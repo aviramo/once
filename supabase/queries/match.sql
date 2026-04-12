@@ -1,0 +1,40 @@
+create or replace function match (me public.users) returns jsonb as $$
+declare
+  other public.users;
+  raw_dist float;
+  final_dist float;
+begin
+  if me.state in ('HIDDEN','VISIBLE') then return null; end if;
+  select * into other from users where user_id = me.other_id;
+  raw_dist := extensions.st_distance(me.location, other.location);
+  if raw_dist < 250 then
+    final_dist := 0;
+  else
+    final_dist := round(raw_dist / 50.0) * 50;
+  end if;
+
+  if me.state in ('WATCHING','WAITING','REPLYING','CHAT') then
+    return jsonb_strip_nulls(jsonb_build_object(
+    'user_id', other.user_id,
+    'title', other.name || ', ' || extract(year from age(now(), other.birth_date)),
+    'images', other.images ->> 'normal',
+    'message', other.message,
+    'last_seen', other.last_seen,
+    'distance', case when me.state = 'CHAT' then null else final_dist end,
+    'subscribed', other.subscription is not null,
+    'is_for_kids', other.is_for_kids,
+    'is_male', other.is_male,
+    'created_at', case when me.match is null then now() else (me.match ->> 'created_at')::timestamptz end
+  ));
+  end if;
+
+  return jsonb_build_object(
+      'user_id', me.match ->> 'user_id',
+      'title', me.match ->> 'title',
+      'images', me.match ->> 'images',
+      'is_male', me.match ->> 'is_male',
+      'created_at', me.match ->> 'created_at'
+    );
+    
+end;
+$$ language plpgsql;

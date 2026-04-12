@@ -1,0 +1,6 @@
+{
+  "nodeModules": true,
+  "imports": {
+    "lodash": "npm:lodash"
+  }
+}

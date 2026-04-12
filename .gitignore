@@ -1,0 +1,48 @@
+# ── Secrets / env ──────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.p8
+*.p12
+*.jks
+*.key
+*.mobileprovision
+*.keystore
+
+# ── Node ───────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# ── Expo / React Native ────────────────────────────────────────────────────
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Generated native folders (regenerate with expo prebuild)
+/mobile/ios/
+/mobile/android/
+
+# ── TypeScript ─────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── Supabase local dev ─────────────────────────────────────────────────────
+supabase/.branches/
+supabase/.temp/
+supabase/test/
+
+# ── Editor / OS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.orig.*
+.vscode/
+.idea/
+
+# ── Claude / assistant metadata ────────────────────────────────────────────
+.claude/
+.mcp.json
