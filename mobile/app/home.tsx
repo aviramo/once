@@ -1,8 +1,9 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { useRef } from 'react'
+import { View, Text, Pressable, StyleSheet, Animated } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
-import Svg, { Path, Circle } from 'react-native-svg'
+import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
@@ -17,6 +18,68 @@ function SettingsIcon() {
       <Circle cx={12} cy={12} r={3} />
     </Svg>
   )
+}
+
+// ── State Icons ────────────────────────────────────────────────────────────
+// Large pictographic glyph that anchors the content area. Swapped per state:
+// a plain incognito silhouette when hidden, binoculars when visible.
+//
+// All icons render on a 120×120 viewBox with solid #111 fills so they read
+// clearly at large sizes without stroke-weight tuning.
+
+const ICON_SIZE = 124
+
+function IncognitoIcon() {
+  // Classic "incognito" glyph: fedora + thin wide brim + two round sunglasses
+  // joined by a short bridge. No head or body — just the hat and glasses float
+  // on the background.
+  return (
+    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 120 120" fill="none">
+      {/* Fedora crown — trapezoid with softly rounded top corners */}
+      <Path d="M 28 50 L 36 20 Q 38 16 44 16 L 76 16 Q 82 16 84 20 L 92 50 Z" fill="#111" />
+      {/* Brim — thin horizontal bar, wider than the crown */}
+      <Rect x="14" y="50" width="92" height="7" rx="3.5" fill="#111" />
+      {/* Left lens */}
+      <Circle cx="32" cy="84" r="24" fill="#111" />
+      {/* Right lens */}
+      <Circle cx="88" cy="84" r="24" fill="#111" />
+      {/* Bridge between lenses */}
+      <Rect x="56" y="80" width="8" height="8" fill="#111" />
+    </Svg>
+  )
+}
+
+function BinocularsIcon() {
+  // Two round barrels with large lens cutouts, joined by a center bridge, with
+  // tilted "horn" eyepieces rising from each barrel and leaving a V-notch
+  // between them at the top — matches the reference glyph shape.
+  return (
+    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 120 120" fill="none">
+      {/* Left eyepiece — tilted oval leaning toward center */}
+      <Ellipse cx="32" cy="38" rx="15" ry="24" fill="#111" transform="rotate(-14 32 38)" />
+      {/* Right eyepiece — mirror */}
+      <Ellipse cx="88" cy="38" rx="15" ry="24" fill="#111" transform="rotate(14 88 38)" />
+
+      {/* Left barrel */}
+      <Circle cx="32" cy="80" r="28" fill="#111" />
+      {/* Right barrel */}
+      <Circle cx="88" cy="80" r="28" fill="#111" />
+
+      {/* Bridge — rounded bar joining the two barrels through the middle */}
+      <Rect x="50" y="58" width="20" height="32" rx="3" fill="#111" />
+
+      {/* Lens cutouts — large white circles read as glass */}
+      <Circle cx="32" cy="80" r="14" fill="#fafafa" />
+      <Circle cx="88" cy="80" r="14" fill="#fafafa" />
+      {/* Focus-wheel dot on the bridge */}
+      <Circle cx="60" cy="80" r="3" fill="#fafafa" />
+    </Svg>
+  )
+}
+
+function StateIcon({ state }: { state: string }) {
+  if (state === 'VISIBLE') return <BinocularsIcon />
+  return <IncognitoIcon />
 }
 
 // ── Message ────────────────────────────────────────────────────────────────
@@ -38,7 +101,7 @@ const messageStyles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     color: '#111',
     textAlign: 'center',
@@ -46,25 +109,51 @@ const messageStyles = StyleSheet.create({
   },
   desc: {
     marginTop: 14,
-    fontSize: 15,
-    lineHeight: 22,
-    color: 'rgba(0,0,0,0.55)',
+    fontSize: 18,
+    lineHeight: 26,
+    color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
   },
 })
 
 // ── Primary Button ─────────────────────────────────────────────────────────
 // Bottom call-to-action button. The home screen shows 0-N of these depending
-// on the user's state.
+// on the user's state. Shares the press feedback language with the toggle
+// buttons in settings: a quick scale-down followed by a spring-back bump,
+// driven natively so it stays smooth even when the JS thread is busy with
+// the in-flight invoke that the press kicks off.
 
 function PrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current
+
+  const handlePressIn = () => {
+    Animated.timing(scale, {
+      toValue: 0.96,
+      duration: 90,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 4,
+      tension: 140,
+      useNativeDriver: true,
+    }).start()
+  }
+
   return (
-    <Pressable
-      style={({ pressed }) => [btnStyles.btn, pressed && btnStyles.pressed]}
-      onPress={onPress}
-    >
-      <Text style={btnStyles.text}>{label}</Text>
-    </Pressable>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        style={({ pressed }) => [btnStyles.btn, pressed && btnStyles.pressed]}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
+      >
+        <Text style={btnStyles.text}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   )
 }
 
@@ -147,6 +236,9 @@ export default function HomePage() {
 
       {/* ── Content (flex:1, centered) ── */}
       <View style={styles.content}>
+        <View style={styles.stateIcon}>
+          <StateIcon state={state} />
+        </View>
         {renderContent()}
       </View>
 
@@ -191,6 +283,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stateIcon: {
+    marginBottom: 32,
   },
 
   buttons: {
