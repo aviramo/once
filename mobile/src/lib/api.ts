@@ -30,13 +30,17 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
     throw new Error(await res.text())
   }
 
-  const data = await res.json() as T
+  // Some endpoints (e.g. app/reset) return an empty body when there is no
+  // user record to serialize. Parsing `await res.json()` on "" throws a
+  // SyntaxError, so read as text and only parse when non-empty.
+  const text = await res.text()
+  const data = (text ? JSON.parse(text) : null) as T
   // Iron rule: the `app` edge function returns the authoritative user record
   // on every call. Merge it straight into the store so no component needs to
   // fetch after invoking. Realtime covers the rest (changes from other
   // sources), and both funnels flow through the same applyServerUser entry.
   // We tag this path as 'invoke' so client-authored fields are skipped —
   // realtime (post-commit) is the truth source for those.
-  if (fn === 'app') useUserStore.getState().applyServerUser(data as any, 'invoke')
+  if (fn === 'app' || fn.startsWith('app/')) useUserStore.getState().applyServerUser(data as any, 'invoke')
   return data
 }

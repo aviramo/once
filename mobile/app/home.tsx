@@ -1,13 +1,44 @@
-import { useRef } from 'react'
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { View, Text, Pressable, StyleSheet, ScrollView, Animated, PanResponder, Dimensions, I18nManager, BackHandler } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { useRouter } from 'expo-router'
 import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
 import { t, tg } from '../src/i18n'
+import { PrimaryButton } from '../src/components/Button'
+import { ProfilePreviewRow, PROFILE_ASSETS, GALLERY_HEIGHT } from '../src/components/ProfilePreviewRow'
+import { BootScreen } from '../src/components/BootScreen'
+import { Asset } from 'expo-asset'
+import SettingsPage from './settings'
+
+const isRTL = I18nManager.isRTL
+
+// ── Zigzag seam ────────────────────────────────────────────────────────────
+// Decorative divider drawn between the home and settings panes. Renders a
+// small-amplitude vertical zigzag the full height of the shell so the seam
+// is visibly textured rather than a flat hairline.
+
+const SEAM_AMP   = 3      // horizontal amplitude (px) — total width = 2*AMP
+const SEAM_SEG   = 16     // pixels per zigzag segment
+const SEAM_COLOR = 'rgba(0,0,0,0.22)'
+const SEAM_WIDTH = SEAM_AMP * 2
+
+function ZigzagSeam({ height }: { height: number }) {
+  const segments = Math.max(1, Math.ceil(height / SEAM_SEG))
+  let d = `M ${SEAM_AMP} 0`
+  for (let i = 1; i <= segments; i++) {
+    const y = Math.min(i * SEAM_SEG, height)
+    const x = i % 2 === 1 ? 0 : SEAM_WIDTH
+    d += ` L ${x} ${y}`
+  }
+  return (
+    <Svg width={SEAM_WIDTH} height={height} viewBox={`0 0 ${SEAM_WIDTH} ${height}`}>
+      <Path d={d} stroke={SEAM_COLOR} strokeWidth={1.2} strokeLinejoin="round" fill="none" />
+    </Svg>
+  )
+}
 
 // ── Settings Icon ──────────────────────────────────────────────────────────
 
@@ -86,19 +117,43 @@ function StateIcon({ state }: { state: string }) {
 // Centered title + description block. Used as the main content surface for
 // every per-state variant of this screen (HIDDEN, WATCHING, WAITING, etc.).
 
-function Message({ title, desc }: { title: string; desc: string }) {
+function renderWithEmphasis(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <Text key={i} style={messageStyles.emphasis}>{part.slice(2, -2)}</Text>
+      : part
+  )
+}
+
+function Message({ state, title, desc }: { state: string; title: string; desc: string }) {
   return (
     <View style={messageStyles.wrap}>
+      <View style={messageStyles.icon}>
+        <StateIcon state={state} />
+      </View>
       <Text style={messageStyles.title}>{title}</Text>
-      <Text style={messageStyles.desc}>{desc}</Text>
+      {/* Only the description scrolls if it overflows — icon + title stay
+          pinned. flex:1 inside a height-bounded parent gives the ScrollView
+          the constraint it needs to actually scroll instead of growing. */}
+      <ScrollView
+        style={messageStyles.descScroll}
+        contentContainerStyle={messageStyles.descScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={messageStyles.desc}>{renderWithEmphasis(desc)}</Text>
+      </ScrollView>
     </View>
   )
 }
 
 const messageStyles = StyleSheet.create({
   wrap: {
+    flex: 1,
     alignItems: 'center',
     paddingHorizontal: 28,
+  },
+  icon: {
+    marginBottom: 32,
   },
   title: {
     fontSize: 24,
@@ -107,111 +162,199 @@ const messageStyles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: -0.4,
   },
-  desc: {
+  descScroll: {
+    flex: 1,
+    alignSelf: 'stretch',
     marginTop: 14,
-    fontSize: 18,
-    lineHeight: 26,
+  },
+  descScrollContent: {
+    paddingBottom: 8,
+  },
+  desc: {
+    fontSize: 15,
+    lineHeight: 22,
     color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
   },
-})
-
-// ── Primary Button ─────────────────────────────────────────────────────────
-// Bottom call-to-action button. The home screen shows 0-N of these depending
-// on the user's state. Shares the press feedback language with the toggle
-// buttons in settings: a quick scale-down followed by a spring-back bump,
-// driven natively so it stays smooth even when the JS thread is busy with
-// the in-flight invoke that the press kicks off.
-
-function PrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
-  const scale = useRef(new Animated.Value(1)).current
-
-  const handlePressIn = () => {
-    Animated.timing(scale, {
-      toValue: 0.96,
-      duration: 90,
-      useNativeDriver: true,
-    }).start()
-  }
-
-  const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      friction: 4,
-      tension: 140,
-      useNativeDriver: true,
-    }).start()
-  }
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        style={({ pressed }) => [btnStyles.btn, pressed && btnStyles.pressed]}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-      >
-        <Text style={btnStyles.text}>{label}</Text>
-      </Pressable>
-    </Animated.View>
-  )
-}
-
-const btnStyles = StyleSheet.create({
-  btn: {
-    backgroundColor: '#111',
-    borderRadius: 16,
-    paddingVertical: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: { opacity: 0.85 },
-  text: {
-    color: '#fff',
-    fontSize: 16,
+  emphasis: {
     fontWeight: '700',
-    letterSpacing: -0.2,
   },
 })
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
-  const router = useRouter()
   const { profile, update } = useUserStore()
+
+  // ── Horizontal pager shell ──────────────────────────────────────────────
+  // Two panes laid side-by-side: [0]=home content, [1]=full Settings page.
+  // Same motion model as the Settings tab pager — spring translation + pan
+  // responder on the wrapping View. The Settings page is embedded (not
+  // routed to) so the swipe feels like moving between siblings rather than
+  // pushing a new screen.
+  const [paneIndex, setPaneIndex] = useState<0 | 1>(0)
+  const [shellW, setShellW] = useState(() => Dimensions.get('window').width)
+  const [shellH, setShellH] = useState(0)
+  const shellTranslate = useRef(new Animated.Value(0)).current
+  const paneIndexRef = useRef(paneIndex)
+  const shellWRef = useRef(shellW)
+  useEffect(() => { paneIndexRef.current = paneIndex }, [paneIndex])
+  useEffect(() => { shellWRef.current = shellW }, [shellW])
+
+  // Direction sign: LTR places pane 1 to the right of pane 0, so showing
+  // pane 1 means translating the strip by -width. RTL mirrors that.
+  const DIR = isRTL ? 1 : -1
+
+  const animateShellToIndex = (index: 0 | 1, velocity = 0) => {
+    Animated.spring(shellTranslate, {
+      toValue: DIR * index * shellWRef.current,
+      velocity,
+      tension: 68,
+      friction: 14,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  const goToPane = (index: 0 | 1, velocity = 0) => {
+    if (index === paneIndexRef.current) return
+    tap()
+    setPaneIndex(index)
+    animateShellToIndex(index, velocity)
+  }
+
+  // Snap shell to current pane when the width first resolves.
+  useEffect(() => {
+    if (!shellW) return
+    shellTranslate.setValue(DIR * paneIndexRef.current * shellW)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shellW])
+
+  // Android hardware back — when on the settings pane, consume the press
+  // and slide back to home instead of letting the router pop (which would
+  // take the user out of the app).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (paneIndexRef.current === 1) {
+        goToPane(0)
+        return true
+      }
+      return false
+    })
+    return () => sub.remove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const shellPan = useRef(
+    PanResponder.create({
+      // Coexistence rules with inner pan responders (profile carousel on
+      // home, tab pager inside settings):
+      //   • On pane 0 (home): any clearly horizontal gesture becomes a
+      //     shell swipe to settings.
+      //   • On pane 1 (settings): claim backward gestures (toward home).
+      //     The inner Settings tab pager surrenders backward swipes when
+      //     it's at the first tab, so this handler only ever receives
+      //     them in that case — non-first-tab swipes stay with the inner
+      //     pager via responder bubbling.
+      onMoveShouldSetPanResponder: (_, g) => {
+        const horizontal =
+          Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5
+        if (!horizontal) return false
+        if (paneIndexRef.current === 0) return true
+        const backward = isRTL ? g.dx < 0 : g.dx > 0
+        return backward
+      },
+      onPanResponderMove: (_, g) => {
+        const w = shellWRef.current
+        if (!w) return
+        const base = DIR * paneIndexRef.current * w
+        const edge = DIR * 1 * w
+        const [lo, hi] = DIR < 0 ? [edge, 0] : [0, edge]
+        const next = Math.max(lo, Math.min(hi, base + g.dx))
+        shellTranslate.setValue(next)
+      },
+      onPanResponderRelease: (_, g) => {
+        const w = shellWRef.current
+        if (!w) return
+        const index = paneIndexRef.current
+        const forward = DIR < 0 ? g.dx < 0 : g.dx > 0
+        const flick = Math.abs(g.vx) > 0.4
+        const past = Math.abs(g.dx) > w * 0.3
+        let target: 0 | 1 = index
+        if ((past || flick) && forward && index < 1) target = 1
+        else if ((past || flick) && !forward && index > 0) target = 0
+        animateShellToIndex(target, g.vx * 1000)
+        if (target !== index) {
+          tap()
+          setPaneIndex(target)
+        }
+      },
+    })
+  ).current
 
   const state = profile?.state ?? 'HIDDEN'
   const isMale = profile?.is_male ?? null
+
+  // Preload the profile carousel images into the asset cache before the
+  // screen reveals. Without this the message + icon render a frame before
+  // the gallery images finish decoding, producing a visible "pop". We also
+  // gate on the profile being loaded so all UI appears at once.
+  const [assetsReady, setAssetsReady] = useState(false)
+  useEffect(() => {
+    Asset.loadAsync(PROFILE_ASSETS as any)
+      .then(() => setAssetsReady(true))
+      .catch(() => setAssetsReady(true))
+  }, [])
+
+  const ready = assetsReady && !!profile
+
+  // Cooldown after a visibility toggle — 5 seconds where the button is
+  // disabled (and rendered as such) to prevent rapid toggling while the
+  // server round-trip settles. The timer id is held in a ref so we can
+  // clear it on unmount if the screen is left mid-cooldown.
+  const [cooldown, setCooldown] = useState(false)
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimer.current) clearTimeout(cooldownTimer.current)
+    }
+  }, [])
 
   // Visibility toggle — optimistically update the local profile so the UI
   // reacts instantly, then fire the server event. The server response
   // broadcasts the authoritative state back via the user-update channel.
   // Payload shape matches the old web app: { event: 'visibility', state: ... }.
   const setVisibility = (next: 'VISIBLE' | 'HIDDEN') => {
+    if (cooldown) return
     tap()
+    setCooldown(true)
+    cooldownTimer.current = setTimeout(() => setCooldown(false), 5000)
     update({ state: next })
-    invoke('app', { event: 'visibility', state: next }).catch(console.error)
+    invoke('app/visibility', { state: next }).catch(console.error)
   }
 
-  // Per-state content — the content block and the button set are chosen
-  // together. Additional states will slot in here as they're designed.
+  // Per-state message. The gallery is rendered separately below the message
+  // area (not inside it) so its vertical spacing from the button is
+  // independent of message length.
   const renderContent = () => {
     switch (state) {
       case 'HIDDEN':
-        return <Message title={tg('home.hiddenModeTitle', isMale)} desc={tg('home.hiddenModeDesc', isMale)} />
+        return <Message state={state} title={tg('home.hiddenModeTitle', isMale)} desc={tg('home.hiddenModeDesc', isMale)} />
       case 'VISIBLE':
-        return <Message title={tg('home.nowVisible', isMale)} desc={tg('home.nowVisibleDesc', isMale)} />
+        return <Message state={state} title={tg('home.nowVisible', isMale)} desc={tg('home.nowVisibleDesc', isMale)} />
       default:
-        return <Message title={tg('home.hiddenModeTitle', isMale)} desc={tg('home.hiddenModeDesc', isMale)} />
+        return <Message state={state} title={tg('home.hiddenModeTitle', isMale)} desc={tg('home.hiddenModeDesc', isMale)} />
     }
   }
+
+  const showGallery = (state === 'HIDDEN' || state === 'VISIBLE') && !!profile
 
   const renderButtons = () => {
     switch (state) {
       case 'HIDDEN':
-        return <PrimaryButton label={t('home.switchToVisible')} onPress={() => setVisibility('VISIBLE')} />
+        return <PrimaryButton label={t('home.switchToVisible')} onPress={() => setVisibility('VISIBLE')} disabled={cooldown} />
       case 'VISIBLE':
-        return <PrimaryButton label={t('home.switchToHidden')} onPress={() => setVisibility('HIDDEN')} />
+        return <PrimaryButton label={t('home.switchToHidden')} onPress={() => setVisibility('HIDDEN')} disabled={cooldown} />
       default:
         return null
     }
@@ -219,36 +362,120 @@ export default function HomePage() {
 
   const buttons = renderButtons()
 
+  // Gate the entire screen on profile fetch + asset preload so nothing
+  // pops in piece by piece. Until both are ready, render the same branded
+  // boot animation used during the auth check so the two loading phases
+  // feel like one continuous start-up.
+  if (!ready) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <BootScreen />
+      </>
+    )
+  }
+
   return (
-    <SafeAreaView style={styles.root}>
+    <View
+      style={styles.shell}
+      onLayout={e => {
+        setShellW(e.nativeEvent.layout.width)
+        setShellH(e.nativeEvent.layout.height)
+      }}
+      {...shellPan.panHandlers}
+    >
       <StatusBar style="dark" />
+      <Animated.View style={[styles.shellStrip, { transform: [{ translateX: shellTranslate }] }]}>
+        {/* Decorative zigzag seam between the two panes. Centered on the
+            boundary (start = shellW - AMP) and drawn full height so the
+            divider reads as a stitched edge rather than a flat line. */}
+        {shellH > 0 && (
+          <View
+            pointerEvents="none"
+            style={[styles.shellSeam, { start: shellW - SEAM_AMP, width: SEAM_WIDTH }]}
+          >
+            <ZigzagSeam height={shellH} />
+          </View>
+        )}
+
+        {/* Pane 0 — home */}
+        <View
+          style={[styles.shellPane, { start: 0, width: shellW }]}
+          pointerEvents={paneIndex === 0 ? 'auto' : 'none'}
+        >
+    <SafeAreaView style={styles.root}>
 
       {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={styles.logo}>SyncWish</Text>
         <Pressable
           style={({ pressed }) => [styles.settingsBtn, pressed && styles.settingsBtnPressed]}
-          onPress={() => { tap(); router.push('/settings') }}
+          onPress={() => goToPane(1)}
         >
           <SettingsIcon />
         </Pressable>
       </View>
 
-      {/* ── Content (flex:1, centered) ── */}
+      {/* ── Content — icon+message block anchored below the header with a
+          fixed top gap, so the vertical position doesn't shift with content
+          length across states. ── */}
       <View style={styles.content}>
-        <View style={styles.stateIcon}>
-          <StateIcon state={state} />
-        </View>
         {renderContent()}
       </View>
+
+      {/* ── Gallery — sits in its own row between message and button so
+          there's a guaranteed gap on both sides regardless of message
+          length. ── */}
+      {showGallery && profile && (
+        <View style={styles.gallery}>
+          <ProfilePreviewRow
+            userId={profile.user_id}
+            isForMale={profile.is_for_male}
+            isForFemale={profile.is_for_female}
+            ageFrom={profile.age_from}
+            ageTo={profile.age_to}
+            blur={state === 'VISIBLE'}
+          />
+        </View>
+      )}
 
       {/* ── Buttons (optional; collapses when null) ── */}
       {buttons && <View style={styles.buttons}>{buttons}</View>}
     </SafeAreaView>
+        </View>
+
+        {/* Pane 1 — settings embedded as a sibling */}
+        <View
+          style={[styles.shellPane, { start: shellW, width: shellW }]}
+          pointerEvents={paneIndex === 1 ? 'auto' : 'none'}
+        >
+          <SettingsPage onBack={() => goToPane(0)} />
+        </View>
+      </Animated.View>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  shell: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#fafafa',
+  },
+  shellStrip: {
+    flex: 1,
+  },
+  shellPane: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+  },
+  shellSeam: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+  },
+
   root: {
     flex: 1,
     backgroundColor: '#fafafa',
@@ -279,13 +506,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
 
+  // Message takes all remaining space between header and the fixed-height
+  // gallery row. Inside Message the description is wrapped in a ScrollView
+  // so when it doesn't fit, only the desc scrolls — the icon, title, and
+  // the gallery's vertical position stay put.
   content: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 48,
   },
-  stateIcon: {
-    marginBottom: 32,
+
+  // Fixed height — keeps the gallery anchored at the same Y in every state
+  // regardless of how long the message above it ends up being.
+  gallery: {
+    height: GALLERY_HEIGHT,
+    justifyContent: 'center',
+    marginVertical: 24,
   },
 
   buttons: {

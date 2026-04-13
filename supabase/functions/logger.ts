@@ -7,6 +7,7 @@ export default class Logger {
   created_at: Date = new Date();
   user?: User;
   body: Record<string, unknown> = {};
+  event?: string;
   status: number = 200;
   action?: string;
   logs: Log[] = [];
@@ -33,8 +34,8 @@ export default class Logger {
     const values: Record<string, unknown> = {
       created_at: this.created_at,
       user_id: this.user?.user_id,
-      event: this.body?.event ?? 'update',
-      action: this.action ?? this.body?.event,
+      event: this.event ?? 'update',
+      action: this.action ?? this.event,
       location: this.user?.location,
       other_id: this.user?.other_id ?? (this.user?.state === State.HIDDEN ? null : this.user?.db?.old?.other_id),
       run_ms: new Date().getTime() - this.created_at.getTime(),

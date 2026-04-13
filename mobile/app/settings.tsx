@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   View, Text, Pressable, StyleSheet, ScrollView,
-  PanResponder, I18nManager, TextInput, Image, Alert, ActivityIndicator,
-  Keyboard, Platform, Animated, Easing, Dimensions,
+  PanResponder, I18nManager, TextInput, Image, ActivityIndicator,
+  Keyboard, Platform, Animated, Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -10,17 +10,26 @@ import { useRouter } from 'expo-router'
 import Slider from '@react-native-community/slider'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
-import Svg, { Path, Line, Polyline } from 'react-native-svg'
+import Svg, { Path, Line, Polyline, Circle } from 'react-native-svg'
 import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess, tapWarning } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg } from '../src/i18n'
+import { ConfirmDialog } from '../src/components/ConfirmDialog'
+import { Button } from '../src/components/Button'
 
 const isRTL = I18nManager.isRTL
 const THUMB = 22
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
+
+// Module-level flag flipped by sliders while their thumb is being dragged.
+// The settings tab pager checks this in its onMoveShouldSetPanResponder so
+// it doesn't steal horizontal gestures away from a slider mid-drag. Module
+// scope is fine here because only one slider can be dragged at a time and
+// only the in-page pager reads it.
+const slidingActiveRef = { current: false }
 
 // ── Back Icon ──────────────────────────────────────────────────────────────
 
@@ -62,23 +71,37 @@ function RangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }:
   const minPan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { s.current.startMin = toPos(s.current.valueMin) },
+    // Hold on to the gesture so the outer pagers (settings tabs + home
+    // shell) can't steal it mid-drag.
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.startMin = toPos(s.current.valueMin)
+    },
     onPanResponderMove: (_, { dx }) => {
       const v = toVal(s.current.startMin + (isRTL ? -dx : dx))
       if (v !== s.current.valueMin && v < s.current.valueMax)
         cbs.current.onChangeMin(v)
     },
+    onPanResponderRelease: () => { slidingActiveRef.current = false },
+    onPanResponderTerminate: () => { slidingActiveRef.current = false },
   })).current
 
   const maxPan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { s.current.startMax = toPos(s.current.valueMax) },
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.startMax = toPos(s.current.valueMax)
+    },
     onPanResponderMove: (_, { dx }) => {
       const v = toVal(s.current.startMax + (isRTL ? -dx : dx))
       if (v !== s.current.valueMax && v > s.current.valueMin)
         cbs.current.onChangeMax(v)
     },
+    onPanResponderRelease: () => { slidingActiveRef.current = false },
+    onPanResponderTerminate: () => { slidingActiveRef.current = false },
   })).current
 
   const minPct = (valueMin - min) / (max - min)
@@ -141,7 +164,7 @@ function useAutoSave(data: object, ready: boolean, delay = 600) {
     if (!ready) return
     if (isFirst.current) { isFirst.current = false; return }
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => { invoke('app', data).catch(console.error) }, delay)
+    timer.current = setTimeout(() => { invoke('app/update', data).catch(console.error) }, delay)
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [key, ready])
 }
@@ -161,31 +184,69 @@ function calcAge(birthDate: string): number {
 
 type Tab = 'preferences' | 'profile' | 'account' | 'app'
 const TABS: Tab[] = ['preferences', 'profile', 'account', 'app']
-const TAB_ANIM_MS = 280
 const TAB_BAR_PAD = 3  // inner padding of the tab bar — must match styles.tabBar.padding
 
-// Stacks an active (white) label over the inactive (gray) label and cross-fades
-// between them. Uses native-driven opacity — backgroundColor/text-color
-// interpolation can't run on the native thread.
-function TabLabel({ active, label }: { active: boolean; label: string }) {
-  const whiteOpacity = useRef(new Animated.Value(active ? 1 : 0)).current
-  useEffect(() => {
-    Animated.timing(whiteOpacity, {
-      toValue: active ? 1 : 0,
-      duration: TAB_ANIM_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start()
-  }, [active])
+// Per-tab glyph. Drawn twice by TabIconStack (gray + white) so the active
+// state can cross-fade over the pill indicator on the native driver.
+const TAB_ICON_SIZE = 20
+
+function TabIcon({ tab, color }: { tab: Tab; color: string }) {
+  const stroke = color
+  if (tab === 'preferences') {
+    // Sliders — three horizontal tracks with a knob on each
+    return (
+      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Line x1="4" y1="6" x2="20" y2="6" />
+        <Circle cx="15" cy="6" r="2.2" fill={stroke} stroke="none" />
+        <Line x1="4" y1="12" x2="20" y2="12" />
+        <Circle cx="9" cy="12" r="2.2" fill={stroke} stroke="none" />
+        <Line x1="4" y1="18" x2="20" y2="18" />
+        <Circle cx="16" cy="18" r="2.2" fill={stroke} stroke="none" />
+      </Svg>
+    )
+  }
+  if (tab === 'profile') {
+    // Person — head + shoulders
+    return (
+      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="12" cy="8" r="4" />
+        <Path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+      </Svg>
+    )
+  }
+  if (tab === 'account') {
+    // Shield with check — account identity
+    return (
+      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
+        <Polyline points="9 12 11.5 14.5 15.5 10.5" />
+      </Svg>
+    )
+  }
+  // app → gear
   return (
-    <View>
-      <Text style={styles.tabText}>{label}</Text>
-      <Animated.Text
+    <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <Circle cx={12} cy={12} r={3} />
+    </Svg>
+  )
+}
+
+// Stacks an active (white) icon over the inactive (gray) icon. The white
+// opacity is driven by the pill indicator's position (passed in by the parent)
+// so the cross-fade stays in lockstep with the pill — otherwise the pill can
+// sit over a still-gray icon (gray on black = invisible) or leave a tab whose
+// icon is still white (white on light bg = invisible).
+function TabIconStack({ opacity, tab }: { opacity: Animated.AnimatedInterpolation<number> | number; tab: Tab }) {
+  return (
+    <View style={{ width: TAB_ICON_SIZE, height: TAB_ICON_SIZE }}>
+      <TabIcon tab={tab} color="rgba(0,0,0,0.5)" />
+      <Animated.View
         pointerEvents="none"
-        style={[styles.tabText, styles.tabTextActive, { position: 'absolute', top: 0, start: 0, opacity: whiteOpacity }]}
+        style={{ position: 'absolute', top: 0, start: 0, opacity }}
       >
-        {label}
-      </Animated.Text>
+        <TabIcon tab={tab} color="#fff" />
+      </Animated.View>
     </View>
   )
 }
@@ -296,17 +357,23 @@ function PreferencesTab() {
           <Text style={styles.sectionLabel}>{t('settings.range').toUpperCase()}</Text>
           <Text style={styles.sectionValue}>{formatRadius(radius)}</Text>
         </View>
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={RADIUS_STEPS.length - 1}
-          step={1}
-          value={RADIUS_STEPS.indexOf(radius) < 0 ? 0 : RADIUS_STEPS.indexOf(radius)}
-          onValueChange={i => update({ range: radiusToServer(RADIUS_STEPS[Math.round(i)]) })}
-          minimumTrackTintColor="#111"
-          maximumTrackTintColor="rgba(0,0,0,0.15)"
-          thumbTintColor="#111"
-        />
+        <View
+          onTouchStart={() => { slidingActiveRef.current = true }}
+          onTouchEnd={() => { slidingActiveRef.current = false }}
+          onTouchCancel={() => { slidingActiveRef.current = false }}
+        >
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={RADIUS_STEPS.length - 1}
+            step={1}
+            value={RADIUS_STEPS.indexOf(radius) < 0 ? 0 : RADIUS_STEPS.indexOf(radius)}
+            onValueChange={i => update({ range: radiusToServer(RADIUS_STEPS[Math.round(i)]) })}
+            minimumTrackTintColor="#111"
+            maximumTrackTintColor="rgba(0,0,0,0.15)"
+            thumbTintColor="#111"
+          />
+        </View>
       </View>
 
       {/* Preferred Gender */}
@@ -531,6 +598,7 @@ function ProfileTab() {
   // filename → signature map, persists across the session even after upload cell disappears
   const sigByFilename = useRef<Map<string, string>>(new Map())
   const [dragging, setDragging] = useState(false)
+  const [duplicateDialog, setDuplicateDialog] = useState(false)
   // Message is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
   const [localMessage, setLocalMessage] = useState(profile?.message ?? '')
   const localMessageRef = useRef(localMessage)
@@ -558,7 +626,7 @@ function ProfileTab() {
     if (next === savedMessageRef.current) return
     savedMessageRef.current = next
     update({ message: next })
-    invoke('app', { message: next }).catch(console.error)
+    invoke('app/update', { message: next }).catch(console.error)
   }
 
   // Flush on unmount (e.g., user pressed back while input still focused)
@@ -676,7 +744,7 @@ function ProfileTab() {
     })
 
     const skipped = result.assets.length - filtered.length
-    if (skipped > 0) Alert.alert(t('settings.duplicatePhotoTitle'), t('settings.duplicatePhotoBody'))
+    if (skipped > 0) setDuplicateDialog(true)
     if (filtered.length === 0) return
 
     const assets = filtered.slice(0, maxPick)
@@ -733,6 +801,7 @@ function ProfileTab() {
   }
 
   return (
+    <>
     <ScrollView
       ref={scrollRef}
       // Pad the bottom by the live keyboard height so the scroll has somewhere
@@ -820,6 +889,14 @@ function ProfileTab() {
       </View>
 
     </ScrollView>
+    <ConfirmDialog
+      visible={duplicateDialog}
+      title={t('settings.duplicatePhotoTitle')}
+      description={t('settings.duplicatePhotoBody')}
+      confirmLabel={t('common.gotIt')}
+      onConfirm={() => setDuplicateDialog(false)}
+    />
+    </>
   )
 }
 
@@ -906,6 +983,8 @@ function AccountTab() {
   const { profile } = useUserStore()
   const { user, signOut } = useAuthStore()
   const router = useRouter()
+  const [signOutDialog, setSignOutDialog] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState(false)
 
   if (!profile || !user) return <View style={styles.tabContent} />
 
@@ -925,41 +1004,26 @@ function AccountTab() {
 
   const confirmSignOut = () => {
     tap()
-    Alert.alert(
-      t('settings.signOutConfirmTitle'),
-      tg('settings.signOutConfirmDesc', profile.is_male),
-      [
-        { text: t('settings.signOutNo'), style: 'cancel' },
-        {
-          text: tg('settings.signOutYes', profile.is_male),
-          onPress: async () => {
-            tap()
-            try { await invoke('app', { event: 'logout' }) } catch (e) { console.error(e) }
-            await finishAndGoToLogin()
-          },
-        },
-      ],
-    )
+    setSignOutDialog(true)
   }
 
   const confirmDelete = () => {
     tapWarning()
-    Alert.alert(
-      t('settings.deleteConfirmTitle'),
-      tg('settings.deleteConfirmDesc', profile.is_male),
-      [
-        { text: t('settings.deleteNo'), style: 'cancel' },
-        {
-          text: t('settings.deleteYes'),
-          style: 'destructive',
-          onPress: async () => {
-            tapWarning()
-            try { await invoke('app', { event: 'delete' }) } catch (e) { console.error(e) }
-            await finishAndGoToLogin()
-          },
-        },
-      ],
-    )
+    setDeleteDialog(true)
+  }
+
+  const onSignOutConfirmed = async () => {
+    tap()
+    setSignOutDialog(false)
+    try { await invoke('app/logout') } catch (e) { console.error(e) }
+    await finishAndGoToLogin()
+  }
+
+  const onDeleteConfirmed = async () => {
+    tapWarning()
+    setDeleteDialog(false)
+    try { await invoke('app/delete') } catch (e) { console.error(e) }
+    await finishAndGoToLogin()
   }
 
   const rows: Array<{ label: string; value: string }> = [
@@ -970,6 +1034,7 @@ function AccountTab() {
   ]
 
   return (
+    <>
     <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t('settings.accountInfo').toUpperCase()}</Text>
@@ -1001,6 +1066,26 @@ function AccountTab() {
         </Pressable>
       </View>
     </ScrollView>
+    <ConfirmDialog
+      visible={signOutDialog}
+      title={t('settings.signOutConfirmTitle')}
+      description={tg('settings.signOutConfirmDesc', profile.is_male)}
+      cancelLabel={t('settings.signOutNo')}
+      confirmLabel={tg('settings.signOutYes', profile.is_male)}
+      onCancel={() => setSignOutDialog(false)}
+      onConfirm={onSignOutConfirmed}
+    />
+    <ConfirmDialog
+      visible={deleteDialog}
+      title={t('settings.deleteConfirmTitle')}
+      description={tg('settings.deleteConfirmDesc', profile.is_male)}
+      cancelLabel={t('settings.deleteNo')}
+      confirmLabel={t('settings.deleteYes')}
+      destructive
+      onCancel={() => setDeleteDialog(false)}
+      onConfirm={onDeleteConfirmed}
+    />
+    </>
   )
 }
 
@@ -1008,6 +1093,8 @@ function AccountTab() {
 
 function AppTab() {
   const { profile, update } = useUserStore()
+  const [resetting, setResetting] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
 
   // Null-safe: useAutoSave compares JSON.stringify of the object, so writing
   // `units: profile?.units` (undefined when unset) vs `'metric'` / `'imperial'`
@@ -1018,6 +1105,16 @@ function AppTab() {
 
   // Default view state is metric when units is unset (matches our km sliders).
   const isMetric = (profile.units ?? 'metric') === 'metric'
+
+  const onReset = async () => {
+    setResetting(true)
+    try {
+      await invoke('app/reset')
+      setResetDone(true)
+      setTimeout(() => setResetDone(false), 2500)
+    } catch (e) { console.error(e) }
+    finally { setResetting(false) }
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
@@ -1036,6 +1133,22 @@ function AppTab() {
           />
         </View>
       </View>
+
+      {profile.role === 'ADMIN' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>{t('settings.adminLabel').toUpperCase()}</Text>
+          <View style={{ marginTop: 14 }}>
+            <Button
+              label={resetDone ? t('settings.resetDone') : t('settings.reset')}
+              onPress={onReset}
+              loading={resetting}
+              disabled={resetDone}
+              variant="destructive"
+              size="md"
+            />
+          </View>
+        </View>
+      )}
     </ScrollView>
   )
 }
@@ -1050,7 +1163,14 @@ function renderTab(tab: Tab) {
   return <View style={styles.tabContent} />
 }
 
-export default function SettingsPage() {
+// When embedded inside the home shell pager, the parent passes `onBack` so
+// the back button animates the shell back to the home pane instead of
+// popping the navigation stack. When rendered standalone via expo-router
+// (e.g., direct /settings navigation), onBack is undefined and the back
+// button falls back to router.back().
+type SettingsPageProps = { onBack?: () => void }
+
+export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('preferences')
   // Pager-style: all 4 tabs are laid out side-by-side in a strip, we just
@@ -1068,47 +1188,137 @@ export default function SettingsPage() {
   const [tabBarWidth, setTabBarWidth] = useState(0)
   const indicator = useRef(new Animated.Value(0)).current
 
+  // Refs mirror state so the animateToIndex closure and the PanResponder
+  // handlers (created once) see live values without re-binding.
+  const activeTabRef = useRef(activeTab)
+  const widthRef = useRef(width)
+  const tabBarWidthRef = useRef(tabBarWidth)
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  useEffect(() => { widthRef.current = width }, [width])
+  useEffect(() => { tabBarWidthRef.current = tabBarWidth }, [tabBarWidth])
+
+  // Single animation entry point — used both by tab taps and by swipe release.
+  // Spring with an initial velocity carries the finger's momentum forward
+  // without the "stop, then re-start" feel that timing() produces. Velocity
+  // is in px/s (gestureState.vx is px/ms, so callers multiply by 1000).
+  const animateToIndex = (index: number, velocity = 0) => {
+    const w = widthRef.current
+    const tbw = tabBarWidthRef.current
+    if (!w || !tbw) return
+    const tabW = (tbw - TAB_BAR_PAD * 2) / TABS.length
+    const translateTarget = (isRTL ? 1 : -1) * index * w
+    const indicatorTarget = (isRTL ? -1 : 1) * index * tabW
+    // Content spring — initial velocity is the gesture velocity (LTR:
+    // negative dx = forward = translate moves negative, vx mirrors sign).
+    Animated.spring(translate, {
+      toValue: translateTarget,
+      velocity,
+      tension: 68,
+      friction: 14,
+      useNativeDriver: true,
+    }).start()
+    // Indicator spring — mirror relationship: indicator = -translate * tabW/w,
+    // so its velocity is the negated, scaled content velocity.
+    Animated.spring(indicator, {
+      toValue: indicatorTarget,
+      velocity: -velocity * (tabW / w),
+      tension: 68,
+      friction: 14,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  // Snap to the active tab when layout dimensions change (initial mount,
+  // orientation change). No animation — layout shifts should be instant.
+  useEffect(() => {
+    if (!width || !tabBarWidth) return
+    const index = TABS.indexOf(activeTab)
+    const tabW = (tabBarWidth - TAB_BAR_PAD * 2) / TABS.length
+    translate.setValue((isRTL ? 1 : -1) * index * width)
+    indicator.setValue((isRTL ? -1 : 1) * index * tabW)
+    // activeTab intentionally NOT in deps — changes to activeTab go through
+    // animateToIndex, not this instant-snap path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, tabBarWidth])
+
   const changeTab = (tab: Tab) => {
     if (tab === activeTab) return
     tap()
     setActiveTab(tab)
+    animateToIndex(TABS.indexOf(tab))
   }
 
-  useEffect(() => {
-    if (width === 0) return
-    const index = TABS.indexOf(activeTab)
-    // RTL flips the sign: in LTR we shift the strip left (negative translateX)
-    // to bring later tabs into view; in RTL children are anchored from the
-    // right edge via `start`, so we shift the strip right (positive) instead.
-    const target = (isRTL ? 1 : -1) * index * width
-    Animated.timing(translate, {
-      toValue: target,
-      duration: TAB_ANIM_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start()
-  }, [activeTab, width])
-
-  useEffect(() => {
-    if (tabBarWidth === 0) return
-    const index = TABS.indexOf(activeTab)
-    const tabW = (tabBarWidth - TAB_BAR_PAD * 2) / TABS.length
-    // Same RTL sign-flip rule as the content strip
-    const target = (isRTL ? -1 : 1) * index * tabW
-    Animated.timing(indicator, {
-      toValue: target,
-      duration: TAB_ANIM_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start()
-  }, [activeTab, tabBarWidth])
+  // Swipe-to-change-tab — dragging horizontally moves both the content strip
+  // and the tab indicator together under the finger, then springs to the
+  // nearest tab on release (distance past 30% of the screen OR a flick faster
+  // than 0.4 px/ms advances). The release spring inherits the gesture's
+  // velocity so the motion is one continuous gesture.
+  const panResponder = useRef(
+    PanResponder.create({
+      // Don't claim on touch-down — child Pressables / sliders need the first
+      // frame. Only claim once the gesture is clearly horizontal. When
+      // embedded in the home shell pager, surrender a backward swipe at
+      // the first tab so the outer shell can take over and slide back
+      // to home instead of us clamping at the edge. Also stay out of the
+      // way while a slider thumb is being dragged.
+      onMoveShouldSetPanResponder: (_, g) => {
+        if (slidingActiveRef.current) return false
+        const horizontal =
+          Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5
+        if (!horizontal) return false
+        const index = TABS.indexOf(activeTabRef.current)
+        const forward = isRTL ? g.dx > 0 : g.dx < 0
+        if (!forward && index === 0) return false
+        return true
+      },
+      // Once we have the gesture, refuse to give it up — otherwise the
+      // outer home-shell pan responder steals mid-swipe and the user
+      // ends up back on home instead of changing tabs.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_, g) => {
+        const w = widthRef.current
+        const tbw = tabBarWidthRef.current
+        if (!w || !tbw) return
+        const tabW = (tbw - TAB_BAR_PAD * 2) / TABS.length
+        const index = TABS.indexOf(activeTabRef.current)
+        const base = (isRTL ? 1 : -1) * index * w
+        // Edge clamp — can't drag past the first/last tab.
+        const edge = (isRTL ? 1 : -1) * (TABS.length - 1) * w
+        const [lo, hi] = isRTL ? [0, edge] : [edge, 0]
+        const next = Math.max(lo, Math.min(hi, base + g.dx))
+        translate.setValue(next)
+        indicator.setValue(-next * (tabW / w))
+      },
+      onPanResponderRelease: (_, g) => {
+        const w = widthRef.current
+        if (!w) return
+        const index = TABS.indexOf(activeTabRef.current)
+        // "Forward" = next tab in the list; direction flips under RTL.
+        const forward = isRTL ? g.dx > 0 : g.dx < 0
+        const flick = Math.abs(g.vx) > 0.4
+        const past = Math.abs(g.dx) > w * 0.3
+        let delta = 0
+        if ((past || flick) && forward && index < TABS.length - 1) delta = 1
+        else if ((past || flick) && !forward && index > 0) delta = -1
+        const targetIndex = index + delta
+        // Carry the finger's velocity into the spring — no frame gap, no
+        // "stop and restart" feel. gestureState.vx is px/ms; spring wants px/s.
+        animateToIndex(targetIndex, g.vx * 1000)
+        const targetTab = TABS[targetIndex]
+        if (targetTab !== activeTabRef.current) {
+          tap()
+          setActiveTab(targetTab)
+        }
+      },
+    })
+  ).current
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
 
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => { tap(); router.back() }}>
+        <Pressable style={styles.backBtn} onPress={() => { tap(); onBack ? onBack() : router.back() }}>
           <BackIcon />
         </Pressable>
         <Text style={styles.title}>{t('settings.title')}</Text>
@@ -1136,20 +1346,35 @@ export default function SettingsPage() {
             }}
           />
         )}
-        {TABS.map(tab => (
-          <Pressable
-            key={tab}
-            style={styles.tabItem}
-            onPress={() => changeTab(tab)}
-          >
-            <TabLabel active={activeTab === tab} label={t(`settings.${tab}` as any)} />
-          </Pressable>
-        ))}
+        {TABS.map((tab, i) => {
+          const tabW = tabBarWidth > 0 ? (tabBarWidth - TAB_BAR_PAD * 2) / TABS.length : 0
+          const center = (isRTL ? -1 : 1) * i * tabW
+          // White opacity peaks when the pill is centered on this tab and
+          // falls to zero at the neighboring tabs — fades track pill motion.
+          const whiteOpacity: Animated.AnimatedInterpolation<number> | number =
+            tabW > 0
+              ? indicator.interpolate({
+                  inputRange: [center - tabW, center, center + tabW],
+                  outputRange: [0, 1, 0],
+                  extrapolate: 'clamp',
+                })
+              : (activeTab === tab ? 1 : 0)
+          return (
+            <Pressable
+              key={tab}
+              style={styles.tabItem}
+              onPress={() => changeTab(tab)}
+            >
+              <TabIconStack opacity={whiteOpacity} tab={tab} />
+            </Pressable>
+          )
+        })}
       </View>
 
       <View
         style={{ flex: 1, overflow: 'hidden' }}
         onLayout={e => setWidth(e.nativeEvent.layout.width)}
+        {...panResponder.panHandlers}
       >
         <Animated.View style={{ flex: 1, transform: [{ translateX: translate }] }}>
           {TABS.map((tab, i) => (
@@ -1192,9 +1417,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', marginHorizontal: 16, marginBottom: 8,
     backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3,
   },
-  tabItem: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
-  tabText: { fontSize: 13, fontWeight: '500', color: 'rgba(0,0,0,0.5)' },
-  tabTextActive: { color: '#fff' },
+  tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
 
   tabContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },
 

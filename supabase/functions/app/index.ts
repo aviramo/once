@@ -19,10 +19,13 @@ const updatable = [
 
 Deno.serve(async (req) => {
   const body = await Tools.getBody(req);
+  const segments = new URL(req.url).pathname.split('/').filter(Boolean);
+  const event = segments[segments.indexOf('app') + 1] ?? null;
   const logger = new Logger(new User("unknown"), body);
+  if (event) logger.event = event;
   const user = await User.getByRequest(logger, req);
   logger.user = user;
-  if (Object.keys(logger.body).length === 0) return logger.response('options');
+  if (!event && Object.keys(logger.body).length === 0) return logger.response('options');
   if (!user) return logger.error('api', "unauthenticated", 401);
   user.last_seen = new Date();
 
@@ -38,7 +41,7 @@ Deno.serve(async (req) => {
 
   const other = await user.other(logger);
 
-  switch (body.event) {
+  switch (event) {
     case "account":
       if (!user.state && typeof body.name === 'string' && typeof body.birth_date === 'string' && typeof body.is_male === 'boolean') {
         const birthDate = new Date(body.birth_date);
@@ -68,7 +71,7 @@ Deno.serve(async (req) => {
     }
     case "ignore":
       if (user.state == State.WATCHING) {
-        EdgeRuntime.waitUntil(user.action(logger, body.event));
+        EdgeRuntime.waitUntil(user.action(logger, event));
         delete other?.watchers[user.user_id];
         if(other) EdgeRuntime.waitUntil(other.update(logger));
         await search(logger, user, other);
@@ -84,11 +87,11 @@ Deno.serve(async (req) => {
       break;
     case "cancel":
       if (user.state == State.WAITING)
-        await no(logger, body.event, user, State.CANCELLED, other);
+        await no(logger, event, user, State.CANCELLED, other);
       break;
     case "refuse":
       if (user.state == State.REPLYING)
-        await no(logger, body.event, user, State.REFUSED, other);
+        await no(logger, event, user, State.REFUSED, other);
       break;
     case "approve":
       if (user.state == State.REPLYING) {
@@ -98,11 +101,11 @@ Deno.serve(async (req) => {
       break;
     case "leave":
       if (user.state == State.CHAT)
-        await no(logger, body.event, user, State.LEFT, other);
+        await no(logger, event, user, State.LEFT, other);
       break;
     case "block":
       if (user.state == State.CHAT)
-        await no(logger, body.event, user, State.LEFT, other);
+        await no(logger, event, user, State.LEFT, other);
       break;
     case 'ok':
       await search(logger, user);
@@ -169,7 +172,8 @@ async function watch(logger: Logger, user: User, exclude?: User) {
 async function search(logger: Logger, user: User, exclude?: User) {
   if (exclude) {
     const newUser = lodash.cloneDeep(user);
-    const newLogger = new Logger(newUser, { event: 'search' }, logger);
+    const newLogger = new Logger(newUser, {}, logger);
+    newLogger.event = 'search';
     await watch(newLogger, newUser, exclude);
     newLogger.response();
   } else await watch(logger, user, exclude);

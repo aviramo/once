@@ -104,7 +104,8 @@ export default class User {
   }
 
   async notify(state?: State) {
-    const logger = new Logger(this, { event: 'notify' });
+    const logger = new Logger(this, {});
+    logger.event = 'notify';
     const matchImageFilename = (this.match?.images as string[] | undefined)?.[0];
     const matchImageUrl = matchImageFilename && this.match?.user_id
       ? `${Tools.supabaseUrl}/storage/v1/object/public/users/${this.match.user_id}/normal/${matchImageFilename}`

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  View, Text, Pressable, StyleSheet, ActivityIndicator, Platform,
-} from 'react-native'
+import { View, Text, StyleSheet, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
@@ -11,6 +9,7 @@ import Svg, { Path } from 'react-native-svg'
 import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
+import { PrimaryButton } from '../src/components/Button'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -130,28 +129,20 @@ export default function LoginPage() {
 
       {/* ── Auth Buttons — pinned to bottom ── */}
       <View style={styles.bottom}>
-        <Pressable
-          style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+        <PrimaryButton
+          label={t('auth.signInGoogle')}
           onPress={handleGoogle}
-          disabled={loadingProvider !== null}
-        >
-          {loadingProvider === 'google'
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={styles.btnText}>{t('auth.signInGoogle')}</Text>
-          }
-        </Pressable>
+          loading={loadingProvider === 'google'}
+          disabled={loadingProvider !== null && loadingProvider !== 'google'}
+        />
 
         {Platform.OS === 'ios' && (
-          <Pressable
-            style={({ pressed }) => [styles.btn, styles.btnApple, pressed && styles.btnPressed]}
+          <PrimaryButton
+            label={t('auth.signInApple')}
             onPress={handleApple}
-            disabled={loadingProvider !== null}
-          >
-            {loadingProvider === 'apple'
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={styles.btnText}>{t('auth.signInApple')}</Text>
-            }
-          </Pressable>
+            loading={loadingProvider === 'apple'}
+            disabled={loadingProvider !== null && loadingProvider !== 'apple'}
+          />
         )}
       </View>
     </SafeAreaView>
@@ -216,35 +207,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // Bottom
+  // Bottom — matches home.tsx's buttons container so the CTA sits at the
+  // same inset on both screens.
   bottom: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 36,
-    paddingTop: 12,
+    paddingTop: 8,
     backgroundColor: 'rgba(250,250,250,0.97)',
     gap: 10,
-  },
-  btn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#111',
-    paddingVertical: 16,
-  },
-  btnApple: {
-    backgroundColor: '#1a1a1a',
-  },
-  btnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  btnPressed: {
-    opacity: 0.88,
   },
 })
