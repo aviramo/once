@@ -132,16 +132,14 @@ export default function LoginPage() {
         <PrimaryButton
           label={t('auth.signInGoogle')}
           onPress={handleGoogle}
-          loading={loadingProvider === 'google'}
-          disabled={loadingProvider !== null && loadingProvider !== 'google'}
+          disabled={loadingProvider !== null}
         />
 
         {Platform.OS === 'ios' && (
           <PrimaryButton
             label={t('auth.signInApple')}
             onPress={handleApple}
-            loading={loadingProvider === 'apple'}
-            disabled={loadingProvider !== null && loadingProvider !== 'apple'}
+            disabled={loadingProvider !== null}
           />
         )}
       </View>
@@ -152,7 +150,7 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#eef0f3',
   },
   center: {
     flex: 1,

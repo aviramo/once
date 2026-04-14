@@ -58,14 +58,21 @@ Deno.serve(async (req) => {
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
-        await user.removeWatchers(logger);
-        await search(logger, user);
+        // Defer the geo-matching search so the response returns quickly;
+        // the gateway was timing out (502) while we waited for `search` to
+        // finish. The next state transition lands on the client via realtime.
+        EdgeRuntime.waitUntil((async () => {
+          await user.removeWatchers(logger);
+          await search(logger, user);
+        })());
       }
       if (body.state == State.VISIBLE) {
         delete other?.watchers[user.user_id];
         if(other) EdgeRuntime.waitUntil(other.update(logger));
-        await user.addWatchers(logger);
-        EdgeRuntime.waitUntil(user.update(logger, body.state));
+        EdgeRuntime.waitUntil((async () => {
+          await user.addWatchers(logger);
+          await user.update(logger, body.state as State);
+        })());
       }
       break;
     }

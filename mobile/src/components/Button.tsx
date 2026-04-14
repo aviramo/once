@@ -1,67 +1,58 @@
-import { useEffect, useRef } from 'react'
-import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native'
+import { useRef, useState, type ReactNode } from 'react'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
-// through this component so the press feedback, disabled state, and loading
-// animation stay identical everywhere.
+// through this component so the press feedback and disabled state stay
+// identical everywhere.
 //
 // Press feedback: a quick scale-down followed by a spring-back bump, driven
 // natively so it stays smooth even when the JS thread is busy with the
 // in-flight action that the press kicks off.
 //
-// `loading` keeps the label visible and pulses its opacity while the action
-// is in-flight; presses are blocked. `disabled` fades the whole button to a
-// static dim state without the pulse.
+// Tap target is built on raw View responder callbacks rather than Pressable:
+// RN 0.81's Pressability has an aggressive cancel-on-movement threshold that
+// drops single taps as "pressIn + pressOut without onPress" on buttons inside
+// ScrollViews (settings reset, units toggle) — the bare responder flow below
+// fires onPress on every clean release. Termination is NOT refused, so a
+// ScrollView ancestor can still steal the gesture on an actual scroll.
 
 type Variant = 'primary' | 'secondary' | 'destructive'
 type Size = 'lg' | 'md'
+// Accent tone layered on top of `primary`. Keeps the rest of the button
+// spec intact (shape, text color, pressed fade) and only swaps the fill —
+// so a positive CTA stays consistent with every other primary button.
+type Tone = 'neutral' | 'positive'
 
 export function Button({
   label,
   onPress,
   disabled,
-  loading,
   variant = 'primary',
   size = 'lg',
+  tone = 'neutral',
+  silentDisabled,
+  iconStart,
 }: {
   label: string
   onPress: () => void
   disabled?: boolean
-  loading?: boolean
   variant?: Variant
   size?: Size
+  tone?: Tone
+  // When true, `disabled` still blocks taps but the button keeps its normal
+  // appearance (no fade). Used for sibling buttons that get locked out while
+  // another action in the same row is in-flight — we want the lockout, not a
+  // visual flicker as the user sees every button go gray for a frame.
+  silentDisabled?: boolean
+  // Optional leading glyph pinned to the start edge. Positioned absolutely
+  // so the label stays visually centered regardless of the icon's width.
+  iconStart?: ReactNode
 }) {
   const scale = useRef(new Animated.Value(1)).current
-  const pulse = useRef(new Animated.Value(1)).current
+  const [pressed, setPressed] = useState(false)
 
-  // Breathing pulse on the label opacity while loading — communicates
-  // "something is happening" without swapping the text out for a spinner.
-  useEffect(() => {
-    if (!loading) {
-      pulse.setValue(1)
-      return
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.45,
-          duration: 700,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 700,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [loading])
-
-  const handlePressIn = () => {
+  const pressIn = () => {
+    setPressed(true)
     Animated.timing(scale, {
       toValue: 0.96,
       duration: 90,
@@ -69,7 +60,8 @@ export function Button({
     }).start()
   }
 
-  const handlePressOut = () => {
+  const pressOut = () => {
+    setPressed(false)
     Animated.spring(scale, {
       toValue: 1,
       friction: 4,
@@ -78,29 +70,45 @@ export function Button({
     }).start()
   }
 
-  const isDisabled = disabled || loading
   const base = SIZE[size]
   const skin = VARIANT[variant]
+  // Tone only overrides the fill/pressed fill of the primary variant. For
+  // secondary/destructive the tone is ignored — they already carry their
+  // own semantic color.
+  const toneSkin = variant === 'primary' && tone !== 'neutral' ? TONE[tone] : null
 
   return (
-    <Animated.View style={[styles.wrap, { transform: [{ scale }] }]}>
-      <Pressable
-        style={({ pressed }) => [
+    <Animated.View collapsable={false} style={[styles.wrap, { transform: [{ scale }] }]}>
+      <View
+        style={[
           styles.btn,
           base.btn,
           skin.btn,
-          pressed && skin.pressed,
-          disabled && styles.disabled,
+          toneSkin?.btn,
+          pressed && (toneSkin?.pressed ?? skin.pressed),
+          disabled && !silentDisabled && styles.disabled,
         ]}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-        disabled={isDisabled}
+        onStartShouldSetResponder={() => !disabled}
+        onResponderGrant={pressIn}
+        onResponderRelease={() => {
+          pressOut()
+          if (!disabled) onPress()
+        }}
+        onResponderTerminate={pressOut}
       >
-        <Animated.Text style={[styles.text, base.text, skin.text, { opacity: pulse }]}>
+        {iconStart ? (
+          <View pointerEvents="none" style={styles.iconStart}>
+            {iconStart}
+          </View>
+        ) : null}
+        <Text
+          style={[styles.text, base.text, skin.text]}
+          numberOfLines={1}
+          allowFontScaling={false}
+        >
           {label}
-        </Animated.Text>
-      </Pressable>
+        </Text>
+      </View>
     </Animated.View>
   )
 }
@@ -121,8 +129,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   disabled: { opacity: 0.45 },
+  // Absolute so the label stays visually centered regardless of icon width.
+  iconStart: {
+    position: 'absolute',
+    start: 20,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
   text: {
     letterSpacing: -0.2,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
 })
 
@@ -134,6 +153,13 @@ const SIZE: Record<Size, { btn: object; text: object }> = {
   md: {
     btn: { borderRadius: 14, paddingVertical: 16 },
     text: { fontSize: 15, fontWeight: '700' },
+  },
+}
+
+const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> = {
+  positive: {
+    btn: { backgroundColor: '#16a34a' },
+    pressed: { backgroundColor: '#15803d' },
   },
 }
 

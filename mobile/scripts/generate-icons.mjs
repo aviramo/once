@@ -42,16 +42,17 @@ async function render(svgStr, file, { background } = {}) {
   await write(file, await pipe.png().toBuffer())
 }
 
-// App icon — dark brand background with the logo in warm accent
-await render(svg({ size: 1024, bg: '#0d0005', fill: '#ff643c', logoFraction: 0.58 }), 'icon.png')
+// App icon — black mark on the off-white brand background, matching the
+// BootScreen logo (#111 on #fafafa).
+await render(svg({ size: 1024, bg: '#fafafa', fill: '#111111', logoFraction: 0.58 }), 'icon.png')
 
 // Adaptive icon foreground — logo on transparent. Android composites it
 // over the backgroundColor from app.json, inside a safe 66% inner circle,
 // so we keep the logo at ~55% of the canvas to stay well inside the mask.
-await render(svg({ size: 1024, bg: 'transparent', fill: '#ff643c', logoFraction: 0.45 }), 'adaptive-icon.png')
+await render(svg({ size: 1024, bg: 'transparent', fill: '#111111', logoFraction: 0.45 }), 'adaptive-icon.png')
 
-// Splash icon — on the dark brand background (matches splash.backgroundColor)
-await render(svg({ size: 1024, bg: '#0d0005', fill: '#ff643c', logoFraction: 0.42 }), 'splash-icon.png')
+// Splash icon — on the off-white brand background (matches splash.backgroundColor)
+await render(svg({ size: 1024, bg: '#fafafa', fill: '#111111', logoFraction: 0.42 }), 'splash-icon.png')
 
 // Favicon — small, same palette
-await render(svg({ size: 96, bg: '#0d0005', fill: '#ff643c', logoFraction: 0.62 }), 'favicon.png')
+await render(svg({ size: 96, bg: '#fafafa', fill: '#111111', logoFraction: 0.62 }), 'favicon.png')

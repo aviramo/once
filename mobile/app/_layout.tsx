@@ -11,16 +11,26 @@ import {
   Rubik_700Bold,
   Rubik_800ExtraBold,
 } from '@expo-google-fonts/rubik'
+import {
+  Heebo_400Regular,
+  Heebo_500Medium,
+  Heebo_600SemiBold,
+  Heebo_700Bold,
+  Heebo_800ExtraBold,
+} from '@expo-google-fonts/heebo'
 import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
+import { lang } from '../src/i18n'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
-// Map RN's fontWeight values to the matching Rubik face. Applied globally so
-// every <Text> across the app renders in Rubik without per-component work.
-const WEIGHT_TO_FAMILY: Record<string, string> = {
+// Rubik ships Latin-only glyphs; Hebrew text falls back to the system font
+// which renders visibly larger. Heebo is Rubik's Hebrew-optimized sibling
+// (same designer, matching metrics), so we swap to Heebo when the UI is in
+// Hebrew to keep Hebrew and Latin text visually aligned.
+const RUBIK_WEIGHTS: Record<string, string> = {
   '400': 'Rubik_400Regular',
   '500': 'Rubik_500Medium',
   '600': 'Rubik_600SemiBold',
@@ -29,6 +39,17 @@ const WEIGHT_TO_FAMILY: Record<string, string> = {
   normal: 'Rubik_400Regular',
   bold: 'Rubik_700Bold',
 }
+const HEEBO_WEIGHTS: Record<string, string> = {
+  '400': 'Heebo_400Regular',
+  '500': 'Heebo_500Medium',
+  '600': 'Heebo_600SemiBold',
+  '700': 'Heebo_700Bold',
+  '800': 'Heebo_800ExtraBold',
+  normal: 'Heebo_400Regular',
+  bold: 'Heebo_700Bold',
+}
+const WEIGHT_TO_FAMILY = lang === 'he' ? HEEBO_WEIGHTS : RUBIK_WEIGHTS
+const DEFAULT_FAMILY = WEIGHT_TO_FAMILY['400']
 
 function applyGlobalFont() {
   const flatten = (style: any): any => {
@@ -39,10 +60,15 @@ function applyGlobalFont() {
   const pickFamily = (style: any) => {
     const flat = flatten(style)
     const w = flat?.fontWeight != null ? String(flat.fontWeight) : '400'
-    return WEIGHT_TO_FAMILY[w] ?? 'Rubik_400Regular'
+    return WEIGHT_TO_FAMILY[w] ?? DEFAULT_FAMILY
   }
   // @ts-expect-error — defaultProps is the documented RN hook for global text defaults
   Text.defaultProps = Text.defaultProps || {}
+  // Cap font scaling globally: honours the user's preference up to ~25% larger
+  // than baseline, then stops so slider labels, chips, and fixed-height rows
+  // don't overflow at extreme OS font sizes.
+  // @ts-expect-error
+  Text.defaultProps.maxFontSizeMultiplier = 1.25
   const origTextRender = Text.render
   // Override render to inject fontFamily based on the resolved fontWeight.
   // @ts-expect-error
@@ -57,7 +83,9 @@ function applyGlobalFont() {
   // @ts-expect-error
   TextInput.defaultProps = TextInput.defaultProps || {}
   // @ts-expect-error
-  TextInput.defaultProps.style = [{ fontFamily: 'Rubik_400Regular' }, TextInput.defaultProps.style]
+  TextInput.defaultProps.maxFontSizeMultiplier = 1.25
+  // @ts-expect-error
+  TextInput.defaultProps.style = [{ fontFamily: DEFAULT_FAMILY }, TextInput.defaultProps.style]
 }
 
 let globalFontApplied = false
@@ -128,6 +156,11 @@ export default function RootLayout() {
     Rubik_600SemiBold,
     Rubik_700Bold,
     Rubik_800ExtraBold,
+    Heebo_400Regular,
+    Heebo_500Medium,
+    Heebo_600SemiBold,
+    Heebo_700Bold,
+    Heebo_800ExtraBold,
   })
 
   useEffect(() => {

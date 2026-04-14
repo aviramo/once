@@ -1,7 +1,7 @@
 import lodash from "lodash";
 import Tools, { Subscription } from "./tools.ts";
 import Logger from "./logger.ts";
-import { State } from "./global.ts";
+import { State, Match, Watcher } from "./global.ts";
 
 export default class User {
   user_id: string;
@@ -14,7 +14,7 @@ export default class User {
   subscription?: JSON | null;
   state: State | null = null;
   other_id: string | null = null;
-  match: Record<string, unknown> | null = null;
+  match: Match | null = null;
   location: string | null = null;
   range?: number;
   age_from?: number;
@@ -25,13 +25,12 @@ export default class User {
   role?: string | null;
   lang?: string;
   os?: string;
-  watchers: Record<string, unknown> = {};
+  watchers: Record<string, Watcher> = {};
   units?: string;
 
   db: { new: Record<string, unknown>, old: Record<string, unknown> } = { new: {}, old: {} };
 
   static LEGAL = 18;
-  static MAX_WATCHERS = 3;
 
   constructor(data: string | Record<string, unknown>) {
     if (typeof data === 'string') this.user_id = data;
@@ -125,7 +124,7 @@ export default class User {
     if (!subJson?.endpoint) return logger.error('notify', "subscription missing endpoint", 400);
     const notified = await Tools.notify(log, subJson, payload);
     if (!notified) {
-      this.subscription = null;
+      // this.subscription = null;
       if (this.state === State.VISIBLE) this.state = State.HIDDEN;
       EdgeRuntime.waitUntil(this.update(logger));
       return logger.error('notify', "failed to send notification", 500);
@@ -150,9 +149,9 @@ export default class User {
     return (await this.others(logger, query => query.eq("user_id", this.other_id)))[0];
   }
 
-  renderMatch(other?: User) {
-    const match: Record<string, unknown> | null = other ? {
-      created_at: this.match?.created_at ? this.match.created_at : null,
+  renderMatch(other?: User): Match | null {
+    const match: Match | null = other ? {
+      created_at: this.match?.created_at ?? null,
       user_id: other.user_id,
       last_seen: other.last_seen,
       title: other.name + ', ' + other.age(),
@@ -194,20 +193,20 @@ export default class User {
 
   setWatcher(other: User) {
     console.log("setWatcher", other);
-    const watcher = this.renderMatch(other);
-    if (watcher) {
-      delete watcher.images;
-      watcher.image = other.images?.blur?.[0];
+    const match = this.renderMatch(other);
+    if (match) {
+      const { images: _images, ...rest } = match;
+      const watcher: Watcher = { ...rest, image: other.images?.blur?.[0] };
+      if (this.watchers[other.user_id]?.created_at) watcher.created_at = new Date();
       this.watchers[other.user_id] = watcher;
     }
   }
 
   async addWatchers(logger: Logger) {
-    if (this.watchersCount() < User.MAX_WATCHERS)
-      for (const other of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).order("relevance", { ascending: false }).limit(User.MAX_WATCHERS - this.watchersCount()))) {
-        this.setWatcher(other);
-        EdgeRuntime.waitUntil(other.update(logger, State.WATCHING, this, true));
-      }
+    for (const other of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).order("relevance", { ascending: false }))) {
+      this.setWatcher(other);
+      EdgeRuntime.waitUntil(other.update(logger, State.WATCHING, this, true));
+    }
   }
 
   async updateWatchers(logger: Logger) {

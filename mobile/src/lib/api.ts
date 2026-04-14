@@ -44,3 +44,10 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   if (fn === 'app' || fn.startsWith('app/')) useUserStore.getState().applyServerUser(data as any, 'invoke')
   return data
 }
+
+export function publicImageUrl(userId: string, folder: 'normal' | 'blur', filename: string) {
+  // `encodeURI` preserves already-safe chars like `-`, `_`, `.` and slashes
+  // in case the filename accidentally carries a path, while still escaping
+  // spaces and unicode that RN's Image loader won't normalize on its own.
+  return `${supabaseUrl}/storage/v1/object/public/users/${userId}/${folder}/${encodeURI(filename)}`
+}

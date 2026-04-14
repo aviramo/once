@@ -1,3 +1,4 @@
+import { AppState, type AppStateStatus } from 'react-native'
 import { supabase } from './supabase'
 import { useUserStore } from '../stores/userStore'
 
@@ -16,6 +17,17 @@ let activeUserId: string | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let retryDelay = 2000
 const MAX_RETRY_DELAY = 30_000
+let appStateSub: { remove: () => void } | null = null
+
+// Fetch the latest user row to close any gap. Realtime can miss UPDATEs that
+// committed while the socket was down (background, network drop, timeout),
+// and Supabase doesn't replay them on reconnect — so whenever we (re)gain a
+// healthy connection we pull a fresh snapshot through the same store entry
+// point the live stream feeds.
+function resync(userId: string) {
+  if (activeUserId !== userId) return
+  useUserStore.getState().fetch(userId)
+}
 
 function clearRetry() {
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
@@ -53,6 +65,7 @@ function connect(userId: string) {
       if (channel !== activeChannel) return
       if (status === 'SUBSCRIBED') {
         retryDelay = 2000  // reset backoff on a healthy subscription
+        resync(userId)     // fill any gap from events missed pre-subscribe
       } else if (
         status === 'CHANNEL_ERROR' ||
         status === 'TIMED_OUT' ||
@@ -76,6 +89,14 @@ function connect(userId: string) {
 export function subscribeToUserChanges(userId: string) {
   if (activeUserId === userId && activeChannel) return
   activeUserId = userId
+  if (!appStateSub) {
+    appStateSub = AppState.addEventListener('change', (s: AppStateStatus) => {
+      // Coming back to foreground: the socket may have been backgrounded and
+      // missed commits. Pull a fresh snapshot; the underlying channel will
+      // reconnect on its own if it dropped.
+      if (s === 'active' && activeUserId) resync(activeUserId)
+    })
+  }
   connect(userId)
 }
 
@@ -84,4 +105,5 @@ export function unsubscribeFromUserChanges() {
   activeUserId = null
   teardown()
   retryDelay = 2000
+  if (appStateSub) { appStateSub.remove(); appStateSub = null }
 }

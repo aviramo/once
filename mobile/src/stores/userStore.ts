@@ -1,6 +1,35 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 
+export interface MatchData {
+  image: string
+  images?: string | string[] | null
+  user_id: string
+  title: string
+  message: string
+  distance: number
+  located_at?: string | null
+  last_seen?: string | null
+  subscribed: boolean
+  is_for_kids?: boolean | null
+  age?: number
+  is_male?: boolean | null
+  units?: string | null
+}
+
+export interface WatcherInfo {
+  user_id: string
+  image: string
+  title: string
+  created_at?: string | null
+  distance?: number | null
+  last_seen?: string | null
+  is_male?: boolean | null
+  message?: string | null
+  subscribed?: boolean | null
+  is_for_kids?: boolean | null
+}
+
 export interface UserProfile {
   user_id: string
   name: string | null
@@ -17,6 +46,8 @@ export interface UserProfile {
   state: string | null
   units: string | null
   role: string | null
+  match?: MatchData | null
+  watchers?: Record<string, WatcherInfo> | null
 }
 
 interface UserStore {
@@ -40,11 +71,19 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'units',
 ]
 
-// Every invoke bumps the user's `last_seen` on the server. The same value
-// then echoes back on realtime — identical DB write, two delivery paths.
-// We remember the last_seen we applied from invoke responses and drop the
-// matching realtime echo to avoid a redundant re-render.
-let lastInvokeLastSeen: string | null = null
+// Monotonic gate on realtime snapshots. The server fires several
+// EdgeRuntime.waitUntil(user.update) tasks after the HTTP response, so
+// postgres_changes events can land out of order — and a stale one arriving
+// after a fresher invoke response would flicker the UI back to the old
+// state. We remember the newest `last_seen` ms we've applied from any
+// source and drop realtime events whose snapshot is same-or-older (both
+// the exact echo of our invoke and the tail of earlier writes still in
+// flight).
+//
+// Compared as epoch ms via Date.parse rather than string equality: postgrest
+// (`...+00:00`) and realtime/WAL (`...` / `...Z`) format the same timestamp
+// slightly differently, so string equality misses echoes it should catch.
+let lastAppliedLastSeen = 0
 
 // Pending local values for client-authored fields that haven't yet been
 // confirmed by a server response carrying the same value. While a field is
@@ -68,7 +107,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
         .select('*')
         .eq('user_id', userId)
         .single()
-      set({ profile: data ?? null })
+      // Route through applyServerUser so the realtime gate + pending map
+      // stay consistent with the snapshot we just pulled. Otherwise the
+      // very next realtime event can be judged stale (or the inverse)
+      // against a lastAppliedLastSeen that wasn't updated.
+      if (data) get().applyServerUser(data as Record<string, unknown>, 'invoke')
+      else set({ profile: null })
     } finally {
       set({ loading: false })
     }
@@ -87,8 +131,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
     if (!data || typeof data !== 'object') return
     const d = data as Record<string, unknown>
     const lastSeen = d.last_seen as string | undefined
-    if (source === 'realtime' && lastSeen && lastSeen === lastInvokeLastSeen) return
-    if (source === 'invoke' && lastSeen) lastInvokeLastSeen = lastSeen
+    const ts = lastSeen ? Date.parse(lastSeen) : 0
+    // Strict `<`: same-timestamp events are legitimate (server-side writes
+    // can commit without bumping last_seen), so we must let them through.
+    // `<=` was dropping valid state transitions when last_seen stayed put.
+    if (source === 'realtime' && ts && ts < lastAppliedLastSeen) return
+    if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
     const prev = get().profile
     if (!prev) { set({ profile: data as unknown as UserProfile }); return }
     const merged: Record<string, unknown> = { ...prev, ...data }
@@ -106,5 +154,5 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ profile: merged as unknown as UserProfile })
   },
 
-  clear: () => { pending.clear(); lastInvokeLastSeen = null; set({ profile: null }) },
+  clear: () => { pending.clear(); lastAppliedLastSeen = 0; set({ profile: null }) },
 }))

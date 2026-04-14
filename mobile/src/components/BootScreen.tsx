@@ -11,7 +11,7 @@ import { t } from '../i18n'
 
 function SyncWishLogo({ size = 96 }: { size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 48 50" fill="none">
+    <Svg width={size} height={size} viewBox="1.9 -1.1 48 50" fill="none">
       <Path
         fillRule="evenodd"
         d="M18.871 33.044L17.998 44.704C17.936 45.523 18.665 46.087 19.316 45.722C23.929 43.138 38.378 33.648 45.702 12.79C46.038 11.833 45.135 10.97 44.365 11.509C40.039 14.539 30.585 20.801 24.742 21.993C24.742 21.993 28.484 19.395 30.723 15.405C30.943 15.014 30.924 14.514 30.68 14.161L22.513 2.389C22.029 1.691 21.035 1.981 20.861 2.87L18.318 15.807L6.384 26.223C5.786 26.745 5.908 27.8 6.599 28.079L18.871 33.044Z"
@@ -80,7 +80,7 @@ export function BootScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#eef0f3',
     alignItems: 'center',
     justifyContent: 'center',
   },

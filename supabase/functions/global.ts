@@ -17,3 +17,23 @@ export enum State {
     REFUSED = "REFUSED",
     LEFT = "LEFT"
 }
+
+type BaseMatch = {
+  created_at: Date | null;
+  user_id: string;
+  last_seen?: Date;
+  title: string;
+  is_male?: boolean;
+  subscribed?: boolean;
+  message?: string;
+  is_for_kids?: boolean | null;
+  distance?: number | null;
+};
+
+export type Match = BaseMatch & {
+  images?: string[];
+};
+
+export type Watcher = BaseMatch & {
+  image?: string;
+};

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from './Button'
@@ -20,8 +20,10 @@ export function ConfirmDialog({
   cancelLabel,
   confirmLabel,
   destructive,
+  tone,
   onCancel,
   onConfirm,
+  busy,
 }: {
   visible: boolean
   title: string
@@ -29,13 +31,32 @@ export function ConfirmDialog({
   cancelLabel?: string
   confirmLabel: string
   destructive?: boolean
+  // Paints the confirm button with a positive (green) fill. Ignored when
+  // `destructive` is set. Use for affirmative, non-reversing commits (e.g.
+  // "Send invitation").
+  tone?: 'positive'
   onCancel?: () => void
   onConfirm: () => void
+  // While true the confirm button is disabled + both backdrop and cancel
+  // ignore input. Use this whenever `onConfirm` makes a server call so the
+  // user can't double-commit or dismiss mid-flight.
+  busy?: boolean
 }) {
   // Fade + slight slide-up when the modal shows. Pure opacity feels flat for
   // a dialog this prominent, and a full slide is too heavy — so we do both
   // at reduced amplitude.
   const anim = useRef(new Animated.Value(0)).current
+
+  // Track which button was pressed so only that one shows the gray
+  // disabled treatment while busy — the other stays visually normal but
+  // is still non-interactive. Reset whenever busy clears or dialog hides.
+  const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
+  useEffect(() => {
+    if (!busy) setPressed(null)
+  }, [busy])
+  useEffect(() => {
+    if (!visible) setPressed(null)
+  }, [visible])
 
   useEffect(() => {
     Animated.timing(anim, {
@@ -58,7 +79,10 @@ export function ConfirmDialog({
       statusBarTranslucent
     >
       <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel ?? onConfirm} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={busy ? undefined : (onCancel ?? onConfirm)}
+        />
         <SafeAreaView edges={['bottom']} style={styles.safe} pointerEvents="box-none">
           <Animated.View style={[styles.card, { opacity: anim, transform: [{ translateY: cardTranslate }] }]}>
             <Text style={styles.title}>{title}</Text>
@@ -69,18 +93,23 @@ export function ConfirmDialog({
                 <View style={styles.slot}>
                   <Button
                     label={cancelLabel}
-                    onPress={onCancel ?? (() => {})}
+                    onPress={() => { setPressed('cancel'); onCancel?.() }}
                     variant="secondary"
                     size="md"
+                    disabled={busy}
+                    silentDisabled={pressed !== 'cancel'}
                   />
                 </View>
               ) : null}
               <View style={styles.slot}>
                 <Button
                   label={confirmLabel}
-                  onPress={onConfirm}
+                  onPress={() => { setPressed('confirm'); onConfirm() }}
                   variant={destructive ? 'destructive' : 'primary'}
+                  tone={!destructive && tone === 'positive' ? 'positive' : 'neutral'}
                   size="md"
+                  disabled={busy}
+                  silentDisabled={pressed !== 'confirm'}
                 />
               </View>
             </View>
@@ -107,9 +136,9 @@ const styles = StyleSheet.create({
     padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.06,
     shadowRadius: 24,
-    elevation: 12,
+    elevation: 6,
   },
   title: {
     fontSize: 22,

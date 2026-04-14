@@ -2,12 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import {
   View, Text, Pressable, StyleSheet, ScrollView,
   PanResponder, I18nManager, TextInput, Image, ActivityIndicator,
-  Keyboard, Platform, Animated, Dimensions,
+  Keyboard, Platform, Animated, Dimensions, Modal,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
-import Slider from '@react-native-community/slider'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import Svg, { Path, Line, Polyline, Circle } from 'react-native-svg'
@@ -19,17 +18,21 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t, tg } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
+import { IconPressable } from '../src/components/IconPressable'
+import { MatchCard } from '../src/components/MatchCard'
+import type { MatchData } from '../src/stores/userStore'
+import { slidingActiveRef } from '../src/lib/gesture'
 
 const isRTL = I18nManager.isRTL
 const THUMB = 22
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
-// Module-level flag flipped by sliders while their thumb is being dragged.
-// The settings tab pager checks this in its onMoveShouldSetPanResponder so
-// it doesn't steal horizontal gestures away from a slider mid-drag. Module
-// scope is fine here because only one slider can be dragged at a time and
-// only the in-page pager reads it.
-const slidingActiveRef = { current: false }
+function uuidv4(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
 
 // ── Back Icon ──────────────────────────────────────────────────────────────
 
@@ -112,8 +115,8 @@ function RangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }:
       <View style={rs.track} onLayout={e => { s.current.trackWidth = e.nativeEvent.layout.width }}>
         <View style={rs.trackBg} />
         <View style={[rs.trackFill, { start: `${minPct * 100}%`, end: `${(1 - maxPct) * 100}%` }]} />
-        <View style={[rs.thumb, { start: `${minPct * 100}%`, transform: [{ translateX: -THUMB / 2 }] }]} {...minPan.panHandlers} />
-        <View style={[rs.thumb, { start: `${maxPct * 100}%`, transform: [{ translateX: -THUMB / 2 }] }]} {...maxPan.panHandlers} />
+        <View style={[rs.thumb, { start: `${minPct * 100}%`, transform: [{ translateX: isRTL ? THUMB / 2 : -THUMB / 2 }] }]} {...minPan.panHandlers} />
+        <View style={[rs.thumb, { start: `${maxPct * 100}%`, transform: [{ translateX: isRTL ? THUMB / 2 : -THUMB / 2 }] }]} {...maxPan.panHandlers} />
       </View>
     </View>
   )
@@ -126,9 +129,78 @@ const rs = StyleSheet.create({
   trackFill: { position: 'absolute', height: 3, backgroundColor: '#111', borderRadius: 2 },
   thumb: {
     position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: '#111',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
   },
 })
+
+// ── Radius Slider ──────────────────────────────────────────────────────────
+// Single-thumb step slider built on the same PanResponder model as the age
+// RangeSlider above. Using the native Slider here had recurring gesture
+// negotiation problems with the nested horizontal pagers (home shell +
+// settings tabs) — replacing it with a custom thumb whose PanResponder
+// directly owns the gesture and flips slidingActiveRef makes the nested
+// pagers stay out of the way reliably.
+
+interface RadiusSliderProps {
+  stepCount: number           // number of snap positions (value domain is 0..stepCount-1)
+  value: number               // current integer index
+  onChange: (v: number) => void
+}
+
+function RadiusSlider({ stepCount, value, onChange }: RadiusSliderProps) {
+  const s = useRef({ trackWidth: 0, startPos: 0, value, stepCount })
+  s.current.value = value
+  s.current.stepCount = stepCount
+  const cbs = useRef({ onChange })
+  useEffect(() => { cbs.current = { onChange } }, [onChange])
+
+  const toPos = (v: number) => {
+    const { trackWidth, stepCount: sc } = s.current
+    if (sc <= 1 || trackWidth === 0) return 0
+    return (v / (sc - 1)) * trackWidth
+  }
+  const toVal = (pos: number) => {
+    const { trackWidth, stepCount: sc } = s.current
+    if (sc <= 1 || trackWidth === 0) return 0
+    const frac = Math.max(0, Math.min(pos, trackWidth)) / trackWidth
+    return Math.round(frac * (sc - 1))
+  }
+
+  const thumbPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.startPos = toPos(s.current.value)
+    },
+    onPanResponderMove: (_, { dx }) => {
+      const v = toVal(s.current.startPos + (isRTL ? -dx : dx))
+      if (v !== s.current.value) cbs.current.onChange(v)
+    },
+    onPanResponderRelease: () => { slidingActiveRef.current = false },
+    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+  })).current
+
+  const pct = stepCount <= 1 ? 0 : value / (stepCount - 1)
+
+  return (
+    <View style={rs.container} collapsable={false}>
+      <View
+        style={rs.track}
+        onLayout={e => { s.current.trackWidth = e.nativeEvent.layout.width }}
+      >
+        <View style={rs.trackBg} />
+        <View style={[rs.trackFill, { start: 0, end: `${(1 - pct) * 100}%` }]} />
+        <View
+          style={[rs.thumb, { start: `${pct * 100}%`, transform: [{ translateX: isRTL ? THUMB / 2 : -THUMB / 2 }] }]}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          {...thumbPan.panHandlers}
+        />
+      </View>
+    </View>
+  )
+}
 
 // ── Radius helpers ─────────────────────────────────────────────────────────
 
@@ -280,13 +352,18 @@ function AnimatedToggleButton({
     onPress()
   }
 
+  // Raw responder callbacks (not Pressable) for the same reason as Button /
+  // IconPressable: RN 0.81 Pressability cancels single taps inside ScrollView.
   return (
     <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
-      <Pressable onPress={handlePress}>
+      <View
+        onStartShouldSetResponder={() => true}
+        onResponderRelease={handlePress}
+      >
         <View style={{ borderRadius: 14, overflow: 'hidden' }}>
           {/* Inactive layer — always rendered underneath */}
-          <View style={{ backgroundColor: 'rgba(0,0,0,0.06)', paddingVertical: 14, alignItems: 'center' }}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: 'rgba(0,0,0,0.5)' }}>{label}</Text>
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.06)', paddingVertical: 10, alignItems: 'center' }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: 'rgba(0,0,0,0.5)' }}>{label}</Text>
           </View>
           {/* Active layer — fades over the top */}
           <Animated.View
@@ -297,10 +374,10 @@ function AnimatedToggleButton({
               opacity: activeOpacity,
             }}
           >
-            <Text style={{ fontSize: 15, fontWeight: '600', color: '#fff' }}>{label}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>{label}</Text>
           </Animated.View>
         </View>
-      </Pressable>
+      </View>
     </Animated.View>
   )
 }
@@ -330,7 +407,7 @@ function PreferencesTab() {
   const forFemale = profile.is_for_female
 
   return (
-    <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
 
       {/* Age Range */}
       <View style={styles.section}>
@@ -357,23 +434,11 @@ function PreferencesTab() {
           <Text style={styles.sectionLabel}>{t('settings.range').toUpperCase()}</Text>
           <Text style={styles.sectionValue}>{formatRadius(radius)}</Text>
         </View>
-        <View
-          onTouchStart={() => { slidingActiveRef.current = true }}
-          onTouchEnd={() => { slidingActiveRef.current = false }}
-          onTouchCancel={() => { slidingActiveRef.current = false }}
-        >
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={RADIUS_STEPS.length - 1}
-            step={1}
-            value={RADIUS_STEPS.indexOf(radius) < 0 ? 0 : RADIUS_STEPS.indexOf(radius)}
-            onValueChange={i => update({ range: radiusToServer(RADIUS_STEPS[Math.round(i)]) })}
-            minimumTrackTintColor="#111"
-            maximumTrackTintColor="rgba(0,0,0,0.15)"
-            thumbTintColor="#111"
-          />
-        </View>
+        <RadiusSlider
+          stepCount={RADIUS_STEPS.length}
+          value={Math.max(0, RADIUS_STEPS.indexOf(radius))}
+          onChange={i => update({ range: radiusToServer(RADIUS_STEPS[i]) })}
+        />
       </View>
 
       {/* Preferred Gender */}
@@ -599,6 +664,7 @@ function ProfileTab() {
   const sigByFilename = useRef<Map<string, string>>(new Map())
   const [dragging, setDragging] = useState(false)
   const [duplicateDialog, setDuplicateDialog] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   // Message is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
   const [localMessage, setLocalMessage] = useState(profile?.message ?? '')
   const localMessageRef = useRef(localMessage)
@@ -670,7 +736,6 @@ function ProfileTab() {
     if (!res.ok) throw new Error(await res.text())
   }
 
-  // Compress the image to JPEG under 200K by resizing + iterating compression quality.
   const compressUnder200K = async (uri: string): Promise<string> => {
     const MAX_BYTES = 200 * 1024
     const widths = [1080, 900, 720, 540]
@@ -680,39 +745,38 @@ function ProfileTab() {
         const out = await ImageManipulator.manipulateAsync(
           uri,
           [{ resize: { width: w } }],
-          { compress: q, format: ImageManipulator.SaveFormat.JPEG }
+          { compress: q, format: ImageManipulator.SaveFormat.WEBP }
         )
         const size = (await (await fetch(out.uri)).blob()).size
         if (size <= MAX_BYTES) return out.uri
       }
     }
-    // Last resort — smallest size
     const out = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 480 } }],
-      { compress: 0.25, format: ImageManipulator.SaveFormat.JPEG }
+      { compress: 0.25, format: ImageManipulator.SaveFormat.WEBP }
     )
     return out.uri
   }
 
   const uploadOne = async (asset: DocumentPicker.DocumentPickerAsset) => {
     if (!user) return null
-    const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`
+    const filename = `${uuidv4()}.webp`
 
     const [normalUri, blurred] = await Promise.all([
       compressUnder200K(asset.uri),
       ImageManipulator.manipulateAsync(
         asset.uri,
         [{ resize: { width: 32 } }],
-        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+        { compress: 0.5, format: ImageManipulator.SaveFormat.WEBP }
       ),
     ])
 
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token ?? ''
 
-    await uploadFile(normalUri, filename, 'image/jpeg', 'normal', token)
-    await uploadFile(blurred.uri, filename, 'image/jpeg', 'blur', token)
+    await uploadFile(normalUri, filename, 'image/webp', 'normal', token)
+    await uploadFile(blurred.uri, filename, 'image/webp', 'blur', token)
     return filename
   }
 
@@ -796,6 +860,21 @@ function ProfileTab() {
     update({ images: { normal: next, blur: next } })
   }
 
+  const previewData: MatchData | null = profile ? {
+    user_id: profile.user_id,
+    image: photos[0] ?? '',
+    images: photos,
+    title: profile.name ?? '—',
+    message: localMessage,
+    distance: 0,
+    located_at: new Date().toISOString(),
+    subscribed: false,
+    is_for_kids: profile.is_for_kids ?? null,
+    age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
+    is_male: profile.is_male,
+    units: profile.units,
+  } : null
+
   const onPhotoLoaded = (filename: string) => {
     setUploads(prev => prev.filter(u => u.filename !== filename))
   }
@@ -804,6 +883,7 @@ function ProfileTab() {
     <>
     <ScrollView
       ref={scrollRef}
+      style={styles.tabScroll}
       // Pad the bottom by the live keyboard height so the scroll has somewhere
       // to go: without it, on short-content tabs scrollTo would clamp before
       // the section reaches the top of the visible area.
@@ -811,37 +891,18 @@ function ProfileTab() {
       showsVerticalScrollIndicator={false}
       scrollEnabled={!dragging}
       keyboardShouldPersistTaps="handled"
+      delaysContentTouches={false}
     >
 
-      <Pressable style={({ pressed }) => [styles.previewBtn, pressed && { opacity: 0.7 }]} onPress={tap}>
+      <Pressable
+        style={({ pressed }) => [styles.previewBtn, pressed && { opacity: 0.7 }]}
+        onPress={() => { tap(); setPreviewOpen(true) }}
+      >
         <Text style={styles.previewBtnText}>{t('settings.previewProfile')}</Text>
       </Pressable>
 
-      <View style={[styles.section, { marginTop: 24 }]}>
-        <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
-        <PhotoGrid
-          photos={photos}
-          urlFor={(f) => `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
-          onRemove={removePhoto}
-          onLoaded={onPhotoLoaded}
-          onReorder={reorderPhotos}
-          canRemove={photos.length > 1}
-          uploads={uploads}
-          onDragStateChange={setDragging}
-          additionalChildren={
-            photos.length + uploads.filter(u => !u.filename).length < 6 ? (
-              <Pressable style={photoStyles.add} onPress={() => { tap(); pickPhoto() }}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={1.5} strokeLinecap="round">
-                  <Path d="M12 5v14M5 12h14" />
-                </Svg>
-              </Pressable>
-            ) : null
-          }
-        />
-      </View>
-
       <View
-        style={styles.section}
+        style={[styles.section, { marginTop: 24 }]}
         onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
       >
         <Text style={styles.sectionLabel}>{t('settings.aboutMe').toUpperCase()}</Text>
@@ -873,6 +934,29 @@ function ProfileTab() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
+        <PhotoGrid
+          photos={photos}
+          urlFor={(f) => `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
+          onRemove={removePhoto}
+          onLoaded={onPhotoLoaded}
+          onReorder={reorderPhotos}
+          canRemove={photos.length > 1}
+          uploads={uploads}
+          onDragStateChange={setDragging}
+          additionalChildren={
+            photos.length + uploads.filter(u => !u.filename).length < 6 ? (
+              <Pressable style={photoStyles.add} onPress={() => { tap(); pickPhoto() }}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={1.5} strokeLinecap="round">
+                  <Path d="M12 5v14M5 12h14" />
+                </Svg>
+              </Pressable>
+            ) : null
+          }
+        />
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionLabel}>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</Text>
         <View style={styles.genderRow}>
           <AnimatedToggleButton
@@ -896,13 +980,44 @@ function ProfileTab() {
       confirmLabel={t('common.gotIt')}
       onConfirm={() => setDuplicateDialog(false)}
     />
+    <Modal
+      visible={previewOpen}
+      animationType="slide"
+      onRequestClose={() => setPreviewOpen(false)}
+      statusBarTranslucent
+    >
+      <SafeAreaView style={styles.previewModal} edges={['top', 'bottom']}>
+        <View style={styles.previewHeader}>
+          <Text style={styles.previewHeaderTitle}>{t('settings.myProfile')}</Text>
+          <IconPressable style={styles.previewCloseBtn} onPress={() => { tap(); setPreviewOpen(false) }}>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="M18 6L6 18M6 6l12 12" stroke="#111" strokeWidth={2.2} strokeLinecap="round" />
+            </Svg>
+          </IconPressable>
+        </View>
+        {previewData && (
+          <MatchCard match={previewData} userIsMale={profile?.is_male ?? null} />
+        )}
+      </SafeAreaView>
+    </Modal>
     </>
   )
 }
 
+// 3 columns × 2 rows (max 6 photos). Percentage width + space-between
+// lets the gaps adapt to the actual pane width, which varies with safe-area
+// insets on edge-to-edge Android, instead of relying on Dimensions at
+// module-load time.
 const photoStyles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 8, marginTop: 12 },
-  cell: { width: '30%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden' },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    rowGap: 8,
+    marginTop: 12,
+  },
+  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12, overflow: 'hidden' },
   img: { width: '100%', height: '100%' },
   remove: {
     position: 'absolute', top: 4, end: 4,
@@ -911,7 +1026,7 @@ const photoStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   add: {
-    width: '30%', aspectRatio: 1, borderRadius: 12,
+    width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.05)',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', borderStyle: 'dashed',
@@ -1035,7 +1150,7 @@ function AccountTab() {
 
   return (
     <>
-    <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t('settings.accountInfo').toUpperCase()}</Text>
         <View style={styles.infoCard}>
@@ -1091,10 +1206,10 @@ function AccountTab() {
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
-function AppTab() {
+function AppTab({ onBack }: { onBack?: () => void }) {
+  const router = useRouter()
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState(false)
-  const [resetDone, setResetDone] = useState(false)
 
   // Null-safe: useAutoSave compares JSON.stringify of the object, so writing
   // `units: profile?.units` (undefined when unset) vs `'metric'` / `'imperial'`
@@ -1110,14 +1225,24 @@ function AppTab() {
     setResetting(true)
     try {
       await invoke('app/reset')
-      setResetDone(true)
-      setTimeout(() => setResetDone(false), 2500)
+      // The reset edge function runs bulk UPDATEs on the DB but doesn't
+      // refresh the request's in-memory user, so the response body carries
+      // the PRE-reset snapshot. Realtime delivers the real post-reset state
+      // ~1s later, which left the home screen showing stale data in the
+      // gap. Apply the known post-reset shape locally so the store reflects
+      // the new truth before we navigate home.
+      update({ state: 'HIDDEN', match: null, watchers: {} })
+      // Navigate back to home once the store matches the post-reset state.
+      // When embedded in the shell pager the parent slides back to home;
+      // standalone falls back to router.back().
+      if (onBack) onBack()
+      else router.back()
     } catch (e) { console.error(e) }
     finally { setResetting(false) }
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t('settings.unitsLabel').toUpperCase()}</Text>
         <View style={styles.genderRow}>
@@ -1139,10 +1264,9 @@ function AppTab() {
           <Text style={styles.sectionLabel}>{t('settings.adminLabel').toUpperCase()}</Text>
           <View style={{ marginTop: 14 }}>
             <Button
-              label={resetDone ? t('settings.resetDone') : t('settings.reset')}
+              label={t('settings.reset')}
               onPress={onReset}
-              loading={resetting}
-              disabled={resetDone}
+              disabled={resetting}
               variant="destructive"
               size="md"
             />
@@ -1155,11 +1279,11 @@ function AppTab() {
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function renderTab(tab: Tab) {
+function renderTab(tab: Tab, onBack?: () => void) {
   if (tab === 'preferences') return <PreferencesTab />
   if (tab === 'profile')     return <ProfileTab />
   if (tab === 'account')     return <AccountTab />
-  if (tab === 'app')         return <AppTab />
+  if (tab === 'app')         return <AppTab onBack={onBack} />
   return <View style={styles.tabContent} />
 }
 
@@ -1193,7 +1317,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
   const activeTabRef = useRef(activeTab)
   const widthRef = useRef(width)
   const tabBarWidthRef = useRef(tabBarWidth)
-  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  useEffect(() => { activeTabRef.current = activeTab; Keyboard.dismiss() }, [activeTab])
   useEffect(() => { widthRef.current = width }, [width])
   useEffect(() => { tabBarWidthRef.current = tabBarWidth }, [tabBarWidth])
 
@@ -1244,6 +1368,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
   const changeTab = (tab: Tab) => {
     if (tab === activeTab) return
     tap()
+    Keyboard.dismiss()
     setActiveTab(tab)
     animateToIndex(TABS.indexOf(tab))
   }
@@ -1263,8 +1388,12 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
       // way while a slider thumb is being dragged.
       onMoveShouldSetPanResponder: (_, g) => {
         if (slidingActiveRef.current) return false
+        // Matches the home shell's higher threshold — lower values claim
+        // the gesture on light finger wobble during a tap, which forces
+        // child Pressables (tab icons, reset, back) to drop the press
+        // and makes the user's first tap look like it was ignored.
         const horizontal =
-          Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5
+          Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6
         if (!horizontal) return false
         const index = TABS.indexOf(activeTabRef.current)
         const forward = isRTL ? g.dx > 0 : g.dx < 0
@@ -1318,9 +1447,12 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
       <StatusBar style="dark" />
 
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => { tap(); onBack ? onBack() : router.back() }}>
+        <IconPressable
+          style={styles.backBtn}
+          onPress={() => { tap(); onBack ? onBack() : router.back() }}
+        >
           <BackIcon />
-        </Pressable>
+        </IconPressable>
         <Text style={styles.title}>{t('settings.title')}</Text>
         <View style={styles.backBtn} />
       </View>
@@ -1360,13 +1492,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
                 })
               : (activeTab === tab ? 1 : 0)
           return (
-            <Pressable
+            <IconPressable
               key={tab}
               style={styles.tabItem}
               onPress={() => changeTab(tab)}
             >
               <TabIconStack opacity={whiteOpacity} tab={tab} />
-            </Pressable>
+            </IconPressable>
           )
         })}
       </View>
@@ -1392,7 +1524,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
                 width,
               }}
             >
-              {renderTab(tab)}
+              {renderTab(tab, onBack)}
             </View>
           ))}
         </Animated.View>
@@ -1404,11 +1536,11 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fafafa' },
+  root: { flex: 1, backgroundColor: '#eef0f3' },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12,
+    justifyContent: 'space-between', paddingHorizontal: 16, height: 56,
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 17, fontWeight: '600', color: '#111', letterSpacing: -0.3 },
@@ -1419,6 +1551,7 @@ const styles = StyleSheet.create({
   },
   tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
 
+  tabScroll: { flex: 1 },
   tabContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },
 
   section: { marginBottom: 28 },
@@ -1435,6 +1568,26 @@ const styles = StyleSheet.create({
 
   previewBtn: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   previewBtnText: { fontSize: 15, fontWeight: '500', color: '#111' },
+
+  previewModal: { flex: 1, backgroundColor: '#eef0f3' },
+  previewHeader: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    backgroundColor: '#eef0f3',
+  },
+  previewHeaderTitle: { fontSize: 17, fontWeight: '700', color: '#111' },
+  previewCloseBtn: {
+    position: 'absolute',
+    end: 8,
+    top: 0,
+    bottom: 0,
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   textInputWrap: { marginTop: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 14, paddingHorizontal: 12, paddingTop: 16, paddingBottom: 4, backgroundColor: '#fff' },
   textInput: { fontSize: 15, color: '#111' },
@@ -1453,7 +1606,10 @@ const styles = StyleSheet.create({
   },
   infoRowLast: { borderBottomWidth: 0 },
   infoLabel: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
-  infoValue: { fontSize: 15, fontWeight: '600', color: '#111', flexShrink: 1, marginStart: 16 },
+  infoValue: {
+    fontSize: 15, fontWeight: '600', color: '#111',
+    flexShrink: 1, marginStart: 16,
+  },
 
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
