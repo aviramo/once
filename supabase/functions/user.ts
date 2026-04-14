@@ -183,16 +183,7 @@ export default class User {
     this.match = this.renderMatch(other);
   }
 
-  async getWatchers(logger: Logger, exclude?: User) {
-    return await this.others(logger, query => {
-      query = query.eq("other_id", this.user_id);
-      if (exclude) query = query.neq("user_id", exclude.user_id);
-      return query;
-    });
-  }
-
   setWatcher(other: User) {
-    console.log("setWatcher", other);
     const match = this.renderMatch(other);
     if (match) {
       const { images: _images, ...rest } = match;
@@ -203,29 +194,38 @@ export default class User {
   }
 
   async addWatchers(logger: Logger) {
-    for (const other of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).order("relevance", { ascending: false }))) {
-      this.setWatcher(other);
-      EdgeRuntime.waitUntil(other.update(logger, State.WATCHING, this, true));
+    for (const watcher of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).order("relevance", { ascending: false }))) {
+      this.setWatcher(watcher);
+      EdgeRuntime.waitUntil(watcher.update(logger, State.WATCHING, this, true));
     }
   }
 
   async updateWatchers(logger: Logger) {
-    for (const other of await this.getWatchers(logger)) {
-      if (this.state == State.VISIBLE) this.setWatcher(other);
-      other.setWatcher(this);
-      other.setMatch(this);
-      EdgeRuntime.waitUntil(other.update(logger));
+    const watchers = await this.others(logger, query => {
+      return query.eq("other_id", this.user_id);
+    });
+    for (const watcher of watchers) {
+      watcher.setMatch(this);
+      if (this.state == State.VISIBLE)
+        this.setWatcher(watcher);
+      else
+        this.setMatch(watcher);
+      EdgeRuntime.waitUntil(watcher.update(logger));
     }
+
   }
 
   async removeWatchers(logger: Logger, exclude?: User) {
-    for (const other of await this.getWatchers(logger, exclude))
-      this.removeWatcher(logger, other);
+    for (const watcher_id of Object.keys(this.watchers)) {
+      if (watcher_id == exclude?.user_id) continue;
+      await this.removeWatcher(logger, watcher_id);
+    }
   }
 
-  removeWatcher(logger: Logger, other: User) {
-    delete this.watchers[other.user_id];
-    EdgeRuntime.waitUntil(other.update(logger, State.MISSED, this, true));
+  async removeWatcher(logger: Logger, watcher_id: string) {
+    delete this.watchers[watcher_id];
+    const watcher = await User.getById(logger, watcher_id);
+    await watcher?.update(logger, State.MISSED, this, true);
   }
 
   async action(logger: Logger, key: string) {

@@ -53,26 +53,19 @@ Deno.serve(async (req) => {
       await search(logger, user);
       break;
     case "delete":
+      await user.delete(logger);
       EdgeRuntime.waitUntil(user.removeWatchers(logger));
-      EdgeRuntime.waitUntil(user.delete(logger));
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
-        // Defer the geo-matching search so the response returns quickly;
-        // the gateway was timing out (502) while we waited for `search` to
-        // finish. The next state transition lands on the client via realtime.
-        EdgeRuntime.waitUntil((async () => {
-          await user.removeWatchers(logger);
-          await search(logger, user);
-        })());
+        await search(logger, user);
+        EdgeRuntime.waitUntil(user.removeWatchers(logger));
       }
       if (body.state == State.VISIBLE) {
         delete other?.watchers[user.user_id];
-        if(other) EdgeRuntime.waitUntil(other.update(logger));
-        EdgeRuntime.waitUntil((async () => {
-          await user.addWatchers(logger);
-          await user.update(logger, body.state as State);
-        })());
+        if (other) EdgeRuntime.waitUntil(other.update(logger));
+        EdgeRuntime.waitUntil(user.addWatchers(logger));
+        EdgeRuntime.waitUntil(user.update(logger, body.state as State));
       }
       break;
     }
@@ -80,14 +73,14 @@ Deno.serve(async (req) => {
       if (user.state == State.WATCHING) {
         EdgeRuntime.waitUntil(user.action(logger, event));
         delete other?.watchers[user.user_id];
-        if(other) EdgeRuntime.waitUntil(other.update(logger));
+        if (other) EdgeRuntime.waitUntil(other.update(logger));
         await search(logger, user, other);
       }
       break;
     case "invite":
       if (user.state == State.WATCHING) {
         if (await other?.update(logger, State.REPLYING, user, true)) {
-          if(other) EdgeRuntime.waitUntil(other.removeWatchers(logger, user));
+          if (other) EdgeRuntime.waitUntil(other.removeWatchers(logger, user));
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
         } else EdgeRuntime.waitUntil(user.update(logger, State.MISSED, other));
       }
@@ -103,7 +96,7 @@ Deno.serve(async (req) => {
     case "approve":
       if (user.state == State.REPLYING) {
         EdgeRuntime.waitUntil(user.update(logger, State.CHAT, other));
-        if(other) EdgeRuntime.waitUntil(other.update(logger, State.CHAT, user));
+        if (other) EdgeRuntime.waitUntil(other.update(logger, State.CHAT, user));
       }
       break;
     case "leave":
@@ -126,15 +119,12 @@ Deno.serve(async (req) => {
       EdgeRuntime.waitUntil(user.update(logger));
       if (!body.chat || typeof (body.chat as Record<string, unknown>).text !== 'string' || ((body.chat as Record<string, unknown>).text as string).trim() === '')
         return logger.error("chat", "no text", 400);
-      await user.chat(logger, (body.chat as Record<string, unknown>).text as string);
-      if(other) EdgeRuntime.waitUntil(other.update(logger));
-      if(other) EdgeRuntime.waitUntil(other.notify());
+      EdgeRuntime.waitUntil(user.chat(logger, (body.chat as Record<string, unknown>).text as string));
+      if (other) EdgeRuntime.waitUntil(other.update(logger, undefined, undefined, true));
       break;
     }
     case "remove": {
-      const other = await User.getById(logger, body.user_id);
-      if (!other) return logger.error("remove", "user not found", 404);
-      user.removeWatcher(logger, other);
+      EdgeRuntime.waitUntil(user.removeWatcher(logger, body.user_id));
       EdgeRuntime.waitUntil(user.update(logger));
       break;
     }
@@ -145,23 +135,17 @@ Deno.serve(async (req) => {
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
       break;
     }
-    default: {
+    default:
       await user.updateWatchers(logger);
-      if (user.state == State.HIDDEN) await search(logger, user);
-      if (user.state == State.VISIBLE && user.location) {
-        await user.addWatchers(logger);
-        EdgeRuntime.waitUntil(user.update(logger));
+      if (other?.state == State.VISIBLE) {
+        user.setMatch(other);
+        other.setWatcher(user);
+        EdgeRuntime.waitUntil(other.update(logger));
       }
-      if (user.state == State.WATCHING) {
-        other?.setWatcher(user);
-        if(other) EdgeRuntime.waitUntil(other.update(logger));
-      }
-      if (user.state && [State.WAITING, State.REPLYING, State.CHAT].includes(user.state) && other) {
-        other.setMatch(user);
-        if(other) EdgeRuntime.waitUntil(other.update(logger));
-      }
+      if (user.state == State.VISIBLE)
+        EdgeRuntime.waitUntil(user.addWatchers(logger));
       EdgeRuntime.waitUntil(user.update(logger));
-    }
+      break;
   }
   return logger.response();
 });

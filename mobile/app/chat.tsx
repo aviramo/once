@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AppState, I18nManager, Keyboard, Modal, Pressable,
+  Animated, AppState, Easing, I18nManager, Keyboard, Modal, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -469,11 +469,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
           })}
           {otherIsTyping && (
             <View style={[styles.msgWrap, styles.msgWrapFirst]}>
-              <View style={[styles.bubble, styles.bubbleTheirs, styles.bubbleTheirsLast, styles.typingBubble]}>
-                <View style={styles.typingDot} />
-                <View style={[styles.typingDot, { opacity: 0.75 }]} />
-                <View style={[styles.typingDot, { opacity: 0.5 }]} />
-              </View>
+              <TypingDots />
             </View>
           )}
         </ScrollView>
@@ -584,6 +580,43 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
       <View style={styles.daySepLine} />
       <Text style={[styles.daySepLabel, bold && { fontWeight: '600' }]}>{label}</Text>
       <View style={styles.daySepLine} />
+    </View>
+  )
+}
+
+// Three dots rising in a staggered loop — the same pattern iMessage/WhatsApp
+// use. Each dot runs its own Animated.loop with a delay so the wave is
+// smooth even if the component remounts mid-cycle.
+function TypingDots() {
+  const a = useRef(new Animated.Value(0)).current
+  const b = useRef(new Animated.Value(0)).current
+  const c = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    const loopFor = (v: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(v, { toValue: 1, duration: 320, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0, duration: 320, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          Animated.delay(480 - delay),
+        ]),
+      )
+    const loops = [loopFor(a, 0), loopFor(b, 140), loopFor(c, 280)]
+    loops.forEach(l => l.start())
+    return () => loops.forEach(l => l.stop())
+  }, [])
+
+  const dotStyle = (v: Animated.Value) => ({
+    opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
+    transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }],
+  })
+
+  return (
+    <View style={[styles.bubble, styles.bubbleTheirs, styles.bubbleTheirsLast, styles.typingBubble]}>
+      <Animated.View style={[styles.typingDot, dotStyle(a)]} />
+      <Animated.View style={[styles.typingDot, dotStyle(b)]} />
+      <Animated.View style={[styles.typingDot, dotStyle(c)]} />
     </View>
   )
 }
