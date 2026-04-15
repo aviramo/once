@@ -4,20 +4,19 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin'
-import * as WebBrowser from 'expo-web-browser'
+import * as AppleAuthentication from 'expo-apple-authentication'
 import Svg, { Path } from 'react-native-svg'
 import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
 import { PrimaryButton } from '../src/components/Button'
 
-WebBrowser.maybeCompleteAuthSession()
-
 // ── Google Sign-In config ──────────────────────────────────────────────────
 // webClientId comes from Google Cloud Console → OAuth 2.0 → Web client
 // Replace with your actual Web Client ID from Supabase → Auth → Google provider
 GoogleSignin.configure({
   webClientId: '734623738972-62iahq9pjtlv9pl78alf86pn4plsbdj8.apps.googleusercontent.com',
+  iosClientId: '734623738972-csljo0jmhcioedopq9o591ni506g5o1q.apps.googleusercontent.com',
   scopes: ['email', 'profile'],
 })
 
@@ -60,16 +59,18 @@ async function signInWithGoogle() {
 }
 
 async function signInWithApple() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'apple',
-    options: { redirectTo: 'syncwish://login', skipBrowserRedirect: true },
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
   })
-  if (error || !data.url) throw error ?? new Error('No URL returned')
-  const result = await WebBrowser.openAuthSessionAsync(data.url, 'syncwish://login')
-  if (result.type !== 'success') return
-  const params = new URL(result.url).searchParams
-  const code = params.get('code')
-  if (code) await supabase.auth.exchangeCodeForSession(code)
+  if (!credential.identityToken) throw new Error('No identity token returned')
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credential.identityToken,
+  })
+  if (error) throw error
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────
@@ -100,8 +101,10 @@ export default function LoginPage() {
     setLoadingProvider('apple')
     try {
       await signInWithApple()
-    } catch (e) {
-      console.error('Apple sign-in error:', e)
+    } catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') {
+        console.error('Apple sign-in error:', e)
+      }
     } finally {
       setLoadingProvider(null)
     }
@@ -129,16 +132,16 @@ export default function LoginPage() {
 
       {/* ── Auth Buttons — pinned to bottom ── */}
       <View style={styles.bottom}>
-        <PrimaryButton
-          label={t('auth.signInGoogle')}
-          onPress={handleGoogle}
-          disabled={loadingProvider !== null}
-        />
-
-        {Platform.OS === 'ios' && (
+        {Platform.OS === 'ios' ? (
           <PrimaryButton
             label={t('auth.signInApple')}
             onPress={handleApple}
+            disabled={loadingProvider !== null}
+          />
+        ) : (
+          <PrimaryButton
+            label={t('auth.signInGoogle')}
+            onPress={handleGoogle}
             disabled={loadingProvider !== null}
           />
         )}
