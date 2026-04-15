@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import { Animated, StyleSheet, View } from 'react-native'
+import { Text } from './AppText'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -21,7 +22,7 @@ type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill —
 // so a positive CTA stays consistent with every other primary button.
-type Tone = 'neutral' | 'positive'
+type Tone = 'neutral' | 'positive' | 'visible'
 
 export function Button({
   label,
@@ -160,6 +161,10 @@ const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> =
   positive: {
     btn: { backgroundColor: '#16a34a' },
     pressed: { backgroundColor: '#15803d' },
+  },
+  visible: {
+    btn: { backgroundColor: '#6d28d9' },
+    pressed: { backgroundColor: '#5b21b6' },
   },
 }
 

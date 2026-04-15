@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, Pressable, Animated, StyleSheet } from 'react-native'
+import { View, Pressable, Animated, StyleSheet } from 'react-native'
+import { Text } from './AppText'
 import { t } from '../i18n'
 
 const CARDS = [

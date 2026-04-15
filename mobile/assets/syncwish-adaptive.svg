@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <g id="plane">
+      <path d="M 17.5 57.5 L 100 95 L 57.5 60 Z" fill="#ffffff"/>
+      <path d="M 57.5 60 L 100 95 L 73.75 21.25 Z" fill="#ffffff" fill-opacity="0.55"/>
+      <path d="M 100 95 L 57.5 60" stroke="#4c1d95" stroke-width="2" stroke-linecap="round" stroke-opacity="0.35"/>
+      <circle cx="30" cy="45" r="3" fill="#ffffff" fill-opacity="0.8"/>
+      <circle cx="17.5" cy="32.5" r="2.5" fill="#ffffff" fill-opacity="0.55"/>
+      <circle cx="7.5" cy="20" r="2" fill="#ffffff" fill-opacity="0.32"/>
+    </g>
+  </defs>
+
+  <!-- Planes shrunk into the Android adaptive safe zone (center 66%) so no mask crops them -->
+  <use href="#plane" transform="translate(155 215) scale(3.6)"/>
+  <use href="#plane" transform="rotate(180 512 512) translate(155 215) scale(3.6)"/>
+</svg>

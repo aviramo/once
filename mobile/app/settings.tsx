@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  View, Text, Pressable, StyleSheet, ScrollView,
-  PanResponder, I18nManager, TextInput, Image, ActivityIndicator,
-  Keyboard, Platform, Animated, Dimensions, Modal,
+  View, Pressable, StyleSheet, ScrollView,
+  PanResponder, I18nManager, Image, ActivityIndicator,
+  Keyboard, Platform, Animated, Dimensions, BackHandler,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Text, TextInput } from '../src/components/AppText'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import * as DocumentPicker from 'expo-document-picker'
@@ -17,11 +19,11 @@ import { useUserStore } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { Button } from '../src/components/Button'
+import { Button, PrimaryButton } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
 import type { MatchData } from '../src/stores/userStore'
-import { slidingActiveRef } from '../src/lib/gesture'
+import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 
 const isRTL = I18nManager.isRTL
 const THUMB = 22
@@ -443,7 +445,7 @@ function PreferencesTab() {
 
       {/* Preferred Gender */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{t('settings.preferredGender').toUpperCase()}</Text>
+        <SectionLabel>{t('settings.preferredGender').toUpperCase()}</SectionLabel>
         <View style={styles.genderRow}>
           <AnimatedToggleButton
             active={!!forMale}
@@ -471,24 +473,53 @@ function PreferencesTab() {
 const loadedUris = new Set<string>()
 
 function PhotoCell({
-  uri, localUri, onRemove, onLoaded, canRemove, panHandlers, dragging, highlighted, onLayout,
+  uri, localUri, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
+  editMode, onEnterEditMode,
 }: {
   uri: string
   localUri?: string  // Shown immediately while uri is loading, to avoid layout jitter
   onRemove: () => void
   onLoaded?: () => void
   canRemove: boolean
-  panHandlers?: any
   dragging?: boolean
   highlighted?: boolean  // Live drop-target indicator during another cell's drag
   onLayout?: (e: any) => void
+  editMode: boolean
+  onEnterEditMode: () => void
 }) {
   const [loaded, setLoaded] = useState(() => loadedUris.has(uri))
+  // Wiggle: iOS-style jiggle while in edit mode (except while this cell is the drag source).
+  const wiggle = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (editMode && !dragging) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(wiggle, { toValue: 1, duration: 110, useNativeDriver: true }),
+          Animated.timing(wiggle, { toValue: -1, duration: 220, useNativeDriver: true }),
+          Animated.timing(wiggle, { toValue: 0, duration: 110, useNativeDriver: true }),
+        ])
+      )
+      // Per-cell phase jitter so the grid doesn't wiggle in lockstep.
+      const startDelay = Math.random() * 180
+      const t = setTimeout(() => loop.start(), startDelay)
+      // On exit, glide the rotation back to 0 so cells don't freeze mid-tilt.
+      // loop.stop() halts the sequence wherever it is; a plain setValue(0) on
+      // a native-driven Animated.Value can race with the last frame that's
+      // already in flight, leaving a visible residual angle.
+      return () => {
+        clearTimeout(t)
+        loop.stop()
+        Animated.timing(wiggle, { toValue: 0, duration: 160, useNativeDriver: true }).start()
+      }
+    }
+    wiggle.setValue(0)
+  }, [editMode, dragging])
+  const rotate = wiggle.interpolate({ inputRange: [-1, 1], outputRange: ['-1.5deg', '1.5deg'] })
+
   return (
-    <View
-      style={photoStyles.cell}
+    <Animated.View
+      style={[photoStyles.cell, { transform: [{ rotate }] }]}
       onLayout={onLayout}
-      {...panHandlers}
     >
       {/* Local preview shown at full opacity until server image loads — no layout shift, no gray square */}
       {localUri && !loaded && (
@@ -508,21 +539,34 @@ function PhotoCell({
       {/* `dragging` = this is the source photo being held. */}
       {/* `highlighted` = this cell is the current drop target. Both get the same frame. */}
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
-      {loaded && canRemove && (
+      {/* Long-press to enter edit mode. Pressable cancels on move, so horizontal
+          swipes still bubble up to the tab pager. Removed in edit mode so the
+          grid's drag Pan gesture owns the gesture. */}
+      {!editMode && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onLongPress={() => { tapMedium(); onEnterEditMode() }}
+          delayLongPress={450}
+        />
+      )}
+      {editMode && loaded && canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round">
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
         </Pressable>
       )}
-    </View>
+    </Animated.View>
   )
 }
 
-// Draggable photo grid — long-press to lift, drag to reorder
+// Draggable photo grid — long-press a cell to enter edit mode (iOS-style jiggle),
+// then drag to reorder. Outside edit mode the grid is locked so horizontal
+// swipes pass through to the surrounding tab pager.
 function PhotoGrid({
   photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads, additionalChildren, onDragStateChange,
+  editMode, onEnterEditMode,
 }: {
   photos: string[]
   urlFor: (f: string) => string
@@ -533,6 +577,8 @@ function PhotoGrid({
   uploads: { id: string; uri: string; filename?: string }[]
   additionalChildren?: React.ReactNode
   onDragStateChange?: (dragging: boolean) => void
+  editMode: boolean
+  onEnterEditMode: () => void
 }) {
   const layouts = useRef<Array<{ x: number; y: number; w: number; h: number }>>([])
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -541,9 +587,9 @@ function PhotoGrid({
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const hoverIdxRef = useRef<number | null>(null)
 
-  // Refs for values the PanResponder closures need to read freshly — we bind
-  // them via refs because the PanResponders themselves are created once per
-  // index and retained, so direct closures would go stale.
+  // Refs for values the gesture closure reads after the gesture has begun —
+  // the gesture object itself is rebuilt on editMode change, but once a drag
+  // is in flight we want stable access to the latest callbacks.
   const photosLenRef = useRef(photos.length)
   const onReorderRef = useRef(onReorder)
   const onDragStateChangeRef = useRef(onDragStateChange)
@@ -551,36 +597,50 @@ function PhotoGrid({
   useEffect(() => { onReorderRef.current = onReorder }, [onReorder])
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange }, [onDragStateChange])
 
-  // Stable PanResponder per cell index. Re-creating PanResponder mid-gesture
-  // (which happened on every setHoverIdx re-render) resets its internal
-  // gestureState, so subsequent move events report dx/dy relative to the new
-  // instance's grant — effectively collapsing back toward 0. The symptom the
-  // user reported — "the target frame disappears while moving" — was that: a
-  // fresh PanResponder would read g.dx ≈ 0, recompute the nearest target as
-  // the source itself, and null out hoverIdx. Pinning them across renders
-  // keeps the gestureState alive for the whole drag.
-  const pansRef = useRef<Array<ReturnType<typeof PanResponder.create>>>([])
-  const ensurePanAt = (index: number) => {
-    if (pansRef.current[index]) return pansRef.current[index]
-    pansRef.current[index] = PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 3 || Math.abs(g.dy) > 3,
-      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 3 || Math.abs(g.dy) > 3,
-      onPanResponderTerminationRequest: () => false,  // never let parent take over
-      onShouldBlockNativeResponder: () => true,
-      onPanResponderGrant: () => {
+  // Which cell the finger is over at touch-down. Populated in onBegin via
+  // hit-test against `layouts.current`; consumed in onStart once the 3px
+  // threshold has been crossed and the drag is live.
+  const sourceIdxRef = useRef<number | null>(null)
+
+  // Drag-to-reorder lives in gesture-handler, not legacy PanResponder. A
+  // single top-level Pan gesture hit-tests which cell the touch started on,
+  // so we don't pay N PanResponders for N cells, and — critically — the
+  // outer tabPan/shellPan are also gesture-handler Pans, so this inner one
+  // wins the race at its 3px threshold before the outer ones can claim at
+  // 10px. That's what prevents the pager from eating horizontal drags.
+  const dragPan = useMemo(() =>
+    Gesture.Pan()
+      .enabled(editMode)
+      .minDistance(3)
+      .onBegin(e => {
+        // Find the cell under the finger at touch-down. `e.x/e.y` are in the
+        // GestureDetector's coordinate space, which matches layouts.current
+        // (both relative to the grid's top-left).
+        let hit = -1
+        for (let i = 0; i < layouts.current.length; i++) {
+          const l = layouts.current[i]
+          if (!l) continue
+          if (e.x >= l.x && e.x <= l.x + l.w && e.y >= l.y && e.y <= l.y + l.h) {
+            hit = i
+            break
+          }
+        }
+        sourceIdxRef.current = hit >= 0 ? hit : null
+      })
+      .onStart(() => {
+        const idx = sourceIdxRef.current
+        if (idx == null) return
         tapMedium()
-        setDragIdx(index)
+        setDragIdx(idx)
         onDragStateChangeRef.current?.(true)
-      },
-      // No floating preview — we just need the gesture's dx/dy to compute
-      // which cell the finger is hovering over. Nearest-by-center.
-      onPanResponderMove: (_, g) => {
-        const l = layouts.current[index]
+      })
+      .onUpdate(e => {
+        const idx = sourceIdxRef.current
+        if (idx == null) return
+        const l = layouts.current[idx]
         if (!l) return
-        const cx = l.x + l.w / 2 + g.dx
-        const cy = l.y + l.h / 2 + g.dy
+        const cx = l.x + l.w / 2 + e.translationX
+        const cy = l.y + l.h / 2 + e.translationY
         let best = -1
         let bestDist = Infinity
         for (let i = 0; i < layouts.current.length; i++) {
@@ -591,41 +651,36 @@ function PhotoGrid({
           const d = dx * dx + dy * dy
           if (d < bestDist) { bestDist = d; best = i }
         }
-        const normalized = best < 0 || best === index ? null : best
+        const normalized = best < 0 || best === idx ? null : best
         if (normalized !== hoverIdxRef.current) {
           hoverIdxRef.current = normalized
           setHoverIdx(normalized)
         }
-      },
-      onPanResponderRelease: () => {
-        // The highlighted target is the same cell the user sees framed, so
-        // the drop matches the hint exactly.
+      })
+      .onEnd(() => {
+        const idx = sourceIdxRef.current
         const target = hoverIdxRef.current
-        if (target !== null && target >= 0 && target < photosLenRef.current && target !== index) {
+        if (idx != null && target !== null && target >= 0 && target < photosLenRef.current && target !== idx) {
           tapSuccess()
-          onReorderRef.current(index, target)
+          onReorderRef.current(idx, target)
         }
+      })
+      .onFinalize(() => {
+        sourceIdxRef.current = null
         setDragIdx(null)
         setHoverIdx(null)
         hoverIdxRef.current = null
         onDragStateChangeRef.current?.(false)
-      },
-      onPanResponderTerminate: () => {
-        setDragIdx(null)
-        setHoverIdx(null)
-        hoverIdxRef.current = null
-        onDragStateChangeRef.current?.(false)
-      },
-    })
-    return pansRef.current[index]
-  }
+      })
+      .runOnJS(true)
+  , [editMode])
 
   return (
-    <View style={photoStyles.grid}>
+    <GestureDetector gesture={dragPan}>
+    <View style={photoStyles.grid} pointerEvents="box-none">
       {photos.map((filename, i) => {
         // If there's an upload matching this filename, show its local preview under the spinner
         const matchingUpload = uploads.find(u => u.filename === filename)
-        const pan = ensurePanAt(i)
         return (
           <PhotoCell
             key={filename}
@@ -634,10 +689,11 @@ function PhotoGrid({
             onRemove={() => onRemove(filename)}
             onLoaded={() => onLoaded(filename)}
             canRemove={canRemove}
-            panHandlers={pan.panHandlers}
             dragging={dragIdx === i}
             highlighted={hoverIdx === i}
             onLayout={(e) => { layouts.current[i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
+            editMode={editMode}
+            onEnterEditMode={onEnterEditMode}
           />
         )
       })}
@@ -651,11 +707,29 @@ function PhotoGrid({
         </View>
       ))}
       {additionalChildren}
+      {/* Invisible fillers so `justifyContent: space-between` doesn't stretch
+          a partial last row across the whole width — without them the add
+          cell (or a trailing photo on its own) snaps to the opposite edge.
+          We pad to the next multiple of 3 cells. */}
+      {(() => {
+        const pendingCount = uploads.filter(u => !u.filename).length
+        const addCount = additionalChildren ? 1 : 0
+        const total = photos.length + pendingCount + addCount
+        const fillers = (3 - (total % 3)) % 3
+        return Array.from({ length: fillers }).map((_, i) => (
+          <View
+            key={`filler-${i}`}
+            style={[photoStyles.cell, photoStyles.filler]}
+            pointerEvents="none"
+          />
+        ))
+      })()}
     </View>
+    </GestureDetector>
   )
 }
 
-function ProfileTab() {
+function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onTogglePreview, onPreviewDataChange }: { focused?: boolean; onEditModeChange?: (editing: boolean) => void; previewOpen?: boolean; onTogglePreview?: () => void; onPreviewDataChange?: (data: MatchData | null) => void }) {
   const { profile, update } = useUserStore()
   const { user } = useAuthStore()
   // filename is set when upload is done; we keep the upload card until the server image loads
@@ -663,8 +737,8 @@ function ProfileTab() {
   // filename → signature map, persists across the session even after upload cell disappears
   const sigByFilename = useRef<Map<string, string>>(new Map())
   const [dragging, setDragging] = useState(false)
+  const [editMode, setEditMode] = useState(false)
   const [duplicateDialog, setDuplicateDialog] = useState(false)
-  const [previewOpen, setPreviewOpen] = useState(false)
   // Message is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
   const [localMessage, setLocalMessage] = useState(profile?.message ?? '')
   const localMessageRef = useRef(localMessage)
@@ -699,6 +773,30 @@ function ProfileTab() {
   useEffect(() => {
     return () => { flushMessage() }
   }, [])
+
+  // Leaving the Profile tab (swipe to another settings tab, swipe back to
+  // home, or tab tap) dismisses the photo jiggle state. All photo edits save
+  // as they happen, so there's nothing to flush here — just drop the UI flag.
+  useEffect(() => {
+    if (!focused && editMode) setEditMode(false)
+  }, [focused, editMode])
+
+  // Report edit-mode to ancestors so they can disable the tab pager and
+  // outer shell pan — otherwise horizontal drags on a photo cell get claimed
+  // by the outer gestures via activeOffsetX and the whole page slides
+  // instead of the photo being dragged.
+  useEffect(() => { onEditModeChange?.(editMode) }, [editMode, onEditModeChange])
+
+  // Android hardware back while editing exits edit mode instead of navigating
+  // away — matches the iOS home-screen jiggle behavior.
+  useEffect(() => {
+    if (!editMode) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setEditMode(false)
+      return true
+    })
+    return () => sub.remove()
+  }, [editMode])
 
   // Subscribe to keyboard show/hide so we can expand the scroll region to
   // leave room for the content above the keyboard, and track the height for
@@ -860,7 +958,7 @@ function ProfileTab() {
     update({ images: { normal: next, blur: next } })
   }
 
-  const previewData: MatchData | null = profile ? {
+  const previewData: MatchData | null = useMemo(() => profile ? {
     user_id: profile.user_id,
     image: photos[0] ?? '',
     images: photos,
@@ -873,7 +971,9 @@ function ProfileTab() {
     age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
     is_male: profile.is_male,
     units: profile.units,
-  } : null
+  } : null, [profile, photos, localMessage])
+
+  useEffect(() => { onPreviewDataChange?.(previewData) }, [previewData, onPreviewDataChange])
 
   const onPhotoLoaded = (filename: string) => {
     setUploads(prev => prev.filter(u => u.filename !== filename))
@@ -889,29 +989,35 @@ function ProfileTab() {
       // the section reaches the top of the visible area.
       contentContainerStyle={[styles.tabContent, { paddingBottom: 40 + keyboardHeight }]}
       showsVerticalScrollIndicator={false}
-      scrollEnabled={!dragging}
+      scrollEnabled={!dragging && !previewOpen}
       keyboardShouldPersistTaps="handled"
       delaysContentTouches={false}
+      // Any scroll/swipe dismisses photo edit mode — replaces the explicit
+      // "Done" button so the user doesn't need to tap it.
+      onScrollBeginDrag={() => { if (editMode) setEditMode(false) }}
     >
 
       <Pressable
         style={({ pressed }) => [styles.previewBtn, pressed && { opacity: 0.7 }]}
-        onPress={() => { tap(); setPreviewOpen(true) }}
+        onPress={() => { tap(); if (editMode) setEditMode(false); onTogglePreview?.() }}
       >
-        <Text style={styles.previewBtnText}>{t('settings.previewProfile')}</Text>
+        <Text style={styles.previewBtnText}>
+          {previewOpen ? t('settings.closePreview') : t('settings.previewProfile')}
+        </Text>
       </Pressable>
 
       <View
         style={[styles.section, { marginTop: 24 }]}
         onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
       >
-        <Text style={styles.sectionLabel}>{t('settings.aboutMe').toUpperCase()}</Text>
+        <SectionLabel>{t('settings.aboutMe').toUpperCase()}</SectionLabel>
         <View style={styles.textInputWrap}>
           <TextInput
             style={styles.textInput}
             value={localMessage}
             onChangeText={setLocalMessage}
             onFocus={() => {
+              if (editMode) setEditMode(false)
               // Wait for the keyboard to finish animating, then pull the
               // "About me" section up to the top of the visible area. Since
               // the ScrollView is padded by keyboardHeight, there's always
@@ -933,8 +1039,21 @@ function ProfileTab() {
         </View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
+      {/* Dim overlay sits under the photo grid (higher zIndex) but above
+          every other section — tap anywhere outside the photos to drop out
+          of jiggle mode. Outsized vertically so it still catches taps when
+          the content is shorter than the viewport. */}
+      {editMode && (
+        <Pressable
+          style={styles.photoEditOverlay}
+          onPress={() => { tap(); setEditMode(false) }}
+        />
+      )}
+
+      <View style={[styles.section, styles.photoSection]} pointerEvents="box-none">
+        <View style={styles.photoSectionHeader} pointerEvents="box-none">
+          <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
+        </View>
         <PhotoGrid
           photos={photos}
           urlFor={(f) => `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
@@ -944,20 +1063,26 @@ function ProfileTab() {
           canRemove={photos.length > 1}
           uploads={uploads}
           onDragStateChange={setDragging}
+          editMode={editMode}
+          onEnterEditMode={() => setEditMode(true)}
           additionalChildren={
             photos.length + uploads.filter(u => !u.filename).length < 6 ? (
-              <Pressable style={photoStyles.add} onPress={() => { tap(); pickPhoto() }}>
+              <View style={photoStyles.add} pointerEvents={editMode ? 'none' : 'auto'}>
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => { tap(); pickPhoto() }}
+                />
                 <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={1.5} strokeLinecap="round">
                   <Path d="M12 5v14M5 12h14" />
                 </Svg>
-              </Pressable>
+              </View>
             ) : null
           }
         />
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</Text>
+        <SectionLabel>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</SectionLabel>
         <View style={styles.genderRow}>
           <AnimatedToggleButton
             active={isForKids === true}
@@ -980,26 +1105,6 @@ function ProfileTab() {
       confirmLabel={t('common.gotIt')}
       onConfirm={() => setDuplicateDialog(false)}
     />
-    <Modal
-      visible={previewOpen}
-      animationType="slide"
-      onRequestClose={() => setPreviewOpen(false)}
-      statusBarTranslucent
-    >
-      <SafeAreaView style={styles.previewModal} edges={['top', 'bottom']}>
-        <View style={styles.previewHeader}>
-          <Text style={styles.previewHeaderTitle}>{t('settings.myProfile')}</Text>
-          <IconPressable style={styles.previewCloseBtn} onPress={() => { tap(); setPreviewOpen(false) }}>
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M18 6L6 18M6 6l12 12" stroke="#111" strokeWidth={2.2} strokeLinecap="round" />
-            </Svg>
-          </IconPressable>
-        </View>
-        {previewData && (
-          <MatchCard match={previewData} userIsMale={profile?.is_male ?? null} />
-        )}
-      </SafeAreaView>
-    </Modal>
     </>
   )
 }
@@ -1016,13 +1121,19 @@ const photoStyles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 8,
     marginTop: 12,
+    // Animated cells rotate slightly in edit mode; overflow: 'visible' prevents
+    // clipping of the wiggle at the grid edges.
+    overflow: 'visible',
   },
   cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12, overflow: 'hidden' },
+  // Invisible row-filler — same footprint as a real cell so the flex layout
+  // treats the partial last row the same as a full one.
+  filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
   img: { width: '100%', height: '100%' },
   remove: {
-    position: 'absolute', top: 4, end: 4,
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    position: 'absolute', top: 8, end: 8,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center', justifyContent: 'center',
   },
   add: {
@@ -1152,7 +1263,7 @@ function AccountTab() {
     <>
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{t('settings.accountInfo').toUpperCase()}</Text>
+        <SectionLabel>{t('settings.accountInfo').toUpperCase()}</SectionLabel>
         <View style={styles.infoCard}>
           {rows.map((r, i) => (
             <View key={r.label} style={[styles.infoRow, i === rows.length - 1 && styles.infoRowLast]}>
@@ -1164,7 +1275,7 @@ function AccountTab() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{t('settings.accountActions').toUpperCase()}</Text>
+        <SectionLabel>{t('settings.accountActions').toUpperCase()}</SectionLabel>
         <Pressable
           style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7 }]}
           onPress={confirmSignOut}
@@ -1244,7 +1355,7 @@ function AppTab({ onBack }: { onBack?: () => void }) {
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{t('settings.unitsLabel').toUpperCase()}</Text>
+        <SectionLabel>{t('settings.unitsLabel').toUpperCase()}</SectionLabel>
         <View style={styles.genderRow}>
           <AnimatedToggleButton
             active={isMetric}
@@ -1261,7 +1372,7 @@ function AppTab({ onBack }: { onBack?: () => void }) {
 
       {profile.role === 'ADMIN' && (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>{t('settings.adminLabel').toUpperCase()}</Text>
+          <SectionLabel>{t('settings.adminLabel').toUpperCase()}</SectionLabel>
           <View style={{ marginTop: 14 }}>
             <Button
               label={t('settings.reset')}
@@ -1279,9 +1390,9 @@ function AppTab({ onBack }: { onBack?: () => void }) {
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function renderTab(tab: Tab, onBack?: () => void) {
+function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onEditModeChange?: (editing: boolean) => void, previewOpen?: boolean, onTogglePreview?: () => void, onPreviewDataChange?: (data: MatchData | null) => void) {
   if (tab === 'preferences') return <PreferencesTab />
-  if (tab === 'profile')     return <ProfileTab />
+  if (tab === 'profile')     return <ProfileTab focused={focused} onEditModeChange={onEditModeChange} previewOpen={previewOpen} onTogglePreview={onTogglePreview} onPreviewDataChange={onPreviewDataChange} />
   if (tab === 'account')     return <AccountTab />
   if (tab === 'app')         return <AppTab onBack={onBack} />
   return <View style={styles.tabContent} />
@@ -1291,12 +1402,59 @@ function renderTab(tab: Tab, onBack?: () => void) {
 // the back button animates the shell back to the home pane instead of
 // popping the navigation stack. When rendered standalone via expo-router
 // (e.g., direct /settings navigation), onBack is undefined and the back
-// button falls back to router.back().
-type SettingsPageProps = { onBack?: () => void }
+// button falls back to router.back(). `focused` is true when the settings
+// pane is the current pane in the home shell — tabs use it to tear down
+// ephemeral UI state (e.g., photo jiggle) when the user swipes back home.
+type SettingsPageProps = { onBack?: () => void; focused?: boolean; onEditModeChange?: (editing: boolean) => void }
 
-export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
+// Wraps a section label text in a row container so flexDirection:'row'
+// auto-flipping places the label on the logical start side (right in RTL,
+// left in LTR) reliably — textAlign/writingDirection alone proved
+// inconsistent at runtime.
+function SectionLabel({ children }: { children: any }) {
+  return (
+    <View style={styles.sectionLabelRow}>
+      <Text style={styles.sectionLabel}>{children}</Text>
+    </View>
+  )
+}
+
+export default function SettingsPage({ onBack, focused = true, onEditModeChange }: SettingsPageProps = {}) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('preferences')
+  // Photo edit (jiggle) state bubbles up from ProfileTab so the tab pager
+  // and outer shell can surrender horizontal gestures to the photo-reorder
+  // PanResponder. Without this, dragging a photo cell is claimed by the
+  // outer GestureDetector's activeOffsetX and the whole page slides.
+  const [photoEditActive, setPhotoEditActive] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewMounted, setPreviewMounted] = useState(false)
+  const [previewData, setPreviewData] = useState<MatchData | null>(null)
+  const [headerH, setHeaderH] = useState(0)
+  const insets = useSafeAreaInsets()
+  const previewSlide = useRef(new Animated.Value(Dimensions.get('window').height)).current
+  useEffect(() => { onEditModeChange?.(photoEditActive || previewOpen) }, [photoEditActive, previewOpen, onEditModeChange])
+  // Close preview when leaving the profile tab so it doesn't linger over other tabs.
+  useEffect(() => { if (activeTab !== 'profile' && previewOpen) setPreviewOpen(false) }, [activeTab, previewOpen])
+  // Slide-in / slide-out — keep mounted through the close animation so the
+  // exit motion is visible. Distance is windowHeight so the card fully clears
+  // the viewport regardless of where its top edge is positioned.
+  useEffect(() => {
+    if (previewOpen) {
+      setPreviewMounted(true)
+      Animated.timing(previewSlide, { toValue: 0, duration: 280, useNativeDriver: true }).start()
+    } else {
+      Animated.timing(previewSlide, {
+        toValue: Dimensions.get('window').height,
+        duration: 240,
+        useNativeDriver: true,
+      }).start(({ finished }) => { if (finished) setPreviewMounted(false) })
+    }
+  }, [previewOpen, previewSlide])
+  // Disable the tab pan whenever a slider is mid-drag, so gesture-handler's
+  // 10px activeOffsetX doesn't claim the gesture out from under the slider's
+  // legacy PanResponder.
+  const sliding = useSlidingActive()
   // Pager-style: all 4 tabs are laid out side-by-side in a strip, we just
   // translate the strip to reveal the selected one. No mount/unmount during
   // the transition, so nothing re-renders — the motion runs on the native
@@ -1378,89 +1536,73 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
   // nearest tab on release (distance past 30% of the screen OR a flick faster
   // than 0.4 px/ms advances). The release spring inherits the gesture's
   // velocity so the motion is one continuous gesture.
-  const panResponder = useRef(
-    PanResponder.create({
-      // Don't claim on touch-down — child Pressables / sliders need the first
-      // frame. Only claim once the gesture is clearly horizontal. When
-      // embedded in the home shell pager, surrender a backward swipe at
-      // the first tab so the outer shell can take over and slide back
-      // to home instead of us clamping at the edge. Also stay out of the
-      // way while a slider thumb is being dragged.
-      onMoveShouldSetPanResponder: (_, g) => {
-        if (slidingActiveRef.current) return false
-        // Matches the home shell's higher threshold — lower values claim
-        // the gesture on light finger wobble during a tap, which forces
-        // child Pressables (tab icons, reset, back) to drop the press
-        // and makes the user's first tap look like it was ignored.
-        const horizontal =
-          Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6
-        if (!horizontal) return false
-        const index = TABS.indexOf(activeTabRef.current)
-        const forward = isRTL ? g.dx > 0 : g.dx < 0
-        if (!forward && index === 0) return false
-        return true
-      },
-      // Once we have the gesture, refuse to give it up — otherwise the
-      // outer home-shell pan responder steals mid-swipe and the user
-      // ends up back on home instead of changing tabs.
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderMove: (_, g) => {
+  // Swipe-to-change-tab using gesture-handler. activeOffsetX/failOffsetY let
+  // the inner ScrollView own vertical drags unambiguously while horizontal
+  // intent (>=10px) claims us declaratively. At the first tab we narrow the
+  // claim to the forward direction only, so a backward swipe surrenders to
+  // the outer shell pan (which then slides back to the home pane). Without
+  // this, the inner wins the race and clamps at the edge — the user is
+  // trapped on the settings pane.
+  const isFirstTab = TABS.indexOf(activeTab) === 0
+  const activeOffsetX: [number, number] = isFirstTab
+    ? (isRTL ? [-99999, 10] : [-10, 99999])
+    : [-10, 10]
+  const tabPan = useMemo(() =>
+    Gesture.Pan()
+      .enabled(!photoEditActive && !sliding && !previewOpen)
+      .activeOffsetX(activeOffsetX)
+      .failOffsetY([-20, 20])
+      .onUpdate(e => {
+        if (slidingActiveRef.current) return
         const w = widthRef.current
         const tbw = tabBarWidthRef.current
         if (!w || !tbw) return
         const tabW = (tbw - TAB_BAR_PAD * 2) / TABS.length
         const index = TABS.indexOf(activeTabRef.current)
         const base = (isRTL ? 1 : -1) * index * w
-        // Edge clamp — can't drag past the first/last tab.
         const edge = (isRTL ? 1 : -1) * (TABS.length - 1) * w
         const [lo, hi] = isRTL ? [0, edge] : [edge, 0]
-        const next = Math.max(lo, Math.min(hi, base + g.dx))
+        const next = Math.max(lo, Math.min(hi, base + e.translationX))
         translate.setValue(next)
         indicator.setValue(-next * (tabW / w))
-      },
-      onPanResponderRelease: (_, g) => {
+      })
+      .onEnd(e => {
         const w = widthRef.current
         if (!w) return
         const index = TABS.indexOf(activeTabRef.current)
-        // "Forward" = next tab in the list; direction flips under RTL.
-        const forward = isRTL ? g.dx > 0 : g.dx < 0
-        const flick = Math.abs(g.vx) > 0.4
-        const past = Math.abs(g.dx) > w * 0.3
+        const forward = isRTL ? e.translationX > 0 : e.translationX < 0
+        const vx = e.velocityX / 1000
+        const flick = Math.abs(vx) > 0.4
+        const past = Math.abs(e.translationX) > w * 0.3
         let delta = 0
         if ((past || flick) && forward && index < TABS.length - 1) delta = 1
         else if ((past || flick) && !forward && index > 0) delta = -1
         const targetIndex = index + delta
-        // Carry the finger's velocity into the spring — no frame gap, no
-        // "stop and restart" feel. gestureState.vx is px/ms; spring wants px/s.
-        animateToIndex(targetIndex, g.vx * 1000)
+        animateToIndex(targetIndex, e.velocityX)
         const targetTab = TABS[targetIndex]
         if (targetTab !== activeTabRef.current) {
           tap()
           setActiveTab(targetTab)
         }
-      },
-    })
-  ).current
+      })
+      .runOnJS(true)
+  , [activeOffsetX[0], activeOffsetX[1], photoEditActive, sliding, previewOpen])
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
 
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={e => setHeaderH(e.nativeEvent.layout.height)}>
         <IconPressable
           style={styles.backBtn}
           onPress={() => { tap(); onBack ? onBack() : router.back() }}
         >
           <BackIcon />
         </IconPressable>
-        <Text style={styles.title}>{t('settings.title')}</Text>
-        <View style={styles.backBtn} />
-      </View>
-
-      <View
-        style={styles.tabBar}
-        onLayout={e => setTabBarWidth(e.nativeEvent.layout.width)}
-      >
+        <View
+          style={styles.tabBar}
+          onLayout={e => setTabBarWidth(e.nativeEvent.layout.width)}
+        >
         {/* Sliding pill behind the active label. Sits below the Pressables
             in render order so touches still hit the buttons. */}
         {tabBarWidth > 0 && (
@@ -1501,12 +1643,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
             </IconPressable>
           )
         })}
+        </View>
       </View>
 
+      <GestureDetector gesture={tabPan}>
       <View
         style={{ flex: 1, overflow: 'hidden' }}
         onLayout={e => setWidth(e.nativeEvent.layout.width)}
-        {...panResponder.panHandlers}
       >
         <Animated.View style={{ flex: 1, transform: [{ translateX: translate }] }}>
           {TABS.map((tab, i) => (
@@ -1524,11 +1667,27 @@ export default function SettingsPage({ onBack }: SettingsPageProps = {}) {
                 width,
               }}
             >
-              {renderTab(tab, onBack)}
+              {renderTab(tab, onBack, focused && activeTab === tab, setPhotoEditActive, previewOpen, () => setPreviewOpen(o => !o), setPreviewData)}
             </View>
           ))}
         </Animated.View>
       </View>
+      </GestureDetector>
+
+      {previewMounted && previewData && (
+        <Animated.View
+          style={[
+            styles.previewOverlay,
+            {
+              top: insets.top + headerH + 24 + 42 + 28,
+              bottom: Math.max(insets.bottom, 8) + 8,
+              transform: [{ translateY: previewSlide }],
+            },
+          ]}
+        >
+          <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+        </Animated.View>
+      )}
     </SafeAreaView>
   )
 }
@@ -1540,13 +1699,12 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 16, height: 56,
+    paddingHorizontal: 20, height: 56,
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 17, fontWeight: '600', color: '#111', letterSpacing: -0.3 },
 
   tabBar: {
-    flexDirection: 'row', marginHorizontal: 16, marginBottom: 8,
+    flex: 1, flexDirection: 'row', marginStart: 12,
     backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3,
   },
   tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
@@ -1555,8 +1713,21 @@ const styles = StyleSheet.create({
   tabContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },
 
   section: { marginBottom: 28 },
+  // Photo section sits above the jiggle-mode overlay — zIndex stacks it
+  // over the dim layer so thumbnails stay bright and interactive while the
+  // rest of the page dims behind them. elevation mirrors that on Android.
+  photoSection: { zIndex: 2, elevation: 2 },
+  photoEditOverlay: {
+    position: 'absolute',
+    start: -40, end: -40, top: -2000, bottom: -2000,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    zIndex: 1, elevation: 1,
+  },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionLabelRow: { flexDirection: 'row', marginBottom: 0 },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.4)', letterSpacing: 1 },
+  photoSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  editDoneBtn: { fontSize: 13, fontWeight: '600', color: '#111', letterSpacing: 0.3 },
   sectionValue: { fontSize: 15, fontWeight: '700', color: '#111' },
   divider: { height: 0 },
 
@@ -1566,27 +1737,16 @@ const styles = StyleSheet.create({
 
   genderRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
 
-  previewBtn: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  previewBtnText: { fontSize: 15, fontWeight: '500', color: '#111' },
+  previewBtn: { backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  previewBtnText: { fontSize: 15, fontWeight: '600', color: '#111' },
 
-  previewModal: { flex: 1, backgroundColor: '#eef0f3' },
-  previewHeader: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    backgroundColor: '#eef0f3',
-  },
-  previewHeaderTitle: { fontSize: 17, fontWeight: '700', color: '#111' },
-  previewCloseBtn: {
+  previewOverlay: {
     position: 'absolute',
-    end: 8,
-    top: 0,
-    bottom: 0,
-    width: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    start: 16,
+    end: 16,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    overflow: 'hidden',
   },
 
   textInputWrap: { marginTop: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 14, paddingHorizontal: 12, paddingTop: 16, paddingBottom: 4, backgroundColor: '#fff' },

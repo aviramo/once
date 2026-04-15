@@ -1,91 +1,49 @@
 import { useEffect } from 'react'
 import { Text, TextInput } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as SplashScreen from 'expo-splash-screen'
+import { useFonts } from 'expo-font'
 import {
-  useFonts,
   Rubik_400Regular,
   Rubik_500Medium,
   Rubik_600SemiBold,
   Rubik_700Bold,
   Rubik_800ExtraBold,
 } from '@expo-google-fonts/rubik'
-import {
-  Heebo_400Regular,
-  Heebo_500Medium,
-  Heebo_600SemiBold,
-  Heebo_700Bold,
-  Heebo_800ExtraBold,
-} from '@expo-google-fonts/heebo'
 import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
-import { lang } from '../src/i18n'
+import { DEFAULT_FAMILY } from '../src/fonts'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
-// Rubik ships Latin-only glyphs; Hebrew text falls back to the system font
-// which renders visibly larger. Heebo is Rubik's Hebrew-optimized sibling
-// (same designer, matching metrics), so we swap to Heebo when the UI is in
-// Hebrew to keep Hebrew and Latin text visually aligned.
-const RUBIK_WEIGHTS: Record<string, string> = {
-  '400': 'Rubik_400Regular',
-  '500': 'Rubik_500Medium',
-  '600': 'Rubik_600SemiBold',
-  '700': 'Rubik_700Bold',
-  '800': 'Rubik_800ExtraBold',
-  normal: 'Rubik_400Regular',
-  bold: 'Rubik_700Bold',
-}
-const HEEBO_WEIGHTS: Record<string, string> = {
-  '400': 'Heebo_400Regular',
-  '500': 'Heebo_500Medium',
-  '600': 'Heebo_600SemiBold',
-  '700': 'Heebo_700Bold',
-  '800': 'Heebo_800ExtraBold',
-  normal: 'Heebo_400Regular',
-  bold: 'Heebo_700Bold',
-}
-const WEIGHT_TO_FAMILY = lang === 'he' ? HEEBO_WEIGHTS : RUBIK_WEIGHTS
-const DEFAULT_FAMILY = WEIGHT_TO_FAMILY['400']
+// Rubik covers both Latin and Hebrew, with real weighted faces 400–800. Font application happens through the
+// AppText wrapper in src/components/AppText.tsx, which is used in place of
+// RN's Text throughout the UI. Text.defaultProps.style below is a safety
+// net for stray RN Text usages (e.g., from third-party libraries).
 
 function applyGlobalFont() {
-  const flatten = (style: any): any => {
-    if (!style) return {}
-    if (Array.isArray(style)) return Object.assign({}, ...style.map(flatten))
-    return style
-  }
-  const pickFamily = (style: any) => {
-    const flat = flatten(style)
-    const w = flat?.fontWeight != null ? String(flat.fontWeight) : '400'
-    return WEIGHT_TO_FAMILY[w] ?? DEFAULT_FAMILY
-  }
-  // @ts-expect-error — defaultProps is the documented RN hook for global text defaults
+  // @ts-expect-error — defaultProps is still the documented RN hook for
+  // global Text/TextInput defaults, and RN's Text reads this internally
+  // (not via React's deprecated defaultProps machinery).
   Text.defaultProps = Text.defaultProps || {}
-  // Cap font scaling globally: honours the user's preference up to ~25% larger
-  // than baseline, then stops so slider labels, chips, and fixed-height rows
-  // don't overflow at extreme OS font sizes.
   // @ts-expect-error
   Text.defaultProps.maxFontSizeMultiplier = 1.25
-  const origTextRender = Text.render
-  // Override render to inject fontFamily based on the resolved fontWeight.
   // @ts-expect-error
-  Text.render = function (...args: any[]) {
-    const el = origTextRender.apply(this, args)
-    const family = pickFamily(el.props.style)
-    return {
-      ...el,
-      props: { ...el.props, style: [{ fontFamily: family }, el.props.style] },
-    }
-  }
+  Text.defaultProps.style = [{ fontFamily: DEFAULT_FAMILY }, Text.defaultProps.style]
+
   // @ts-expect-error
   TextInput.defaultProps = TextInput.defaultProps || {}
   // @ts-expect-error
   TextInput.defaultProps.maxFontSizeMultiplier = 1.25
   // @ts-expect-error
-  TextInput.defaultProps.style = [{ fontFamily: DEFAULT_FAMILY }, TextInput.defaultProps.style]
+  TextInput.defaultProps.style = [
+    { fontFamily: DEFAULT_FAMILY },
+    TextInput.defaultProps.style,
+  ]
 }
 
 let globalFontApplied = false
@@ -150,18 +108,18 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Rubik_400Regular,
     Rubik_500Medium,
     Rubik_600SemiBold,
     Rubik_700Bold,
     Rubik_800ExtraBold,
-    Heebo_400Regular,
-    Heebo_500Medium,
-    Heebo_600SemiBold,
-    Heebo_700Bold,
-    Heebo_800ExtraBold,
   })
+
+  useEffect(() => {
+    if (fontError) console.warn('[fonts] load error:', fontError)
+    if (fontsLoaded) console.log('[fonts] loaded successfully, default family:', DEFAULT_FAMILY)
+  }, [fontsLoaded, fontError])
 
   useEffect(() => {
     if (fontsLoaded && !globalFontApplied) {
@@ -174,10 +132,12 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
-      </AuthProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+        </AuthProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   )
 }

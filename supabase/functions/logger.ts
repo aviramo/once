@@ -11,10 +11,11 @@ export default class Logger {
   status: number = 200;
   action?: string;
   logs: Log[] = [];
-  logger: Logger | undefined = undefined;
+  logger?: Logger;
 
-  constructor(user: User, body: Record<string, unknown>, logger?: Logger) {
+  constructor(event: string, body: Record<string, unknown>, user?: User, logger?: Logger) {
     this.user = user;
+    this.event = event;
     this.body = body;
     if (logger) logger.logger = this;
   }
@@ -40,7 +41,7 @@ export default class Logger {
       other_id: this.user?.other_id ?? (this.user?.state === State.HIDDEN ? null : this.user?.db?.old?.other_id),
       run_ms: new Date().getTime() - this.created_at.getTime(),
       status: this.status,
-      state: this.user?.db.new.state != this.user?.db.old?.state ? this.user?.db.new.state : null,
+      state: this.user?.db.new.state != this.user?.db.old?.state || this.user?.db.new.other_id != this.user?.db.old?.other_id ? this.user?.db.new.state : null,
       data: {
         logs: this.logs,
         body: this.body,

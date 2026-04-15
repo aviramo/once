@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated, AppState, Easing, I18nManager, Keyboard, Modal, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  Animated, AppState, Easing, I18nManager, Keyboard, Modal, Platform, Pressable,
+  ScrollView, StyleSheet, View,
 } from 'react-native'
+import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -387,8 +388,8 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
           widths carry the layout. */}
       <View style={styles.header}>
         <IconPressable
-          style={styles.headerSlot}
-          pressedStyle={styles.iconBtnPressed}
+          style={styles.menuBtn}
+          pressedStyle={styles.menuBtnPressed}
           onPress={() => { tap(); setMenuOpen(true) }}
         >
           <DotsIcon />
@@ -402,21 +403,12 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
           </Text>
         </View>
         <IconPressable
-          style={styles.headerSlot}
-          pressedStyle={styles.iconBtnPressed}
+          style={styles.backBtn}
+          pressedStyle={styles.backBtnPressed}
           onPress={() => { tap(); onBack?.() }}
         >
           <BackIcon />
         </IconPressable>
-        {/* Soft drop shadow fading downward — mirrors the one above the
-            home screen's bottom bar so the two surfaces feel consistent. */}
-        <View pointerEvents="none" style={styles.headerShadow}>
-          <View style={[styles.headerShadowStripe, { backgroundColor: 'rgba(0,0,0,0.10)' }]} />
-          <View style={[styles.headerShadowStripe, { backgroundColor: 'rgba(0,0,0,0.07)' }]} />
-          <View style={[styles.headerShadowStripe, { backgroundColor: 'rgba(0,0,0,0.04)' }]} />
-          <View style={[styles.headerShadowStripe, { backgroundColor: 'rgba(0,0,0,0.02)' }]} />
-          <View style={[styles.headerShadowStripe, { backgroundColor: 'rgba(0,0,0,0.01)' }]} />
-        </View>
       </View>
 
       {/* ── Messages ── */}
@@ -504,7 +496,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
               <SendIcon />
             </Pressable>
           </View>
-          <View style={{ height: kbHeight > 0 ? kbHeight + insets.bottom + 8 : Math.max(insets.bottom, 8) }} />
+          <View style={{ height: kbHeight > 0 ? kbHeight + (Platform.OS === 'ios' ? 0 : insets.bottom) + 8 : Math.max(insets.bottom, 8) }} />
         </View>
       </View>
 
@@ -627,19 +619,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#eef0f3' },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     height: 56,
-    paddingHorizontal: 8,
+    paddingHorizontal: 20,
     backgroundColor: '#eef0f3',
     zIndex: 2,
-  },
-  headerShadow: {
-    position: 'absolute',
-    start: 0,
-    end: 0,
-    top: '100%',
-  },
-  headerShadowStripe: {
-    height: 3,
   },
   // Icon slot: square 56×56 box. alignItems/justifyContent center the icon
   // on the exact same centerline as the header's own 56px height, so icons
@@ -649,6 +633,29 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   iconBtnPressed: { opacity: 0.5 },
+  menuBtn: {
+    height: 40,
+    width: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuBtnPressed: {
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  backBtn: {
+    height: 40,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+    gap: 2,
+  },
+  backBtnPressed: {
+    opacity: 0.5,
+  },
   // Center slot fills whatever space is left between the two icon boxes.
   headerCenter: {
     flex: 1,
@@ -770,16 +777,27 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
   },
+  // The app is Hebrew-only, so layout is hard-coded to RTL: text pinned to
+  // the visual right, accessory pinned to the visual left. Using physical
+  // left/right (not logical start/end) to avoid auto-swap surprises when
+  // I18nManager.isRTL happens to be false at module-evaluation time.
   menuItem: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 8,
     borderRadius: 10,
+    minHeight: 50,
+    gap: 12,
   },
   menuItemPressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
-  menuItemText: { fontSize: 15, color: '#111', flex: 1 },
+  menuItemText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#111',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   menuCheckbox: {
     width: 22,
     height: 22,

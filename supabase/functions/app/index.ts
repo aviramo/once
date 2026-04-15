@@ -20,9 +20,8 @@ const updatable = [
 Deno.serve(async (req) => {
   const body = await Tools.getBody(req);
   const segments = new URL(req.url).pathname.split('/').filter(Boolean);
-  const event = segments[segments.indexOf('app') + 1] ?? null;
-  const logger = new Logger(new User("unknown"), body);
-  if (event) logger.event = event;
+  const event = segments[segments.indexOf('app') + 1];
+  const logger = new Logger(event, body);
   const user = await User.getByRequest(logger, req);
   logger.user = user;
   if (!event && Object.keys(logger.body).length === 0) return logger.response('options');
@@ -50,20 +49,22 @@ Deno.serve(async (req) => {
       }
       break;
     case "profile":
-      await search(logger, user);
+      await search(logger, event, user);
       break;
     case "delete":
       await user.delete(logger);
-      EdgeRuntime.waitUntil(user.removeWatchers(logger));
+      EdgeRuntime.waitUntil(user.missWatchers(logger));
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
-        await search(logger, user);
-        EdgeRuntime.waitUntil(user.removeWatchers(logger));
+        EdgeRuntime.waitUntil(user.missWatchers(logger));
+        await search(logger, event, user);
       }
       if (body.state == State.VISIBLE) {
-        delete other?.watchers[user.user_id];
-        if (other) EdgeRuntime.waitUntil(other.update(logger));
+        if (other) {
+          delete other.watchers[user.user_id];
+          EdgeRuntime.waitUntil(other.update(logger));
+        }
         EdgeRuntime.waitUntil(user.addWatchers(logger));
         EdgeRuntime.waitUntil(user.update(logger, body.state as State));
       }
@@ -74,13 +75,13 @@ Deno.serve(async (req) => {
         EdgeRuntime.waitUntil(user.action(logger, event));
         delete other?.watchers[user.user_id];
         if (other) EdgeRuntime.waitUntil(other.update(logger));
-        await search(logger, user, other);
-      }
+        await search(logger, event, user, other);
+      } else user.update(logger, State.MISSED, other);
       break;
     case "invite":
-      if (user.state == State.WATCHING) {
-        if (await other?.update(logger, State.REPLYING, user, true)) {
-          if (other) EdgeRuntime.waitUntil(other.removeWatchers(logger, user));
+      if (user.state == State.WATCHING && other) {
+        if (await other.update(logger, State.REPLYING, user, true)) {
+          EdgeRuntime.waitUntil(other.missWatchers(logger, user));
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
         } else EdgeRuntime.waitUntil(user.update(logger, State.MISSED, other));
       }
@@ -108,7 +109,7 @@ Deno.serve(async (req) => {
         await no(logger, event, user, State.LEFT, other);
       break;
     case 'ok':
-      await search(logger, user);
+      await search(logger, event, user);
       break;
     case "reset": {
       if (user.role == 'ADMIN') await user.reset(logger);
@@ -124,24 +125,19 @@ Deno.serve(async (req) => {
       break;
     }
     case "remove": {
-      EdgeRuntime.waitUntil(user.removeWatcher(logger, body.user_id));
+      EdgeRuntime.waitUntil(user.missWatcher(logger, body.user_id));
       EdgeRuntime.waitUntil(user.update(logger));
       break;
     }
     case "logout": {
-      EdgeRuntime.waitUntil(user.removeWatchers(logger));
+      EdgeRuntime.waitUntil(user.missWatchers(logger));
       user.subscription = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
       break;
     }
     default:
-      await user.updateWatchers(logger);
-      if (other?.state == State.VISIBLE) {
-        user.setMatch(other);
-        other.setWatcher(user);
-        EdgeRuntime.waitUntil(other.update(logger));
-      }
+      await user.updateRelation(logger);
       if (user.state == State.VISIBLE)
         EdgeRuntime.waitUntil(user.addWatchers(logger));
       EdgeRuntime.waitUntil(user.update(logger));
@@ -160,19 +156,17 @@ async function watch(logger: Logger, user: User, exclude?: User) {
   else EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
 }
 
-async function search(logger: Logger, user: User, exclude?: User) {
+async function search(logger: Logger, event: string, user: User, exclude?: User) {
   if (exclude) {
     const newUser = lodash.cloneDeep(user);
-    const newLogger = new Logger(newUser, {}, logger);
-    newLogger.event = 'search';
+    const newLogger = new Logger(event, {}, newUser, logger);
     await watch(newLogger, newUser, exclude);
     newLogger.response();
   } else await watch(logger, user, exclude);
-  EdgeRuntime.waitUntil(user.update(logger));
 }
 
 async function no(logger: Logger, event: string, user: User, state: State, other?: User) {
   EdgeRuntime.waitUntil(user.action(logger, event));
   if (other) EdgeRuntime.waitUntil(other.update(logger, state, user, true));
-  await search(logger, user, other);
+  await search(logger, event, user, other);
 }

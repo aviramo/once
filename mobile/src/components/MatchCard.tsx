@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useMemo, useState } from 'react'
+import { Image, ScrollView, StyleSheet, View } from 'react-native'
+import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
 import type { MatchData } from '../stores/userStore'
@@ -106,6 +107,14 @@ export function MatchCard({
   hideTime?: boolean
 }) {
   const imageUrls = useMemo(() => resolveImages(match), [match])
+  // Measure both the card's full interior and the name+chips block. Sizing
+  // the photo from the real card height (not windowHeight − estimates) makes
+  // the layout robust to safe-area insets, header height, and Android nav
+  // bars. bottomInset is subtracted because the floating action bar covers
+  // that slice of the card visually.
+  const [cardH, setCardH] = useState(0)
+  const [headerBlockH, setHeaderBlockH] = useState(0)
+  const photoHeight = Math.max(280, cardH - headerBlockH - bottomInset)
   const timeIso = match.last_seen ?? match.located_at
   const timeStr = hideTime ? '' : formatLocatedAt(timeIso)
   const distStr = formatDistance(match.distance, match.units)
@@ -121,43 +130,48 @@ export function MatchCard({
   const hasChips = !!distStr || !!timeStr || match.subscribed != null
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + bottomInset }]}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        delaysContentTouches={false}
       >
         {imageUrls.length > 0 && (
-          <Image source={{ uri: imageUrls[0] }} style={styles.photo} resizeMode="cover" />
+          <Image source={{ uri: imageUrls[0] }} style={[styles.photo, { height: photoHeight }]} resizeMode="cover" />
         )}
 
-        <Text style={styles.name}>{displayTitle}</Text>
+        <View onLayout={e => setHeaderBlockH(e.nativeEvent.layout.height)}>
+          <Text style={[styles.name, !hasChips && styles.nameNoChips]}>{displayTitle}</Text>
 
-        {hasChips && (
-          <View style={styles.chips}>
-            {distStr ? (
-              <Chip
-                renderIcon={c => <PinIcon color={c} />}
-                text={distStr}
-                tone={distGreen ? 'positive' : 'neutral'}
-              />
-            ) : null}
-            {timeStr ? (
-              <Chip
-                renderIcon={c => <ClockIcon color={c} />}
-                text={timeStr}
-                tone={timeGreen ? 'positive' : 'neutral'}
-              />
-            ) : null}
-            {match.subscribed != null ? (
-              <Chip
-                renderIcon={c => match.subscribed ? <BellOnIcon color={c} /> : <BellOffIcon color={c} />}
-                text={match.subscribed ? tg('home.notifOn', match.is_male) : tg('home.notifOff', match.is_male)}
-                tone={match.subscribed ? 'positive' : 'negative'}
-              />
-            ) : null}
-          </View>
-        )}
+          {hasChips && (
+            <View style={styles.chips}>
+              {distStr ? (
+                <Chip
+                  renderIcon={c => <PinIcon color={c} />}
+                  text={distStr}
+                  tone={distGreen ? 'positive' : 'neutral'}
+                />
+              ) : null}
+              {timeStr ? (
+                <Chip
+                  renderIcon={c => <ClockIcon color={c} />}
+                  text={timeStr}
+                  tone={timeGreen ? 'positive' : 'neutral'}
+                />
+              ) : null}
+              {match.subscribed != null ? (
+                <Chip
+                  renderIcon={c => match.subscribed ? <BellOnIcon color={c} /> : <BellOffIcon color={c} />}
+                  text={match.subscribed ? tg('home.notifOn', match.is_male) : tg('home.notifOff', match.is_male)}
+                  tone={match.subscribed ? 'positive' : 'negative'}
+                />
+              ) : null}
+            </View>
+          )}
+        </View>
 
         {match.message ? (
           <Text style={styles.message}>{match.message}</Text>
@@ -188,25 +202,19 @@ export function MatchCard({
 }
 
 const styles = StyleSheet.create({
-  // overflow:hidden + matching border radius on the top corners clips the
-  // photo so it reads as flush against the card's rounded top edge. Matches
-  // the outer matchCard wrapper in home.tsx.
+  // Card chrome (rounding + clipping) lives on the outer matchCard wrapper
+  // in home.tsx now — this inner wrap only needs to stretch.
   wrap: {
     flex: 1,
-    overflow: 'hidden',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
   },
   scroll: { flex: 1 },
   scrollContent: {
     paddingBottom: 24,
   },
-  // Fixed 3:4 portrait so the photo has a predictable size and anchors flush
-  // to the card's top edge. flex:1 + minHeight in a non-flex parent can land
-  // on inconsistent heights across platforms — an aspectRatio is stable.
+  // Height is set inline so the photo fills the viewport above the name/chips
+  // — chips become the last row visible before the user scrolls.
   photo: {
     width: '100%',
-    aspectRatio: 3 / 4,
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   name: {
@@ -217,6 +225,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     textAlign: 'center',
     letterSpacing: -0.4,
+  },
+  nameNoChips: {
+    marginBottom: 28,
   },
   chips: {
     flexDirection: 'row',

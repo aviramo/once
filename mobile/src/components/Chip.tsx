@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
+import { Text } from './AppText'
 import Svg, { Path, Circle, Line } from 'react-native-svg'
 
 // Shared pill chip used across cards (watcher list + match card). A soft

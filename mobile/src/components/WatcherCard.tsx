@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, StyleSheet, Image, Pressable, I18nManager, Animated, Easing } from 'react-native'
+import { View, StyleSheet, Image, Pressable, I18nManager, Animated, Easing } from 'react-native'
+import { Text } from './AppText'
 import { invoke, publicImageUrl } from '../lib/api'
 import { t, tg } from '../i18n'
 import type { WatcherInfo } from '../stores/userStore'
@@ -55,12 +56,16 @@ type Props = {
   units?: string | null
   exiting?: boolean
   onExited?: () => void
+  // Render without the card's own bg / border / rounding so the watcher
+  // row reads as a list item inside a parent container that already owns
+  // the card chrome (see home.tsx visible-with-watchers layout).
+  flat?: boolean
 }
 
 // Per-card enter/exit animation. Each instance mounts with a lift+fade-in.
 // When `exiting` flips true, the card runs a matching fade/slide/collapse and
 // invokes `onExited` so the parent can unmount it.
-export function WatcherCard({ watcher, units, exiting, onExited }: Props) {
+export function WatcherCard({ watcher, units, exiting, onExited, flat }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [removing, setRemoving] = useState(false)
   const distance = formatDistance(watcher.distance, units)
@@ -116,7 +121,7 @@ export function WatcherCard({ watcher, units, exiting, onExited }: Props) {
     <>
       <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
         <Pressable
-          style={styles.card}
+          style={[styles.card, flat && styles.cardFlat]}
           onPress={onPress}
         >
           <View style={styles.avatar}>
@@ -180,6 +185,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
+  },
+  // Flat variant (used inside the big white outer card in home.tsx) —
+  // strips the chrome so watchers read as rows in the parent card.
+  cardFlat: {
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   // Fixed 3:4 portrait avatar so every card has the exact same image size
   // regardless of how many chips wrap in the body. The Image fills the

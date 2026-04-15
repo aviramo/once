@@ -41,6 +41,12 @@ export default class User {
     }
   }
 
+  static async getAuth(req: Request) {
+    const token = req.headers.get("authorization")?.split(" ")[1];
+    const auth = await Tools.supabase.auth.getUser(token);
+    return auth.data.user;
+  }
+
   static async getById(logger: Logger, user_id: string) {
     const data = await Tools.invoke(logger, "get user", Tools.supabase.from("users").select().eq("user_id", user_id));
     if (data && data[0]) return new User(data[0]);
@@ -76,21 +82,25 @@ export default class User {
     }
   }
 
-  async update(logger: Logger, state?: State, other?: User, notify?: boolean) {
+  validate() {
     if (this.age_from && this.age_from < User.LEGAL) this.age_from = User.LEGAL;
     if (this.age_from && this.age_to && this.age_from > this.age_to) this.age_to = this.age_from;
+    if (this.state && ![State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)) this.other_id = null;
+    else this.watchers = {};
+  }
+
+  async update(logger: Logger, state?: State, other?: User, notify?: boolean) {
     if (state) {
       this.state = state;
       this.other_id = other?.user_id ?? null;
-      if (this.state == State.VISIBLE) this.other_id = null;
-      else this.watchers = {};
     }
+    this.validate();
     this.setMatch(other);
     const delta = this.delta();
     if (lodash.size(delta) > 0) {
       lodash.merge(this.db.new, delta);
       let query = Tools.supabase.from("users").update(delta).eq("user_id", this.user_id);
-      if (this.state == State.REPLYING) query = query.eq("state", State.VISIBLE);
+      if (this.state == State.REPLYING) query = query.is("other_id", null);
       const data = await Tools.invoke(logger, 'update', query.select());
       if (data && data[0]) {
         lodash.merge(this, data[0]);
@@ -103,8 +113,7 @@ export default class User {
   }
 
   async notify(state?: State) {
-    const logger = new Logger(this, {});
-    logger.event = 'notify';
+    const logger = new Logger('notify', { state }, this);
     const matchImageFilename = (this.match?.images as string[] | undefined)?.[0];
     const matchImageUrl = matchImageFilename && this.match?.user_id
       ? `${Tools.supabaseUrl}/storage/v1/object/public/users/${this.match.user_id}/normal/${matchImageFilename}`
@@ -194,35 +203,43 @@ export default class User {
   }
 
   async addWatchers(logger: Logger) {
-    for (const watcher of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).order("relevance", { ascending: false }))) {
+    for (const watcher of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.VISIBLE).order("relevance", { ascending: false }))) {
       this.setWatcher(watcher);
       EdgeRuntime.waitUntil(watcher.update(logger, State.WATCHING, this, true));
     }
   }
 
-  async updateWatchers(logger: Logger) {
+  async updateRelation(logger: Logger, other?: Other) {
     const watchers = await this.others(logger, query => {
       return query.eq("other_id", this.user_id);
     });
+    let otherUpdated = false;
     for (const watcher of watchers) {
       watcher.setMatch(this);
-      if (this.state == State.VISIBLE)
-        this.setWatcher(watcher);
-      else
+      if (this.other_id == watcher.user_id) {
         this.setMatch(watcher);
+        otherUpdated = true;
+      }
+      else
+        this.setWatcher(watcher);
       EdgeRuntime.waitUntil(watcher.update(logger));
     }
+    if (!otherUpdated && other) {
+      this.setMatch(other);
+      other.setWatcher(this);
+      EdgeRuntime.waitUntil(other.update(logger));
+    }
 
   }
 
-  async removeWatchers(logger: Logger, exclude?: User) {
+  async missWatchers(logger: Logger, exclude?: User) {
     for (const watcher_id of Object.keys(this.watchers)) {
       if (watcher_id == exclude?.user_id) continue;
-      await this.removeWatcher(logger, watcher_id);
+      await this.missWatcher(logger, watcher_id);
     }
   }
 
-  async removeWatcher(logger: Logger, watcher_id: string) {
+  async missWatcher(logger: Logger, watcher_id: string) {
     delete this.watchers[watcher_id];
     const watcher = await User.getById(logger, watcher_id);
     await watcher?.update(logger, State.MISSED, this, true);
@@ -241,7 +258,7 @@ export default class User {
     await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().is("user_id", null));
     await Tools.invoke(logger, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null));
     await Tools.invoke(logger, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null));
-    await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: State.HIDDEN, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
+    await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: State.VISIBLE, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
     lodash.merge(this, await User.getById(logger, this.user_id));
   }
 
