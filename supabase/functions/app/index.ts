@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
       await search(logger, event, user);
       break;
     case "reset": {
-      if (user.role == 'ADMIN') await user.reset(logger);
+      if (user.role == 'ADMIN') await user.reset(logger, body.state as State || State.VISIBLE);
       else return logger.error("reset", "unauthorized", 403);
       break;
     }
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       break;
     }
     default:
-      await user.updateRelation(logger);
+      await user.updateRelations(logger);
       if (user.state == State.VISIBLE)
         EdgeRuntime.waitUntil(user.addWatchers(logger));
       EdgeRuntime.waitUntil(user.update(logger));

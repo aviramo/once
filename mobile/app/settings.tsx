@@ -1320,7 +1320,7 @@ function AccountTab() {
 function AppTab({ onBack }: { onBack?: () => void }) {
   const router = useRouter()
   const { profile, update } = useUserStore()
-  const [resetting, setResetting] = useState(false)
+  const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
 
   // Null-safe: useAutoSave compares JSON.stringify of the object, so writing
   // `units: profile?.units` (undefined when unset) vs `'metric'` / `'imperial'`
@@ -1332,24 +1332,25 @@ function AppTab({ onBack }: { onBack?: () => void }) {
   // Default view state is metric when units is unset (matches our km sliders).
   const isMetric = (profile.units ?? 'metric') === 'metric'
 
-  const onReset = async () => {
-    setResetting(true)
+  const onReset = async (state: 'VISIBLE' | 'HIDDEN') => {
+    if (resetting) return
+    setResetting(state)
     try {
-      await invoke('app/reset')
+      await invoke('app/reset', { state })
       // The reset edge function runs bulk UPDATEs on the DB but doesn't
       // refresh the request's in-memory user, so the response body carries
       // the PRE-reset snapshot. Realtime delivers the real post-reset state
       // ~1s later, which left the home screen showing stale data in the
       // gap. Apply the known post-reset shape locally so the store reflects
       // the new truth before we navigate home.
-      update({ state: 'HIDDEN', match: null, watchers: {} })
+      update({ state, match: null, watchers: {} })
       // Navigate back to home once the store matches the post-reset state.
       // When embedded in the shell pager the parent slides back to home;
       // standalone falls back to router.back().
       if (onBack) onBack()
       else router.back()
     } catch (e) { console.error(e) }
-    finally { setResetting(false) }
+    finally { setResetting(null) }
   }
 
   return (
@@ -1372,15 +1373,30 @@ function AppTab({ onBack }: { onBack?: () => void }) {
 
       {profile.role === 'ADMIN' && (
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('settings.adminTitle')}</Text>
           <SectionLabel>{t('settings.adminLabel').toUpperCase()}</SectionLabel>
-          <View style={{ marginTop: 14 }}>
-            <Button
-              label={t('settings.reset')}
-              onPress={onReset}
-              disabled={resetting}
-              variant="destructive"
-              size="md"
-            />
+          <View style={styles.genderRow}>
+            <View style={{ flex: 1 }}>
+              <Button
+                label={t('settings.resetVisible')}
+                onPress={() => onReset('VISIBLE')}
+                disabled={!!resetting}
+                silentDisabled={resetting !== 'VISIBLE'}
+                variant="primary"
+                tone="visible"
+                size="md"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label={t('settings.resetHidden')}
+                onPress={() => onReset('HIDDEN')}
+                disabled={!!resetting}
+                silentDisabled={resetting !== 'HIDDEN'}
+                variant="primary"
+                size="md"
+              />
+            </View>
           </View>
         </View>
       )}
@@ -1726,6 +1742,7 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionLabelRow: { flexDirection: 'row', marginBottom: 0 },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.4)', letterSpacing: 1 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#111', marginBottom: 10 },
   photoSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   editDoneBtn: { fontSize: 13, fontWeight: '600', color: '#111', letterSpacing: 0.3 },
   sectionValue: { fontSize: 15, fontWeight: '700', color: '#111' },

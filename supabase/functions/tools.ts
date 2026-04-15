@@ -1,14 +1,9 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 import { PostgrestTransformBuilder, PostgrestFilterBuilder } from "https://esm.sh/@supabase/postgrest-js@1.16.3/dist/cjs/index.js";
-import webpush from "npm:web-push@3.6.7";
 import Logger, { Log } from "./logger.ts";
 
-export type Subscription = {
-  endpoint: string;
-  expirationTime: number | null;
-  keys: { p256dh: string; auth: string };
-};
+export type Subscription = { type: "expo"; token: string };
 
 export default class Tools {
 
@@ -28,29 +23,35 @@ export default class Tools {
   }
 
   static async notify(log: Log, subJson: Subscription, payload: Record<string, unknown>) {
-    webpush.setVapidDetails(
-      Deno.env.get("VAPID_SUBJECT")!,
-      Deno.env.get("VAPID_PUBLIC_KEY")!,
-      Deno.env.get("VAPID_PRIVATE_KEY")!,
-    );
+    const body = {
+      to: subJson.token,
+      sound: "default",
+      priority: "high",
+      title: (payload?.title as string) ?? "SyncWish",
+      body: (payload?.body as string) ?? "",
+      data: payload,
+    };
     try {
-      const res = await webpush.sendNotification(
-        subJson,
-        JSON.stringify(payload),
-        {
-          TTL: 60,
-          headers: {
-            Urgency: "high",
-            Topic: (payload?.tag as string) ?? "default",
-          },
+      const res = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip, deflate",
+          "Content-Type": "application/json",
         },
-      );
-      log.result(res.body, res.statusCode);
-      return true;
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(5000),
+      });
+      const json = await res.json().catch(() => null);
+      const ticket = json?.data;
+      const status = ticket?.status as string | undefined;
+      log.result(json ?? (await res.text()), res.status);
+      if (status === "ok") return { ok: true as const };
+      return { ok: false as const, error: ticket?.details?.error as string | undefined };
     } catch (err: unknown) {
-      const error = err as Error & { body?: string; statusCode?: number };
-      log.result(error.body, error.statusCode ?? 500)
-      return false;
+      const error = err as Error;
+      log.result(error.message, 500);
+      return { ok: false as const, error: error.message };
     }
   }
 

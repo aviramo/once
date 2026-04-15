@@ -192,8 +192,11 @@ export default {
   'settings.unitsMetricDesc': 'קילומטרים',
   'settings.unitsImperial': 'אמפריאלי',
   'settings.unitsImperialDesc': 'מיילים',
-  'settings.adminLabel': 'ניהול',
+  'settings.adminTitle': 'ניהול',
+  'settings.adminLabel': 'אתחול משתמשים',
   'settings.reset': 'Reset',
+  'settings.resetVisible': 'גלוי',
+  'settings.resetHidden': 'מוסתר',
   'settings.resetDone': '✓ בוצע',
 
   // Match

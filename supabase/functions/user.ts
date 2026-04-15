@@ -130,13 +130,16 @@ export default class User {
       typeof this.subscription === "string"
         ? JSON.parse(this.subscription)
         : this.subscription as unknown as Subscription | null;
-    if (!subJson?.endpoint) return logger.error('notify', "subscription missing endpoint", 400);
-    const notified = await Tools.notify(log, subJson, payload);
-    if (!notified) {
-      // this.subscription = null;
-      if (this.state === State.VISIBLE) this.state = State.HIDDEN;
-      EdgeRuntime.waitUntil(this.update(logger));
-      return logger.error('notify', "failed to send notification", 500);
+    if (subJson?.type !== "expo" || !subJson.token)
+      return logger.error('notify', "subscription missing token", 400);
+    const result = await Tools.notify(log, subJson, payload);
+    if (!result.ok) {
+      const dead = result.error === "DeviceNotRegistered" || result.error === "InvalidCredentials";
+      if (dead) {
+        this.subscription = null;
+        EdgeRuntime.waitUntil(this.update(logger));
+      }
+      return logger.error('notify', `failed to send notification: ${result.error ?? "unknown"}`, 500);
     }
     return logger.response();
   }
@@ -209,7 +212,7 @@ export default class User {
     }
   }
 
-  async updateRelation(logger: Logger, other?: Other) {
+  async updateRelations(logger: Logger, other?: Other) {
     const watchers = await this.others(logger, query => {
       return query.eq("other_id", this.user_id);
     });
@@ -253,12 +256,12 @@ export default class User {
     await Tools.invoke(logger, 'delete', Tools.supabase.from("users").delete().eq("user_id", this.user_id));
   }
 
-  async reset(logger: Logger) {
+  async reset(logger: Logger, state: State) {
     await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().not("user_id", "is", null));
     await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().is("user_id", null));
     await Tools.invoke(logger, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null));
     await Tools.invoke(logger, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null));
-    await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: State.VISIBLE, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
+    await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
     lodash.merge(this, await User.getById(logger, this.user_id));
   }
 

@@ -16,6 +16,7 @@ import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
+import { registerForPushNotifications, unregisterPushNotifications } from '../src/lib/notifications'
 import { DEFAULT_FAMILY } from '../src/fonts'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
@@ -78,6 +79,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         fetchProfile(user.id)
         subscribeToUserChanges(user.id)
+        registerForPushNotifications().catch(() => {})
       }
     }).catch(() => {
       clearTimeout(timeout)
@@ -91,9 +93,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         fetchProfile(user.id)
         subscribeToUserChanges(user.id)
+        registerForPushNotifications().catch(() => {})
       } else {
         clear()
         unsubscribeFromUserChanges()
+        unregisterPushNotifications()
       }
     })
 

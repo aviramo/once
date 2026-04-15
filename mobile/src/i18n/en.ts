@@ -192,8 +192,11 @@ export default {
   'settings.unitsMetricDesc': 'Kilometers',
   'settings.unitsImperial': 'Imperial',
   'settings.unitsImperialDesc': 'Miles',
-  'settings.adminLabel': 'Admin',
+  'settings.adminTitle': 'Admin',
+  'settings.adminLabel': 'Reset users',
   'settings.reset': 'Reset',
+  'settings.resetVisible': 'Visible',
+  'settings.resetHidden': 'Hidden',
   'settings.resetDone': '✓ Done',
 
   // Match

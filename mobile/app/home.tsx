@@ -659,13 +659,15 @@ export default function HomePage() {
   const pushLabel = isMatchCardOpen ? t(pushKey as any) : ''
   const showWatchersTitle = isVisible && watchers.length > 0
   const headerTitle =
-    pushLabel && pushLabel !== pushKey
-      ? pushLabel
-      : showWatchersTitle
-        ? t('home.watchersInnerTitle')
-        : !isVisible
-          ? tg('home.hiddenHeaderTitle', isMale)
-          : tg('home.visibleHeaderTitle', isMale)
+    state === 'WATCHING'
+      ? 'SyncWish'
+      : pushLabel && pushLabel !== pushKey
+        ? pushLabel
+        : showWatchersTitle
+          ? t('home.watchersInnerTitle')
+          : !isVisible
+            ? tg('home.hiddenHeaderTitle', isMale)
+            : tg('home.visibleHeaderTitle', isMale)
 
   if (!ready) {
     return (
