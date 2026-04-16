@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Animated, Easing, Dimensions, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
+import { View, Pressable, StyleSheet, ScrollView, Animated, Dimensions, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
 import { Text } from '../src/components/AppText'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -20,7 +20,7 @@ import { IconPressable } from '../src/components/IconPressable'
 import { CountBadge } from '../src/components/CountBadge'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { FONT_SCALE } from '../src/fonts'
-import SettingsPage from './settings'
+import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage } from './settings'
 import ChatPage from './chat'
 
 const isRTL = I18nManager.isRTL
@@ -480,7 +480,11 @@ function Message({
 const messageStyles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    paddingHorizontal: 28,
+    marginHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#fff',
+    borderRadius: 20,
   },
   icon: {
     marginTop: 28,
@@ -514,6 +518,7 @@ const messageStyles = StyleSheet.create({
   },
   descWrap: {
     alignSelf: 'stretch',
+    marginTop: 6,
   },
   desc: {
     fontSize: 15,
@@ -537,11 +542,13 @@ export default function HomePage() {
   // [2]=settings. In LTR that places chat to the left of home and settings
   // to the right; RTL mirrors. Chat is only reachable while state===CHAT —
   // the gesture to pane 0 refuses otherwise.
-  type PaneIndex = 0 | 1 | 2
+  type PaneIndex = 0 | 1 | 2 | 3
   const HOME_PANE: PaneIndex = 1
   const CHAT_PANE: PaneIndex = 0
   const SETTINGS_PANE: PaneIndex = 2
+  const SUBPAGE_PANE: PaneIndex = 3
   const [paneIndex, setPaneIndex] = useState<PaneIndex>(HOME_PANE)
+  const [subPageConfig, setSubPageConfig] = useState<SubPageConfig | null>(null)
   // Unread message count reported by ChatPage — shown as a badge next to the
   // "Chat" title while we're on the home pane.
   const [chatUnread, setChatUnread] = useState(0)
@@ -554,8 +561,8 @@ export default function HomePage() {
   const sliding = useSlidingActive()
   const shellTranslate = useRef(new Animated.Value(0)).current
   // Card flip — animates the main card between VISIBLE/HIDDEN/WATCHING transitions.
-  // Value range: -1 = -90° (edge-on from back), 0 = face-on, 1 = 90° (edge-on from front).
-  const flipAnim = useRef(new Animated.Value(0)).current
+  // Value range: -1 = edge-on from back, 0 = face-on, 1 = edge-on from front.
+  // Runs on the UI thread via Reanimated so it stays smooth even under JS load.
   const paneIndexRef = useRef(paneIndex)
   const shellWRef = useRef(shellW)
   useEffect(() => { paneIndexRef.current = paneIndex }, [paneIndex])
@@ -590,6 +597,16 @@ export default function HomePage() {
     animateShellToIndex(index, velocity)
   }
 
+  const openShellSubPage = (config: SubPageConfig) => {
+    setSubPageConfig(config)
+    goToPane(SUBPAGE_PANE)
+  }
+
+  const closeShellSubPage = () => {
+    goToPane(SETTINGS_PANE)
+    setTimeout(() => setSubPageConfig(null), 400)
+  }
+
   // Snap shell to current pane when the width first resolves.
   useEffect(() => {
     if (!shellW) return
@@ -601,7 +618,12 @@ export default function HomePage() {
   // of letting the router pop.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (paneIndexRef.current !== HOME_PANE) {
+      const idx = paneIndexRef.current
+      if (idx === SUBPAGE_PANE) {
+        goToPane(SETTINGS_PANE)
+        return true
+      }
+      if (idx !== HOME_PANE) {
         goToPane(HOME_PANE)
         return true
       }
@@ -620,19 +642,9 @@ export default function HomePage() {
   // content swaps at the flip midpoint (when the card is edge-on, invisible).
   // Values: 'notif' | 'loc' | any profile state string.
   const [displayedCardMode, setDisplayedCardMode] = useState(state)
-  const displayedCardModeRef = useRef(state)
-  const flippingRef = useRef(false)
-  const firstFlipRef = useRef(true)   // skip animation on initial profile load
-  const pendingPhase2Ref = useRef(false)  // phase 2 waits for the re-render commit
 
-  // rotateY-based card flip. Phase 1 folds right-edge toward viewer (0°→90°,
-  // card goes edge-on). Phase 2 unfolds from the left-edge side (−90°→0°,
-  // new content revealed). perspective lives on the same transform array —
-  // iOS compositing isolation is handled by the stage container below.
-  const cardRotateY = flipAnim.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: ['-90deg', '0deg', '90deg'],
-  })
+  // Desc block animation: 1 = normal, 0 = zoomed-in + faded (during server request).
+  // Animates to 0 on button press; animates back to 1 after server responds.
 
   // ── Notification permission flow ────────────────────────────────────────
   // Runs once on first mount after profile is ready. Shows a card-based
@@ -699,10 +711,13 @@ export default function HomePage() {
       ])
       // Location + subscription are applied before the switch statement,
       // then 'start' runs a nearby search. Location must be { latitude, longitude }.
-      invoke('app/start', {
-        ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
-        ...(token ? { subscription: { type: 'expo', token } } : {}),
-      }).catch(() => {})
+      const calls: Promise<unknown>[] = [
+        invoke('app/start', {
+          ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
+        }),
+      ]
+      if (token) calls.push(invoke('app/data', { data: { subscription: { type: 'expo', token } } }))
+      Promise.all(calls).catch(() => {})
     })()
   }, [notifPerm, locPerm])
 
@@ -771,58 +786,23 @@ export default function HomePage() {
     }
   }, [state])
 
-  // Card flip trigger — fires whenever the active card mode changes.
+  // Keep displayedCardMode in sync with actualCardMode — instant, no animation.
   useEffect(() => {
-    const from = displayedCardModeRef.current
-    const to = actualCardMode
-    if (from === to) return
-    displayedCardModeRef.current = to
+    setDisplayedCardMode(actualCardMode)
+  }, [actualCardMode])
 
-    // First sync (profile just loaded) — show the real state instantly, no animation.
-    if (firstFlipRef.current || !ready) {
-      firstFlipRef.current = false
-      setDisplayedCardMode(to)
-      return
-    }
-    firstFlipRef.current = false
-
-    if (flippingRef.current) {
-      setDisplayedCardMode(to)
-      return
-    }
-
-    // Phase 1: fold the card to edge-on (0 → 1, i.e. 0° → -90° in rotateX).
-    flippingRef.current = true
-    flipAnim.setValue(0)
-    Animated.timing(flipAnim, {
-      toValue: 1,
-      duration: 150,
-      easing: Easing.in(Easing.quad),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (!finished) { flippingRef.current = false; return }
-      // Mark that phase 2 should start after the re-render commit, then swap
-      // content. The useEffect below picks up the flag once React has actually
-      // painted the new content — guaranteeing the swap is truly at mid-flip.
-      pendingPhase2Ref.current = true
-      setDisplayedCardMode(to)
-    })
-  }, [actualCardMode, ready, flipAnim])
-
-  // Phase 2 of the flip — runs after React has committed the new content to
-  // the native layer. At this point the card is still edge-on (rotateY -90°)
-  // so the new content is invisible; we unfold it into view.
+  // One-time migration: populate the `data` jsonb column for users who
+  // pre-date the data-field architecture. Fires once after the profile is
+  // first loaded. If data is already set we skip to avoid a redundant write.
   useEffect(() => {
-    if (!pendingPhase2Ref.current) return
-    pendingPhase2Ref.current = false
-    flipAnim.setValue(-1)
-    Animated.timing(flipAnim, {
-      toValue: 0,
-      duration: 150,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start(() => { flippingRef.current = false })
-  }, [displayedCardMode, flipAnim])
+    if (!profile) return
+    const d = (profile as unknown as { data?: Record<string, unknown> }).data
+    if (d && Object.keys(d).length > 0) return
+    invoke('app/data', {
+      data: { bio: profile.bio ?? null, images: profile.images, units: profile.units ?? null }
+    }).catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!profile])
 
   // Coexistence rules with inner gestures:
   //   • On pane 1 (home): forward → settings (always), backward → chat
@@ -1138,7 +1118,7 @@ export default function HomePage() {
             Android drops their touch events (vertical scrolls on the home
             pane stop responding). flex:1 alone gives the strip the shell's
             width, which only covers pane 0. */}
-        <Animated.View style={[styles.shellStrip, { width: 3 * shellW + 2 * SEAM_GAP, transform: [{ translateX: shellTranslate }] }]}>
+        <Animated.View style={[styles.shellStrip, { width: 4 * shellW + 3 * SEAM_GAP, transform: [{ translateX: shellTranslate }] }]}>
 
           {/* Pane 0 — chat (left of home in LTR, right in RTL) */}
           <View
@@ -1190,7 +1170,7 @@ export default function HomePage() {
                 <View style={styles.headerActions}>
                   {state === 'WATCHING' && (
                     <Pressable
-                      style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed, busy && styles.receiveBtnDisabled]}
+                      style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed]}
                       onPress={() => setVisibility('VISIBLE')}
                       disabled={busy}
                       accessibilityLabel={t('home.switchToVisible')}
@@ -1265,157 +1245,161 @@ export default function HomePage() {
               />
             </SafeAreaView>
 
-            {/* Match card — covers everything below the header for non-resting
-                states. Positioned in pane coordinates (outside SafeAreaView)
-                so the top offset is unambiguous. */}
-            {displayedIsMatchCardOpen && (
-              <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: state === 'CHAT' ? Math.max(insets.bottom, 8) : buttonsH + 16 }, { transform: [{ scaleY: cardScaleY }] }]}>
-                <View style={styles.matchCardInner}>
-                  {profile?.match ? (
-                    <MatchCard key={profile.match.user_id} match={profile.match} userIsMale={isMale} bottomInset={0} hideTime={state === 'CHAT'} />
-                  ) : null}
-                </View>
-              </Animated.View>
-            )}
+            {/* Stage — single compositing context for card + desc + buttons.
+                All three are absolute children of this one View so their
+                JSX order (card first → desc → buttons last) is the Z-order
+                iOS respects even when the card has a 3D transform. Without
+                this wrapper the card's CATransformLayer can obscure siblings
+                that live at the pane level. top is set to just below the
+                header so card positions are expressed relative to the stage. */}
+            <View style={[styles.stage, { top: insets.top + headerH }]}>
 
-            {showWatchers && (
-              <>
-                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + visibleDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
+              {displayedIsMatchCardOpen && (
+                <View style={[styles.matchCardOuter, { top: 6, bottom: state === 'CHAT' ? Math.max(insets.bottom, 8) : buttonsH + 16 }]}>
                   <View style={styles.matchCardInner}>
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    delaysContentTouches={false}
-                  >
-                    {watchers.map((w, i) => (
-                      <View key={w.user_id}>
-                        {i > 0 && <View style={styles.watchersRowDivider} />}
-                        <WatcherCard watcher={w} units={profile?.units} flat />
-                      </View>
-                    ))}
-                    {Array.from({ length: watchers.length >= 6 ? 0 : Math.max(1, 3 - watchers.length) }).map((_, i) => (
-                      <View key={`ph-${i}`}>
-                        {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
-                        <View style={styles.watcherPlaceholder}>
-                          <View style={styles.watcherPlaceholderAvatar} />
-                          <View style={styles.watcherPlaceholderBody}>
-                            <View style={styles.watcherPlaceholderTitleRow}>
-                              <View style={styles.watcherPlaceholderTitle} />
-                            </View>
-                            <View style={styles.watcherPlaceholderChips}>
-                              <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
-                              <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                    {profile?.match ? (
+                      <MatchCard key={profile.match.user_id} match={profile.match} userIsMale={isMale} bottomInset={0} hideTime={state === 'CHAT'} />
+                    ) : null}
+                  </View>
+                </View>
+              )}
+
+              {showWatchers && (
+                <>
+                  <View style={[styles.matchCardOuter, { top: 6, bottom: buttonsH + 16 + visibleDescH }]}>
+                    <View style={styles.matchCardInner}>
+                      <ScrollView
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {watchers.map((w, i) => (
+                          <View key={w.user_id}>
+                            {i > 0 && <View style={styles.watchersRowDivider} />}
+                            <WatcherCard watcher={w} units={profile?.units} flat />
+                          </View>
+                        ))}
+                        {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
+                          <View key={`ph-${i}`}>
+                            {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
+                            <View style={styles.watcherPlaceholder}>
+                              <View style={styles.watcherPlaceholderAvatar} />
+                              <View style={styles.watcherPlaceholderBody}>
+                                <View style={styles.watcherPlaceholderTitleRow}>
+                                  <View style={styles.watcherPlaceholderTitle} />
+                                </View>
+                                <View style={styles.watcherPlaceholderChips}>
+                                  <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
+                                  <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                                </View>
+                              </View>
                             </View>
                           </View>
-                        </View>
-                      </View>
-                    ))}
-                  </ScrollView>
+                        ))}
+                      </ScrollView>
+                    </View>
                   </View>
-                </Animated.View>
-                <View
-                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
-                  onLayout={e => setVisibleDescH(e.nativeEvent.layout.height)}
-                  pointerEvents="none"
-                >
-                  <Message
-                    state="VISIBLE"
-                    title={t('home.nowVisible')}
-                    desc={tg('home.nowVisibleDesc', isMale)}
-                    hideIcon
-                    titleColorOverride="#111"
-                  />
-                </View>
-              </>
-            )}
-
-            {showHiddenPlaceholder && (
-              <>
-                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + hiddenDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
-                  <View style={styles.matchCardInner}>
-                    <CardBack />
+                  <View
+                    style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                    onLayout={e => setVisibleDescH(e.nativeEvent.layout.height)}
+                    pointerEvents="none"
+                  >
+                    <Message
+                      state="VISIBLE"
+                      title={t('home.nowVisible')}
+                      desc={tg('home.nowVisibleDesc', isMale)}
+                      hideIcon
+                      titleColorOverride="#111"
+                    />
                   </View>
-                </Animated.View>
-                <View
-                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
-                  onLayout={e => setHiddenDescH(e.nativeEvent.layout.height)}
-                  pointerEvents="none"
-                >
-                  <Message
-                    state="HIDDEN"
-                    title={t('home.hiddenModeTitle')}
-                    desc={tg('home.hiddenModeDesc', isMale)}
-                    hideIcon
-                  />
-                </View>
-              </>
-            )}
+                </>
+              )}
 
-            {displayedCardMode === 'notif' && (
-              <>
-                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + notifDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
-                  <View style={styles.matchCardInner}>
-                    <PermissionCardFace icon="bell" denied={notifPerm === 'denied'} />
+              {showHiddenPlaceholder && (
+                <>
+                  <View style={[styles.matchCardOuter, { top: 6, bottom: buttonsH + 16 + hiddenDescH }]}>
+                    <View style={styles.matchCardInner}>
+                      <CardBack />
+                    </View>
                   </View>
-                </Animated.View>
-                <View
-                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
-                  onLayout={e => setNotifDescH(e.nativeEvent.layout.height)}
-                  pointerEvents="none"
-                >
-                  <Message
-                    state="HIDDEN"
-                    title={notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : t('home.notifPromptTitle')}
-                    desc={notifPerm === 'denied' ? t('home.emptyNotifBlockedDesc') : t('home.notifPromptDesc')}
-                    hideIcon
-                  />
-                </View>
-              </>
-            )}
-
-            {displayedCardMode === 'loc' && (
-              <>
-                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + locDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
-                  <View style={styles.matchCardInner}>
-                    <PermissionCardFace icon="location" />
+                  <View
+                    style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                    onLayout={e => setHiddenDescH(e.nativeEvent.layout.height)}
+                    pointerEvents="none"
+                  >
+                    <Message
+                      state="HIDDEN"
+                      title={t('home.hiddenModeTitle')}
+                      desc={tg('home.hiddenModeDesc', isMale)}
+                      hideIcon
+                    />
                   </View>
-                </Animated.View>
-                <View
-                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
-                  onLayout={e => setLocDescH(e.nativeEvent.layout.height)}
-                  pointerEvents="none"
-                >
-                  <Message
-                    state="HIDDEN"
-                    title={
-                      locPerm === 'services-off' ? t('home.locationUnavailableTitle')
-                      : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle')
-                      : t('home.locationPromptTitle')
-                    }
-                    desc={
-                      locPerm === 'services-off' ? t('home.locationServicesOffDesc')
-                      : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc')
-                      : t('home.locationPromptDesc')
-                    }
-                    hideIcon
-                  />
-                </View>
-              </>
-            )}
+                </>
+              )}
 
-            {/* Pinned buttons — rendered at pane level (outside SafeAreaView)
-                so Android's elevation stacking compares them against the
-                match card as proper siblings. Inside SafeAreaView, the
-                card's elevation would cover the entire SafeAreaView
-                regardless of the inner button's own elevation. */}
-            {buttons && (
-              <View
-                style={[styles.buttons, { paddingBottom: Math.max(insets.bottom, 8) }]}
-                onLayout={e => setButtonsH(e.nativeEvent.layout.height)}
-              >
-                {buttons}
-              </View>
-            )}
+              {displayedCardMode === 'notif' && (
+                <>
+                  <View style={[styles.matchCardOuter, { top: 6, bottom: buttonsH + 16 + notifDescH }]}>
+                    <View style={styles.matchCardInner}>
+                      <PermissionCardFace icon="bell" denied={notifPerm === 'denied'} />
+                    </View>
+                  </View>
+                  <View
+                    style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                    onLayout={e => setNotifDescH(e.nativeEvent.layout.height)}
+                    pointerEvents="none"
+                  >
+                    <Message
+                      state="HIDDEN"
+                      title={notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : t('home.notifPromptTitle')}
+                      desc={notifPerm === 'denied' ? t('home.emptyNotifBlockedDesc') : t('home.notifPromptDesc')}
+                      hideIcon
+                    />
+                  </View>
+                </>
+              )}
+
+              {displayedCardMode === 'loc' && (
+                <>
+                  <View style={[styles.matchCardOuter, { top: 6, bottom: buttonsH + 16 + locDescH }]}>
+                    <View style={styles.matchCardInner}>
+                      <PermissionCardFace icon="location" />
+                    </View>
+                  </View>
+                  <View
+                    style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                    onLayout={e => setLocDescH(e.nativeEvent.layout.height)}
+                    pointerEvents="none"
+                  >
+                    <Message
+                      state="HIDDEN"
+                      title={
+                        locPerm === 'services-off' ? t('home.locationUnavailableTitle')
+                        : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle')
+                        : t('home.locationPromptTitle')
+                      }
+                      desc={
+                        locPerm === 'services-off' ? t('home.locationServicesOffDesc')
+                        : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc')
+                        : t('home.locationPromptDesc')
+                      }
+                      hideIcon
+                    />
+                  </View>
+                </>
+              )}
+
+              {/* Buttons — rendered last inside the stage so they always
+                  composite above the card regardless of 3D transforms. */}
+              {buttons && (
+                <View
+                  style={[styles.buttons, { paddingBottom: Math.max(insets.bottom, 8) }]}
+                  onLayout={e => setButtonsH(e.nativeEvent.layout.height)}
+                >
+                  {buttons}
+                </View>
+              )}
+
+            </View>
           </View>
 
           {/* Pane 2 — settings (right of home in LTR, left in RTL) */}
@@ -1423,7 +1407,23 @@ export default function HomePage() {
             style={[styles.shellPane, { start: 2 * (shellW + SEAM_GAP), width: shellW }]}
             pointerEvents={paneIndex === SETTINGS_PANE ? 'auto' : 'none'}
           >
-            <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onEditModeChange={setSettingsEditing} />
+            <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onEditModeChange={setSettingsEditing} onOpenSubPage={openShellSubPage} />
+          </View>
+
+          {/* Pane 3 — field sub-page (select, age range, or radius) */}
+          <View
+            style={[styles.shellPane, { start: 3 * (shellW + SEAM_GAP), width: shellW }]}
+            pointerEvents={paneIndex === SUBPAGE_PANE ? 'auto' : 'none'}
+          >
+            {subPageConfig && (
+              subPageConfig.kind === 'ageRange'
+                ? <AgeRangeFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                : subPageConfig.kind === 'radius'
+                  ? <RadiusFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                  : subPageConfig.kind === 'admin'
+                    ? <AdminFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                    : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+            )}
           </View>
 
           {/* Thin seams between adjacent panes. Parked off-screen when a pane
@@ -1437,6 +1437,10 @@ export default function HomePage() {
               <View
                 pointerEvents="none"
                 style={[styles.shellSeam, { start: 2 * shellW + SEAM_GAP, width: SEAM_WIDTH }]}
+              />
+              <View
+                pointerEvents="none"
+                style={[styles.shellSeam, { start: 3 * shellW + 2 * SEAM_GAP, width: SEAM_WIDTH }]}
               />
             </>
           )}
@@ -1550,21 +1554,16 @@ const styles = StyleSheet.create({
   },
   // Surfaces the "switch to visible" path from the WATCHING match card.
   receiveBtn: {
-    height: 40,
-    minWidth: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(109,40,217,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   receiveBtnPressed: {
-    backgroundColor: 'rgba(109,40,217,0.18)',
+    opacity: 0.5,
   },
   receiveBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: 'rgba(109,40,217,0.75)',
+    color: '#6d28d9',
     letterSpacing: -0.2,
   },
   receiveBtnDisabled: {
@@ -1639,6 +1638,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef0f3',
     zIndex: 3,
   },
+  // Single compositing context for all card-area content. The card's
+  // Animated.View (with 3D transform) is the first child; desc and buttons
+  // follow, so iOS respects their JSX-order Z-stacking over the card.
+  stage: {
+    position: 'absolute',
+    start: 0,
+    end: 0,
+    bottom: 0,
+  },
+
   // Legacy — kept for any remaining non-animated card slots.
   matchCard: {
     position: 'absolute',
@@ -1671,8 +1680,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     start: 0,
     end: 0,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   // Two-button horizontal row used by WATCHING/REPLYING. flex:1 cells so
   // both buttons share width evenly regardless of label length.

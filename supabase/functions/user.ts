@@ -5,13 +5,11 @@ import { State, Match, Watcher } from "./global.ts";
 
 export default class User {
   user_id: string;
+  is_active: boolean = true;
   is_male?: boolean;
   last_seen: Date = new Date();
   name?: string;
   birth_date?: Date;
-  images?: { normal: string[], blur: string[] };
-  message?: string;
-  subscription?: JSON | null;
   state: State | null = null;
   other_id: string | null = null;
   match: Match | null = null;
@@ -23,10 +21,15 @@ export default class User {
   is_for_female?: boolean;
   is_for_kids: boolean | null = null;
   role?: string | null;
-  lang?: string;
-  os?: string;
   watchers: Record<string, Watcher> = {};
-  units?: string;
+  data: Record<string, unknown> = {
+    bio: null,
+    images: { normal: [], blur: [] },
+    units: null,
+    os: null,
+    lang: null,
+    subscription: null,
+  };
 
   db: { new: Record<string, unknown>, old: Record<string, unknown> } = { new: {}, old: {} };
 
@@ -86,7 +89,7 @@ export default class User {
   validate(other?: User) {
     if (this.age_from && this.age_from < User.LEGAL) this.age_from = User.LEGAL;
     if (this.age_from && this.age_to && this.age_from > this.age_to) this.age_to = this.age_from;
-    if (this.state && [State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)){
+    if (this.state && [State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)) {
       this.setMatch(other);
       this.watchers = {};
     }
@@ -128,18 +131,18 @@ export default class User {
       icon: matchImageUrl,
     };
     const log = logger.log("notify", payload);
-    if (!this.subscription) return logger.error('notify', "no subscription", 400);
+    if (!this.data.subscription) return logger.error('notify', "no subscription", 400);
     const subJson: Subscription | null =
-      typeof this.subscription === "string"
-        ? JSON.parse(this.subscription)
-        : this.subscription as unknown as Subscription | null;
+      typeof this.data.subscription === "string"
+        ? JSON.parse(this.data.subscription)
+        : this.data.subscription as unknown as Subscription | null;
     if (subJson?.type !== "expo" || !subJson.token)
       return logger.error('notify', "subscription missing token", 400);
     const result = await Tools.notify(log, subJson, payload);
     if (!result.ok) {
       const dead = result.error === "DeviceNotRegistered" || result.error === "InvalidCredentials";
       if (dead) {
-        this.subscription = null;
+        this.data.subscription = null;
         EdgeRuntime.waitUntil(this.update(logger));
       }
       return logger.error('notify', `failed to send notification: ${result.error ?? "unknown"}`, 500);
@@ -151,7 +154,7 @@ export default class User {
   async others(logger: Logger, extend?: (query: any) => any, exclude?: User) {
     const sp = "others";
     const others: Other[] = [];
-    let query = Tools.supabase.rpc(sp, { user_id: this.user_id, location: this.location });
+    let query = Tools.supabase.rpc(sp, { me: this.db.new, location: this.location });
     if (exclude) query = query.neq("user_id", exclude.user_id);
     if (extend) query = extend(query);
     const data = await Tools.invoke(logger, sp, query.select());
@@ -171,10 +174,10 @@ export default class User {
       last_seen: other.last_seen,
       title: other.name + ', ' + other.age(),
       is_male: other.is_male,
-      subscribed: other.subscription != null,
-      images: other.images?.normal,
-      message: other.message,
-      is_for_kids: other.is_for_kids,
+      subscribed: other.data.subscription != null,
+      images: (other.data.images as { normal: string[] } | undefined)?.normal,
+      bio: other.data.bio as string | undefined,
+      is_for_kids: other.is_for_kids as boolean | null | undefined,
       distance: other instanceof Other ? other.distance : this instanceof Other ? this.distance : null,
     } : this.match;
     if (match)
@@ -202,7 +205,7 @@ export default class User {
     const match = this.renderMatch(other);
     if (match) {
       const { images: _images, ...rest } = match;
-      const watcher: Watcher = { ...rest, image: other.images?.blur?.[0] };
+      const watcher: Watcher = { ...rest, image: (other.data.images as { blur: string[] } | undefined)?.blur?.[0] };
       if (this.watchers[other.user_id]?.created_at) watcher.created_at = new Date();
       this.watchers[other.user_id] = watcher;
     }

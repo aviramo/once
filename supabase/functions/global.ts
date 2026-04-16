@@ -25,7 +25,7 @@ type BaseMatch = {
   title: string;
   is_male?: boolean;
   subscribed?: boolean;
-  message?: string;
+  bio?: string;
   is_for_kids?: boolean | null;
   distance?: number | null;
 };

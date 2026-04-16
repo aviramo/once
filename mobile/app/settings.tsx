@@ -53,6 +53,7 @@ function ForwardChevronIcon() {
 export type SelectOption = { value: string; label: string }
 
 export type SelectFieldConfig = {
+  kind: 'select'
   title: string
   options: SelectOption[]
   value: string
@@ -60,16 +61,42 @@ export type SelectFieldConfig = {
   description?: string
 }
 
+export type AgeRangeFieldConfig = {
+  kind: 'ageRange'
+  title: string
+  ageMin: number
+  ageMax: number
+  sliderMin: number
+  sliderMax: number
+  onChangeMin: (v: number) => void
+  onChangeMax: (v: number) => void
+}
+
+export type RadiusFieldConfig = {
+  kind: 'radius'
+  title: string
+  stepCount: number
+  value: number
+  onChange: (v: number) => void
+  formatStep: (i: number) => string
+}
+
+export type AdminFieldConfig = {
+  kind: 'admin'
+  title: string
+  onReset: (state: 'VISIBLE' | 'HIDDEN') => Promise<void>
+}
+
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig
+
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Tappable settings row: label on the start side, current value + forward
 // chevron on the end side. Tapping opens the sub-page via onPress.
 
 function SelectFieldRow({
-  label,
   displayValue,
   onPress,
 }: {
-  label: string
   displayValue: string
   onPress: () => void
 }) {
@@ -79,11 +106,8 @@ function SelectFieldRow({
       onStartShouldSetResponder={() => true}
       onResponderRelease={() => { tap(); onPress() }}
     >
-      <Text style={styles.selectRowLabel}>{label}</Text>
-      <View style={styles.selectRowTrailing}>
-        <Text style={styles.selectRowValue}>{displayValue}</Text>
-        <ForwardChevronIcon />
-      </View>
+      <Text style={styles.selectRowValue}>{displayValue}</Text>
+      <ForwardChevronIcon />
     </View>
   )
 }
@@ -246,6 +270,173 @@ function RadiusSlider({ stepCount, value, onChange }: RadiusSliderProps) {
   )
 }
 
+// ── Vertical Range Slider ──────────────────────────────────────────────────
+// Same logic as RangeSlider but oriented vertically. High values are at the
+// top of the track; low values at the bottom. PanResponder uses `dy` instead
+// of `dx`, and position math inverts the y-axis so dragging up increases the
+// value.
+
+const VTHUMB = 28
+
+interface VerticalRangeSliderProps {
+  min: number; max: number
+  valueMin: number; valueMax: number
+  onChangeMin: (v: number) => void
+  onChangeMax: (v: number) => void
+}
+
+function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }: VerticalRangeSliderProps) {
+  const s = useRef({ trackHeight: 0, min, max, valueMin, valueMax, startPosMin: 0, startPosMax: 0 })
+  const cbs = useRef({ onChangeMin, onChangeMax })
+
+  useEffect(() => { s.current.min = min }, [min])
+  useEffect(() => { s.current.max = max }, [max])
+  useEffect(() => { s.current.valueMin = valueMin }, [valueMin])
+  useEffect(() => { s.current.valueMax = valueMax }, [valueMax])
+  useEffect(() => { cbs.current = { onChangeMin, onChangeMax } }, [onChangeMin, onChangeMax])
+
+  // y=0 is top of track (high value), y=trackHeight is bottom (low value)
+  const toPosY = (v: number) => {
+    const { trackHeight, min, max } = s.current
+    if (!trackHeight) return 0
+    return (1 - (v - min) / (max - min)) * trackHeight
+  }
+  const toVal = (posY: number) => {
+    const { min, max, trackHeight } = s.current
+    if (!trackHeight) return min
+    return Math.round(min + (1 - Math.max(0, Math.min(posY, trackHeight)) / trackHeight) * (max - min))
+  }
+
+  const minPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.startPosMin = toPosY(s.current.valueMin)
+    },
+    onPanResponderMove: (_, { dy }) => {
+      const v = toVal(s.current.startPosMin + dy)
+      if (v !== s.current.valueMin && v < s.current.valueMax)
+        cbs.current.onChangeMin(v)
+    },
+    onPanResponderRelease: () => { slidingActiveRef.current = false },
+    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+  })).current
+
+  const maxPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.startPosMax = toPosY(s.current.valueMax)
+    },
+    onPanResponderMove: (_, { dy }) => {
+      const v = toVal(s.current.startPosMax + dy)
+      if (v !== s.current.valueMax && v > s.current.valueMin)
+        cbs.current.onChangeMax(v)
+    },
+    onPanResponderRelease: () => { slidingActiveRef.current = false },
+    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+  })).current
+
+  const minPct = (valueMin - min) / (max - min)
+  const maxPct = (valueMax - min) / (max - min)
+
+  return (
+    <View style={vrs.container}>
+      <View
+        style={vrs.track}
+        onLayout={e => { s.current.trackHeight = e.nativeEvent.layout.height }}
+      >
+        <View style={vrs.trackBg} />
+        <View style={[vrs.trackFill, { top: `${(1 - maxPct) * 100}%`, bottom: `${minPct * 100}%` }]} />
+        {/* Max thumb — near top */}
+        <View
+          style={[vrs.thumb, { top: `${(1 - maxPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...maxPan.panHandlers}
+        />
+        {/* Min thumb — near bottom */}
+        <View
+          style={[vrs.thumb, { top: `${(1 - minPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...minPan.panHandlers}
+        />
+      </View>
+    </View>
+  )
+}
+
+// ── Vertical Radius Slider ─────────────────────────────────────────────────
+
+function VerticalRadiusSlider({ stepCount, value, onChange }: RadiusSliderProps) {
+  const s = useRef({ trackHeight: 0, startPos: 0, value, stepCount })
+  s.current.value = value
+  s.current.stepCount = stepCount
+  const cbs = useRef({ onChange })
+  useEffect(() => { cbs.current = { onChange } }, [onChange])
+
+  const toPosY = (v: number) => {
+    const { trackHeight, stepCount: sc } = s.current
+    if (sc <= 1 || !trackHeight) return trackHeight
+    return (1 - v / (sc - 1)) * trackHeight
+  }
+  const toVal = (posY: number) => {
+    const { trackHeight, stepCount: sc } = s.current
+    if (sc <= 1 || !trackHeight) return 0
+    const frac = 1 - Math.max(0, Math.min(posY, trackHeight)) / trackHeight
+    return Math.round(frac * (sc - 1))
+  }
+
+  const thumbPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.startPos = toPosY(s.current.value)
+    },
+    onPanResponderMove: (_, { dy }) => {
+      const v = toVal(s.current.startPos + dy)
+      if (v !== s.current.value) cbs.current.onChange(v)
+    },
+    onPanResponderRelease: () => { slidingActiveRef.current = false },
+    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+  })).current
+
+  const pct = stepCount <= 1 ? 0 : value / (stepCount - 1)
+
+  return (
+    <View style={vrs.container}>
+      <View
+        style={vrs.track}
+        onLayout={e => { s.current.trackHeight = e.nativeEvent.layout.height }}
+      >
+        <View style={vrs.trackBg} />
+        <View style={[vrs.trackFill, { bottom: 0, top: `${(1 - pct) * 100}%` }]} />
+        <View
+          style={[vrs.thumb, { top: `${(1 - pct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...thumbPan.panHandlers}
+        />
+      </View>
+    </View>
+  )
+}
+
+const vrs = StyleSheet.create({
+  container: { width: VTHUMB + 16, flex: 1, alignItems: 'center', paddingVertical: VTHUMB / 2 },
+  track: { width: VTHUMB, flex: 1, alignItems: 'center' },
+  trackBg: { position: 'absolute', top: 0, bottom: 0, width: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 2 },
+  trackFill: { position: 'absolute', width: 3, backgroundColor: '#111', borderRadius: 2 },
+  thumb: {
+    position: 'absolute', width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2, backgroundColor: '#111',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
+  },
+})
+
 // ── Radius helpers ─────────────────────────────────────────────────────────
 
 const RADIUS_STEPS = [0, 0.5, 1, 2, 5, 10, 20, 50, 70, 100, Infinity]
@@ -283,6 +474,25 @@ function useAutoSave(data: object, ready: boolean, delay = 600) {
     timer.current = setTimeout(() => { invoke('app/update', data).catch(console.error) }, delay)
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [key, ready])
+}
+
+// Saves bio + images + units together via app/data whenever `watchKey` changes.
+// Always reads the full current state from the store so the data column is
+// never partially overwritten.
+function useDataSave(watchKey: unknown, ready: boolean, delay = 600) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isFirst = useRef(true)
+  useEffect(() => {
+    if (!ready) return
+    if (isFirst.current) { isFirst.current = false; return }
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => {
+      const p = useUserStore.getState().profile
+      if (!p) return
+      invoke('app/data', { data: { bio: p.bio ?? null, images: p.images, units: p.units ?? null } }).catch(console.error)
+    }, delay)
+    return () => { if (timer.current) clearTimeout(timer.current) }
+  }, [JSON.stringify(watchKey), ready ? 1 : 0])
 }
 
 // ── Age helpers ────────────────────────────────────────────────────────────
@@ -428,7 +638,7 @@ function AnimatedToggleButton({
 
 // ── Preferences Tab ────────────────────────────────────────────────────────
 
-function PreferencesTab() {
+function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => void }) {
   const { profile, update } = useUserStore()
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
@@ -466,74 +676,69 @@ function PreferencesTab() {
   const radius = profile.range >= 100_000_000 ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
+  const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
+  const genderOptions: SelectOption[] = [
+    { value: 'M', label: t('settings.genderM') },
+    { value: 'F', label: t('settings.genderF') },
+    { value: 'B', label: t('settings.genderB') },
+  ]
+  const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
 
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
 
       {/* Age Range */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>{t('settings.ageRange').toUpperCase()}</Text>
-          <Text style={styles.sectionValue}>{ageMin} – {ageMax}</Text>
-        </View>
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderEndLabel}>{ageSliderMin}</Text>
-          <View style={{ flex: 1 }}>
-            <RangeSlider
-              min={ageSliderMin} max={ageSliderMax}
-              valueMin={ageMin} valueMax={ageMax}
-              onChangeMin={v => { update({ age_from: v }); queuePref({ age_from: v }) }}
-              onChangeMax={v => { update({ age_to: v }); queuePref({ age_to: v }) }}
-            />
-          </View>
-          <Text style={styles.sliderEndLabel}>{ageSliderMax}</Text>
-        </View>
+        <SectionLabel>{t('settings.ageRange').toUpperCase()}</SectionLabel>
+        <SelectFieldRow
+          displayValue={`${ageMin} – ${ageMax}`}
+          onPress={() => onOpenSubPage?.({
+            kind: 'ageRange',
+            title: t('settings.ageRange'),
+            ageMin, ageMax,
+            sliderMin: ageSliderMin, sliderMax: ageSliderMax,
+            onChangeMin: v => { update({ age_from: v }); queuePref({ age_from: v }) },
+            onChangeMax: v => { update({ age_to: v }); queuePref({ age_to: v }) },
+          })}
+        />
       </View>
 
       {/* Search Radius */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>{t('settings.range').toUpperCase()}</Text>
-          <Text style={styles.sectionValue}>{formatRadius(radius)}</Text>
-        </View>
-        <RadiusSlider
-          stepCount={RADIUS_STEPS.length}
-          value={Math.max(0, RADIUS_STEPS.indexOf(radius))}
-          onChange={i => {
-            const r = radiusToServer(RADIUS_STEPS[i])
-            update({ range: r })
-            queuePref({ range: r })
-          }}
+        <SectionLabel>{t('settings.range').toUpperCase()}</SectionLabel>
+        <SelectFieldRow
+          displayValue={formatRadius(radius)}
+          onPress={() => onOpenSubPage?.({
+            kind: 'radius',
+            title: t('settings.range'),
+            stepCount: RADIUS_STEPS.length,
+            value: Math.max(0, RADIUS_STEPS.indexOf(radius)),
+            onChange: i => {
+              const r = radiusToServer(RADIUS_STEPS[i])
+              update({ range: r })
+              queuePref({ range: r })
+            },
+            formatStep: i => formatRadius(RADIUS_STEPS[i]),
+          })}
         />
       </View>
 
       {/* Preferred Gender */}
       <View style={styles.section}>
         <SectionLabel>{t('settings.preferredGender').toUpperCase()}</SectionLabel>
-        <View style={styles.genderRow}>
-          <AnimatedToggleButton
-            active={!!forMale}
-            label={t('settings.genderM')}
-            onPress={() => {
-              if (!(forFemale || !forMale)) return
-              const nextForMale = !forMale
-              update({ is_for_male: nextForMale })
-              const pg = nextForMale && forFemale ? 'B' : nextForMale ? 'M' : 'F'
-              queuePref({ preferred_gender: pg })
-            }}
-          />
-          <AnimatedToggleButton
-            active={!!forFemale}
-            label={t('settings.genderF')}
-            onPress={() => {
-              if (!(forMale || !forFemale)) return
-              const nextForFemale = !forFemale
-              update({ is_for_female: nextForFemale })
-              const pg = forMale && nextForFemale ? 'B' : nextForFemale ? 'F' : 'M'
-              queuePref({ preferred_gender: pg })
-            }}
-          />
-        </View>
+        <SelectFieldRow
+          displayValue={genderDisplayValue}
+          onPress={() => onOpenSubPage?.({
+            kind: 'select',
+            title: t('settings.preferredGender'),
+            options: genderOptions,
+            value: genderPref,
+            onSelect: (v) => {
+              update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+              queuePref({ preferred_gender: v })
+            },
+          })}
+        />
       </View>
 
     </ScrollView>
@@ -542,17 +747,17 @@ function PreferencesTab() {
 
 // ── Profile Tab ────────────────────────────────────────────────────────────
 
-function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onTogglePreview, onPreviewDataChange }: { focused?: boolean; onEditModeChange?: (editing: boolean) => void; previewOpen?: boolean; onTogglePreview?: () => void; onPreviewDataChange?: (data: MatchData | null) => void }) {
+function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onTogglePreview, onPreviewDataChange, onOpenSubPage }: { focused?: boolean; onEditModeChange?: (editing: boolean) => void; previewOpen?: boolean; onTogglePreview?: () => void; onPreviewDataChange?: (data: MatchData | null) => void; onOpenSubPage?: (config: SubPageConfig) => void }) {
   const { profile, update } = useUserStore()
   const { user } = useAuthStore()
   const [dragging, setDragging] = useState(false)
   const [editMode, setEditMode] = useState(false)
-  // Message is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
-  const [localMessage, setLocalMessage] = useState(profile?.message ?? '')
-  const localMessageRef = useRef(localMessage)
-  const savedMessageRef = useRef(profile?.message ?? '')
+  // Bio is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
+  const [localBio, setLocalBio] = useState(profile?.bio ?? '')
+  const localBioRef = useRef(localBio)
+  const savedBioRef = useRef(profile?.bio ?? '')
   const scrollRef = useRef<ScrollView>(null)
-  // Keyboard handling: when the message field is focused we explicitly scroll
+  // Keyboard handling: when the bio field is focused we explicitly scroll
   // the section into view. Padding the bottom by the keyboard height makes
   // sure the scroll has somewhere to land even when content is short.
   const [keyboardHeight, setKeyboardHeight] = useState(0)
@@ -560,26 +765,30 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
   // set by the section's onLayout, used as the scroll target on focus.
   const messageSectionYRef = useRef(0)
 
-  // Keep localMessage in sync when profile loads or changes from elsewhere
+  // Keep localBio in sync when profile loads or changes from elsewhere
   useEffect(() => {
-    const serverMessage = profile?.message ?? ''
-    savedMessageRef.current = serverMessage
-    setLocalMessage(serverMessage)
-  }, [profile?.message])
+    const serverBio = profile?.bio ?? ''
+    savedBioRef.current = serverBio
+    setLocalBio(serverBio)
+  }, [profile?.bio])
 
-  useEffect(() => { localMessageRef.current = localMessage }, [localMessage])
+  useEffect(() => { localBioRef.current = localBio }, [localBio])
 
-  const flushMessage = () => {
-    const next = localMessageRef.current
-    if (next === savedMessageRef.current) return
-    savedMessageRef.current = next
-    update({ message: next })
-    invoke('app/update', { message: next }).catch(console.error)
+  const flushBio = () => {
+    const next = localBioRef.current
+    if (next === savedBioRef.current) return
+    // Don't save a non-empty bio shorter than 20 chars
+    if (next.length > 0 && next.length < 20) return
+    savedBioRef.current = next
+    update({ bio: next })
+    const p = useUserStore.getState().profile
+    if (!p) return
+    invoke('app/data', { data: { bio: next, images: p.images, units: p.units ?? null } }).catch(console.error)
   }
 
   // Flush on unmount (e.g., user pressed back while input still focused)
   useEffect(() => {
-    return () => { flushMessage() }
+    return () => { flushBio() }
   }, [])
 
   // Leaving the Profile tab (swipe to another settings tab, swipe back to
@@ -617,16 +826,21 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
     return () => { showSub.remove(); hideSub.remove() }
   }, [])
 
-  // message is excluded — it has its own blur-based save path
-  useAutoSave({
-    is_for_kids: profile?.is_for_kids ?? null,
-    images: profile?.images ?? { normal: [], blur: [] },
-  }, !!profile)
+  // bio is excluded — it has its own blur-based save path
+  useAutoSave({ is_for_kids: profile?.is_for_kids ?? null }, !!profile)
+  useDataSave(profile?.images, !!profile)
 
   if (!profile) return <View style={styles.tabContent} />
 
   const photos = profile.images?.normal ?? []
   const isForKids = profile.is_for_kids
+  const kidsOptions: SelectOption[] = [
+    { value: 'yes', label: t('settings.kidsYes') },
+    { value: 'no',  label: t('settings.kidsNo')  },
+    { value: 'na',  label: t('settings.kidsNa')  },
+  ]
+  const kidsValue = isForKids === true ? 'yes' : isForKids === false ? 'no' : 'na'
+  const kidsDisplayValue = kidsOptions.find(o => o.value === kidsValue)?.label ?? t('settings.kidsNa')
 
   const previewData: MatchData | null = useMemo(() => {
     if (!profile) return null
@@ -636,7 +850,7 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
       image: imgs[0] ?? '',
       images: imgs,
       title: profile.name ?? '—',
-      message: localMessage,
+      message: localBio,
       distance: 0,
       located_at: new Date().toISOString(),
       subscribed: false,
@@ -645,7 +859,7 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
       is_male: profile.is_male,
       units: profile.units,
     }
-  }, [profile, localMessage])
+  }, [profile, localBio])
 
   useEffect(() => { onPreviewDataChange?.(previewData) }, [previewData, onPreviewDataChange])
 
@@ -660,6 +874,7 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
       contentContainerStyle={[styles.tabContent, { paddingBottom: 40 + keyboardHeight }]}
       showsVerticalScrollIndicator={false}
       scrollEnabled={!dragging && !previewOpen}
+      nestedScrollEnabled
       keyboardShouldPersistTaps="handled"
       delaysContentTouches={false}
       // Any scroll/swipe dismisses photo edit mode — replaces the explicit
@@ -667,14 +882,13 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
       onScrollBeginDrag={() => { if (editMode) setEditMode(false) }}
     >
 
-      <Pressable
-        style={({ pressed }) => [styles.previewBtn, pressed && { opacity: 0.7 }]}
+      <Button
+        variant="primary"
+        size="md"
+        tone="visible"
+        label={previewOpen ? t('settings.closePreview') : t('settings.previewProfile')}
         onPress={() => { tap(); if (editMode) setEditMode(false); onTogglePreview?.() }}
-      >
-        <Text style={styles.previewBtnText}>
-          {previewOpen ? t('settings.closePreview') : t('settings.previewProfile')}
-        </Text>
-      </Pressable>
+      />
 
       <View
         style={[styles.section, { marginTop: 24 }]}
@@ -684,8 +898,15 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
         <View style={styles.textInputWrap}>
           <TextInput
             style={styles.textInput}
-            value={localMessage}
-            onChangeText={setLocalMessage}
+            value={localBio}
+            onChangeText={(text) => {
+              // Enforce max 5 lines
+              const parts = text.split('\n')
+              if (parts.length > 5) text = parts.slice(0, 5).join('\n')
+              // Enforce 150-char hard cap (covers paste)
+              if (text.length > 150) text = text.slice(0, 150)
+              setLocalBio(text)
+            }}
             onFocus={() => {
               if (editMode) setEditMode(false)
               // Wait for the keyboard to finish animating, then pull the
@@ -699,13 +920,15 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
                 })
               }, 300)
             }}
-            onBlur={flushMessage}
+            onBlur={flushBio}
             multiline
-            maxLength={300}
+            maxLength={150}
             textAlign="center"
             textAlignVertical="center"
           />
-          <Text style={styles.charCount}>{localMessage.length}</Text>
+          {localBio.length >= 20 && (
+            <Text style={styles.charCount}>{150 - localBio.length}</Text>
+          )}
         </View>
       </View>
 
@@ -720,6 +943,20 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
         />
       )}
 
+      <View style={styles.section}>
+        <SectionLabel>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</SectionLabel>
+        <SelectFieldRow
+          displayValue={kidsDisplayValue}
+          onPress={() => onOpenSubPage?.({
+            kind: 'select',
+            title: tg('settings.kidsLabel', profile.is_male),
+            options: kidsOptions,
+            value: kidsValue,
+            onSelect: (v) => { update({ is_for_kids: v === 'yes' ? true : v === 'no' ? false : null }) },
+          })}
+        />
+      </View>
+
       <View style={[styles.section, styles.photoSection]} pointerEvents="box-none">
         <View style={styles.photoSectionHeader} pointerEvents="box-none">
           <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
@@ -729,22 +966,6 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
           onEnterEditMode={() => setEditMode(true)}
           onDragStateChange={setDragging}
         />
-      </View>
-
-      <View style={styles.section}>
-        <SectionLabel>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</SectionLabel>
-        <View style={styles.genderRow}>
-          <AnimatedToggleButton
-            active={isForKids === true}
-            label={`✓  ${t('settings.kidsYes')}`}
-            onPress={() => update({ is_for_kids: true })}
-          />
-          <AnimatedToggleButton
-            active={isForKids === false}
-            label={`✗  ${t('settings.kidsNo')}`}
-            onPress={() => update({ is_for_kids: false })}
-          />
-        </View>
       </View>
 
     </ScrollView>
@@ -847,39 +1068,36 @@ function AccountTab() {
   const rows: Array<{ label: string; value: string }> = [
     { label: t('settings.email'),     value: user.email ?? '—' },
     { label: t('settings.name'),      value: profile.name ?? '—' },
-    { label: t('settings.birthDate'), value: profile.birth_date ? `(${age}) ${formatBirthDate(profile.birth_date)}` : '—' },
+    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
     { label: t('settings.gender'),    value: gender },
   ]
 
   return (
     <>
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
-      <View style={styles.section}>
-        <SectionLabel>{t('settings.accountInfo').toUpperCase()}</SectionLabel>
-        <View style={styles.infoCard}>
-          {rows.map((r, i) => (
-            <View key={r.label} style={[styles.infoRow, i === rows.length - 1 && styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>{r.label}</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>{r.value}</Text>
-            </View>
-          ))}
+      {rows.map((r) => (
+        <View key={r.label} style={styles.section}>
+          <SectionLabel>{r.label.toUpperCase()}</SectionLabel>
+          <View style={styles.selectRow} pointerEvents="none">
+            <Text style={styles.selectRowLabel} numberOfLines={1}>{r.value}</Text>
+          </View>
         </View>
-      </View>
+      ))}
 
       <View style={styles.section}>
         <SectionLabel>{t('settings.accountActions').toUpperCase()}</SectionLabel>
-        <Pressable
-          style={({ pressed }) => [styles.actionBtn, styles.actionBtnDestructiveSolid, pressed && styles.actionBtnDestructiveSolidPressed]}
+        <Button
+          variant="primary"
+          size="md"
+          tone="visible"
+          label={tg('settings.signOut', profile.is_male)}
           onPress={confirmSignOut}
-        >
-          <SignOutIcon color="#fff" />
-          <Text style={[styles.actionBtnText, styles.actionBtnTextOnSolid]}>{tg('settings.signOut', profile.is_male)}</Text>
-        </Pressable>
+        />
+        <View style={{ height: 10 }} />
         <Pressable
-          style={({ pressed }) => [styles.actionBtn, styles.actionBtnDestructive, { marginTop: 10 }, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [styles.actionBtn, styles.actionBtnDestructive, pressed && { opacity: 0.7 }]}
           onPress={confirmDelete}
         >
-          <TrashIcon color="#4b5563" />
           <Text style={[styles.actionBtnText, styles.actionBtnTextDestructive]}>{t('settings.deleteAccount')}</Text>
         </Pressable>
       </View>
@@ -910,28 +1128,21 @@ function AccountTab() {
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
-function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SelectFieldConfig) => void }) {
+function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => void }) {
   const router = useRouter()
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
 
-  // Null-safe: useAutoSave compares JSON.stringify of the object, so writing
-  // `units: profile?.units` (undefined when unset) vs `'metric'` / `'imperial'`
-  // after a tap produces a different key and saves correctly.
-  useAutoSave({ units: profile?.units }, !!profile)
+  useDataSave(profile?.units, !!profile)
 
   if (!profile) return <View style={styles.tabContent} />
 
-  // Default view state is metric when units is unset (matches our km sliders).
-  const isMetric = (profile.units ?? 'metric') === 'metric'
-
-  const appearance = profile.appearance ?? 'system'
-  const appearanceOptions: SelectOption[] = [
-    { value: 'system', label: t('settings.appearanceSystem') },
-    { value: 'light',  label: t('settings.appearanceLight')  },
-    { value: 'dark',   label: t('settings.appearanceDark')   },
+  const units = profile.units ?? 'metric'
+  const unitsOptions: SelectOption[] = [
+    { value: 'metric',   label: t('settings.unitsMetricDesc')   },
+    { value: 'imperial', label: t('settings.unitsImperialDesc') },
   ]
-  const appearanceDisplayValue = appearanceOptions.find(o => o.value === appearance)?.label ?? t('settings.appearanceLight')
+  const unitsDisplayValue = unitsOptions.find(o => o.value === units)?.label ?? t('settings.unitsMetricDesc')
 
   const onReset = async (state: 'VISIBLE' | 'HIDDEN') => {
     if (resetting) return
@@ -957,66 +1168,30 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
-        <SectionLabel>{t('settings.appearance').toUpperCase()}</SectionLabel>
+        <SectionLabel>{t('settings.unitsLabel').toUpperCase()}</SectionLabel>
         <SelectFieldRow
-          label={t('settings.appearance')}
-          displayValue={appearanceDisplayValue}
+          displayValue={unitsDisplayValue}
           onPress={() => onOpenSubPage?.({
-            title: t('settings.appearance'),
-            options: appearanceOptions,
-            value: appearance,
-            onSelect: (v) => {
-              update({ appearance: v })
-              invoke('app/update', { appearance: v }).catch(console.error)
-            },
-            description: t('settings.appearanceDesc'),
+            kind: 'select',
+            title: t('settings.unitsLabel'),
+            options: unitsOptions,
+            value: units,
+            onSelect: (v) => { update({ units: v }) },
           })}
         />
       </View>
 
-      <View style={styles.section}>
-        <SectionLabel>{t('settings.unitsLabel').toUpperCase()}</SectionLabel>
-        <View style={styles.genderRow}>
-          <AnimatedToggleButton
-            active={isMetric}
-            label={t('settings.unitsMetricDesc')}
-            onPress={() => update({ units: 'metric' })}
-          />
-          <AnimatedToggleButton
-            active={!isMetric}
-            label={t('settings.unitsImperialDesc')}
-            onPress={() => update({ units: 'imperial' })}
-          />
-        </View>
-      </View>
-
       {profile.role === 'ADMIN' && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.adminTitle')}</Text>
-          <SectionLabel>{t('settings.adminLabel').toUpperCase()}</SectionLabel>
-          <View style={styles.genderRow}>
-            <View style={{ flex: 1 }}>
-              <Button
-                label={t('settings.resetVisible')}
-                onPress={() => onReset('VISIBLE')}
-                disabled={!!resetting}
-                silentDisabled={resetting !== 'VISIBLE'}
-                variant="primary"
-                tone="visible"
-                size="md"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                label={t('settings.resetHidden')}
-                onPress={() => onReset('HIDDEN')}
-                disabled={!!resetting}
-                silentDisabled={resetting !== 'HIDDEN'}
-                variant="primary"
-                size="md"
-              />
-            </View>
-          </View>
+          <SectionLabel>{t('settings.adminTitle').toUpperCase()}</SectionLabel>
+          <SelectFieldRow
+            displayValue={t('settings.adminEntry')}
+            onPress={() => onOpenSubPage?.({
+              kind: 'admin',
+              title: t('settings.adminTitle'),
+              onReset: async (state) => { await onReset(state) },
+            })}
+          />
         </View>
       )}
     </ScrollView>
@@ -1025,9 +1200,9 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onEditModeChange?: (editing: boolean) => void, previewOpen?: boolean, onTogglePreview?: () => void, onPreviewDataChange?: (data: MatchData | null) => void, onOpenSubPage?: (config: SelectFieldConfig) => void) {
-  if (tab === 'preferences') return <PreferencesTab />
-  if (tab === 'profile')     return <ProfileTab focused={focused} onEditModeChange={onEditModeChange} previewOpen={previewOpen} onTogglePreview={onTogglePreview} onPreviewDataChange={onPreviewDataChange} />
+function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onEditModeChange?: (editing: boolean) => void, previewOpen?: boolean, onTogglePreview?: () => void, onPreviewDataChange?: (data: MatchData | null) => void, onOpenSubPage?: (config: SubPageConfig) => void) {
+  if (tab === 'preferences') return <PreferencesTab onOpenSubPage={onOpenSubPage} />
+  if (tab === 'profile')     return <ProfileTab focused={focused} onEditModeChange={onEditModeChange} previewOpen={previewOpen} onTogglePreview={onTogglePreview} onPreviewDataChange={onPreviewDataChange} onOpenSubPage={onOpenSubPage} />
   if (tab === 'account')     return <AccountTab />
   if (tab === 'app')         return <AppTab onBack={onBack} onOpenSubPage={onOpenSubPage} />
   return <View style={styles.tabContent} />
@@ -1040,7 +1215,210 @@ function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean,
 // button falls back to router.back(). `focused` is true when the settings
 // pane is the current pane in the home shell — tabs use it to tear down
 // ephemeral UI state (e.g., photo jiggle) when the user swipes back home.
-type SettingsPageProps = { onBack?: () => void; focused?: boolean; onEditModeChange?: (editing: boolean) => void }
+// ── Select Field Page ──────────────────────────────────────────────────────
+// Full-screen pane used as pane 3 in the home shell pager. Mirrors the
+// visual style of the settings screen (same background, header, card).
+
+export function SelectFieldPage({
+  config,
+  onBack,
+}: {
+  config: SelectFieldConfig
+  onBack: () => void
+}) {
+  const handleSelect = (value: string) => {
+    config.onSelect(value)
+    onBack()
+  }
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.subPageOptionsCard}>
+          {config.options.map((opt, i) => (
+            <View key={opt.value}>
+              {i > 0 && <View style={styles.optionDivider} />}
+              <View
+                style={styles.subPageOptionRow}
+                onStartShouldSetResponder={() => true}
+                onResponderRelease={() => { tap(); handleSelect(opt.value) }}
+              >
+                <Text style={styles.subPageOptionLabel}>{opt.label}</Text>
+                {opt.value === config.value && (
+                  <Text style={styles.subPageCheckmark}>✓</Text>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+        {config.description ? (
+          <Text style={styles.subPageDesc}>{config.description}</Text>
+        ) : null}
+      </ScrollView>
+    </SafeAreaView>
+  )
+}
+
+// ── Age Range Field Page ───────────────────────────────────────────────────
+// Full-screen pane with a vertical range slider for editing the age preference.
+
+export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldConfig; onBack: () => void }) {
+  const [ageMin, setAgeMin] = useState(config.ageMin)
+  const [ageMax, setAgeMax] = useState(config.ageMax)
+
+  const handleChangeMin = (v: number) => { setAgeMin(v); config.onChangeMin(v) }
+  const handleChangeMax = (v: number) => { setAgeMax(v); config.onChangeMax(v) }
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      <View style={spStyles.content}>
+        <Text style={spStyles.displayValue}>{ageMin} – {ageMax}</Text>
+        <View style={spStyles.sliderArea}>
+          <Text style={spStyles.endLabel}>{config.sliderMax}</Text>
+          <VerticalRangeSlider
+            min={config.sliderMin} max={config.sliderMax}
+            valueMin={ageMin} valueMax={ageMax}
+            onChangeMin={handleChangeMin} onChangeMax={handleChangeMax}
+          />
+          <Text style={spStyles.endLabel}>{config.sliderMin}</Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  )
+}
+
+// ── Radius Field Page ──────────────────────────────────────────────────────
+// Full-screen pane with a vertical single-thumb slider for editing the search radius.
+
+export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig; onBack: () => void }) {
+  const [value, setValue] = useState(config.value)
+
+  const handleChange = (v: number) => { setValue(v); config.onChange(v) }
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      <View style={spStyles.content}>
+        <Text style={spStyles.displayValue}>{config.formatStep(value)}</Text>
+        <View style={spStyles.sliderArea}>
+          <Text style={spStyles.endLabel}>{config.formatStep(config.stepCount - 1)}</Text>
+          <VerticalRadiusSlider
+            stepCount={config.stepCount}
+            value={value}
+            onChange={handleChange}
+          />
+          <Text style={spStyles.endLabel}>{config.formatStep(0)}</Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  )
+}
+
+// ── Admin Field Page ───────────────────────────────────────────────────────
+// Full-screen pane with the reset-users controls.
+
+export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; onBack: () => void }) {
+  const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
+
+  const handleReset = async (state: 'VISIBLE' | 'HIDDEN') => {
+    if (resetting) return
+    setResetting(state)
+    try { await config.onReset(state) }
+    finally { setResetting(null) }
+  }
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <SectionLabel>{t('settings.adminLabel').toUpperCase()}</SectionLabel>
+          <View style={[styles.genderRow, { marginTop: 14 }]}>
+            <View style={{ flex: 1 }}>
+              <Button
+                label={t('settings.resetVisible')}
+                onPress={() => handleReset('VISIBLE')}
+                disabled={!!resetting}
+                silentDisabled={resetting !== 'VISIBLE'}
+                variant="primary"
+                tone="visible"
+                size="md"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label={t('settings.resetHidden')}
+                onPress={() => handleReset('HIDDEN')}
+                disabled={!!resetting}
+                silentDisabled={resetting !== 'HIDDEN'}
+                variant="primary"
+                size="md"
+              />
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  )
+}
+
+const spStyles = StyleSheet.create({
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  displayValue: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#111',
+    letterSpacing: -0.5,
+    marginBottom: 28,
+  },
+  sliderArea: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 12,
+  },
+  endLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(0,0,0,0.35)',
+  },
+})
+
+type SettingsPageProps = { onBack?: () => void; focused?: boolean; onEditModeChange?: (editing: boolean) => void; onOpenSubPage?: (config: SubPageConfig) => void }
 
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
@@ -1054,7 +1432,7 @@ function SectionLabel({ children }: { children: any }) {
   )
 }
 
-export default function SettingsPage({ onBack, focused = true, onEditModeChange }: SettingsPageProps = {}) {
+export default function SettingsPage({ onBack, focused = true, onEditModeChange, onOpenSubPage }: SettingsPageProps = {}) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('preferences')
   // Photo edit (jiggle) state bubbles up from ProfileTab so the tab pager
@@ -1068,11 +1446,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
   const [headerH, setHeaderH] = useState(0)
   const insets = useSafeAreaInsets()
   const previewSlide = useRef(new Animated.Value(Dimensions.get('window').height)).current
-  // Sub-page state declared here so it's available for the dependency arrays below.
-  // The animation value and open/close functions live further down (after `width`).
-  const [subPage, setSubPage] = useState<SelectFieldConfig | null>(null)
-  const subPageSlide = useRef(new Animated.Value(isRTL ? -Dimensions.get('window').width : Dimensions.get('window').width)).current
-  useEffect(() => { onEditModeChange?.(photoEditActive || previewOpen || !!subPage) }, [photoEditActive, previewOpen, subPage, onEditModeChange])
+  useEffect(() => { onEditModeChange?.(photoEditActive || previewOpen) }, [photoEditActive, previewOpen, onEditModeChange])
   // Close preview when leaving the profile tab so it doesn't linger over other tabs.
   useEffect(() => { if (activeTab !== 'profile' && previewOpen) setPreviewOpen(false) }, [activeTab, previewOpen])
   // Slide-in / slide-out — keep mounted through the close animation so the
@@ -1117,41 +1491,6 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
   useEffect(() => { activeTabRef.current = activeTab; Keyboard.dismiss() }, [activeTab])
   useEffect(() => { widthRef.current = width }, [width])
   useEffect(() => { tabBarWidthRef.current = tabBarWidth }, [tabBarWidth])
-
-  // ── Sub-page open / close helpers ─────────────────────────────────────
-  // Declared after `width` and `widthRef` so references are clean.
-  // State + animation ref live above the effects (before dep-array evaluation).
-
-  const openSubPage = (config: SelectFieldConfig) => {
-    subPageSlide.setValue(isRTL ? -widthRef.current : widthRef.current)
-    setSubPage(config)
-    Animated.timing(subPageSlide, { toValue: 0, duration: 280, useNativeDriver: true }).start()
-  }
-
-  const closeSubPage = () => {
-    const w = widthRef.current
-    Animated.timing(subPageSlide, { toValue: isRTL ? -w : w, duration: 240, useNativeDriver: true })
-      .start(({ finished }) => { if (finished) setSubPage(null) })
-  }
-
-  const handleSelectOption = (value: string) => {
-    subPage?.onSelect(value)
-    closeSubPage()
-  }
-
-  // Android hardware back while sub-page is open closes it instead of
-  // navigating away to the home pane. Placed here (after closeSubPage) so
-  // TypeScript doesn't flag a use-before-declaration.
-  useEffect(() => {
-    if (!subPage) return
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      closeSubPage()
-      return true
-    })
-    return () => sub.remove()
-  // closeSubPage is stable within a render cycle; subPage drives the guard
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!subPage])
 
   // Single animation entry point — used both by tab taps and by swipe release.
   // Spring with an initial velocity carries the finger's momentum forward
@@ -1225,7 +1564,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
     : [canGoFwd ? -10 : -99999, canGoBack ? 10 : 99999]
   const tabPan = useMemo(() =>
     Gesture.Pan()
-      .enabled(!photoEditActive && !sliding && !previewOpen && !subPage)
+      .enabled(!photoEditActive && !sliding && !previewOpen)
       .activeOffsetX(activeOffsetX)
       .failOffsetY([-20, 20])
       .onUpdate(e => {
@@ -1262,7 +1601,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
         }
       })
       .runOnJS(true)
-  , [activeOffsetX[0], activeOffsetX[1], photoEditActive, sliding, previewOpen, !!subPage])
+  , [activeOffsetX[0], activeOffsetX[1], photoEditActive, sliding, previewOpen])
 
   return (
     <SafeAreaView style={styles.root}>
@@ -1343,7 +1682,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
                 width,
               }}
             >
-              {renderTab(tab, onBack, focused && activeTab === tab, setPhotoEditActive, previewOpen, () => setPreviewOpen(o => !o), setPreviewData, openSubPage)}
+              {renderTab(tab, onBack, focused && activeTab === tab, setPhotoEditActive, previewOpen, () => setPreviewOpen(o => !o), setPreviewData, onOpenSubPage)}
             </View>
           ))}
         </Animated.View>
@@ -1365,51 +1704,6 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
         </Animated.View>
       )}
 
-      {/* ── Sub-page overlay ─────────────────────────────────────────────── */}
-      {/* Slides in over everything (header included) when a SelectFieldRow  */}
-      {/* is tapped. Slides back out when the user picks an option or taps   */}
-      {/* the back button.                                                    */}
-      {subPage && (
-        <Animated.View
-          style={[StyleSheet.absoluteFill, styles.subPageRoot, { transform: [{ translateX: subPageSlide }] }]}
-        >
-          {/* Header — same layout as the main settings header */}
-          <View style={styles.header}>
-            <IconPressable style={styles.backBtn} onPress={closeSubPage}>
-              <BackIcon />
-            </IconPressable>
-            <Text style={styles.subPageHeaderTitle}>{subPage.title}</Text>
-          </View>
-
-          {/* Options list */}
-          <ScrollView
-            contentContainerStyle={{ paddingBottom: 40 }}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.subPageOptionsCard}>
-              {subPage.options.map((opt, i) => (
-                <View key={opt.value}>
-                  {i > 0 && <View style={styles.optionDivider} />}
-                  <View
-                    style={styles.subPageOptionRow}
-                    onStartShouldSetResponder={() => true}
-                    onResponderRelease={() => { tap(); handleSelectOption(opt.value) }}
-                  >
-                    <Text style={styles.subPageOptionLabel}>{opt.label}</Text>
-                    {opt.value === subPage.value && (
-                      <Text style={styles.subPageCheckmark}>✓</Text>
-                    )}
-                  </View>
-                </View>
-              ))}
-            </View>
-            {subPage.description ? (
-              <Text style={styles.subPageDesc}>{subPage.description}</Text>
-            ) : null}
-          </ScrollView>
-        </Animated.View>
-      )}
     </SafeAreaView>
   )
 }
@@ -1446,7 +1740,7 @@ const styles = StyleSheet.create({
     zIndex: 1, elevation: 1,
   },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionLabelRow: { flexDirection: 'row', marginBottom: 0 },
+  sectionLabelRow: { flexDirection: 'row', marginBottom: 8 },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.4)', letterSpacing: 1 },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: '#111', marginBottom: 10 },
   photoSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -1472,10 +1766,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  textInputWrap: { marginTop: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 14, paddingHorizontal: 12, paddingTop: 16, paddingBottom: 4, backgroundColor: '#fff' },
-  textInput: { fontSize: 15, color: '#111' },
-  // charCount sits alone on a single line, aligned to the trailing edge via flexbox container
-  charCount: { fontSize: 12, color: 'rgba(0,0,0,0.3)', alignSelf: 'flex-end', marginTop: 4 },
+  textInputWrap: { marginTop: 12, borderRadius: 14, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 28, backgroundColor: 'rgba(0,0,0,0.05)', minHeight: 140 },
+  textInput: { fontSize: 16, color: '#111', padding: 0, minHeight: 96, textAlign: 'center' },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.3)' },
 
   // Account tab
   infoCard: {
@@ -1534,7 +1827,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
   },
   subPageOptionLabel: { fontSize: 17, color: '#111' },
-  subPageCheckmark: { fontSize: 17, color: '#e11d48', fontWeight: '600' },
+  subPageCheckmark: { fontSize: 17, color: '#e2b84a', fontWeight: '600' },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
     marginStart: 16,

@@ -40,7 +40,7 @@ export interface UserProfile {
   age_from: number
   age_to: number
   range: number
-  message: string | null
+  bio: string | null
   is_for_kids: boolean | null
   images: { normal: string[]; blur: string[] }
   state: string | null
@@ -66,7 +66,7 @@ interface UserStore {
 // user row before our latest optimistic change committed. The dirty-field
 // map below protects against that race on both paths.
 const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
-  'images', 'message', 'is_for_kids',
+  'images', 'bio', 'is_for_kids',
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
   'units',
@@ -139,6 +139,16 @@ export const useUserStore = create<UserStore>((set, get) => ({
     // `<=` was dropping valid state transitions when last_seen stayed put.
     if (source === 'realtime' && ts && ts < lastAppliedLastSeen) return
     if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
+    // Compatibility: server still sends top-level `message` — map to `bio`.
+    // Also promote `data.bio/images/units` if the server sends them inside the
+    // `data` JSON column (new storage path).
+    if ('message' in d && !('bio' in d)) (d as Record<string, unknown>).bio = d.message
+    if (d.data && typeof d.data === 'object') {
+      const dd = d.data as Record<string, unknown>
+      if ('bio' in dd) (d as Record<string, unknown>).bio = dd.bio
+      if ('images' in dd) (d as Record<string, unknown>).images = dd.images
+      if ('units' in dd) (d as Record<string, unknown>).units = dd.units
+    }
     const prev = get().profile
     if (!prev) { set({ profile: data as unknown as UserProfile }); return }
     const merged: Record<string, unknown> = { ...prev, ...data }

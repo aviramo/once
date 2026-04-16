@@ -5,16 +5,10 @@ import User from "../user.ts";
 import { State } from "../global.ts";
 
 const updatable = [
-  "subscription",
   "age_from",
   "age_to",
   "range",
-  "lang",
-  "os",
-  "units",
   "is_for_kids",
-  "message",
-  "images",
 ];
 
 Deno.serve(async (req) => {
@@ -54,6 +48,10 @@ Deno.serve(async (req) => {
     case "delete":
       await user.delete(logger);
       user.missWatchers(logger);
+      break;
+    case "data":
+      lodash.merge(user.data, body.data);
+      await user.update(logger);
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
@@ -131,7 +129,7 @@ Deno.serve(async (req) => {
     }
     case "logout": {
       user.missWatchers(logger);
-      user.subscription = null;
+      user.data.subscription = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
       break;

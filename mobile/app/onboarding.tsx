@@ -151,7 +151,7 @@ export default function OnboardingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [dateError, setDateError] = useState<string | null>(null)
   const [photosEditMode, setPhotosEditMode] = useState(false)
-  const [bio, setBio] = useState(profile?.message ?? '')
+  const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
   const [savingImages, setSavingImages] = useState(false)
   const [photosUploading, setPhotosUploading] = useState(false)
@@ -206,7 +206,7 @@ export default function OnboardingPage() {
     seededFromProfileRef.current = true
     setIsMale(profile.is_male ?? null)
     setName(profile.name ?? '')
-    setBio(profile.message ?? '')
+    setBio(profile.bio ?? '')
     setStep((profile.images?.normal?.length ?? 0) >= 1 ? 5 : 4)
   }, [profile])
 

@@ -9,8 +9,8 @@ import { FONT_SCALE } from '../fonts'
 
 const TONES = {
   neutral:  { fg: '#374151', bg: 'rgba(17,24,39,0.06)' },
-  positive: { fg: '#a87f10', bg: 'rgba(212,160,23,0.14)' },
-  negative: { fg: '#b91c1c', bg: 'rgba(185,28,28,0.10)' },
+  positive: { fg: '#6d28d9', bg: 'rgba(109,40,217,0.10)' },
+  negative: { fg: '#374151', bg: 'rgba(17,24,39,0.06)' },
 } as const
 
 export type ChipTone = keyof typeof TONES

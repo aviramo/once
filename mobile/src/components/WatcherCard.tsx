@@ -191,7 +191,6 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat }: Props) 
                     source={{ uri: publicImageUrl(watcher.user_id, 'blur', watcher.image) }}
                     style={styles.avatarImage}
                     resizeMode="cover"
-                    blurRadius={50}
                   />
                 ) : null}
               </View>
