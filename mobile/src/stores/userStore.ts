@@ -45,6 +45,7 @@ export interface UserProfile {
   images: { normal: string[]; blur: string[] }
   state: string | null
   units: string | null
+  appearance: string | null
   role: string | null
   match?: MatchData | null
   watchers?: Record<string, WatcherInfo> | null
@@ -69,6 +70,7 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
   'units',
+  'appearance',
 ]
 
 // Monotonic gate on realtime snapshots. The server fires several

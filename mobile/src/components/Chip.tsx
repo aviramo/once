@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import Svg, { Path, Circle, Line } from 'react-native-svg'
+import { FONT_SCALE } from '../fonts'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -8,7 +9,7 @@ import Svg, { Path, Circle, Line } from 'react-native-svg'
 
 const TONES = {
   neutral:  { fg: '#374151', bg: 'rgba(17,24,39,0.06)' },
-  positive: { fg: '#15803d', bg: 'rgba(21,128,61,0.10)' },
+  positive: { fg: '#a87f10', bg: 'rgba(212,160,23,0.14)' },
   negative: { fg: '#b91c1c', bg: 'rgba(185,28,28,0.10)' },
 } as const
 
@@ -27,7 +28,7 @@ export function Chip({
   return (
     <View style={[styles.chip, { backgroundColor: bg }]}>
       {renderIcon?.(fg)}
-      <Text style={[styles.chipText, { color: fg }]} numberOfLines={1}>{text}</Text>
+      <Text style={[styles.chipText, { color: fg }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.heading}>{text}</Text>
     </View>
   )
 }

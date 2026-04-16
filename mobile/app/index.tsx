@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'expo-router'
 import { useAuthStore } from '../src/stores/authStore'
 import { BootScreen } from '../src/components/BootScreen'
@@ -10,9 +10,11 @@ import { BootScreen } from '../src/components/BootScreen'
 export default function Index() {
   const { user, loading } = useAuthStore()
   const router = useRouter()
+  const navigated = useRef(false)
 
   useEffect(() => {
-    if (loading) return
+    if (loading || navigated.current) return
+    navigated.current = true
     router.replace(user ? '/home' : '/login')
   }, [user, loading])
 

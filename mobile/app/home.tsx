@@ -1,21 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Animated, Dimensions, I18nManager, BackHandler, Keyboard } from 'react-native'
+import { View, Pressable, StyleSheet, ScrollView, Animated, Easing, Dimensions, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
 import { Text } from '../src/components/AppText'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import Svg, { Path, Circle, Rect, Ellipse, G } from 'react-native-svg'
+import Svg, { Defs, Path, Circle, Rect, Ellipse, G, Pattern } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
 import { t, tg } from '../src/i18n'
+import { getNotifPermission, requestNotifPermission, ensurePushToken, type NotifPermission } from '../src/lib/notifications'
+import { getLocPermission, requestLocPermission, getLocation, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button, PrimaryButton } from '../src/components/Button'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BootScreen } from '../src/components/BootScreen'
 import { MatchCard } from '../src/components/MatchCard'
 import { IconPressable } from '../src/components/IconPressable'
+import { CountBadge } from '../src/components/CountBadge'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
+import { FONT_SCALE } from '../src/fonts'
 import SettingsPage from './settings'
 import ChatPage from './chat'
 
@@ -160,6 +164,248 @@ function StateIcon({ state }: { state: string }) {
   return <EnvelopeIcon accent={HIDDEN_ACCENT} direction="up" />
 }
 
+// Single-figure silhouette: circle head + trapezoid/rectangular torso.
+// `variant` shapes the torso so a viewer reads it as one gender or the other.
+function PersonGlyph({ variant, size = 140 }: { variant: 'M' | 'F'; size?: number }) {
+  const color = 'rgba(0,0,0,0.22)'
+  const w = size
+  const h = Math.round(size * 1.15)
+  return (
+    <Svg width={w} height={h} viewBox="0 0 100 120">
+      <Circle cx={50} cy={28} r={20} fill={color} />
+      {variant === 'F' ? (
+        <Path d="M18 116 L34 54 L66 54 L82 116 Z" fill={color} />
+      ) : (
+        <Path d="M22 116 V 82 C 22 66 34 54 50 54 C 66 54 78 66 78 82 V 116 Z" fill={color} />
+      )}
+    </Svg>
+  )
+}
+
+function PreferredGenderGlyph({ forMale, forFemale, size = 140 }: { forMale: boolean; forFemale: boolean; size?: number }) {
+  if (forMale && forFemale) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+        <PersonGlyph variant="F" size={size * 0.82} />
+        <PersonGlyph variant="M" size={size * 0.82} />
+      </View>
+    )
+  }
+  if (forFemale) return <PersonGlyph variant="F" size={size} />
+  return <PersonGlyph variant="M" size={size} />
+}
+
+// Board-game card back — playful, like Djeco: colored background with
+// texture, a big rounded SVG question mark, and the brand name with each
+// letter tilted at a different angle for a whimsical look.
+const BRAND_LETTERS = [
+  { ch: 'S', rot: -8 },
+  { ch: 'y', rot: 5 },
+  { ch: 'n', rot: -3 },
+  { ch: 'c', rot: 7 },
+  { ch: 'W', rot: -6 },
+  { ch: 'i', rot: 4 },
+  { ch: 's', rot: -5 },
+  { ch: 'h', rot: 8 },
+]
+
+// SyncWish star paths in 0–48 coordinate space — extracted from SyncWishLogo.
+const STAR_PATH_1 = "M16.8712 33.0436L15.9976 44.7036C15.9362 45.5229 16.6646 46.0872 17.3161 45.722C21.9289 43.1382 36.3783 33.6479 43.7017 12.7899C44.0376 11.8331 43.1352 10.9697 42.3646 11.5094C38.0387 14.539 28.5846 20.8006 22.7421 21.9934C22.7421 21.9934 26.4836 19.3946 28.7231 15.4053C28.9426 15.0143 28.9244 14.5136 28.6796 14.1606L20.5127 2.38925C20.0287 1.69147 19.0354 1.98057 18.8606 2.87002L16.3181 15.8073L4.38437 26.2226C3.78602 26.7446 3.90808 27.7996 4.5989 28.079L16.8712 33.0436Z"
+const STAR_PATH_2 = "M37.9745 28.448C37.2188 29.5025 35.5908 31.6717 34.0876 32.9974C33.7871 33.2624 33.8276 33.7068 34.1724 33.9234L42.1145 38.909C42.5926 39.2091 43.2384 38.8529 43.1576 38.3323C42.7882 35.9496 41.7237 30.9818 39.0328 28.3741C38.7322 28.083 38.2142 28.1136 37.9745 28.448Z"
+// Two stars per tile: one at top-left, one at centre — creates a natural
+// diagonal layout when tiled (no patternTransform rotation needed).
+const STAR_SCALE = 38 / 48
+const STAR_T1 = `translate(4, 4) scale(${STAR_SCALE})`
+const STAR_T2 = `translate(48, 48) scale(${STAR_SCALE})`
+
+function CardBack() {
+  return (
+    <View style={cardBackStyles.wrap}>
+      {/* Texture — SyncWish stars in a diagonal offset tile */}
+      <View style={StyleSheet.absoluteFill}>
+        <Svg width="100%" height="100%">
+          <Defs>
+            <Pattern id="cbTex" width={88} height={88} patternUnits="userSpaceOnUse">
+              <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_2} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_1} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_2} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+            </Pattern>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#cbTex)" />
+        </Svg>
+      </View>
+      {/* Big rounded question mark — SVG for full control over shape */}
+      <Svg width={180} height={240} viewBox="0 0 180 240">
+        {/* Rounded bulb */}
+        <Path
+          d="M50 60 C50 20, 130 20, 130 60 C130 95, 100 100, 100 135"
+          fill="none"
+          stroke="#fff"
+          strokeWidth={32}
+          strokeLinecap="round"
+        />
+        {/* Dot */}
+        <Circle cx={100} cy={185} r={18} fill="#fff" />
+      </Svg>
+      {/* Brand — each letter tilted differently */}
+      <View style={cardBackStyles.brandRow}>
+        {BRAND_LETTERS.map((l, i) => (
+          <Text
+            key={i}
+            style={[
+              cardBackStyles.brandLetter,
+              { transform: [{ rotate: `${l.rot}deg` }] },
+            ]}
+          >
+            {l.ch}
+          </Text>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+const cardBackStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e2b84a',
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  brandRow: {
+    position: 'absolute',
+    bottom: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    direction: 'ltr',
+    gap: 2,
+  },
+  brandLetter: {
+    fontSize: 32,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: 'rgba(255,255,255,0.85)',
+    includeFontPadding: false,
+  },
+})
+
+// ── Notification card faces ───────────────────────────────────────────────
+// Same purple card style as CardBack but with bell icons instead of "?".
+// Shown during the startup notification permission flow.
+
+function PermissionCardFace({ icon, denied }: { icon: 'bell' | 'location'; denied?: boolean }) {
+  const PAT = 28
+  return (
+    <View style={permCardStyles.wrap}>
+      {/* Texture — SyncWish stars in a diagonal offset tile */}
+      <View style={StyleSheet.absoluteFill}>
+        <Svg width="100%" height="100%">
+          <Defs>
+            <Pattern id="pcTex" width={88} height={88} patternUnits="userSpaceOnUse">
+              <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_2} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_1} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_2} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+            </Pattern>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#pcTex)" />
+        </Svg>
+      </View>
+      {/* Icon — bold, wide, matches the CardBack ? style */}
+      <Svg width={180} height={240} viewBox="0 0 180 240" fill="none">
+        {icon === 'bell' ? (
+          <>
+            {/* Bell dome — narrows to smooth apex, widens toward body */}
+            <Path
+              d="M 30 152 C 28 90 60 28 90 28 C 120 28 152 90 150 152"
+              stroke="#fff"
+              strokeWidth={28}
+              strokeLinecap="round"
+            />
+            {/* Bottom rim — wider than the body */}
+            <Path
+              d="M 10 162 L 170 162"
+              stroke="#fff"
+              strokeWidth={24}
+              strokeLinecap="round"
+            />
+            {/* Clapper */}
+            <Circle cx={90} cy={196} r={14} fill="#fff" />
+          </>
+        ) : (
+          <>
+            {/* Map pin outline */}
+            <Path
+              d="M 90 205 C 32 162 22 115 22 78 C 22 38 52 16 90 16 C 128 16 158 38 158 78 C 158 115 148 162 90 205 Z"
+              stroke="#fff"
+              strokeWidth={28}
+              strokeLinejoin="round"
+            />
+            {/* Center circle */}
+            <Circle
+              cx={90}
+              cy={78}
+              r={26}
+              stroke="#fff"
+              strokeWidth={28}
+            />
+          </>
+        )}
+        {denied && (
+          <Path
+            d="M 20 20 L 160 220"
+            stroke="rgba(255,255,255,0.55)"
+            strokeWidth={24}
+            strokeLinecap="round"
+          />
+        )}
+      </Svg>
+      <View style={permCardStyles.brandRow}>
+        {BRAND_LETTERS.map((l, i) => (
+          <Text
+            key={i}
+            style={[
+              permCardStyles.brandLetter,
+              { transform: [{ rotate: `${l.rot}deg` }] },
+            ]}
+          >
+            {l.ch}
+          </Text>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+const permCardStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6d28d9',
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  brandRow: {
+    position: 'absolute',
+    bottom: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    direction: 'ltr',
+    gap: 2,
+  },
+  brandLetter: {
+    fontSize: 32,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: 'rgba(255,255,255,0.85)',
+    includeFontPadding: false,
+  },
+})
+
 // ── Message ────────────────────────────────────────────────────────────────
 // Centered title + description block. Used as the main content surface for
 // every per-state variant of this screen (HIDDEN, WATCHING, WAITING, etc.).
@@ -180,6 +426,7 @@ function Message({
   hideIcon,
   hideDesc,
   badgeCount,
+  titleColorOverride,
 }: {
   state: string
   title?: string
@@ -193,10 +440,11 @@ function Message({
   // Optional count pill rendered next to the title. Used for the
   // "watching you" title in visible-with-watchers mode.
   badgeCount?: number
+  titleColorOverride?: string
 }) {
-  const titleColor =
+  const titleColor = titleColorOverride ?? (
     state === 'VISIBLE' ? VISIBLE_ACCENT :
-    state === 'HIDDEN' ? HIDDEN_ACCENT : undefined
+    state === 'HIDDEN' ? HIDDEN_ACCENT : undefined)
   const titleNode = title ? (
     <Text style={[messageStyles.title, titleColor ? { color: titleColor } : null]}>
       {title}
@@ -209,12 +457,10 @@ function Message({
           <StateIcon state={state} />
         </View>
       )}
-      {badgeCount != null ? (
+      {badgeCount != null && badgeCount !== 0 ? (
         <View style={messageStyles.titleRow}>
           {titleNode}
-          <View style={[messageStyles.titleBadge, titleColor ? { backgroundColor: titleColor } : null]}>
-            <Text style={messageStyles.titleBadgeText}>{badgeCount}</Text>
-          </View>
+          <CountBadge value={badgeCount} color={titleColor ?? '#111'} />
         </View>
       ) : titleNode}
       {subtitle ? (
@@ -257,19 +503,6 @@ const messageStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  titleBadge: {
-    minWidth: 28,
-    height: 28,
-    borderRadius: 14,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titleBadgeText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
   },
   subtitle: {
     marginTop: 6,
@@ -320,6 +553,9 @@ export default function HomePage() {
   const [settingsEditing, setSettingsEditing] = useState(false)
   const sliding = useSlidingActive()
   const shellTranslate = useRef(new Animated.Value(0)).current
+  // Card flip — animates the main card between VISIBLE/HIDDEN/WATCHING transitions.
+  // Value range: -1 = -90° (edge-on from back), 0 = face-on, 1 = 90° (edge-on from front).
+  const flipAnim = useRef(new Animated.Value(0)).current
   const paneIndexRef = useRef(paneIndex)
   const shellWRef = useRef(shellW)
   useEffect(() => { paneIndexRef.current = paneIndex }, [paneIndex])
@@ -380,6 +616,140 @@ export default function HomePage() {
   const ready = !!profile
   const isVisible = state === 'VISIBLE'
 
+  // `displayedCardMode` drives card content — lags behind the actual mode so
+  // content swaps at the flip midpoint (when the card is edge-on, invisible).
+  // Values: 'notif' | 'loc' | any profile state string.
+  const [displayedCardMode, setDisplayedCardMode] = useState(state)
+  const displayedCardModeRef = useRef(state)
+  const flippingRef = useRef(false)
+  const firstFlipRef = useRef(true)   // skip animation on initial profile load
+  const pendingPhase2Ref = useRef(false)  // phase 2 waits for the re-render commit
+
+  // rotateY-based card flip. Phase 1 folds right-edge toward viewer (0°→90°,
+  // card goes edge-on). Phase 2 unfolds from the left-edge side (−90°→0°,
+  // new content revealed). perspective lives on the same transform array —
+  // iOS compositing isolation is handled by the stage container below.
+  const cardRotateY = flipAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-90deg', '0deg', '90deg'],
+  })
+
+  // ── Notification permission flow ────────────────────────────────────────
+  // Runs once on first mount after profile is ready. Shows a card-based
+  // prompt (undetermined) or blocked message (denied) until granted.
+  const [notifPerm, setNotifPerm] = useState<NotifPermission | null>(null)
+  const [notifBusy, setNotifBusy] = useState(false)
+  const notifCheckedRef = useRef(false)
+
+  useEffect(() => {
+    if (!ready || notifCheckedRef.current) return
+    notifCheckedRef.current = true
+    getNotifPermission().then(setNotifPerm)
+  }, [ready])
+
+  // When notif permission is granted, eagerly fetch the push token so it's
+  // ready for the app/start call once location is also granted.
+  const pushTokenRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (notifPerm !== 'granted') return
+    ensurePushToken()
+      .then(token => { pushTokenRef.current = token })
+      .catch(() => {})
+  }, [notifPerm])
+
+  const handleNotifRequest = async () => {
+    if (notifBusy) return
+    setNotifBusy(true)
+    try {
+      const result = await requestNotifPermission()
+      setNotifPerm(result)
+    } finally {
+      setNotifBusy(false)
+    }
+  }
+
+  // While we're still checking or the user hasn't granted permission,
+  // the notification card overlay takes over the home pane content.
+  const showNotifOverlay = notifPerm !== null && notifPerm !== 'granted'
+
+  // ── Location permission flow ───────────────────────────────────────────
+  // Runs after notifications are granted. Same pattern: card overlay until
+  // the user grants location access.
+  const [locPerm, setLocPerm] = useState<LocPermission | null>(null)
+  const [locBusy, setLocBusy] = useState(false)
+
+  useEffect(() => {
+    if (notifPerm !== 'granted') return
+    getLocPermission().then(setLocPerm)
+  }, [notifPerm])
+
+  // ── Startup completion ────────────────────────────────────────────────
+  // Both permissions granted → get location + push token, send app/start.
+  const startupSentRef = useRef(false)
+  useEffect(() => {
+    if (notifPerm !== 'granted' || locPerm !== 'granted') return
+    if (startupSentRef.current) return
+    startupSentRef.current = true
+    ;(async () => {
+      const [location, token] = await Promise.all([
+        getLocation(),
+        pushTokenRef.current
+          ? Promise.resolve(pushTokenRef.current)
+          : ensurePushToken(),
+      ])
+      // Location + subscription are applied before the switch statement,
+      // then 'start' runs a nearby search. Location must be { latitude, longitude }.
+      invoke('app/start', {
+        ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
+        ...(token ? { subscription: { type: 'expo', token } } : {}),
+      }).catch(() => {})
+    })()
+  }, [notifPerm, locPerm])
+
+  const handleLocRequest = async () => {
+    if (locBusy) return
+    setLocBusy(true)
+    try {
+      const result = await requestLocPermission()
+      setLocPerm(result)
+    } finally {
+      setLocBusy(false)
+    }
+  }
+
+  const showLocOverlay = !showNotifOverlay && locPerm !== null && locPerm !== 'granted'
+
+  // Any permission overlay active — used to suppress normal home content.
+  const showPermOverlay = showNotifOverlay || showLocOverlay
+
+  // Unified card mode — which card should currently be visible.
+  const actualCardMode = showNotifOverlay ? 'notif' : showLocOverlay ? 'loc' : state
+
+  // ── Re-check permissions when app returns to foreground ────────────────
+  // Covers the user changing app permissions in device settings, etc.
+  // Fires on every background→active transition.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (next) => {
+      if (next !== 'active') return
+      const np = await getNotifPermission()
+      setNotifPerm(np)
+      // Re-check location using the fresh notif result, not a stale closure value
+      if (np === 'granted') getLocPermission().then(setLocPerm)
+    })
+    return () => sub.remove()
+  }, [])
+
+  // ── Poll location services while notif phase is done ──────────────────
+  // Toggling GPS from the Android quick-settings panel doesn't put the app
+  // into background, so AppState 'active' never fires. Poll every 2s so
+  // the overlay appears/disappears without requiring the user to leave the app.
+  // hasServicesEnabledAsync is a fast local call — negligible battery cost.
+  useEffect(() => {
+    if (notifPerm !== 'granted') return
+    const id = setInterval(() => getLocPermission().then(setLocPerm), 2000)
+    return () => clearInterval(id)
+  }, [notifPerm])
+
   // Gesture reads `state` via a ref: the PanResponder captures its callbacks
   // once (useRef), so a direct closure would freeze the initial state value
   // and never unlock chat-pane access when the user later transitions to
@@ -401,6 +771,59 @@ export default function HomePage() {
     }
   }, [state])
 
+  // Card flip trigger — fires whenever the active card mode changes.
+  useEffect(() => {
+    const from = displayedCardModeRef.current
+    const to = actualCardMode
+    if (from === to) return
+    displayedCardModeRef.current = to
+
+    // First sync (profile just loaded) — show the real state instantly, no animation.
+    if (firstFlipRef.current || !ready) {
+      firstFlipRef.current = false
+      setDisplayedCardMode(to)
+      return
+    }
+    firstFlipRef.current = false
+
+    if (flippingRef.current) {
+      setDisplayedCardMode(to)
+      return
+    }
+
+    // Phase 1: fold the card to edge-on (0 → 1, i.e. 0° → -90° in rotateX).
+    flippingRef.current = true
+    flipAnim.setValue(0)
+    Animated.timing(flipAnim, {
+      toValue: 1,
+      duration: 150,
+      easing: Easing.in(Easing.quad),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) { flippingRef.current = false; return }
+      // Mark that phase 2 should start after the re-render commit, then swap
+      // content. The useEffect below picks up the flag once React has actually
+      // painted the new content — guaranteeing the swap is truly at mid-flip.
+      pendingPhase2Ref.current = true
+      setDisplayedCardMode(to)
+    })
+  }, [actualCardMode, ready, flipAnim])
+
+  // Phase 2 of the flip — runs after React has committed the new content to
+  // the native layer. At this point the card is still edge-on (rotateY -90°)
+  // so the new content is invisible; we unfold it into view.
+  useEffect(() => {
+    if (!pendingPhase2Ref.current) return
+    pendingPhase2Ref.current = false
+    flipAnim.setValue(-1)
+    Animated.timing(flipAnim, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start(() => { flippingRef.current = false })
+  }, [displayedCardMode, flipAnim])
+
   // Coexistence rules with inner gestures:
   //   • On pane 1 (home): forward → settings (always), backward → chat
   //     (only if state===CHAT).
@@ -412,10 +835,22 @@ export default function HomePage() {
   // a clear horizontal intent (>=10px) before claiming, and to bail out if
   // the user's finger moves vertically first (>=20px) — which is what lets
   // inner ScrollViews own vertical drags unambiguously.
+  //
+  // Narrow activeOffsetX to the directions where a neighbor pane actually
+  // exists. Without this, swiping toward a blocked side still claims the
+  // gesture and the JS clamp leaves a brief elastic feel before snapping
+  // back. A one-sided threshold (99999) makes gesture-handler refuse to
+  // activate in that direction entirely — no claim, no elasticity.
+  const chatAvailable = state === 'CHAT'
+  const shellCanGoBack = paneIndex > 0 && !(paneIndex === HOME_PANE && !chatAvailable)
+  const shellCanGoFwd = paneIndex < 2
+  const shellActiveOffsetX: [number, number] = isRTL
+    ? [shellCanGoBack ? -10 : -99999, shellCanGoFwd ? 10 : 99999]
+    : [shellCanGoFwd ? -10 : -99999, shellCanGoBack ? 10 : 99999]
   const shellPan = useMemo(() =>
     Gesture.Pan()
       .enabled(!settingsEditing && !sliding)
-      .activeOffsetX([-10, 10])
+      .activeOffsetX(shellActiveOffsetX)
       .failOffsetY([-20, 20])
       .onBegin(() => {
         if (slidingActiveRef.current) return
@@ -464,7 +899,7 @@ export default function HomePage() {
         }
       })
       .runOnJS(true)
-  , [settingsEditing, sliding])
+  , [settingsEditing, sliding, shellActiveOffsetX[0], shellActiveOffsetX[1]])
 
   // Button stays disabled from click until the server round-trip resolves.
   // `pendingKey` identifies which button initiated the in-flight action so
@@ -484,7 +919,6 @@ export default function HomePage() {
         // no local update() call needed. isVisible will flip on the next render.
         setBusy(false)
         setHideConfirmOpen(false)
-        setVisibleConfirmOpen(false)
       })
       .catch(err => {
         // Transient gateway errors (502 on cold start / timeout) surface as
@@ -493,35 +927,14 @@ export default function HomePage() {
         console.warn('visibility toggle failed:', String(err).slice(0, 120))
         setBusy(false)
         setHideConfirmOpen(false)
-        setVisibleConfirmOpen(false)
       })
   }
 
   const watchers = profile?.watchers ? Object.values(profile.watchers) : []
 
-  // Copy swaps while visible: empty-list copy explains the feature, the
-  // with-watchers copy orients the user around the list below.
-  const visibleDescKey = watchers.length > 0
-    ? 'home.nowVisibleWithWatchersDesc'
-    : 'home.nowVisibleDesc'
-  const visibleSubtitleKey = watchers.length > 0
-    ? 'home.nowVisibleWithWatchersSubtitle'
-    : 'home.nowVisibleSubtitle'
-
-  const hasWatchers = watchers.length > 0
-  const renderContent = () =>
-    isVisible
-      ? <Message
-          state="VISIBLE"
-          title={hasWatchers ? t('home.watchersInnerTitle') : t('home.nowVisible')}
-          desc={tg(visibleDescKey, isMale)}
-          hideIcon={hasWatchers}
-          hideDesc={hasWatchers}
-          badgeCount={hasWatchers ? watchers.length : undefined}
-        />
-      : <Message state="HIDDEN" title={t('home.hiddenModeTitle')} desc={tg('home.hiddenModeDesc', isMale)} />
-
-  const showWatchers = !!profile && isVisible && watchers.length > 0
+  // Use displayedCardMode so card content only swaps at the flip midpoint.
+  const showWatchers = !!profile && displayedCardMode === 'VISIBLE'
+  const showHiddenPlaceholder = !!profile && displayedCardMode === 'HIDDEN'
 
   // If any watchers are listed when the user goes hidden, confirm first —
   // switching removes them all, which is destructive.
@@ -538,11 +951,15 @@ export default function HomePage() {
     + ' ' + tg('home.hideConfirmDesc', isMale)
 
   const visibilityButton = isVisible
-    ? <PrimaryButton label={t('home.switchToHidden')} onPress={onSwitchToHidden} disabled={busy} iconStart={<ArrowIcon color="#fff" direction="up" />} />
-    : <PrimaryButton label={t('home.switchToVisible')} onPress={() => setVisibility('VISIBLE')} disabled={busy} tone="visible" iconStart={<ArrowIcon color="#fff" direction="down" />} />
+    ? <PrimaryButton label={t('home.switchToHidden')} onPress={onSwitchToHidden} disabled={busy} tone="positive" />
+    : <PrimaryButton label={t('home.switchToVisible')} onPress={() => setVisibility('VISIBLE')} disabled={busy} tone="visible" />
 
   const [headerH, setHeaderH] = useState(0)
   const [buttonsH, setButtonsH] = useState(0)
+  const [visibleDescH, setVisibleDescH] = useState(0)
+  const [hiddenDescH, setHiddenDescH] = useState(0)
+  const [notifDescH, setNotifDescH] = useState(0)
+  const [locDescH, setLocDescH] = useState(0)
 
   // The match card surfaces both for live interaction states and for
   // terminal/ended states (MISSED, CANCELLED, REFUSED, LEFT). The ended
@@ -553,6 +970,12 @@ export default function HomePage() {
   const isMatchCardOpen =
     state === 'WATCHING' || state === 'WAITING' || state === 'REPLYING' || state === 'CHAT' ||
     isEndedState
+  // Displayed versions — drive card rendering (lag during flip).
+  const displayedIsEndedState =
+    displayedCardMode === 'MISSED' || displayedCardMode === 'CANCELLED' || displayedCardMode === 'REFUSED' || displayedCardMode === 'LEFT'
+  const displayedIsMatchCardOpen =
+    displayedCardMode === 'WATCHING' || displayedCardMode === 'WAITING' || displayedCardMode === 'REPLYING' || displayedCardMode === 'CHAT' ||
+    displayedIsEndedState
 
   // ── Match-state actions ────────────────────────────────────────────────
   // The pinned bottom slot swaps in per-state buttons when the match card
@@ -561,7 +984,6 @@ export default function HomePage() {
   const [inviteConfirmOpen, setInviteConfirmOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
-  const [visibleConfirmOpen, setVisibleConfirmOpen] = useState(false)
 
   const runAction = (endpoint: string, key: string, onDone?: () => void) => {
     if (busy) return
@@ -645,29 +1067,51 @@ export default function HomePage() {
           label={tg('home.tapForMore', isMale)}
           onPress={() => runAction('app/ok', 'ended-ok')}
           disabled={busy}
+          tone="visible"
         />
       )
     }
     return null
   })()
 
-  const buttons = isMatchCardOpen ? matchButtons : visibilityButton
+  const notifButtons = notifPerm === 'undetermined'
+    ? <PrimaryButton label={t('home.notifPromptButton')} onPress={handleNotifRequest} disabled={notifBusy} tone="visible" />
+    : notifPerm === 'denied'
+      ? <PrimaryButton label={t('home.openAppSettings')} onPress={openAppSettings} tone="visible" />
+      : null
+
+  const locButtons = locPerm === 'undetermined'
+    ? <PrimaryButton label={t('home.locationPromptButton')} onPress={handleLocRequest} disabled={locBusy} tone="visible" />
+    : locPerm === 'services-off'
+      ? <PrimaryButton label={t('home.openLocationSettings')} onPress={openLocationSettings} tone="visible" />
+      : locPerm === 'denied'
+        ? <PrimaryButton label={t('home.openAppSettings')} onPress={openAppSettings} tone="visible" />
+        : null
+
+  const buttons = showNotifOverlay
+    ? notifButtons
+    : showLocOverlay
+      ? locButtons
+      : isMatchCardOpen ? matchButtons : visibilityButton
 
   // Header title tracks the state machine: the two resting modes show the
   // brand, and any active state swaps in its push-notification label.
   const pushKey = `push.${state}`
   const pushLabel = isMatchCardOpen ? t(pushKey as any) : ''
-  const showWatchersTitle = isVisible && watchers.length > 0
+  const showWatchersBadge = isVisible && !showPermOverlay
+  const watchersTitleActive = isVisible && watchers.length > 0
   const headerTitle =
-    state === 'WATCHING'
-      ? 'SyncWish'
-      : pushLabel && pushLabel !== pushKey
-        ? pushLabel
-        : showWatchersTitle
-          ? t('home.watchersInnerTitle')
-          : !isVisible
-            ? tg('home.hiddenHeaderTitle', isMale)
-            : tg('home.visibleHeaderTitle', isMale)
+    showNotifOverlay
+      ? t('home.notifHeaderTitle')
+      : showLocOverlay
+        ? t('home.locHeaderTitle')
+        : state === 'WATCHING'
+        ? 'SyncWish'
+        : pushLabel && pushLabel !== pushKey
+          ? pushLabel
+          : isVisible
+            ? t('home.watchersInnerTitle')
+            : tg('home.hiddenHeaderTitle', isMale)
 
   if (!ready) {
     return (
@@ -727,33 +1171,32 @@ export default function HomePage() {
                     onPress={() => goToPane(CHAT_PANE)}
                   >
                     <ChatHeaderArrowIcon />
-                    <Text style={styles.logo}>{t('home.chatHeader')}</Text>
+                    <Text style={styles.logo} maxFontSizeMultiplier={FONT_SCALE.ui}>{t('home.chatHeader')}</Text>
                     {chatUnread > 0 && (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadBadgeText}>{chatUnread > 99 ? '99+' : chatUnread}</Text>
-                      </View>
+                      <CountBadge value={chatUnread} color="#16a34a" />
                     )}
                   </IconPressable>
                 ) : (
                   <View style={styles.headerTitleRow}>
-                    <Text style={[styles.logo, showWatchersTitle && { color: VISIBLE_ACCENT }]}>{headerTitle}</Text>
-                    {showWatchersTitle && (
-                      <View style={[styles.headerWatcherBadge, { backgroundColor: VISIBLE_ACCENT }]}>
-                        <Text style={styles.headerWatcherBadgeText}>{watchers.length}</Text>
-                      </View>
+                    <Text style={[styles.logo, watchersTitleActive && { color: VISIBLE_ACCENT }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{headerTitle}</Text>
+                    {showWatchersBadge && (
+                      <CountBadge
+                        value={watchers.length}
+                        color={watchersTitleActive ? VISIBLE_ACCENT : '#9ca3af'}
+                      />
                     )}
                   </View>
                 )}
                 <View style={styles.headerActions}>
                   {state === 'WATCHING' && (
                     <Pressable
-                      style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed]}
-                      onPress={() => { if (!busy) { tap(); setVisibleConfirmOpen(true) } }}
+                      style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed, busy && styles.receiveBtnDisabled]}
+                      onPress={() => setVisibility('VISIBLE')}
                       disabled={busy}
-                      accessibilityLabel={t('home.receiveInvitesBtn')}
+                      accessibilityLabel={t('home.switchToVisible')}
                       collapsable={false}
                     >
-                      <ArrowIcon color="#111" direction="down" />
+                      <Text style={styles.receiveBtnText} maxFontSizeMultiplier={FONT_SCALE.ui}>{t('home.switchToVisible')}</Text>
                     </Pressable>
                   )}
                   <IconPressable
@@ -772,21 +1215,7 @@ export default function HomePage() {
                   scrolling, and the desc pinned below. Everything else (other
                   states) keeps the original scroll-everything ScrollView so
                   short/long content both look right. */}
-              {showWatchers ? (
-                <View style={{ flex: 1 }} />
-              ) : (
-                <ScrollView
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ flexGrow: 1, paddingBottom: buttonsH }}
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  delaysContentTouches={false}
-                >
-                  <View style={styles.content}>
-                    {renderContent()}
-                  </View>
-                </ScrollView>
-              )}
+              <View style={{ flex: 1 }} />
 
               <ConfirmDialog
                 visible={hideConfirmOpen}
@@ -796,17 +1225,6 @@ export default function HomePage() {
                 confirmLabel={tg('home.hideConfirmConfirm', isMale)}
                 onCancel={() => { if (!busy) setHideConfirmOpen(false) }}
                 onConfirm={() => setVisibility('HIDDEN')}
-                busy={busy}
-              />
-
-              <ConfirmDialog
-                visible={visibleConfirmOpen}
-                title={t('home.visibleConfirmTitle')}
-                description={tg('home.visibleConfirmDesc', isMale)}
-                cancelLabel={t('home.hideConfirmCancel')}
-                confirmLabel={tg('home.visibleConfirmConfirm', isMale)}
-                onCancel={() => { if (!busy) setVisibleConfirmOpen(false) }}
-                onConfirm={() => { setVisibility('VISIBLE'); setVisibleConfirmOpen(false) }}
                 busy={busy}
               />
 
@@ -850,46 +1268,139 @@ export default function HomePage() {
             {/* Match card — covers everything below the header for non-resting
                 states. Positioned in pane coordinates (outside SafeAreaView)
                 so the top offset is unambiguous. */}
-            {isMatchCardOpen && (
-              <View style={[styles.matchCard, { top: insets.top + headerH + 6, bottom: state === 'CHAT' ? Math.max(insets.bottom, 8) : buttonsH + 16 }]}>
-                {profile?.match ? (
-                  <MatchCard key={profile.match.user_id} match={profile.match} userIsMale={isMale} bottomInset={0} hideTime={state === 'CHAT'} />
-                ) : null}
-              </View>
+            {displayedIsMatchCardOpen && (
+              <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: state === 'CHAT' ? Math.max(insets.bottom, 8) : buttonsH + 16 }, { transform: [{ scaleY: cardScaleY }] }]}>
+                <View style={styles.matchCardInner}>
+                  {profile?.match ? (
+                    <MatchCard key={profile.match.user_id} match={profile.match} userIsMale={isMale} bottomInset={0} hideTime={state === 'CHAT'} />
+                  ) : null}
+                </View>
+              </Animated.View>
             )}
 
             {showWatchers && (
-              <View style={[styles.matchCard, { top: insets.top + headerH + 6, bottom: buttonsH + 16 }]}>
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  delaysContentTouches={false}
-                >
-                  {watchers.map((w, i) => (
-                    <View key={w.user_id}>
-                      {i > 0 && <View style={styles.watchersRowDivider} />}
-                      <WatcherCard watcher={w} units={profile?.units} flat />
-                    </View>
-                  ))}
-                  {Array.from({ length: Math.max(0, 5 - watchers.length) }).map((_, i) => (
-                    <View key={`ph-${i}`}>
-                      <View style={styles.watchersRowDivider} />
-                      <View style={styles.watcherPlaceholder}>
-                        <View style={styles.watcherPlaceholderAvatar} />
-                        <View style={styles.watcherPlaceholderBody}>
-                          <View style={styles.watcherPlaceholderTitleRow}>
-                            <View style={styles.watcherPlaceholderTitle} />
-                          </View>
-                          <View style={styles.watcherPlaceholderChips}>
-                            <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
-                            <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+              <>
+                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + visibleDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
+                  <View style={styles.matchCardInner}>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    delaysContentTouches={false}
+                  >
+                    {watchers.map((w, i) => (
+                      <View key={w.user_id}>
+                        {i > 0 && <View style={styles.watchersRowDivider} />}
+                        <WatcherCard watcher={w} units={profile?.units} flat />
+                      </View>
+                    ))}
+                    {Array.from({ length: watchers.length >= 6 ? 0 : Math.max(1, 3 - watchers.length) }).map((_, i) => (
+                      <View key={`ph-${i}`}>
+                        {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
+                        <View style={styles.watcherPlaceholder}>
+                          <View style={styles.watcherPlaceholderAvatar} />
+                          <View style={styles.watcherPlaceholderBody}>
+                            <View style={styles.watcherPlaceholderTitleRow}>
+                              <View style={styles.watcherPlaceholderTitle} />
+                            </View>
+                            <View style={styles.watcherPlaceholderChips}>
+                              <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
+                              <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                            </View>
                           </View>
                         </View>
                       </View>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
+                    ))}
+                  </ScrollView>
+                  </View>
+                </Animated.View>
+                <View
+                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                  onLayout={e => setVisibleDescH(e.nativeEvent.layout.height)}
+                  pointerEvents="none"
+                >
+                  <Message
+                    state="VISIBLE"
+                    title={t('home.nowVisible')}
+                    desc={tg('home.nowVisibleDesc', isMale)}
+                    hideIcon
+                    titleColorOverride="#111"
+                  />
+                </View>
+              </>
+            )}
+
+            {showHiddenPlaceholder && (
+              <>
+                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + hiddenDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
+                  <View style={styles.matchCardInner}>
+                    <CardBack />
+                  </View>
+                </Animated.View>
+                <View
+                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                  onLayout={e => setHiddenDescH(e.nativeEvent.layout.height)}
+                  pointerEvents="none"
+                >
+                  <Message
+                    state="HIDDEN"
+                    title={t('home.hiddenModeTitle')}
+                    desc={tg('home.hiddenModeDesc', isMale)}
+                    hideIcon
+                  />
+                </View>
+              </>
+            )}
+
+            {displayedCardMode === 'notif' && (
+              <>
+                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + notifDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
+                  <View style={styles.matchCardInner}>
+                    <PermissionCardFace icon="bell" denied={notifPerm === 'denied'} />
+                  </View>
+                </Animated.View>
+                <View
+                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                  onLayout={e => setNotifDescH(e.nativeEvent.layout.height)}
+                  pointerEvents="none"
+                >
+                  <Message
+                    state="HIDDEN"
+                    title={notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : t('home.notifPromptTitle')}
+                    desc={notifPerm === 'denied' ? t('home.emptyNotifBlockedDesc') : t('home.notifPromptDesc')}
+                    hideIcon
+                  />
+                </View>
+              </>
+            )}
+
+            {displayedCardMode === 'loc' && (
+              <>
+                <Animated.View style={[styles.matchCardOuter, { top: insets.top + headerH + 6, bottom: buttonsH + 16 + locDescH }, { transform: [{ scaleY: cardScaleY }] }]}>
+                  <View style={styles.matchCardInner}>
+                    <PermissionCardFace icon="location" />
+                  </View>
+                </Animated.View>
+                <View
+                  style={[styles.visibleDescBlock, { bottom: buttonsH }]}
+                  onLayout={e => setLocDescH(e.nativeEvent.layout.height)}
+                  pointerEvents="none"
+                >
+                  <Message
+                    state="HIDDEN"
+                    title={
+                      locPerm === 'services-off' ? t('home.locationUnavailableTitle')
+                      : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle')
+                      : t('home.locationPromptTitle')
+                    }
+                    desc={
+                      locPerm === 'services-off' ? t('home.locationServicesOffDesc')
+                      : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc')
+                      : t('home.locationPromptDesc')
+                    }
+                    hideIcon
+                  />
+                </View>
+              </>
             )}
 
             {/* Pinned buttons — rendered at pane level (outside SafeAreaView)
@@ -981,22 +1492,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  headerWatcherBadge: {
-    minWidth: 26,
-    height: 26,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerWatcherBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    lineHeight: 16,
-  },
   // Clickable title shown in place of the SyncWish logo when state==='CHAT'.
   // Bare text + chevron, no rounded container — reads as an inline link, not
   // a button. Pressed state fades the whole row.
@@ -1007,26 +1502,6 @@ const styles = StyleSheet.create({
   },
   chatHeaderBtnPressed: {
     opacity: 0.5,
-  },
-  // Red unread-count pill beside the "Chat" title. Same 26px height as the
-  // watcher-count badge so the row's alignItems:'center' keeps everything on
-  // one line.
-  unreadBadge: {
-    minWidth: 26,
-    height: 26,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    backgroundColor: '#16a34a',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unreadBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    lineHeight: 16,
   },
   logo: {
     fontSize: 22,
@@ -1078,21 +1553,22 @@ const styles = StyleSheet.create({
     height: 40,
     minWidth: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(109,40,217,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 9,
+    paddingHorizontal: 12,
   },
   receiveBtnPressed: {
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: 'rgba(109,40,217,0.18)',
+  },
+  receiveBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(109,40,217,0.75)',
+    letterSpacing: -0.2,
   },
   receiveBtnDisabled: {
     opacity: 0.5,
-  },
-
-  content: {
-    alignItems: 'center',
-    paddingTop: 48,
   },
 
   watchersList: {
@@ -1163,6 +1639,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef0f3',
     zIndex: 3,
   },
+  // Legacy — kept for any remaining non-animated card slots.
   matchCard: {
     position: 'absolute',
     start: 16,
@@ -1170,6 +1647,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 24,
     overflow: 'hidden',
+  },
+  // Outer shell for all animated card slots. Only positional styles here —
+  // overflow:hidden must NOT live on the same view as the 3D transform on iOS,
+  // or it creates a stacking-context that clips sibling views (header, buttons,
+  // etc.) and makes them disappear. Clipping is delegated to matchCardInner.
+  matchCardOuter: {
+    position: 'absolute',
+    start: 16,
+    end: 16,
+    borderRadius: 24,
+  },
+  // Inner wrapper that provides the clipped card surface. Separating
+  // overflow:hidden from the 3D-transformed parent avoids the iOS compositing
+  // bug described above.
+  matchCardInner: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  visibleDescBlock: {
+    position: 'absolute',
+    start: 0,
+    end: 0,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   // Two-button horizontal row used by WATCHING/REPLYING. flex:1 cells so
   // both buttons share width evenly regardless of label length.

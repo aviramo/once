@@ -53,11 +53,11 @@ Deno.serve(async (req) => {
       break;
     case "delete":
       await user.delete(logger);
-      EdgeRuntime.waitUntil(user.missWatchers(logger));
+      user.missWatchers(logger);
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
-        EdgeRuntime.waitUntil(user.missWatchers(logger));
+        await user.missWatchers(logger);
         await search(logger, event, user);
       }
       if (body.state == State.VISIBLE) {
@@ -65,8 +65,8 @@ Deno.serve(async (req) => {
           delete other.watchers[user.user_id];
           EdgeRuntime.waitUntil(other.update(logger));
         }
-        EdgeRuntime.waitUntil(user.addWatchers(logger));
-        EdgeRuntime.waitUntil(user.update(logger, body.state as State));
+        await user.addWatchers(logger);
+        EdgeRuntime.waitUntil(user.update(logger, body.state));
       }
       break;
     }
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     case "invite":
       if (user.state == State.WATCHING && other) {
         if (await other.update(logger, State.REPLYING, user, true)) {
-          EdgeRuntime.waitUntil(other.missWatchers(logger, user));
+          other.missWatchers(logger, user);
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
         } else EdgeRuntime.waitUntil(user.update(logger, State.MISSED, other));
       }
@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
       break;
     }
     case "logout": {
-      EdgeRuntime.waitUntil(user.missWatchers(logger));
+      user.missWatchers(logger);
       user.subscription = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));

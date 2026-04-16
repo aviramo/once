@@ -115,6 +115,12 @@ export function MatchCard({
   const [cardH, setCardH] = useState(0)
   const [headerBlockH, setHeaderBlockH] = useState(0)
   const photoHeight = Math.max(280, cardH - headerBlockH - bottomInset)
+  // Both measurements feed photoHeight, so we have to wait for both — if only
+  // cardH is known and headerBlockH is still 0, the photo paints at almost
+  // the full card height and then visibly shrinks once the header block
+  // measures. Render the content normally so onLayout fires for both nodes,
+  // but keep the wrap invisible until measurements settle.
+  const ready = cardH > 0 && headerBlockH > 0
   const timeIso = match.last_seen ?? match.located_at
   const timeStr = hideTime ? '' : formatLocatedAt(timeIso)
   const distStr = formatDistance(match.distance, match.units)
@@ -130,7 +136,7 @@ export function MatchCard({
   const hasChips = !!distStr || !!timeStr || match.subscribed != null
 
   return (
-    <View style={styles.wrap} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
+    <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + bottomInset }]}
@@ -206,6 +212,12 @@ const styles = StyleSheet.create({
   // in home.tsx now — this inner wrap only needs to stretch.
   wrap: {
     flex: 1,
+  },
+  // Applied during the brief window between mount and the first onLayout pass
+  // that resolves both cardH and headerBlockH. Layout still flows so onLayout
+  // fires; only the visual is suppressed to hide the size correction.
+  hidden: {
+    opacity: 0,
   },
   scroll: { flex: 1 },
   scrollContent: {

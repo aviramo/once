@@ -1,39 +1,33 @@
-import Svg, { Defs, LinearGradient, Stop, G, Path, Circle, Rect, Symbol, Use } from 'react-native-svg'
+import Svg, { Rect, Path } from 'react-native-svg'
 
 // Canonical brand logo. Source of truth: assets/syncwish-logo.svg.
-// Two planes meeting at the center on a purple gradient badge.
+// Wishing-star on a purple badge.
 export function SyncWishLogo({ size = 96 }: { size?: number }) {
+  // The star paths sit in a 0–48 coordinate space; the viewBox (1024)
+  // places them inside a 650×650 area centered in the badge. We replicate
+  // that layout with a single-level scale+translate so RN-SVG renders it
+  // without nested <Svg> elements (which can clip on Android).
+  const s = 650 / 48          // ≈13.54
+  const tx = 187 + (650 - 48 * s) / 2
+  const ty = 187 + (650 - 48 * s) / 2
+
   return (
     <Svg width={size} height={size} viewBox="0 0 1024 1024">
-      <Defs>
-        <LinearGradient id="swLogoBg" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0%" stopColor="#7c3aed" />
-          <Stop offset="100%" stopColor="#4c1d95" />
-        </LinearGradient>
-        <Symbol id="swLogoPlane" viewBox="0 0 120 120">
-          <Path d="M 17.5 57.5 L 100 95 L 57.5 60 Z" fill="#ffffff" />
-          <Path d="M 57.5 60 L 100 95 L 73.75 21.25 Z" fill="#ffffff" fillOpacity={0.55} />
-          <Path
-            d="M 100 95 L 57.5 60"
-            stroke="#4c1d95"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeOpacity={0.35}
-          />
-          <Circle cx={30} cy={45} r={3} fill="#ffffff" fillOpacity={0.8} />
-          <Circle cx={17.5} cy={32.5} r={2.5} fill="#ffffff" fillOpacity={0.55} />
-          <Circle cx={7.5} cy={20} r={2} fill="#ffffff" fillOpacity={0.32} />
-        </Symbol>
-      </Defs>
-
-      <Rect width={1024} height={1024} rx={224} fill="url(#swLogoBg)" />
-
-      <G transform="translate(-30 0) scale(5.5)">
-        <Use href="#swLogoPlane" width={120} height={120} />
-      </G>
-      <G transform="rotate(180 512 512) translate(-30 0) scale(5.5)">
-        <Use href="#swLogoPlane" width={120} height={120} />
-      </G>
+      <Rect width={1024} height={1024} rx={224} fill="#6d28d9" />
+      <Path
+        transform={`translate(${tx}, ${ty}) scale(${s})`}
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M16.8712 33.0436L15.9976 44.7036C15.9362 45.5229 16.6646 46.0872 17.3161 45.722C21.9289 43.1382 36.3783 33.6479 43.7017 12.7899C44.0376 11.8331 43.1352 10.9697 42.3646 11.5094C38.0387 14.539 28.5846 20.8006 22.7421 21.9934C22.7421 21.9934 26.4836 19.3946 28.7231 15.4053C28.9426 15.0143 28.9244 14.5136 28.6796 14.1606L20.5127 2.38925C20.0287 1.69147 19.0354 1.98057 18.8606 2.87002L16.3181 15.8073L4.38437 26.2226C3.78602 26.7446 3.90808 27.7996 4.5989 28.079L16.8712 33.0436Z"
+        fill="#ffffff"
+      />
+      <Path
+        transform={`translate(${tx}, ${ty}) scale(${s})`}
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M37.9745 28.448C37.2188 29.5025 35.5908 31.6717 34.0876 32.9974C33.7871 33.2624 33.8276 33.7068 34.1724 33.9234L42.1145 38.909C42.5926 39.2091 43.2384 38.8529 43.1576 38.3323C42.7882 35.9496 41.7237 30.9818 39.0328 28.3741C38.7322 28.083 38.2142 28.1136 37.9745 28.448Z"
+        fill="#ffffff"
+      />
     </Svg>
   )
 }

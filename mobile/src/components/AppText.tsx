@@ -21,7 +21,7 @@ function resolveFamily(style: any): string {
   return WEIGHT_TO_FAMILY[w] ?? DEFAULT_FAMILY
 }
 
-// When the active font ships multiple weighted faces (Heebo/Rubik), we pin
+// When the active font ships multiple weighted faces (Noto Sans Hebrew), we pin
 // fontWeight to 'normal' so iOS doesn't synthesise bold on top of an
 // already-bold face. For single-weight fonts (Varela Round) we leave
 // fontWeight alone so the OS *does* synthesise bold for headings.

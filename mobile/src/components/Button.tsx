@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
+import { FONT_SCALE } from '../fonts'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -105,7 +106,9 @@ export function Button({
         <Text
           style={[styles.text, base.text, skin.text]}
           numberOfLines={1}
-          allowFontScaling={false}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          maxFontSizeMultiplier={FONT_SCALE.ui}
         >
           {label}
         </Text>
@@ -159,8 +162,8 @@ const SIZE: Record<Size, { btn: object; text: object }> = {
 
 const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> = {
   positive: {
-    btn: { backgroundColor: '#16a34a' },
-    pressed: { backgroundColor: '#15803d' },
+    btn: { backgroundColor: '#d4a017' },
+    pressed: { backgroundColor: '#a87f10' },
   },
   visible: {
     btn: { backgroundColor: '#6d28d9' },
@@ -184,8 +187,8 @@ const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> =
     text: { color: '#111', fontWeight: '600' },
   },
   destructive: {
-    btn: { backgroundColor: '#e5484d' },
-    pressed: { backgroundColor: '#c93d42' },
-    text: { color: '#fff' },
+    btn: { backgroundColor: '#e5e7eb' },
+    pressed: { backgroundColor: '#d1d5db' },
+    text: { color: '#374151' },
   },
 }

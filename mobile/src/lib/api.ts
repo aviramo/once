@@ -3,11 +3,7 @@ import { useUserStore } from '../stores/userStore'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
-let _lastInvokeTime = 0
-export const getLastInvokeTime = () => _lastInvokeTime
-
 export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
-  _lastInvokeTime = Date.now()
 
   const session = await supabase.auth.getSession()
   const token = session.data.session?.access_token

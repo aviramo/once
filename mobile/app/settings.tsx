@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   View, Pressable, StyleSheet, ScrollView,
-  PanResponder, I18nManager, Image, ActivityIndicator,
+  PanResponder, I18nManager,
   Keyboard, Platform, Animated, Dimensions, BackHandler,
 } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
@@ -9,12 +9,9 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
-import * as DocumentPicker from 'expo-document-picker'
-import * as ImageManipulator from 'expo-image-manipulator'
 import Svg, { Path, Line, Polyline, Circle } from 'react-native-svg'
-import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
-import { tap, tapMedium, tapSuccess, tapWarning } from '../src/lib/haptics'
+import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg } from '../src/i18n'
@@ -22,19 +19,12 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button, PrimaryButton } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
+import { PhotoEditor } from '../src/components/PhotoEditor'
 import type { MatchData } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 
 const isRTL = I18nManager.isRTL
 const THUMB = 22
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
-
-function uuidv4(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
-  })
-}
 
 // ── Back Icon ──────────────────────────────────────────────────────────────
 
@@ -43,6 +33,58 @@ function BackIcon() {
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
     </Svg>
+  )
+}
+
+// ── Forward Chevron ────────────────────────────────────────────────────────
+// Opposite of BackIcon — points in the "deeper navigation" direction.
+// LTR: points right ›  |  RTL: points left ‹
+
+function ForwardChevronIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
+    </Svg>
+  )
+}
+
+// ── Select Field Types ─────────────────────────────────────────────────────
+
+export type SelectOption = { value: string; label: string }
+
+export type SelectFieldConfig = {
+  title: string
+  options: SelectOption[]
+  value: string
+  onSelect: (value: string) => void
+  description?: string
+}
+
+// ── Select Field Row ───────────────────────────────────────────────────────
+// Tappable settings row: label on the start side, current value + forward
+// chevron on the end side. Tapping opens the sub-page via onPress.
+
+function SelectFieldRow({
+  label,
+  displayValue,
+  onPress,
+}: {
+  label: string
+  displayValue: string
+  onPress: () => void
+}) {
+  return (
+    <View
+      style={styles.selectRow}
+      onStartShouldSetResponder={() => true}
+      onResponderRelease={() => { tap(); onPress() }}
+    >
+      <Text style={styles.selectRowLabel}>{label}</Text>
+      <View style={styles.selectRowTrailing}>
+        <Text style={styles.selectRowValue}>{displayValue}</Text>
+        <ForwardChevronIcon />
+      </View>
+    </View>
   )
 }
 
@@ -393,12 +435,29 @@ function PreferencesTab() {
   const ageSliderMin = Math.max(18, age - 20)
   const ageSliderMax = Math.min(80, age + 20)
 
-  useAutoSave({
-    age_from: profile?.age_from ?? 18,
-    age_to: profile?.age_to ?? 80,
-    range: profile?.range ?? 0,
-    preferred_gender: profile?.is_for_male && profile?.is_for_female ? 'B' : profile?.is_for_male ? 'M' : 'F',
-  }, !!profile)
+  // Handler-driven debounced save. The previous useAutoSave bundled all four
+  // preference fields and re-fired whenever any of them changed in profile —
+  // which included server-pushed values arriving via realtime, causing an
+  // echo back to the server with values it had just sent us. Driving the save
+  // from the actual control callbacks guarantees a request only goes out for
+  // genuine user input.
+  const dirtyRef = useRef<Record<string, unknown>>({})
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flushPrefs = () => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    const body = dirtyRef.current
+    if (Object.keys(body).length === 0) return
+    dirtyRef.current = {}
+    invoke('app/update', body).catch(console.error)
+  }
+  const queuePref = (patch: Record<string, unknown>) => {
+    Object.assign(dirtyRef.current, patch)
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(flushPrefs, 600)
+  }
+  // Flush any pending patch on unmount so a swipe away mid-debounce doesn't
+  // drop the user's most recent change.
+  useEffect(() => () => { flushPrefs() }, [])
 
   if (!profile) return <View style={styles.tabContent} />
 
@@ -423,7 +482,8 @@ function PreferencesTab() {
             <RangeSlider
               min={ageSliderMin} max={ageSliderMax}
               valueMin={ageMin} valueMax={ageMax}
-              onChangeMin={v => update({ age_from: v })} onChangeMax={v => update({ age_to: v })}
+              onChangeMin={v => { update({ age_from: v }); queuePref({ age_from: v }) }}
+              onChangeMax={v => { update({ age_to: v }); queuePref({ age_to: v }) }}
             />
           </View>
           <Text style={styles.sliderEndLabel}>{ageSliderMax}</Text>
@@ -439,7 +499,11 @@ function PreferencesTab() {
         <RadiusSlider
           stepCount={RADIUS_STEPS.length}
           value={Math.max(0, RADIUS_STEPS.indexOf(radius))}
-          onChange={i => update({ range: radiusToServer(RADIUS_STEPS[i]) })}
+          onChange={i => {
+            const r = radiusToServer(RADIUS_STEPS[i])
+            update({ range: r })
+            queuePref({ range: r })
+          }}
         />
       </View>
 
@@ -450,12 +514,24 @@ function PreferencesTab() {
           <AnimatedToggleButton
             active={!!forMale}
             label={t('settings.genderM')}
-            onPress={() => { if (forFemale || !forMale) update({ is_for_male: !forMale }) }}
+            onPress={() => {
+              if (!(forFemale || !forMale)) return
+              const nextForMale = !forMale
+              update({ is_for_male: nextForMale })
+              const pg = nextForMale && forFemale ? 'B' : nextForMale ? 'M' : 'F'
+              queuePref({ preferred_gender: pg })
+            }}
           />
           <AnimatedToggleButton
             active={!!forFemale}
             label={t('settings.genderF')}
-            onPress={() => { if (forMale || !forFemale) update({ is_for_female: !forFemale }) }}
+            onPress={() => {
+              if (!(forMale || !forFemale)) return
+              const nextForFemale = !forFemale
+              update({ is_for_female: nextForFemale })
+              const pg = forMale && nextForFemale ? 'B' : nextForFemale ? 'F' : 'M'
+              queuePref({ preferred_gender: pg })
+            }}
           />
         </View>
       </View>
@@ -466,279 +542,11 @@ function PreferencesTab() {
 
 // ── Profile Tab ────────────────────────────────────────────────────────────
 
-// Module-level cache of URIs already loaded at least once in this app session.
-// React Native Image caches bytes to disk, but the component still runs a load
-// cycle on re-mount which shows a spinner. Tracking loaded URIs here lets us
-// skip the spinner entirely when the user navigates back to the screen.
-const loadedUris = new Set<string>()
-
-function PhotoCell({
-  uri, localUri, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
-  editMode, onEnterEditMode,
-}: {
-  uri: string
-  localUri?: string  // Shown immediately while uri is loading, to avoid layout jitter
-  onRemove: () => void
-  onLoaded?: () => void
-  canRemove: boolean
-  dragging?: boolean
-  highlighted?: boolean  // Live drop-target indicator during another cell's drag
-  onLayout?: (e: any) => void
-  editMode: boolean
-  onEnterEditMode: () => void
-}) {
-  const [loaded, setLoaded] = useState(() => loadedUris.has(uri))
-  // Wiggle: iOS-style jiggle while in edit mode (except while this cell is the drag source).
-  const wiggle = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    if (editMode && !dragging) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(wiggle, { toValue: 1, duration: 110, useNativeDriver: true }),
-          Animated.timing(wiggle, { toValue: -1, duration: 220, useNativeDriver: true }),
-          Animated.timing(wiggle, { toValue: 0, duration: 110, useNativeDriver: true }),
-        ])
-      )
-      // Per-cell phase jitter so the grid doesn't wiggle in lockstep.
-      const startDelay = Math.random() * 180
-      const t = setTimeout(() => loop.start(), startDelay)
-      // On exit, glide the rotation back to 0 so cells don't freeze mid-tilt.
-      // loop.stop() halts the sequence wherever it is; a plain setValue(0) on
-      // a native-driven Animated.Value can race with the last frame that's
-      // already in flight, leaving a visible residual angle.
-      return () => {
-        clearTimeout(t)
-        loop.stop()
-        Animated.timing(wiggle, { toValue: 0, duration: 160, useNativeDriver: true }).start()
-      }
-    }
-    wiggle.setValue(0)
-  }, [editMode, dragging])
-  const rotate = wiggle.interpolate({ inputRange: [-1, 1], outputRange: ['-1.5deg', '1.5deg'] })
-
-  return (
-    <Animated.View
-      style={[photoStyles.cell, { transform: [{ rotate }] }]}
-      onLayout={onLayout}
-    >
-      {/* Local preview shown at full opacity until server image loads — no layout shift, no gray square */}
-      {localUri && !loaded && (
-        <Image source={{ uri: localUri }} style={[photoStyles.img, { position: 'absolute', top: 0, start: 0, end: 0, bottom: 0 }]} />
-      )}
-      <Image
-        source={{ uri }}
-        style={[photoStyles.img, !loaded && { opacity: 0 }]}
-        onLoad={() => { loadedUris.add(uri); setLoaded(true); onLoaded?.() }}
-      />
-      {!loaded && (
-        <View style={photoStyles.spinnerBadge}>
-          <ActivityIndicator size="small" color="#fff" />
-        </View>
-      )}
-      {/* Black border indicator — drawn under the X button so the button stays tappable. */}
-      {/* `dragging` = this is the source photo being held. */}
-      {/* `highlighted` = this cell is the current drop target. Both get the same frame. */}
-      {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
-      {/* Long-press to enter edit mode. Pressable cancels on move, so horizontal
-          swipes still bubble up to the tab pager. Removed in edit mode so the
-          grid's drag Pan gesture owns the gesture. */}
-      {!editMode && (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onLongPress={() => { tapMedium(); onEnterEditMode() }}
-          delayLongPress={450}
-        />
-      )}
-      {editMode && loaded && canRemove && (
-        <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round">
-            <Line x1="18" y1="6" x2="6" y2="18" />
-            <Line x1="6" y1="6" x2="18" y2="18" />
-          </Svg>
-        </Pressable>
-      )}
-    </Animated.View>
-  )
-}
-
-// Draggable photo grid — long-press a cell to enter edit mode (iOS-style jiggle),
-// then drag to reorder. Outside edit mode the grid is locked so horizontal
-// swipes pass through to the surrounding tab pager.
-function PhotoGrid({
-  photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads, additionalChildren, onDragStateChange,
-  editMode, onEnterEditMode,
-}: {
-  photos: string[]
-  urlFor: (f: string) => string
-  onRemove: (f: string) => void
-  onLoaded: (f: string) => void
-  onReorder: (from: number, to: number) => void
-  canRemove: boolean
-  uploads: { id: string; uri: string; filename?: string }[]
-  additionalChildren?: React.ReactNode
-  onDragStateChange?: (dragging: boolean) => void
-  editMode: boolean
-  onEnterEditMode: () => void
-}) {
-  const layouts = useRef<Array<{ x: number; y: number; w: number; h: number }>>([])
-  const [dragIdx, setDragIdx] = useState<number | null>(null)
-  // Live "where the photo would land if released now" — a black frame on the
-  // nearest cell tells the user what a release will swap with.
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
-  const hoverIdxRef = useRef<number | null>(null)
-
-  // Refs for values the gesture closure reads after the gesture has begun —
-  // the gesture object itself is rebuilt on editMode change, but once a drag
-  // is in flight we want stable access to the latest callbacks.
-  const photosLenRef = useRef(photos.length)
-  const onReorderRef = useRef(onReorder)
-  const onDragStateChangeRef = useRef(onDragStateChange)
-  useEffect(() => { photosLenRef.current = photos.length }, [photos.length])
-  useEffect(() => { onReorderRef.current = onReorder }, [onReorder])
-  useEffect(() => { onDragStateChangeRef.current = onDragStateChange }, [onDragStateChange])
-
-  // Which cell the finger is over at touch-down. Populated in onBegin via
-  // hit-test against `layouts.current`; consumed in onStart once the 3px
-  // threshold has been crossed and the drag is live.
-  const sourceIdxRef = useRef<number | null>(null)
-
-  // Drag-to-reorder lives in gesture-handler, not legacy PanResponder. A
-  // single top-level Pan gesture hit-tests which cell the touch started on,
-  // so we don't pay N PanResponders for N cells, and — critically — the
-  // outer tabPan/shellPan are also gesture-handler Pans, so this inner one
-  // wins the race at its 3px threshold before the outer ones can claim at
-  // 10px. That's what prevents the pager from eating horizontal drags.
-  const dragPan = useMemo(() =>
-    Gesture.Pan()
-      .enabled(editMode)
-      .minDistance(3)
-      .onBegin(e => {
-        // Find the cell under the finger at touch-down. `e.x/e.y` are in the
-        // GestureDetector's coordinate space, which matches layouts.current
-        // (both relative to the grid's top-left).
-        let hit = -1
-        for (let i = 0; i < layouts.current.length; i++) {
-          const l = layouts.current[i]
-          if (!l) continue
-          if (e.x >= l.x && e.x <= l.x + l.w && e.y >= l.y && e.y <= l.y + l.h) {
-            hit = i
-            break
-          }
-        }
-        sourceIdxRef.current = hit >= 0 ? hit : null
-      })
-      .onStart(() => {
-        const idx = sourceIdxRef.current
-        if (idx == null) return
-        tapMedium()
-        setDragIdx(idx)
-        onDragStateChangeRef.current?.(true)
-      })
-      .onUpdate(e => {
-        const idx = sourceIdxRef.current
-        if (idx == null) return
-        const l = layouts.current[idx]
-        if (!l) return
-        const cx = l.x + l.w / 2 + e.translationX
-        const cy = l.y + l.h / 2 + e.translationY
-        let best = -1
-        let bestDist = Infinity
-        for (let i = 0; i < layouts.current.length; i++) {
-          const li = layouts.current[i]
-          if (!li) continue
-          const dx = (li.x + li.w / 2) - cx
-          const dy = (li.y + li.h / 2) - cy
-          const d = dx * dx + dy * dy
-          if (d < bestDist) { bestDist = d; best = i }
-        }
-        const normalized = best < 0 || best === idx ? null : best
-        if (normalized !== hoverIdxRef.current) {
-          hoverIdxRef.current = normalized
-          setHoverIdx(normalized)
-        }
-      })
-      .onEnd(() => {
-        const idx = sourceIdxRef.current
-        const target = hoverIdxRef.current
-        if (idx != null && target !== null && target >= 0 && target < photosLenRef.current && target !== idx) {
-          tapSuccess()
-          onReorderRef.current(idx, target)
-        }
-      })
-      .onFinalize(() => {
-        sourceIdxRef.current = null
-        setDragIdx(null)
-        setHoverIdx(null)
-        hoverIdxRef.current = null
-        onDragStateChangeRef.current?.(false)
-      })
-      .runOnJS(true)
-  , [editMode])
-
-  return (
-    <GestureDetector gesture={dragPan}>
-    <View style={photoStyles.grid} pointerEvents="box-none">
-      {photos.map((filename, i) => {
-        // If there's an upload matching this filename, show its local preview under the spinner
-        const matchingUpload = uploads.find(u => u.filename === filename)
-        return (
-          <PhotoCell
-            key={filename}
-            uri={urlFor(filename)}
-            localUri={matchingUpload?.uri}
-            onRemove={() => onRemove(filename)}
-            onLoaded={() => onLoaded(filename)}
-            canRemove={canRemove}
-            dragging={dragIdx === i}
-            highlighted={hoverIdx === i}
-            onLayout={(e) => { layouts.current[i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
-            editMode={editMode}
-            onEnterEditMode={onEnterEditMode}
-          />
-        )
-      })}
-      {/* Pending uploads without a filename yet (still uploading) */}
-      {uploads.filter(u => !u.filename).map(u => (
-        <View key={u.id} style={photoStyles.cell}>
-          <Image source={{ uri: u.uri }} style={photoStyles.img} />
-          <View style={photoStyles.spinnerBadge}>
-            <ActivityIndicator size="small" color="#fff" />
-          </View>
-        </View>
-      ))}
-      {additionalChildren}
-      {/* Invisible fillers so `justifyContent: space-between` doesn't stretch
-          a partial last row across the whole width — without them the add
-          cell (or a trailing photo on its own) snaps to the opposite edge.
-          We pad to the next multiple of 3 cells. */}
-      {(() => {
-        const pendingCount = uploads.filter(u => !u.filename).length
-        const addCount = additionalChildren ? 1 : 0
-        const total = photos.length + pendingCount + addCount
-        const fillers = (3 - (total % 3)) % 3
-        return Array.from({ length: fillers }).map((_, i) => (
-          <View
-            key={`filler-${i}`}
-            style={[photoStyles.cell, photoStyles.filler]}
-            pointerEvents="none"
-          />
-        ))
-      })()}
-    </View>
-    </GestureDetector>
-  )
-}
-
 function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onTogglePreview, onPreviewDataChange }: { focused?: boolean; onEditModeChange?: (editing: boolean) => void; previewOpen?: boolean; onTogglePreview?: () => void; onPreviewDataChange?: (data: MatchData | null) => void }) {
   const { profile, update } = useUserStore()
   const { user } = useAuthStore()
-  // filename is set when upload is done; we keep the upload card until the server image loads
-  const [uploads, setUploads] = useState<{ id: string; uri: string; filename?: string; sig: string }[]>([])
-  // filename → signature map, persists across the session even after upload cell disappears
-  const sigByFilename = useRef<Map<string, string>>(new Map())
   const [dragging, setDragging] = useState(false)
   const [editMode, setEditMode] = useState(false)
-  const [duplicateDialog, setDuplicateDialog] = useState(false)
   // Message is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
   const [localMessage, setLocalMessage] = useState(profile?.message ?? '')
   const localMessageRef = useRef(localMessage)
@@ -820,164 +628,26 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
   const photos = profile.images?.normal ?? []
   const isForKids = profile.is_for_kids
 
-  const uploadFile = async (uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string) => {
-    const formData = new FormData()
-    formData.append('', { uri, name: filename, type: contentType } as any)
-    const res = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/users/${user!.id}/${variant}/${filename}`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'x-upsert': 'true' },
-        body: formData,
-      }
-    )
-    if (!res.ok) throw new Error(await res.text())
-  }
-
-  const compressUnder200K = async (uri: string): Promise<string> => {
-    const MAX_BYTES = 200 * 1024
-    const widths = [1080, 900, 720, 540]
-    const qualities = [0.8, 0.6, 0.45, 0.3]
-    for (const w of widths) {
-      for (const q of qualities) {
-        const out = await ImageManipulator.manipulateAsync(
-          uri,
-          [{ resize: { width: w } }],
-          { compress: q, format: ImageManipulator.SaveFormat.WEBP }
-        )
-        const size = (await (await fetch(out.uri)).blob()).size
-        if (size <= MAX_BYTES) return out.uri
-      }
+  const previewData: MatchData | null = useMemo(() => {
+    if (!profile) return null
+    const imgs = profile.images?.normal ?? []
+    return {
+      user_id: profile.user_id,
+      image: imgs[0] ?? '',
+      images: imgs,
+      title: profile.name ?? '—',
+      message: localMessage,
+      distance: 0,
+      located_at: new Date().toISOString(),
+      subscribed: false,
+      is_for_kids: profile.is_for_kids ?? null,
+      age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
+      is_male: profile.is_male,
+      units: profile.units,
     }
-    const out = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 480 } }],
-      { compress: 0.25, format: ImageManipulator.SaveFormat.WEBP }
-    )
-    return out.uri
-  }
-
-  const uploadOne = async (asset: DocumentPicker.DocumentPickerAsset) => {
-    if (!user) return null
-    const filename = `${uuidv4()}.webp`
-
-    const [normalUri, blurred] = await Promise.all([
-      compressUnder200K(asset.uri),
-      ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 32 } }],
-        { compress: 0.5, format: ImageManipulator.SaveFormat.WEBP }
-      ),
-    ])
-
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token ?? ''
-
-    await uploadFile(normalUri, filename, 'image/webp', 'normal', token)
-    await uploadFile(blurred.uri, filename, 'image/webp', 'blur', token)
-    return filename
-  }
-
-  const pickPhoto = async () => {
-    if (!user || photos.length >= 6) return
-    const maxPick = 6 - photos.length
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'image/*',
-      copyToCacheDirectory: false,
-      multiple: true,
-    })
-    if (result.canceled || !result.assets?.length) return
-
-    const sigFor = (a: DocumentPicker.DocumentPickerAsset) => `${a.name ?? ''}|${a.size ?? 0}`
-
-    // All signatures currently in use: completed uploads + in-progress uploads
-    const existingSigs = new Set<string>([
-      ...Array.from(sigByFilename.current.values()),
-      ...uploads.map(u => u.sig),
-    ])
-
-    // Filter out duplicates: within this batch AND against existing
-    const seenThisBatch = new Set<string>()
-    const filtered = result.assets.filter(a => {
-      const s = sigFor(a)
-      if (existingSigs.has(s) || seenThisBatch.has(s)) return false
-      seenThisBatch.add(s)
-      return true
-    })
-
-    const skipped = result.assets.length - filtered.length
-    if (skipped > 0) setDuplicateDialog(true)
-    if (filtered.length === 0) return
-
-    const assets = filtered.slice(0, maxPick)
-    const newUploads = assets.map((a, i) => ({
-      id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
-      uri: a.uri,
-      sig: sigFor(a),
-    }))
-    setUploads(prev => [...prev, ...newUploads])
-
-    // Upload each asset; when done, attach filename to upload AND add to photos.
-    // The upload card stays visible until the server image in PhotoCell loads (onLoaded).
-    for (let i = 0; i < assets.length; i++) {
-      try {
-        const filename = await uploadOne(assets[i])
-        if (filename) {
-          sigByFilename.current.set(filename, newUploads[i].sig)
-          setUploads(prev => prev.map(u => u.id === newUploads[i].id ? { ...u, filename } : u))
-          const current = useUserStore.getState().profile?.images?.normal ?? []
-          update({ images: { normal: [...current, filename], blur: [...current, filename] } })
-        } else {
-          setUploads(prev => prev.filter(u => u.id !== newUploads[i].id))
-        }
-      } catch (e: any) {
-        console.error('Photo upload error:', e)
-        setUploads(prev => prev.filter(u => u.id !== newUploads[i].id))
-      }
-    }
-  }
-
-  const removePhoto = async (filename: string) => {
-    if (!user) return
-    if (photos.length <= 1) return  // must keep at least one photo
-    await supabase.storage.from('users').remove([
-      `${user.id}/normal/${filename}`,
-      `${user.id}/blur/${filename}`,
-    ])
-    // Release the signature so the user can re-pick the same file later
-    sigByFilename.current.delete(filename)
-    const newPhotos = photos.filter(f => f !== filename)
-    update({ images: { normal: newPhotos, blur: newPhotos } })
-  }
-
-  const reorderPhotos = (from: number, to: number) => {
-    if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
-    // Pure swap — only the two cells exchange positions, the rest stay put.
-    const next = [...photos]
-    ;[next[from], next[to]] = [next[to], next[from]]
-    update({ images: { normal: next, blur: next } })
-  }
-
-  const previewData: MatchData | null = useMemo(() => profile ? {
-    user_id: profile.user_id,
-    image: photos[0] ?? '',
-    images: photos,
-    title: profile.name ?? '—',
-    message: localMessage,
-    distance: 0,
-    located_at: new Date().toISOString(),
-    subscribed: false,
-    is_for_kids: profile.is_for_kids ?? null,
-    age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
-    is_male: profile.is_male,
-    units: profile.units,
-  } : null, [profile, photos, localMessage])
+  }, [profile, localMessage])
 
   useEffect(() => { onPreviewDataChange?.(previewData) }, [previewData, onPreviewDataChange])
-
-  const onPhotoLoaded = (filename: string) => {
-    setUploads(prev => prev.filter(u => u.filename !== filename))
-  }
 
   return (
     <>
@@ -1054,30 +724,10 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
         <View style={styles.photoSectionHeader} pointerEvents="box-none">
           <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
         </View>
-        <PhotoGrid
-          photos={photos}
-          urlFor={(f) => `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
-          onRemove={removePhoto}
-          onLoaded={onPhotoLoaded}
-          onReorder={reorderPhotos}
-          canRemove={photos.length > 1}
-          uploads={uploads}
-          onDragStateChange={setDragging}
+        <PhotoEditor
           editMode={editMode}
           onEnterEditMode={() => setEditMode(true)}
-          additionalChildren={
-            photos.length + uploads.filter(u => !u.filename).length < 6 ? (
-              <View style={photoStyles.add} pointerEvents={editMode ? 'none' : 'auto'}>
-                <Pressable
-                  style={StyleSheet.absoluteFill}
-                  onPress={() => { tap(); pickPhoto() }}
-                />
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={1.5} strokeLinecap="round">
-                  <Path d="M12 5v14M5 12h14" />
-                </Svg>
-              </View>
-            ) : null
-          }
+          onDragStateChange={setDragging}
         />
       </View>
 
@@ -1098,13 +748,6 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
       </View>
 
     </ScrollView>
-    <ConfirmDialog
-      visible={duplicateDialog}
-      title={t('settings.duplicatePhotoTitle')}
-      description={t('settings.duplicatePhotoBody')}
-      confirmLabel={t('common.gotIt')}
-      onConfirm={() => setDuplicateDialog(false)}
-    />
     </>
   )
 }
@@ -1113,72 +756,11 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
 // lets the gaps adapt to the actual pane width, which varies with safe-area
 // insets on edge-to-edge Android, instead of relying on Dimensions at
 // module-load time.
-const photoStyles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    rowGap: 8,
-    marginTop: 12,
-    // Animated cells rotate slightly in edit mode; overflow: 'visible' prevents
-    // clipping of the wiggle at the grid edges.
-    overflow: 'visible',
-  },
-  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12, overflow: 'hidden' },
-  // Invisible row-filler — same footprint as a real cell so the flex layout
-  // treats the partial last row the same as a full one.
-  filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
-  img: { width: '100%', height: '100%' },
-  remove: {
-    position: 'absolute', top: 8, end: 8,
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  add: {
-    width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', borderStyle: 'dashed',
-  },
-  progressOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  dropTarget: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 3,
-    borderColor: '#111',
-    borderRadius: 12,
-  },
-  spinnerBadge: {
-    position: 'absolute',
-    top: '50%', start: '50%',
-    width: 36, height: 36, marginStart: -18, marginTop: -18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  progressBarBg: {
-    width: '70%', height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressBarFill: {
-    height: '100%', borderRadius: 2,
-    backgroundColor: '#fff',
-  },
-  progressText: {
-    color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 6,
-  },
-})
-
 // ── Account Tab ────────────────────────────────────────────────────────────
 
-function SignOutIcon() {
+function SignOutIcon({ color = '#111' }: { color?: string }) {
   return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <Polyline points="16 17 21 12 16 7" />
       <Line x1="21" y1="12" x2="9" y2="12" />
@@ -1186,9 +768,9 @@ function SignOutIcon() {
   )
 }
 
-function TrashIcon() {
+function TrashIcon({ color = '#111' }: { color?: string }) {
   return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="3 6 5 6 21 6" />
       <Path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <Path d="M10 11v6" />
@@ -1211,6 +793,7 @@ function AccountTab() {
   const router = useRouter()
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   if (!profile || !user) return <View style={styles.tabContent} />
 
@@ -1246,9 +829,18 @@ function AccountTab() {
   }
 
   const onDeleteConfirmed = async () => {
+    if (deleting) return
     tapWarning()
+    setDeleting(true)
+    try {
+      await invoke('app/delete')
+    } catch (e) {
+      console.error(e)
+      setDeleting(false)
+      return
+    }
     setDeleteDialog(false)
-    try { await invoke('app/delete') } catch (e) { console.error(e) }
+    setDeleting(false)
     await finishAndGoToLogin()
   }
 
@@ -1277,18 +869,18 @@ function AccountTab() {
       <View style={styles.section}>
         <SectionLabel>{t('settings.accountActions').toUpperCase()}</SectionLabel>
         <Pressable
-          style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [styles.actionBtn, styles.actionBtnDestructiveSolid, pressed && styles.actionBtnDestructiveSolidPressed]}
           onPress={confirmSignOut}
         >
-          <SignOutIcon />
-          <Text style={styles.actionBtnText}>{tg('settings.signOut', profile.is_male)}</Text>
+          <SignOutIcon color="#fff" />
+          <Text style={[styles.actionBtnText, styles.actionBtnTextOnSolid]}>{tg('settings.signOut', profile.is_male)}</Text>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [styles.actionBtn, { marginTop: 10 }, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [styles.actionBtn, styles.actionBtnDestructive, { marginTop: 10 }, pressed && { opacity: 0.7 }]}
           onPress={confirmDelete}
         >
-          <TrashIcon />
-          <Text style={styles.actionBtnText}>{t('settings.deleteAccount')}</Text>
+          <TrashIcon color="#4b5563" />
+          <Text style={[styles.actionBtnText, styles.actionBtnTextDestructive]}>{t('settings.deleteAccount')}</Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -1308,6 +900,7 @@ function AccountTab() {
       cancelLabel={t('settings.deleteNo')}
       confirmLabel={t('settings.deleteYes')}
       destructive
+      busy={deleting}
       onCancel={() => setDeleteDialog(false)}
       onConfirm={onDeleteConfirmed}
     />
@@ -1317,7 +910,7 @@ function AccountTab() {
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
-function AppTab({ onBack }: { onBack?: () => void }) {
+function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SelectFieldConfig) => void }) {
   const router = useRouter()
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
@@ -1331,6 +924,14 @@ function AppTab({ onBack }: { onBack?: () => void }) {
 
   // Default view state is metric when units is unset (matches our km sliders).
   const isMetric = (profile.units ?? 'metric') === 'metric'
+
+  const appearance = profile.appearance ?? 'system'
+  const appearanceOptions: SelectOption[] = [
+    { value: 'system', label: t('settings.appearanceSystem') },
+    { value: 'light',  label: t('settings.appearanceLight')  },
+    { value: 'dark',   label: t('settings.appearanceDark')   },
+  ]
+  const appearanceDisplayValue = appearanceOptions.find(o => o.value === appearance)?.label ?? t('settings.appearanceLight')
 
   const onReset = async (state: 'VISIBLE' | 'HIDDEN') => {
     if (resetting) return
@@ -1355,6 +956,24 @@ function AppTab({ onBack }: { onBack?: () => void }) {
 
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
+      <View style={styles.section}>
+        <SectionLabel>{t('settings.appearance').toUpperCase()}</SectionLabel>
+        <SelectFieldRow
+          label={t('settings.appearance')}
+          displayValue={appearanceDisplayValue}
+          onPress={() => onOpenSubPage?.({
+            title: t('settings.appearance'),
+            options: appearanceOptions,
+            value: appearance,
+            onSelect: (v) => {
+              update({ appearance: v })
+              invoke('app/update', { appearance: v }).catch(console.error)
+            },
+            description: t('settings.appearanceDesc'),
+          })}
+        />
+      </View>
+
       <View style={styles.section}>
         <SectionLabel>{t('settings.unitsLabel').toUpperCase()}</SectionLabel>
         <View style={styles.genderRow}>
@@ -1406,11 +1025,11 @@ function AppTab({ onBack }: { onBack?: () => void }) {
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onEditModeChange?: (editing: boolean) => void, previewOpen?: boolean, onTogglePreview?: () => void, onPreviewDataChange?: (data: MatchData | null) => void) {
+function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onEditModeChange?: (editing: boolean) => void, previewOpen?: boolean, onTogglePreview?: () => void, onPreviewDataChange?: (data: MatchData | null) => void, onOpenSubPage?: (config: SelectFieldConfig) => void) {
   if (tab === 'preferences') return <PreferencesTab />
   if (tab === 'profile')     return <ProfileTab focused={focused} onEditModeChange={onEditModeChange} previewOpen={previewOpen} onTogglePreview={onTogglePreview} onPreviewDataChange={onPreviewDataChange} />
   if (tab === 'account')     return <AccountTab />
-  if (tab === 'app')         return <AppTab onBack={onBack} />
+  if (tab === 'app')         return <AppTab onBack={onBack} onOpenSubPage={onOpenSubPage} />
   return <View style={styles.tabContent} />
 }
 
@@ -1449,7 +1068,11 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
   const [headerH, setHeaderH] = useState(0)
   const insets = useSafeAreaInsets()
   const previewSlide = useRef(new Animated.Value(Dimensions.get('window').height)).current
-  useEffect(() => { onEditModeChange?.(photoEditActive || previewOpen) }, [photoEditActive, previewOpen, onEditModeChange])
+  // Sub-page state declared here so it's available for the dependency arrays below.
+  // The animation value and open/close functions live further down (after `width`).
+  const [subPage, setSubPage] = useState<SelectFieldConfig | null>(null)
+  const subPageSlide = useRef(new Animated.Value(isRTL ? -Dimensions.get('window').width : Dimensions.get('window').width)).current
+  useEffect(() => { onEditModeChange?.(photoEditActive || previewOpen || !!subPage) }, [photoEditActive, previewOpen, subPage, onEditModeChange])
   // Close preview when leaving the profile tab so it doesn't linger over other tabs.
   useEffect(() => { if (activeTab !== 'profile' && previewOpen) setPreviewOpen(false) }, [activeTab, previewOpen])
   // Slide-in / slide-out — keep mounted through the close animation so the
@@ -1494,6 +1117,41 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
   useEffect(() => { activeTabRef.current = activeTab; Keyboard.dismiss() }, [activeTab])
   useEffect(() => { widthRef.current = width }, [width])
   useEffect(() => { tabBarWidthRef.current = tabBarWidth }, [tabBarWidth])
+
+  // ── Sub-page open / close helpers ─────────────────────────────────────
+  // Declared after `width` and `widthRef` so references are clean.
+  // State + animation ref live above the effects (before dep-array evaluation).
+
+  const openSubPage = (config: SelectFieldConfig) => {
+    subPageSlide.setValue(isRTL ? -widthRef.current : widthRef.current)
+    setSubPage(config)
+    Animated.timing(subPageSlide, { toValue: 0, duration: 280, useNativeDriver: true }).start()
+  }
+
+  const closeSubPage = () => {
+    const w = widthRef.current
+    Animated.timing(subPageSlide, { toValue: isRTL ? -w : w, duration: 240, useNativeDriver: true })
+      .start(({ finished }) => { if (finished) setSubPage(null) })
+  }
+
+  const handleSelectOption = (value: string) => {
+    subPage?.onSelect(value)
+    closeSubPage()
+  }
+
+  // Android hardware back while sub-page is open closes it instead of
+  // navigating away to the home pane. Placed here (after closeSubPage) so
+  // TypeScript doesn't flag a use-before-declaration.
+  useEffect(() => {
+    if (!subPage) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      closeSubPage()
+      return true
+    })
+    return () => sub.remove()
+  // closeSubPage is stable within a render cycle; subPage drives the guard
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!subPage])
 
   // Single animation entry point — used both by tab taps and by swipe release.
   // Spring with an initial velocity carries the finger's momentum forward
@@ -1554,18 +1212,20 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
   // velocity so the motion is one continuous gesture.
   // Swipe-to-change-tab using gesture-handler. activeOffsetX/failOffsetY let
   // the inner ScrollView own vertical drags unambiguously while horizontal
-  // intent (>=10px) claims us declaratively. At the first tab we narrow the
-  // claim to the forward direction only, so a backward swipe surrenders to
-  // the outer shell pan (which then slides back to the home pane). Without
-  // this, the inner wins the race and clamps at the edge — the user is
-  // trapped on the settings pane.
-  const isFirstTab = TABS.indexOf(activeTab) === 0
-  const activeOffsetX: [number, number] = isFirstTab
-    ? (isRTL ? [-99999, 10] : [-10, 99999])
-    : [-10, 10]
+  // intent (>=10px) claims us declaratively. We narrow activeOffsetX to the
+  // directions where a neighbor tab actually exists: at the first tab a
+  // backward swipe surrenders to the outer shell pan (which slides back to
+  // the home pane), and at the last tab a forward swipe is refused entirely
+  // so there's no claim+clamp elastic feel against a non-existent neighbor.
+  const tabIdx = TABS.indexOf(activeTab)
+  const canGoBack = tabIdx > 0
+  const canGoFwd  = tabIdx < TABS.length - 1
+  const activeOffsetX: [number, number] = isRTL
+    ? [canGoBack ? -10 : -99999, canGoFwd ? 10 : 99999]
+    : [canGoFwd ? -10 : -99999, canGoBack ? 10 : 99999]
   const tabPan = useMemo(() =>
     Gesture.Pan()
-      .enabled(!photoEditActive && !sliding && !previewOpen)
+      .enabled(!photoEditActive && !sliding && !previewOpen && !subPage)
       .activeOffsetX(activeOffsetX)
       .failOffsetY([-20, 20])
       .onUpdate(e => {
@@ -1602,7 +1262,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
         }
       })
       .runOnJS(true)
-  , [activeOffsetX[0], activeOffsetX[1], photoEditActive, sliding, previewOpen])
+  , [activeOffsetX[0], activeOffsetX[1], photoEditActive, sliding, previewOpen, !!subPage])
 
   return (
     <SafeAreaView style={styles.root}>
@@ -1683,7 +1343,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
                 width,
               }}
             >
-              {renderTab(tab, onBack, focused && activeTab === tab, setPhotoEditActive, previewOpen, () => setPreviewOpen(o => !o), setPreviewData)}
+              {renderTab(tab, onBack, focused && activeTab === tab, setPhotoEditActive, previewOpen, () => setPreviewOpen(o => !o), setPreviewData, openSubPage)}
             </View>
           ))}
         </Animated.View>
@@ -1702,6 +1362,52 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange 
           ]}
         >
           <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+        </Animated.View>
+      )}
+
+      {/* ── Sub-page overlay ─────────────────────────────────────────────── */}
+      {/* Slides in over everything (header included) when a SelectFieldRow  */}
+      {/* is tapped. Slides back out when the user picks an option or taps   */}
+      {/* the back button.                                                    */}
+      {subPage && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, styles.subPageRoot, { transform: [{ translateX: subPageSlide }] }]}
+        >
+          {/* Header — same layout as the main settings header */}
+          <View style={styles.header}>
+            <IconPressable style={styles.backBtn} onPress={closeSubPage}>
+              <BackIcon />
+            </IconPressable>
+            <Text style={styles.subPageHeaderTitle}>{subPage.title}</Text>
+          </View>
+
+          {/* Options list */}
+          <ScrollView
+            contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.subPageOptionsCard}>
+              {subPage.options.map((opt, i) => (
+                <View key={opt.value}>
+                  {i > 0 && <View style={styles.optionDivider} />}
+                  <View
+                    style={styles.subPageOptionRow}
+                    onStartShouldSetResponder={() => true}
+                    onResponderRelease={() => { tap(); handleSelectOption(opt.value) }}
+                  >
+                    <Text style={styles.subPageOptionLabel}>{opt.label}</Text>
+                    {opt.value === subPage.value && (
+                      <Text style={styles.subPageCheckmark}>✓</Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+            {subPage.description ? (
+              <Text style={styles.subPageDesc}>{subPage.description}</Text>
+            ) : null}
+          </ScrollView>
         </Animated.View>
       )}
     </SafeAreaView>
@@ -1793,5 +1499,49 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)', borderRadius: 14,
     paddingVertical: 14, marginTop: 10,
   },
+  actionBtnDestructive: { borderWidth: 0 },
+  actionBtnDestructiveSolid: { backgroundColor: '#374151', borderColor: '#374151' },
+  actionBtnDestructiveSolidPressed: { backgroundColor: '#1f2937', borderColor: '#1f2937' },
   actionBtnText: { fontSize: 15, fontWeight: '500', color: '#111' },
+  actionBtnTextDestructive: { color: '#4b5563' },
+  actionBtnTextOnSolid: { color: '#fff' },
+
+  // Select field row — tappable row with label + value + forward chevron
+  selectRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 14,
+    paddingHorizontal: 16, paddingVertical: 14, marginTop: 14,
+  },
+  selectRowLabel: { fontSize: 15, color: '#111' },
+  selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  selectRowValue: { fontSize: 15, color: 'rgba(0,0,0,0.45)' },
+
+  // Sub-page overlay panel
+  subPageRoot: { backgroundColor: '#eef0f3' },
+  subPageHeaderTitle: {
+    flex: 1, fontSize: 17, fontWeight: '600', color: '#111',
+    textAlign: 'center',
+    // balance the back-button width so the title is visually centred
+    marginEnd: 36,
+  },
+  subPageOptionsCard: {
+    marginHorizontal: 20, marginTop: 24,
+    borderRadius: 14, overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.04)',
+  },
+  subPageOptionRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  subPageOptionLabel: { fontSize: 17, color: '#111' },
+  subPageCheckmark: { fontSize: 17, color: '#e11d48', fontWeight: '600' },
+  optionDivider: {
+    height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
+    marginStart: 16,
+  },
+  subPageDesc: {
+    marginHorizontal: 20, marginTop: 16,
+    fontSize: 13, color: 'rgba(0,0,0,0.45)',
+    textAlign: 'center', lineHeight: 19,
+  },
 })

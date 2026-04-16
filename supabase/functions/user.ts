@@ -31,6 +31,7 @@ export default class User {
   db: { new: Record<string, unknown>, old: Record<string, unknown> } = { new: {}, old: {} };
 
   static LEGAL = 18;
+  static WATCHERS = 5;
 
   constructor(data: string | Record<string, unknown>) {
     if (typeof data === 'string') this.user_id = data;
@@ -82,11 +83,14 @@ export default class User {
     }
   }
 
-  validate() {
+  validate(other?: User) {
     if (this.age_from && this.age_from < User.LEGAL) this.age_from = User.LEGAL;
     if (this.age_from && this.age_to && this.age_from > this.age_to) this.age_to = this.age_from;
-    if (this.state && ![State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)) this.other_id = null;
-    else this.watchers = {};
+    if (this.state && [State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)){
+      this.setMatch(other);
+      this.watchers = {};
+    }
+    else this.other_id = null;
   }
 
   async update(logger: Logger, state?: State, other?: User, notify?: boolean) {
@@ -94,8 +98,7 @@ export default class User {
       this.state = state;
       this.other_id = other?.user_id ?? null;
     }
-    this.validate();
-    this.setMatch(other);
+    this.validate(other);
     const delta = this.delta();
     if (lodash.size(delta) > 0) {
       lodash.merge(this.db.new, delta);
@@ -206,7 +209,8 @@ export default class User {
   }
 
   async addWatchers(logger: Logger) {
-    for (const watcher of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.VISIBLE).order("relevance", { ascending: false }))) {
+    const watchersToAdd = User.WATCHERS - Object.keys(this.watchers).length;
+    for (const watcher of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).limit(watchersToAdd).order("relevance", { ascending: false }))) {
       this.setWatcher(watcher);
       EdgeRuntime.waitUntil(watcher.update(logger, State.WATCHING, this, true));
     }
@@ -235,10 +239,10 @@ export default class User {
 
   }
 
-  async missWatchers(logger: Logger, exclude?: User) {
+  missWatchers(logger: Logger, exclude?: User) {
     for (const watcher_id of Object.keys(this.watchers)) {
       if (watcher_id == exclude?.user_id) continue;
-      await this.missWatcher(logger, watcher_id);
+      EdgeRuntime.waitUntil(this.missWatcher(logger, watcher_id));
     }
   }
 
@@ -262,7 +266,10 @@ export default class User {
     await Tools.invoke(logger, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null));
     await Tools.invoke(logger, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null));
     await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
-    lodash.merge(this, await User.getById(logger, this.user_id));
+    this.other_id = null;
+    this.match = null;
+    this.watchers = {};
+    // await this.update(logger, state == State.VISIBLE ? State.HIDDEN : State.VISIBLE);
   }
 
   async chat(logger: Logger, text: string) {
@@ -274,10 +281,6 @@ export default class User {
     const delta = lodash.omitBy(this, (v: unknown, k: string) => lodash.isEqual(v, (this.db.new as Record<string, unknown>)?.[k]));
     delete (delta as Record<string, unknown>).db;
     return delta;
-  }
-
-  watchersCount() {
-    return lodash.size(this.watchers);
   }
 
   age() {

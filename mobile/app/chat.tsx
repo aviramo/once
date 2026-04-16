@@ -15,6 +15,7 @@ import { t, tg } from '../src/i18n'
 import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
+import { FONT_SCALE } from '../src/fonts'
 
 const isRTL = I18nManager.isRTL
 
@@ -452,7 +453,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
                   </Text>
                 </Pressable>
                 {showTime && (
-                  <Text style={[styles.time, isMine ? styles.timeMine : styles.timeTheirs]}>
+                  <Text style={[styles.time, isMine ? styles.timeMine : styles.timeTheirs]} maxFontSizeMultiplier={FONT_SCALE.ui}>
                     {formatTime(msg.created_at)}
                   </Text>
                 )}
@@ -570,7 +571,7 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
   return (
     <View style={styles.daySep}>
       <View style={styles.daySepLine} />
-      <Text style={[styles.daySepLabel, bold && { fontWeight: '600' }]}>{label}</Text>
+      <Text style={[styles.daySepLabel, bold && { fontWeight: '600' }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{label}</Text>
       <View style={styles.daySepLine} />
     </View>
   )

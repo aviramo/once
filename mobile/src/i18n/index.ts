@@ -25,10 +25,7 @@ function getTranslations(lang: string): Translations {
 
 export const lang = detectLang()
 export const isRTL = RTL_LANGS.includes(lang)
-export const dir: 'rtl' | 'ltr' = isRTL ? 'rtl' : 'ltr'
-
-export const translations = getTranslations(lang)
-export const allTranslations: Record<string, Translations> = { he: he as unknown as Translations, en }
+const translations = getTranslations(lang)
 
 export function t(key: keyof Translations): string {
   return (translations as Record<string, string>)[key] ?? key

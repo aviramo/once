@@ -119,12 +119,14 @@ export default function LoginPage() {
             label={t('auth.signInApple')}
             onPress={handleApple}
             disabled={loadingProvider !== null}
+            tone="visible"
           />
         ) : (
           <PrimaryButton
             label={t('auth.signInGoogle')}
             onPress={handleGoogle}
             disabled={loadingProvider !== null}
+            tone="visible"
           />
         )}
       </View>
@@ -159,6 +161,7 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     color: '#111',
     letterSpacing: -0.5,
+    fontFamily: 'NotoSans_400Regular',
   },
   tagline: {
     fontSize: 13,
@@ -176,7 +179,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   messageLine1: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '300',
     color: 'rgba(0,0,0,0.4)',
     textAlign: 'center',
@@ -200,7 +203,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 36,
     paddingTop: 8,
-    backgroundColor: 'rgba(250,250,250,0.97)',
+    backgroundColor: 'transparent',
     gap: 10,
   },
 })
