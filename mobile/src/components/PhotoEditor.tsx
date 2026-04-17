@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Pressable, StyleSheet, Image, ActivityIndicator, Animated } from 'react-native'
+import { View, Pressable, StyleSheet, Image, ActivityIndicator } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Path, Line } from 'react-native-svg'
 import * as DocumentPicker from 'expo-document-picker'
@@ -10,6 +10,8 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
+import { SINGLE } from '../fonts'
+import { TEXT, WHITE } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -29,7 +31,6 @@ const loadedUris = new Set<string>()
 
 function PhotoCell({
   uri, localUri, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
-  editMode, onEnterEditMode,
 }: {
   uri: string
   localUri?: string
@@ -39,35 +40,11 @@ function PhotoCell({
   dragging?: boolean
   highlighted?: boolean
   onLayout?: (e: any) => void
-  editMode: boolean
-  onEnterEditMode: () => void
 }) {
   const [loaded, setLoaded] = useState(() => loadedUris.has(uri))
-  const wiggle = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    if (editMode && !dragging) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(wiggle, { toValue: 1, duration: 110, useNativeDriver: true }),
-          Animated.timing(wiggle, { toValue: -1, duration: 220, useNativeDriver: true }),
-          Animated.timing(wiggle, { toValue: 0, duration: 110, useNativeDriver: true }),
-        ])
-      )
-      const startDelay = Math.random() * 180
-      const t = setTimeout(() => loop.start(), startDelay)
-      return () => {
-        clearTimeout(t)
-        loop.stop()
-        Animated.timing(wiggle, { toValue: 0, duration: 160, useNativeDriver: true }).start()
-      }
-    }
-    wiggle.setValue(0)
-  }, [editMode, dragging])
-  const rotate = wiggle.interpolate({ inputRange: [-1, 1], outputRange: ['-1.5deg', '1.5deg'] })
-
   return (
-    <Animated.View
-      style={[photoStyles.cell, { transform: [{ rotate }] }]}
+    <View
+      style={photoStyles.cell}
       onLayout={onLayout}
     >
       {localUri && !loaded && (
@@ -80,35 +57,25 @@ function PhotoCell({
       />
       {!loaded && (
         <View style={photoStyles.spinnerBadge}>
-          <ActivityIndicator size="small" color="#fff" />
+          <ActivityIndicator size="small" color={WHITE} />
         </View>
       )}
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
-      {!editMode && (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onLongPress={() => { tapMedium(); onEnterEditMode() }}
-          delayLongPress={450}
-        />
-      )}
-      {editMode && loaded && canRemove && (
+      {loaded && canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round">
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.5} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
         </Pressable>
       )}
-    </Animated.View>
+    </View>
   )
 }
 
-// Draggable photo grid — long-press a cell to enter edit mode (iOS-style jiggle),
-// then drag to reorder. Outside edit mode the grid is locked so horizontal
-// swipes pass through to the surrounding tab pager.
+// Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
   photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads, additionalChildren, onDragStateChange,
-  editMode, onEnterEditMode,
 }: {
   photos: string[]
   urlFor: (f: string) => string
@@ -119,8 +86,6 @@ function PhotoGrid({
   uploads: { id: string; uri: string; filename?: string }[]
   additionalChildren?: React.ReactNode
   onDragStateChange?: (dragging: boolean) => void
-  editMode: boolean
-  onEnterEditMode: () => void
 }) {
   const layouts = useRef<Array<{ x: number; y: number; w: number; h: number }>>([])
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -138,7 +103,6 @@ function PhotoGrid({
 
   const dragPan = useMemo(() =>
     Gesture.Pan()
-      .enabled(editMode)
       .minDistance(3)
       .onBegin(e => {
         let hit = -1
@@ -198,7 +162,7 @@ function PhotoGrid({
         onDragStateChangeRef.current?.(false)
       })
       .runOnJS(true)
-  , [editMode])
+  , [])
 
   return (
     <GestureDetector gesture={dragPan}>
@@ -207,7 +171,7 @@ function PhotoGrid({
         const matchingUpload = uploads.find(u => u.filename === filename)
         return (
           <PhotoCell
-            key={filename}
+            key={`${i}-${filename}`}
             uri={urlFor(filename)}
             localUri={matchingUpload?.uri}
             onRemove={() => onRemove(filename)}
@@ -216,8 +180,6 @@ function PhotoGrid({
             dragging={dragIdx === i}
             highlighted={hoverIdx === i}
             onLayout={(e) => { layouts.current[i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
-            editMode={editMode}
-            onEnterEditMode={onEnterEditMode}
           />
         )
       })}
@@ -225,7 +187,7 @@ function PhotoGrid({
         <View key={u.id} style={photoStyles.cell}>
           <Image source={{ uri: u.uri }} style={photoStyles.img} />
           <View style={photoStyles.spinnerBadge}>
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={WHITE} />
           </View>
         </View>
       ))}
@@ -249,18 +211,14 @@ function PhotoGrid({
 }
 
 // ── Public editor ─────────────────────────────────────────────────────────
-// Full photo-management surface used by both settings (profile editing) and
-// onboarding step 4. Owns the upload queue, dedupe signature map, and the
-// duplicate-detected dialog so callers just mount it and react to
-// editMode / drag callbacks.
+// Full photo-management surface used by both the photo sub-page (settings)
+// and onboarding step 4. Owns the upload queue, dedupe signature map, and
+// the duplicate-detected dialog. Remove/reorder changes are applied to the
+// store immediately (no deferred flush).
 export function PhotoEditor({
-  editMode,
-  onEnterEditMode,
   onDragStateChange,
   onUploadingChange,
 }: {
-  editMode: boolean
-  onEnterEditMode: () => void
   onDragStateChange?: (dragging: boolean) => void
   // Fires when the in-flight upload count toggles between zero and non-zero.
   // Onboarding uses this to disable the "Confirm & Continue" button until
@@ -281,28 +239,7 @@ export function PhotoEditor({
   const [duplicateDialog, setDuplicateDialog] = useState(false)
 
   const storeImages = profile?.images ?? { normal: [], blur: [] }
-
-  // During edit mode, reorder/remove changes are kept locally and only
-  // flushed to the store (single server call via useAutoSave) on exit.
-  const [localImages, setLocalImages] = useState<{ normal: string[]; blur: string[] } | null>(null)
-  const photos = localImages?.normal ?? storeImages.normal
-
-  // Sync localImages when entering edit mode; flush on exit.
-  const prevEditMode = useRef(editMode)
-  useEffect(() => {
-    if (editMode && !prevEditMode.current) {
-      setLocalImages({ normal: [...storeImages.normal], blur: [...storeImages.blur] })
-    } else if (!editMode && prevEditMode.current && localImages) {
-      const changed = localImages.normal.length !== storeImages.normal.length ||
-        localImages.normal.some((f, i) => f !== storeImages.normal[i]) ||
-        localImages.blur.some((f, i) => f !== storeImages.blur[i])
-      if (changed) {
-        update({ images: localImages })
-      }
-      setLocalImages(null)
-    }
-    prevEditMode.current = editMode
-  }, [editMode])
+  const photos = storeImages.normal
 
   const uploadFile = async (uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string) => {
     const formData = new FormData()
@@ -342,11 +279,6 @@ export function PhotoEditor({
   }
 
   const compressBlur = async (uri: string): Promise<string> => {
-    // Two-step: shrink to 8px (destroys all identifiable detail), then
-    // scale back up to 200px. The bilinear upscale turns 8 raw pixels
-    // into smooth color gradients — no visible pixel blocks. Combined
-    // with blurRadius on display, the result is a soft, unidentifiable
-    // wash of color.
     const tiny = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 8 } }],
@@ -377,9 +309,6 @@ export function PhotoEditor({
   const pickPhoto = async () => {
     if (!user || photos.length >= 6) return
     const maxPick = 6 - photos.length
-    // copyToCacheDirectory: true makes the URI a stable file:// that
-    // FileSystem.getInfoAsync can MD5 — content:// URIs from the Android
-    // picker don't reliably expose name/size/content to the MD5 path.
     const result = await DocumentPicker.getDocumentAsync({
       type: 'image/*',
       copyToCacheDirectory: true,
@@ -387,12 +316,6 @@ export function PhotoEditor({
     })
     if (result.canceled || !result.assets?.length) return
 
-    // Content hash over file bytes is the only dedupe check that survives
-    // Android content providers renaming the same image on re-pick, and
-    // name/size alone were letting duplicates through. Falls back to
-    // `name|size` if the MD5 read fails for some asset (offline file,
-    // cloud placeholder, etc.) — better to risk a duplicate than reject a
-    // valid image.
     const sigs = await Promise.all(result.assets.map(async a => {
       try {
         const info = await FileSystem.getInfoAsync(a.uri, { md5: true })
@@ -453,29 +376,27 @@ export function PhotoEditor({
   const removePhoto = async (filename: string) => {
     if (!user) return
     if (photos.length <= 1) return
-    const imgs = localImages ?? storeImages
-    const idx = imgs.normal.indexOf(filename)
+    const idx = storeImages.normal.indexOf(filename)
     if (idx < 0) return
-    const blurFilename = imgs.blur[idx]
+    const blurFilename = storeImages.blur[idx]
     await supabase.storage.from('users').remove([
       `${user.id}/normal/${filename}`,
       `${user.id}/blur/${blurFilename}`,
     ])
     sigByFilename.current.delete(filename)
-    setLocalImages({
-      normal: imgs.normal.filter((_, i) => i !== idx),
-      blur: imgs.blur.filter((_, i) => i !== idx),
-    })
+    update({ images: {
+      normal: storeImages.normal.filter((_, i) => i !== idx),
+      blur: storeImages.blur.filter((_, i) => i !== idx),
+    } })
   }
 
   const reorderPhotos = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
-    const imgs = localImages ?? storeImages
-    const nextNormal = [...imgs.normal]
-    const nextBlur = [...imgs.blur]
+    const nextNormal = [...storeImages.normal]
+    const nextBlur = [...storeImages.blur]
     ;[nextNormal[from], nextNormal[to]] = [nextNormal[to], nextNormal[from]]
     ;[nextBlur[from], nextBlur[to]] = [nextBlur[to], nextBlur[from]]
-    setLocalImages({ normal: nextNormal, blur: nextBlur })
+    update({ images: { normal: nextNormal, blur: nextBlur } })
   }
 
   const onPhotoLoaded = (filename: string) => {
@@ -493,16 +414,14 @@ export function PhotoEditor({
         canRemove={photos.length > 1}
         uploads={uploads}
         onDragStateChange={onDragStateChange}
-        editMode={editMode}
-        onEnterEditMode={onEnterEditMode}
         additionalChildren={
           photos.length + uploads.filter(u => !u.filename).length < 6 ? (
-            <View style={photoStyles.add} pointerEvents={editMode ? 'none' : 'auto'}>
+            <View style={photoStyles.add}>
               <Pressable
                 style={StyleSheet.absoluteFill}
                 onPress={() => { tap(); pickPhoto() }}
               />
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={1.5} strokeLinecap="round">
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} strokeLinecap="round">
                 <Path d="M12 5v14M5 12h14" />
               </Svg>
             </View>
@@ -514,6 +433,7 @@ export function PhotoEditor({
         title={t('settings.duplicatePhotoTitle')}
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}
+        soft
         onConfirm={() => setDuplicateDialog(false)}
       />
     </>
@@ -528,39 +448,35 @@ const photoStyles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 8,
     marginTop: 12,
-    // Animated cells rotate slightly in edit mode; overflow: 'visible' prevents
-    // clipping of the wiggle at the grid edges.
     overflow: 'visible',
   },
-  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12, overflow: 'hidden' },
-  // Invisible row-filler — same footprint as a real cell so the flex layout
-  // treats the partial last row the same as a full one.
+  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: SINGLE, overflow: 'hidden' },
   filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
   img: { width: '100%', height: '100%' },
   remove: {
     position: 'absolute', top: 8, end: 8,
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 28, height: 28, borderRadius: SINGLE,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center', justifyContent: 'center',
   },
   add: {
-    width: '31.5%', aspectRatio: 3 / 4, borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    width: '31.5%', aspectRatio: 3 / 4, borderRadius: SINGLE,
+    backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', borderStyle: 'dashed',
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 3,
-    borderColor: '#111',
-    borderRadius: 12,
+    borderColor: TEXT,
+    borderRadius: SINGLE,
   },
   spinnerBadge: {
     position: 'absolute',
     top: '50%', start: '50%',
     width: 36, height: 36, marginStart: -18, marginTop: -18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: SINGLE,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center', justifyContent: 'center',
   },
 })

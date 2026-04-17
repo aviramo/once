@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Image, ScrollView, StyleSheet, View } from 'react-native'
+import { Image, StyleSheet, View } from 'react-native'
+import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
 import type { MatchData } from '../stores/userStore'
 import { Chip, PinIcon, ClockIcon, BellOnIcon, BellOffIcon } from './Chip'
+import { SINGLE, DOUBLE } from '../fonts'
+import { TEXT, WHITE, GREEN, RED } from '../colors'
 
 // Display-only card for non-resting states. Action buttons live in the
 // home screen's pinned bottom bar so they share spacing + positioning with
@@ -99,11 +102,7 @@ export function MatchCard({
 }: {
   match: MatchData
   userIsMale: boolean | null
-  // Extra padding at the bottom of the inner ScrollView so the last row of
-  // content isn't hidden behind the home screen's floating action bar.
   bottomInset?: number
-  // Suppress the last-seen chip — the CHAT state has no use for it since
-  // the two users are already in active conversation.
   hideTime?: boolean
 }) {
   const imageUrls = useMemo(() => resolveImages(match), [match])
@@ -137,13 +136,13 @@ export function MatchCard({
 
   return (
     <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
-      <ScrollView
+      <PullScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + bottomInset }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
+        scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
-        delaysContentTouches={false}
       >
         {imageUrls.length > 0 && (
           <Image source={{ uri: imageUrls[0] }} style={[styles.photo, { height: photoHeight }]} resizeMode="cover" />
@@ -179,8 +178,8 @@ export function MatchCard({
           )}
         </View>
 
-        {match.message ? (
-          <Text style={styles.message}>{match.message}</Text>
+        {match.bio ? (
+          <Text style={styles.message}>{match.bio}</Text>
         ) : null}
 
         {imageUrls.length > 1 && (
@@ -194,15 +193,15 @@ export function MatchCard({
         {match.is_for_kids != null && (
           <View style={styles.kidsRow}>
             <View style={styles.kidsLabel}>
-              <BabyIcon color="#111" />
+              <BabyIcon color={TEXT} />
               <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', userIsMale)}</Text>
             </View>
             {match.is_for_kids
-              ? <KidsCheckIcon color="#15803d" />
-              : <KidsXIcon color="#c53030" />}
+              ? <KidsCheckIcon color={GREEN} />
+              : <KidsXIcon color={RED} />}
           </View>
         )}
-      </ScrollView>
+      </PullScrollView>
     </View>
   )
 }
@@ -221,20 +220,20 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: 0,
   },
   // Height is set inline so the photo fills the viewport above the name/chips
   // — chips become the last row visible before the user scrolls.
   photo: {
     width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   name: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#111',
-    marginTop: 16,
-    marginHorizontal: 20,
+    color: TEXT,
+    marginTop: DOUBLE,
+    marginHorizontal: SINGLE,
     textAlign: 'center',
     letterSpacing: -0.4,
   },
@@ -245,38 +244,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    marginBottom: 16,
-    marginHorizontal: 20,
+    gap: SINGLE,
+    marginTop: SINGLE,
+    marginBottom: DOUBLE,
+    marginHorizontal: SINGLE,
   },
   message: {
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(0,0,0,0.75)',
-    marginTop: 18,
-    marginHorizontal: 20,
+    color: 'rgba(0,0,0,0.6)',
+    marginTop: DOUBLE,
+    marginHorizontal: SINGLE,
     textAlign: 'center',
   },
   extraPhotos: {
     marginTop: 20,
-    backgroundColor: '#fff',
+    backgroundColor: WHITE,
     gap: 2,
   },
   extraPhoto: {
     width: '100%',
     aspectRatio: 3 / 4,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   kidsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 24,
-    marginHorizontal: 20,
+    marginTop: DOUBLE,
+    marginBottom: DOUBLE,
+    marginHorizontal: SINGLE,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: SINGLE,
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   kidsLabel: {
@@ -287,6 +287,6 @@ const styles = StyleSheet.create({
   kidsLabelText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111',
+    color: TEXT,
   },
 })

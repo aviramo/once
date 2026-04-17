@@ -13,6 +13,7 @@ import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor } from '../src/components/PhotoEditor'
+import { TEXT, WHITE, RED } from '../src/colors'
 
 const TOTAL_STEPS = 5
 const isRTL = I18nManager.isRTL
@@ -111,14 +112,14 @@ function GenderCard({
         onResponderRelease={handlePress}
       >
         <View style={styles.cardInner}>
-          {icon('#111')}
+          {icon(TEXT)}
           <Text style={styles.cardLabel}>{label}</Text>
         </View>
         <Animated.View
           pointerEvents="none"
           style={[styles.cardActive, { opacity: activeOpacity }]}
         >
-          {icon('#fff')}
+          {icon(WHITE)}
           <Text style={[styles.cardLabel, styles.cardLabelActive]}>{label}</Text>
         </Animated.View>
       </View>
@@ -150,7 +151,6 @@ export default function OnboardingPage() {
   const [yyyy, setYyyy] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [dateError, setDateError] = useState<string | null>(null)
-  const [photosEditMode, setPhotosEditMode] = useState(false)
   const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
   const [savingImages, setSavingImages] = useState(false)
@@ -246,7 +246,6 @@ export default function OnboardingPage() {
       const id = setTimeout(() => bioInputRef.current?.focus(), 280)
       return () => clearTimeout(id)
     }
-    if (step !== 4 && photosEditMode) setPhotosEditMode(false)
     Keyboard.dismiss()
   }, [step])
 
@@ -324,7 +323,7 @@ export default function OnboardingPage() {
       // state away from null. _layout.tsx's routing then no longer treats
       // the user as needing onboarding, but it only auto-redirects from the
       // auth screen — we still need an explicit push to /home from here.
-      await invoke('app/profile', { message: bio.trim() })
+      await invoke('app/profile', { message: bio.trim().replace(/\n{3,}/g, '\n\n') })
       router.replace('/home')
     } catch {
       setBioSubmitting(false)
@@ -461,7 +460,7 @@ export default function OnboardingPage() {
                     keyboardType="number-pad"
                     maxLength={unit === 'yyyy' ? 4 : 2}
                     placeholder={unitPlaceholder[unit]}
-                    placeholderTextColor="rgba(0,0,0,0.25)"
+                    placeholderTextColor="rgba(0,0,0,0.35)"
                   />
                 </View>
                 <Text style={styles.dateUnit}>{unitLabel[unit]}</Text>
@@ -502,20 +501,8 @@ export default function OnboardingPage() {
         <Text style={styles.title}>{t('photo.title')}</Text>
         <Text style={styles.subtitle}>{t('photo.sub')}</Text>
 
-        {/* Dim overlay matches the settings pattern: sits under the photo
-            section (higher zIndex on the grid) and catches taps anywhere
-            outside the grid to exit jiggle mode. */}
-        {photosEditMode && (
-          <Pressable
-            style={styles.photoEditOverlay}
-            onPress={() => { tap(); setPhotosEditMode(false) }}
-          />
-        )}
-
         <View style={styles.photoWrap} pointerEvents="box-none">
           <PhotoEditor
-            editMode={photosEditMode}
-            onEnterEditMode={() => setPhotosEditMode(true)}
             onUploadingChange={setPhotosUploading}
           />
         </View>
@@ -642,7 +629,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#111',
+    color: TEXT,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
@@ -673,7 +660,7 @@ const styles = StyleSheet.create({
   card: {
     aspectRatio: 1,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
   },
   cardInner: {
@@ -684,7 +671,7 @@ const styles = StyleSheet.create({
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#111',
+    backgroundColor: TEXT,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 14,
@@ -692,9 +679,9 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111',
+    color: TEXT,
   },
-  cardLabelActive: { color: '#fff' },
+  cardLabelActive: { color: WHITE },
 
   ctaWrap: { marginTop: 32 },
 
@@ -705,23 +692,17 @@ const styles = StyleSheet.create({
     // the overlay below.
     zIndex: 2, elevation: 2,
   },
-  photoEditOverlay: {
-    position: 'absolute',
-    start: -40, end: -40, top: -2000, bottom: -2000,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    zIndex: 1, elevation: 1,
-  },
 
   inputWrap: {
     marginTop: 32,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
   input: {
     fontSize: 16,
-    color: '#111',
+    color: TEXT,
     textAlign: 'center',
     padding: 0,
   },
@@ -752,7 +733,7 @@ const styles = StyleSheet.create({
   dateSegmentGap: { marginLeft: 10 },
   dateBox: {
     alignSelf: 'stretch',
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 8,
@@ -760,7 +741,7 @@ const styles = StyleSheet.create({
   dateInput: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111',
+    color: TEXT,
     textAlign: 'center',
     padding: 0,
   },
@@ -772,7 +753,7 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 12,
     fontSize: 13,
-    color: '#c0392b',
+    color: RED,
     textAlign: 'center',
   },
 
@@ -783,13 +764,13 @@ const styles = StyleSheet.create({
   bioEmphasis: {
     marginTop: 14,
     fontSize: 15,
-    color: '#111',
+    color: TEXT,
     fontWeight: '700',
     textAlign: 'center',
   },
   bioField: {
     marginTop: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -798,7 +779,7 @@ const styles = StyleSheet.create({
   },
   bioInput: {
     fontSize: 16,
-    color: '#111',
+    color: TEXT,
     padding: 0,
     minHeight: 96,
     textAlign: 'center',
@@ -808,13 +789,13 @@ const styles = StyleSheet.create({
     end: 12,
     bottom: 8,
     fontSize: 12,
-    color: 'rgba(0,0,0,0.45)',
+    color: 'rgba(0,0,0,0.5)',
   },
-  bioCounterWarn: { color: '#c0392b' },
+  bioCounterWarn: { color: RED },
   bioTip: {
     marginTop: 14,
     fontSize: 13,
-    color: 'rgba(0,0,0,0.55)',
+    color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
   },
 })

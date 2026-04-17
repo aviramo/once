@@ -4,6 +4,7 @@ import { Text } from './AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { t } from '../i18n'
 import { SyncWishLogo } from './SyncWishLogo'
+import { WHITE, PURPLE } from '../colors'
 
 export function BootScreen() {
   // Soft pulse on the logo — opacity + scale looped while we're waiting.
@@ -59,7 +60,7 @@ export function BootScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#eef0f3',
+    backgroundColor: PURPLE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -67,14 +68,14 @@ const styles = StyleSheet.create({
     marginTop: 18,
     fontSize: 22,
     fontWeight: '800',
-    color: '#111',
+    color: WHITE,
     letterSpacing: -0.5,
     textAlign: 'center',
   },
   tagline: {
     marginTop: 8,
     fontSize: 16,
-    color: 'rgba(0,0,0,0.55)',
+    color: 'rgba(255,255,255,0.7)',
     letterSpacing: 0.2,
     textAlign: 'center',
   },

@@ -1,6 +1,7 @@
 import { View, StyleSheet } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE } from '../fonts'
+import { WHITE } from '../colors'
 
 // Pill-shaped count badge — shared across the app for inline numeric
 // indicators (unread chat, watcher count, onboarding age, ...). One
@@ -33,7 +34,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#fff',
+    color: WHITE,
     includeFontPadding: false,
     textAlignVertical: 'center',
     lineHeight: 16,

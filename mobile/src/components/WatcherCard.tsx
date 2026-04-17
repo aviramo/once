@@ -7,6 +7,8 @@ import { t, tg } from '../i18n'
 import type { WatcherInfo } from '../stores/userStore'
 import { Chip, PinIcon, ClockIcon, BellOnIcon } from './Chip'
 import { tap } from '../lib/haptics'
+import { SINGLE } from '../fonts'
+import { TEXT, WHITE } from '../colors'
 
 // ── Format helpers ────────────────────────────────────────────────────────
 
@@ -234,7 +236,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   swipeRootCard: {
-    borderRadius: 16,
+    borderRadius: SINGLE,
   },
   swipeRootFlat: {
     borderRadius: 0,
@@ -252,16 +254,16 @@ const styles = StyleSheet.create({
   deleteBtn: {
     width: 38,
     height: 38,
-    borderRadius: 10,
-    backgroundColor: 'rgba(17,24,39,0.06)',
+    borderRadius: SINGLE,
+    backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteBtnPressed: {
-    backgroundColor: 'rgba(17,24,39,0.12)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
   deleteX: {
-    color: '#374151',
+    color: 'rgba(0,0,0,0.6)',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -270,11 +272,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     padding: 12,
-    borderTopEndRadius: 16,
-    borderBottomEndRadius: 16,
+    borderTopEndRadius: SINGLE,
+    borderBottomEndRadius: SINGLE,
     borderTopStartRadius: 0,
     borderBottomStartRadius: 0,
-    backgroundColor: '#fff',
+    backgroundColor: WHITE,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
   },
@@ -286,7 +288,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 66,
     height: 88,
-    borderRadius: 10,
+    borderRadius: SINGLE,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
   },
@@ -303,7 +305,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111',
+    color: TEXT,
     writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
   },
   chipRow: {

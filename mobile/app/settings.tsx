@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  View, Pressable, StyleSheet, ScrollView,
+  View, Pressable, StyleSheet, ScrollView, Image,
   PanResponder, I18nManager,
-  Keyboard, Platform, Animated, Dimensions, BackHandler,
+  Keyboard, Platform, Animated, Dimensions,
 } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import Svg, { Path, Line, Polyline, Circle } from 'react-native-svg'
@@ -16,21 +16,39 @@ import { useUserStore } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { Button, PrimaryButton } from '../src/components/Button'
+import { Button } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
 import { PhotoEditor } from '../src/components/PhotoEditor'
 import type { MatchData } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
+import { SINGLE, DOUBLE, BUTTON } from '../src/fonts'
+import { TEXT, WHITE, BLACK, PURPLE } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 const THUMB = 22
+const TAP_SLOP = 10
+
+// Returns responder props that fire `onPress` only on clean taps (movement < TAP_SLOP).
+function useTapResponder(onPress: () => void) {
+  const start = useRef({ x: 0, y: 0 })
+  return {
+    onStartShouldSetResponder: () => true,
+    onResponderGrant: (e: any) => { start.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY } },
+    onResponderRelease: (e: any) => {
+      const dx = Math.abs(e.nativeEvent.pageX - start.current.x)
+      const dy = Math.abs(e.nativeEvent.pageY - start.current.y)
+      if (dx < TAP_SLOP && dy < TAP_SLOP) { tap(); onPress() }
+    },
+  }
+}
 
 // ── Back Icon ──────────────────────────────────────────────────────────────
 
 function BackIcon() {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={DOUBLE} height={DOUBLE} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
     </Svg>
   )
@@ -42,7 +60,7 @@ function BackIcon() {
 
 function ForwardChevronIcon() {
   return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
     </Svg>
   )
@@ -57,7 +75,7 @@ export type SelectFieldConfig = {
   title: string
   options: SelectOption[]
   value: string
-  onSelect: (value: string) => void
+  onSelect: (value: string) => void | Promise<void>
   description?: string
 }
 
@@ -87,7 +105,12 @@ export type AdminFieldConfig = {
   onReset: (state: 'VISIBLE' | 'HIDDEN') => Promise<void>
 }
 
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig
+export type PhotoFieldConfig = {
+  kind: 'photos'
+  title: string
+}
+
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Tappable settings row: label on the start side, current value + forward
@@ -100,12 +123,9 @@ function SelectFieldRow({
   displayValue: string
   onPress: () => void
 }) {
+  const tapProps = useTapResponder(onPress)
   return (
-    <View
-      style={styles.selectRow}
-      onStartShouldSetResponder={() => true}
-      onResponderRelease={() => { tap(); onPress() }}
-    >
+    <View style={styles.selectRow} {...tapProps}>
       <Text style={styles.selectRowValue}>{displayValue}</Text>
       <ForwardChevronIcon />
     </View>
@@ -194,10 +214,10 @@ const rs = StyleSheet.create({
   container: { height: THUMB + 8, justifyContent: 'center', marginVertical: 4, paddingHorizontal: THUMB / 2 },
   track: { flex: 1, height: THUMB, justifyContent: 'center' },
   trackBg: { position: 'absolute', start: 0, end: 0, height: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 2 },
-  trackFill: { position: 'absolute', height: 3, backgroundColor: '#111', borderRadius: 2 },
+  trackFill: { position: 'absolute', height: 3, backgroundColor: TEXT, borderRadius: 2 },
   thumb: {
-    position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: '#111',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
+    position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: TEXT,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
   },
 })
 
@@ -430,10 +450,10 @@ const vrs = StyleSheet.create({
   container: { width: VTHUMB + 16, flex: 1, alignItems: 'center', paddingVertical: VTHUMB / 2 },
   track: { width: VTHUMB, flex: 1, alignItems: 'center' },
   trackBg: { position: 'absolute', top: 0, bottom: 0, width: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 2 },
-  trackFill: { position: 'absolute', width: 3, backgroundColor: '#111', borderRadius: 2 },
+  trackFill: { position: 'absolute', width: 3, backgroundColor: TEXT, borderRadius: 2 },
   thumb: {
-    position: 'absolute', width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2, backgroundColor: '#111',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
+    position: 'absolute', width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2, backgroundColor: TEXT,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
   },
 })
 
@@ -508,9 +528,8 @@ function calcAge(birthDate: string): number {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
-type Tab = 'preferences' | 'profile' | 'account' | 'app'
-const TABS: Tab[] = ['preferences', 'profile', 'account', 'app']
-const TAB_BAR_PAD = 3  // inner padding of the tab bar — must match styles.tabBar.padding
+type Tab = 'preferences' | 'profile' | 'account' | 'app' | 'preview'
+const TABS: Tab[] = ['preferences', 'profile', 'account', 'app', 'preview']
 
 // Per-tab glyph. Drawn twice by TabIconStack (gray + white) so the active
 // state can cross-fade over the pill indicator on the native driver.
@@ -546,6 +565,15 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
       <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
         <Polyline points="9 12 11.5 14.5 15.5 10.5" />
+      </Svg>
+    )
+  }
+  if (tab === 'preview') {
+    // Eye
+    return (
+      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <Circle cx={12} cy={12} r={3} />
       </Svg>
     )
   }
@@ -588,6 +616,7 @@ function AnimatedToggleButton({
   // (backgroundColor interpolation can't). Active layer sits on top.
   const activeOpacity = useRef(new Animated.Value(active ? 1 : 0)).current
   const scale = useRef(new Animated.Value(1)).current
+  const startRef = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
     Animated.timing(activeOpacity, {
@@ -612,9 +641,14 @@ function AnimatedToggleButton({
     <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
       <View
         onStartShouldSetResponder={() => true}
-        onResponderRelease={handlePress}
+        onResponderGrant={e => { startRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY } }}
+        onResponderRelease={e => {
+          const dx = Math.abs(e.nativeEvent.pageX - startRef.current.x)
+          const dy = Math.abs(e.nativeEvent.pageY - startRef.current.y)
+          if (dx < TAP_SLOP && dy < TAP_SLOP) handlePress()
+        }}
       >
-        <View style={{ borderRadius: 14, overflow: 'hidden' }}>
+        <View style={{ borderRadius: SINGLE, overflow: 'hidden' }}>
           {/* Inactive layer — always rendered underneath */}
           <View style={{ backgroundColor: 'rgba(0,0,0,0.06)', paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ fontSize: 14, fontWeight: '600', color: 'rgba(0,0,0,0.5)' }}>{label}</Text>
@@ -624,11 +658,11 @@ function AnimatedToggleButton({
             pointerEvents="none"
             style={{
               position: 'absolute', top: 0, start: 0, end: 0, bottom: 0,
-              backgroundColor: '#111', alignItems: 'center', justifyContent: 'center',
+              backgroundColor: TEXT, alignItems: 'center', justifyContent: 'center',
               opacity: activeOpacity,
             }}
           >
-            <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>{label}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: WHITE }}>{label}</Text>
           </Animated.View>
         </View>
       </View>
@@ -733,9 +767,9 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
             title: t('settings.preferredGender'),
             options: genderOptions,
             value: genderPref,
-            onSelect: (v) => {
+            onSelect: async (v) => {
               update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-              queuePref({ preferred_gender: v })
+              await invoke('app/update', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B', preferred_gender: v })
             },
           })}
         />
@@ -745,24 +779,41 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
   )
 }
 
+// ── Photo Field Row ───────────────────────────────────────────────────────
+// Thumbnail strip inside a tappable field row — same height as SelectFieldRow.
+// Shows up to 6 small round thumbnails + a forward chevron.
+
+const PHOTO_THUMB = 36
+
+function PhotoFieldRow({ photos, userId, onPress }: { photos: string[]; userId: string; onPress: () => void }) {
+  const tapProps = useTapResponder(onPress)
+  return (
+    <View style={styles.selectRow} {...tapProps}>
+      <View style={styles.photoThumbStrip}>
+        {photos.map((f, i) => (
+          <Image
+            key={`${i}-${f}`}
+            source={{ uri: `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}` }}
+            style={styles.photoThumb}
+          />
+        ))}
+      </View>
+      <ForwardChevronIcon />
+    </View>
+  )
+}
+
 // ── Profile Tab ────────────────────────────────────────────────────────────
 
-function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onTogglePreview, onPreviewDataChange, onOpenSubPage }: { focused?: boolean; onEditModeChange?: (editing: boolean) => void; previewOpen?: boolean; onTogglePreview?: () => void; onPreviewDataChange?: (data: MatchData | null) => void; onOpenSubPage?: (config: SubPageConfig) => void }) {
+function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void }) {
   const { profile, update } = useUserStore()
   const { user } = useAuthStore()
-  const [dragging, setDragging] = useState(false)
-  const [editMode, setEditMode] = useState(false)
   // Bio is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
   const [localBio, setLocalBio] = useState(profile?.bio ?? '')
   const localBioRef = useRef(localBio)
   const savedBioRef = useRef(profile?.bio ?? '')
   const scrollRef = useRef<ScrollView>(null)
-  // Keyboard handling: when the bio field is focused we explicitly scroll
-  // the section into view. Padding the bottom by the keyboard height makes
-  // sure the scroll has somewhere to land even when content is short.
   const [keyboardHeight, setKeyboardHeight] = useState(0)
-  // y offset of the "About me" section from the top of the scroll content —
-  // set by the section's onLayout, used as the scroll target on focus.
   const messageSectionYRef = useRef(0)
 
   // Keep localBio in sync when profile loads or changes from elsewhere
@@ -775,9 +826,9 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
   useEffect(() => { localBioRef.current = localBio }, [localBio])
 
   const flushBio = () => {
-    const next = localBioRef.current
+    const next = localBioRef.current.replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
+    if (next !== localBioRef.current) { setLocalBio(next); localBioRef.current = next }
     if (next === savedBioRef.current) return
-    // Don't save a non-empty bio shorter than 20 chars
     if (next.length > 0 && next.length < 20) return
     savedBioRef.current = next
     update({ bio: next })
@@ -786,38 +837,10 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
     invoke('app/data', { data: { bio: next, images: p.images, units: p.units ?? null } }).catch(console.error)
   }
 
-  // Flush on unmount (e.g., user pressed back while input still focused)
   useEffect(() => {
     return () => { flushBio() }
   }, [])
 
-  // Leaving the Profile tab (swipe to another settings tab, swipe back to
-  // home, or tab tap) dismisses the photo jiggle state. All photo edits save
-  // as they happen, so there's nothing to flush here — just drop the UI flag.
-  useEffect(() => {
-    if (!focused && editMode) setEditMode(false)
-  }, [focused, editMode])
-
-  // Report edit-mode to ancestors so they can disable the tab pager and
-  // outer shell pan — otherwise horizontal drags on a photo cell get claimed
-  // by the outer gestures via activeOffsetX and the whole page slides
-  // instead of the photo being dragged.
-  useEffect(() => { onEditModeChange?.(editMode) }, [editMode, onEditModeChange])
-
-  // Android hardware back while editing exits edit mode instead of navigating
-  // away — matches the iOS home-screen jiggle behavior.
-  useEffect(() => {
-    if (!editMode) return
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setEditMode(false)
-      return true
-    })
-    return () => sub.remove()
-  }, [editMode])
-
-  // Subscribe to keyboard show/hide so we can expand the scroll region to
-  // leave room for the content above the keyboard, and track the height for
-  // any follow-up scroll math.
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
@@ -826,7 +849,6 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
     return () => { showSub.remove(); hideSub.remove() }
   }, [])
 
-  // bio is excluded — it has its own blur-based save path
   useAutoSave({ is_for_kids: profile?.is_for_kids ?? null }, !!profile)
   useDataSave(profile?.images, !!profile)
 
@@ -842,56 +864,18 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
   const kidsValue = isForKids === true ? 'yes' : isForKids === false ? 'no' : 'na'
   const kidsDisplayValue = kidsOptions.find(o => o.value === kidsValue)?.label ?? t('settings.kidsNa')
 
-  const previewData: MatchData | null = useMemo(() => {
-    if (!profile) return null
-    const imgs = profile.images?.normal ?? []
-    return {
-      user_id: profile.user_id,
-      image: imgs[0] ?? '',
-      images: imgs,
-      title: profile.name ?? '—',
-      message: localBio,
-      distance: 0,
-      located_at: new Date().toISOString(),
-      subscribed: false,
-      is_for_kids: profile.is_for_kids ?? null,
-      age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
-      is_male: profile.is_male,
-      units: profile.units,
-    }
-  }, [profile, localBio])
-
-  useEffect(() => { onPreviewDataChange?.(previewData) }, [previewData, onPreviewDataChange])
-
   return (
-    <>
     <ScrollView
       ref={scrollRef}
       style={styles.tabScroll}
-      // Pad the bottom by the live keyboard height so the scroll has somewhere
-      // to go: without it, on short-content tabs scrollTo would clamp before
-      // the section reaches the top of the visible area.
       contentContainerStyle={[styles.tabContent, { paddingBottom: 40 + keyboardHeight }]}
       showsVerticalScrollIndicator={false}
-      scrollEnabled={!dragging && !previewOpen}
-      nestedScrollEnabled
       keyboardShouldPersistTaps="handled"
       delaysContentTouches={false}
-      // Any scroll/swipe dismisses photo edit mode — replaces the explicit
-      // "Done" button so the user doesn't need to tap it.
-      onScrollBeginDrag={() => { if (editMode) setEditMode(false) }}
     >
 
-      <Button
-        variant="primary"
-        size="md"
-        tone="visible"
-        label={previewOpen ? t('settings.closePreview') : t('settings.previewProfile')}
-        onPress={() => { tap(); if (editMode) setEditMode(false); onTogglePreview?.() }}
-      />
-
       <View
-        style={[styles.section, { marginTop: 24 }]}
+        style={[styles.section, { marginTop: 0 }]}
         onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
       >
         <SectionLabel>{t('settings.aboutMe').toUpperCase()}</SectionLabel>
@@ -900,19 +884,10 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
             style={styles.textInput}
             value={localBio}
             onChangeText={(text) => {
-              // Enforce max 5 lines
-              const parts = text.split('\n')
-              if (parts.length > 5) text = parts.slice(0, 5).join('\n')
-              // Enforce 150-char hard cap (covers paste)
               if (text.length > 150) text = text.slice(0, 150)
               setLocalBio(text)
             }}
             onFocus={() => {
-              if (editMode) setEditMode(false)
-              // Wait for the keyboard to finish animating, then pull the
-              // "About me" section up to the top of the visible area. Since
-              // the ScrollView is padded by keyboardHeight, there's always
-              // room to scroll this far.
               setTimeout(() => {
                 scrollRef.current?.scrollTo({
                   y: Math.max(0, messageSectionYRef.current - 12),
@@ -922,26 +897,16 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
             }}
             onBlur={flushBio}
             multiline
+            scrollEnabled={false}
             maxLength={150}
             textAlign="center"
-            textAlignVertical="center"
+            textAlignVertical="top"
           />
           {localBio.length >= 20 && (
             <Text style={styles.charCount}>{150 - localBio.length}</Text>
           )}
         </View>
       </View>
-
-      {/* Dim overlay sits under the photo grid (higher zIndex) but above
-          every other section — tap anywhere outside the photos to drop out
-          of jiggle mode. Outsized vertically so it still catches taps when
-          the content is shorter than the viewport. */}
-      {editMode && (
-        <Pressable
-          style={styles.photoEditOverlay}
-          onPress={() => { tap(); setEditMode(false) }}
-        />
-      )}
 
       <View style={styles.section}>
         <SectionLabel>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</SectionLabel>
@@ -952,24 +917,25 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
             title: tg('settings.kidsLabel', profile.is_male),
             options: kidsOptions,
             value: kidsValue,
-            onSelect: (v) => { update({ is_for_kids: v === 'yes' ? true : v === 'no' ? false : null }) },
+            onSelect: async (v) => {
+              const val = v === 'yes' ? true : v === 'no' ? false : null
+              update({ is_for_kids: val })
+              await invoke('app/update', { is_for_kids: val })
+            },
           })}
         />
       </View>
 
-      <View style={[styles.section, styles.photoSection]} pointerEvents="box-none">
-        <View style={styles.photoSectionHeader} pointerEvents="box-none">
-          <Text style={styles.sectionLabel}>{t('settings.photo').toUpperCase()}</Text>
-        </View>
-        <PhotoEditor
-          editMode={editMode}
-          onEnterEditMode={() => setEditMode(true)}
-          onDragStateChange={setDragging}
+      <View style={styles.section}>
+        <SectionLabel>{t('settings.photo').toUpperCase()}</SectionLabel>
+        <PhotoFieldRow
+          photos={photos}
+          userId={user!.id}
+          onPress={() => onOpenSubPage?.({ kind: 'photos', title: t('settings.photo') })}
         />
       </View>
 
     </ScrollView>
-    </>
   )
 }
 
@@ -979,7 +945,7 @@ function ProfileTab({ focused = true, onEditModeChange, previewOpen = false, onT
 // module-load time.
 // ── Account Tab ────────────────────────────────────────────────────────────
 
-function SignOutIcon({ color = '#111' }: { color?: string }) {
+function SignOutIcon({ color = TEXT }: { color?: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -989,7 +955,7 @@ function SignOutIcon({ color = '#111' }: { color?: string }) {
   )
 }
 
-function TrashIcon({ color = '#111' }: { color?: string }) {
+function TrashIcon({ color = TEXT }: { color?: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="3 6 5 6 21 6" />
@@ -1066,10 +1032,10 @@ function AccountTab() {
   }
 
   const rows: Array<{ label: string; value: string }> = [
-    { label: t('settings.email'),     value: user.email ?? '—' },
     { label: t('settings.name'),      value: profile.name ?? '—' },
     { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
     { label: t('settings.gender'),    value: gender },
+    { label: t('settings.email'),     value: user.email ?? '—' },
   ]
 
   return (
@@ -1085,21 +1051,23 @@ function AccountTab() {
       ))}
 
       <View style={styles.section}>
-        <SectionLabel>{t('settings.accountActions').toUpperCase()}</SectionLabel>
-        <Button
-          variant="primary"
-          size="md"
-          tone="visible"
-          label={tg('settings.signOut', profile.is_male)}
-          onPress={confirmSignOut}
-        />
-        <View style={{ height: 10 }} />
-        <Pressable
-          style={({ pressed }) => [styles.actionBtn, styles.actionBtnDestructive, pressed && { opacity: 0.7 }]}
-          onPress={confirmDelete}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnTextDestructive]}>{t('settings.deleteAccount')}</Text>
-        </Pressable>
+        <View style={styles.accountActionsCard}>
+          <View
+            style={styles.accountActionRow}
+            {...useTapResponder(confirmSignOut)}
+          >
+            <SignOutIcon color="rgba(0,0,0,0.5)" />
+            <Text style={styles.accountActionText}>{tg('settings.signOut', profile.is_male)}</Text>
+          </View>
+          <View style={styles.accountActionDivider} />
+          <View
+            style={styles.accountActionRow}
+            {...useTapResponder(confirmDelete)}
+          >
+            <TrashIcon color="rgba(180,60,60,0.5)" />
+            <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.deleteAccount')}</Text>
+          </View>
+        </View>
       </View>
     </ScrollView>
     <ConfirmDialog
@@ -1108,6 +1076,7 @@ function AccountTab() {
       description={tg('settings.signOutConfirmDesc', profile.is_male)}
       cancelLabel={t('settings.signOutNo')}
       confirmLabel={tg('settings.signOutYes', profile.is_male)}
+      soft
       onCancel={() => setSignOutDialog(false)}
       onConfirm={onSignOutConfirmed}
     />
@@ -1176,7 +1145,11 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
             title: t('settings.unitsLabel'),
             options: unitsOptions,
             value: units,
-            onSelect: (v) => { update({ units: v }) },
+            onSelect: async (v) => {
+              update({ units: v })
+              const p = useUserStore.getState().profile
+              if (p) await invoke('app/data', { data: { bio: p.bio ?? null, images: p.images, units: v } })
+            },
           })}
         />
       </View>
@@ -1200,11 +1173,43 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onEditModeChange?: (editing: boolean) => void, previewOpen?: boolean, onTogglePreview?: () => void, onPreviewDataChange?: (data: MatchData | null) => void, onOpenSubPage?: (config: SubPageConfig) => void) {
+function PreviewTab() {
+  const { profile } = useUserStore()
+  const previewData: MatchData | null = useMemo(() => {
+    if (!profile) return null
+    const imgs = profile.images?.normal ?? []
+    return {
+      user_id: profile.user_id,
+      image: imgs[0] ?? '',
+      images: imgs,
+      title: profile.name ?? '—',
+      message: profile.bio ?? '',
+      distance: 0,
+      located_at: new Date().toISOString(),
+      subscribed: false,
+      is_for_kids: profile.is_for_kids ?? null,
+      age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
+      is_male: profile.is_male,
+      units: profile.units,
+    }
+  }, [profile])
+
+  if (!previewData) return <View style={styles.tabContent} />
+  return (
+    <View style={styles.previewTabWrap}>
+      <View style={styles.previewCard}>
+        <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+      </View>
+    </View>
+  )
+}
+
+function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onOpenSubPage?: (config: SubPageConfig) => void) {
   if (tab === 'preferences') return <PreferencesTab onOpenSubPage={onOpenSubPage} />
-  if (tab === 'profile')     return <ProfileTab focused={focused} onEditModeChange={onEditModeChange} previewOpen={previewOpen} onTogglePreview={onTogglePreview} onPreviewDataChange={onPreviewDataChange} onOpenSubPage={onOpenSubPage} />
+  if (tab === 'profile')     return <ProfileTab focused={focused} onOpenSubPage={onOpenSubPage} />
   if (tab === 'account')     return <AccountTab />
   if (tab === 'app')         return <AppTab onBack={onBack} onOpenSubPage={onOpenSubPage} />
+  if (tab === 'preview')     return <PreviewTab />
   return <View style={styles.tabContent} />
 }
 
@@ -1219,16 +1224,21 @@ function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean,
 // Full-screen pane used as pane 3 in the home shell pager. Mirrors the
 // visual style of the settings screen (same background, header, card).
 
+function OptionRow({ onPress, children }: { onPress: () => void; children: React.ReactNode }) {
+  const tapProps = useTapResponder(onPress)
+  return <View style={styles.subPageOptionRow} {...tapProps}>{children}</View>
+}
+
 export function SelectFieldPage({
   config,
   onBack,
 }: {
   config: SelectFieldConfig
-  onBack: () => void
+  onBack: (afterSlide?: () => Promise<void> | void) => void
 }) {
   const handleSelect = (value: string) => {
-    config.onSelect(value)
-    onBack()
+    const p = Promise.resolve(config.onSelect(value))
+    onBack(() => p)
   }
 
   return (
@@ -1249,16 +1259,12 @@ export function SelectFieldPage({
           {config.options.map((opt, i) => (
             <View key={opt.value}>
               {i > 0 && <View style={styles.optionDivider} />}
-              <View
-                style={styles.subPageOptionRow}
-                onStartShouldSetResponder={() => true}
-                onResponderRelease={() => { tap(); handleSelect(opt.value) }}
-              >
+              <OptionRow onPress={() => handleSelect(opt.value)}>
                 <Text style={styles.subPageOptionLabel}>{opt.label}</Text>
                 {opt.value === config.value && (
                   <Text style={styles.subPageCheckmark}>✓</Text>
                 )}
-              </View>
+              </OptionRow>
             </View>
           ))}
         </View>
@@ -1370,8 +1376,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
                 onPress={() => handleReset('VISIBLE')}
                 disabled={!!resetting}
                 silentDisabled={resetting !== 'VISIBLE'}
-                variant="primary"
-                tone="visible"
+                variant="secondary"
                 size="md"
               />
             </View>
@@ -1381,12 +1386,37 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
                 onPress={() => handleReset('HIDDEN')}
                 disabled={!!resetting}
                 silentDisabled={resetting !== 'HIDDEN'}
-                variant="primary"
+                variant="secondary"
                 size="md"
               />
             </View>
           </View>
         </View>
+      </ScrollView>
+    </SafeAreaView>
+  )
+}
+
+// ── Photo Field Page ──────────────────────────────────────────────────────
+// Full-screen photo editor opened from the profile photo field row.
+
+export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; onBack: () => void }) {
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: SINGLE, paddingTop: 12, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        delaysContentTouches={false}
+      >
+        <PhotoEditor />
       </ScrollView>
     </SafeAreaView>
   )
@@ -1402,7 +1432,7 @@ const spStyles = StyleSheet.create({
   displayValue: {
     fontSize: 40,
     fontWeight: '700',
-    color: '#111',
+    color: TEXT,
     letterSpacing: -0.5,
     marginBottom: 28,
   },
@@ -1418,7 +1448,7 @@ const spStyles = StyleSheet.create({
   },
 })
 
-type SettingsPageProps = { onBack?: () => void; focused?: boolean; onEditModeChange?: (editing: boolean) => void; onOpenSubPage?: (config: SubPageConfig) => void }
+type SettingsPageProps = { onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void }
 
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
@@ -1432,38 +1462,9 @@ function SectionLabel({ children }: { children: any }) {
   )
 }
 
-export default function SettingsPage({ onBack, focused = true, onEditModeChange, onOpenSubPage }: SettingsPageProps = {}) {
+export default function SettingsPage({ onBack, focused = true, onOpenSubPage }: SettingsPageProps = {}) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('preferences')
-  // Photo edit (jiggle) state bubbles up from ProfileTab so the tab pager
-  // and outer shell can surrender horizontal gestures to the photo-reorder
-  // PanResponder. Without this, dragging a photo cell is claimed by the
-  // outer GestureDetector's activeOffsetX and the whole page slides.
-  const [photoEditActive, setPhotoEditActive] = useState(false)
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewMounted, setPreviewMounted] = useState(false)
-  const [previewData, setPreviewData] = useState<MatchData | null>(null)
-  const [headerH, setHeaderH] = useState(0)
-  const insets = useSafeAreaInsets()
-  const previewSlide = useRef(new Animated.Value(Dimensions.get('window').height)).current
-  useEffect(() => { onEditModeChange?.(photoEditActive || previewOpen) }, [photoEditActive, previewOpen, onEditModeChange])
-  // Close preview when leaving the profile tab so it doesn't linger over other tabs.
-  useEffect(() => { if (activeTab !== 'profile' && previewOpen) setPreviewOpen(false) }, [activeTab, previewOpen])
-  // Slide-in / slide-out — keep mounted through the close animation so the
-  // exit motion is visible. Distance is windowHeight so the card fully clears
-  // the viewport regardless of where its top edge is positioned.
-  useEffect(() => {
-    if (previewOpen) {
-      setPreviewMounted(true)
-      Animated.timing(previewSlide, { toValue: 0, duration: 280, useNativeDriver: true }).start()
-    } else {
-      Animated.timing(previewSlide, {
-        toValue: Dimensions.get('window').height,
-        duration: 240,
-        useNativeDriver: true,
-      }).start(({ finished }) => { if (finished) setPreviewMounted(false) })
-    }
-  }, [previewOpen, previewSlide])
   // Disable the tab pan whenever a slider is mid-drag, so gesture-handler's
   // 10px activeOffsetX doesn't claim the gesture out from under the slider's
   // legacy PanResponder.
@@ -1500,7 +1501,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
     const w = widthRef.current
     const tbw = tabBarWidthRef.current
     if (!w || !tbw) return
-    const tabW = (tbw - TAB_BAR_PAD * 2) / TABS.length
+    const tabW = tbw / TABS.length
     const translateTarget = (isRTL ? 1 : -1) * index * w
     const indicatorTarget = (isRTL ? -1 : 1) * index * tabW
     // Content spring — initial velocity is the gesture velocity (LTR:
@@ -1528,7 +1529,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
   useEffect(() => {
     if (!width || !tabBarWidth) return
     const index = TABS.indexOf(activeTab)
-    const tabW = (tabBarWidth - TAB_BAR_PAD * 2) / TABS.length
+    const tabW = tabBarWidth / TABS.length
     translate.setValue((isRTL ? 1 : -1) * index * width)
     indicator.setValue((isRTL ? -1 : 1) * index * tabW)
     // activeTab intentionally NOT in deps — changes to activeTab go through
@@ -1564,7 +1565,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
     : [canGoFwd ? -10 : -99999, canGoBack ? 10 : 99999]
   const tabPan = useMemo(() =>
     Gesture.Pan()
-      .enabled(!photoEditActive && !sliding && !previewOpen)
+      .enabled(!sliding)
       .activeOffsetX(activeOffsetX)
       .failOffsetY([-20, 20])
       .onUpdate(e => {
@@ -1572,7 +1573,7 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
         const w = widthRef.current
         const tbw = tabBarWidthRef.current
         if (!w || !tbw) return
-        const tabW = (tbw - TAB_BAR_PAD * 2) / TABS.length
+        const tabW = tbw / TABS.length
         const index = TABS.indexOf(activeTabRef.current)
         const base = (isRTL ? 1 : -1) * index * w
         const edge = (isRTL ? 1 : -1) * (TABS.length - 1) * w
@@ -1601,13 +1602,14 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
         }
       })
       .runOnJS(true)
-  , [activeOffsetX[0], activeOffsetX[1], photoEditActive, sliding, previewOpen])
+  , [activeOffsetX[0], activeOffsetX[1], sliding])
 
   return (
+    <View style={styles.rootOuter}>
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
 
-      <View style={styles.header} onLayout={e => setHeaderH(e.nativeEvent.layout.height)}>
+      <View style={styles.header}>
         <IconPressable
           style={styles.backBtn}
           onPress={() => { tap(); onBack ? onBack() : router.back() }}
@@ -1625,18 +1627,18 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: TAB_BAR_PAD,
-              bottom: TAB_BAR_PAD,
-              start: TAB_BAR_PAD,
-              width: (tabBarWidth - TAB_BAR_PAD * 2) / TABS.length,
-              borderRadius: 10,
-              backgroundColor: '#111',
+              top: 0,
+              bottom: 0,
+              start: 0,
+              width: tabBarWidth / TABS.length,
+              borderRadius: SINGLE,
+              backgroundColor: 'rgba(0,0,0,0.5)',
               transform: [{ translateX: indicator }],
             }}
           />
         )}
         {TABS.map((tab, i) => {
-          const tabW = tabBarWidth > 0 ? (tabBarWidth - TAB_BAR_PAD * 2) / TABS.length : 0
+          const tabW = tabBarWidth > 0 ? tabBarWidth / TABS.length : 0
           const center = (isRTL ? -1 : 1) * i * tabW
           // White opacity peaks when the pill is centered on this tab and
           // falls to zero at the neighboring tabs — fades track pill motion.
@@ -1682,97 +1684,73 @@ export default function SettingsPage({ onBack, focused = true, onEditModeChange,
                 width,
               }}
             >
-              {renderTab(tab, onBack, focused && activeTab === tab, setPhotoEditActive, previewOpen, () => setPreviewOpen(o => !o), setPreviewData, onOpenSubPage)}
+              {renderTab(tab, onBack, focused && activeTab === tab, onOpenSubPage)}
             </View>
           ))}
         </Animated.View>
       </View>
       </GestureDetector>
 
-      {previewMounted && previewData && (
-        <Animated.View
-          style={[
-            styles.previewOverlay,
-            {
-              top: insets.top + headerH + 24 + 42 + 28,
-              bottom: Math.max(insets.bottom, 8) + 8,
-              transform: [{ translateY: previewSlide }],
-            },
-          ]}
-        >
-          <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
-        </Animated.View>
-      )}
-
     </SafeAreaView>
+    </View>
   )
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#eef0f3' },
+  rootOuter: { flex: 1, backgroundColor: '#eef0f3' },
+  root: { flex: 1 },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, height: 56,
+    paddingHorizontal: 0, height: 56,
   },
-  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { padding: BUTTON, alignItems: 'center', justifyContent: 'center' },
 
   tabBar: {
-    flex: 1, flexDirection: 'row', marginStart: 12,
-    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3,
+    flex: 1, flexDirection: 'row', marginHorizontal: SINGLE,
+    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: SINGLE, padding: 0,
   },
-  tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  tabItem: { flex: 1, paddingVertical: SINGLE, alignItems: 'center', borderRadius: SINGLE },
 
   tabScroll: { flex: 1 },
-  tabContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },
+  tabContent: { paddingHorizontal: SINGLE, paddingTop: 24, paddingBottom: 40 },
 
-  section: { marginBottom: 28 },
-  // Photo section sits above the jiggle-mode overlay — zIndex stacks it
-  // over the dim layer so thumbnails stay bright and interactive while the
-  // rest of the page dims behind them. elevation mirrors that on Android.
-  photoSection: { zIndex: 2, elevation: 2 },
-  photoEditOverlay: {
-    position: 'absolute',
-    start: -40, end: -40, top: -2000, bottom: -2000,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    zIndex: 1, elevation: 1,
-  },
+  section: { marginBottom: DOUBLE },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionLabelRow: { flexDirection: 'row', marginBottom: 8 },
-  sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.4)', letterSpacing: 1 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#111', marginBottom: 10 },
-  photoSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  editDoneBtn: { fontSize: 13, fontWeight: '600', color: '#111', letterSpacing: 0.3 },
-  sectionValue: { fontSize: 15, fontWeight: '700', color: '#111' },
+  sectionLabelRow: { flexDirection: 'row', marginBottom: 0 },
+  sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.5)', letterSpacing: 1 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: TEXT, marginBottom: 10 },
+  sectionValue: { fontSize: 15, fontWeight: '700', color: TEXT },
   divider: { height: 0 },
+
+  photoThumbStrip: { flexDirection: 'row', gap: SINGLE, flex: 1 },
+  photoThumb: { width: PHOTO_THUMB, height: PHOTO_THUMB, borderRadius: SINGLE },
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   slider: { width: '100%', height: 40 },
   sliderEndLabel: { fontSize: 12, color: 'rgba(0,0,0,0.35)', minWidth: 22, textAlign: 'center' },
 
-  genderRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  genderRow: { flexDirection: 'row', gap: 10, marginTop: SINGLE },
 
-  previewBtn: { backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  previewBtnText: { fontSize: 15, fontWeight: '600', color: '#111' },
-
-  previewOverlay: {
-    position: 'absolute',
-    start: 16,
-    end: 16,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    overflow: 'hidden',
+  previewTabWrap: {
+    flex: 1,
+    marginHorizontal: SINGLE, marginTop: SINGLE, marginBottom: 0,
+  },
+  previewCard: {
+    flex: 1, borderRadius: SINGLE, overflow: 'hidden',
+    backgroundColor: WHITE,
   },
 
-  textInputWrap: { marginTop: 12, borderRadius: 14, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 28, backgroundColor: 'rgba(0,0,0,0.05)', minHeight: 140 },
-  textInput: { fontSize: 16, color: '#111', padding: 0, minHeight: 96, textAlign: 'center' },
-  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.3)' },
+
+  textInputWrap: { marginTop: SINGLE, borderRadius: SINGLE, paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE, backgroundColor: 'rgba(0,0,0,0.06)' },
+  textInput: { fontSize: 16, color: TEXT, padding: 0, textAlign: 'center', minHeight: 56 },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.35)' },
 
   // Account tab
   infoCard: {
-    marginTop: 12, borderRadius: 14, overflow: 'hidden',
+    marginTop: SINGLE, borderRadius: SINGLE, overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   infoRow: {
@@ -1783,58 +1761,61 @@ const styles = StyleSheet.create({
   infoRowLast: { borderBottomWidth: 0 },
   infoLabel: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
   infoValue: {
-    fontSize: 15, fontWeight: '600', color: '#111',
+    fontSize: 15, fontWeight: '600', color: TEXT,
     flexShrink: 1, marginStart: 16,
   },
 
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)', borderRadius: 14,
-    paddingVertical: 14, marginTop: 10,
+  accountActionsCard: {
+    borderRadius: SINGLE, overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
-  actionBtnDestructive: { borderWidth: 0 },
-  actionBtnDestructiveSolid: { backgroundColor: '#374151', borderColor: '#374151' },
-  actionBtnDestructiveSolidPressed: { backgroundColor: '#1f2937', borderColor: '#1f2937' },
-  actionBtnText: { fontSize: 15, fontWeight: '500', color: '#111' },
-  actionBtnTextDestructive: { color: '#4b5563' },
-  actionBtnTextOnSolid: { color: '#fff' },
+  accountActionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  accountActionDivider: {
+    height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
+    marginStart: 16,
+  },
+  accountActionText: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
+  accountActionTextDestructive: { color: 'rgba(180,60,60,0.6)' },
 
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 14, marginTop: 14,
+    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: SINGLE,
+    paddingHorizontal: BUTTON, paddingVertical: BUTTON, marginTop: SINGLE,
   },
-  selectRowLabel: { fontSize: 15, color: '#111' },
+  selectRowLabel: { fontSize: 15, color: TEXT },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectRowValue: { fontSize: 15, color: 'rgba(0,0,0,0.45)' },
+  selectRowValue: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
 
   // Sub-page overlay panel
   subPageRoot: { backgroundColor: '#eef0f3' },
   subPageHeaderTitle: {
-    flex: 1, fontSize: 17, fontWeight: '600', color: '#111',
+    flex: 1, fontSize: 17, fontWeight: '600', color: TEXT,
     textAlign: 'center',
     // balance the back-button width so the title is visually centred
     marginEnd: 36,
   },
   subPageOptionsCard: {
-    marginHorizontal: 20, marginTop: 24,
-    borderRadius: 14, overflow: 'hidden',
+    marginHorizontal: SINGLE, marginTop: DOUBLE,
+    borderRadius: SINGLE, overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   subPageOptionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: BUTTON, paddingVertical: DOUBLE,
   },
-  subPageOptionLabel: { fontSize: 17, color: '#111' },
-  subPageCheckmark: { fontSize: 17, color: '#e2b84a', fontWeight: '600' },
+  subPageOptionLabel: { fontSize: 17, color: TEXT },
+  subPageCheckmark: { fontSize: 17, color: PURPLE, fontWeight: '600' },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
     marginStart: 16,
   },
   subPageDesc: {
-    marginHorizontal: 20, marginTop: 16,
-    fontSize: 13, color: 'rgba(0,0,0,0.45)',
+    marginHorizontal: SINGLE, marginTop: 16,
+    fontSize: 13, color: 'rgba(0,0,0,0.5)',
     textAlign: 'center', lineHeight: 19,
   },
 })

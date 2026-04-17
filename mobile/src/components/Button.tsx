@@ -1,7 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
-import { FONT_SCALE } from '../fonts'
+import { FONT_SCALE, SINGLE, BUTTON } from '../fonts'
+import { TEXT, WHITE, PURPLE, PURPLE_PRESS, RED, RED_PRESS, MUTED, MUTED_PRESS, MUTED_TEXT } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -18,12 +19,11 @@ import { FONT_SCALE } from '../fonts'
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'destructive'
+type Variant = 'primary' | 'secondary' | 'destructive' | 'soft'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
-// spec intact (shape, text color, pressed fade) and only swaps the fill —
-// so a positive CTA stays consistent with every other primary button.
-type Tone = 'neutral' | 'positive' | 'visible'
+// spec intact (shape, text color, pressed fade) and only swaps the fill.
+type Tone = 'neutral' | 'visible'
 
 export function Button({
   label,
@@ -151,44 +151,45 @@ const styles = StyleSheet.create({
 
 const SIZE: Record<Size, { btn: object; text: object }> = {
   lg: {
-    btn: { borderRadius: 16, paddingVertical: 20 },
+    btn: { borderRadius: SINGLE, paddingVertical: BUTTON },
     text: { fontSize: 16, fontWeight: '700' },
   },
   md: {
-    btn: { borderRadius: 14, paddingVertical: 16 },
+    btn: { borderRadius: SINGLE, paddingVertical: SINGLE },
     text: { fontSize: 15, fontWeight: '700' },
   },
 }
 
 const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> = {
-  positive: {
-    btn: { backgroundColor: '#d4a017' },
-    pressed: { backgroundColor: '#a87f10' },
-  },
   visible: {
-    btn: { backgroundColor: '#6d28d9' },
-    pressed: { backgroundColor: '#5b21b6' },
+    btn: { backgroundColor: PURPLE },
+    pressed: { backgroundColor: PURPLE_PRESS },
   },
 }
 
 const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
   primary: {
-    btn: { backgroundColor: '#111' },
+    btn: { backgroundColor: TEXT },
     pressed: { opacity: 0.85 },
-    text: { color: '#fff' },
+    text: { color: WHITE },
   },
   secondary: {
     btn: {
-      backgroundColor: '#fff',
+      backgroundColor: WHITE,
       borderWidth: 1,
       borderColor: 'rgba(0,0,0,0.12)',
     },
     pressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
-    text: { color: '#111', fontWeight: '600' },
+    text: { color: TEXT, fontWeight: '600' },
   },
   destructive: {
-    btn: { backgroundColor: '#e5e7eb' },
-    pressed: { backgroundColor: '#d1d5db' },
-    text: { color: '#374151' },
+    btn: { backgroundColor: RED },
+    pressed: { backgroundColor: RED_PRESS },
+    text: { color: WHITE },
+  },
+  soft: {
+    btn: { backgroundColor: MUTED },
+    pressed: { backgroundColor: MUTED_PRESS },
+    text: { color: MUTED_TEXT },
   },
 }

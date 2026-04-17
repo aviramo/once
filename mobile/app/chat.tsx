@@ -16,6 +16,7 @@ import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
+import { TEXT, WHITE, BLACK, RED } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
 
@@ -61,14 +62,14 @@ function BackIcon() {
   // Chat lives on the *opposite* side of settings, so the chevron mirrors
   // the settings back button — points toward home from the chat side.
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
     </Svg>
   )
 }
 function DotsIcon() {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="#111">
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill={TEXT}>
       <Circle cx={12} cy={5} r={1.6} />
       <Circle cx={12} cy={12} r={1.6} />
       <Circle cx={12} cy={19} r={1.6} />
@@ -77,7 +78,7 @@ function DotsIcon() {
 }
 function SendIcon() {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={isRTL ? 'M2 2L13 13M2 2L9 22l4-9 9-4L2 2z' : 'M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z'} />
     </Svg>
   )
@@ -516,7 +517,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
                 <View style={[styles.menuCheckbox, enterSends && styles.menuCheckboxOn]}>
                   {enterSends && (
                     <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                      <Polyline points="20 6 9 17 4 12" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                      <Polyline points="20 6 9 17 4 12" stroke={WHITE} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
                     </Svg>
                   )}
                 </View>
@@ -638,12 +639,12 @@ const styles = StyleSheet.create({
     height: 40,
     width: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   menuBtnPressed: {
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.08)',
   },
   backBtn: {
     height: 40,
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
   status: {
     fontSize: 17,
     fontWeight: '700',
-    color: 'rgba(0,0,0,0.55)',
+    color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
     // Android adds ~4px of invisible padding above text metrics that pushes
     // the visible glyphs below the geometric center of their bounding box.
@@ -689,7 +690,7 @@ const styles = StyleSheet.create({
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.12)' },
-  daySepLabel: { fontSize: 11, color: 'rgba(0,0,0,0.42)' },
+  daySepLabel: { fontSize: 11, color: 'rgba(0,0,0,0.5)' },
 
   bubble: {
     maxWidth: '72%',
@@ -697,20 +698,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 18,
   },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: '#111' },
+  bubbleMine: { alignSelf: 'flex-end', backgroundColor: TEXT },
   bubbleMineLast: { borderBottomEndRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: 'rgba(0,0,0,0.07)' },
+  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: 'rgba(0,0,0,0.06)' },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
-  bubbleTextMine: { color: '#fff' },
-  bubbleTextTheirs: { color: '#111' },
+  bubbleTextMine: { color: WHITE },
+  bubbleTextTheirs: { color: TEXT },
 
-  time: { fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4, letterSpacing: 0.5 },
+  time: { fontSize: 11, color: 'rgba(0,0,0,0.5)', marginTop: 4, letterSpacing: 0.5 },
   timeMine: { alignSelf: 'flex-end', paddingEnd: 6 },
   timeTheirs: { alignSelf: 'flex-start', paddingStart: 6 },
 
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 13, paddingHorizontal: 16 },
-  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.45)' },
+  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.5)' },
 
   // Outer wrapper: holds the single-row input + send button plus the
   // dynamic bottom spacer that clears the nav bar / keyboard.
@@ -738,17 +739,17 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.12)',
-    backgroundColor: '#fff',
+    backgroundColor: WHITE,
     fontSize: 15,
     lineHeight: 22,
-    color: '#111',
+    color: TEXT,
     textAlign: isRTL ? 'right' : 'left',
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
   sendBtn: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#111',
+    backgroundColor: TEXT,
     alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.3 },
@@ -765,14 +766,14 @@ const styles = StyleSheet.create({
     maxWidth: '92%',
   },
   menuDropdown: {
-    backgroundColor: '#fff',
+    backgroundColor: WHITE,
     borderRadius: 16,
     paddingTop: 4,
     paddingBottom: 10,
     paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
+    shadowColor: BLACK,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
@@ -795,7 +796,7 @@ const styles = StyleSheet.create({
   menuItemText: {
     flex: 1,
     fontSize: 15,
-    color: '#111',
+    color: TEXT,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -804,14 +805,14 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.25)',
+    borderColor: 'rgba(0,0,0,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: WHITE,
   },
   menuCheckboxOn: {
-    backgroundColor: '#111',
-    borderColor: '#111',
+    backgroundColor: TEXT,
+    borderColor: TEXT,
   },
   menuDivider: {
     height: StyleSheet.hairlineWidth,
@@ -821,11 +822,11 @@ const styles = StyleSheet.create({
   },
   menuEndBtnWrap: { marginTop: 10, paddingHorizontal: 2 },
   menuEndBtn: {
-    backgroundColor: '#e53e3e',
+    backgroundColor: RED,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuEndBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  menuEndBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
 })
