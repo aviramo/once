@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
     case "invite":
       if (user.state == State.WATCHING && other) {
         if (await other.update(logger, State.REPLYING, user, true)) {
+          EdgeRuntime.waitUntil(user.chat(logger, event, true));
           other.missWatchers(logger, user);
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
         } else EdgeRuntime.waitUntil(user.update(logger, State.MISSED, other));
@@ -95,6 +96,7 @@ Deno.serve(async (req) => {
     case "approve":
       if (user.state == State.REPLYING) {
         EdgeRuntime.waitUntil(user.update(logger, State.CHAT, other));
+        EdgeRuntime.waitUntil(user.chat(logger, event, true));
         if (other) EdgeRuntime.waitUntil(other.update(logger, State.CHAT, user));
       }
       break;
@@ -165,6 +167,7 @@ async function search(logger: Logger, event: string, user: User, exclude?: User)
 
 async function no(logger: Logger, event: string, user: User, state: State, other?: User) {
   EdgeRuntime.waitUntil(user.action(logger, event));
+  EdgeRuntime.waitUntil(user.chat(logger, event, true));
   if (other) EdgeRuntime.waitUntil(other.update(logger, state, user, true));
   await search(logger, event, user, other);
 }

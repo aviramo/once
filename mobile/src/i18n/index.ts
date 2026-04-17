@@ -36,3 +36,11 @@ export function tg(key: keyof Translations, isMale: boolean | null | undefined):
   const suffix = isMale === false ? '_f' : '_m'
   return dict[key + suffix] ?? dict[key] ?? key
 }
+
+/** Double-gender lookup: key_mm, key_mf, key_fm, key_ff → falls back to tg → t. */
+export function tgg(key: keyof Translations, userMale: boolean | null | undefined, otherMale: boolean | null | undefined): string {
+  const dict = translations as Record<string, string>
+  const u = userMale === false ? 'f' : 'm'
+  const o = otherMale === false ? 'f' : 'm'
+  return dict[`${key}_${u}${o}`] ?? dict[`${key}_${u}`] ?? dict[key] ?? key
+}

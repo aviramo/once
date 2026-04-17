@@ -11,6 +11,12 @@ export const SINGLE_WEIGHT = false
 //            survives an accessibility bump.
 // - body:    paragraph copy, descriptions, settings rows — this is the text
 //            accessibility bumps are actually meant to help.
+// Base screen-edge padding used throughout the app.
+// Change this one value to adjust all margins/paddings from the screen edge.
+export const SINGLE = 10
+export const DOUBLE = SINGLE * 2
+export const BUTTON = 16            // padding around icon in a button
+
 export const FONT_SCALE = {
   ui: 1.0,
   heading: 1.15,

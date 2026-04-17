@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import Svg, { Defs, Path, Circle, Rect, Ellipse, G, Pattern } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
+import { hasSeen, markSeen } from '../src/lib/seen'
 import { tap } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
 import { t, tg, tgg } from '../src/i18n'
@@ -827,11 +828,25 @@ export default function HomePage() {
   // switching removes them all, which is destructive.
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
   const [revealConfirmOpen, setRevealConfirmOpen] = useState(false)
+  // Tracks whether the reveal dialog was opened from WATCHING state (skip toggle only shown then).
+  const [revealIsForWatching, setRevealIsForWatching] = useState(false)
+  const [skipRevealChecked, setSkipRevealChecked] = useState(false)
   const cardPullRef = useRef<(() => void) | null>(null)
   // Deferred resolve — keeps the card held at PULL_HOLD_Y until the
   // confirm dialog flow completes (confirm+server or cancel).
   const pullResolveRef = useRef<(() => void) | null>(null)
   const releasePull = () => { pullResolveRef.current?.(); pullResolveRef.current = null }
+
+  const openRevealConfirm = (forWatching: boolean, resolve: () => void) => {
+    pullResolveRef.current = resolve
+    setRevealIsForWatching(forWatching)
+    setSkipRevealChecked(false)
+    setRevealConfirmOpen(true)
+  }
+  const closeRevealConfirm = () => {
+    setRevealConfirmOpen(false)
+    setRevealIsForWatching(false)
+  }
 
   const onSwitchToHidden = (): Promise<void> => {
     tap()
@@ -1013,10 +1028,12 @@ export default function HomePage() {
   const cardOnPull = (() => {
     if (showWatchers) return onSwitchToHidden
     if (showHiddenPlaceholder) return () => new Promise<void>(resolve => {
-      pullResolveRef.current = resolve
-      setRevealConfirmOpen(true)
+      openRevealConfirm(false, resolve)
     })
-    if (state === 'WATCHING') return () => setVisibility('VISIBLE')
+    if (state === 'WATCHING') return async () => {
+      if (await hasSeen('reveal_confirm')) return setVisibility('VISIBLE')
+      return new Promise<void>(resolve => { openRevealConfirm(true, resolve) })
+    }
     return undefined
   })()
 
@@ -1178,9 +1195,17 @@ export default function HomePage() {
                 cancelLabel={t('home.revealConfirmCancel')}
                 confirmLabel={t('home.revealConfirmConfirm')}
                 tone="visible"
-                onCancel={() => { if (!busy) { setRevealConfirmOpen(false); releasePull() } }}
-                onConfirm={() => { setVisibility('VISIBLE').finally(() => { setRevealConfirmOpen(false); releasePull() }) }}
+                onCancel={() => { if (!busy) { closeRevealConfirm(); releasePull() } }}
+                onConfirm={() => {
+                  if (revealIsForWatching && skipRevealChecked) markSeen('reveal_confirm').catch(() => {})
+                  setVisibility('VISIBLE').finally(() => { closeRevealConfirm(); releasePull() })
+                }}
                 busy={busy}
+                skipToggle={revealIsForWatching ? {
+                  label: t('home.revealConfirmSkip'),
+                  checked: skipRevealChecked,
+                  onToggle: () => setSkipRevealChecked(v => !v),
+                } : undefined}
               />
 
               <ConfirmDialog

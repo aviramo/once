@@ -164,7 +164,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontError) console.warn('[fonts] load error:', fontError)
-    if (fontsLoaded) console.log('[fonts] loaded successfully, default family:', DEFAULT_FAMILY)
   }, [fontsLoaded, fontError])
 
   useEffect(() => {
@@ -178,7 +177,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#6d28d9' }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'none' }} />

@@ -6,7 +6,7 @@ export interface MatchData {
   images?: string | string[] | null
   user_id: string
   title: string
-  message: string
+  bio: string
   distance: number
   located_at?: string | null
   last_seen?: string | null
@@ -25,7 +25,7 @@ export interface WatcherInfo {
   distance?: number | null
   last_seen?: string | null
   is_male?: boolean | null
-  message?: string | null
+  bio?: string | null
   subscribed?: boolean | null
   is_for_kids?: boolean | null
 }

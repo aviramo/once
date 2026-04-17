@@ -57,8 +57,7 @@ export async function ensurePushToken(): Promise<string | null> {
   let token: string
   try {
     token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
-  } catch (e) {
-    console.warn('Failed to get push token (Firebase not configured?):', e)
+  } catch {
     return null
   }
 

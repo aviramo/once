@@ -306,7 +306,7 @@ interface VerticalRangeSliderProps {
 }
 
 function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }: VerticalRangeSliderProps) {
-  const s = useRef({ trackHeight: 0, min, max, valueMin, valueMax, startPosMin: 0, startPosMax: 0 })
+  const s = useRef({ trackHeight: 0, min, max, valueMin, valueMax, startPosMin: 0, startPosMax: 0, startedStackedMin: false, startedStackedMax: false })
   const cbs = useRef({ onChangeMin, onChangeMax })
 
   useEffect(() => { s.current.min = min }, [min])
@@ -334,11 +334,18 @@ function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChan
     onPanResponderGrant: () => {
       slidingActiveRef.current = true
       s.current.startPosMin = toPosY(s.current.valueMin)
+      s.current.startedStackedMin = s.current.valueMin === s.current.valueMax
     },
     onPanResponderMove: (_, { dy }) => {
       const v = toVal(s.current.startPosMin + dy)
-      if (v !== s.current.valueMin && v < s.current.valueMax)
-        cbs.current.onChangeMin(v)
+      if (s.current.startedStackedMin && dy < 0) {
+        // Started stacked and dragging up → move max instead
+        if (v !== s.current.valueMax && v >= s.current.valueMin)
+          cbs.current.onChangeMax(v)
+      } else {
+        if (v !== s.current.valueMin && v <= s.current.valueMax)
+          cbs.current.onChangeMin(v)
+      }
     },
     onPanResponderRelease: () => { slidingActiveRef.current = false },
     onPanResponderTerminate: () => { slidingActiveRef.current = false },
@@ -351,11 +358,18 @@ function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChan
     onPanResponderGrant: () => {
       slidingActiveRef.current = true
       s.current.startPosMax = toPosY(s.current.valueMax)
+      s.current.startedStackedMax = s.current.valueMin === s.current.valueMax
     },
     onPanResponderMove: (_, { dy }) => {
       const v = toVal(s.current.startPosMax + dy)
-      if (v !== s.current.valueMax && v > s.current.valueMin)
-        cbs.current.onChangeMax(v)
+      if (s.current.startedStackedMax && dy > 0) {
+        // Started stacked and dragging down → move min instead
+        if (v !== s.current.valueMin && v <= s.current.valueMax)
+          cbs.current.onChangeMin(v)
+      } else {
+        if (v !== s.current.valueMax && v >= s.current.valueMin)
+          cbs.current.onChangeMax(v)
+      }
     },
     onPanResponderRelease: () => { slidingActiveRef.current = false },
     onPanResponderTerminate: () => { slidingActiveRef.current = false },
@@ -469,7 +483,7 @@ function snapRadius(km: number): number {
 
 function formatRadius(km: number): string {
   if (km === 0) return t('settings.rangeHere')
-  if (km === Infinity) return '∞'
+  if (km === Infinity) return t('settings.rangeUnlimited')
   if (km < 1) return `${km * 1000} ${t('settings.meter')}`
   return `${km} ${t('settings.km')}`
 }

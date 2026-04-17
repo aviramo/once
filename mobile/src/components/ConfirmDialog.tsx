@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Modal, Pressable, StyleSheet, View } from 'react-native'
+import { Modal, Pressable, StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text } from './AppText'
 import { Button } from './Button'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated'
@@ -18,6 +18,7 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
   busy,
+  skipToggle,
 }: {
   visible: boolean
   title: string
@@ -30,6 +31,8 @@ export function ConfirmDialog({
   onCancel?: () => void
   onConfirm: () => void
   busy?: boolean
+  /** Optional "don't show again" toggle rendered below the description. */
+  skipToggle?: { label: string; checked: boolean; onToggle: () => void }
 }) {
   const translateY = useSharedValue(400)
   const [modalVisible, setModalVisible] = useState(false)
@@ -92,6 +95,20 @@ export function ConfirmDialog({
           <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           {description ? <Text style={styles.desc}>{description}</Text> : null}
+
+          {skipToggle && (
+            <TouchableOpacity
+              style={styles.skipRow}
+              onPress={skipToggle.onToggle}
+              activeOpacity={0.7}
+              disabled={busy}
+            >
+              <View style={[styles.checkbox, skipToggle.checked && styles.checkboxChecked]}>
+                {skipToggle.checked && <Text style={styles.checkboxTick}>✓</Text>}
+              </View>
+              <Text style={styles.skipLabel}>{skipToggle.label}</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.row}>
             {cancelLabel ? (
@@ -159,6 +176,37 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
+  },
+  skipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: DOUBLE,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: WHITE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#6d28d9',
+    borderColor: '#6d28d9',
+  },
+  checkboxTick: {
+    fontSize: 13,
+    lineHeight: 14,
+    color: WHITE,
+    fontWeight: '700',
+    includeFontPadding: false,
+  },
+  skipLabel: {
+    fontSize: 14,
+    color: 'rgba(0,0,0,0.55)',
   },
   row: {
     flexDirection: 'row',

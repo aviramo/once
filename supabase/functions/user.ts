@@ -154,7 +154,8 @@ export default class User {
   async others(logger: Logger, extend?: (query: any) => any, exclude?: User) {
     const sp = "others";
     const others: Other[] = [];
-    let query = Tools.supabase.rpc(sp, { me: this.db.new, location: this.location });
+    this.db.new.location = this.location;
+    let query = Tools.supabase.rpc(sp, { me: this.db.new});
     if (exclude) query = query.neq("user_id", exclude.user_id);
     if (extend) query = extend(query);
     const data = await Tools.invoke(logger, sp, query.select());
@@ -272,11 +273,10 @@ export default class User {
     this.other_id = null;
     this.match = null;
     this.watchers = {};
-    // await this.update(logger, state == State.VISIBLE ? State.HIDDEN : State.VISIBLE);
   }
 
-  async chat(logger: Logger, text: string) {
-    const data = await Tools.invoke(logger, 'chat', Tools.supabase.from("chat").insert({ user_id: this.user_id, other_id: this.other_id, text: text }));
+  async chat(logger: Logger, text: string, is_event: boolean = false) {
+    const data = await Tools.invoke(logger, 'chat', Tools.supabase.from("chat").insert({ user_id: this.user_id, other_id: this.other_id, text: text, is_event: is_event }));
     if (data) return data[0];
   }
 
