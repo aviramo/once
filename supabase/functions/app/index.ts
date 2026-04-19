@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       }
       break;
     case "profile":
-      await search(logger, event, user);
+      await user.search(logger, event);
       break;
     case "delete":
       await user.delete(logger);
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     case 'visibility': {
       if (body.state == State.HIDDEN) {
         user.removeRrlations(logger, State.HID, other);
-        await search(logger, event, user);
+        await user.search(logger, event);
       }
       if (body.state == State.VISIBLE) {
         if (other) {
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
         EdgeRuntime.waitUntil(user.action(logger, event));
         delete other?.watchers[user.user_id];
         if (other) EdgeRuntime.waitUntil(other.update(logger));
-        await search(logger, event, user, other);
+        await user.search(logger, event, other);
       } else user.update(logger, State.MISSED, other);
       break;
     case "invite":
@@ -99,11 +99,11 @@ Deno.serve(async (req) => {
       break;
     case "cancel":
       if (user.state == State.WAITING)
-        await no(logger, event, user, State.CANCELLED, other);
+        await user.removeOther(logger, event, State.CANCELLED, other);
       break;
     case "refuse":
       if (user.state == State.REPLYING)
-        await no(logger, event, user, State.REFUSED, other);
+        await user.removeOther(logger, event, State.REFUSED, other);
       break;
     case "approve":
       if (user.state == State.REPLYING) {
@@ -114,14 +114,14 @@ Deno.serve(async (req) => {
       break;
     case "leave":
       if (user.state == State.CHAT)
-        await no(logger, event, user, State.LEFT, other);
+        await user.removeOther(logger, event, State.LEFT, other);
       break;
     case "block":
       if (user.state == State.CHAT)
-        await no(logger, event, user, State.LEFT, other);
+        await user.removeOther(logger, event, State.LEFT, other);
       break;
     case 'ok':
-      await search(logger, event, user);
+      await user.search(logger, event);
       break;
     case "reset": {
       if (user.role == 'ADMIN') await user.reset(logger, body.state as State || State.VISIBLE);
@@ -157,29 +157,3 @@ Deno.serve(async (req) => {
   }
   return logger.response();
 });
-
-async function watch(logger: Logger, user: User, exclude?: User) {
-  const other = (await user.others(logger, query => query.eq('state', State.VISIBLE).gt("relevance", 0).order("relevance", { ascending: false }).limit(1), exclude))[0];
-  if (other) {
-    EdgeRuntime.waitUntil(user.update(logger, State.WATCHING, other));
-    other.setWatcher(user);
-    EdgeRuntime.waitUntil(other.update(logger));
-  }
-  else EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
-}
-
-async function search(logger: Logger, event: string, user: User, exclude?: User) {
-  if (exclude) {
-    const newUser = lodash.cloneDeep(user);
-    const newLogger = new Logger(event, {}, newUser, logger);
-    await watch(newLogger, newUser, exclude);
-    newLogger.response();
-  } else await watch(logger, user, exclude);
-}
-
-async function no(logger: Logger, event: string, user: User, state: State, other?: User) {
-  EdgeRuntime.waitUntil(user.action(logger, event));
-  EdgeRuntime.waitUntil(user.chat(logger, event, true));
-  if (other) EdgeRuntime.waitUntil(other.update(logger, state, user, true));
-  await search(logger, event, user, other);
-}

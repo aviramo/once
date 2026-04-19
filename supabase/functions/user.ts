@@ -97,13 +97,13 @@ export default class User {
     this.validate(other);
     const delta = this.delta();
     if (lodash.size(delta) > 0) {
-      lodash.merge(this.db.new, delta);
+      Object.assign(this.db.new, delta);
       let query = Tools.supabase.from("users").update(delta).eq("user_id", this.user_id);
       if (this.state == State.REPLYING) query = query.is("other_id", null);
       const data = await Tools.invoke(logger, 'update', query.select());
       if (data && data[0]) {
-        lodash.merge(this, data[0]);
-        lodash.merge(this.db.new, data[0]);
+        Object.assign(this, data[0]);
+        Object.assign(this.db.new, data[0]);
         if (notify) EdgeRuntime.waitUntil(this.notify(state));
         return true;
       } else lodash.merge(this.db.new, this.db.old);
@@ -167,6 +167,7 @@ export default class User {
       user_id: other.user_id,
       last_seen: other.last_seen,
       title: other.name + ', ' + other.age(),
+      name: other.name,
       is_male: other.is_male,
       subscribed: other.data?.subscription != null,
       images: (other.data?.images)?.normal,
@@ -283,6 +284,32 @@ export default class User {
   age() {
     if (this.birth_date) return Math.floor((Date.now() - new Date(this.birth_date).getTime()) / 31536000000);
     return 0;
+  }
+
+  async watch(logger: Logger, exclude?: User) {
+    const other = (await this.others(logger, query => query.eq('state', State.VISIBLE).gt("relevance", 0).order("relevance", { ascending: false }).limit(1), exclude))[0];
+    if (other) {
+      EdgeRuntime.waitUntil(this.update(logger, State.WATCHING, other));
+      other.setWatcher(this);
+      EdgeRuntime.waitUntil(other.update(logger));
+    }
+    else EdgeRuntime.waitUntil(this.update(logger, State.HIDDEN));
+  }
+
+  async search(logger: Logger, event: string, exclude?: User) {
+    if (exclude) {
+      const newUser = lodash.cloneDeep(this);
+      const newLogger = new Logger(event, {}, newUser, logger);
+      await this.watch(newLogger, exclude);
+      newLogger.response();
+    } else await this.watch(logger, exclude);
+  }
+
+  async removeOther(logger: Logger, event: string, state: State, other?: User) {
+    EdgeRuntime.waitUntil(this.action(logger, event));
+    EdgeRuntime.waitUntil(this.chat(logger, event, true));
+    if (other) EdgeRuntime.waitUntil(other.update(logger, state, this, true));
+    await this.search(logger, event, other);
   }
 
 }

@@ -82,6 +82,9 @@ GoogleSignin.configure({
 
 async function signInWithGoogle() {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
+  // Clear any cached Google session so the account picker always appears,
+  // even if the user previously signed in with a different account.
+  await GoogleSignin.signOut().catch(() => {})
   const userInfo = await GoogleSignin.signIn()
   const idToken = userInfo.data?.idToken
   if (!idToken) throw new Error('No ID token returned')

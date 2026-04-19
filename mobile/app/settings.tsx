@@ -9,7 +9,7 @@ import { Gesture, GestureDetector, TextInput as GHTextInput } from 'react-native
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
-import Svg, { Path, Line, Polyline, Circle } from 'react-native-svg'
+import Svg, { Path, Line, Polyline, Circle, Rect } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore } from '../src/stores/userStore'
@@ -110,7 +110,17 @@ export type PhotoFieldConfig = {
   title: string
 }
 
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig
+export type AccountFieldConfig = {
+  kind: 'account'
+  title: string
+}
+
+export type PreviewFieldConfig = {
+  kind: 'preview'
+  title: string
+}
+
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig | AccountFieldConfig | PreviewFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Tappable settings row: label on the start side, current value + forward
@@ -561,8 +571,8 @@ function calcAge(birthDate: string): number {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
-export type Tab = 'preferences' | 'profile' | 'account' | 'app' | 'preview'
-const TABS: Tab[] = ['preferences', 'profile', 'account', 'app', 'preview']
+export type Tab = 'preferences' | 'profile' | 'app'
+const TABS: Tab[] = ['preferences', 'profile', 'app']
 
 // Per-tab glyph. Drawn twice by TabIconStack (gray + white) so the active
 // state can cross-fade over the pill indicator on the native driver.
@@ -571,15 +581,11 @@ const TAB_ICON_SIZE = 20
 function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   const stroke = color
   if (tab === 'preferences') {
-    // Sliders — three horizontal tracks with a knob on each
+    // Magnifying glass
     return (
       <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-        <Line x1="4" y1="6" x2="20" y2="6" />
-        <Circle cx="15" cy="6" r="2.2" fill={stroke} stroke="none" />
-        <Line x1="4" y1="12" x2="20" y2="12" />
-        <Circle cx="9" cy="12" r="2.2" fill={stroke} stroke="none" />
-        <Line x1="4" y1="18" x2="20" y2="18" />
-        <Circle cx="16" cy="18" r="2.2" fill={stroke} stroke="none" />
+        <Circle cx="11" cy="11" r="7" />
+        <Line x1="16.5" y1="16.5" x2="21" y2="21" />
       </Svg>
     )
   }
@@ -592,29 +598,13 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
       </Svg>
     )
   }
-  if (tab === 'account') {
-    // Shield with check — account identity
-    return (
-      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
-        <Polyline points="9 12 11.5 14.5 15.5 10.5" />
-      </Svg>
-    )
-  }
-  if (tab === 'preview') {
-    // Eye
-    return (
-      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-        <Circle cx={12} cy={12} r={3} />
-      </Svg>
-    )
-  }
-  // app → gear
+  // app → 2×2 grid (app icon)
   return (
     <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-      <Circle cx={12} cy={12} r={3} />
+      <Rect x="3" y="3" width="8" height="8" rx="2" />
+      <Rect x="13" y="3" width="8" height="8" rx="2" />
+      <Rect x="3" y="13" width="8" height="8" rx="2" />
+      <Rect x="13" y="13" width="8" height="8" rx="2" />
     </Svg>
   )
 }
@@ -848,6 +838,8 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   const localBioRef = useRef(localBio)
   const savedBioRef = useRef(profile?.bio ?? '')
   const scrollRef = useRef<ScrollView>(null)
+  const bioInputRef = useRef<any>(null)
+  const [bioFocused, setBioFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const messageSectionYRef = useRef(0)
 
@@ -909,6 +901,30 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
       delaysContentTouches={false}
     >
 
+      <View
+        style={styles.accountLinkRow}
+        {...useTapResponder(() => onOpenSubPage?.({ kind: 'account', title: t('settings.account') }))}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
+          <Polyline points="9 12 11.5 14.5 15.5 10.5" />
+        </Svg>
+        <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.account')}</Text>
+        <ForwardChevronIcon />
+      </View>
+
+      <View
+        style={styles.accountLinkRow}
+        {...useTapResponder(() => onOpenSubPage?.({ kind: 'preview', title: t('settings.myProfile') }))}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <Circle cx={12} cy={12} r={3} />
+        </Svg>
+        <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.preview')}</Text>
+        <ForwardChevronIcon />
+      </View>
+
       <View style={[styles.section, { marginTop: 0 }]}>
         <SectionLabel>{t('settings.photo').toUpperCase()}</SectionLabel>
         <PhotoFieldRow
@@ -925,6 +941,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
         <SectionLabel>{t('settings.aboutMe').toUpperCase()}</SectionLabel>
         <View style={styles.textInputWrap}>
           <GHTextInput
+            ref={bioInputRef}
             style={[styles.textInput, { fontFamily: DEFAULT_FAMILY }]}
             value={localBio}
             onChangeText={(text) => {
@@ -932,6 +949,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
               setLocalBio(text)
             }}
             onFocus={() => {
+              setBioFocused(true)
               setTimeout(() => {
                 scrollRef.current?.scrollTo({
                   y: Math.max(0, messageSectionYRef.current - 12),
@@ -939,13 +957,19 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
                 })
               }, 300)
             }}
-            onBlur={flushBio}
+            onBlur={() => { setBioFocused(false); flushBio() }}
             multiline
             scrollEnabled={false}
             maxLength={150}
             textAlign="center"
             textAlignVertical="top"
           />
+          {!bioFocused && (
+            <View
+              style={StyleSheet.absoluteFill}
+              {...useTapResponder(() => bioInputRef.current?.focus())}
+            />
+          )}
           {localBio.length >= 20 && (
             <Text style={styles.charCount}>{150 - localBio.length}</Text>
           )}
@@ -1007,129 +1031,6 @@ function formatBirthDate(iso: string): string {
   const dd = String(d.getDate()).padStart(2, '0')
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   return `${dd}.${mm}.${d.getFullYear()}`
-}
-
-function AccountTab() {
-  const { profile } = useUserStore()
-  const { user, signOut } = useAuthStore()
-  const router = useRouter()
-  const [signOutDialog, setSignOutDialog] = useState(false)
-  const [deleteDialog, setDeleteDialog] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-
-  if (!profile || !user) return <View style={styles.tabContent} />
-
-  const age = profile.birth_date ? calcAge(profile.birth_date) : null
-  const gender =
-    profile.is_male === true  ? t('settings.male')
-    : profile.is_male === false ? t('settings.female')
-    : '—'
-
-  // After the server event completes (or fails — we don't want to strand the
-  // user on a dead session), clear the Supabase session and hard-navigate to
-  // the login screen. router.replace so the back stack can't return here.
-  const finishAndGoToLogin = async () => {
-    await signOut()
-    router.replace('/login')
-  }
-
-  const confirmSignOut = () => {
-    tap()
-    setSignOutDialog(true)
-  }
-
-  const confirmDelete = () => {
-    tapWarning()
-    setDeleteDialog(true)
-  }
-
-  const onSignOutConfirmed = async () => {
-    tap()
-    setSignOutDialog(false)
-    try { await invoke('app/logout') } catch (e) { console.error(e) }
-    await finishAndGoToLogin()
-  }
-
-  const onDeleteConfirmed = async () => {
-    if (deleting) return
-    tapWarning()
-    setDeleting(true)
-    try {
-      await invoke('app/delete')
-    } catch (e) {
-      console.error(e)
-      setDeleting(false)
-      return
-    }
-    setDeleteDialog(false)
-    setDeleting(false)
-    await finishAndGoToLogin()
-  }
-
-  const rows: Array<{ label: string; value: string }> = [
-    { label: t('settings.name'),      value: profile.name ?? '—' },
-    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
-    { label: t('settings.gender'),    value: gender },
-    { label: t('settings.email'),     value: user.email ?? '—' },
-  ]
-
-  return (
-    <>
-    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
-      {rows.map((r) => (
-        <View key={r.label} style={styles.section}>
-          <SectionLabel>{r.label.toUpperCase()}</SectionLabel>
-          <View style={styles.selectRow} pointerEvents="none">
-            <Text style={styles.selectRowLabel} numberOfLines={1}>{r.value}</Text>
-          </View>
-        </View>
-      ))}
-
-      <View style={styles.section}>
-        <View style={styles.accountActionsCard}>
-          <View
-            style={styles.accountActionRow}
-            {...useTapResponder(confirmSignOut)}
-          >
-            <SignOutIcon color="rgba(0,0,0,0.5)" />
-            <Text style={styles.accountActionText}>{tg('settings.signOut', profile.is_male)}</Text>
-          </View>
-          <View style={styles.accountActionDivider} />
-          <View
-            style={styles.accountActionRow}
-            {...useTapResponder(confirmDelete)}
-          >
-            <TrashIcon color="rgba(180,60,60,0.5)" />
-            <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.deleteAccount')}</Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
-    <ConfirmDialog
-      visible={signOutDialog}
-      title={t('settings.signOutConfirmTitle')}
-      description={tg('settings.signOutConfirmDesc', profile.is_male)}
-      cancelLabel={t('settings.signOutNo')}
-      confirmLabel={tg('settings.signOutYes', profile.is_male)}
-      confirmFlex={0.6}
-      soft
-      onCancel={() => setSignOutDialog(false)}
-      onConfirm={onSignOutConfirmed}
-    />
-    <ConfirmDialog
-      visible={deleteDialog}
-      title={t('settings.deleteConfirmTitle')}
-      description={tg('settings.deleteConfirmDesc', profile.is_male)}
-      cancelLabel={t('settings.deleteNo')}
-      confirmLabel={t('settings.deleteYes')}
-      confirmFlex={0.6}
-      destructive
-      busy={deleting}
-      onCancel={() => setDeleteDialog(false)}
-      onConfirm={onDeleteConfirmed}
-    />
-    </>
-  )
 }
 
 // ── App Tab ────────────────────────────────────────────────────────────────
@@ -1210,43 +1111,10 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function PreviewTab() {
-  const { profile } = useUserStore()
-  const previewData: MatchData | null = useMemo(() => {
-    if (!profile) return null
-    const imgs = profile.images?.normal ?? []
-    return {
-      user_id: profile.user_id,
-      image: imgs[0] ?? '',
-      images: imgs,
-      title: profile.name ?? '—',
-      bio: profile.bio ?? '',
-      distance: 0,
-      located_at: new Date().toISOString(),
-      subscribed: false,
-      is_for_kids: profile.is_for_kids ?? null,
-      age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
-      is_male: profile.is_male,
-      units: profile.units,
-    }
-  }, [profile])
-
-  if (!previewData) return <View style={styles.tabContent} />
-  return (
-    <View style={styles.previewTabWrap}>
-      <View style={styles.previewCard}>
-        <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
-      </View>
-    </View>
-  )
-}
-
 function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onOpenSubPage?: (config: SubPageConfig) => void) {
   if (tab === 'preferences') return <PreferencesTab onOpenSubPage={onOpenSubPage} />
   if (tab === 'profile')     return <ProfileTab focused={focused} onOpenSubPage={onOpenSubPage} />
-  if (tab === 'account')     return <AccountTab />
   if (tab === 'app')         return <AppTab onBack={onBack} onOpenSubPage={onOpenSubPage} />
-  if (tab === 'preview')     return <PreviewTab />
   return <View style={styles.tabContent} />
 }
 
@@ -1468,6 +1336,180 @@ export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; o
         <Text style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', textAlign: 'center', marginBottom: 4 }}>{t('settings.photoHint')}</Text>
         <PhotoEditor ref={photoRef} deferUpload />
       </ScrollView>
+    </View>
+  )
+}
+
+// ── Account Field Page ───────────────────────────────────────────────────
+// Full-screen pane with account info + sign-out / delete, opened from the
+// profile tab via the sub-page mechanism.
+
+export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfig; onBack: (afterSlide?: () => Promise<void> | void) => void }) {
+  const insets = useSafeAreaInsets()
+  const { profile } = useUserStore()
+  const { user, signOut } = useAuthStore()
+  const router = useRouter()
+  const [signOutDialog, setSignOutDialog] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  if (!profile || !user) return <View style={[styles.root, { paddingTop: insets.top }]} />
+
+  const age = profile.birth_date ? calcAge(profile.birth_date) : null
+  const gender =
+    profile.is_male === true  ? t('settings.male')
+    : profile.is_male === false ? t('settings.female')
+    : '—'
+
+  const finishAndGoToLogin = async () => {
+    await signOut()
+    router.replace('/login')
+  }
+
+  const confirmSignOut = () => { tap(); setSignOutDialog(true) }
+  const confirmDelete = () => { tapWarning(); setDeleteDialog(true) }
+
+  const onSignOutConfirmed = async () => {
+    tap()
+    setSignOutDialog(false)
+    try { await invoke('app/logout') } catch (e) { console.error(e) }
+    await finishAndGoToLogin()
+  }
+
+  const onDeleteConfirmed = async () => {
+    if (deleting) return
+    tapWarning()
+    setDeleting(true)
+    try { await invoke('app/delete') } catch (e) { console.error(e); setDeleting(false); return }
+    setDeleteDialog(false)
+    setDeleting(false)
+    await finishAndGoToLogin()
+  }
+
+  const rows: Array<{ label: string; value: string }> = [
+    { label: t('settings.name'),      value: profile.name ?? '—' },
+    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
+    { label: t('settings.gender'),    value: gender },
+    { label: t('settings.email'),     value: user.email ?? '—' },
+  ]
+
+  return (
+    <>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
+        {rows.map((r) => (
+          <View key={r.label} style={styles.section}>
+            <SectionLabel>{r.label.toUpperCase()}</SectionLabel>
+            <View style={styles.selectRow} pointerEvents="none">
+              <Text style={styles.selectRowLabel} numberOfLines={1}>{r.value}</Text>
+            </View>
+          </View>
+        ))}
+
+        <View style={styles.section}>
+          <View style={styles.accountActionsCard}>
+            <View
+              style={styles.accountActionRow}
+              {...useTapResponder(confirmSignOut)}
+            >
+              <SignOutIcon color="rgba(0,0,0,0.5)" />
+              <Text style={styles.accountActionText}>{tg('settings.signOut', profile.is_male)}</Text>
+            </View>
+            <View style={styles.accountActionDivider} />
+            <View
+              style={styles.accountActionRow}
+              {...useTapResponder(confirmDelete)}
+            >
+              <TrashIcon color="rgba(180,60,60,0.5)" />
+              <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.deleteAccount')}</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+    <ConfirmDialog
+      visible={signOutDialog}
+      title={t('settings.signOutConfirmTitle')}
+      description={tg('settings.signOutConfirmDesc', profile.is_male)}
+      cancelLabel={t('settings.signOutNo')}
+      confirmLabel={tg('settings.signOutYes', profile.is_male)}
+      confirmFlex={0.6}
+      soft
+      onCancel={() => setSignOutDialog(false)}
+      onConfirm={onSignOutConfirmed}
+    />
+    <ConfirmDialog
+      visible={deleteDialog}
+      title={t('settings.deleteConfirmTitle')}
+      description={tg('settings.deleteConfirmDesc', profile.is_male)}
+      cancelLabel={t('settings.deleteNo')}
+      confirmLabel={t('settings.deleteYes')}
+      confirmFlex={0.6}
+      destructive
+      busy={deleting}
+      onCancel={() => setDeleteDialog(false)}
+      onConfirm={onDeleteConfirmed}
+    />
+    </>
+  )
+}
+
+// ── Preview Field Page ───────────────────────────────────────────────────
+// Full-screen pane showing the user's profile card preview, opened from the
+// profile tab via the sub-page mechanism.
+
+export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
+  const { profile } = useUserStore()
+  const { user } = useAuthStore()
+  const previewData: MatchData | null = useMemo(() => {
+    if (!profile) return null
+    const userId = user?.id ?? profile.user_id
+    const filenames = profile.images?.normal ?? []
+    const imgs = filenames.map(f =>
+      localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}`
+    )
+    return {
+      user_id: profile.user_id,
+      image: imgs[0] ?? '',
+      images: imgs,
+      title: profile.name ?? '—',
+      bio: profile.bio ?? '',
+      distance: 0,
+      located_at: new Date().toISOString(),
+      subscribed: false,
+      is_for_kids: profile.is_for_kids ?? null,
+      age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
+      is_male: profile.is_male,
+      units: profile.units,
+    }
+  }, [profile, user?.id])
+
+  return (
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+      </View>
+      {previewData ? (
+        <View style={styles.previewTabWrap}>
+          <View style={styles.previewCard}>
+            <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+          </View>
+        </View>
+      ) : (
+        <View style={styles.tabContent} />
+      )}
     </View>
   )
 }
@@ -1793,7 +1835,7 @@ const styles = StyleSheet.create({
 
   previewTabWrap: {
     flex: 1,
-    marginHorizontal: SINGLE, marginTop: SINGLE, marginBottom: 0,
+    marginHorizontal: SINGLE, marginTop: SINGLE, marginBottom: DOUBLE,
   },
   previewCard: {
     flex: 1, borderRadius: SINGLE, overflow: 'hidden',
@@ -1822,6 +1864,12 @@ const styles = StyleSheet.create({
     flexShrink: 1, marginStart: 16,
   },
 
+  accountLinkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: SINGLE,
+    paddingHorizontal: 16, paddingVertical: 14,
+    marginBottom: DOUBLE,
+  },
   accountActionsCard: {
     borderRadius: SINGLE, overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.04)',

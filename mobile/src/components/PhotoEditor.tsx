@@ -111,10 +111,11 @@ function PhotoGrid({
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const hoverIdxRef = useRef<number | null>(null)
 
-  const photosLenRef = useRef(photos.length)
+  const totalDraggable = photos.length + (localPhotos?.length ?? 0)
+  const totalDraggableRef = useRef(totalDraggable)
   const onReorderRef = useRef(onReorder)
   const onDragStateChangeRef = useRef(onDragStateChange)
-  useEffect(() => { photosLenRef.current = photos.length }, [photos.length])
+  useEffect(() => { totalDraggableRef.current = totalDraggable; layouts.current.length = totalDraggable }, [totalDraggable])
   useEffect(() => { onReorderRef.current = onReorder }, [onReorder])
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange }, [onDragStateChange])
 
@@ -169,7 +170,7 @@ function PhotoGrid({
       .onEnd(() => {
         const idx = sourceIdxRef.current
         const target = hoverIdxRef.current
-        if (idx != null && target !== null && target >= 0 && target < photosLenRef.current && target !== idx) {
+        if (idx != null && target !== null && target >= 0 && target < totalDraggableRef.current && target !== idx) {
           tapSuccess()
           onReorderRef.current(idx, target)
         }
@@ -203,12 +204,15 @@ function PhotoGrid({
           />
         )
       })}
-      {(localPhotos ?? []).map(lp => (
+      {(localPhotos ?? []).map((lp, i) => (
         <PhotoCell
           key={lp.id}
           uri={lp.uri}
           onRemove={() => onRemoveLocal?.(lp.id)}
           canRemove={canRemove}
+          dragging={dragIdx === photos.length + i}
+          highlighted={hoverIdx === photos.length + i}
+          onLayout={(e) => { layouts.current[photos.length + i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
         />
       ))}
       {uploads.filter(u => !u.filename).map(u => (
@@ -530,12 +534,32 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const reorderPhotos = (from: number, to: number) => {
-    if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
-    const nextNormal = [...storeImages.normal]
-    const nextBlur = [...storeImages.blur]
-    ;[nextNormal[from], nextNormal[to]] = [nextNormal[to], nextNormal[from]]
-    ;[nextBlur[from], nextBlur[to]] = [nextBlur[to], nextBlur[from]]
-    update({ images: { normal: nextNormal, blur: nextBlur } })
+    const totalLen = photos.length + localPhotos.length
+    if (from === to || from < 0 || to < 0 || from >= totalLen || to >= totalLen) return
+
+    // Both in committed photos — swap in store
+    if (from < photos.length && to < photos.length) {
+      const nextNormal = [...storeImages.normal]
+      const nextBlur = [...storeImages.blur]
+      ;[nextNormal[from], nextNormal[to]] = [nextNormal[to], nextNormal[from]]
+      ;[nextBlur[from], nextBlur[to]] = [nextBlur[to], nextBlur[from]]
+      update({ images: { normal: nextNormal, blur: nextBlur } })
+      return
+    }
+
+    // Both in local photos — swap in local state
+    if (from >= photos.length && to >= photos.length) {
+      const li = from - photos.length
+      const lj = to - photos.length
+      setLocalPhotos(prev => {
+        const next = [...prev]
+        ;[next[li], next[lj]] = [next[lj], next[li]]
+        return next
+      })
+      return
+    }
+
+    // Cross-group reordering not supported (local photos still compressing)
   }
 
   const onPhotoLoaded = (filename: string) => {

@@ -1,6 +1,7 @@
 import * as Location from 'expo-location'
 import { Linking, Platform } from 'react-native'
 import * as IntentLauncher from 'expo-intent-launcher'
+import Constants from 'expo-constants'
 
 export type LocPermission = 'granted' | 'denied' | 'undetermined' | 'services-off'
 
@@ -49,6 +50,11 @@ export async function getLocation(): Promise<{ lat: number; lng: number } | null
   }
 }
 
+/** Show system dialog to enable location services. Resolves if enabled, rejects if dismissed. */
+export async function enableLocationServices(): Promise<void> {
+  return Location.enableNetworkProviderAsync()
+}
+
 /** Open the device-level location services settings (GPS toggle). */
 export function openLocationSettings() {
   if (Platform.OS === 'android') {
@@ -65,5 +71,19 @@ export function openLocationSettings() {
 
 /** Open the app-level permission settings (notification / location toggle). */
 export function openAppSettings() {
-  Linking.openSettings()
+  if (Platform.OS === 'android') {
+    const pkg = Constants.expoConfig?.android?.package ?? 'com.syncwish.app'
+    // Try to open the app's permissions page directly; fall back to app details → generic settings.
+    IntentLauncher.startActivityAsync(
+      'android.settings.MANAGE_APP_PERMISSIONS',
+      { extra: { 'android.intent.extra.PACKAGE_NAME': pkg } },
+    ).catch(() =>
+      IntentLauncher.startActivityAsync(
+        IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
+        { data: `package:${pkg}` },
+      ),
+    ).catch(() => Linking.openSettings())
+  } else {
+    Linking.openSettings()
+  }
 }

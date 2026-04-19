@@ -39,6 +39,7 @@ type BaseMatch = {
   user_id: string;
   last_seen?: Date;
   title: string;
+  name?: string;
   is_male?: boolean;
   subscribed?: boolean;
   bio?: string;

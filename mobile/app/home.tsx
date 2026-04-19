@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Dimensions, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
 import { Text } from '../src/components/AppText'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -12,7 +12,7 @@ import { tap } from '../src/lib/haptics'
 import { useUserStore, type WatcherInfo } from '../src/stores/userStore'
 import { t, tg, tgg } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, type NotifPermission } from '../src/lib/notifications'
-import { getLocPermission, requestLocPermission, getLocation, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
+import { getLocPermission, requestLocPermission, getLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button, PrimaryButton } from '../src/components/Button'
 import { TEXT, WHITE, BLACK, PURPLE, PURPLE_BG, RED } from '../src/colors'
 import { WatcherCard } from '../src/components/WatcherCard'
@@ -23,7 +23,7 @@ import { CountBadge } from '../src/components/CountBadge'
 import { HomeHeader } from '../src/components/HomeHeader'
 import { HomeCard, PullScrollView } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
-import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage, type Tab } from './settings'
+import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage, AccountFieldPage, PreviewFieldPage, type Tab } from './settings'
 import ChatPage from './chat'
 
 const isRTL = I18nManager.isRTL
@@ -142,11 +142,44 @@ const STAR_SCALE = 38 / 48
 const STAR_T1 = `translate(4, 4) scale(${STAR_SCALE})`
 const STAR_T2 = `translate(48, 48) scale(${STAR_SCALE})`
 
+const STAR_TILE = 88 // pattern repeat height
+
 function CardBack() {
+  // Stars drift downward — continuous frame-driven loop (no snap-back glitch).
+  const starsY = useSharedValue(0)
+  // Magnifying glass sways left ↔ right — near card edges.
+  const glassX = useSharedValue(0)
+
+  const FALL_SPEED = STAR_TILE / 2000 // px per ms — one tile every 2s
+  useFrameCallback((info) => {
+    'worklet'
+    if (info.timeSincePreviousFrame) {
+      starsY.value = (starsY.value + info.timeSincePreviousFrame * FALL_SPEED) % STAR_TILE
+    }
+  })
+
+  useEffect(() => {
+    glassX.value = -60
+    glassX.value = withRepeat(
+      withTiming(60, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
+      -1, // infinite
+      true, // reverse — ping-pong for seamless loop
+    )
+  }, [])
+
+  const starsStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: starsY.value }],
+  }))
+
+  const glassStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: glassX.value }],
+  }))
+
   return (
     <View style={cardBackStyles.wrap}>
-      <View style={StyleSheet.absoluteFill}>
-        <Svg width="100%" height="100%">
+      {/* Oversized star layer — one extra tile so the loop is seamless */}
+      <Animated.View style={[StyleSheet.absoluteFill, { top: -STAR_TILE }, starsStyle]}>
+        <Svg width="100%" height="200%">
           <Defs>
             <Pattern id="cbTex" width={88} height={88} patternUnits="userSpaceOnUse">
               <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
@@ -157,24 +190,26 @@ function CardBack() {
           </Defs>
           <Rect width="100%" height="100%" fill="url(#cbTex)" />
         </Svg>
-      </View>
-      <Svg width={180} height={240} viewBox="0 0 180 240" fill="none">
-        {/* Magnifying glass — circle lens + angled handle */}
-        <Circle
-          cx={82}
-          cy={90}
-          r={52}
-          stroke="#fff"
-          strokeWidth={28}
-        />
-        {/* Handle — along 45° radius from circle center */}
-        <Path
-          d="M 119 127 L 168 176"
-          stroke="#fff"
-          strokeWidth={28}
-          strokeLinecap="round"
-        />
-      </Svg>
+      </Animated.View>
+      <Animated.View style={glassStyle}>
+        <Svg width={180} height={240} viewBox="0 0 180 240" fill="none">
+          {/* Magnifying glass — circle lens + angled handle */}
+          <Circle
+            cx={82}
+            cy={90}
+            r={52}
+            stroke="#fff"
+            strokeWidth={28}
+          />
+          {/* Handle — along 45° radius from circle center */}
+          <Path
+            d="M 119 127 L 168 176"
+            stroke="#fff"
+            strokeWidth={28}
+            strokeLinecap="round"
+          />
+        </Svg>
+      </Animated.View>
       <View style={cardBackStyles.brandRow}>
         {BRAND_LETTERS.map((l, i) => (
           <Text
@@ -221,7 +256,7 @@ const cardBackStyles = StyleSheet.create({
 // Same purple card style as CardBack but with bell icons instead of "?".
 // Shown during the startup notification permission flow.
 
-function PermissionCardFace({ icon, denied }: { icon: 'bell' | 'location'; denied?: boolean }) {
+function PermissionCardFace({ icon }: { icon: 'bell' | 'location' }) {
   const PAT = 28
   return (
     <View style={permCardStyles.wrap}>
@@ -278,14 +313,6 @@ function PermissionCardFace({ icon, denied }: { icon: 'bell' | 'location'; denie
               strokeWidth={28}
             />
           </>
-        )}
-        {denied && (
-          <Path
-            d="M 20 20 L 160 220"
-            stroke="rgba(255,255,255,0.55)"
-            strokeWidth={24}
-            strokeLinecap="round"
-          />
         )}
       </Svg>
       <View style={permCardStyles.brandRow}>
@@ -584,7 +611,6 @@ export default function HomePage() {
   // Runs once on first mount after profile is ready. Shows a card-based
   // prompt (undetermined) or blocked message (denied) until granted.
   const [notifPerm, setNotifPerm] = useState<NotifPermission | null>(null)
-  const [notifBusy, setNotifBusy] = useState(false)
   const notifCheckedRef = useRef(false)
 
   useEffect(() => {
@@ -603,26 +629,40 @@ export default function HomePage() {
       .catch(() => {})
   }, [notifPerm])
 
-  const handleNotifRequest = async () => {
-    if (notifBusy) return
-    setNotifBusy(true)
+  // ── Permission request handler ──────────────────────────────────────────
+  const [locPerm, setLocPerm] = useState<LocPermission | null>(null)
+  const [permBusy, setPermBusy] = useState(false)
+
+  const handlePermissionRequest = async () => {
+    if (permBusy) return
+    setPermBusy(true)
     try {
-      const result = await requestNotifPermission()
-      setNotifPerm(result)
+      if (notifPerm !== 'granted') {
+        const result = await requestNotifPermission()
+        setNotifPerm(result)
+        if (result === 'denied') openAppSettings()
+        return
+      }
+      const result = await requestLocPermission()
+      setLocPerm(result)
+      if (result === 'denied') openAppSettings()
+      if (result === 'services-off') {
+        try {
+          await enableLocationServices()
+          const updated = await requestLocPermission()
+          setLocPerm(updated)
+        } catch {
+          openLocationSettings()
+        }
+      }
     } finally {
-      setNotifBusy(false)
+      setPermBusy(false)
     }
   }
 
   // While we're still checking or the user hasn't granted permission,
   // the notification card overlay takes over the home pane content.
-  const showNotifOverlay = notifPerm !== null && notifPerm !== 'granted'
-
-  // ── Location permission flow ───────────────────────────────────────────
-  // Runs after notifications are granted. Same pattern: card overlay until
-  // the user grants location access.
-  const [locPerm, setLocPerm] = useState<LocPermission | null>(null)
-  const [locBusy, setLocBusy] = useState(false)
+  const showNotifOverlay = notifPerm !== 'granted'
 
   useEffect(() => {
     if (notifPerm !== 'granted') return
@@ -643,8 +683,6 @@ export default function HomePage() {
           ? Promise.resolve(pushTokenRef.current)
           : ensurePushToken(),
       ])
-      // Location + subscription are applied before the switch statement,
-      // then 'start' runs a nearby search. Location must be { latitude, longitude }.
       const calls: Promise<unknown>[] = [
         invoke('app/start', {
           ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
@@ -655,18 +693,7 @@ export default function HomePage() {
     })()
   }, [notifPerm, locPerm])
 
-  const handleLocRequest = async () => {
-    if (locBusy) return
-    setLocBusy(true)
-    try {
-      const result = await requestLocPermission()
-      setLocPerm(result)
-    } finally {
-      setLocBusy(false)
-    }
-  }
-
-  const showLocOverlay = !showNotifOverlay && locPerm !== null && locPerm !== 'granted'
+  const showLocOverlay = locPerm !== 'granted'
 
   // Unified card mode — derived synchronously so the header title never
   // flashes a stale value between state changes and the next render.
@@ -1009,19 +1036,11 @@ export default function HomePage() {
     return null
   })()
 
-  const notifButtons = notifPerm === 'undetermined'
-    ? <PrimaryButton label={t('home.notifPromptButton')} onPress={handleNotifRequest} disabled={notifBusy} tone="visible" />
-    : notifPerm === 'denied'
-      ? <PrimaryButton label={t('home.openAppSettings')} onPress={openAppSettings} tone="visible" />
+  const permissionButton = showNotifOverlay
+    ? <PrimaryButton label={t('home.notifPromptButton')} onPress={handlePermissionRequest} disabled={permBusy || notifPerm === null} />
+    : showLocOverlay
+      ? <PrimaryButton label={t('home.locationPromptButton')} onPress={handlePermissionRequest} disabled={permBusy || locPerm === null} />
       : null
-
-  const locButtons = locPerm === 'undetermined'
-    ? <PrimaryButton label={t('home.locationPromptButton')} onPress={handleLocRequest} disabled={locBusy} tone="visible" />
-    : locPerm === 'services-off'
-      ? <PrimaryButton label={t('home.openLocationSettings')} onPress={openLocationSettings} tone="visible" />
-      : locPerm === 'denied'
-        ? <PrimaryButton label={t('home.openAppSettings')} onPress={openAppSettings} tone="visible" />
-        : null
 
   const goToPreferences = () => {
     settingsChangeTabRef.current?.('preferences')
@@ -1029,14 +1048,12 @@ export default function HomePage() {
   }
 
   const hiddenButtons = showHiddenPlaceholder
-    ? <Button variant="soft" label={t('home.changePreferences')} onPress={goToPreferences} />
+    ? <Button variant="secondary" label={t('home.changePreferences')} onPress={goToPreferences} />
     : null
 
-  const cardButtons = showNotifOverlay
-    ? notifButtons
-    : showLocOverlay
-      ? locButtons
-      : isMatchCardOpen ? matchButtons : hiddenButtons
+  const cardButtons = showNotifOverlay || showLocOverlay
+    ? permissionButton
+    : isMatchCardOpen ? matchButtons : hiddenButtons
 
   // ── Header props ──────────────────────────────────────────────────────
   const headerTitle =
@@ -1056,7 +1073,7 @@ export default function HomePage() {
     : state === 'HID' ? tg('push.HID' as any, matchIsMale)
     : state === 'DELETED' ? tg('push.DELETED' as any, matchIsMale)
     : isVisible ? t('home.watchersInnerTitle')
-    : 'SyncWish'
+    : t('home.scanningHeader')
 
   const headerArrow = (() => {
     if (state === 'CHAT') return { direction: 'side' as const, onPress: () => goToPane(CHAT_PANE) }
@@ -1173,7 +1190,24 @@ export default function HomePage() {
     return undefined
   })()
 
-  if (!ready) {
+  const booting = !ready || notifPerm === null || (notifPerm === 'granted' && locPerm === null)
+  const bootOpacity = useSharedValue(1)
+  const [bootVisible, setBootVisible] = useState(true)
+
+  useEffect(() => {
+    if (!booting && bootVisible) {
+      bootOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.quad) }, (finished) => {
+        'worklet'
+        if (finished) runOnJS(setBootVisible)(false)
+      })
+    }
+  }, [booting])
+
+  const bootOverlayStyle = useAnimatedStyle(() => ({
+    opacity: bootOpacity.value,
+  }))
+
+  if (booting) {
     return (
       <>
         <StatusBar style="dark" />
@@ -1256,7 +1290,13 @@ export default function HomePage() {
                     scrollEventThrottle={16}
                   >
                     <View style={styles.watchersDescRow}>
-                      <Text style={styles.watchersDescText}>{tg(watchers.length > 0 ? 'home.nowVisibleWithWatchersDesc' : 'home.nowVisibleDesc', isMale)}</Text>
+                      <Text style={styles.watchersDescText}>{
+                        watchers.length === 0
+                          ? tg('home.nowVisibleDesc', isMale)
+                          : watchers.length === 1
+                            ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
+                            : tg('home.nowVisibleWithWatchersDesc', isMale)
+                      }</Text>
                     </View>
                     {watchers.map((w, i) => (
                       <View key={w.user_id}>
@@ -1289,7 +1329,7 @@ export default function HomePage() {
                 )}
 
                 {displayedCardMode === 'notif' && (
-                  <PermissionCardFace icon="bell" denied={notifPerm === 'denied'} />
+                  <PermissionCardFace icon="bell" />
                 )}
 
                 {displayedCardMode === 'loc' && (
@@ -1304,7 +1344,6 @@ export default function HomePage() {
                 cancelLabel={t('home.revealConfirmCancel')}
                 confirmLabel={t('home.revealConfirmConfirm')}
                 cancelFlex={0.6}
-                tone="visible"
                 onCancel={() => { if (!busy) { closeRevealConfirm(); releasePull() } }}
                 onConfirm={() => {
                   setVisibility('VISIBLE').finally(() => { closeRevealConfirm(); releasePull() })
@@ -1372,7 +1411,7 @@ export default function HomePage() {
               <ConfirmDialog
                 visible={!!removeWatcherTarget}
                 title={t('home.removeWatcherTitle')}
-                description={t('home.removeWatcherDesc').replace('{name}', removeWatcherTarget?.title ?? '')}
+                description={tg('home.removeWatcherDesc' as any, removeWatcherTarget?.is_male ?? null).replace('{name}', removeWatcherTarget?.name ?? '')}
                 cancelLabel={t('home.removeWatcherCancel')}
                 cancelFlex={0.6}
                 confirmLabel={t('home.removeWatcherConfirm')}
@@ -1417,7 +1456,11 @@ export default function HomePage() {
                     ? <AdminFieldPage config={subPageConfig} onBack={closeShellSubPage} />
                     : subPageConfig.kind === 'photos'
                       ? <PhotoFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                      : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                      : subPageConfig.kind === 'account'
+                        ? <AccountFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                        : subPageConfig.kind === 'preview'
+                          ? <PreviewFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                          : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
             )}
           </View>
 
@@ -1442,6 +1485,11 @@ export default function HomePage() {
         </Animated.View>
       </Animated.View>
       </GestureDetector>
+      {bootVisible && (
+        <Animated.View style={[StyleSheet.absoluteFill, bootOverlayStyle]} pointerEvents="none">
+          <BootScreen />
+        </Animated.View>
+      )}
     </View>
   )
 }

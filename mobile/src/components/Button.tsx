@@ -23,7 +23,7 @@ type Variant = 'primary' | 'secondary' | 'destructive' | 'soft'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
-type Tone = 'neutral' | 'visible' | 'positive'
+type Tone = 'positive'
 
 export function Button({
   label,
@@ -31,7 +31,7 @@ export function Button({
   disabled,
   variant = 'primary',
   size = 'lg',
-  tone = 'neutral',
+  tone,
   silentDisabled,
   iconStart,
 }: {
@@ -77,7 +77,7 @@ export function Button({
   // Tone only overrides the fill/pressed fill of the primary variant. For
   // secondary/destructive the tone is ignored — they already carry their
   // own semantic color.
-  const toneSkin = variant === 'primary' && tone !== 'neutral' ? TONE[tone] : null
+  const toneSkin = variant === 'primary' && tone ? TONE[tone] : null
 
   return (
     <Animated.View collapsable={false} style={[styles.wrap, { transform: [{ scale }] }]}>
@@ -160,11 +160,7 @@ const SIZE: Record<Size, { btn: object; text: object }> = {
   },
 }
 
-const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> = {
-  visible: {
-    btn: { backgroundColor: PURPLE },
-    pressed: { backgroundColor: PURPLE_PRESS },
-  },
+const TONE: Record<Tone, { btn: object; pressed: object }> = {
   positive: {
     btn: { backgroundColor: GREEN },
     pressed: { backgroundColor: GREEN_PRESS },
@@ -173,8 +169,8 @@ const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> =
 
 const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
   primary: {
-    btn: { backgroundColor: TEXT },
-    pressed: { opacity: 0.85 },
+    btn: { backgroundColor: PURPLE },
+    pressed: { backgroundColor: PURPLE_PRESS },
     text: { color: WHITE },
   },
   secondary: {

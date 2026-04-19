@@ -29,7 +29,7 @@ export function ConfirmDialog({
   confirmLabel: string
   destructive?: boolean
   soft?: boolean
-  tone?: 'positive' | 'visible'
+  tone?: 'positive'
   onCancel?: () => void
   onConfirm: () => void
   busy?: boolean
@@ -134,7 +134,7 @@ export function ConfirmDialog({
                 label={confirmLabel}
                 onPress={() => { setPressed('confirm'); onConfirm() }}
                 variant={destructive ? 'destructive' : soft ? 'soft' : 'primary'}
-                tone={!destructive && !soft && tone ? tone : 'neutral'}
+                tone={!destructive && !soft ? tone : undefined}
                 size="lg"
                 disabled={busy}
                 silentDisabled={pressed !== 'confirm'}
@@ -178,6 +178,7 @@ const styles = StyleSheet.create({
   },
   desc: {
     marginTop: DOUBLE,
+    paddingHorizontal: SINGLE,
     fontSize: 15,
     lineHeight: 22,
     color: 'rgba(0,0,0,0.6)',

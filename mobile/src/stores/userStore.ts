@@ -21,6 +21,7 @@ export interface WatcherInfo {
   user_id: string
   image: string
   title: string
+  name: string
   created_at?: string | null
   distance?: number | null
   last_seen?: string | null

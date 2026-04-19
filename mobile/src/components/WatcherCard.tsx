@@ -107,7 +107,7 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
           ) : null}
         </View>
         <View style={styles.body}>
-          <Text style={styles.title} numberOfLines={1}>{watcher.title}</Text>
+          <Text style={styles.title} numberOfLines={1}>{watcher.name}</Text>
           <View style={styles.chipRow}>
             {distance ? (
               <Chip
