@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useRouter } from 'expo-router'
+import { useRouter, useRootNavigationState } from 'expo-router'
 import { useAuthStore } from '../src/stores/authStore'
 import { BootScreen } from '../src/components/BootScreen'
 
@@ -10,13 +10,25 @@ import { BootScreen } from '../src/components/BootScreen'
 export default function Index() {
   const { user, loading } = useAuthStore()
   const router = useRouter()
+  const rootState = useRootNavigationState()
+  const navigatorReady = !!rootState?.key
   const navigated = useRef(false)
 
   useEffect(() => {
-    if (loading || navigated.current) return
+    if (loading || !navigatorReady || navigated.current) return
     navigated.current = true
-    router.replace(user ? '/home' : '/login')
-  }, [user, loading])
+    // Defer by one frame so the Root Layout's navigator is fully committed
+    // before we navigate. Without this, rapid back-navigations to the index
+    // route cause "Attempted to navigate before mounting the Root Layout".
+    requestAnimationFrame(() => {
+      try {
+        router.replace(user ? '/home' : '/login')
+      } catch {
+        // Navigator not ready yet — reset flag so the next effect run retries.
+        navigated.current = false
+      }
+    })
+  }, [user, loading, navigatorReady])
 
   return <BootScreen />
 }

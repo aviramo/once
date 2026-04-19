@@ -5,7 +5,7 @@ import {
   Keyboard, Platform, Animated, Dimensions,
 } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
-import { Gesture, GestureDetector, TextInput as GHTextInput } from 'react-native-gesture-handler'
+import { Gesture, GestureDetector, TextInput as GHTextInput, ScrollView as GHScrollView } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
@@ -86,8 +86,8 @@ export type AgeRangeFieldConfig = {
   ageMax: number
   sliderMin: number
   sliderMax: number
-  onChangeMin: (v: number) => void
-  onChangeMax: (v: number) => void
+  onChangeLocal: (min: number, max: number) => void
+  onClose: (min: number, max: number) => void | Promise<void>
 }
 
 export type RadiusFieldConfig = {
@@ -95,7 +95,8 @@ export type RadiusFieldConfig = {
   title: string
   stepCount: number
   value: number
-  onChange: (v: number) => void
+  onChangeLocal: (v: number) => void
+  onClose: (v: number) => void | Promise<void>
   formatStep: (i: number) => string
 }
 
@@ -702,31 +703,6 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
   const ageSliderMin = Math.max(18, age - 20)
   const ageSliderMax = Math.min(80, age + 20)
 
-  // Handler-driven debounced save. The previous useAutoSave bundled all four
-  // preference fields and re-fired whenever any of them changed in profile —
-  // which included server-pushed values arriving via realtime, causing an
-  // echo back to the server with values it had just sent us. Driving the save
-  // from the actual control callbacks guarantees a request only goes out for
-  // genuine user input.
-  const dirtyRef = useRef<Record<string, unknown>>({})
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const flushPrefs = () => {
-    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-    const body = dirtyRef.current
-    if (Object.keys(body).length === 0) return
-    dirtyRef.current = {}
-    const field = Object.keys(body)[0]
-    invoke(`app/${field}`, body).catch(console.error)
-  }
-  const queuePref = (patch: Record<string, unknown>) => {
-    Object.assign(dirtyRef.current, patch)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(flushPrefs, 600)
-  }
-  // Flush any pending patch on unmount so a swipe away mid-debounce doesn't
-  // drop the user's most recent change.
-  useEffect(() => () => { flushPrefs() }, [])
-
   if (!profile) return <View style={styles.tabContent} />
 
   const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax - 1))
@@ -743,20 +719,20 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
   const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
 
   return (
-    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
+    <GHScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
 
       {/* Age Range */}
       <View style={styles.section}>
         <SectionLabel>{t('settings.ageRange').toUpperCase()}</SectionLabel>
         <SelectFieldRow
-          displayValue={`${ageMin} – ${ageMax}`}
+          displayValue={`\u2066${ageMin} – ${ageMax}\u2069`}
           onPress={() => onOpenSubPage?.({
             kind: 'ageRange',
             title: t('settings.ageRange'),
             ageMin, ageMax,
             sliderMin: ageSliderMin, sliderMax: ageSliderMax,
-            onChangeMin: v => { update({ age_from: v }); queuePref({ age_from: v }) },
-            onChangeMax: v => { update({ age_to: v }); queuePref({ age_to: v }) },
+            onChangeLocal: (min, max) => { update({ age_from: min, age_to: max }) },
+            onClose: (min, max) => { invoke('app/age', { age_from: min, age_to: max }).catch(console.error) },
           })}
         />
       </View>
@@ -771,11 +747,8 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
             title: t('settings.range'),
             stepCount: RADIUS_STEPS.length,
             value: Math.max(0, RADIUS_STEPS.indexOf(radius)),
-            onChange: i => {
-              const r = radiusToServer(RADIUS_STEPS[i])
-              update({ range: r })
-              queuePref({ range: r })
-            },
+            onChangeLocal: i => { update({ range: radiusToServer(RADIUS_STEPS[i]) }) },
+            onClose: i => { invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) }).catch(console.error) },
             formatStep: i => formatRadius(RADIUS_STEPS[i]),
           })}
         />
@@ -793,13 +766,13 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
             value: genderPref,
             onSelect: async (v) => {
               update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-              await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B', preferred_gender: v })
+              await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
             },
           })}
         />
       </View>
 
-    </ScrollView>
+    </GHScrollView>
   )
 }
 
@@ -837,7 +810,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   const [localBio, setLocalBio] = useState(profile?.bio ?? '')
   const localBioRef = useRef(localBio)
   const savedBioRef = useRef(profile?.bio ?? '')
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<any>(null)
   const bioInputRef = useRef<any>(null)
   const [bioFocused, setBioFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
@@ -879,6 +852,15 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   useAutoSave({ is_for_kids: profile?.is_for_kids ?? null }, !!profile)
   useDataSave({ images: profile?.images }, !!profile)
 
+  // Hook calls must be above the early return to keep count stable.
+  const accountTap = useTapResponder(() => onOpenSubPage?.({ kind: 'account', title: t('settings.account') }))
+  const previewTap = useTapResponder(() => onOpenSubPage?.({ kind: 'preview', title: t('settings.myProfile') }))
+  const bioTapGesture = useMemo(() =>
+    Gesture.Tap()
+      .onEnd(() => { tap(); bioInputRef.current?.focus() })
+      .runOnJS(true)
+  , [])
+
   if (!profile) return <View style={styles.tabContent} />
 
   const photos = profile.images?.normal ?? []
@@ -892,7 +874,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   const kidsDisplayValue = kidsOptions.find(o => o.value === kidsValue)?.label ?? t('settings.kidsNa')
 
   return (
-    <ScrollView
+    <GHScrollView
       ref={scrollRef}
       style={styles.tabScroll}
       contentContainerStyle={[styles.tabContent, { paddingBottom: 40 + keyboardHeight }]}
@@ -903,7 +885,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
 
       <View
         style={styles.accountLinkRow}
-        {...useTapResponder(() => onOpenSubPage?.({ kind: 'account', title: t('settings.account') }))}
+        {...accountTap}
       >
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
@@ -915,7 +897,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
 
       <View
         style={styles.accountLinkRow}
-        {...useTapResponder(() => onOpenSubPage?.({ kind: 'preview', title: t('settings.myProfile') }))}
+        {...previewTap}
       >
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -965,10 +947,9 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
             textAlignVertical="top"
           />
           {!bioFocused && (
-            <View
-              style={StyleSheet.absoluteFill}
-              {...useTapResponder(() => bioInputRef.current?.focus())}
-            />
+            <GestureDetector gesture={bioTapGesture}>
+              <View style={StyleSheet.absoluteFill} />
+            </GestureDetector>
           )}
           {localBio.length >= 20 && (
             <Text style={styles.charCount}>{150 - localBio.length}</Text>
@@ -994,7 +975,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
         />
       </View>
 
-    </ScrollView>
+    </GHScrollView>
   )
 }
 
@@ -1073,7 +1054,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
   }
 
   return (
-    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
+    <GHScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
         <SectionLabel>{t('settings.unitsLabel').toUpperCase()}</SectionLabel>
         <SelectFieldRow
@@ -1105,7 +1086,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
           />
         </View>
       )}
-    </ScrollView>
+    </GHScrollView>
   )
 }
 
@@ -1143,8 +1124,7 @@ export function SelectFieldPage({
 }) {
   const insets = useSafeAreaInsets()
   const handleSelect = (value: string) => {
-    const p = Promise.resolve(config.onSelect(value))
-    onBack(() => p)
+    onBack(() => config.onSelect(value))
   }
 
   return (
@@ -1189,9 +1169,15 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
   const insets = useSafeAreaInsets()
   const [ageMin, setAgeMin] = useState(config.ageMin)
   const [ageMax, setAgeMax] = useState(config.ageMax)
+  const ageMinRef = useRef(ageMin)
+  const ageMaxRef = useRef(ageMax)
 
-  const handleChangeMin = (v: number) => { setAgeMin(v); config.onChangeMin(v) }
-  const handleChangeMax = (v: number) => { setAgeMax(v); config.onChangeMax(v) }
+  const handleChangeMin = (v: number) => { setAgeMin(v); ageMinRef.current = v; config.onChangeLocal(v, ageMaxRef.current) }
+  const handleChangeMax = (v: number) => { setAgeMax(v); ageMaxRef.current = v; config.onChangeLocal(ageMinRef.current, v) }
+
+  // Fire server call when the page unmounts (back button or swipe).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => { config.onClose(ageMinRef.current, ageMaxRef.current) }, [])
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -1203,7 +1189,7 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
         <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       <View style={spStyles.content}>
-        <Text style={spStyles.displayValue}>{ageMin} – {ageMax}</Text>
+        <Text style={spStyles.displayValue}>{`\u2066${ageMin} – ${ageMax}\u2069`}</Text>
         <View style={spStyles.sliderArea}>
           <Text style={spStyles.endLabel}>{config.sliderMax}</Text>
           <VerticalRangeSlider
@@ -1224,8 +1210,13 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
 export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig; onBack: () => void }) {
   const insets = useSafeAreaInsets()
   const [value, setValue] = useState(config.value)
+  const valueRef = useRef(value)
 
-  const handleChange = (v: number) => { setValue(v); config.onChange(v) }
+  const handleChange = (v: number) => { setValue(v); valueRef.current = v; config.onChangeLocal(v) }
+
+  // Fire server call when the page unmounts (back button or swipe).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => { config.onClose(valueRef.current) }, [])
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -1353,6 +1344,10 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Hook calls must be above the early return to keep count stable.
+  const signOutTap = useTapResponder(() => { tap(); setSignOutDialog(true) })
+  const deleteTap = useTapResponder(() => { tapWarning(); setDeleteDialog(true) })
+
   if (!profile || !user) return <View style={[styles.root, { paddingTop: insets.top }]} />
 
   const age = profile.birth_date ? calcAge(profile.birth_date) : null
@@ -1365,9 +1360,6 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
     await signOut()
     router.replace('/login')
   }
-
-  const confirmSignOut = () => { tap(); setSignOutDialog(true) }
-  const confirmDelete = () => { tapWarning(); setDeleteDialog(true) }
 
   const onSignOutConfirmed = async () => {
     tap()
@@ -1417,7 +1409,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
           <View style={styles.accountActionsCard}>
             <View
               style={styles.accountActionRow}
-              {...useTapResponder(confirmSignOut)}
+              {...signOutTap}
             >
               <SignOutIcon color="rgba(0,0,0,0.5)" />
               <Text style={styles.accountActionText}>{tg('settings.signOut', profile.is_male)}</Text>
@@ -1425,7 +1417,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
             <View style={styles.accountActionDivider} />
             <View
               style={styles.accountActionRow}
-              {...useTapResponder(confirmDelete)}
+              {...deleteTap}
             >
               <TrashIcon color="rgba(180,60,60,0.5)" />
               <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.deleteAccount')}</Text>

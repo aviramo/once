@@ -18,10 +18,12 @@ import { ConfirmDialog } from './ConfirmDialog'
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
 function uuidv4(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
-  })
+  const bytes = new Uint8Array(16)
+  for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 // Module-level cache of local URIs for photos whose upload is still in
@@ -91,7 +93,6 @@ function PhotoCell({
 // Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
   photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads,
-  localPhotos, onRemoveLocal,
   additionalChildren, onDragStateChange,
 }: {
   photos: string[]
@@ -101,8 +102,6 @@ function PhotoGrid({
   onReorder: (from: number, to: number) => void
   canRemove: boolean
   uploads: { id: string; uri: string; filename?: string }[]
-  localPhotos?: { id: string; uri: string }[]
-  onRemoveLocal?: (id: string) => void
   additionalChildren?: React.ReactNode
   onDragStateChange?: (dragging: boolean) => void
 }) {
@@ -111,7 +110,7 @@ function PhotoGrid({
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const hoverIdxRef = useRef<number | null>(null)
 
-  const totalDraggable = photos.length + (localPhotos?.length ?? 0)
+  const totalDraggable = photos.length
   const totalDraggableRef = useRef(totalDraggable)
   const onReorderRef = useRef(onReorder)
   const onDragStateChangeRef = useRef(onDragStateChange)
@@ -204,17 +203,6 @@ function PhotoGrid({
           />
         )
       })}
-      {(localPhotos ?? []).map((lp, i) => (
-        <PhotoCell
-          key={lp.id}
-          uri={lp.uri}
-          onRemove={() => onRemoveLocal?.(lp.id)}
-          canRemove={canRemove}
-          dragging={dragIdx === photos.length + i}
-          highlighted={hoverIdx === photos.length + i}
-          onLayout={(e) => { layouts.current[photos.length + i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
-        />
-      ))}
       {uploads.filter(u => !u.filename).map(u => (
         <View key={u.id} style={photoStyles.cell}>
           {u.uri ? (
@@ -233,9 +221,8 @@ function PhotoGrid({
       {additionalChildren}
       {(() => {
         const pendingCount = uploads.filter(u => !u.filename).length
-        const localCount = localPhotos?.length ?? 0
         const addCount = additionalChildren ? 1 : 0
-        const total = photos.length + pendingCount + localCount + addCount
+        const total = photos.length + pendingCount + addCount
         const fillers = (3 - (total % 3)) % 3
         return Array.from({ length: fillers }).map((_, i) => (
           <View
@@ -279,18 +266,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   const { user } = useAuthStore()
   const { profile, update } = useUserStore()
   const [uploads, setUploads] = useState<{ id: string; uri: string; filename?: string; sig: string }[]>([])
-  const [localPhotos, setLocalPhotos] = useState<{
-    id: string
+  // Deferred uploads: photos already committed to the store but not yet
+  // uploaded to storage.  Keyed by normalFilename so we can clean up on
+  // remove and skip stale entries in flush().
+  const pendingUploads = useRef<Map<string, {
     normalFilename: string
     blurFilename: string
     normalUri: string
     blurUri: string
-    displayUri: string
-    sig: string
-  }[]>([])
-
-  const localPhotosRef = useRef(localPhotos)
-  useEffect(() => { localPhotosRef.current = localPhotos }, [localPhotos])
+  }>>(new Map())
 
   useEffect(() => {
     onUploadingChange?.(uploads.some(u => !u.filename))
@@ -303,43 +287,30 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   const storeImages = profile?.images ?? { normal: [], blur: [] }
   const photos = storeImages.normal
 
-  const totalCount = photos.length + localPhotos.length
-  useEffect(() => { onTotalCountChange?.(totalCount) }, [totalCount, onTotalCountChange])
+  useEffect(() => { onTotalCountChange?.(photos.length) }, [photos.length, onTotalCountChange])
 
-  // ── Flush: commit to store then upload in the background ────────────
-  // The synchronous part (store update + URI cache) runs before the first
-  // await, so the caller can navigate away immediately and sibling
-  // components will already see the new photos.
+  // ── Flush: upload pending deferred photos to storage ─────────────────
+  // Filenames are already in the store and local URIs are already cached,
+  // so callers can navigate away immediately.  flush() only handles the
+  // actual network upload.
   useImperativeHandle(ref, () => ({
     flush: async () => {
-      const toUpload = localPhotosRef.current
-      if (toUpload.length === 0) return
+      const entries = Array.from(pendingUploads.current.values())
+      if (entries.length === 0) return
 
       const userId = user?.id
       if (!userId) return
 
-      // ── synchronous: commit filenames to store ──────────────────
-      const currentImages = useUserStore.getState().profile?.images ?? { normal: [], blur: [] }
-      useUserStore.getState().update({
-        images: {
-          normal: [...currentImages.normal, ...toUpload.map(p => p.normalFilename)],
-          blur: [...currentImages.blur, ...toUpload.map(p => p.blurFilename)],
-        },
-      })
-
-      // ── synchronous: cache local URIs for thumbnails ────────────
-      for (const lp of toUpload) {
-        localPhotoUriCache.set(lp.normalFilename, lp.normalUri)
-      }
-
-      // ── synchronous: clear component state ──────────────────────
-      setLocalPhotos([])
-
-      // ── async: upload files to storage ──────────────────────────
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token ?? ''
 
-      for (const lp of toUpload) {
+      for (const lp of entries) {
+        // Photo may have been removed while awaiting — skip stale entries.
+        const currentNormal = useUserStore.getState().profile?.images?.normal ?? []
+        if (!currentNormal.includes(lp.normalFilename)) {
+          pendingUploads.current.delete(lp.normalFilename)
+          continue
+        }
         try {
           await Promise.all([
             uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId),
@@ -348,6 +319,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         } catch (e) {
           console.error('Deferred upload error:', e)
         }
+        pendingUploads.current.delete(lp.normalFilename)
         localPhotoUriCache.delete(lp.normalFilename)
       }
     },
@@ -405,9 +377,8 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const pickPhoto = async () => {
-    const localCount = localPhotosRef.current.length
-    if (!user || photos.length + localCount >= 6) return
-    const maxPick = 6 - photos.length - localCount
+    if (!user || photos.length >= 6) return
+    const maxPick = 6 - photos.length
     const result = await DocumentPicker.getDocumentAsync({
       type: 'image/*',
       copyToCacheDirectory: true,
@@ -426,7 +397,6 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     const existingSigs = new Set<string>([
       ...Array.from(sigByFilename.current.values()),
       ...uploads.map(u => u.sig),
-      ...localPhotosRef.current.map(lp => lp.sig),
     ])
 
     const seenThisBatch = new Set<string>()
@@ -447,36 +417,47 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     const assets = filtered.slice(0, maxPick)
 
     if (deferUpload) {
-      // Show the original (uncompressed) photos immediately, compress in background.
+      // Commit filenames to the store immediately so they participate in
+      // the single photos array (and thus reordering).  The original URI
+      // is cached so the image is visible instantly; compression and
+      // upload happen later.
       const entries = assets.map((a, i) => {
-        const id = `local_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`
         const normalFilename = `${uuidv4()}.webp`
         const blurFilename = `${uuidv4()}.webp`
         sigByFilename.current.set(normalFilename, filteredSigs[i])
-        return { id, normalFilename, blurFilename, originalUri: a.uri, sig: filteredSigs[i] }
+        return { normalFilename, blurFilename, originalUri: a.uri }
       })
 
-      // Add all entries immediately with the original URI so photos appear instantly.
-      setLocalPhotos(prev => [...prev, ...entries.map(e => ({
-        id: e.id,
-        normalFilename: e.normalFilename,
-        blurFilename: e.blurFilename,
-        normalUri: e.originalUri,
-        blurUri: e.originalUri,
-        displayUri: e.originalUri,
-        sig: e.sig,
-      }))])
+      // ── synchronous: add to store + cache local URIs ───────────
+      const currentImages = useUserStore.getState().profile?.images ?? { normal: [], blur: [] }
+      useUserStore.getState().update({
+        images: {
+          normal: [...currentImages.normal, ...entries.map(e => e.normalFilename)],
+          blur: [...currentImages.blur, ...entries.map(e => e.blurFilename)],
+        },
+      })
+      for (const e of entries) {
+        localPhotoUriCache.set(e.normalFilename, e.originalUri)
+        pendingUploads.current.set(e.normalFilename, {
+          normalFilename: e.normalFilename,
+          blurFilename: e.blurFilename,
+          normalUri: e.originalUri,
+          blurUri: e.originalUri,
+        })
+      }
 
-      // Compress in the background — only update upload URIs, not displayUri.
+      // Compress in the background — update the pending entry URIs.
       for (const e of entries) {
         try {
           const [normalUri, blurUri] = await Promise.all([
             compressUnder200K(e.originalUri),
             compressBlur(e.originalUri),
           ])
-          setLocalPhotos(prev => prev.map(lp =>
-            lp.id === e.id ? { ...lp, normalUri, blurUri } : lp
-          ))
+          const pending = pendingUploads.current.get(e.normalFilename)
+          if (pending) {
+            pending.normalUri = normalUri
+            pending.blurUri = blurUri
+          }
         } catch (err) {
           console.error('Photo compress error:', err)
         }
@@ -514,52 +495,25 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const removePhoto = (filename: string) => {
-    if (photos.length + localPhotos.length <= 1) return
+    if (photos.length <= 1) return
     const idx = storeImages.normal.indexOf(filename)
     if (idx < 0) return
     sigByFilename.current.delete(filename)
     localPhotoUriCache.delete(filename)
+    pendingUploads.current.delete(filename)
     update({ images: {
       normal: storeImages.normal.filter((_, i) => i !== idx),
       blur: storeImages.blur.filter((_, i) => i !== idx),
     } })
   }
 
-  const removeLocalPhoto = (id: string) => {
-    setLocalPhotos(prev => {
-      const removed = prev.find(lp => lp.id === id)
-      if (removed) sigByFilename.current.delete(removed.normalFilename)
-      return prev.filter(lp => lp.id !== id)
-    })
-  }
-
   const reorderPhotos = (from: number, to: number) => {
-    const totalLen = photos.length + localPhotos.length
-    if (from === to || from < 0 || to < 0 || from >= totalLen || to >= totalLen) return
-
-    // Both in committed photos — swap in store
-    if (from < photos.length && to < photos.length) {
-      const nextNormal = [...storeImages.normal]
-      const nextBlur = [...storeImages.blur]
-      ;[nextNormal[from], nextNormal[to]] = [nextNormal[to], nextNormal[from]]
-      ;[nextBlur[from], nextBlur[to]] = [nextBlur[to], nextBlur[from]]
-      update({ images: { normal: nextNormal, blur: nextBlur } })
-      return
-    }
-
-    // Both in local photos — swap in local state
-    if (from >= photos.length && to >= photos.length) {
-      const li = from - photos.length
-      const lj = to - photos.length
-      setLocalPhotos(prev => {
-        const next = [...prev]
-        ;[next[li], next[lj]] = [next[lj], next[li]]
-        return next
-      })
-      return
-    }
-
-    // Cross-group reordering not supported (local photos still compressing)
+    if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
+    const nextNormal = [...storeImages.normal]
+    const nextBlur = [...storeImages.blur]
+    ;[nextNormal[from], nextNormal[to]] = [nextNormal[to], nextNormal[from]]
+    ;[nextBlur[from], nextBlur[to]] = [nextBlur[to], nextBlur[from]]
+    update({ images: { normal: nextNormal, blur: nextBlur } })
   }
 
   const onPhotoLoaded = (filename: string) => {
@@ -574,13 +528,11 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         onRemove={removePhoto}
         onLoaded={onPhotoLoaded}
         onReorder={reorderPhotos}
-        canRemove={photos.length + localPhotos.length > 1}
+        canRemove={photos.length > 1}
         uploads={uploads}
-        localPhotos={localPhotos.map(lp => ({ id: lp.id, uri: lp.displayUri ?? lp.normalUri }))}
-        onRemoveLocal={removeLocalPhoto}
         onDragStateChange={onDragStateChange}
         additionalChildren={
-          photos.length + uploads.filter(u => !u.filename).length + localPhotos.length < 6 ? (
+          photos.length + uploads.filter(u => !u.filename).length < 6 ? (
             <Pressable
               style={photoStyles.add}
               onPress={() => { tap(); pickPhoto() }}

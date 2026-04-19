@@ -1,11 +1,10 @@
 import lodash from "lodash";
-import Tools, { Subscription } from "./tools.ts";
+import Tools from "./tools.ts";
 import Logger from "./logger.ts";
-import { State, Match, Watcher, UserData } from "./global.ts";
+import { State, Match, Watcher, UserData, PushToken } from "./global.ts";
 
 export default class User {
   user_id: string;
-  is_active: boolean = true;
   is_male?: boolean;
   last_seen: Date = new Date();
   name?: string;
@@ -124,18 +123,18 @@ export default class User {
       icon: matchImageUrl,
     };
     const log = logger.log("notify", payload);
-    if (!this.data?.subscription) return logger.error('notify', "no subscription", 400);
-    const subJson: Subscription | null =
-      typeof this.data.subscription === "string"
-        ? JSON.parse(this.data.subscription)
-        : this.data.subscription as unknown as Subscription | null;
+    if (!this.data?.push_token) return logger.error('notify', "no push token", 400);
+    const subJson: PushToken | null =
+      typeof this.data.push_token === "string"
+        ? JSON.parse(this.data.push_token)
+        : this.data.push_token as unknown as PushToken | null;
     if (subJson?.type !== "expo" || !subJson.token)
-      return logger.error('notify', "subscription missing token", 400);
+      return logger.error('notify', "push token missing token", 400);
     const result = await Tools.notify(log, subJson, payload);
     if (!result.ok) {
       const dead = result.error === "DeviceNotRegistered" || result.error === "InvalidCredentials";
       if (dead) {
-        this.data.subscription = null;
+        this.data.push_token = null;
         EdgeRuntime.waitUntil(this.update(logger));
       }
       return logger.error('notify', `failed to send notification: ${result.error ?? "unknown"}`, 500);
@@ -169,7 +168,7 @@ export default class User {
       title: other.name + ', ' + other.age(),
       name: other.name,
       is_male: other.is_male,
-      subscribed: other.data?.subscription != null,
+      push_enabled: other.data?.push_token != null,
       images: (other.data?.images)?.normal,
       bio: other.data?.bio,
       is_for_kids: other.is_for_kids,
@@ -186,7 +185,7 @@ export default class User {
         case State.CANCELLED:
           delete match.distance;
           delete match.last_seen;
-          delete match.subscribed;
+          delete match.push_enabled;
           break;
       }
     return match;

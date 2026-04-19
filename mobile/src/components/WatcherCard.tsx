@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, I18nManager, Animated, Easing } from 'react-native'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, type GestureResponderEvent } from 'react-native'
 import { Image } from 'expo-image'
 import { Text } from './AppText'
 import { publicImageUrl } from '../lib/api'
@@ -90,11 +90,35 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] })
   const scale      = anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] })
 
+  // Track finger movement to suppress onPress when the user swipes
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null)
+  const wasDragged = useRef(false)
+  const DRAG_THRESHOLD = 10
+
+  const handlePressIn = useCallback((e: GestureResponderEvent) => {
+    pressOrigin.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }
+    wasDragged.current = false
+  }, [])
+
+  const handlePressOut = useCallback((e: GestureResponderEvent) => {
+    if (pressOrigin.current) {
+      const dx = Math.abs(e.nativeEvent.pageX - pressOrigin.current.x)
+      const dy = Math.abs(e.nativeEvent.pageY - pressOrigin.current.y)
+      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) wasDragged.current = true
+    }
+  }, [])
+
+  const handlePress = useCallback(() => {
+    if (!wasDragged.current) onPress?.()
+  }, [onPress])
+
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
       <Pressable
         style={[styles.card, flat && styles.cardFlat]}
-        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={handlePress}
       >
         <View style={styles.avatar}>
           {watcher.image ? (

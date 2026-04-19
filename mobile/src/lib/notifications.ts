@@ -57,7 +57,8 @@ export async function ensurePushToken(): Promise<string | null> {
   let token: string
   try {
     token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
-  } catch {
+  } catch (e) {
+    console.log('[push] getExpoPushTokenAsync failed:', e)
     return null
   }
 

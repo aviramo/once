@@ -216,7 +216,7 @@ export function HomeHeader({
             <IconPressable
               style={[
                 styles.statusChip,
-                statusColor ? { backgroundColor: statusColor + '18', borderColor: statusColor + '40' } :
+                statusColor ? { backgroundColor: '#fff', borderColor: statusColor + '40', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3 } :
                 statusGreen ? [styles.statusChipGreen, styles.statusChipTappableGreen] :
                 styles.statusChipTappable,
               ]}
@@ -322,9 +322,20 @@ const styles = StyleSheet.create({
   },
   statusChipTappable: {
     borderColor: 'rgba(0,0,0,0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+    backgroundColor: '#fff',
   },
   statusChipTappableGreen: {
     borderColor: 'rgba(21,128,61,0.25)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
   },
   statusChipGreen: {
     backgroundColor: 'rgba(21,128,61,0.1)',

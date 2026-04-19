@@ -48,6 +48,7 @@ export interface UserProfile {
   units: string | null
   appearance: string | null
   role: string | null
+  data?: { push_token?: { type: string; token: string } | null; [key: string]: unknown } | null
   match?: MatchData | null
   watchers?: Record<string, WatcherInfo> | null
 }

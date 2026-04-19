@@ -1,4 +1,3 @@
-import lodash from "lodash";
 import Logger from "../logger.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
@@ -17,7 +16,7 @@ const updatable = [
   "units",
   "os",
   "lang",
-  "subscription",
+  "push_token",
 ];
 
 Deno.serve(async (req) => {
@@ -38,7 +37,14 @@ Deno.serve(async (req) => {
       (user.data as unknown as Record<string, unknown>)[key] = value;
   }
 
-  if ('location' in body && body.location) user.location = `SRID=4326;POINT(${body.location.longitude} ${body.location.latitude})`;
+  if ('location' in body && body.location) {
+    const lng = Number(body.location.longitude);
+    const lat = Number(body.location.latitude);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat))
+      return logger.error('location', 'invalid coordinates', 400);
+    user.location = `SRID=4326;POINT(${lng} ${lat})`;
+  }
+
   if ('preferred_gender' in body && body.preferred_gender) {
     user.is_for_male = ['B', 'M'].includes(body.preferred_gender as string);
     user.is_for_female = ['B', 'F'].includes(body.preferred_gender as string);
@@ -60,10 +66,6 @@ Deno.serve(async (req) => {
     case "delete":
       await user.delete(logger);
       user.removeRrlations(logger, State.DELETED, other);
-      break;
-    case "data":
-      lodash.merge(user.data, body.data);
-      await user.update(logger);
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
@@ -137,13 +139,14 @@ Deno.serve(async (req) => {
       break;
     }
     case "remove": {
+      if (typeof body.user_id !== 'string' || !user.watchers[body.user_id]) break;
       EdgeRuntime.waitUntil(user.removeRelation(logger, State.REMOVED, body.user_id));
       EdgeRuntime.waitUntil(user.update(logger));
       break;
     }
     case "logout": {
       user.removeRrlations(logger, State.LOGGED_OUT, other);
-      if (user.data) user.data.subscription = null;
+      if (user.data) user.data.push_token = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
       break;

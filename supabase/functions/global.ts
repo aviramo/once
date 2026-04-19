@@ -29,7 +29,7 @@ export type UserData = {
   units?: string,
   os?: string,
   lang?: string,
-  subscription: JSON | null,
+  push_token: JSON | null,
   match: Match | null,
   wachers: Record<string, Watcher>;
 };
@@ -41,7 +41,7 @@ type BaseMatch = {
   title: string;
   name?: string;
   is_male?: boolean;
-  subscribed?: boolean;
+  push_enabled?: boolean;
   bio?: string;
   is_for_kids: boolean | null;
   distance?: number;
@@ -54,3 +54,5 @@ export type Match = BaseMatch & {
 export type Watcher = BaseMatch & {
   image?: string;
 };
+
+export type PushToken = { type: "expo"; token: string };

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Dimensions, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
+import PagerView from 'react-native-pager-view'
 import { Text } from '../src/components/AppText'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import Svg, { Defs, Path, Circle, Rect, Ellipse, G, Pattern } from 'react-native-svg'
@@ -26,15 +26,6 @@ import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage, AccountFieldPage, PreviewFieldPage, type Tab } from './settings'
 import ChatPage from './chat'
 
-const isRTL = I18nManager.isRTL
-// ── Pane seam ──────────────────────────────────────────────────────────────
-// Thin divider living in the gap between the home and settings panes. Lives
-// off-screen when either pane is at rest; only becomes visible during the
-// swipe transition as the strip slides by.
-
-const SEAM_WIDTH = 1
-const SEAM_GAP   = SEAM_WIDTH  // pane-to-pane spacer is just the seam itself
-const SEAM_COLOR = 'transparent'
 
 // ── State Icons ────────────────────────────────────────────────────────────
 // Large pictographic glyph that anchors the content area. A coherent
@@ -492,8 +483,8 @@ export default function HomePage() {
   // to the right; RTL mirrors. Chat is only reachable while state===CHAT —
   // the gesture to pane 0 refuses otherwise.
   type PaneIndex = 0 | 1 | 2 | 3
-  const HOME_PANE: PaneIndex = 1
   const CHAT_PANE: PaneIndex = 0
+  const HOME_PANE: PaneIndex = 1
   const SETTINGS_PANE: PaneIndex = 2
   const SUBPAGE_PANE: PaneIndex = 3
   const [paneIndex, setPaneIndex] = useState<PaneIndex>(HOME_PANE)
@@ -502,92 +493,102 @@ export default function HomePage() {
   // "Chat" title while we're on the home pane.
   const [chatUnread, setChatUnread] = useState(0)
   const settingsChangeTabRef = useRef<((tab: Tab) => void) | null>(null)
-  // Track which settings tab is active so the shell pager yields backward
-  // swipes to PagerView when the user is on a non-first settings tab.
+  // Track which settings tab is active so PagerView scrolling is disabled
+  // when the inner settings tab pager owns horizontal gestures (tab > 0).
   const [settingsTabIndex, setSettingsTabIndex] = useState(0)
-  const [shellW, setShellW] = useState(() => Dimensions.get('window').width)
-  const [shellH, setShellH] = useState(0)
   // SettingsPage reports when the user is editing photos (iOS-style jiggle).
-  // While that's active, the shell pan must not claim horizontal drags —
-  // otherwise dragging a photo to reorder it slides the whole pane instead.
+  // While that's active, PagerView scrolling is disabled so dragging a photo
+  // to reorder doesn't slide the whole pane.
   const sliding = useSlidingActive()
-  const slidingSV = useSharedValue(false)
-  const settingsTabIndexSV = useSharedValue(0)
-  const touchStartXSV = useSharedValue(0)
-  const touchStartYSV = useSharedValue(0)
-  const shellTranslate = useSharedValue(0)
-  // Card flip — animates the main card between VISIBLE/HIDDEN/WATCHING transitions.
-  // Value range: -1 = edge-on from back, 0 = face-on, 1 = edge-on from front.
-  // Runs on the UI thread via Reanimated so it stays smooth even under JS load.
+  const pagerRef = useRef<PagerView>(null)
   const paneIndexRef = useRef(paneIndex)
-  const paneIndexSV = useSharedValue(paneIndex)
-  const shellWRef = useRef(shellW)
-  const shellWSV = useSharedValue(shellW)
-  useEffect(() => { paneIndexRef.current = paneIndex; paneIndexSV.value = paneIndex }, [paneIndex])
+  useEffect(() => { paneIndexRef.current = paneIndex }, [paneIndex])
   // Dismiss any open keyboard on every pane transition so it never lingers
-  // visually over a pane that doesn't own the focused input (chat input,
-  // settings text fields, etc.).
-  useEffect(() => { Keyboard.dismiss() }, [paneIndex])
-  useEffect(() => { shellWRef.current = shellW; shellWSV.value = shellW }, [shellW])
-  useEffect(() => { slidingSV.value = sliding }, [sliding])
-  useEffect(() => { settingsTabIndexSV.value = settingsTabIndex }, [settingsTabIndex])
+  // visually over a pane that doesn't own the focused input.
+  useEffect(() => { requestAnimationFrame(() => Keyboard.dismiss()) }, [paneIndex])
 
-  // Direction sign: LTR lays panes left-to-right in render order (0,1,2),
-  // so showing pane i means translating the strip by -i*step. RTL mirrors.
-  const DIR = isRTL ? 1 : -1
+  // SubPage — rendered as an extra page in PagerView after Settings.
+  // afterSlideRef holds a callback to run after the sub-page is removed
+  // (e.g. SelectFieldPage fires onSelect, then slides back).
+  const afterSlideRef = useRef<(() => Promise<void> | void) | null>(null)
 
-  // One pane-step includes the seam gap so the gap slides completely off the
-  // opposite edge — the seam never bleeds into a resting pane.
-  const paneStep = (w: number) => {
-    'worklet'
-    return w + SEAM_GAP
-  }
-
-  const animateShellToIndex = (index: PaneIndex) => {
-    shellTranslate.value = withTiming(DIR * index * paneStep(shellWRef.current), {
-      duration: 300,
-      easing: Easing.out(Easing.cubic),
-    })
-  }
+  // Chat page is only rendered when available, so PagerView has 2 or 3 pages.
+  // These helpers map between stable logical pane indices and PagerView pages.
+  const chatAvailable = (profile?.state ?? 'HIDDEN') === 'CHAT'
+  const chatAvailableRef = useRef(chatAvailable)
+  useEffect(() => { chatAvailableRef.current = chatAvailable }, [chatAvailable])
+  const paneToPage = (pane: PaneIndex): number => chatAvailableRef.current ? pane : pane - 1
+  const pageToPane = (page: number): PaneIndex => (chatAvailableRef.current ? page : page + 1) as PaneIndex
 
   const goToPane = (index: PaneIndex) => {
     if (index === paneIndexRef.current) return
+    if (index === CHAT_PANE && !chatAvailableRef.current) return
     tap()
-    setPaneIndex(index)
-    animateShellToIndex(index)
+    pagerRef.current?.setPage(paneToPage(index))
+    // setPaneIndex fires from onPageSelected
   }
 
+  const subPageConfigRef = useRef(subPageConfig)
+  useEffect(() => { subPageConfigRef.current = subPageConfig }, [subPageConfig])
+
+  const onPageSelected = (e: { nativeEvent: { position: number } }) => {
+    const pane = pageToPane(e.nativeEvent.position)
+    if (pane !== paneIndexRef.current) {
+      tap()
+      setPaneIndex(pane)
+    }
+  }
+
+  const onPageScrollStateChanged = (e: { nativeEvent: { pageScrollState: string } }) => {
+    if (e.nativeEvent.pageScrollState !== 'idle') return
+    // Once the scroll settles, check if we ended up away from the sub-page.
+    // If so, tear it down. This replaces the old setTimeout(350) approach
+    // and correctly handles half-swipe-then-return gestures.
+    if (paneIndexRef.current !== SUBPAGE_PANE && subPageConfigRef.current) {
+      const cb = afterSlideRef.current
+      afterSlideRef.current = null
+      setSubPageConfig(null)
+      if (cb) Promise.resolve(cb()).catch(console.error)
+    }
+  }
+
+  // Navigate to the sub-page once it has mounted in PagerView.
+  const pendingSubPageNav = useRef(false)
+  useEffect(() => {
+    if (subPageConfig && pendingSubPageNav.current) {
+      pendingSubPageNav.current = false
+      requestAnimationFrame(() => {
+        pagerRef.current?.setPage(paneToPage(SUBPAGE_PANE))
+      })
+    }
+  }, [subPageConfig])
+
   const openShellSubPage = (config: SubPageConfig) => {
-    setSubPageConfig(config)                       // 2. render sub-page
-    requestAnimationFrame(() => goToPane(SUBPAGE_PANE))  // 3. slide after render
+    tap()
+    pendingSubPageNav.current = true
+    setSubPageConfig(config)
   }
 
   const closeShellSubPage = (afterSlide?: () => Promise<void> | void) => {
-    goToPane(SETTINGS_PANE)                        // 4. slide back
-    setTimeout(async () => {
-      if (afterSlide) {                            // 5. server update
-        try { await afterSlide() } catch (e) { console.error(e) }
-      }
-      setSubPageConfig(null)                       // 6. delete page
-    }, 400)
+    tap()
+    afterSlideRef.current = afterSlide ?? null
+    goToPane(SETTINGS_PANE)
+    // Cleanup happens in onPageSelected when the transition completes.
   }
 
-  // Snap shell to current pane when the width first resolves.
-  useEffect(() => {
-    if (!shellW) return
-    shellTranslate.value = DIR * paneIndexRef.current * paneStep(shellW)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellW])
+  // PagerView scrollEnabled — disabled when photo reorder is active or when
+  // the settings inner tab pager owns horizontal gestures (tab > 0).
+  const scrollEnabled = !sliding && !(paneIndex === SETTINGS_PANE && settingsTabIndex > 0)
 
-  // Android hardware back — when on a side pane, slide back to home instead
-  // of letting the router pop.
+  // Android hardware back — when on the sub-page, go back to settings;
+  // when on any other side pane, slide back to home.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      const idx = paneIndexRef.current
-      if (idx === SUBPAGE_PANE) {
-        goToPane(SETTINGS_PANE)
+      if (paneIndexRef.current === SUBPAGE_PANE) {
+        closeShellSubPage()
         return true
       }
+      const idx = paneIndexRef.current
       if (idx !== HOME_PANE) {
         goToPane(HOME_PANE)
         return true
@@ -670,34 +671,52 @@ export default function HomePage() {
   }, [notifPerm])
 
   // ── Startup completion ────────────────────────────────────────────────
-  // Both permissions granted → get location + push token, send app/start.
+  // Both permissions granted → send app/start + try to get location.
   const startupSentRef = useRef(false)
+  const [locFailed, setLocFailed] = useState(false)
+  const [locBusy, setLocBusy] = useState(false)
   useEffect(() => {
     if (notifPerm !== 'granted' || locPerm !== 'granted') return
     if (startupSentRef.current) return
     startupSentRef.current = true
     ;(async () => {
+      // Get location + push token in parallel, then send app/start.
       const [location, token] = await Promise.all([
         getLocation(),
         pushTokenRef.current
           ? Promise.resolve(pushTokenRef.current)
-          : ensurePushToken(),
+          : ensurePushToken().catch(() => null),
       ])
-      const calls: Promise<unknown>[] = [
-        invoke('app/start', {
-          ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
-        }),
-      ]
-      if (token) calls.push(invoke('app/subscription', { subscription: { type: 'expo', token } }))
-      Promise.all(calls).catch(() => {})
+      // Only include push_token if it changed from what the server has.
+      const pushChanged = token && token !== profile?.data?.push_token?.token
+      console.log('[startup] token:', token, 'serverToken:', profile?.data?.push_token?.token, 'pushChanged:', pushChanged)
+      invoke('app/start', {
+        ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
+        ...(pushChanged ? { push_token: { type: 'expo', token } } : {}),
+      }).catch(() => {})
+      if (!location) setLocFailed(true)
     })()
   }, [notifPerm, locPerm])
+
+  const handleLocRetry = async () => {
+    if (locBusy) return
+    setLocBusy(true)
+    try {
+      const location = await getLocation()
+      if (location) {
+        setLocFailed(false)
+        invoke('app/location', { location: { latitude: location.lat, longitude: location.lng } }).catch(() => {})
+      }
+    } finally {
+      setLocBusy(false)
+    }
+  }
 
   const showLocOverlay = locPerm !== 'granted'
 
   // Unified card mode — derived synchronously so the header title never
   // flashes a stale value between state changes and the next render.
-  const displayedCardMode = showNotifOverlay ? 'notif' : showLocOverlay ? 'loc' : state
+  const displayedCardMode = showNotifOverlay ? 'notif' : showLocOverlay ? 'loc' : locFailed ? 'locFailed' : state
 
   // ── Re-check permissions when app returns to foreground ────────────────
   // Covers the user changing app permissions in device settings, etc.
@@ -724,112 +743,39 @@ export default function HomePage() {
     return () => clearInterval(id)
   }, [notifPerm])
 
-  // Gesture reads `state` via a ref: the PanResponder captures its callbacks
-  // once (useRef), so a direct closure would freeze the initial state value
-  // and never unlock chat-pane access when the user later transitions to
-  // CHAT.
-  const chatAvailableSV = useSharedValue(state === 'CHAT')
-  useEffect(() => { chatAvailableSV.value = state === 'CHAT' }, [state])
-
   // Anchor pane on state transitions. Entering CHAT auto-navigates to the
-  // chat pane so the user lands directly in the conversation; other
-  // transitions snap back to the home pane so the user isn't stranded on a
-  // side pane after a match status flip.
+  // chat pane; leaving CHAT snaps back to home. Because PagerView children
+  // change (2↔3 pages), we need to adjust page indices after render.
   const prevStateRef = useRef(state)
   useEffect(() => {
     if (prevStateRef.current !== state) {
       const prev = prevStateRef.current
       prevStateRef.current = state
-      if (state === 'CHAT' && prev !== 'CHAT') goToPane(CHAT_PANE)
-      else if (paneIndexRef.current !== HOME_PANE) goToPane(HOME_PANE)
+      const enteringChat = state === 'CHAT' && prev !== 'CHAT'
+      const leavingChat = state !== 'CHAT' && prev === 'CHAT'
+
+      if (enteringChat) {
+        // Children changed from [Home,Settings] → [Chat,Home,Settings].
+        // PagerView still shows the old page index — fix it, then slide to Chat.
+        requestAnimationFrame(() => {
+          pagerRef.current?.setPageWithoutAnimation(1) // Home is now page 1
+          requestAnimationFrame(() => {
+            pagerRef.current?.setPage(0) // animate to Chat
+            setPaneIndex(CHAT_PANE)
+          })
+        })
+      } else if (leavingChat) {
+        // Children changed from [Chat,Home,Settings] → [Home,Settings].
+        // Snap to Home (now page 0) without animation.
+        requestAnimationFrame(() => {
+          pagerRef.current?.setPageWithoutAnimation(0)
+          setPaneIndex(HOME_PANE)
+        })
+      } else if (paneIndexRef.current !== HOME_PANE) {
+        goToPane(HOME_PANE)
+      }
     }
   }, [state])
-
-  // Shell pager gesture — uses manualActivation so all constraint logic lives
-  // in worklets (shared values). The gesture object is created once (empty deps)
-  // which prevents mid-animation recreation that caused stuttering.
-  const shellPan = useMemo(() =>
-    Gesture.Pan()
-      .manualActivation(true)
-      .onTouchesDown((e, manager) => {
-        'worklet'
-        if (e.allTouches.length === 1) {
-          touchStartXSV.value = e.allTouches[0].absoluteX
-          touchStartYSV.value = e.allTouches[0].absoluteY
-        }
-      })
-      .onTouchesMove((e, manager) => {
-        'worklet'
-        if (slidingSV.value) { manager.fail(); return }
-        if (e.allTouches.length !== 1) { manager.fail(); return }
-        const dx = e.allTouches[0].absoluteX - touchStartXSV.value
-        const dy = e.allTouches[0].absoluteY - touchStartYSV.value
-        // Vertical intent — let scroll views own it
-        if (Math.abs(dy) >= 20) { manager.fail(); return }
-        // Not enough horizontal movement yet
-        if (Math.abs(dx) < 10) return
-        // Direction check using shared values
-        const idx = paneIndexSV.value
-        const forward = (DIR < 0) ? (dx < 0) : (dx > 0)
-        const canGoBack = idx > 0
-          && !(idx === HOME_PANE && !chatAvailableSV.value)
-          && !(idx === SETTINGS_PANE && settingsTabIndexSV.value > 0)
-        const canGoFwd = idx < 2
-        if ((forward && canGoFwd) || (!forward && canGoBack)) manager.activate()
-        else manager.fail()
-      })
-      .onUpdate(e => {
-        'worklet'
-        const w = shellWSV.value
-        if (!w) return
-        const step = paneStep(w)
-        const idx = paneIndexSV.value
-        const base = DIR * idx * step
-        const canGoBack = idx > 0 && !(idx === HOME_PANE && !chatAvailableSV.value)
-        const canGoFwd  = idx < 2
-        const minIdx = canGoBack ? (idx - 1) : idx
-        const maxIdx = canGoFwd  ? (idx + 1) : idx
-        const t1 = DIR * minIdx * step
-        const t2 = DIR * maxIdx * step
-        const lo = t1 < t2 ? t1 : t2
-        const hi = t1 < t2 ? t2 : t1
-        const next = Math.max(lo, Math.min(hi, base + e.translationX))
-        shellTranslate.value = next
-      })
-      .onEnd(e => {
-        'worklet'
-        const w = shellWSV.value
-        if (!w) return
-        const idx = paneIndexSV.value
-        const forward = DIR < 0 ? e.translationX < 0 : e.translationX > 0
-        const vx = e.velocityX / 1000
-        const flick = Math.abs(vx) > 0.4
-        const past = Math.abs(e.translationX) > w * 0.3
-        if (idx === HOME_PANE && !forward && !chatAvailableSV.value) {
-          shellTranslate.value = withTiming(DIR * idx * paneStep(w), { duration: 300, easing: Easing.out(Easing.cubic) })
-          return
-        }
-        let target = idx
-        if ((past || flick) && forward && idx < 2) target = idx + 1
-        else if ((past || flick) && !forward && idx > 0) {
-          if (!(idx === HOME_PANE && !chatAvailableSV.value))
-            target = idx - 1
-        }
-        if (target !== idx) runOnJS(tap)()
-        shellTranslate.value = withTiming(
-          DIR * target * paneStep(w),
-          { duration: 300, easing: Easing.out(Easing.cubic) },
-          (finished) => {
-            'worklet'
-            if (finished && target !== idx) runOnJS(setPaneIndex)(target as PaneIndex)
-          },
-        )
-      })
-  , [])
-
-  const shellStripStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shellTranslate.value }],
-  }))
 
   // Button stays disabled from click until the server round-trip resolves.
   // `pendingKey` identifies which button initiated the in-flight action so
@@ -1040,7 +986,9 @@ export default function HomePage() {
     ? <PrimaryButton label={t('home.notifPromptButton')} onPress={handlePermissionRequest} disabled={permBusy || notifPerm === null} />
     : showLocOverlay
       ? <PrimaryButton label={t('home.locationPromptButton')} onPress={handlePermissionRequest} disabled={permBusy || locPerm === null} />
-      : null
+      : locFailed
+        ? <PrimaryButton label={t('home.locationUnavailableButton')} onPress={handleLocRetry} disabled={locBusy} />
+        : null
 
   const goToPreferences = () => {
     settingsChangeTabRef.current?.('preferences')
@@ -1051,7 +999,7 @@ export default function HomePage() {
     ? <Button variant="secondary" label={t('home.changePreferences')} onPress={goToPreferences} />
     : null
 
-  const cardButtons = showNotifOverlay || showLocOverlay
+  const cardButtons = showNotifOverlay || showLocOverlay || locFailed
     ? permissionButton
     : isMatchCardOpen ? matchButtons : hiddenButtons
 
@@ -1059,6 +1007,7 @@ export default function HomePage() {
   const headerTitle =
     showNotifOverlay ? t('home.notifHeaderTitle')
     : showLocOverlay ? t('home.locHeaderTitle')
+    : locFailed ? t('home.locHeaderTitle')
     : state === 'CHAT' ? t('home.chatHeader')
     : state === 'WATCHING' ? t('push.WATCHING')
     : state === 'WAITING' ? t('push.WAITING')
@@ -1177,6 +1126,16 @@ export default function HomePage() {
         />
       )
     }
+    if (displayedCardMode === 'locFailed') {
+      return (
+        <Message
+          state="HIDDEN"
+          title={t('home.locationUnavailableTitle')}
+          desc={t('home.locationUnavailableDesc')}
+          hideIcon
+        />
+      )
+    }
     if (displayedCardMode === 'HIDDEN') {
       return (
         <Message
@@ -1218,273 +1177,245 @@ export default function HomePage() {
 
   return (
     <View style={styles.backdrop}>
-      <GestureDetector gesture={shellPan}>
-      <Animated.View
-        style={styles.shell}
-        onLayout={e => {
-          setShellW(e.nativeEvent.layout.width)
-          setShellH(e.nativeEvent.layout.height)
-        }}
-      >
+      <View style={styles.shell}>
         <StatusBar style="dark" />
-        {/* Strip width must span all three panes; otherwise children at
-            start > shellW sit outside the strip's intrinsic bounds and
-            Android drops their touch events (vertical scrolls on the home
-            pane stop responding). flex:1 alone gives the strip the shell's
-            width, which only covers pane 0. */}
-        <Animated.View style={[styles.shellStrip, { width: 4 * shellW + 3 * SEAM_GAP }, shellStripStyle]}>
+        {/* react-native-pager-view's childrenWithOverriddenStyle casts
+            every Children.map entry to ReactElement and accesses .props.
+            Under React 19, falsy children (false/null) are no longer
+            stripped before the callback, so the conditional chat page
+            must be excluded from the array entirely — not rendered as
+            `{cond && <View>}`. We build the pages array here and pass
+            it via the children prop. */}
+        <PagerView
+          ref={pagerRef}
+          style={{ flex: 1 }}
+          initialPage={chatAvailable ? 1 : 0}
+          scrollEnabled={scrollEnabled}
+          overdrag={false}
+          overScrollMode="never"
+          onPageSelected={onPageSelected}
+          onPageScrollStateChanged={onPageScrollStateChanged}
+        >
+          {[
+            ...(chatAvailable ? [
+              <View key="chat" style={{ flex: 1 }}>
+                <ChatPage
+                  onBack={() => goToPane(HOME_PANE)}
+                  isActive={paneIndex === CHAT_PANE}
+                  onUnreadChange={setChatUnread}
+                />
+              </View>,
+            ] : []),
 
-          {/* Pane 0 — chat (left of home in LTR, right in RTL) */}
-          <View
-            style={[styles.shellPane, { start: 0, width: shellW }]}
-            pointerEvents={paneIndex === CHAT_PANE ? 'auto' : 'none'}
-          >
-            <ChatPage
-              onBack={() => goToPane(HOME_PANE)}
-              isActive={paneIndex === CHAT_PANE}
-              onUnreadChange={setChatUnread}
-            />
-          </View>
+            <View key="home" style={{ flex: 1 }}>
+              <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
+                <HomeHeader
+                  title={headerTitle}
+                  statusLabel={headerStatusLabel}
+                  statusGreen={statusGreen}
+                  statusColor={statusColor}
+                  arrow={headerArrow}
+                  badge={headerBadge}
+                  badgeColor={headerBadgeColor}
+                  statusMenu={statusMenuOptions}
+                  onSettingsPress={() => goToPane(SETTINGS_PANE)}
+                  disabled={busy}
+                  loading={busy}
+                />
+                <HomeCard
+                  onPull={cardOnPull}
+                  pullRef={cardPullRef}
+                  buttons={cardButtons}
+                  description={cardDescription}
+                >
+                  {displayedIsMatchCardOpen && (
+                    profile?.match ? (
+                      <MatchCard
+                        key={profile.match.user_id}
+                        match={profile.match}
+                        userIsMale={isMale}
+                        bottomInset={0}
+                        hideTime={state === 'CHAT'}
+                      />
+                    ) : null
+                  )}
 
-          {/* Pane 1 — home (middle, default) */}
-          <View
-            style={[styles.shellPane, { start: shellW + SEAM_GAP, width: shellW }]}
-            pointerEvents={paneIndex === HOME_PANE ? 'auto' : 'none'}
-          >
-            <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
-              <HomeHeader
-                title={headerTitle}
-                statusLabel={headerStatusLabel}
-                statusGreen={statusGreen}
-                statusColor={statusColor}
-                arrow={headerArrow}
-                badge={headerBadge}
-                badgeColor={headerBadgeColor}
-                statusMenu={statusMenuOptions}
-                onSettingsPress={() => goToPane(SETTINGS_PANE)}
-                disabled={busy}
-                loading={busy}
-              />
-              <HomeCard
-                onPull={cardOnPull}
-                pullRef={cardPullRef}
-                buttons={cardButtons}
-                description={cardDescription}
-              >
-                {displayedIsMatchCardOpen && (
-                  profile?.match ? (
-                    <MatchCard
-                      key={profile.match.user_id}
-                      match={profile.match}
-                      userIsMale={isMale}
-                      bottomInset={0}
-                      hideTime={state === 'CHAT'}
-                    />
-                  ) : null
-                )}
-
-                {showWatchers && (
-                  <PullScrollView
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    scrollEventThrottle={16}
-                  >
-                    <View style={styles.watchersDescRow}>
-                      <Text style={styles.watchersDescText}>{
-                        watchers.length === 0
-                          ? tg('home.nowVisibleDesc', isMale)
-                          : watchers.length === 1
-                            ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
-                            : tg('home.nowVisibleWithWatchersDesc', isMale)
-                      }</Text>
-                    </View>
-                    {watchers.map((w, i) => (
-                      <View key={w.user_id}>
-                        {i > 0 && <View style={styles.watchersRowDivider} />}
-                        <WatcherCard watcher={w} units={profile?.units} flat onPress={() => { tap(); setRemoveWatcherTarget(w) }} />
+                  {showWatchers && (
+                    <PullScrollView
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      scrollEventThrottle={16}
+                    >
+                      <View style={styles.watchersDescRow}>
+                        <Text style={styles.watchersDescText}>{
+                          watchers.length === 0
+                            ? tg('home.nowVisibleDesc', isMale)
+                            : watchers.length === 1
+                              ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
+                              : tg('home.nowVisibleWithWatchersDesc', isMale)
+                        }</Text>
                       </View>
-                    ))}
-                    {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
-                      <View key={`ph-${i}`}>
-                        {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
-                        <View style={styles.watcherPlaceholder}>
-                          <View style={styles.watcherPlaceholderAvatar} />
-                          <View style={styles.watcherPlaceholderBody}>
-                            <View style={styles.watcherPlaceholderTitleRow}>
-                              <View style={styles.watcherPlaceholderTitle} />
-                            </View>
-                            <View style={styles.watcherPlaceholderChips}>
-                              <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
-                              <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                      {watchers.map((w, i) => (
+                        <View key={w.user_id}>
+                          {i > 0 && <View style={styles.watchersRowDivider} />}
+                          <WatcherCard watcher={w} units={profile?.units} flat onPress={() => { tap(); setRemoveWatcherTarget(w) }} />
+                        </View>
+                      ))}
+                      {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
+                        <View key={`ph-${i}`}>
+                          {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
+                          <View style={styles.watcherPlaceholder}>
+                            <View style={styles.watcherPlaceholderAvatar} />
+                            <View style={styles.watcherPlaceholderBody}>
+                              <View style={styles.watcherPlaceholderTitleRow}>
+                                <View style={styles.watcherPlaceholderTitle} />
+                              </View>
+                              <View style={styles.watcherPlaceholderChips}>
+                                <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
+                                <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                              </View>
                             </View>
                           </View>
                         </View>
-                      </View>
-                    ))}
-                  </PullScrollView>
-                )}
+                      ))}
+                    </PullScrollView>
+                  )}
 
-                {showHiddenPlaceholder && (
-                  <CardBack />
-                )}
+                  {showHiddenPlaceholder && (
+                    <CardBack />
+                  )}
 
-                {displayedCardMode === 'notif' && (
-                  <PermissionCardFace icon="bell" />
-                )}
+                  {displayedCardMode === 'notif' && (
+                    <PermissionCardFace icon="bell" />
+                  )}
 
-                {displayedCardMode === 'loc' && (
-                  <PermissionCardFace icon="location" />
-                )}
-              </HomeCard>
+                  {(displayedCardMode === 'loc' || displayedCardMode === 'locFailed') && (
+                    <PermissionCardFace icon="location" />
+                  )}
+                </HomeCard>
 
-              <ConfirmDialog
-                visible={revealConfirmOpen}
-                title={t('home.revealConfirmTitle')}
-                description={tg('home.revealConfirmDesc', isMale)}
-                cancelLabel={t('home.revealConfirmCancel')}
-                confirmLabel={t('home.revealConfirmConfirm')}
-                cancelFlex={0.6}
-                onCancel={() => { if (!busy) { closeRevealConfirm(); releasePull() } }}
-                onConfirm={() => {
-                  setVisibility('VISIBLE').finally(() => { closeRevealConfirm(); releasePull() })
-                }}
-                busy={busy}
-                skipToggle={revealIsForWatching ? {
-                  label: t('home.revealConfirmSkip'),
-                  checked: skipRevealChecked,
-                  onToggle: () => setSkipRevealChecked(v => !v),
-                } : undefined}
-              />
+                <ConfirmDialog
+                  visible={revealConfirmOpen}
+                  title={t('home.revealConfirmTitle')}
+                  description={tg('home.revealConfirmDesc', isMale)}
+                  cancelLabel={t('home.revealConfirmCancel')}
+                  confirmLabel={t('home.revealConfirmConfirm')}
+                  cancelFlex={0.6}
+                  onCancel={() => { if (!busy) { closeRevealConfirm(); releasePull() } }}
+                  onConfirm={() => {
+                    setVisibility('VISIBLE').finally(() => { closeRevealConfirm(); releasePull() })
+                  }}
+                  busy={busy}
+                  skipToggle={revealIsForWatching ? {
+                    label: t('home.revealConfirmSkip'),
+                    checked: skipRevealChecked,
+                    onToggle: () => setSkipRevealChecked(v => !v),
+                  } : undefined}
+                />
 
-              <ConfirmDialog
-                visible={hideConfirmOpen}
-                title={t('home.hideConfirmTitle')}
-                description={hideConfirmDesc}
-                cancelLabel={t('home.hideConfirmCancel')}
-                confirmLabel={tg('home.hideConfirmConfirm', isMale)}
-                confirmFlex={0.6}
-                destructive
-                onCancel={() => { if (!busy) { setHideConfirmOpen(false); releasePull() } }}
-                onConfirm={() => { setVisibility('HIDDEN').finally(releasePull) }}
-                busy={busy}
-              />
+                <ConfirmDialog
+                  visible={hideConfirmOpen}
+                  title={t('home.hideConfirmTitle')}
+                  description={hideConfirmDesc}
+                  cancelLabel={t('home.hideConfirmCancel')}
+                  confirmLabel={tg('home.hideConfirmConfirm', isMale)}
+                  confirmFlex={0.6}
+                  destructive
+                  onCancel={() => { if (!busy) { setHideConfirmOpen(false); releasePull() } }}
+                  onConfirm={() => { setVisibility('HIDDEN').finally(releasePull) }}
+                  busy={busy}
+                />
 
-              <ConfirmDialog
-                visible={inviteConfirmOpen}
-                title={t('home.inviteConfirmTitle').replace('{name}', matchName)}
-                description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
-                cancelLabel={t('home.inviteConfirmCancel')}
-                cancelFlex={0.6}
-                confirmLabel={t('home.inviteConfirmOk')}
-                tone="positive"
-                onCancel={() => { if (!busy) setInviteConfirmOpen(false) }}
-                onConfirm={() => runAction('app/invite', 'invite-confirm', () => setInviteConfirmOpen(false))}
-                busy={busy}
-              />
+                <ConfirmDialog
+                  visible={inviteConfirmOpen}
+                  title={t('home.inviteConfirmTitle').replace('{name}', matchName)}
+                  description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
+                  cancelLabel={t('home.inviteConfirmCancel')}
+                  cancelFlex={0.6}
+                  confirmLabel={t('home.inviteConfirmOk')}
+                  tone="positive"
+                  onCancel={() => { if (!busy) setInviteConfirmOpen(false) }}
+                  onConfirm={() => runAction('app/invite', 'invite-confirm', () => setInviteConfirmOpen(false))}
+                  busy={busy}
+                />
 
-              <ConfirmDialog
-                visible={cancelConfirmOpen}
-                title={t('home.cancelWaitingTitle')}
-                description={tg('home.cancelWaitingDesc', matchIsMale).replace(/\{name\}/g, matchName)}
-                cancelLabel={t('home.cancelWaitingBack')}
-                confirmLabel={t('home.cancelWaitingConfirm')}
-                confirmFlex={0.6}
-                destructive
-                onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
-                onConfirm={() => runAction('app/cancel', 'cancel-confirm', () => setCancelConfirmOpen(false))}
-                busy={busy}
-              />
+                <ConfirmDialog
+                  visible={cancelConfirmOpen}
+                  title={t('home.cancelWaitingTitle')}
+                  description={tg('home.cancelWaitingDesc', matchIsMale).replace(/\{name\}/g, matchName)}
+                  cancelLabel={t('home.cancelWaitingBack')}
+                  confirmLabel={t('home.cancelWaitingConfirm')}
+                  confirmFlex={0.6}
+                  destructive
+                  onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
+                  onConfirm={() => runAction('app/cancel', 'cancel-confirm', () => setCancelConfirmOpen(false))}
+                  busy={busy}
+                />
 
-              <ConfirmDialog
-                visible={refuseConfirmOpen}
-                title={t('home.refuseReplyTitle')}
-                description={tg('home.refuseReplyDesc', matchIsMale)}
-                cancelLabel={t('home.refuseReplyBack')}
-                confirmLabel={t('home.refuseReplyConfirm')}
-                confirmFlex={0.6}
-                destructive
-                onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
-                onConfirm={() => runAction('app/refuse', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
-                busy={busy}
-              />
+                <ConfirmDialog
+                  visible={refuseConfirmOpen}
+                  title={t('home.refuseReplyTitle')}
+                  description={tg('home.refuseReplyDesc', matchIsMale)}
+                  cancelLabel={t('home.refuseReplyBack')}
+                  confirmLabel={t('home.refuseReplyConfirm')}
+                  confirmFlex={0.6}
+                  destructive
+                  onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
+                  onConfirm={() => runAction('app/refuse', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
+                  busy={busy}
+                />
 
-              <ConfirmDialog
-                visible={!!removeWatcherTarget}
-                title={t('home.removeWatcherTitle')}
-                description={tg('home.removeWatcherDesc' as any, removeWatcherTarget?.is_male ?? null).replace('{name}', removeWatcherTarget?.name ?? '')}
-                cancelLabel={t('home.removeWatcherCancel')}
-                cancelFlex={0.6}
-                confirmLabel={t('home.removeWatcherConfirm')}
-                destructive
-                onCancel={() => { if (!removeWatcherBusy) setRemoveWatcherTarget(null) }}
-                onConfirm={async () => {
-                  if (!removeWatcherTarget || removeWatcherBusy) return
-                  setRemoveWatcherBusy(true)
-                  try {
-                    await invoke('app/remove', { user_id: removeWatcherTarget.user_id })
-                  } catch (e) {
-                    console.error(e)
-                  } finally {
-                    setRemoveWatcherBusy(false)
-                    setRemoveWatcherTarget(null)
-                  }
-                }}
-                busy={removeWatcherBusy}
-              />
-            </SafeAreaView>
-          </View>
+                <ConfirmDialog
+                  visible={!!removeWatcherTarget}
+                  title={t('home.removeWatcherTitle')}
+                  description={tg('home.removeWatcherDesc' as any, removeWatcherTarget?.is_male ?? null).replace('{name}', removeWatcherTarget?.name ?? '')}
+                  cancelLabel={t('home.removeWatcherCancel')}
+                  cancelFlex={0.6}
+                  confirmLabel={t('home.removeWatcherConfirm')}
+                  destructive
+                  onCancel={() => { if (!removeWatcherBusy) setRemoveWatcherTarget(null) }}
+                  onConfirm={async () => {
+                    if (!removeWatcherTarget || removeWatcherBusy) return
+                    setRemoveWatcherBusy(true)
+                    try {
+                      await invoke('app/remove', { user_id: removeWatcherTarget.user_id })
+                    } catch (e) {
+                      console.error(e)
+                    } finally {
+                      setRemoveWatcherBusy(false)
+                      setRemoveWatcherTarget(null)
+                    }
+                  }}
+                  busy={removeWatcherBusy}
+                />
+              </SafeAreaView>
+            </View>,
 
-          {/* Pane 2 — settings (right of home in LTR, left in RTL) */}
-          <View
-            style={[styles.shellPane, { start: 2 * (shellW + SEAM_GAP), width: shellW }]}
-            pointerEvents={paneIndex === SETTINGS_PANE ? 'auto' : 'none'}
-          >
-            <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} changeTabRef={settingsChangeTabRef} onTabChange={setSettingsTabIndex} />
-          </View>
+            <View key="settings" style={{ flex: 1 }}>
+              <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} changeTabRef={settingsChangeTabRef} onTabChange={setSettingsTabIndex} />
+            </View>,
 
-          {/* Pane 3 — field sub-page (select, age range, or radius) */}
-          <View
-            style={[styles.shellPane, { start: 3 * (shellW + SEAM_GAP), width: shellW }]}
-            pointerEvents={paneIndex === SUBPAGE_PANE ? 'auto' : 'none'}
-          >
-            {subPageConfig && (
-              subPageConfig.kind === 'ageRange'
-                ? <AgeRangeFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                : subPageConfig.kind === 'radius'
-                  ? <RadiusFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                  : subPageConfig.kind === 'admin'
-                    ? <AdminFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                    : subPageConfig.kind === 'photos'
-                      ? <PhotoFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                      : subPageConfig.kind === 'account'
-                        ? <AccountFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                        : subPageConfig.kind === 'preview'
-                          ? <PreviewFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                          : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-            )}
-          </View>
-
-          {/* Thin seams between adjacent panes. Parked off-screen when a pane
-              is at rest, so they only appear during the swipe transition. */}
-          {shellH > 0 && (
-            <>
-              <View
-                pointerEvents="none"
-                style={[styles.shellSeam, { start: shellW, width: SEAM_WIDTH }]}
-              />
-              <View
-                pointerEvents="none"
-                style={[styles.shellSeam, { start: 2 * shellW + SEAM_GAP, width: SEAM_WIDTH }]}
-              />
-              <View
-                pointerEvents="none"
-                style={[styles.shellSeam, { start: 3 * shellW + 2 * SEAM_GAP, width: SEAM_WIDTH }]}
-              />
-            </>
-          )}
-        </Animated.View>
-      </Animated.View>
-      </GestureDetector>
+            ...(subPageConfig ? [
+              <View key="subpage" style={{ flex: 1, backgroundColor: '#eef0f3' }}>
+                {subPageConfig.kind === 'ageRange'
+                  ? <AgeRangeFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                  : subPageConfig.kind === 'radius'
+                    ? <RadiusFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                    : subPageConfig.kind === 'admin'
+                      ? <AdminFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                      : subPageConfig.kind === 'photos'
+                        ? <PhotoFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                        : subPageConfig.kind === 'account'
+                          ? <AccountFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                          : subPageConfig.kind === 'preview'
+                            ? <PreviewFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                            : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
+                }
+              </View>,
+            ] : []),
+          ]}
+        </PagerView>
+      </View>
       {bootVisible && (
         <Animated.View style={[StyleSheet.absoluteFill, bootOverlayStyle]} pointerEvents="none">
           <BootScreen />
@@ -1504,20 +1435,6 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     backgroundColor: '#eef0f3',
-  },
-  shellStrip: {
-    flex: 1,
-  },
-  shellPane: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-  },
-  shellSeam: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    backgroundColor: SEAM_COLOR,
   },
 
   root: {

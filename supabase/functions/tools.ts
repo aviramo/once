@@ -2,8 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 import { PostgrestTransformBuilder, PostgrestFilterBuilder } from "https://esm.sh/@supabase/postgrest-js@1.16.3/dist/cjs/index.js";
 import Logger, { Log } from "./logger.ts";
-
-export type Subscription = { type: "expo"; token: string };
+import { PushToken } from "./global.ts";
 
 export default class Tools {
 
@@ -22,7 +21,7 @@ export default class Tools {
     }
   }
 
-  static async notify(log: Log, subJson: Subscription, payload: Record<string, unknown>) {
+  static async notify(log: Log, subJson: PushToken, payload: Record<string, unknown>) {
     const body = {
       to: subJson.token,
       sound: "default",
