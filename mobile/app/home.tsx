@@ -530,9 +530,13 @@ export default function HomePage() {
 
   const subPageConfigRef = useRef(subPageConfig)
   useEffect(() => { subPageConfigRef.current = subPageConfig }, [subPageConfig])
-
   const onPageSelected = (e: { nativeEvent: { position: number } }) => {
     const pane = pageToPane(e.nativeEvent.position)
+    // Prevent swiping into the empty SubPage slot.
+    if (pane === SUBPAGE_PANE && !subPageConfigRef.current) {
+      pagerRef.current?.setPage(paneToPage(SETTINGS_PANE))
+      return
+    }
     if (pane !== paneIndexRef.current) {
       tap()
       setPaneIndex(pane)
@@ -542,8 +546,8 @@ export default function HomePage() {
   const onPageScrollStateChanged = (e: { nativeEvent: { pageScrollState: string } }) => {
     if (e.nativeEvent.pageScrollState !== 'idle') return
     // Once the scroll settles, check if we ended up away from the sub-page.
-    // If so, tear it down. This replaces the old setTimeout(350) approach
-    // and correctly handles half-swipe-then-return gestures.
+    // If so, tear it down. Children count stays constant (SubPage is always
+    // in PagerView, just empty), so no spurious events.
     if (paneIndexRef.current !== SUBPAGE_PANE && subPageConfigRef.current) {
       const cb = afterSlideRef.current
       afterSlideRef.current = null
@@ -689,7 +693,6 @@ export default function HomePage() {
       ])
       // Only include push_token if it changed from what the server has.
       const pushChanged = token && token !== profile?.data?.push_token?.token
-      console.log('[startup] token:', token, 'serverToken:', profile?.data?.push_token?.token, 'pushChanged:', pushChanged)
       invoke('app/start', {
         ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
         ...(pushChanged ? { push_token: { type: 'expo', token } } : {}),
@@ -1395,9 +1398,9 @@ export default function HomePage() {
               <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} changeTabRef={settingsChangeTabRef} onTabChange={setSettingsTabIndex} />
             </View>,
 
-            ...(subPageConfig ? [
-              <View key="subpage" style={{ flex: 1, backgroundColor: '#eef0f3' }}>
-                {subPageConfig.kind === 'ageRange'
+            <View key="subpage" style={{ flex: 1, backgroundColor: '#eef0f3' }}>
+              {subPageConfig && (
+                subPageConfig.kind === 'ageRange'
                   ? <AgeRangeFieldPage config={subPageConfig} onBack={closeShellSubPage} />
                   : subPageConfig.kind === 'radius'
                     ? <RadiusFieldPage config={subPageConfig} onBack={closeShellSubPage} />
@@ -1410,9 +1413,8 @@ export default function HomePage() {
                           : subPageConfig.kind === 'preview'
                             ? <PreviewFieldPage config={subPageConfig} onBack={closeShellSubPage} />
                             : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                }
-              </View>,
-            ] : []),
+              )}
+            </View>,
           ]}
         </PagerView>
       </View>
