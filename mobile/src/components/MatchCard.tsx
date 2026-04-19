@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Image, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
+import { Image } from 'expo-image'
 import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
@@ -41,22 +42,22 @@ function formatDistance(m: number | null | undefined, units?: string | null): st
   if (units === 'imperial') {
     const miles = m / 1609.344
     if (miles < 0.1) return t('home.distanceHere')
-    if (miles < 10) return `${miles.toFixed(1)}${t('settings.miles')}`
-    return `${Math.round(miles).toLocaleString()}${t('settings.miles')}`
+    if (miles < 10) return `${miles.toFixed(1)} ${t('settings.miles')}`
+    return `${Math.round(miles).toLocaleString()} ${t('settings.miles')}`
   }
-  if (m < 1000) return `${Math.round(m)}${t('settings.meter')}`
+  if (m < 1000) return `${Math.round(m)} ${t('settings.meter')}`
   const km = m / 1000
-  if (km > 10) return `${Math.round(km).toLocaleString()}${t('settings.km')}`
-  return `${km.toFixed(1)}${t('settings.km')}`
+  if (km > 10) return `${Math.round(km).toLocaleString()} ${t('settings.km')}`
+  return `${km.toFixed(1)} ${t('settings.km')}`
 }
 
 function formatLocatedAt(iso: string | null | undefined): string {
   if (!iso) return ''
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
   if (diff < 60) return t('match.justNow')
-  if (diff < 3600) return `${Math.floor(diff / 60)}${t('match.minsAgo')}`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}${t('match.hrsAgo')}`
-  return `${Math.floor(diff / 86400)}${t('match.daysAgo')}`
+  if (diff < 3600) return t('match.minsAgo').replace('{n}', String(Math.floor(diff / 60)))
+  if (diff < 86400) return t('match.hrsAgo').replace('{n}', String(Math.floor(diff / 3600)))
+  return t('match.daysAgo').replace('{n}', String(Math.floor(diff / 86400)))
 }
 
 const isDistanceNear = (m: number | null | undefined) =>
@@ -133,19 +134,20 @@ export function MatchCard({
   const distGreen = isDistanceNear(match.distance)
   const timeGreen = isTimeRecent(timeIso)
   const hasChips = !!distStr || !!timeStr || match.subscribed != null
+  const endsWithPhoto = imageUrls.length > 1 && match.is_for_kids == null
 
   return (
     <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
       <PullScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + (endsWithPhoto ? 0 : DOUBLE) }]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
       >
         {imageUrls.length > 0 && (
-          <Image source={{ uri: imageUrls[0] }} style={[styles.photo, { height: photoHeight }]} resizeMode="cover" />
+          <Image source={imageUrls[0]} style={[styles.photo, { height: photoHeight }]} contentFit="cover" cachePolicy="disk" />
         )}
 
         <View onLayout={e => setHeaderBlockH(e.nativeEvent.layout.height)}>
@@ -185,7 +187,7 @@ export function MatchCard({
         {imageUrls.length > 1 && (
           <View style={styles.extraPhotos}>
             {imageUrls.slice(1).map((url, i) => (
-              <Image key={i} source={{ uri: url }} style={styles.extraPhoto} resizeMode="cover" />
+              <Image key={i} source={url} style={styles.extraPhoto} contentFit="cover" cachePolicy="disk" />
             ))}
           </View>
         )}
@@ -194,11 +196,11 @@ export function MatchCard({
           <View style={styles.kidsRow}>
             <View style={styles.kidsLabel}>
               <BabyIcon color={TEXT} />
-              <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', userIsMale)}</Text>
+              <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', match.is_male)}</Text>
             </View>
-            {match.is_for_kids
-              ? <KidsCheckIcon color={GREEN} />
-              : <KidsXIcon color={RED} />}
+            <Text style={[styles.kidsValue, { color: match.is_for_kids ? GREEN : RED }]}>
+              {match.is_for_kids ? t('settings.kidsYes') : t('settings.kidsNo')}
+            </Text>
           </View>
         )}
       </PullScrollView>
@@ -272,11 +274,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: DOUBLE,
-    marginBottom: DOUBLE,
     marginHorizontal: SINGLE,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: SINGLE,
+    borderRadius: DOUBLE,
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   kidsLabel: {
@@ -288,5 +289,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: TEXT,
+  },
+  kidsValue: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 })

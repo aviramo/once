@@ -7,12 +7,13 @@ import { useRouter } from 'expo-router'
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import Svg, { Path, G, Circle, Rect } from 'react-native-svg'
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { SyncWishLogo } from '../src/components/SyncWishLogo'
-import { TEXT, WHITE } from '../src/colors'
+import { TEXT, WHITE, PURPLE } from '../src/colors'
 
 // ── Brand icons ────────────────────────────────────────────────────────────
 
@@ -38,6 +39,36 @@ function AppleIcon() {
   )
 }
 
+function LoginSpinner() {
+  const rotation = useSharedValue(0)
+
+  useEffect(() => {
+    rotation.value = withRepeat(
+      withTiming(360, { duration: 700, easing: Easing.linear }),
+      -1, false,
+    )
+  }, [])
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }))
+
+  return (
+    <Animated.View style={[{ width: 20, height: 20 }, animStyle]}>
+      <Svg width={20} height={20} viewBox="0 0 22 22">
+        <Circle cx={11} cy={11} r={8} stroke="rgba(109,40,217,0.2)" strokeWidth={2.5} fill="none" />
+        <Path
+          d="M 11 3 A 8 8 0 0 1 19 11"
+          stroke={PURPLE}
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          fill="none"
+        />
+      </Svg>
+    </Animated.View>
+  )
+}
+
 // ── Google Sign-In config ──────────────────────────────────────────────────
 // webClientId comes from Google Cloud Console → OAuth 2.0 → Web client
 // Replace with your actual Web Client ID from Supabase → Auth → Google provider
@@ -50,20 +81,15 @@ GoogleSignin.configure({
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
-  console.log('Starting Google Sign-In...')
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
-  console.log('Play Services OK')
   const userInfo = await GoogleSignin.signIn()
-  console.log('Sign-in result:', JSON.stringify(userInfo))
   const idToken = userInfo.data?.idToken
   if (!idToken) throw new Error('No ID token returned')
-  console.log('Got ID token, signing in with Supabase...')
   const { error } = await supabase.auth.signInWithIdToken({
     provider: 'google',
     token: idToken,
   })
   if (error) throw error
-  console.log('Supabase sign-in success')
 }
 
 async function signInWithApple() {
@@ -125,7 +151,6 @@ export default function LoginPage() {
         {/* ── Hero ── */}
         <View style={styles.hero}>
           <Text style={styles.brandName}>SyncWish</Text>
-          <Text style={styles.tagline}>{t('auth.tagline')}</Text>
           <View style={styles.logoWrapper}>
             <SyncWishLogo size={128} color={WHITE} />
           </View>
@@ -145,16 +170,18 @@ export default function LoginPage() {
             label={t('auth.signInApple')}
             onPress={handleApple}
             disabled={loadingProvider !== null}
+            silentDisabled
             variant="secondary"
-            iconStart={<AppleIcon />}
+            iconStart={loadingProvider === 'apple' ? <LoginSpinner /> : <AppleIcon />}
           />
         ) : (
           <Button
             label={t('auth.signInGoogle')}
             onPress={handleGoogle}
             disabled={loadingProvider !== null}
+            silentDisabled
             variant="secondary"
-            iconStart={<GoogleIcon />}
+            iconStart={loadingProvider === 'google' ? <LoginSpinner /> : <GoogleIcon />}
           />
         )}
       </View>
@@ -190,14 +217,6 @@ const styles = StyleSheet.create({
     color: WHITE,
     letterSpacing: -0.5,
     fontFamily: 'NotoSans_400Regular',
-  },
-  tagline: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-    fontWeight: '500',
-    marginTop: 4,
   },
 
   // Message

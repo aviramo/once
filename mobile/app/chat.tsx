@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated, AppState, Easing, I18nManager, Keyboard, Modal, Platform, Pressable,
-  ScrollView, StyleSheet, View,
+  Animated, AppState, Easing, I18nManager, Image, Keyboard, Modal, Platform,
+  Pressable, ScrollView, StyleSheet, View,
 } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,22 +9,25 @@ import { StatusBar } from 'expo-status-bar'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Circle, Path, Polyline } from 'react-native-svg'
 import { supabase } from '../src/lib/supabase'
-import { invoke } from '../src/lib/api'
+import { invoke, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { t, tg } from '../src/i18n'
 import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
-import { FONT_SCALE } from '../src/fonts'
-import { TEXT, WHITE, BLACK, RED } from '../src/colors'
+import { FONT_SCALE, DOUBLE } from '../src/fonts'
+import { TEXT, WHITE, BLACK, RED, GREEN, GREEN_BG } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
 interface Message {
   user_id: string
   other_id: string
   created_at: string
   text: string
+  is_event?: boolean
+  _pending?: boolean
 }
 
 // ── Date / time helpers ────────────────────────────────────────────────────
@@ -47,13 +50,20 @@ function formatTime(dateStr: string): string {
       .format(new Date(dateStr))
   } catch { return '' }
 }
-function formatLastSeen(iso: string | null | undefined): string {
+function formatLastSeen(iso: string | null | undefined, isMale: boolean | null | undefined): string {
   if (!iso) return ''
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return t('match.justNow')
-  if (diff < 3600) return `${Math.floor(diff / 60)}${t('match.minsAgo')}`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}${t('match.hrsAgo')}`
-  return `${Math.floor(diff / 86400)}${t('match.daysAgo')}`
+  if (diff < 60) return tg('match.justNow', isMale)
+  if (diff < 3600) {
+    const n = Math.floor(diff / 60)
+    return n === 1 ? tg('match.minAgo', isMale) : tg('match.minsAgo', isMale).replace('{n}', String(n))
+  }
+  if (diff < 86400) {
+    const n = Math.floor(diff / 3600)
+    return n === 1 ? tg('match.hrAgo', isMale) : tg('match.hrsAgo', isMale).replace('{n}', String(n))
+  }
+  const n = Math.floor(diff / 86400)
+  return n === 1 ? tg('match.dayAgo', isMale) : tg('match.daysAgo', isMale).replace('{n}', String(n))
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -101,11 +111,28 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
   const otherId = profile?.match?.user_id ?? ''
   const matchLastSeen = profile?.match?.last_seen ?? null
   const isMale = profile?.is_male ?? null
+  const matchIsMale = profile?.match?.is_male ?? null
+  const myImage = profile?.images?.normal?.[0]
+    ? publicImageUrl(userId, 'normal', profile.images.normal[0])
+    : undefined
+  const match = profile?.match
+  const matchImage = (() => {
+    if (!match) return undefined
+    if (match.images) {
+      const arr = Array.isArray(match.images)
+        ? match.images
+        : (() => { try { return JSON.parse(match.images as string) } catch { return null } })()
+      if (Array.isArray(arr) && arr.length > 0) return publicImageUrl(match.user_id, 'normal', arr[0])
+    }
+    if (match.image) {
+      return match.image.includes('://') ? match.image : `${SUPABASE_URL}/storage/v1/object/public/users/${match.image}`
+    }
+    return undefined
+  })()
 
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [enterSends, setEnterSends] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'block' | 'leave' | null>(null)
@@ -114,6 +141,20 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
   // Bump to re-render the last-seen label on an interval without touching
   // the message list (which would re-animate bubbles).
   const [, setTick] = useState(0)
+
+  // ── Cache helpers ──────────────────────────────────────────────────────
+  const cacheKey = otherId ? `chatCache_${otherId}` : ''
+  const setMessages = useCallback((update: Message[] | ((prev: Message[]) => Message[])) => {
+    setMessagesRaw(prev => {
+      const next = typeof update === 'function' ? update(prev) : update
+      if (cacheKey && next !== prev) {
+        // Strip _pending flag before persisting
+        const clean = next.map(({ _pending, ...rest }) => rest)
+        AsyncStorage.setItem(cacheKey, JSON.stringify(clean)).catch(() => {})
+      }
+      return next
+    })
+  }, [cacheKey])
 
   const scrollRef = useRef<ScrollView>(null)
   const seenSet = useRef<Set<string>>(new Set())
@@ -191,6 +232,21 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
     ]
     return () => { subs.forEach(s => s.remove()) }
   }, [])
+
+  // ── Load cached messages instantly ───────────────────────────────────────
+  useEffect(() => {
+    if (!cacheKey) return
+    AsyncStorage.getItem(cacheKey).then(raw => {
+      if (!raw) return
+      try {
+        const cached = JSON.parse(raw) as Message[]
+        if (cached.length > 0) {
+          cached.forEach(m => seenSet.current.add(m.user_id + m.created_at))
+          setMessagesRaw(cached)
+        }
+      } catch {}
+    })
+  }, [cacheKey])
 
   // ── Initial history load ─────────────────────────────────────────────────
   useEffect(() => {
@@ -277,9 +333,14 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
       .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') await ch.track({ uid: userId })
       })
+    const appSub = AppState.addEventListener('change', async (s) => {
+      if (s === 'active') await ch.track({ uid: userId })
+      else await ch.untrack()
+    })
     return () => {
       clearTimeout(typingTimerRef.current)
       presenceChannelRef.current = null
+      appSub.remove()
       supabase.removeChannel(ch)
     }
   }, [userId, otherId])
@@ -316,7 +377,19 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
             const incoming = fresh.filter(m => m.user_id === otherId).length
             if (incoming > 0) setUnread(c => c + incoming)
           }
-          return [...prev, ...fresh]
+          // Replace pending (optimistic) messages with their real server rows
+          // instead of appending duplicates. Match by user_id + text.
+          let resolved = [...prev]
+          const remaining: Message[] = []
+          for (const m of fresh) {
+            const pi = resolved.findIndex(p => p._pending && p.user_id === m.user_id && p.text === m.text)
+            if (pi !== -1) {
+              resolved[pi] = m
+            } else {
+              remaining.push(m)
+            }
+          }
+          return [...resolved, ...remaining]
         })
       })
   }, [userId, otherId])
@@ -344,7 +417,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
     setText('')
     const now = new Date().toISOString()
     seenSet.current.add(userId + now)
-    setMessages(prev => [...prev, { user_id: userId, other_id: otherId, created_at: now, text: msg }])
+    setMessages(prev => [...prev, { user_id: userId, other_id: otherId, created_at: now, text: msg, _pending: true }])
     try { await invoke('app/chat', { chat: { text: msg } }) } catch {}
     setSending(false)
   }, [text, sending, userId, otherId])
@@ -368,7 +441,6 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
     }
   }
 
-  const toggleTime = (key: string) => setExpandedKey(prev => (prev === key ? null : key))
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const firstNewIdx = useMemo(
@@ -376,7 +448,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
     [messages],
   )
 
-  const statusText = otherIsOnline ? t('match.connected') : formatLastSeen(matchLastSeen)
+  const statusText = otherIsOnline ? tg('match.connected', matchIsMale) : formatLastSeen(matchLastSeen, matchIsMale)
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -422,27 +494,28 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
           keyboardShouldPersistTaps="handled"
         >
-          {messages.length === 0 && !otherIsTyping && (
+          {messages.every(m => m.is_event) && !otherIsTyping && (
             <Text style={styles.emptyLabel}>{t('chat.empty')}</Text>
           )}
           {messages.map((msg, i) => {
             const key = `${msg.user_id}-${msg.created_at}-${i}`
             const isMine = msg.user_id === userId
             const showSep = i === 0 || !isSameDay(messages[i - 1].created_at, msg.created_at)
-            const isFirstInGroup = showSep || messages[i - 1]?.user_id !== msg.user_id
+            const isFirstInGroup = showSep || messages[i - 1]?.user_id !== msg.user_id || messages[i - 1]?.is_event || msg.is_event
             const isLastInGroup =
               i === messages.length - 1 ||
               messages[i + 1].user_id !== msg.user_id ||
+              messages[i + 1].is_event || msg.is_event ||
               !isSameDay(msg.created_at, messages[i + 1].created_at)
-            const showTime = expandedKey === key
             const showNewSep = firstNewIdx === i
+
+            if (msg.is_event) return null
 
             return (
               <View key={key} style={[styles.msgWrap, isFirstInGroup && styles.msgWrapFirst]}>
                 {showSep && <DaySeparator label={dateSeparatorLabel(msg.created_at)} />}
                 {showNewSep && !showSep && <DaySeparator label={t('chat.newMessages')} bold />}
-                <Pressable
-                  onPress={() => toggleTime(key)}
+                <View
                   style={[
                     styles.bubble,
                     isMine ? styles.bubbleMine : styles.bubbleTheirs,
@@ -451,13 +524,12 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
                 >
                   <Text style={[styles.bubbleText, isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs]}>
                     {msg.text}
+                    {'  '}
+                    <Text style={[styles.inlineTime, isMine ? styles.inlineTimeMine : styles.inlineTimeTheirs]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+                      {formatTime(msg.created_at)}
+                    </Text>
                   </Text>
-                </Pressable>
-                {showTime && (
-                  <Text style={[styles.time, isMine ? styles.timeMine : styles.timeTheirs]} maxFontSizeMultiplier={FONT_SCALE.ui}>
-                    {formatTime(msg.created_at)}
-                  </Text>
-                )}
+                </View>
               </View>
             )
           })}
@@ -502,19 +574,18 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
         </View>
       </View>
 
-      {/* ── Menu dropdown ──
-          Anchored below the 3-dots button on the same (start) side.
-          Transparent backdrop dismisses; tapping the panel itself stays open. */}
+      {/* ── Menu dropdown ── */}
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
           <View style={[styles.menuAnchor, { top: insets.top + 56 + 4 }]}>
             <Pressable style={styles.menuDropdown} onPress={e => e.stopPropagation()}>
+
               <Pressable
                 onPress={toggleEnterSends}
-                style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+                style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
               >
-                <Text style={styles.menuItemText}>{t('chat.enterSends')}</Text>
-                <View style={[styles.menuCheckbox, enterSends && styles.menuCheckboxOn]}>
+                <Text style={styles.menuLabel}>{t('chat.enterSends')}</Text>
+                <View style={[styles.menuCheckbox, styles.menuCheckboxPos, enterSends && styles.menuCheckboxOn]}>
                   {enterSends && (
                     <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
                       <Polyline points="20 6 9 17 4 12" stroke={WHITE} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
@@ -522,13 +593,16 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
                   )}
                 </View>
               </Pressable>
+
               <View style={styles.menuDivider} />
+
               <Pressable
                 onPress={() => { setMenuOpen(false); setConfirmAction('block') }}
-                style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+                style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
               >
-                <Text style={styles.menuItemText}>{t('chat.block')}</Text>
+                <Text style={[styles.menuLabel, { color: RED }]}>{t('chat.block')}</Text>
               </Pressable>
+
               <View style={styles.menuEndBtnWrap}>
                 <Pressable
                   onPress={() => { setMenuOpen(false); setConfirmAction('leave') }}
@@ -537,6 +611,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
                   <Text style={styles.menuEndBtnText}>{t('chat.leave')}</Text>
                 </Pressable>
               </View>
+
             </Pressable>
           </View>
         </Pressable>
@@ -547,6 +622,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
         title={t('chat.blockTitle')}
         description={t('chat.blockDesc')}
         confirmLabel={t('chat.blockConfirm')}
+        confirmFlex={0.6}
         cancelLabel={t('chat.menuCancel')}
         destructive
         onCancel={() => setConfirmAction(null)}
@@ -557,6 +633,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
         title={t('home.leaveTitle')}
         description={t('home.leaveDesc')}
         confirmLabel={t('home.leaveConfirm')}
+        confirmFlex={0.6}
         cancelLabel={t('home.leaveBack')}
         destructive
         onCancel={() => setConfirmAction(null)}
@@ -615,6 +692,83 @@ function TypingDots() {
   )
 }
 
+// ── Event strip ──────────────────────────────────────────────────────────
+// Renders a visual status change row: [actor avatar] ── chip ── [target avatar]
+// Explicitly handles RTL so the actor (inviter) is always on the reading-
+// start side and the target (invited) on the reading-end side.
+
+const EVENT_COLORS = {
+  invite:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)' },
+  approve: { fg: GREEN, bg: GREEN_BG },
+} as const
+
+function EventStrip({
+  actorImage,
+  targetImage,
+  label,
+  eventType,
+  time,
+}: {
+  actorImage: string | undefined
+  targetImage: string | undefined
+  label: string
+  eventType: string
+  time: string
+}) {
+  const colors = EVENT_COLORS[eventType as keyof typeof EVENT_COLORS] ?? EVENT_COLORS.invite
+  const startImage = isRTL ? targetImage : actorImage
+  const endImage = isRTL ? actorImage : targetImage
+  // Single row: [actor] [chip →] [target]
+  return (
+    <View style={evStyles.row}>
+      <Image source={{ uri: startImage }} style={evStyles.avatar} />
+      <View style={[evStyles.chip, { backgroundColor: colors.bg }]}>
+        <Text style={[evStyles.chipLabel, { color: colors.fg }]}>{label}</Text>
+        <Text style={[evStyles.chipTime, { color: colors.fg }]}>{time}</Text>
+        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none"
+          stroke={colors.fg} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+          <Path d={isRTL ? 'M19 12H5M11 5l-6 7 6 7' : 'M5 12h14M13 5l6 7-6 7'} />
+        </Svg>
+      </View>
+      <Image source={{ uri: endImage }} style={evStyles.avatar} />
+    </View>
+  )
+}
+
+const EV_AVATAR = 72
+const evStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
+  avatar: {
+    width: EV_AVATAR,
+    height: EV_AVATAR,
+    borderRadius: EV_AVATAR / 2,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingStart: 12,
+    paddingEnd: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
+    gap: 5,
+  },
+  chipLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipTime: {
+    fontSize: 11,
+    opacity: 0.7,
+  },
+})
+
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -623,7 +777,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
-    paddingHorizontal: 20,
+    paddingStart: 10,
     backgroundColor: '#eef0f3',
     zIndex: 2,
   },
@@ -636,9 +790,9 @@ const styles = StyleSheet.create({
   },
   iconBtnPressed: { opacity: 0.5 },
   menuBtn: {
-    height: 40,
-    width: 40,
-    borderRadius: 12,
+    height: 36,
+    width: 36,
+    borderRadius: 10,
     backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -647,12 +801,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.08)',
   },
   backBtn: {
-    height: 40,
-    borderRadius: 12,
+    height: 56,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     gap: 2,
   },
   backBtnPressed: {
@@ -679,7 +833,7 @@ const styles = StyleSheet.create({
 
   body: { flex: 1 },
   messages: { flex: 1 },
-  messagesContent: { padding: 16, paddingBottom: 12, flexGrow: 1 },
+  messagesContent: { padding: 10, flexGrow: 1 },
   emptyLabel: {
     marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
     color: 'rgba(0,0,0,0.35)', fontSize: 15, letterSpacing: 0.4,
@@ -696,7 +850,7 @@ const styles = StyleSheet.create({
     maxWidth: '72%',
     paddingVertical: 8,
     paddingHorizontal: 13,
-    borderRadius: 18,
+    borderRadius: DOUBLE,
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: TEXT },
   bubbleMineLast: { borderBottomEndRadius: 4 },
@@ -706,9 +860,9 @@ const styles = StyleSheet.create({
   bubbleTextMine: { color: WHITE },
   bubbleTextTheirs: { color: TEXT },
 
-  time: { fontSize: 11, color: 'rgba(0,0,0,0.5)', marginTop: 4, letterSpacing: 0.5 },
-  timeMine: { alignSelf: 'flex-end', paddingEnd: 6 },
-  timeTheirs: { alignSelf: 'flex-start', paddingStart: 6 },
+  inlineTime: { fontSize: 11, lineHeight: 16, letterSpacing: 0.3 },
+  inlineTimeMine: { color: 'rgba(255,255,255,0.5)' },
+  inlineTimeTheirs: { color: 'rgba(0,0,0,0.35)' },
 
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 13, paddingHorizontal: 16 },
   typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.5)' },
@@ -724,8 +878,8 @@ const styles = StyleSheet.create({
     // flex-end so the send button stays pinned to the bottom as the input
     // grows across multi-line content.
     alignItems: 'flex-end',
-    paddingTop: 8,
-    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingHorizontal: 10,
     gap: 8,
   },
   input: {
@@ -767,7 +921,7 @@ const styles = StyleSheet.create({
   },
   menuDropdown: {
     backgroundColor: WHITE,
-    borderRadius: 16,
+    borderRadius: 8,
     paddingTop: 4,
     paddingBottom: 10,
     paddingHorizontal: 10,
@@ -779,26 +933,22 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
   },
-  // The app is Hebrew-only, so layout is hard-coded to RTL: text pinned to
-  // the visual right, accessory pinned to the visual left. Using physical
-  // left/right (not logical start/end) to avoid auto-swap surprises when
-  // I18nManager.isRTL happens to be false at module-evaluation time.
-  menuItem: {
-    flexDirection: 'row-reverse',
+  menuRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 14,
     paddingHorizontal: 8,
     borderRadius: 10,
     minHeight: 50,
     gap: 12,
   },
-  menuItemPressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
-  menuItemText: {
-    flex: 1,
+  menuRowPressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
+  menuLabel: {
     fontSize: 15,
     color: TEXT,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    textAlign: 'center',
+    flex: 1,
   },
   menuCheckbox: {
     width: 22,
@@ -809,6 +959,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: WHITE,
+  },
+  menuCheckboxPos: {
+    position: 'absolute',
+    end: 8,
   },
   menuCheckboxOn: {
     backgroundColor: TEXT,

@@ -9,12 +9,12 @@ import Svg, { Defs, Path, Circle, Rect, Ellipse, G, Pattern } from 'react-native
 import { invoke } from '../src/lib/api'
 import { hasSeen, markSeen } from '../src/lib/seen'
 import { tap } from '../src/lib/haptics'
-import { useUserStore } from '../src/stores/userStore'
+import { useUserStore, type WatcherInfo } from '../src/stores/userStore'
 import { t, tg, tgg } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button, PrimaryButton } from '../src/components/Button'
-import { TEXT, WHITE, BLACK } from '../src/colors'
+import { TEXT, WHITE, BLACK, PURPLE, PURPLE_BG, RED } from '../src/colors'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BootScreen } from '../src/components/BootScreen'
@@ -23,7 +23,7 @@ import { CountBadge } from '../src/components/CountBadge'
 import { HomeHeader } from '../src/components/HomeHeader'
 import { HomeCard, PullScrollView } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
-import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage } from './settings'
+import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage, type Tab } from './settings'
 import ChatPage from './chat'
 
 const isRTL = I18nManager.isRTL
@@ -158,15 +158,22 @@ function CardBack() {
           <Rect width="100%" height="100%" fill="url(#cbTex)" />
         </Svg>
       </View>
-      <Svg width={180} height={240} viewBox="0 0 180 240">
-        <Path
-          d="M50 60 C50 20, 130 20, 130 60 C130 95, 100 100, 100 135"
-          fill="none"
+      <Svg width={180} height={240} viewBox="0 0 180 240" fill="none">
+        {/* Magnifying glass — circle lens + angled handle */}
+        <Circle
+          cx={82}
+          cy={90}
+          r={52}
           stroke="#fff"
-          strokeWidth={32}
+          strokeWidth={28}
+        />
+        {/* Handle — along 45° radius from circle center */}
+        <Path
+          d="M 119 127 L 168 176"
+          stroke="#fff"
+          strokeWidth={28}
           strokeLinecap="round"
         />
-        <Circle cx={100} cy={185} r={18} fill="#fff" />
       </Svg>
       <View style={cardBackStyles.brandRow}>
         {BRAND_LETTERS.map((l, i) => (
@@ -191,7 +198,6 @@ const cardBackStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#6d28d9',
-    borderRadius: 24,
     overflow: 'hidden',
   },
   brandRow: {
@@ -305,7 +311,6 @@ const permCardStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#6d28d9',
-    borderRadius: 24,
     overflow: 'hidden',
   },
   brandRow: {
@@ -469,12 +474,20 @@ export default function HomePage() {
   // Unread message count reported by ChatPage — shown as a badge next to the
   // "Chat" title while we're on the home pane.
   const [chatUnread, setChatUnread] = useState(0)
+  const settingsChangeTabRef = useRef<((tab: Tab) => void) | null>(null)
+  // Track which settings tab is active so the shell pager yields backward
+  // swipes to PagerView when the user is on a non-first settings tab.
+  const [settingsTabIndex, setSettingsTabIndex] = useState(0)
   const [shellW, setShellW] = useState(() => Dimensions.get('window').width)
   const [shellH, setShellH] = useState(0)
   // SettingsPage reports when the user is editing photos (iOS-style jiggle).
   // While that's active, the shell pan must not claim horizontal drags —
   // otherwise dragging a photo to reorder it slides the whole pane instead.
   const sliding = useSlidingActive()
+  const slidingSV = useSharedValue(false)
+  const settingsTabIndexSV = useSharedValue(0)
+  const touchStartXSV = useSharedValue(0)
+  const touchStartYSV = useSharedValue(0)
   const shellTranslate = useSharedValue(0)
   // Card flip — animates the main card between VISIBLE/HIDDEN/WATCHING transitions.
   // Value range: -1 = edge-on from back, 0 = face-on, 1 = edge-on from front.
@@ -489,6 +502,8 @@ export default function HomePage() {
   // settings text fields, etc.).
   useEffect(() => { Keyboard.dismiss() }, [paneIndex])
   useEffect(() => { shellWRef.current = shellW; shellWSV.value = shellW }, [shellW])
+  useEffect(() => { slidingSV.value = sliding }, [sliding])
+  useEffect(() => { settingsTabIndexSV.value = settingsTabIndex }, [settingsTabIndex])
 
   // Direction sign: LTR lays panes left-to-right in render order (0,1,2),
   // so showing pane i means translating the strip by -i*step. RTL mirrors.
@@ -635,7 +650,7 @@ export default function HomePage() {
           ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
         }),
       ]
-      if (token) calls.push(invoke('app/data', { data: { subscription: { type: 'expo', token } } }))
+      if (token) calls.push(invoke('app/subscription', { subscription: { type: 'expo', token } }))
       Promise.all(calls).catch(() => {})
     })()
   }, [notifPerm, locPerm])
@@ -686,9 +701,8 @@ export default function HomePage() {
   // once (useRef), so a direct closure would freeze the initial state value
   // and never unlock chat-pane access when the user later transitions to
   // CHAT.
-  const chatAvailableRef = useRef(state === 'CHAT')
   const chatAvailableSV = useSharedValue(state === 'CHAT')
-  useEffect(() => { chatAvailableRef.current = state === 'CHAT'; chatAvailableSV.value = state === 'CHAT' }, [state])
+  useEffect(() => { chatAvailableSV.value = state === 'CHAT' }, [state])
 
   // Anchor pane on state transitions. Entering CHAT auto-navigates to the
   // chat pane so the user lands directly in the conversation; other
@@ -704,47 +718,39 @@ export default function HomePage() {
     }
   }, [state])
 
-  // One-time migration: populate the `data` jsonb column for users who
-  // pre-date the data-field architecture. Fires once after the profile is
-  // first loaded. If data is already set we skip to avoid a redundant write.
-  useEffect(() => {
-    if (!profile) return
-    const d = (profile as unknown as { data?: Record<string, unknown> }).data
-    if (d && Object.keys(d).length > 0) return
-    invoke('app/data', {
-      data: { bio: profile.bio ?? null, images: profile.images, units: profile.units ?? null }
-    }).catch(console.error)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!profile])
-
-  // Coexistence rules with inner gestures:
-  //   • On pane 1 (home): forward → settings (always), backward → chat
-  //     (only if state===CHAT).
-  //   • On pane 0 (chat) or pane 2 (settings): claim gestures pointing
-  //     back toward home. Inner sub-pagers surrender at their edges so this
-  //     handler only receives them then.
-  //
-  // activeOffsetX/failOffsetY tell gesture-handler to declaratively wait for
-  // a clear horizontal intent (>=10px) before claiming, and to bail out if
-  // the user's finger moves vertically first (>=20px) — which is what lets
-  // inner ScrollViews own vertical drags unambiguously.
-  //
-  // Narrow activeOffsetX to the directions where a neighbor pane actually
-  // exists. Without this, swiping toward a blocked side still claims the
-  // gesture and the JS clamp leaves a brief elastic feel before snapping
-  // back. A one-sided threshold (99999) makes gesture-handler refuse to
-  // activate in that direction entirely — no claim, no elasticity.
-  const chatAvailable = state === 'CHAT'
-  const shellCanGoBack = paneIndex > 0 && !(paneIndex === HOME_PANE && !chatAvailable)
-  const shellCanGoFwd = paneIndex < 2
-  const shellActiveOffsetX: [number, number] = isRTL
-    ? [shellCanGoBack ? -10 : -99999, shellCanGoFwd ? 10 : 99999]
-    : [shellCanGoFwd ? -10 : -99999, shellCanGoBack ? 10 : 99999]
+  // Shell pager gesture — uses manualActivation so all constraint logic lives
+  // in worklets (shared values). The gesture object is created once (empty deps)
+  // which prevents mid-animation recreation that caused stuttering.
   const shellPan = useMemo(() =>
     Gesture.Pan()
-      .enabled(!sliding)
-      .activeOffsetX(shellActiveOffsetX)
-      .failOffsetY([-20, 20])
+      .manualActivation(true)
+      .onTouchesDown((e, manager) => {
+        'worklet'
+        if (e.allTouches.length === 1) {
+          touchStartXSV.value = e.allTouches[0].absoluteX
+          touchStartYSV.value = e.allTouches[0].absoluteY
+        }
+      })
+      .onTouchesMove((e, manager) => {
+        'worklet'
+        if (slidingSV.value) { manager.fail(); return }
+        if (e.allTouches.length !== 1) { manager.fail(); return }
+        const dx = e.allTouches[0].absoluteX - touchStartXSV.value
+        const dy = e.allTouches[0].absoluteY - touchStartYSV.value
+        // Vertical intent — let scroll views own it
+        if (Math.abs(dy) >= 20) { manager.fail(); return }
+        // Not enough horizontal movement yet
+        if (Math.abs(dx) < 10) return
+        // Direction check using shared values
+        const idx = paneIndexSV.value
+        const forward = (DIR < 0) ? (dx < 0) : (dx > 0)
+        const canGoBack = idx > 0
+          && !(idx === HOME_PANE && !chatAvailableSV.value)
+          && !(idx === SETTINGS_PANE && settingsTabIndexSV.value > 0)
+        const canGoFwd = idx < 2
+        if ((forward && canGoFwd) || (!forward && canGoBack)) manager.activate()
+        else manager.fail()
+      })
       .onUpdate(e => {
         'worklet'
         const w = shellWSV.value
@@ -782,13 +788,17 @@ export default function HomePage() {
           if (!(idx === HOME_PANE && !chatAvailableSV.value))
             target = idx - 1
         }
-        shellTranslate.value = withTiming(DIR * target * paneStep(w), { duration: 300, easing: Easing.out(Easing.cubic) })
-        if (target !== idx) {
-          runOnJS(tap)()
-          runOnJS(setPaneIndex)(target as PaneIndex)
-        }
+        if (target !== idx) runOnJS(tap)()
+        shellTranslate.value = withTiming(
+          DIR * target * paneStep(w),
+          { duration: 300, easing: Easing.out(Easing.cubic) },
+          (finished) => {
+            'worklet'
+            if (finished && target !== idx) runOnJS(setPaneIndex)(target as PaneIndex)
+          },
+        )
       })
-  , [sliding, shellActiveOffsetX[0], shellActiveOffsetX[1]])
+  , [])
 
   const shellStripStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: shellTranslate.value }],
@@ -818,7 +828,9 @@ export default function HomePage() {
       })
   }
 
-  const watchers = profile?.watchers ? Object.values(profile.watchers) : []
+  const watchers = profile?.watchers
+    ? Object.values(profile.watchers).sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+    : []
 
   // Use displayedCardMode so card content only swaps at the flip midpoint.
   const showWatchers = !!profile && displayedCardMode === 'VISIBLE'
@@ -869,18 +881,31 @@ export default function HomePage() {
   const matchIsMale = profile?.match?.is_male
   const inviteConfirmDesc = tgg('home.inviteConfirmDesc' as any, isMale, matchIsMale)
 
+  // Status chip shown next to settings button.
+  const statusGreen = false
+  const statusColor: string | undefined = state === 'VISIBLE' ? PURPLE : undefined
+  const headerStatusLabel = (() => {
+    if (state === 'WAITING' || state === 'REPLYING' || state === 'CHAT')
+      return tg('home.statusOnlyMatch' as any, isMale).replace('{name}', matchName)
+    if (state === 'VISIBLE')
+      return tg('home.statusVisible' as any, isMale)
+    return tg('home.statusHidden' as any, isMale)
+  })()
+
   // The match card surfaces both for live interaction states and for
   // terminal/ended states (MISSED, CANCELLED, REFUSED, LEFT). The ended
   // states show the same match + a single dismiss button that clears the
   // record on the server and drops back to the HIDDEN shell.
   const isEndedState =
-    state === 'MISSED' || state === 'CANCELLED' || state === 'REFUSED' || state === 'LEFT'
+    state === 'MISSED' || state === 'CANCELLED' || state === 'REFUSED' || state === 'LEFT' ||
+    state === 'REMOVED' || state === 'LOGGED_OUT' || state === 'INVITED' || state === 'HID' || state === 'DELETED'
   const isMatchCardOpen =
     state === 'WATCHING' || state === 'WAITING' || state === 'REPLYING' || state === 'CHAT' ||
     isEndedState
   // Displayed versions — drive card rendering (lag during flip).
   const displayedIsEndedState =
-    displayedCardMode === 'MISSED' || displayedCardMode === 'CANCELLED' || displayedCardMode === 'REFUSED' || displayedCardMode === 'LEFT'
+    displayedCardMode === 'MISSED' || displayedCardMode === 'CANCELLED' || displayedCardMode === 'REFUSED' || displayedCardMode === 'LEFT' ||
+    displayedCardMode === 'REMOVED' || displayedCardMode === 'LOGGED_OUT' || displayedCardMode === 'INVITED' || displayedCardMode === 'HID' || displayedCardMode === 'DELETED'
   const displayedIsMatchCardOpen =
     displayedCardMode === 'WATCHING' || displayedCardMode === 'WAITING' || displayedCardMode === 'REPLYING' || displayedCardMode === 'CHAT' ||
     displayedIsEndedState
@@ -892,6 +917,8 @@ export default function HomePage() {
   const [inviteConfirmOpen, setInviteConfirmOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
+  const [removeWatcherTarget, setRemoveWatcherTarget] = useState<WatcherInfo | null>(null)
+  const [removeWatcherBusy, setRemoveWatcherBusy] = useState(false)
 
   const runAction = (endpoint: string, key: string, onDone?: () => void) => {
     if (busy) return
@@ -921,7 +948,7 @@ export default function HomePage() {
           <View style={styles.buttonCellAccept}>
             <Button
               variant="primary"
-              tone="visible"
+              tone="positive"
               label={t('home.watchingAccept')}
               onPress={() => { tap(); setInviteConfirmOpen(true) }}
               disabled={busy}
@@ -956,7 +983,7 @@ export default function HomePage() {
           <View style={styles.buttonCellAccept}>
             <Button
               variant="primary"
-              tone="visible"
+              tone="positive"
               label={t('home.replyingAccept')}
               onPress={() => runAction('app/approve', 'replying-accept')}
               disabled={busy}
@@ -996,45 +1023,112 @@ export default function HomePage() {
         ? <PrimaryButton label={t('home.openAppSettings')} onPress={openAppSettings} tone="visible" />
         : null
 
+  const goToPreferences = () => {
+    settingsChangeTabRef.current?.('preferences')
+    goToPane(SETTINGS_PANE)
+  }
+
+  const hiddenButtons = showHiddenPlaceholder
+    ? <Button variant="soft" label={t('home.changePreferences')} onPress={goToPreferences} />
+    : null
+
   const cardButtons = showNotifOverlay
     ? notifButtons
     : showLocOverlay
       ? locButtons
-      : isMatchCardOpen ? matchButtons : null
+      : isMatchCardOpen ? matchButtons : hiddenButtons
 
   // ── Header props ──────────────────────────────────────────────────────
-  const pushKey = `push.${state}`
-  const pushLabel = isMatchCardOpen ? t(pushKey as any) : ''
   const headerTitle =
     showNotifOverlay ? t('home.notifHeaderTitle')
     : showLocOverlay ? t('home.locHeaderTitle')
-    : showHiddenPlaceholder ? tg('home.hiddenPullHint', isMale)
-    : state === 'WATCHING' ? 'SyncWish'
     : state === 'CHAT' ? t('home.chatHeader')
-    : pushLabel && pushLabel !== pushKey ? pushLabel
-    : isVisible ? t('home.hiddenFlippedTitle')
-    : tg('home.hiddenHeaderTitle', isMale)
+    : state === 'WATCHING' ? t('push.WATCHING')
+    : state === 'WAITING' ? t('push.WAITING')
+    : state === 'REPLYING' ? t('push.REPLYING')
+    : state === 'MISSED' ? t('push.MISSED')
+    : state === 'CANCELLED' ? t('push.CANCELLED')
+    : state === 'REFUSED' ? t('push.REFUSED')
+    : state === 'LEFT' ? t('push.LEFT')
+    : state === 'REMOVED' ? tg('push.REMOVED' as any, matchIsMale)
+    : state === 'LOGGED_OUT' ? tg('push.LOGGED_OUT' as any, matchIsMale)
+    : state === 'INVITED' ? t('push.INVITED')
+    : state === 'HID' ? tg('push.HID' as any, matchIsMale)
+    : state === 'DELETED' ? tg('push.DELETED' as any, matchIsMale)
+    : isVisible ? t('home.watchersInnerTitle')
+    : 'SyncWish'
 
   const headerArrow = (() => {
     if (state === 'CHAT') return { direction: 'side' as const, onPress: () => goToPane(CHAT_PANE) }
-    if (showHiddenPlaceholder || state === 'WATCHING' || showWatchers || isVisible)
-      return { direction: 'down' as const, onPress: () => cardPullRef.current?.() }
+    // Pull-based arrow disabled — status chip is now the toggle.
+    // Original: if (showHiddenPlaceholder || state === 'WATCHING' || showWatchers || isVisible)
+    //   return { direction: 'down' as const, onPress: () => cardPullRef.current?.() }
     return undefined
   })()
 
-  const headerBadge = state === 'CHAT' ? chatUnread : undefined
+  const headerBadge = state === 'CHAT' ? (chatUnread || undefined) : isVisible ? watchers.length : undefined
+  const headerBadgeColor = isVisible ? (watchers.length > 0 ? VISIBLE_ACCENT : 'rgba(0,0,0,0.25)') : undefined
 
   // ── Card props ────────────────────────────────────────────────────────
-  const cardOnPull = (() => {
-    if (showWatchers) return onSwitchToHidden
-    if (showHiddenPlaceholder) return () => new Promise<void>(resolve => {
-      openRevealConfirm(false, resolve)
-    })
-    if (state === 'WATCHING') return async () => {
-      if (await hasSeen('reveal_confirm')) return setVisibility('VISIBLE')
-      return new Promise<void>(resolve => { openRevealConfirm(true, resolve) })
+  // Pull gesture disabled — status chip is now the toggle.
+  // Original cardOnPull kept for easy revert:
+  // const cardOnPull = (() => {
+  //   if (showWatchers) return onSwitchToHidden
+  //   if (showHiddenPlaceholder) return () => new Promise<void>(resolve => {
+  //     openRevealConfirm(false, resolve)
+  //   })
+  //   if (state === 'WATCHING') return async () => {
+  //     if (await hasSeen('reveal_confirm')) return setVisibility('VISIBLE')
+  //     return new Promise<void>(resolve => { openRevealConfirm(true, resolve) })
+  //   }
+  //   return undefined
+  // })()
+  const cardOnPull = undefined
+
+  // Status chip toggle — opens confirm dialogs directly (no pull animation).
+  const handleStatusToggle = async () => {
+    if (busy) return
+    if (isVisible) {
+      onSwitchToHidden()
+    } else if (state === 'HIDDEN') {
+      setRevealIsForWatching(false)
+      setSkipRevealChecked(false)
+      setRevealConfirmOpen(true)
+    } else if (state === 'WATCHING') {
+      if (await hasSeen('reveal_confirm')) {
+        setVisibility('VISIBLE')
+      } else {
+        setRevealIsForWatching(true)
+        setSkipRevealChecked(false)
+        setRevealConfirmOpen(true)
+      }
     }
-    return undefined
+  }
+
+  // Status dropdown menu — shows options the user can switch to (excludes current state).
+  const statusMenuOptions = (() => {
+    if (state !== 'VISIBLE' && state !== 'HIDDEN' && state !== 'WATCHING') return undefined
+    const opts: Array<{ label: string; color?: string; onPress: () => void }> = []
+    if (!isVisible) {
+      opts.push({
+        label: t('home.menuVisible'),
+        color: PURPLE,
+        onPress: () => setVisibility('VISIBLE'),
+      })
+    }
+    if (state !== 'HIDDEN' && state !== 'WATCHING') {
+      opts.push({
+        label: t('home.menuHidden'),
+        onPress: () => onSwitchToHidden(),
+      })
+    }
+    // "Inactive" — placeholder, not wired to backend yet.
+    opts.push({
+      label: t('home.menuInactive'),
+      color: RED,
+      onPress: () => {},
+    })
+    return opts
   })()
 
   const cardDescription = (() => {
@@ -1062,6 +1156,16 @@ export default function HomePage() {
             : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc')
             : t('home.locationPromptDesc')
           }
+          hideIcon
+        />
+      )
+    }
+    if (displayedCardMode === 'HIDDEN') {
+      return (
+        <Message
+          state="HIDDEN"
+          title={t('home.hiddenInfoTitle')}
+          desc={tg('home.hiddenInfoDesc', isMale)}
           hideIcon
         />
       )
@@ -1116,8 +1220,13 @@ export default function HomePage() {
             <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
               <HomeHeader
                 title={headerTitle}
+                statusLabel={headerStatusLabel}
+                statusGreen={statusGreen}
+                statusColor={statusColor}
                 arrow={headerArrow}
                 badge={headerBadge}
+                badgeColor={headerBadgeColor}
+                statusMenu={statusMenuOptions}
                 onSettingsPress={() => goToPane(SETTINGS_PANE)}
                 disabled={busy}
                 loading={busy}
@@ -1152,7 +1261,7 @@ export default function HomePage() {
                     {watchers.map((w, i) => (
                       <View key={w.user_id}>
                         {i > 0 && <View style={styles.watchersRowDivider} />}
-                        <WatcherCard watcher={w} units={profile?.units} flat />
+                        <WatcherCard watcher={w} units={profile?.units} flat onPress={() => { tap(); setRemoveWatcherTarget(w) }} />
                       </View>
                     ))}
                     {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
@@ -1194,10 +1303,10 @@ export default function HomePage() {
                 description={tg('home.revealConfirmDesc', isMale)}
                 cancelLabel={t('home.revealConfirmCancel')}
                 confirmLabel={t('home.revealConfirmConfirm')}
+                cancelFlex={0.6}
                 tone="visible"
                 onCancel={() => { if (!busy) { closeRevealConfirm(); releasePull() } }}
                 onConfirm={() => {
-                  if (revealIsForWatching && skipRevealChecked) markSeen('reveal_confirm').catch(() => {})
                   setVisibility('VISIBLE').finally(() => { closeRevealConfirm(); releasePull() })
                 }}
                 busy={busy}
@@ -1214,6 +1323,7 @@ export default function HomePage() {
                 description={hideConfirmDesc}
                 cancelLabel={t('home.hideConfirmCancel')}
                 confirmLabel={tg('home.hideConfirmConfirm', isMale)}
+                confirmFlex={0.6}
                 destructive
                 onCancel={() => { if (!busy) { setHideConfirmOpen(false); releasePull() } }}
                 onConfirm={() => { setVisibility('HIDDEN').finally(releasePull) }}
@@ -1225,8 +1335,9 @@ export default function HomePage() {
                 title={t('home.inviteConfirmTitle').replace('{name}', matchName)}
                 description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
                 cancelLabel={t('home.inviteConfirmCancel')}
+                cancelFlex={0.6}
                 confirmLabel={t('home.inviteConfirmOk')}
-                tone="visible"
+                tone="positive"
                 onCancel={() => { if (!busy) setInviteConfirmOpen(false) }}
                 onConfirm={() => runAction('app/invite', 'invite-confirm', () => setInviteConfirmOpen(false))}
                 busy={busy}
@@ -1234,10 +1345,11 @@ export default function HomePage() {
 
               <ConfirmDialog
                 visible={cancelConfirmOpen}
-                title={t('home.cancelWaitingTitle').replace('{name}', matchName)}
-                description={t('home.cancelWaitingDesc')}
+                title={t('home.cancelWaitingTitle')}
+                description={tg('home.cancelWaitingDesc', matchIsMale).replace(/\{name\}/g, matchName)}
                 cancelLabel={t('home.cancelWaitingBack')}
                 confirmLabel={t('home.cancelWaitingConfirm')}
+                confirmFlex={0.6}
                 destructive
                 onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                 onConfirm={() => runAction('app/cancel', 'cancel-confirm', () => setCancelConfirmOpen(false))}
@@ -1247,13 +1359,38 @@ export default function HomePage() {
               <ConfirmDialog
                 visible={refuseConfirmOpen}
                 title={t('home.refuseReplyTitle')}
-                description={t('home.refuseReplyDesc')}
+                description={tg('home.refuseReplyDesc', matchIsMale)}
                 cancelLabel={t('home.refuseReplyBack')}
                 confirmLabel={t('home.refuseReplyConfirm')}
+                confirmFlex={0.6}
                 destructive
                 onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
                 onConfirm={() => runAction('app/refuse', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
                 busy={busy}
+              />
+
+              <ConfirmDialog
+                visible={!!removeWatcherTarget}
+                title={t('home.removeWatcherTitle')}
+                description={t('home.removeWatcherDesc').replace('{name}', removeWatcherTarget?.title ?? '')}
+                cancelLabel={t('home.removeWatcherCancel')}
+                cancelFlex={0.6}
+                confirmLabel={t('home.removeWatcherConfirm')}
+                destructive
+                onCancel={() => { if (!removeWatcherBusy) setRemoveWatcherTarget(null) }}
+                onConfirm={async () => {
+                  if (!removeWatcherTarget || removeWatcherBusy) return
+                  setRemoveWatcherBusy(true)
+                  try {
+                    await invoke('app/remove', { user_id: removeWatcherTarget.user_id })
+                  } catch (e) {
+                    console.error(e)
+                  } finally {
+                    setRemoveWatcherBusy(false)
+                    setRemoveWatcherTarget(null)
+                  }
+                }}
+                busy={removeWatcherBusy}
               />
             </SafeAreaView>
           </View>
@@ -1263,7 +1400,7 @@ export default function HomePage() {
             style={[styles.shellPane, { start: 2 * (shellW + SEAM_GAP), width: shellW }]}
             pointerEvents={paneIndex === SETTINGS_PANE ? 'auto' : 'none'}
           >
-            <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} />
+            <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} changeTabRef={settingsChangeTabRef} onTabChange={setSettingsTabIndex} />
           </View>
 
           {/* Pane 3 — field sub-page (select, age range, or radius) */}
@@ -1349,14 +1486,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
   },
   watchersDescRow: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   watchersDescText: {
-    fontSize: 14,
-    color: 'rgba(0,0,0,0.5)',
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
-    lineHeight: 21,
-    writingDirection: 'rtl',
   },
   // Ghosted slot hinting that more watchers can land here. Dashed border +
   // translucent fills read as "empty space to fill" rather than a real row.

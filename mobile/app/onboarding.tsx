@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Animated, Keyboard, Dimensions, I18nManager, TextInput as RNTextInput, Pressable } from 'react-native'
+import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -12,12 +12,11 @@ import { tap } from '../src/lib/haptics'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
-import { PhotoEditor } from '../src/components/PhotoEditor'
-import { TEXT, WHITE, RED } from '../src/colors'
+import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
+import { TEXT, WHITE, RED, PURPLE_LIGHT } from '../src/colors'
+import { SINGLE } from '../src/fonts'
 
 const TOTAL_STEPS = 5
-const isRTL = I18nManager.isRTL
-
 // Date segment order keyed by UI language. Hebrew → DD/MM/YYYY (standard in
 // Israel). English → MM/DD/YYYY (US convention; the app's other English
 // surfaces target a US audience). Add more locales here as they land.
@@ -154,14 +153,9 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
   const [savingImages, setSavingImages] = useState(false)
-  const [photosUploading, setPhotosUploading] = useState(false)
+  const [totalPhotoCount, setTotalPhotoCount] = useState(profile?.images?.normal?.length ?? 0)
+  const photoEditorRef = useRef<PhotoEditorRef>(null)
 
-  // Pager layout — every step renders in parallel inside the strip so the
-  // transition is a single native-driven translateX, the same pattern used by
-  // the home/settings shell. Initial width comes from Dimensions so the first
-  // render lands on step 1 without a frame of empty layout before onLayout.
-  const [width, setWidth] = useState(() => Dimensions.get('window').width)
-  const translate = useRef(new Animated.Value(0)).current
   const nameInputRef = useRef<RNTextInput>(null)
   const ddRef = useRef<RNTextInput>(null)
   const mmRef = useRef<RNTextInput>(null)
@@ -210,26 +204,6 @@ export default function OnboardingPage() {
     setStep((profile.images?.normal?.length ?? 0) >= 1 ? 5 : 4)
   }, [profile])
 
-  // Slide the strip whenever the step changes. Spring with damped friction so
-  // the end state matches the other pagers in the app. Width changes (initial
-  // Dimensions → onLayout) snap instantly to avoid a visible bounce on mount.
-  const prevStepRef = useRef(step)
-  useEffect(() => {
-    if (!width) return
-    const target = (isRTL ? 1 : -1) * (step - 1) * width
-    if (step !== prevStepRef.current) {
-      prevStepRef.current = step
-      Animated.spring(translate, {
-        toValue: target,
-        tension: 68,
-        friction: 14,
-        useNativeDriver: true,
-      }).start()
-    } else {
-      translate.setValue(target)
-    }
-  }, [step, width])
-
   // Focus the nickname input only when step 2 is active — autoFocus would fire
   // on mount across all pages simultaneously, so we control focus by step.
   useEffect(() => {
@@ -269,7 +243,6 @@ export default function OnboardingPage() {
     return a
   })()
   const dateValid = age !== null && age >= 18 && age <= 120
-  const photoCount = profile?.images?.normal?.length ?? 0
   const BIO_MAX = 150
   const BIO_MIN = 20
   const bioRemaining = BIO_MAX - bio.length
@@ -278,7 +251,7 @@ export default function OnboardingPage() {
     step === 1 ? isMale !== null :
     step === 2 ? nameValid :
     step === 3 ? dateValid && !submitting :
-    step === 4 ? photoCount >= 1 && !savingImages && !photosUploading :
+    step === 4 ? totalPhotoCount >= 1 && !savingImages :
     step === 5 ? bioValid && !bioSubmitting :
     false
 
@@ -287,6 +260,7 @@ export default function OnboardingPage() {
     setSubmitting(true)
     setDateError(null)
     try {
+      seededFromProfileRef.current = true
       await invoke('app/account', { birth_date: birthdate, name: name.trim(), is_male: isMale })
       setStep(s => Math.min(TOTAL_STEPS, s + 1))
     } catch (e: any) {
@@ -296,35 +270,33 @@ export default function OnboardingPage() {
     }
   }
 
-  const saveImagesAndContinue = async () => {
+  const saveImagesAndContinue = () => {
     if (savingImages) return
     setSavingImages(true)
-    try {
-      // Photos are already in storage (PhotoEditor uploads each immediately and
-      // mutates the local userStore optimistically), but the user row's images
-      // column still points at the pre-onboarding state. Persist the current
-      // local view before moving to bio so the server has the references.
-      const images = useUserStore.getState().profile?.images
-      if (images) await invoke('app/update', { images })
-      setStep(s => Math.min(TOTAL_STEPS, s + 1))
-    } catch (e) {
-      console.error('save images failed', e)
-    } finally {
-      setSavingImages(false)
-    }
+    // flush() commits filenames to the store synchronously (before its
+    // first await), then uploads to storage in the background. We call it
+    // here while the PhotoEditor is still mounted, so the ref is alive.
+    // The storage upload keeps running after we advance to step 5.
+    photoEditorRef.current?.flush().catch(e => console.error('storage upload failed', e))
+    // filenames are already in the store — advance immediately
+    setStep(s => Math.min(TOTAL_STEPS, s + 1))
+    setSavingImages(false)
   }
 
   const submitBio = async () => {
     if (bioSubmitting) return
     setBioSubmitting(true)
     try {
-      // app/profile finalizes onboarding server-side: it picks up `message`
-      // via the updatable allowlist and runs search(), which transitions
-      // state away from null. _layout.tsx's routing then no longer treats
-      // the user as needing onboarding, but it only auto-redirects from the
-      // auth screen — we still need an explicit push to /home from here.
-      await invoke('app/profile', { message: bio.trim().replace(/\n{3,}/g, '\n\n') })
-      router.replace('/home')
+      // Images were committed to the store by flush() in step 4.
+      // Send bio + images together so the profile is complete before
+      // search() runs server-side.
+      const images = useUserStore.getState().profile?.images
+      await invoke('app/profile', {
+        bio: bio.trim().replace(/\n{3,}/g, '\n\n'),
+        images,
+      })
+      // Navigation to /home is handled by the routing guard in _layout.tsx
+      // once the profile state transitions away from null.
     } catch {
       setBioSubmitting(false)
     }
@@ -433,12 +405,12 @@ export default function OnboardingPage() {
         <View style={styles.page}>
           <Text style={styles.title}>{t('ob.birthdate')}</Text>
           <View style={styles.subtitleRow}>
-            <Text style={styles.subtitle}>{tg('ob.howOld', isMale === true)}</Text>
-            {dateValid && (
-              <View style={styles.ageBadgeSlot}>
-                <CountBadge value={age!} color="#6d28d9" />
+            <View style={styles.subtitleAnchor}>
+              <Text style={[styles.subtitle, { marginTop: 0 }]}>{tg('ob.howOld', isMale === true)}</Text>
+              <View style={{ opacity: dateValid ? 1 : 0 }}>
+                <CountBadge value={age ?? 0} color="#6d28d9" />
               </View>
-            )}
+            </View>
           </View>
 
           <View style={styles.dateRow}>
@@ -503,7 +475,9 @@ export default function OnboardingPage() {
 
         <View style={styles.photoWrap} pointerEvents="box-none">
           <PhotoEditor
-            onUploadingChange={setPhotosUploading}
+            ref={photoEditorRef}
+            deferUpload
+            onTotalCountChange={setTotalPhotoCount}
           />
         </View>
 
@@ -571,33 +545,8 @@ export default function OnboardingPage() {
         <ProgressBar step={step} />
       </View>
 
-      <View
-        style={styles.pagerWrap}
-        onLayout={e => setWidth(e.nativeEvent.layout.width)}
-      >
-        <Animated.View style={{ flex: 1, transform: [{ translateX: translate }] }}>
-          {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
-            const s = i + 1
-            // `start: i * width` is RTL-aware — maps to right in RTL. Combined
-            // with the translateX sign flip in the effect above, page s lands
-            // on-screen when step === s in both directions.
-            return (
-              <View
-                key={s}
-                pointerEvents={step === s ? 'auto' : 'none'}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  start: i * width,
-                  width,
-                }}
-              >
-                {renderStep(s)}
-              </View>
-            )
-          })}
-        </Animated.View>
+      <View style={styles.pagerWrap}>
+        {renderStep(step)}
       </View>
     </SafeAreaView>
   )
@@ -639,17 +588,14 @@ const styles = StyleSheet.create({
     color: 'rgba(0,0,0,0.5)',
     textAlign: 'center',
   },
-  // Subtitle row hosts the subtitle text (still carrying its own marginTop)
-  // plus an absolutely positioned age badge pinned to the end edge. Absolute
-  // keeps the subtitle visually centered whether or not the badge is present,
-  // so the layout doesn't jump when the date validates.
-  subtitleRow: { justifyContent: 'center' },
-  ageBadgeSlot: {
-    position: 'absolute',
-    end: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+  subtitleRow: {
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  subtitleAnchor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 
   cardRow: {
@@ -659,7 +605,7 @@ const styles = StyleSheet.create({
   },
   card: {
     aspectRatio: 1,
-    borderRadius: 20,
+    borderRadius: SINGLE,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
   },
@@ -671,7 +617,7 @@ const styles = StyleSheet.create({
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: TEXT,
+    backgroundColor: PURPLE_LIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 14,

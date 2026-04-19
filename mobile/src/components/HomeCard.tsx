@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   cardOuter: {
     flex: 1,
     marginHorizontal: SINGLE,
-    marginTop: 6,
+    marginTop: 0,
     marginBottom: DOUBLE,
     borderRadius: SINGLE,
   },

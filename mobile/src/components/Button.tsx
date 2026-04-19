@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE, SINGLE, BUTTON } from '../fonts'
-import { TEXT, WHITE, PURPLE, PURPLE_PRESS, RED, RED_PRESS, MUTED, MUTED_PRESS, MUTED_TEXT } from '../colors'
+import { TEXT, WHITE, PURPLE, PURPLE_PRESS, RED, RED_PRESS, GREEN, GREEN_PRESS, MUTED, MUTED_PRESS, MUTED_TEXT } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -23,7 +23,7 @@ type Variant = 'primary' | 'secondary' | 'destructive' | 'soft'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
-type Tone = 'neutral' | 'visible'
+type Tone = 'neutral' | 'visible' | 'positive'
 
 export function Button({
   label,
@@ -164,6 +164,10 @@ const TONE: Record<Exclude<Tone, 'neutral'>, { btn: object; pressed: object }> =
   visible: {
     btn: { backgroundColor: PURPLE },
     pressed: { backgroundColor: PURPLE_PRESS },
+  },
+  positive: {
+    btn: { backgroundColor: GREEN },
+    pressed: { backgroundColor: GREEN_PRESS },
   },
 }
 

@@ -48,9 +48,11 @@ function applyGlobalFont() {
   // @ts-expect-error
   TextInput.defaultProps.maxFontSizeMultiplier = FONT_SCALE.body
   // @ts-expect-error
+  const prevStyle = TextInput.defaultProps.style
+  // @ts-expect-error
   TextInput.defaultProps.style = [
     { fontFamily: DEFAULT_FAMILY },
-    TextInput.defaultProps.style,
+    prevStyle,
   ]
 }
 
@@ -97,6 +99,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       target = needsOnboarding ? '/onboarding' : '/home'
     } else if (user && !profileLoading && needsOnboarding && !onOnboarding && !onAuthScreen) {
       target = '/onboarding'
+    } else if (user && !profileLoading && !needsOnboarding && onOnboarding) {
+      target = '/home'
     }
 
     if (!target) return

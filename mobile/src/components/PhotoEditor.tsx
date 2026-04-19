@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Pressable, StyleSheet, Image, ActivityIndicator } from 'react-native'
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
+import { View, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
+import { Image } from 'expo-image'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Svg, { Path, Line } from 'react-native-svg'
+import Svg, { Path, Line, Circle } from 'react-native-svg'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -11,7 +12,7 @@ import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SINGLE } from '../fonts'
-import { TEXT, WHITE } from '../colors'
+import { TEXT, WHITE, PURPLE, MUTED } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -23,11 +24,30 @@ function uuidv4(): string {
   })
 }
 
-// Cached set of URIs we've already seen load once. React Native Image
-// caches bytes to disk, but the component still runs a load cycle on
-// re-mount which shows a spinner. Tracking loaded URIs here lets us skip
-// the spinner entirely when the user navigates back to the screen.
-const loadedUris = new Set<string>()
+// Module-level cache of local URIs for photos whose upload is still in
+// flight. Keyed by the normal-variant filename that is already committed to
+// the user store. Components outside the editor (e.g. the thumbnail strip
+// on the profile tab) read from this map so they can show the image from
+// the device cache while the background upload runs.
+export const localPhotoUriCache = new Map<string, string>()
+
+async function uploadFileToStorage(uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string, userId: string) {
+  const formData = new FormData()
+  formData.append('', { uri, name: filename, type: contentType } as any)
+  const res = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/users/${userId}/${variant}/${filename}`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'x-upsert': 'true' },
+      body: formData,
+    }
+  )
+  if (!res.ok) throw new Error(await res.text())
+}
+
+export interface PhotoEditorRef {
+  flush: () => Promise<void>
+}
 
 function PhotoCell({
   uri, localUri, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
@@ -41,29 +61,24 @@ function PhotoCell({
   highlighted?: boolean
   onLayout?: (e: any) => void
 }) {
-  const [loaded, setLoaded] = useState(() => loadedUris.has(uri))
   return (
     <View
       style={photoStyles.cell}
       onLayout={onLayout}
     >
-      {localUri && !loaded && (
-        <Image source={{ uri: localUri }} style={[photoStyles.img, { position: 'absolute', top: 0, start: 0, end: 0, bottom: 0 }]} />
-      )}
       <Image
-        source={{ uri }}
-        style={[photoStyles.img, !loaded && { opacity: 0 }]}
-        onLoad={() => { loadedUris.add(uri); setLoaded(true); onLoaded?.() }}
+        source={uri}
+        placeholder={localUri ? { uri: localUri } : undefined}
+        style={photoStyles.img}
+        cachePolicy="disk"
+        recyclingKey={uri}
+        transition={200}
+        onLoad={() => onLoaded?.()}
       />
-      {!loaded && (
-        <View style={photoStyles.spinnerBadge}>
-          <ActivityIndicator size="small" color={WHITE} />
-        </View>
-      )}
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
-      {loaded && canRemove && (
+      {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.5} strokeLinecap="round">
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={3} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
@@ -75,7 +90,9 @@ function PhotoCell({
 
 // Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
-  photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads, additionalChildren, onDragStateChange,
+  photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads,
+  localPhotos, onRemoveLocal,
+  additionalChildren, onDragStateChange,
 }: {
   photos: string[]
   urlFor: (f: string) => string
@@ -84,6 +101,8 @@ function PhotoGrid({
   onReorder: (from: number, to: number) => void
   canRemove: boolean
   uploads: { id: string; uri: string; filename?: string }[]
+  localPhotos?: { id: string; uri: string }[]
+  onRemoveLocal?: (id: string) => void
   additionalChildren?: React.ReactNode
   onDragStateChange?: (dragging: boolean) => void
 }) {
@@ -103,7 +122,8 @@ function PhotoGrid({
 
   const dragPan = useMemo(() =>
     Gesture.Pan()
-      .minDistance(3)
+      .activeOffsetX([-8, 8])
+      .activeOffsetY([-8, 8])
       .onBegin(e => {
         let hit = -1
         for (let i = 0; i < layouts.current.length; i++) {
@@ -115,12 +135,12 @@ function PhotoGrid({
           }
         }
         sourceIdxRef.current = hit >= 0 ? hit : null
+        if (hit >= 0) setDragIdx(hit)
       })
       .onStart(() => {
         const idx = sourceIdxRef.current
         if (idx == null) return
         tapMedium()
-        setDragIdx(idx)
         onDragStateChangeRef.current?.(true)
       })
       .onUpdate(e => {
@@ -173,7 +193,7 @@ function PhotoGrid({
           <PhotoCell
             key={`${i}-${filename}`}
             uri={urlFor(filename)}
-            localUri={matchingUpload?.uri}
+            localUri={matchingUpload?.uri ?? localPhotoUriCache.get(filename)}
             onRemove={() => onRemove(filename)}
             onLoaded={() => onLoaded(filename)}
             canRemove={canRemove}
@@ -183,19 +203,35 @@ function PhotoGrid({
           />
         )
       })}
+      {(localPhotos ?? []).map(lp => (
+        <PhotoCell
+          key={lp.id}
+          uri={lp.uri}
+          onRemove={() => onRemoveLocal?.(lp.id)}
+          canRemove={canRemove}
+        />
+      ))}
       {uploads.filter(u => !u.filename).map(u => (
         <View key={u.id} style={photoStyles.cell}>
-          <Image source={{ uri: u.uri }} style={photoStyles.img} />
-          <View style={photoStyles.spinnerBadge}>
-            <ActivityIndicator size="small" color={WHITE} />
-          </View>
+          {u.uri ? (
+            <Image source={u.uri} style={photoStyles.img} cachePolicy="disk" />
+          ) : (
+            <View style={photoStyles.placeholderBg}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="8" r="4" fill="rgba(0,0,0,0.10)" />
+                <Path d="M4 21c0-4 3.5-7 8-7s8 3 8 7" fill="rgba(0,0,0,0.10)" />
+              </Svg>
+            </View>
+          )}
+          <ActivityIndicator size="small" color={PURPLE} style={photoStyles.placeholderSpinner} />
         </View>
       ))}
       {additionalChildren}
       {(() => {
         const pendingCount = uploads.filter(u => !u.filename).length
+        const localCount = localPhotos?.length ?? 0
         const addCount = additionalChildren ? 1 : 0
-        const total = photos.length + pendingCount + addCount
+        const total = photos.length + pendingCount + localCount + addCount
         const fillers = (3 - (total % 3)) % 3
         return Array.from({ length: fillers }).map((_, i) => (
           <View
@@ -213,22 +249,44 @@ function PhotoGrid({
 // ── Public editor ─────────────────────────────────────────────────────────
 // Full photo-management surface used by both the photo sub-page (settings)
 // and onboarding step 4. Owns the upload queue, dedupe signature map, and
-// the duplicate-detected dialog. Remove/reorder changes are applied to the
-// store immediately (no deferred flush).
-export function PhotoEditor({
+// the duplicate-detected dialog.
+//
+// When `deferUpload` is true, picked photos are only compressed locally —
+// nothing is sent to storage until the caller invokes `flush()` via the
+// forwarded ref. Removes never touch storage; they only drop the reference
+// from the images array (the DB update happens on flush / auto-save).
+//
+// `flush()` first commits filenames to the store and caches local URIs in
+// `localPhotoUriCache` (both synchronous), then uploads in the background.
+// This lets sibling components (e.g. the thumbnail strip on the profile
+// tab) show the photos immediately from the device cache while the upload
+// is still in flight.
+export const PhotoEditor = forwardRef<PhotoEditorRef, {
+  onDragStateChange?: (dragging: boolean) => void
+  onUploadingChange?: (uploading: boolean) => void
+  deferUpload?: boolean
+  onTotalCountChange?: (count: number) => void
+}>(function PhotoEditor({
   onDragStateChange,
   onUploadingChange,
-}: {
-  onDragStateChange?: (dragging: boolean) => void
-  // Fires when the in-flight upload count toggles between zero and non-zero.
-  // Onboarding uses this to disable the "Confirm & Continue" button until
-  // every picked image is committed to storage and the user row has its
-  // filename, so the next-step save can't race a pending upload.
-  onUploadingChange?: (uploading: boolean) => void
-}) {
+  deferUpload,
+  onTotalCountChange,
+}, ref) {
   const { user } = useAuthStore()
   const { profile, update } = useUserStore()
   const [uploads, setUploads] = useState<{ id: string; uri: string; filename?: string; sig: string }[]>([])
+  const [localPhotos, setLocalPhotos] = useState<{
+    id: string
+    normalFilename: string
+    blurFilename: string
+    normalUri: string
+    blurUri: string
+    displayUri: string
+    sig: string
+  }[]>([])
+
+  const localPhotosRef = useRef(localPhotos)
+  useEffect(() => { localPhotosRef.current = localPhotos }, [localPhotos])
 
   useEffect(() => {
     onUploadingChange?.(uploads.some(u => !u.filename))
@@ -241,19 +299,55 @@ export function PhotoEditor({
   const storeImages = profile?.images ?? { normal: [], blur: [] }
   const photos = storeImages.normal
 
-  const uploadFile = async (uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string) => {
-    const formData = new FormData()
-    formData.append('', { uri, name: filename, type: contentType } as any)
-    const res = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/users/${user!.id}/${variant}/${filename}`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'x-upsert': 'true' },
-        body: formData,
+  const totalCount = photos.length + localPhotos.length
+  useEffect(() => { onTotalCountChange?.(totalCount) }, [totalCount, onTotalCountChange])
+
+  // ── Flush: commit to store then upload in the background ────────────
+  // The synchronous part (store update + URI cache) runs before the first
+  // await, so the caller can navigate away immediately and sibling
+  // components will already see the new photos.
+  useImperativeHandle(ref, () => ({
+    flush: async () => {
+      const toUpload = localPhotosRef.current
+      if (toUpload.length === 0) return
+
+      const userId = user?.id
+      if (!userId) return
+
+      // ── synchronous: commit filenames to store ──────────────────
+      const currentImages = useUserStore.getState().profile?.images ?? { normal: [], blur: [] }
+      useUserStore.getState().update({
+        images: {
+          normal: [...currentImages.normal, ...toUpload.map(p => p.normalFilename)],
+          blur: [...currentImages.blur, ...toUpload.map(p => p.blurFilename)],
+        },
+      })
+
+      // ── synchronous: cache local URIs for thumbnails ────────────
+      for (const lp of toUpload) {
+        localPhotoUriCache.set(lp.normalFilename, lp.normalUri)
       }
-    )
-    if (!res.ok) throw new Error(await res.text())
-  }
+
+      // ── synchronous: clear component state ──────────────────────
+      setLocalPhotos([])
+
+      // ── async: upload files to storage ──────────────────────────
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? ''
+
+      for (const lp of toUpload) {
+        try {
+          await Promise.all([
+            uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId),
+            uploadFileToStorage(lp.blurUri, lp.blurFilename, 'image/webp', 'blur', token, userId),
+          ])
+        } catch (e) {
+          console.error('Deferred upload error:', e)
+        }
+        localPhotoUriCache.delete(lp.normalFilename)
+      }
+    },
+  }), [user?.id])
 
   const compressUnder200K = async (uri: string): Promise<string> => {
     const MAX_BYTES = 200 * 1024
@@ -301,14 +395,15 @@ export function PhotoEditor({
     ])
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token ?? ''
-    await uploadFile(normalUri, normalFilename, 'image/webp', 'normal', token)
-    await uploadFile(blurred, blurFilename, 'image/webp', 'blur', token)
+    await uploadFileToStorage(normalUri, normalFilename, 'image/webp', 'normal', token, user.id)
+    await uploadFileToStorage(blurred, blurFilename, 'image/webp', 'blur', token, user.id)
     return { normal: normalFilename, blur: blurFilename }
   }
 
   const pickPhoto = async () => {
-    if (!user || photos.length >= 6) return
-    const maxPick = 6 - photos.length
+    const localCount = localPhotosRef.current.length
+    if (!user || photos.length + localCount >= 6) return
+    const maxPick = 6 - photos.length - localCount
     const result = await DocumentPicker.getDocumentAsync({
       type: 'image/*',
       copyToCacheDirectory: true,
@@ -327,6 +422,7 @@ export function PhotoEditor({
     const existingSigs = new Set<string>([
       ...Array.from(sigByFilename.current.values()),
       ...uploads.map(u => u.sig),
+      ...localPhotosRef.current.map(lp => lp.sig),
     ])
 
     const seenThisBatch = new Set<string>()
@@ -345,6 +441,46 @@ export function PhotoEditor({
     if (filtered.length === 0) return
 
     const assets = filtered.slice(0, maxPick)
+
+    if (deferUpload) {
+      // Show the original (uncompressed) photos immediately, compress in background.
+      const entries = assets.map((a, i) => {
+        const id = `local_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`
+        const normalFilename = `${uuidv4()}.webp`
+        const blurFilename = `${uuidv4()}.webp`
+        sigByFilename.current.set(normalFilename, filteredSigs[i])
+        return { id, normalFilename, blurFilename, originalUri: a.uri, sig: filteredSigs[i] }
+      })
+
+      // Add all entries immediately with the original URI so photos appear instantly.
+      setLocalPhotos(prev => [...prev, ...entries.map(e => ({
+        id: e.id,
+        normalFilename: e.normalFilename,
+        blurFilename: e.blurFilename,
+        normalUri: e.originalUri,
+        blurUri: e.originalUri,
+        displayUri: e.originalUri,
+        sig: e.sig,
+      }))])
+
+      // Compress in the background — only update upload URIs, not displayUri.
+      for (const e of entries) {
+        try {
+          const [normalUri, blurUri] = await Promise.all([
+            compressUnder200K(e.originalUri),
+            compressBlur(e.originalUri),
+          ])
+          setLocalPhotos(prev => prev.map(lp =>
+            lp.id === e.id ? { ...lp, normalUri, blurUri } : lp
+          ))
+        } catch (err) {
+          console.error('Photo compress error:', err)
+        }
+      }
+      return
+    }
+
+    // Immediate upload path (original behaviour).
     const newUploads = assets.map((a, i) => ({
       id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
       uri: a.uri,
@@ -373,21 +509,24 @@ export function PhotoEditor({
     }
   }
 
-  const removePhoto = async (filename: string) => {
-    if (!user) return
-    if (photos.length <= 1) return
+  const removePhoto = (filename: string) => {
+    if (photos.length + localPhotos.length <= 1) return
     const idx = storeImages.normal.indexOf(filename)
     if (idx < 0) return
-    const blurFilename = storeImages.blur[idx]
-    await supabase.storage.from('users').remove([
-      `${user.id}/normal/${filename}`,
-      `${user.id}/blur/${blurFilename}`,
-    ])
     sigByFilename.current.delete(filename)
+    localPhotoUriCache.delete(filename)
     update({ images: {
       normal: storeImages.normal.filter((_, i) => i !== idx),
       blur: storeImages.blur.filter((_, i) => i !== idx),
     } })
+  }
+
+  const removeLocalPhoto = (id: string) => {
+    setLocalPhotos(prev => {
+      const removed = prev.find(lp => lp.id === id)
+      if (removed) sigByFilename.current.delete(removed.normalFilename)
+      return prev.filter(lp => lp.id !== id)
+    })
   }
 
   const reorderPhotos = (from: number, to: number) => {
@@ -407,24 +546,25 @@ export function PhotoEditor({
     <>
       <PhotoGrid
         photos={photos}
-        urlFor={(f) => `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
+        urlFor={(f) => localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
         onRemove={removePhoto}
         onLoaded={onPhotoLoaded}
         onReorder={reorderPhotos}
-        canRemove={photos.length > 1}
+        canRemove={photos.length + localPhotos.length > 1}
         uploads={uploads}
+        localPhotos={localPhotos.map(lp => ({ id: lp.id, uri: lp.displayUri ?? lp.normalUri }))}
+        onRemoveLocal={removeLocalPhoto}
         onDragStateChange={onDragStateChange}
         additionalChildren={
-          photos.length + uploads.filter(u => !u.filename).length < 6 ? (
-            <View style={photoStyles.add}>
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={() => { tap(); pickPhoto() }}
-              />
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} strokeLinecap="round">
+          photos.length + uploads.filter(u => !u.filename).length + localPhotos.length < 6 ? (
+            <Pressable
+              style={photoStyles.add}
+              onPress={() => { tap(); pickPhoto() }}
+            >
+              <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} strokeLinecap="round">
                 <Path d="M12 5v14M5 12h14" />
               </Svg>
-            </View>
+            </Pressable>
           ) : null
         }
       />
@@ -438,7 +578,7 @@ export function PhotoEditor({
       />
     </>
   )
-}
+})
 
 const photoStyles = StyleSheet.create({
   grid: {
@@ -453,11 +593,23 @@ const photoStyles = StyleSheet.create({
   cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: SINGLE, overflow: 'hidden' },
   filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
   img: { width: '100%', height: '100%' },
+  placeholderBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: MUTED,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeholderSpinner: {
+    position: 'absolute',
+    bottom: 8,
+    alignSelf: 'center',
+  },
   remove: {
-    position: 'absolute', top: 8, end: 8,
-    width: 28, height: 28, borderRadius: SINGLE,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    position: 'absolute', top: 6, end: 6,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
   add: {
     width: '31.5%', aspectRatio: 3 / 4, borderRadius: SINGLE,
@@ -467,8 +619,7 @@ const photoStyles = StyleSheet.create({
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,
-    borderWidth: 3,
-    borderColor: TEXT,
+    backgroundColor: 'rgba(255,255,255,0.45)',
     borderRadius: SINGLE,
   },
   spinnerBadge: {

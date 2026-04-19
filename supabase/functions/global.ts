@@ -1,33 +1,49 @@
 declare global {
 
-    const EdgeRuntime: {
-        waitUntil(promise: Promise<unknown>): void;
-    };
+  const EdgeRuntime: {
+    waitUntil(promise: Promise<unknown>): void;
+  };
 }
 
 export enum State {
-    HIDDEN = "HIDDEN",
-    VISIBLE = "VISIBLE",
-    WATCHING = "WATCHING",
-    WAITING = "WAITING",
-    REPLYING = "REPLYING",
-    CHAT = "CHAT",
-    CANCELLED = "CANCELLED",
-    MISSED = "MISSED",
-    REFUSED = "REFUSED",
-    LEFT = "LEFT"
+  HIDDEN = "HIDDEN",
+  VISIBLE = "VISIBLE",
+  WATCHING = "WATCHING",
+  WAITING = "WAITING",
+  REPLYING = "REPLYING",
+  CHAT = "CHAT",
+  CANCELLED = "CANCELLED",
+  MISSED = "MISSED",
+  REFUSED = "REFUSED",
+  LEFT = "LEFT",
+  REMOVED = "REMOVED",
+  LOGGED_OUT = "LOGGED_OUT",
+  INVITED = "INVITED",
+  HID = "HID",
+  DELETED = "DELETED",
 }
 
+export type UserData = {
+  bio?: string,
+  images: { normal: string[], blur: string[] },
+  units?: string,
+  os?: string,
+  lang?: string,
+  subscription: JSON | null,
+  match: Match | null,
+  wachers: Record<string, Watcher>;
+};
+
 type BaseMatch = {
-  created_at: Date | null;
+  created_at: Date;
   user_id: string;
   last_seen?: Date;
   title: string;
   is_male?: boolean;
   subscribed?: boolean;
   bio?: string;
-  is_for_kids?: boolean | null;
-  distance?: number | null;
+  is_for_kids: boolean | null;
+  distance?: number;
 };
 
 export type Match = BaseMatch & {

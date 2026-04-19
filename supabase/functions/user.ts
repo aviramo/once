@@ -1,7 +1,7 @@
 import lodash from "lodash";
 import Tools, { Subscription } from "./tools.ts";
 import Logger from "./logger.ts";
-import { State, Match, Watcher } from "./global.ts";
+import { State, Match, Watcher, UserData } from "./global.ts";
 
 export default class User {
   user_id: string;
@@ -22,14 +22,7 @@ export default class User {
   is_for_kids: boolean | null = null;
   role?: string | null;
   watchers: Record<string, Watcher> = {};
-  data: Record<string, unknown> = {
-    bio: null,
-    images: { normal: [], blur: [] },
-    units: null,
-    os: null,
-    lang: null,
-    subscription: null,
-  };
+  data?: UserData;
 
   db: { new: Record<string, unknown>, old: Record<string, unknown> } = { new: {}, old: {} };
 
@@ -131,7 +124,7 @@ export default class User {
       icon: matchImageUrl,
     };
     const log = logger.log("notify", payload);
-    if (!this.data.subscription) return logger.error('notify', "no subscription", 400);
+    if (!this.data?.subscription) return logger.error('notify', "no subscription", 400);
     const subJson: Subscription | null =
       typeof this.data.subscription === "string"
         ? JSON.parse(this.data.subscription)
@@ -155,7 +148,7 @@ export default class User {
     const sp = "others";
     const others: Other[] = [];
     this.db.new.location = this.location;
-    let query = Tools.supabase.rpc(sp, { me: this.db.new});
+    let query = Tools.supabase.rpc(sp, { me: this.db.new });
     if (exclude) query = query.neq("user_id", exclude.user_id);
     if (extend) query = extend(query);
     const data = await Tools.invoke(logger, sp, query.select());
@@ -170,16 +163,16 @@ export default class User {
 
   renderMatch(other?: User): Match | null {
     const match: Match | null = other ? {
-      created_at: this.match?.created_at ?? null,
+      created_at: this.match?.created_at ?? new Date(),
       user_id: other.user_id,
       last_seen: other.last_seen,
       title: other.name + ', ' + other.age(),
       is_male: other.is_male,
-      subscribed: other.data.subscription != null,
-      images: (other.data.images as { normal: string[] } | undefined)?.normal,
-      bio: other.data.bio as string | undefined,
-      is_for_kids: other.is_for_kids as boolean | null | undefined,
-      distance: other instanceof Other ? other.distance : this instanceof Other ? this.distance : null,
+      subscribed: other.data?.subscription != null,
+      images: (other.data?.images)?.normal,
+      bio: other.data?.bio,
+      is_for_kids: other.is_for_kids,
+      distance: other instanceof Other ? other.distance : this instanceof Other ? this.distance : undefined,
     } : this.match;
     if (match)
       switch (this.state) {
@@ -206,7 +199,7 @@ export default class User {
     const match = this.renderMatch(other);
     if (match) {
       const { images: _images, ...rest } = match;
-      const watcher: Watcher = { ...rest, image: (other.data.images as { blur: string[] } | undefined)?.blur?.[0] };
+      const watcher: Watcher = { ...rest, image: other.data?.images?.blur?.[0] };
       if (this.watchers[other.user_id]?.created_at) watcher.created_at = new Date();
       this.watchers[other.user_id] = watcher;
     }
@@ -243,17 +236,18 @@ export default class User {
 
   }
 
-  missWatchers(logger: Logger, exclude?: User) {
+  removeRrlations(logger: Logger, state: State, other?: Other, exclude?: User) {
     for (const watcher_id of Object.keys(this.watchers)) {
-      if (watcher_id == exclude?.user_id) continue;
-      EdgeRuntime.waitUntil(this.missWatcher(logger, watcher_id));
+      if (watcher_id != exclude?.user_id)
+        EdgeRuntime.waitUntil(this.removeRelation(logger, state, watcher_id));
     }
+    if (other) EdgeRuntime.waitUntil(other.update(logger, state, this, true));
   }
 
-  async missWatcher(logger: Logger, watcher_id: string) {
+  async removeRelation(logger: Logger, state: State, watcher_id: string) {
     delete this.watchers[watcher_id];
     const watcher = await User.getById(logger, watcher_id);
-    await watcher?.update(logger, State.MISSED, this, true);
+    await watcher?.update(logger, state, this, true);
   }
 
   async action(logger: Logger, key: string) {

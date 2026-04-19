@@ -19,6 +19,8 @@ export function ConfirmDialog({
   onConfirm,
   busy,
   skipToggle,
+  cancelFlex,
+  confirmFlex,
 }: {
   visible: boolean
   title: string
@@ -33,6 +35,10 @@ export function ConfirmDialog({
   busy?: boolean
   /** Optional "don't show again" toggle rendered below the description. */
   skipToggle?: { label: string; checked: boolean; onToggle: () => void }
+  /** Flex ratio for the cancel button slot (default 1). */
+  cancelFlex?: number
+  /** Flex ratio for the confirm button slot (default 1). */
+  confirmFlex?: number
 }) {
   const translateY = useSharedValue(400)
   const [modalVisible, setModalVisible] = useState(false)
@@ -112,7 +118,7 @@ export function ConfirmDialog({
 
           <View style={styles.row}>
             {cancelLabel ? (
-              <View style={styles.slot}>
+              <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
                 <Button
                   label={cancelLabel}
                   onPress={() => { setPressed('cancel'); onCancel?.() }}
@@ -123,7 +129,7 @@ export function ConfirmDialog({
                 />
               </View>
             ) : null}
-            <View style={styles.slot}>
+            <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
               <Button
                 label={confirmLabel}
                 onPress={() => { setPressed('confirm'); onConfirm() }}

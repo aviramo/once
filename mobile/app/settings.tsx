@@ -5,8 +5,8 @@ import {
   Keyboard, Platform, Animated, Dimensions,
 } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Gesture, GestureDetector, TextInput as GHTextInput } from 'react-native-gesture-handler'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import Svg, { Path, Line, Polyline, Circle } from 'react-native-svg'
@@ -19,10 +19,10 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
-import { PhotoEditor } from '../src/components/PhotoEditor'
+import { PhotoEditor, PhotoEditorRef, localPhotoUriCache } from '../src/components/PhotoEditor'
 import type { MatchData } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
-import { SINGLE, DOUBLE, BUTTON } from '../src/fonts'
+import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
 import { TEXT, WHITE, BLACK, PURPLE } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
@@ -505,28 +505,47 @@ function useAutoSave(data: object, ready: boolean, delay = 600) {
     if (!ready) return
     if (isFirst.current) { isFirst.current = false; return }
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => { invoke('app/update', data).catch(console.error) }, delay)
+    const field = Object.keys(data)[0]
+    timer.current = setTimeout(() => { invoke(`app/${field}`, data).catch(console.error) }, delay)
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [key, ready])
 }
 
-// Saves bio + images + units together via app/data whenever `watchKey` changes.
-// Always reads the full current state from the store so the data column is
-// never partially overwritten.
-function useDataSave(watchKey: unknown, ready: boolean, delay = 600) {
+// Saves a partial data object via app/data whenever the value changes.
+// Server uses lodash.merge so only the provided fields are touched.
+// A stabilization window after mount absorbs the initial realtime echoes
+// that arrive after navigation (e.g. onboarding → home) so they don't
+// trigger a redundant save-back to the server.
+const DATA_SAVE_STABILIZE_MS = 2000
+function useDataSave(data: Record<string, unknown>, ready: boolean, delay = 600) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isFirst = useRef(true)
+  const stableRef = useRef(false)
+  const latestKeyRef = useRef<string | null>(null)
+  const key = JSON.stringify(data)
+
+  // Stabilization: ignore all changes for a short window after first ready.
   useEffect(() => {
-    if (!ready) return
-    if (isFirst.current) { isFirst.current = false; return }
+    if (!ready || stableRef.current) return
+    latestKeyRef.current = key
+    const id = setTimeout(() => {
+      // Capture whatever value settled during the window as baseline.
+      latestKeyRef.current = JSON.stringify(data)
+      stableRef.current = true
+    }, DATA_SAVE_STABILIZE_MS)
+    return () => clearTimeout(id)
+  }, [ready ? 1 : 0, key])
+
+  useEffect(() => {
+    if (!ready || !stableRef.current) return
+    if (key === latestKeyRef.current) return
+    latestKeyRef.current = key
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
-      const p = useUserStore.getState().profile
-      if (!p) return
-      invoke('app/data', { data: { bio: p.bio ?? null, images: p.images, units: p.units ?? null } }).catch(console.error)
+      const field = Object.keys(data)[0]
+      invoke(`app/${field}`, data).catch(console.error)
     }, delay)
     return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [JSON.stringify(watchKey), ready ? 1 : 0])
+  }, [key, ready ? 1 : 0])
 }
 
 // ── Age helpers ────────────────────────────────────────────────────────────
@@ -542,7 +561,7 @@ function calcAge(birthDate: string): number {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
-type Tab = 'preferences' | 'profile' | 'account' | 'app' | 'preview'
+export type Tab = 'preferences' | 'profile' | 'account' | 'app' | 'preview'
 const TABS: Tab[] = ['preferences', 'profile', 'account', 'app', 'preview']
 
 // Per-tab glyph. Drawn twice by TabIconStack (gray + white) so the active
@@ -706,7 +725,8 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
     const body = dirtyRef.current
     if (Object.keys(body).length === 0) return
     dirtyRef.current = {}
-    invoke('app/update', body).catch(console.error)
+    const field = Object.keys(body)[0]
+    invoke(`app/${field}`, body).catch(console.error)
   }
   const queuePref = (patch: Record<string, unknown>) => {
     Object.assign(dirtyRef.current, patch)
@@ -783,7 +803,7 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
             value: genderPref,
             onSelect: async (v) => {
               update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-              await invoke('app/update', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B', preferred_gender: v })
+              await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B', preferred_gender: v })
             },
           })}
         />
@@ -797,19 +817,20 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
 // Thumbnail strip inside a tappable field row — same height as SelectFieldRow.
 // Shows up to 6 small round thumbnails + a forward chevron.
 
-const PHOTO_THUMB = 36
-
 function PhotoFieldRow({ photos, userId, onPress }: { photos: string[]; userId: string; onPress: () => void }) {
   const tapProps = useTapResponder(onPress)
+  const slots = Array.from({ length: 6 }, (_, i) => photos[i] ?? null)
   return (
     <View style={styles.selectRow} {...tapProps}>
       <View style={styles.photoThumbStrip}>
-        {photos.map((f, i) => (
+        {slots.map((f, i) => f ? (
           <Image
             key={`${i}-${f}`}
-            source={{ uri: `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}` }}
+            source={{ uri: localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}` }}
             style={styles.photoThumb}
           />
+        ) : (
+          <View key={`empty-${i}`} style={styles.photoThumb} />
         ))}
       </View>
       <ForwardChevronIcon />
@@ -848,7 +869,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
     update({ bio: next })
     const p = useUserStore.getState().profile
     if (!p) return
-    invoke('app/data', { data: { bio: next, images: p.images, units: p.units ?? null } }).catch(console.error)
+    invoke('app/bio', { bio: next }).catch(console.error)
   }
 
   useEffect(() => {
@@ -864,7 +885,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   }, [])
 
   useAutoSave({ is_for_kids: profile?.is_for_kids ?? null }, !!profile)
-  useDataSave(profile?.images, !!profile)
+  useDataSave({ images: profile?.images }, !!profile)
 
   if (!profile) return <View style={styles.tabContent} />
 
@@ -888,14 +909,23 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
       delaysContentTouches={false}
     >
 
+      <View style={[styles.section, { marginTop: 0 }]}>
+        <SectionLabel>{t('settings.photo').toUpperCase()}</SectionLabel>
+        <PhotoFieldRow
+          photos={photos}
+          userId={user!.id}
+          onPress={() => onOpenSubPage?.({ kind: 'photos', title: t('settings.photo') })}
+        />
+      </View>
+
       <View
-        style={[styles.section, { marginTop: 0 }]}
+        style={styles.section}
         onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
       >
         <SectionLabel>{t('settings.aboutMe').toUpperCase()}</SectionLabel>
         <View style={styles.textInputWrap}>
-          <TextInput
-            style={styles.textInput}
+          <GHTextInput
+            style={[styles.textInput, { fontFamily: DEFAULT_FAMILY }]}
             value={localBio}
             onChangeText={(text) => {
               if (text.length > 150) text = text.slice(0, 150)
@@ -934,18 +964,9 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
             onSelect: async (v) => {
               const val = v === 'yes' ? true : v === 'no' ? false : null
               update({ is_for_kids: val })
-              await invoke('app/update', { is_for_kids: val })
+              await invoke('app/is_for_kids', { is_for_kids: val })
             },
           })}
-        />
-      </View>
-
-      <View style={styles.section}>
-        <SectionLabel>{t('settings.photo').toUpperCase()}</SectionLabel>
-        <PhotoFieldRow
-          photos={photos}
-          userId={user!.id}
-          onPress={() => onOpenSubPage?.({ kind: 'photos', title: t('settings.photo') })}
         />
       </View>
 
@@ -1090,6 +1111,7 @@ function AccountTab() {
       description={tg('settings.signOutConfirmDesc', profile.is_male)}
       cancelLabel={t('settings.signOutNo')}
       confirmLabel={tg('settings.signOutYes', profile.is_male)}
+      confirmFlex={0.6}
       soft
       onCancel={() => setSignOutDialog(false)}
       onConfirm={onSignOutConfirmed}
@@ -1100,6 +1122,7 @@ function AccountTab() {
       description={tg('settings.deleteConfirmDesc', profile.is_male)}
       cancelLabel={t('settings.deleteNo')}
       confirmLabel={t('settings.deleteYes')}
+      confirmFlex={0.6}
       destructive
       busy={deleting}
       onCancel={() => setDeleteDialog(false)}
@@ -1116,7 +1139,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
 
-  useDataSave(profile?.units, !!profile)
+  useDataSave({ units: profile?.units }, !!profile)
 
   if (!profile) return <View style={styles.tabContent} />
 
@@ -1162,7 +1185,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
             onSelect: async (v) => {
               update({ units: v })
               const p = useUserStore.getState().profile
-              if (p) await invoke('app/data', { data: { bio: p.bio ?? null, images: p.images, units: v } })
+              if (p) await invoke('app/units', { units: v })
             },
           })}
         />
@@ -1197,7 +1220,7 @@ function PreviewTab() {
       image: imgs[0] ?? '',
       images: imgs,
       title: profile.name ?? '—',
-      message: profile.bio ?? '',
+      bio: profile.bio ?? '',
       distance: 0,
       located_at: new Date().toISOString(),
       subscribed: false,
@@ -1250,13 +1273,14 @@ export function SelectFieldPage({
   config: SelectFieldConfig
   onBack: (afterSlide?: () => Promise<void> | void) => void
 }) {
+  const insets = useSafeAreaInsets()
   const handleSelect = (value: string) => {
     const p = Promise.resolve(config.onSelect(value))
     onBack(() => p)
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <IconPressable style={styles.backBtn} onPress={onBack}>
@@ -1286,7 +1310,7 @@ export function SelectFieldPage({
           <Text style={styles.subPageDesc}>{config.description}</Text>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -1294,6 +1318,7 @@ export function SelectFieldPage({
 // Full-screen pane with a vertical range slider for editing the age preference.
 
 export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
   const [ageMin, setAgeMin] = useState(config.ageMin)
   const [ageMax, setAgeMax] = useState(config.ageMax)
 
@@ -1301,7 +1326,7 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
   const handleChangeMax = (v: number) => { setAgeMax(v); config.onChangeMax(v) }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <IconPressable style={styles.backBtn} onPress={onBack}>
@@ -1321,7 +1346,7 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
           <Text style={spStyles.endLabel}>{config.sliderMin}</Text>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -1329,12 +1354,13 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
 // Full-screen pane with a vertical single-thumb slider for editing the search radius.
 
 export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
   const [value, setValue] = useState(config.value)
 
   const handleChange = (v: number) => { setValue(v); config.onChange(v) }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <IconPressable style={styles.backBtn} onPress={onBack}>
@@ -1354,7 +1380,7 @@ export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig;
           <Text style={spStyles.endLabel}>{config.formatStep(0)}</Text>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -1362,6 +1388,7 @@ export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig;
 // Full-screen pane with the reset-users controls.
 
 export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
   const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
 
   const handleReset = async (state: 'VISIBLE' | 'HIDDEN') => {
@@ -1372,7 +1399,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <IconPressable style={styles.backBtn} onPress={onBack}>
@@ -1407,7 +1434,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -1415,11 +1442,19 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
 // Full-screen photo editor opened from the profile photo field row.
 
 export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
+  const photoRef = useRef<PhotoEditorRef>(null)
+
+  const handleBack = () => {
+    photoRef.current?.flush().catch(console.error)
+    onBack()
+  }
+
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <IconPressable style={styles.backBtn} onPress={onBack}>
+        <IconPressable style={styles.backBtn} onPress={handleBack}>
           <BackIcon />
         </IconPressable>
         <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
@@ -1430,9 +1465,10 @@ export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; o
         keyboardShouldPersistTaps="handled"
         delaysContentTouches={false}
       >
-        <PhotoEditor />
+        <Text style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', textAlign: 'center', marginBottom: 4 }}>{t('settings.photoHint')}</Text>
+        <PhotoEditor ref={photoRef} deferUpload />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -1462,7 +1498,7 @@ const spStyles = StyleSheet.create({
   },
 })
 
-type SettingsPageProps = { onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void }
+type SettingsPageProps = { onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void; changeTabRef?: React.MutableRefObject<((tab: Tab) => void) | null>; onTabChange?: (index: number) => void }
 
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
@@ -1476,7 +1512,7 @@ function SectionLabel({ children }: { children: any }) {
   )
 }
 
-export default function SettingsPage({ onBack, focused = true, onOpenSubPage }: SettingsPageProps = {}) {
+export default function SettingsPage({ onBack, focused = true, onOpenSubPage, changeTabRef, onTabChange }: SettingsPageProps = {}) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('preferences')
   // Disable the tab pan whenever a slider is mid-drag, so gesture-handler's
@@ -1556,8 +1592,14 @@ export default function SettingsPage({ onBack, focused = true, onOpenSubPage }: 
     tap()
     Keyboard.dismiss()
     setActiveTab(tab)
+    onTabChange?.(TABS.indexOf(tab))
     animateToIndex(TABS.indexOf(tab))
   }
+
+  useEffect(() => {
+    if (changeTabRef) changeTabRef.current = changeTab
+    return () => { if (changeTabRef) changeTabRef.current = null }
+  })
 
   // Swipe-to-change-tab — dragging horizontally moves both the content strip
   // and the tab indicator together under the finger, then springs to the
@@ -1613,6 +1655,7 @@ export default function SettingsPage({ onBack, focused = true, onOpenSubPage }: 
         if (targetTab !== activeTabRef.current) {
           tap()
           setActiveTab(targetTab)
+          onTabChange?.(targetIndex)
         }
       })
       .runOnJS(true)
@@ -1739,8 +1782,8 @@ const styles = StyleSheet.create({
   sectionValue: { fontSize: 15, fontWeight: '700', color: TEXT },
   divider: { height: 0 },
 
-  photoThumbStrip: { flexDirection: 'row', gap: SINGLE, flex: 1 },
-  photoThumb: { width: PHOTO_THUMB, height: PHOTO_THUMB, borderRadius: SINGLE },
+  photoThumbStrip: { flexDirection: 'row', gap: SINGLE, flex: 1, marginEnd: DOUBLE },
+  photoThumb: { flex: 1, aspectRatio: 1, borderRadius: SINGLE },
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   slider: { width: '100%', height: 40 },

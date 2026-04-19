@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { View, StyleSheet, I18nManager } from 'react-native'
+import { useEffect, useState } from 'react'
+import { View, StyleSheet, I18nManager, Modal, Pressable } from 'react-native'
 import { Text } from './AppText'
 import Svg, { Circle, Path } from 'react-native-svg'
 import Animated, {
@@ -8,8 +8,9 @@ import Animated, {
 } from 'react-native-reanimated'
 import { IconPressable } from './IconPressable'
 import { CountBadge } from './CountBadge'
+import { tapMedium } from '../lib/haptics'
 import { FONT_SCALE, SINGLE } from '../fonts'
-import { TEXT, GREEN } from '../colors'
+import { TEXT, GREEN, PURPLE_BG } from '../colors'
 import { SyncWishLogo } from './SyncWishLogo'
 
 const isRTL = I18nManager.isRTL
@@ -130,6 +131,12 @@ function IconSlot({ loading, children }: { loading: boolean; children: React.Rea
 export type HomeHeaderProps = {
   /** Header title. Omit for no title (e.g. profile preview). */
   title?: string
+  /** Status chip text shown next to the settings button. */
+  statusLabel?: string
+  /** Status chip tone: true = green, false = neutral gray. */
+  statusGreen?: boolean
+  /** Custom status chip color (overrides green). */
+  statusColor?: string
   /** When provided, shows an arrow icon and makes the title tappable. */
   arrow?: {
     direction: 'down' | 'side'
@@ -137,6 +144,10 @@ export type HomeHeaderProps = {
   }
   /** Badge count shown next to the title (e.g. chat unread). */
   badge?: number
+  /** Badge color override (defaults to GREEN). */
+  badgeColor?: string
+  /** Status menu options. When provided, the chip becomes tappable and opens a dropdown. */
+  statusMenu?: Array<{ label: string; color?: string; onPress: () => void }>
   /** Settings gear callback. */
   onSettingsPress: () => void
   /** Disable the arrow button. */
@@ -147,8 +158,13 @@ export type HomeHeaderProps = {
 
 export function HomeHeader({
   title,
+  statusLabel,
+  statusGreen,
+  statusColor,
   arrow,
   badge,
+  badgeColor,
+  statusMenu,
   onSettingsPress,
   disabled,
   loading = false,
@@ -167,32 +183,88 @@ export function HomeHeader({
       >
         <IconSlot loading={loading}>{icon}</IconSlot>
         <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
-        {badge != null && badge > 0 && (
-          <CountBadge value={badge} color={GREEN} />
+        {badge != null && (
+          <CountBadge value={badge} color={badgeColor ?? GREEN} />
         )}
       </IconPressable>
     ) : (
       <View style={styles.titleRow}>
         <IconSlot loading={loading}>{icon}</IconSlot>
         <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
-        {badge != null && badge > 0 && (
-          <CountBadge value={badge} color={GREEN} />
+        {badge != null && (
+          <CountBadge value={badge} color={badgeColor ?? GREEN} />
         )}
       </View>
     )
   ) : <View />
 
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const handleChipPress = () => {
+    if (statusMenu && statusMenu.length > 0) {
+      tapMedium()
+      setMenuOpen(true)
+    }
+  }
+
   return (
     <View style={styles.header}>
       {titleContent}
-      <IconPressable
-        style={styles.settingsBtn}
-        pressedStyle={styles.settingsBtnPressed}
-        onPress={onSettingsPress}
-      >
-        <SettingsIcon />
-        <SettingsArrowIcon />
-      </IconPressable>
+      <View style={styles.endRow}>
+        {statusLabel != null && (
+          statusMenu && statusMenu.length > 0 ? (
+            <IconPressable
+              style={[
+                styles.statusChip,
+                statusColor ? { backgroundColor: statusColor + '18', borderColor: statusColor + '40' } :
+                statusGreen ? [styles.statusChipGreen, styles.statusChipTappableGreen] :
+                styles.statusChipTappable,
+              ]}
+              pressedStyle={styles.statusChipPressed}
+              onPress={handleChipPress}
+              disabled={disabled || loading}
+            >
+              <Text style={[styles.statusChipText, statusColor ? { color: statusColor } : statusGreen && styles.statusChipTextGreen]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.ui}>{statusLabel}</Text>
+            </IconPressable>
+          ) : (
+            <View style={[
+              styles.statusChip,
+              statusColor ? { backgroundColor: statusColor + '18' } :
+              statusGreen && styles.statusChipGreen,
+            ]}>
+              <Text style={[styles.statusChipText, statusColor ? { color: statusColor } : statusGreen && styles.statusChipTextGreen]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.ui}>{statusLabel}</Text>
+            </View>
+          )
+        )}
+        <IconPressable
+          style={styles.settingsBtn}
+          pressedStyle={styles.settingsBtnPressed}
+          onPress={onSettingsPress}
+        >
+          <SettingsIcon />
+          <SettingsArrowIcon />
+        </IconPressable>
+      </View>
+
+      {menuOpen && (
+        <Modal transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+          <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
+            <View style={styles.menuCard}>
+              {statusMenu!.map((opt, i) => (
+                <IconPressable
+                  key={i}
+                  style={styles.menuOption}
+                  pressedStyle={styles.menuOptionPressed}
+                  onPress={() => { setMenuOpen(false); opt.onPress() }}
+                >
+                  <View style={[styles.menuDot, { backgroundColor: opt.color ?? 'rgba(0,0,0,0.25)' }]} />
+                  <Text style={[styles.menuOptionText, opt.color ? { color: opt.color } : null]} maxFontSizeMultiplier={FONT_SCALE.ui}>{opt.label}</Text>
+                </IconPressable>
+              ))}
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   )
 }
@@ -231,9 +303,42 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: TEXT,
     letterSpacing: -0.5,
-    lineHeight: 46,
+    lineHeight: 26,
     includeFontPadding: false,
     textAlignVertical: 'center',
+  },
+  endRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  statusChip: {
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  statusChipTappable: {
+    borderColor: 'rgba(0,0,0,0.15)',
+  },
+  statusChipTappableGreen: {
+    borderColor: 'rgba(21,128,61,0.25)',
+  },
+  statusChipGreen: {
+    backgroundColor: 'rgba(21,128,61,0.1)',
+  },
+  statusChipPressed: {
+    opacity: 0.55,
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT,
+  },
+  statusChipTextGreen: {
+    color: GREEN,
   },
   settingsBtn: {
     height: 40,
@@ -245,5 +350,43 @@ const styles = StyleSheet.create({
   },
   settingsBtnPressed: {
     opacity: 0.5,
+  },
+  menuBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 105,
+    paddingEnd: SINGLE,
+  },
+  menuCard: {
+    backgroundColor: '#fff',
+    borderRadius: SINGLE,
+    paddingVertical: 4,
+    minWidth: 160,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  menuOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  menuOptionPressed: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  menuDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  menuOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: TEXT,
   },
 })

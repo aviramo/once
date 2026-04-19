@@ -4,11 +4,20 @@ import Tools from "../tools.ts";
 import User from "../user.ts";
 import { State } from "../global.ts";
 
-const updatable = [
+const searchable = [
   "age_from",
   "age_to",
   "range",
   "is_for_kids",
+];
+
+const updatable = [
+  "bio",
+  "images",
+  "units",
+  "os",
+  "lang",
+  "subscription",
 ];
 
 Deno.serve(async (req) => {
@@ -22,9 +31,12 @@ Deno.serve(async (req) => {
   if (!user) return logger.error('api', "unauthenticated", 401);
   user.last_seen = new Date();
 
-  for (const [key, value] of Object.entries(body))
-    if (updatable.includes(key))
+  for (const [key, value] of Object.entries(body)) {
+    if (searchable.includes(key))
       (user as unknown as Record<string, unknown>)[key] = value;
+    if (updatable.includes(key))
+      (user.data as unknown as Record<string, unknown>)[key] = value;
+  }
 
   if ('location' in body && body.location) user.location = `SRID=4326;POINT(${body.location.longitude} ${body.location.latitude})`;
   if ('preferred_gender' in body && body.preferred_gender) {
@@ -47,7 +59,7 @@ Deno.serve(async (req) => {
       break;
     case "delete":
       await user.delete(logger);
-      user.missWatchers(logger);
+      user.removeRrlations(logger, State.DELETED, other);
       break;
     case "data":
       lodash.merge(user.data, body.data);
@@ -55,7 +67,7 @@ Deno.serve(async (req) => {
       break;
     case 'visibility': {
       if (body.state == State.HIDDEN) {
-        await user.missWatchers(logger);
+        user.removeRrlations(logger, State.HID, other);
         await search(logger, event, user);
       }
       if (body.state == State.VISIBLE) {
@@ -80,7 +92,7 @@ Deno.serve(async (req) => {
       if (user.state == State.WATCHING && other) {
         if (await other.update(logger, State.REPLYING, user, true)) {
           EdgeRuntime.waitUntil(user.chat(logger, event, true));
-          other.missWatchers(logger, user);
+          other.removeRrlations(logger, State.INVITED, undefined, user);
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
         } else EdgeRuntime.waitUntil(user.update(logger, State.MISSED, other));
       }
@@ -125,19 +137,19 @@ Deno.serve(async (req) => {
       break;
     }
     case "remove": {
-      EdgeRuntime.waitUntil(user.missWatcher(logger, body.user_id));
+      EdgeRuntime.waitUntil(user.removeRelation(logger, State.REMOVED, body.user_id));
       EdgeRuntime.waitUntil(user.update(logger));
       break;
     }
     case "logout": {
-      user.missWatchers(logger);
-      user.data.subscription = null;
+      user.removeRrlations(logger, State.LOGGED_OUT, other);
+      if (user.data) user.data.subscription = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
       break;
     }
     default:
-      await user.updateRelations(logger);
+      await user.updateRelations(logger, other);
       if (user.state == State.VISIBLE)
         EdgeRuntime.waitUntil(user.addWatchers(logger));
       EdgeRuntime.waitUntil(user.update(logger));
