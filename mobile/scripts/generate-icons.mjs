@@ -6,59 +6,46 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(__dirname, '..', 'assets')
 
-// Source of truth for the brand mark. Everything below renders this SVG
-// into the PNG slots Expo needs.
-const LOGO_SVG = fs.readFileSync(path.join(ASSETS, 'syncwish-logo.svg'), 'utf8')
+// Source of truth: the Livo icon SVG (1024×1024, white bg, two circles).
+const LOGO_SVG_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.svg')
 
-// Strip the outer <svg …> wrapper so we can re-embed the inner markup inside
-// a canvas of arbitrary size.
-function innerSvg() {
-  const m = LOGO_SVG.match(/<svg[^>]*>([\s\S]*)<\/svg>/)
-  if (!m) throw new Error('Could not parse syncwish-logo.svg')
-  return m[1]
-}
+// Render SVG into a `size`×`size` canvas with the logo scaled to `logoScale` (0–1).
+// The logo is centered; remaining area is filled with `bg`.
+async function render(size, file, { bg = '#ffffff', logoScale = 1 } = {}) {
+  const logoSize = Math.round(size * logoScale)
+  const offset = Math.round((size - logoSize) / 2)
 
-// Renders the logo badge centered on a square canvas. The logo's native
-// viewBox is 1024×1024 with its own rounded purple background, so we just
-// scale it to occupy `logoFraction` of the output.
-function svg({ size, bg, logoFraction }) {
-  const logoSize = size * logoFraction
-  const offset = (size - logoSize) / 2
-  const bgRect = bg === 'transparent'
-    ? ''
-    : `<rect width="${size}" height="${size}" fill="${bg}"/>`
-  return `
-<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-  ${bgRect}
-  <g transform="translate(${offset} ${offset}) scale(${logoSize / 1024})">
-    ${innerSvg()}
-  </g>
-</svg>`
-}
+  const logoBuffer = await sharp(LOGO_SVG_PATH)
+    .resize(logoSize, logoSize)
+    .png()
+    .toBuffer()
 
-async function write(file, buffer) {
+  const buffer = await sharp({
+    create: { width: size, height: size, channels: 4, background: bg },
+  })
+    .composite([{ input: logoBuffer, left: offset, top: offset }])
+    .png()
+    .toBuffer()
+
   const out = path.join(ASSETS, file)
   fs.writeFileSync(out, buffer)
   console.log('wrote', out)
 }
 
-async function render(svgStr, file, { background } = {}) {
-  let pipe = sharp(Buffer.from(svgStr))
-  if (background) pipe = pipe.flatten({ background })
-  await write(file, await pipe.png().toBuffer())
-}
+// App icon (1024×1024) — iOS masks with squircle, safe zone ≈ 87%.
+await render(1024, 'icon.png', { bg: '#ffffff', logoScale: 0.87 })
 
-// App icon — the full branded badge fills the canvas. iOS applies its own
-// mask; the badge already has rounded corners for platforms that don't.
-await render(svg({ size: 1024, bg: 'transparent', logoFraction: 1.0 }), 'icon.png')
+// Adaptive icon foreground — Android safe zone is 66% of the canvas.
+// Keeping logo within 66% ensures nothing is clipped by circle/squircle masks.
+await render(1024, 'adaptive-icon.png', { bg: '#ffffff', logoScale: 0.66 })
 
-// Adaptive icon foreground — Android composites over backgroundColor from
-// app.json and masks to an inner 66% circle. Keep the badge at ~60% so it
-// sits cleanly inside the mask.
-await render(svg({ size: 1024, bg: 'transparent', logoFraction: 0.6 }), 'adaptive-icon.png')
+// Splash icon — same icon at 512 on white.
+await render(512, 'splash-icon.png', { bg: '#ffffff' })
 
-// Splash icon — the badge on the off-white splash background.
-await render(svg({ size: 1024, bg: '#fafafa', logoFraction: 0.45 }), 'splash-icon.png')
+// Favicon — 96px.
+await render(96, 'favicon.png', { bg: '#ffffff' })
 
-// Favicon — small badge, fills the canvas.
-await render(svg({ size: 96, bg: 'transparent', logoFraction: 1.0 }), 'favicon.png')
+// Google OAuth branding / generic 512px square.
+await render(512, 'livo-512.png', { bg: '#ffffff' })
+
+console.log('Done.')

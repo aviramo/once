@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "SyncWish",
+    "name": "Livo",
     "slug": "syncwish",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "syncwish",
+    "scheme": "livo",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6d28d9"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.syncwish.app",
+      "bundleIdentifier": "com.livo.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,12 +23,12 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6d28d9"
+        "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.syncwish.app",
-      "googleServicesFile": "./google-services.json",
+      "package": "com.livo.app",
+      "googleServicesFile": "$GOOGLE_SERVICES_JSON",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -41,22 +41,22 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "SyncWish uses your location to find nearby people.",
-          "locationWhenInUsePermission": "SyncWish uses your location to find nearby people."
+          "locationAlwaysAndWhenInUsePermission": "Livo uses your location to find nearby people.",
+          "locationWhenInUsePermission": "Livo uses your location to find nearby people."
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#6d28d9"
+          "color": "#1AC944"
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "SyncWish needs access to your photos to set a profile picture.",
-          "cameraPermission": "SyncWish needs access to your camera to take a profile picture."
+          "photosPermission": "Livo needs access to your photos to set a profile picture.",
+          "cameraPermission": "Livo needs access to your camera to take a profile picture."
         }
       ],
       "expo-web-browser",
@@ -74,6 +74,7 @@
       "eas": {
         "projectId": "f93f886e-2664-484d-be31-726650198ddc"
       }
-    }
+    },
+    "owner": "aviramo81"
   }
 }
