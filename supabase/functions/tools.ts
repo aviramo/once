@@ -64,7 +64,7 @@ export default class Tools {
     let url = (query as any).url;
     url = url ? url.toString().split("v1/")[1] : undefined;
     const body = (query as any).body;
-    const log = logger.log(action, { url: url, body: body });
+    const log = logger.log(action, { url: url, body: action == 'others' ? { me: { user_id: body.me.user_id } } : body });
     const res = await (query as any);
     if (res?.error) log.result(res.error, res.status);
     else {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { View, StyleSheet, I18nManager, Modal, Pressable } from 'react-native'
+import { View, StyleSheet, I18nManager, Pressable, ActivityIndicator } from 'react-native'
 import { Text } from './AppText'
-import Svg, { Circle, Path } from 'react-native-svg'
+import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg'
 import Animated, {
   useSharedValue, useAnimatedStyle,
   withTiming, withRepeat, Easing,
@@ -10,8 +10,7 @@ import { IconPressable } from './IconPressable'
 import { CountBadge } from './CountBadge'
 import { tapMedium } from '../lib/haptics'
 import { FONT_SCALE, SINGLE } from '../fonts'
-import { TEXT, GREEN, PURPLE_BG } from '../colors'
-import { SyncWishLogo } from './SyncWishLogo'
+import { TEXT, GREEN } from '../colors'
 
 const isRTL = I18nManager.isRTL
 
@@ -50,79 +49,28 @@ function SideArrowIcon() {
   )
 }
 
-// ── Spinner ───────────────────────────────────────────────────────────────────
-
-function Spinner() {
-  const rotation = useSharedValue(0)
-
-  useEffect(() => {
-    rotation.value = withRepeat(
-      withTiming(360, { duration: 700, easing: Easing.linear }),
-      -1, false,
-    )
-  }, [])
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }))
-
+function CheckIcon({ color }: { color: string }) {
   return (
-    <Animated.View style={[{ width: 22, height: 22 }, animStyle]}>
-      <Svg width={22} height={22} viewBox="0 0 22 22">
-        <Circle cx={11} cy={11} r={8} stroke="rgba(0,0,0,0.12)" strokeWidth={2.5} fill="none" />
-        <Path
-          d="M 11 3 A 8 8 0 0 1 19 11"
-          stroke={TEXT}
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          fill="none"
-        />
-      </Svg>
-    </Animated.View>
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 6 L9 17 L4 12" />
+    </Svg>
   )
 }
 
-// ── Icon slot with crossfade ──────────────────────────────────────────────────
-
-function IconSlot({ loading, children }: { loading: boolean; children: React.ReactNode }) {
-  const iconOpacity = useSharedValue(1)
-  const iconScale   = useSharedValue(1)
-  const spinOpacity = useSharedValue(0)
-  const spinScale   = useSharedValue(0.6)
-
-  useEffect(() => {
-    const dur = 160
-    if (loading) {
-      iconOpacity.value = withTiming(0, { duration: dur })
-      iconScale.value   = withTiming(0.6, { duration: dur, easing: Easing.in(Easing.quad) })
-      spinOpacity.value = withTiming(1, { duration: dur })
-      spinScale.value   = withTiming(1, { duration: dur, easing: Easing.out(Easing.back(1.5)) })
-    } else {
-      spinOpacity.value = withTiming(0, { duration: dur })
-      spinScale.value   = withTiming(0.6, { duration: dur, easing: Easing.in(Easing.quad) })
-      iconOpacity.value = withTiming(1, { duration: dur })
-      iconScale.value   = withTiming(1, { duration: dur, easing: Easing.out(Easing.back(1.5)) })
-    }
-  }, [loading])
-
-  const iconStyle = useAnimatedStyle(() => ({
-    opacity: iconOpacity.value,
-    transform: [{ scale: iconScale.value }],
-  }))
-  const spinStyle = useAnimatedStyle(() => ({
-    opacity: spinOpacity.value,
-    transform: [{ scale: spinScale.value }],
-  }))
-
+function Ball3D({ color, size = 28 }: { color: string; size?: number }) {
+  const r = size / 2
   return (
-    <View style={styles.iconSlot}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.iconSlotInner, iconStyle]}>
-        {children}
-      </Animated.View>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.iconSlotInner, spinStyle]}>
-        <Spinner />
-      </Animated.View>
-    </View>
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Defs>
+        <RadialGradient id="ball" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+          <Stop offset="0%" stopColor="#fff" stopOpacity={0.4} />
+          <Stop offset="55%" stopColor={color} stopOpacity={1} />
+          <Stop offset="100%" stopColor="#000" stopOpacity={0.3} />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={r} cy={r} r={r} fill={color} />
+      <Circle cx={r} cy={r} r={r} fill="url(#ball)" />
+    </Svg>
   )
 }
 
@@ -147,13 +95,15 @@ export type HomeHeaderProps = {
   /** Badge color override (defaults to GREEN). */
   badgeColor?: string
   /** Status menu options. When provided, the chip becomes tappable and opens a dropdown. */
-  statusMenu?: Array<{ label: string; color?: string; onPress: () => void }>
+  statusMenu?: Array<{ label: string; color?: string; active?: boolean; onPress: () => void }>
   /** Settings gear callback. */
   onSettingsPress: () => void
   /** Disable the arrow button. */
   disabled?: boolean
   /** Show spinner instead of icon. */
   loading?: boolean
+  /** Pulse the status dot (e.g. while fetching location). */
+  dotPulsing?: boolean
 }
 
 export function HomeHeader({
@@ -168,35 +118,27 @@ export function HomeHeader({
   onSettingsPress,
   disabled,
   loading = false,
+  dotPulsing = false,
 }: HomeHeaderProps) {
   const icon = arrow
     ? (arrow.direction === 'down' ? <DownArrowIcon /> : <SideArrowIcon />)
-    : <SyncWishLogo size={22} color={TEXT} />
+    : null
 
-  const titleContent = title != null ? (
-    arrow ? (
-      <IconPressable
-        style={styles.titleBtn}
-        pressedStyle={styles.titleBtnPressed}
-        onPress={arrow.onPress}
-        disabled={disabled || loading}
-      >
-        <IconSlot loading={loading}>{icon}</IconSlot>
-        <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
-        {badge != null && (
-          <CountBadge value={badge} color={badgeColor ?? GREEN} />
-        )}
-      </IconPressable>
-    ) : (
-      <View style={styles.titleRow}>
-        <IconSlot loading={loading}>{icon}</IconSlot>
-        <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
-        {badge != null && (
-          <CountBadge value={badge} color={badgeColor ?? GREEN} />
-        )}
-      </View>
-    )
-  ) : <View />
+  // Pulsing button animation
+  const pulse = useSharedValue(1)
+  useEffect(() => {
+    if (dotPulsing) {
+      pulse.value = withRepeat(
+        withTiming(0.45, { duration: 600, easing: Easing.inOut(Easing.sin) }),
+        -1, true,
+      )
+    } else {
+      pulse.value = withTiming(1, { duration: 200 })
+    }
+  }, [dotPulsing])
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: pulse.value,
+  }))
 
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -207,35 +149,65 @@ export function HomeHeader({
     }
   }
 
+  // Resolve the fill color for the title text when a menu is present.
+  const titleColor = statusColor ?? (statusGreen ? GREEN : TEXT)
+
+  const hasMenu = statusMenu && statusMenu.length > 0
+
+  const titleContent = title != null ? (
+    arrow ? (
+      <IconPressable
+        style={styles.titleBtn}
+        pressedStyle={styles.titleBtnPressed}
+        onPress={arrow.onPress}
+        disabled={disabled || loading}
+      >
+        {icon}
+        <Text style={[styles.title, hasMenu && { color: titleColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
+        {badge != null && (
+          <CountBadge value={badge} color={badgeColor ?? GREEN} />
+        )}
+      </IconPressable>
+    ) : hasMenu ? (
+      <IconPressable
+        style={styles.titleBtn}
+        pressedStyle={styles.titleBtnPressed}
+        onPress={handleChipPress}
+        disabled={disabled || loading}
+      >
+        {loading || dotPulsing ? (
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator size={16} color={titleColor} />
+          </View>
+        ) : (
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={titleColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M6 9 L12 15 L18 9" />
+          </Svg>
+        )}
+        <Text style={[styles.title, { color: titleColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
+        {badge != null && (
+          <CountBadge value={badge} color={badgeColor ?? GREEN} />
+        )}
+      </IconPressable>
+    ) : (
+      <View style={styles.titleRow}>
+        <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
+        {badge != null && (
+          <CountBadge value={badge} color={badgeColor ?? GREEN} />
+        )}
+      </View>
+    )
+  ) : null
+
   return (
     <View style={styles.header}>
-      {titleContent}
-      <View style={styles.endRow}>
-        {statusLabel != null && (
-          statusMenu && statusMenu.length > 0 ? (
-            <IconPressable
-              style={[
-                styles.statusChip,
-                statusColor ? { backgroundColor: '#fff', borderColor: statusColor + '40', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3 } :
-                statusGreen ? [styles.statusChipGreen, styles.statusChipTappableGreen] :
-                styles.statusChipTappable,
-              ]}
-              pressedStyle={styles.statusChipPressed}
-              onPress={handleChipPress}
-              disabled={disabled || loading}
-            >
-              <Text style={[styles.statusChipText, statusColor ? { color: statusColor } : statusGreen && styles.statusChipTextGreen]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.ui}>{statusLabel}</Text>
-            </IconPressable>
-          ) : (
-            <View style={[
-              styles.statusChip,
-              statusColor ? { backgroundColor: statusColor + '18' } :
-              statusGreen && styles.statusChipGreen,
-            ]}>
-              <Text style={[styles.statusChipText, statusColor ? { color: statusColor } : statusGreen && styles.statusChipTextGreen]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.ui}>{statusLabel}</Text>
-            </View>
-          )
-        )}
+      {/* Start side: title always start-aligned */}
+      <View style={[styles.sideSlot, styles.sideSlotStart]}>
+        {titleContent}
+      </View>
+
+      {/* End side: settings */}
+      <View style={[styles.sideSlot, styles.sideSlotEnd]}>
         <IconPressable
           style={styles.settingsBtn}
           pressedStyle={styles.settingsBtnPressed}
@@ -247,23 +219,32 @@ export function HomeHeader({
       </View>
 
       {menuOpen && (
-        <Modal transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-          <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
+        <>
+          <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} />
+          <View style={styles.menuAnchor}>
             <View style={styles.menuCard}>
               {statusMenu!.map((opt, i) => (
-                <IconPressable
-                  key={i}
-                  style={styles.menuOption}
-                  pressedStyle={styles.menuOptionPressed}
-                  onPress={() => { setMenuOpen(false); opt.onPress() }}
-                >
-                  <View style={[styles.menuDot, { backgroundColor: opt.color ?? 'rgba(0,0,0,0.25)' }]} />
-                  <Text style={[styles.menuOptionText, opt.color ? { color: opt.color } : null]} maxFontSizeMultiplier={FONT_SCALE.ui}>{opt.label}</Text>
-                </IconPressable>
+                opt.active ? (
+                  <View key={i} style={styles.menuOptionActive}>
+                    <View style={[styles.menuDot, { backgroundColor: opt.color ?? 'rgba(0,0,0,0.25)' }]} />
+                    <Text style={[styles.menuOptionText, opt.color ? { color: opt.color } : null]} maxFontSizeMultiplier={FONT_SCALE.ui}>{opt.label}</Text>
+                    <CheckIcon color={opt.color ?? TEXT} />
+                  </View>
+                ) : (
+                  <IconPressable
+                    key={i}
+                    style={styles.menuOption}
+                    pressedStyle={styles.menuOptionPressed}
+                    onPress={() => { setMenuOpen(false); opt.onPress() }}
+                  >
+                    <View style={[styles.menuDot, { backgroundColor: opt.color ?? 'rgba(0,0,0,0.25)' }]} />
+                    <Text style={[styles.menuOptionText, opt.color ? { color: opt.color } : null]} maxFontSizeMultiplier={FONT_SCALE.ui}>{opt.label}</Text>
+                  </IconPressable>
+                )
               ))}
             </View>
-          </Pressable>
-        </Modal>
+          </View>
+        </>
       )}
     </View>
   )
@@ -276,6 +257,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SINGLE,
     height: 56,
+    zIndex: 10,
+  },
+  sideSlot: {
+    zIndex: 1,
+    alignItems: 'flex-start',
+  },
+  sideSlotStart: {
+    flex: 1,
+  },
+  sideSlotEnd: {
+    alignItems: 'flex-end',
+  },
+  titleCenter: {
+    position: 'absolute',
+    start: 0,
+    end: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 60,
   },
   titleBtn: {
     flexDirection: 'row',
@@ -289,14 +289,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  iconSlot: {
-    width: 22,
-    height: 22,
-  },
-  iconSlotInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   title: {
     fontSize: 22,
@@ -313,6 +305,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: 'rgba(0,0,0,0.06)',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -320,25 +315,20 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  statusChipTappable: {
-    borderColor: 'rgba(0,0,0,0.15)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
-    backgroundColor: '#fff',
+  statusBallRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
-  statusChipTappableGreen: {
-    borderColor: 'rgba(21,128,61,0.25)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
+  statusDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
   },
-  statusChipGreen: {
-    backgroundColor: 'rgba(21,128,61,0.1)',
+  statusDotInline: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   statusChipPressed: {
     opacity: 0.55,
@@ -363,11 +353,18 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   menuBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 105,
-    paddingEnd: SINGLE,
+    position: 'absolute',
+    top: -200,
+    bottom: -1000,
+    start: -200,
+    end: -200,
+    zIndex: 99,
+  },
+  menuAnchor: {
+    position: 'absolute',
+    top: '100%',
+    start: SINGLE,
+    zIndex: 100,
   },
   menuCard: {
     backgroundColor: '#fff',
@@ -387,13 +384,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  menuOptionActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+  },
   menuOptionPressed: {
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   menuDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   menuOptionText: {
     fontSize: 15,

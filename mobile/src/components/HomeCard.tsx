@@ -14,6 +14,7 @@ import { WHITE } from '../colors'
 
 type PullCtx = {
   panRef: React.MutableRefObject<GestureType | undefined>
+  extraRefs: React.MutableRefObject<GestureType | undefined>[]
   setScrollAtTop: (v: boolean) => void
 }
 const PullContext = createContext<PullCtx | null>(null)
@@ -35,7 +36,8 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
         {...rest}
         ref={ref}
         onScroll={handleScroll}
-        simultaneousHandlers={ctx?.panRef ?? undefined}
+        nestedScrollEnabled
+        simultaneousHandlers={ctx ? [ctx.panRef, ...ctx.extraRefs].filter(r => r.current) : undefined}
         bounces={false}
         overScrollMode="never"
       />
@@ -60,6 +62,8 @@ export type HomeCardProps = {
   onPull?: () => Promise<void>
   /** Ref for programmatic pull trigger (e.g. from a header arrow button). */
   pullRef?: React.MutableRefObject<(() => void) | null>
+  /** Extra gesture refs that inner ScrollViews should coexist with. */
+  extraSimultaneousRefs?: React.MutableRefObject<GestureType | undefined>[]
 }
 
 export function HomeCard({
@@ -68,6 +72,7 @@ export function HomeCard({
   buttons,
   onPull,
   pullRef,
+  extraSimultaneousRefs,
 }: HomeCardProps) {
   const pullY = useSharedValue(0)
   const pullProgress = useSharedValue(0)
@@ -160,11 +165,12 @@ export function HomeCard({
 
   const ctxValue = useMemo(() => ({
     panRef,
+    extraRefs: extraSimultaneousRefs ?? [],
     setScrollAtTop: (v: boolean) => {
       scrollAtTopSV.value = v
       setScrollAtTop(v)
     },
-  }), [])
+  }), [extraSimultaneousRefs])
 
   return (
     <PullContext.Provider value={ctxValue}>

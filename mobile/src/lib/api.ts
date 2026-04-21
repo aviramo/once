@@ -1,12 +1,29 @@
 import { supabase } from './supabase'
 import { useUserStore } from '../stores/userStore'
+import { getLastKnownLocation } from './location'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
+
+// Set to true once app/start has been sent. Before that, invoke does not
+// auto-attach location — the caller is responsible for including it explicitly.
+let startupComplete = false
+export function markStartupComplete() { startupComplete = true }
 
 export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
 
   const session = await supabase.auth.getSession()
   const token = session.data.session?.access_token
+
+  // Attach the device's last known location to every request so the server
+  // always has a reasonably fresh position. getLastKnownLocation is instant
+  // (cached by the OS) so it won't slow down any call.
+  // Only auto-attach after startup has completed — before app/start fires the
+  // caller passes location explicitly, so there's nothing to fill in here.
+  const loc = startupComplete ? await getLastKnownLocation() : null
+  const payload = {
+    ...(body ?? {}),
+    ...(loc && !(body as any)?.location ? { location: { latitude: loc.lat, longitude: loc.lng } } : {}),
+  }
 
   const res = await fetch(`${supabaseUrl}/functions/v1/${fn}`, {
     method: 'POST',
@@ -15,7 +32,7 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
       'Authorization': `Bearer ${token ?? ''}`,
       'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
     },
-    body: JSON.stringify(body ?? {}),
+    body: JSON.stringify(payload),
   })
 
   if (!res.ok) {

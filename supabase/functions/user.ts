@@ -144,24 +144,21 @@ export default class User {
 
   // deno-lint-ignore no-explicit-any
   async others(logger: Logger, extend?: (query: any) => any, exclude?: User) {
-    const sp = "others";
     const others: Other[] = [];
-    this.db.new.location = this.location;
-    let query = Tools.supabase.rpc(sp, { me: this.db.new });
+    let query = Tools.supabase.rpc("others", { me: { ...this.db.new, location: this.location } });
     if (exclude) query = query.neq("user_id", exclude.user_id);
     if (extend) query = extend(query);
-    const data = await Tools.invoke(logger, sp, query.select());
+    const data = await Tools.invoke(logger, "others", query.select());
     if (Array.isArray(data)) for (const d of data) others.push(new Other(d));
     return others;
   }
 
   async other(logger: Logger) {
-    if (!this.other_id) return;
-    return (await this.others(logger, query => query.eq("user_id", this.other_id)))[0];
+    if (this.other_id) return (await this.others(logger, query => query.eq("user_id", this.other_id)))[0];
   }
 
-  renderMatch(other?: User): Match | null {
-    const match: Match | null = other ? {
+  renderMatch(other?: User) {
+    const match = other ? {
       created_at: this.match?.created_at ?? new Date(),
       user_id: other.user_id,
       last_seen: other.last_seen,
@@ -174,20 +171,14 @@ export default class User {
       is_for_kids: other.is_for_kids,
       distance: other instanceof Other ? other.distance : this instanceof Other ? this.distance : undefined,
     } : this.match;
-    if (match)
-      switch (this.state) {
-        case State.CHAT:
-          delete match.distance;
-          break;
-        case State.MISSED:
-        case State.REFUSED:
-        case State.LEFT:
-        case State.CANCELLED:
-          delete match.distance;
-          delete match.last_seen;
-          delete match.push_enabled;
-          break;
+    if (match) {
+      if (this.state == State.CHAT) delete match.distance;
+      if (!other) {
+        delete match.distance;
+        delete match.last_seen;
+        delete match.push_enabled;
       }
+    }
     return match;
   }
 
@@ -277,6 +268,7 @@ export default class User {
   delta() {
     const delta = lodash.omitBy(this, (v: unknown, k: string) => lodash.isEqual(v, (this.db.new as Record<string, unknown>)?.[k]));
     delete (delta as Record<string, unknown>).db;
+    console.log("delta", delta);
     return delta;
   }
 

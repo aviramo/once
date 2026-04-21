@@ -59,7 +59,7 @@ export default class Logger {
       "Content-Type": "application/json",
     };
     EdgeRuntime.waitUntil(this.save());
-    return new Response(error ?? JSON.stringify(this.getDeepUser()?.db.new), {
+    return new Response(JSON.stringify(this.getDeepUser()?.db.new), {
       status: this.status,
       headers: headers,
     });

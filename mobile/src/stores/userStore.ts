@@ -10,7 +10,7 @@ export interface MatchData {
   distance: number
   located_at?: string | null
   last_seen?: string | null
-  subscribed: boolean
+  push_enabled?: boolean | null
   is_for_kids?: boolean | null
   age?: number
   is_male?: boolean | null
@@ -40,7 +40,7 @@ export interface UserProfile {
   is_for_female: boolean
   age_from: number
   age_to: number
-  range: number
+  range: number | null
   bio: string | null
   is_for_kids: boolean | null
   images: { normal: string[]; blur: string[] }

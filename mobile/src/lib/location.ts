@@ -50,6 +50,17 @@ export async function getLocation(): Promise<{ lat: number; lng: number } | null
   }
 }
 
+/** Return the last cached position without waiting for a GPS fix. */
+export async function getLastKnownLocation(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const pos = await Location.getLastKnownPositionAsync()
+    if (!pos) return null
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  } catch {
+    return null
+  }
+}
+
 /** Show system dialog to enable location services. Resolves if enabled, rejects if dismissed. */
 export async function enableLocationServices(): Promise<void> {
   return Location.enableNetworkProviderAsync()
@@ -67,6 +78,22 @@ export function openLocationSettings() {
     // the Location row is visible.
     Linking.openSettings()
   }
+}
+
+/** Subscribe to continuous location updates.
+ *  Returns a subscription object — call .remove() to stop watching.
+ *  `onLocation` fires whenever the device moves significantly. */
+export async function watchLocation(
+  onLocation: (coords: { lat: number; lng: number }) => void,
+): Promise<Location.LocationSubscription> {
+  return Location.watchPositionAsync(
+    {
+      accuracy: Location.Accuracy.Balanced,
+      distanceInterval: 100,   // metres – fire only after meaningful movement
+      timeInterval: 60_000,    // ms – at most once per minute
+    },
+    (pos) => onLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+  )
 }
 
 /** Open the app-level permission settings (notification / location toggle). */

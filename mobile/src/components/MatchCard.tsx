@@ -133,7 +133,7 @@ export function MatchCard({
 
   const distGreen = isDistanceNear(match.distance)
   const timeGreen = isTimeRecent(timeIso)
-  const hasChips = !!distStr || !!timeStr || match.subscribed != null
+  const hasChips = !!distStr || !!timeStr || match.push_enabled != null
   const endsWithPhoto = imageUrls.length > 1 && match.is_for_kids == null
 
   return (
@@ -169,11 +169,11 @@ export function MatchCard({
                   tone={timeGreen ? 'positive' : 'neutral'}
                 />
               ) : null}
-              {match.subscribed != null ? (
+              {match.push_enabled != null ? (
                 <Chip
-                  renderIcon={c => match.subscribed ? <BellOnIcon color={c} /> : <BellOffIcon color={c} />}
-                  text={match.subscribed ? tg('home.notifOn', match.is_male) : tg('home.notifOff', match.is_male)}
-                  tone={match.subscribed ? 'positive' : 'negative'}
+                  renderIcon={c => match.push_enabled ? <BellOnIcon color={c} /> : <BellOffIcon color={c} />}
+                  text={match.push_enabled ? tg('home.notifOn', match.is_male) : tg('home.notifOff', match.is_male)}
+                  tone={match.push_enabled ? 'positive' : 'negative'}
                 />
               ) : null}
             </View>

@@ -4,6 +4,8 @@ import User from "../user.ts";
 import { State } from "../global.ts";
 
 const searchable = [
+  "is_for_male",
+  "is_for_female",
   "age_from",
   "age_to",
   "range",
@@ -45,11 +47,6 @@ Deno.serve(async (req) => {
     user.location = `SRID=4326;POINT(${lng} ${lat})`;
   }
 
-  if ('preferred_gender' in body && body.preferred_gender) {
-    user.is_for_male = ['B', 'M'].includes(body.preferred_gender as string);
-    user.is_for_female = ['B', 'F'].includes(body.preferred_gender as string);
-  }
-
   const other = await user.other(logger);
 
   switch (event) {
@@ -65,62 +62,71 @@ Deno.serve(async (req) => {
       break;
     case "delete":
       await user.delete(logger);
-      user.removeRrlations(logger, State.DELETED, other);
+      user.removeRrlations(logger, State.OTHER_DELETED, other);
       break;
     case 'visibility': {
-      if (body.state == State.HIDDEN) {
-        user.removeRrlations(logger, State.HID, other);
-        await user.search(logger, event);
-      }
-      if (body.state == State.VISIBLE) {
-        if (other) {
-          delete other.watchers[user.user_id];
-          EdgeRuntime.waitUntil(other.update(logger));
-        }
-        await user.addWatchers(logger);
-        EdgeRuntime.waitUntil(user.update(logger, body.state));
+      switch (body.state) {
+        case State.OFF:
+          user.removeRrlations(logger, State.OTHER_OFF, other);
+          user.location = null;
+          EdgeRuntime.waitUntil(user.update(logger, body.state));
+          break;
+        case State.VISIBLE:
+          if (other) {
+            delete other.watchers[user.user_id];
+            EdgeRuntime.waitUntil(other.update(logger));
+          }
+          await user.addWatchers(logger);
+          EdgeRuntime.waitUntil(user.update(logger, body.state));
+          break;
+        case State.HIDDEN:
+          user.removeRrlations(logger, State.OTHER_HIDDEN, other);
+          await user.search(logger, event);
+          break;
+        default:
+          return logger.error('visibility', 'invalid state', 400);
       }
       break;
     }
     case "ignore":
       if (user.state == State.WATCHING) {
-        EdgeRuntime.waitUntil(user.action(logger, event));
+        user.action(logger, event);
         delete other?.watchers[user.user_id];
         if (other) EdgeRuntime.waitUntil(other.update(logger));
         await user.search(logger, event, other);
-      } else user.update(logger, State.MISSED, other);
+      } else user.update(logger, State.HIDDEN, other);
       break;
     case "invite":
       if (user.state == State.WATCHING && other) {
         if (await other.update(logger, State.REPLYING, user, true)) {
           EdgeRuntime.waitUntil(user.chat(logger, event, true));
-          other.removeRrlations(logger, State.INVITED, undefined, user);
+          other.removeRrlations(logger, State.OTHER_INVITED, undefined, user);
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
-        } else EdgeRuntime.waitUntil(user.update(logger, State.MISSED, other));
+        } else EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN, other));
       }
       break;
     case "cancel":
       if (user.state == State.WAITING)
-        await user.removeOther(logger, event, State.CANCELLED, other);
+        await user.removeOther(logger, event, State.OTHER_CANCELLED, other);
       break;
     case "refuse":
       if (user.state == State.REPLYING)
-        await user.removeOther(logger, event, State.REFUSED, other);
+        await user.removeOther(logger, event, State.OTHER_REFUSED, other);
       break;
     case "approve":
       if (user.state == State.REPLYING) {
         EdgeRuntime.waitUntil(user.update(logger, State.CHAT, other));
         EdgeRuntime.waitUntil(user.chat(logger, event, true));
-        if (other) EdgeRuntime.waitUntil(other.update(logger, State.CHAT, user));
+        if (other) EdgeRuntime.waitUntil(other.update(logger, State.CHAT, user, true));
       }
       break;
     case "leave":
       if (user.state == State.CHAT)
-        await user.removeOther(logger, event, State.LEFT, other);
+        await user.removeOther(logger, event, State.OTHER_LEFT, other);
       break;
     case "block":
       if (user.state == State.CHAT)
-        await user.removeOther(logger, event, State.LEFT, other);
+        await user.removeOther(logger, event, State.OTHER_LEFT, other);
       break;
     case 'ok':
       await user.search(logger, event);
@@ -140,23 +146,34 @@ Deno.serve(async (req) => {
     }
     case "remove": {
       if (typeof body.user_id !== 'string' || !user.watchers[body.user_id]) break;
-      EdgeRuntime.waitUntil(user.removeRelation(logger, State.REMOVED, body.user_id));
+      EdgeRuntime.waitUntil(user.removeRelation(logger, State.OTHER_REMOVED, body.user_id));
       EdgeRuntime.waitUntil(user.update(logger));
       break;
     }
     case "logout": {
-      user.removeRrlations(logger, State.LOGGED_OUT, other);
+      user.removeRrlations(logger, State.OTHER_LOGGED_OUT, other);
       if (user.data) user.data.push_token = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
       break;
     }
     default:
-      await user.updateRelations(logger, other);
-      if (user.state == State.VISIBLE)
-        EdgeRuntime.waitUntil(user.addWatchers(logger));
-      EdgeRuntime.waitUntil(user.update(logger));
-      break;
+      switch (user.state) {
+        case State.VISIBLE:
+          await user.updateRelations(logger, other);
+          EdgeRuntime.waitUntil(user.addWatchers(logger));
+          EdgeRuntime.waitUntil(user.update(logger));
+          break;
+        case State.WATCHING:
+        case State.WAITING:
+        case State.REPLYING:
+        case State.CHAT:
+          await user.updateRelations(logger, other);
+          break;
+        case State.HIDDEN:
+          await user.search(logger, event);
+          break;
+      }
   }
   return logger.response();
 });

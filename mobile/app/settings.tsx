@@ -397,17 +397,17 @@ function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChan
       >
         <View style={vrs.trackBg} />
         <View style={[vrs.trackFill, { top: `${(1 - maxPct) * 100}%`, bottom: `${minPct * 100}%` }]} />
-        {/* Max thumb — near top */}
-        <View
-          style={[vrs.thumb, { top: `${(1 - maxPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
-          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          {...maxPan.panHandlers}
-        />
         {/* Min thumb — near bottom */}
         <View
           style={[vrs.thumb, { top: `${(1 - minPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           {...minPan.panHandlers}
+        />
+        {/* Max thumb — near top (rendered last = higher z-index, wins when thumbs overlap) */}
+        <View
+          style={[vrs.thumb, { top: `${(1 - maxPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...maxPan.panHandlers}
         />
       </View>
     </View>
@@ -499,8 +499,8 @@ function formatRadius(km: number): string {
   return `${km} ${t('settings.km')}`
 }
 
-function radiusToServer(km: number): number {
-  if (km === Infinity) return 100_000_000
+function radiusToServer(km: number): number | null {
+  if (km === Infinity) return null
   if (km === 0) return 250
   return Math.round(km * 1000)
 }
@@ -705,9 +705,9 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
 
   if (!profile) return <View style={styles.tabContent} />
 
-  const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax - 1))
-  const ageMax = Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin + 1))
-  const radius = profile.range >= 100_000_000 ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
+  const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax))
+  const ageMax = Math.max(ageMin, Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin)))
+  const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
@@ -1253,7 +1253,10 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
   const handleReset = async (state: 'VISIBLE' | 'HIDDEN') => {
     if (resetting) return
     setResetting(state)
-    try { await config.onReset(state) }
+    try {
+      await config.onReset(state)
+      onBack()
+    } catch (e) { console.error(e) }
     finally { setResetting(null) }
   }
 
@@ -1476,7 +1479,7 @@ export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfi
       bio: profile.bio ?? '',
       distance: 0,
       located_at: new Date().toISOString(),
-      subscribed: false,
+      subscribed: !!profile.data?.push_token,
       is_for_kids: profile.is_for_kids ?? null,
       age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
       is_male: profile.is_male,
@@ -1532,7 +1535,7 @@ const spStyles = StyleSheet.create({
   },
 })
 
-type SettingsPageProps = { onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void; changeTabRef?: React.MutableRefObject<((tab: Tab) => void) | null>; onTabChange?: (index: number) => void }
+type SettingsPageProps = { onBack?: () => void; focused?: boolean; pagerIdle?: boolean; onOpenSubPage?: (config: SubPageConfig) => void; changeTabRef?: React.MutableRefObject<((tab: Tab) => void) | null>; onTabChange?: (index: number) => void }
 
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
@@ -1546,13 +1549,15 @@ function SectionLabel({ children }: { children: any }) {
   )
 }
 
-export default function SettingsPage({ onBack, focused = true, onOpenSubPage, changeTabRef, onTabChange }: SettingsPageProps = {}) {
+export default function SettingsPage({ onBack, focused = true, pagerIdle = true, onOpenSubPage, changeTabRef, onTabChange }: SettingsPageProps = {}) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('preferences')
   // Disable the tab pan whenever a slider is mid-drag, so gesture-handler's
   // 10px activeOffsetX doesn't claim the gesture out from under the slider's
   // legacy PanResponder.
   const sliding = useSlidingActive()
+  // pagerIdle prop kept for API compat but no longer used — PagerView
+  // scrollEnabled is false on the settings pane so there is no race.
   // Pager-style: all 4 tabs are laid out side-by-side in a strip, we just
   // translate the strip to reveal the selected one. No mount/unmount during
   // the transition, so nothing re-renders — the motion runs on the native
@@ -1642,11 +1647,9 @@ export default function SettingsPage({ onBack, focused = true, onOpenSubPage, ch
   // velocity so the motion is one continuous gesture.
   // Swipe-to-change-tab using gesture-handler. activeOffsetX/failOffsetY let
   // the inner ScrollView own vertical drags unambiguously while horizontal
-  // intent (>=10px) claims us declaratively. We narrow activeOffsetX to the
-  // directions where a neighbor tab actually exists: at the first tab a
-  // backward swipe surrenders to the outer shell pan (which slides back to
-  // the home pane), and at the last tab a forward swipe is refused entirely
-  // so there's no claim+clamp elastic feel against a non-existent neighbor.
+  // intent (>=10px) claims us declaratively. At the first tab, backward
+  // swipes rubber-band and navigate home on release; at the last tab,
+  // forward swipes are refused so there's no elastic feel.
   const tabIdx = TABS.indexOf(activeTab)
   const canGoBack = tabIdx > 0
   const canGoFwd  = tabIdx < TABS.length - 1
@@ -1668,7 +1671,10 @@ export default function SettingsPage({ onBack, focused = true, onOpenSubPage, ch
         const base = (isRTL ? 1 : -1) * index * w
         const edge = (isRTL ? 1 : -1) * (TABS.length - 1) * w
         const [lo, hi] = isRTL ? [0, edge] : [edge, 0]
-        const next = Math.max(lo, Math.min(hi, base + e.translationX))
+        let next = base + e.translationX
+        // Rubber-band overscroll at the last tab's forward edge
+        if (next < lo) next = lo + (next - lo) * 0.3
+        else if (next > hi) next = hi + (next - hi) * 0.3
         translate.setValue(next)
         indicator.setValue(-next * (tabW / w))
       })

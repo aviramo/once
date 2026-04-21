@@ -122,6 +122,7 @@ function PhotoGrid({
 
   const dragPan = useMemo(() =>
     Gesture.Pan()
+      .activateAfterLongPress(300)
       .activeOffsetX([-8, 8])
       .activeOffsetY([-8, 8])
       .onBegin(e => {

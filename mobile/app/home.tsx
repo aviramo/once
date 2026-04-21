@@ -1,20 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState, Dimensions } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
 import PagerView from 'react-native-pager-view'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import Svg, { Defs, Path, Circle, Rect, Ellipse, G, Pattern } from 'react-native-svg'
-import { invoke } from '../src/lib/api'
+import { invoke, markStartupComplete } from '../src/lib/api'
 import { hasSeen, markSeen } from '../src/lib/seen'
 import { tap } from '../src/lib/haptics'
 import { useUserStore, type WatcherInfo } from '../src/stores/userStore'
 import { t, tg, tgg } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, type NotifPermission } from '../src/lib/notifications'
-import { getLocPermission, requestLocPermission, getLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
+import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button, PrimaryButton } from '../src/components/Button'
-import { TEXT, WHITE, BLACK, PURPLE, PURPLE_BG, RED } from '../src/colors'
+import { TEXT, WHITE, BLACK, GREEN, RED, MUTED_TEXT } from '../src/colors'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BootScreen } from '../src/components/BootScreen'
@@ -37,7 +38,7 @@ const ICON_SIZE = 220
 // Purple accent reserved for the VISIBLE state — signals "live / active /
 // discoverable" on the icon + title. Kept close to the components that use
 // it so it doesn't drift from the brand palette.
-const VISIBLE_ACCENT = '#6d28d9'
+const VISIBLE_ACCENT = '#15803d'
 // Neutral gray accent for the HIDDEN state — same hue as the incognito
 // disc so the icon and the title/subtitle read as one coherent badge.
 const HIDDEN_ACCENT = TEXT
@@ -136,41 +137,11 @@ const STAR_T2 = `translate(48, 48) scale(${STAR_SCALE})`
 const STAR_TILE = 88 // pattern repeat height
 
 function CardBack() {
-  // Stars drift downward — continuous frame-driven loop (no snap-back glitch).
-  const starsY = useSharedValue(0)
-  // Magnifying glass sways left ↔ right — near card edges.
-  const glassX = useSharedValue(0)
-
-  const FALL_SPEED = STAR_TILE / 2000 // px per ms — one tile every 2s
-  useFrameCallback((info) => {
-    'worklet'
-    if (info.timeSincePreviousFrame) {
-      starsY.value = (starsY.value + info.timeSincePreviousFrame * FALL_SPEED) % STAR_TILE
-    }
-  })
-
-  useEffect(() => {
-    glassX.value = -60
-    glassX.value = withRepeat(
-      withTiming(60, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
-      -1, // infinite
-      true, // reverse — ping-pong for seamless loop
-    )
-  }, [])
-
-  const starsStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: starsY.value }],
-  }))
-
-  const glassStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: glassX.value }],
-  }))
-
   return (
     <View style={cardBackStyles.wrap}>
-      {/* Oversized star layer — one extra tile so the loop is seamless */}
-      <Animated.View style={[StyleSheet.absoluteFill, { top: -STAR_TILE }, starsStyle]}>
-        <Svg width="100%" height="200%">
+      {/* Static star texture */}
+      <View style={StyleSheet.absoluteFill}>
+        <Svg width="100%" height="100%">
           <Defs>
             <Pattern id="cbTex" width={88} height={88} patternUnits="userSpaceOnUse">
               <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
@@ -181,26 +152,57 @@ function CardBack() {
           </Defs>
           <Rect width="100%" height="100%" fill="url(#cbTex)" />
         </Svg>
-      </Animated.View>
-      <Animated.View style={glassStyle}>
-        <Svg width={180} height={240} viewBox="0 0 180 240" fill="none">
-          {/* Magnifying glass — circle lens + angled handle */}
-          <Circle
-            cx={82}
-            cy={90}
-            r={52}
-            stroke="#fff"
-            strokeWidth={28}
-          />
-          {/* Handle — along 45° radius from circle center */}
-          <Path
-            d="M 119 127 L 168 176"
-            stroke="#fff"
-            strokeWidth={28}
-            strokeLinecap="round"
-          />
-        </Svg>
-      </Animated.View>
+      </View>
+      {/* Incognito figure — fedora, glasses, coat */}
+      <Svg width={220} height={250} viewBox="0 0 220 250" fill="none">
+        {/* Body / shoulders — broad rounded mass */}
+        <Path
+          d="M 110 155 C 60 155 20 175 5 220 L 5 250 L 215 250 L 215 220 C 200 175 160 155 110 155 Z"
+          fill="#fff"
+        />
+        {/* Coat collar left lapel */}
+        <Path
+          d="M 110 155 L 55 125 L 15 210 L 5 220 C 20 175 60 155 110 155 Z"
+          fill="#fff"
+        />
+        {/* Coat collar right lapel */}
+        <Path
+          d="M 110 155 L 165 125 L 205 210 L 215 220 C 200 175 160 155 110 155 Z"
+          fill="#fff"
+        />
+        {/* Collar V-cut — reveals background between lapels */}
+        <Path
+          d="M 110 155 L 68 130 L 60 135 L 110 175 L 160 135 L 152 130 Z"
+          fill="#6b7280"
+        />
+        {/* Hat crown — tall rounded dome */}
+        <Path
+          d="M 55 88 C 55 45 75 20 110 20 C 145 20 165 45 165 88 Z"
+          fill="#fff"
+        />
+        {/* Hat brim — wide curved ellipse, dips at sides */}
+        <Path
+          d="M 20 92 C 20 82 60 72 110 72 C 160 72 200 82 200 92 C 200 102 160 108 110 108 C 60 108 20 102 20 92 Z"
+          fill="#fff"
+        />
+        {/* Hat band — thin dark strip at base of crown */}
+        <Path
+          d="M 58 88 C 58 84 80 78 110 78 C 140 78 162 84 162 88 C 162 90 140 86 110 86 C 80 86 58 90 58 88 Z"
+          fill="#6b7280"
+          opacity={0.3}
+        />
+        {/* Left glass lens */}
+        <Ellipse cx={85} cy={118} rx={22} ry={16} fill="#000" opacity={0.65} />
+        {/* Right glass lens */}
+        <Ellipse cx={135} cy={118} rx={22} ry={16} fill="#000" opacity={0.65} />
+        {/* Bridge between glasses */}
+        <Path
+          d="M 105 118 C 107 113 113 113 115 118"
+          stroke="#000"
+          strokeWidth={3}
+          opacity={0.5}
+        />
+      </Svg>
       <View style={cardBackStyles.brandRow}>
         {BRAND_LETTERS.map((l, i) => (
           <Text
@@ -223,7 +225,7 @@ const cardBackStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6d28d9',
+    backgroundColor: '#6b7280',
     overflow: 'hidden',
   },
   brandRow: {
@@ -244,7 +246,7 @@ const cardBackStyles = StyleSheet.create({
 })
 
 // ── Notification card faces ───────────────────────────────────────────────
-// Same purple card style as CardBack but with bell icons instead of "?".
+// Same gray card style as CardBack but with bell icons instead of "?".
 // Shown during the startup notification permission flow.
 
 function PermissionCardFace({ icon }: { icon: 'bell' | 'location' }) {
@@ -328,7 +330,84 @@ const permCardStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6d28d9',
+    backgroundColor: '#6b7280',
+    overflow: 'hidden',
+  },
+  brandRow: {
+    position: 'absolute',
+    bottom: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    direction: 'ltr',
+    gap: 2,
+  },
+  brandLetter: {
+    fontSize: 32,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: 'rgba(255,255,255,0.85)',
+    includeFontPadding: false,
+  },
+})
+
+// ── OFF state card face ──────────────────────────────────────────────────
+// Red card with power-off icon. Shown when the user turns the app off.
+
+function OffCardFace() {
+  return (
+    <View style={offCardStyles.wrap}>
+      <View style={StyleSheet.absoluteFill}>
+        <Svg width="100%" height="100%">
+          <Defs>
+            <Pattern id="offTex" width={88} height={88} patternUnits="userSpaceOnUse">
+              <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_2} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_1} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+              <Path d={STAR_PATH_2} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
+            </Pattern>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#offTex)" />
+        </Svg>
+      </View>
+      <Svg width={200} height={200} viewBox="0 0 100 100" fill="none">
+        {/* Power icon — open arc + vertical bar, centered in viewBox */}
+        <Path
+          d="M 34 30 A 30 30 0 1 0 66 30"
+          stroke="#fff"
+          strokeWidth={11}
+          strokeLinecap="round"
+          fill="none"
+        />
+        <Path
+          d="M 50 12 L 50 50"
+          stroke="#fff"
+          strokeWidth={11}
+          strokeLinecap="round"
+        />
+      </Svg>
+      <View style={offCardStyles.brandRow}>
+        {BRAND_LETTERS.map((l, i) => (
+          <Text
+            key={i}
+            style={[
+              offCardStyles.brandLetter,
+              { transform: [{ rotate: `${l.rot}deg` }] },
+            ]}
+          >
+            {l.ch}
+          </Text>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+const offCardStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#9b1239',
     overflow: 'hidden',
   },
   brandRow: {
@@ -482,11 +561,10 @@ export default function HomePage() {
   // [2]=settings. In LTR that places chat to the left of home and settings
   // to the right; RTL mirrors. Chat is only reachable while state===CHAT —
   // the gesture to pane 0 refuses otherwise.
-  type PaneIndex = 0 | 1 | 2 | 3
+  type PaneIndex = 0 | 1 | 2
   const CHAT_PANE: PaneIndex = 0
   const HOME_PANE: PaneIndex = 1
   const SETTINGS_PANE: PaneIndex = 2
-  const SUBPAGE_PANE: PaneIndex = 3
   const [paneIndex, setPaneIndex] = useState<PaneIndex>(HOME_PANE)
   const [subPageConfig, setSubPageConfig] = useState<SubPageConfig | null>(null)
   // Unread message count reported by ChatPage — shown as a badge next to the
@@ -500,6 +578,7 @@ export default function HomePage() {
   // While that's active, PagerView scrolling is disabled so dragging a photo
   // to reorder doesn't slide the whole pane.
   const sliding = useSlidingActive()
+  const [pagerIdle, setPagerIdle] = useState(true)
   const pagerRef = useRef<PagerView>(null)
   const paneIndexRef = useRef(paneIndex)
   useEffect(() => { paneIndexRef.current = paneIndex }, [paneIndex])
@@ -507,10 +586,86 @@ export default function HomePage() {
   // visually over a pane that doesn't own the focused input.
   useEffect(() => { requestAnimationFrame(() => Keyboard.dismiss()) }, [paneIndex])
 
-  // SubPage — rendered as an extra page in PagerView after Settings.
+  // SubPage — slides in as an overlay on top of Settings.
   // afterSlideRef holds a callback to run after the sub-page is removed
   // (e.g. SelectFieldPage fires onSelect, then slides back).
   const afterSlideRef = useRef<(() => Promise<void> | void) | null>(null)
+  const shellWidth = useSharedValue(Dimensions.get('window').width)
+  const subPageSlide = useSharedValue(0)
+  const [subPageOpen, setSubPageOpen] = useState(false)
+  const subPageDir = I18nManager.isRTL ? -1 : 1
+  const subPageAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: subPageDir * (1 - subPageSlide.value) * shellWidth.value }],
+  }))
+  // Push-style: the PagerView slides out in the opposite direction so both
+  // pages move together as if connected.
+  const pagerPushStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -subPageDir * subPageSlide.value * shellWidth.value }],
+  }))
+
+  // Swipe-to-dismiss: manualActivation so we resolve direction before
+  // committing. Activates once horizontal movement is clear; fails on
+  // vertical (lets scroll through). Photo drag coexists via long-press
+  // threshold on dragPan — quick touches go to swipe, held touches to drag.
+  const doCloseSubPage = () => { closeShellSubPage() }
+  const swipeStartX = useSharedValue(0)
+  const swipeStartY = useSharedValue(0)
+  const subPageSwipe = useMemo(() =>
+    Gesture.Pan()
+      .manualActivation(true)
+      .onTouchesDown((e, _manager) => {
+        'worklet'
+        const t = e.allTouches[0]
+        if (!t) return
+        swipeStartX.value = t.absoluteX
+        swipeStartY.value = t.absoluteY
+      })
+      .onTouchesMove((e, manager) => {
+        'worklet'
+        const t = e.allTouches[0]
+        if (!t) return
+        const dx = t.absoluteX - swipeStartX.value
+        const dy = t.absoluteY - swipeStartY.value
+        const adx = Math.abs(dx)
+        const ady = Math.abs(dy)
+        if (adx < 6 && ady < 6) return  // wait for clear intent
+        if (ady > adx * 0.8) { manager.fail(); return }  // vertical → scroll
+        manager.activate()
+      })
+      .onUpdate(e => {
+        'worklet'
+        const drag = subPageDir * e.translationX
+        if (drag <= 0) return
+        subPageSlide.value = 1 - Math.min(1, drag / shellWidth.value)
+      })
+      .onEnd(e => {
+        'worklet'
+        const drag = subPageDir * e.translationX
+        const vx = subPageDir * e.velocityX
+        const past = drag > shellWidth.value * 0.3
+        const flick = vx > 400
+        if (past || flick) {
+          subPageSlide.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }, (finished) => {
+            'worklet'
+            if (finished) runOnJS(doCloseSubPage)()
+          })
+        } else {
+          subPageSlide.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) })
+        }
+      })
+  , [])
+
+  // Drive sub-page slide from open/closed state.
+  useEffect(() => {
+    if (subPageOpen) {
+      subPageSlide.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) })
+    } else if (subPageConfigRef.current) {
+      subPageSlide.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.cubic) }, (finished) => {
+        'worklet'
+        if (finished) runOnJS(onSubPageClosed)()
+      })
+    }
+  }, [subPageOpen])
 
   // Chat page is only rendered when available, so PagerView has 2 or 3 pages.
   // These helpers map between stable logical pane indices and PagerView pages.
@@ -532,11 +687,6 @@ export default function HomePage() {
   useEffect(() => { subPageConfigRef.current = subPageConfig }, [subPageConfig])
   const onPageSelected = (e: { nativeEvent: { position: number } }) => {
     const pane = pageToPane(e.nativeEvent.position)
-    // Prevent swiping into the empty SubPage slot.
-    if (pane === SUBPAGE_PANE && !subPageConfigRef.current) {
-      pagerRef.current?.setPage(paneToPage(SETTINGS_PANE))
-      return
-    }
     if (pane !== paneIndexRef.current) {
       tap()
       setPaneIndex(pane)
@@ -544,51 +694,40 @@ export default function HomePage() {
   }
 
   const onPageScrollStateChanged = (e: { nativeEvent: { pageScrollState: string } }) => {
-    if (e.nativeEvent.pageScrollState !== 'idle') return
-    // Once the scroll settles, check if we ended up away from the sub-page.
-    // If so, tear it down. Children count stays constant (SubPage is always
-    // in PagerView, just empty), so no spurious events.
-    if (paneIndexRef.current !== SUBPAGE_PANE && subPageConfigRef.current) {
-      const cb = afterSlideRef.current
-      afterSlideRef.current = null
-      setSubPageConfig(null)
-      if (cb) Promise.resolve(cb()).catch(console.error)
-    }
+    // Only block inner tab gestures during active user drag, not during
+    // settling (animation-only). This lets the user swipe inner tabs
+    // immediately after arriving at the settings pane.
+    setPagerIdle(e.nativeEvent.pageScrollState !== 'dragging')
   }
 
-  // Navigate to the sub-page once it has mounted in PagerView.
-  const pendingSubPageNav = useRef(false)
-  useEffect(() => {
-    if (subPageConfig && pendingSubPageNav.current) {
-      pendingSubPageNav.current = false
-      requestAnimationFrame(() => {
-        pagerRef.current?.setPage(paneToPage(SUBPAGE_PANE))
-      })
-    }
-  }, [subPageConfig])
+  const onSubPageClosed = () => {
+    const cb = afterSlideRef.current
+    afterSlideRef.current = null
+    setSubPageConfig(null)
+    if (cb) Promise.resolve(cb()).catch(console.error)
+  }
 
   const openShellSubPage = (config: SubPageConfig) => {
     tap()
-    pendingSubPageNav.current = true
     setSubPageConfig(config)
+    setSubPageOpen(true)
   }
 
   const closeShellSubPage = (afterSlide?: () => Promise<void> | void) => {
     tap()
     afterSlideRef.current = afterSlide ?? null
-    goToPane(SETTINGS_PANE)
-    // Cleanup happens in onPageSelected when the transition completes.
+    setSubPageOpen(false)
   }
 
-  // PagerView scrollEnabled — disabled when photo reorder is active or when
-  // the settings inner tab pager owns horizontal gestures (tab > 0).
-  const scrollEnabled = !sliding && !(paneIndex === SETTINGS_PANE && settingsTabIndex > 0)
+  // PagerView scrollEnabled — disabled on settings pane entirely so the
+  // inner tab pan owns all horizontal gestures without competing.
+  const scrollEnabled = !sliding && (paneIndex !== SETTINGS_PANE || settingsTabIndex === 0)
 
-  // Android hardware back — when on the sub-page, go back to settings;
+  // Android hardware back — when on the sub-page, slide it out;
   // when on any other side pane, slide back to home.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (paneIndexRef.current === SUBPAGE_PANE) {
+      if (subPageConfigRef.current) {
         closeShellSubPage()
         return true
       }
@@ -676,23 +815,36 @@ export default function HomePage() {
 
   // ── Startup completion ────────────────────────────────────────────────
   // Both permissions granted → send app/start + try to get location.
+  const lastFocusRef = useRef(0)
   const startupSentRef = useRef(false)
   const [locFailed, setLocFailed] = useState(false)
   const [locBusy, setLocBusy] = useState(false)
+  const [locFetching, setLocFetching] = useState(false)
+  const locFetchStartRef = useRef(0)
+  const LOC_FETCH_MIN_MS = 1500
+  const startLocFetch = () => { locFetchStartRef.current = Date.now(); setLocFetching(true) }
+  const stopLocFetch = () => {
+    const elapsed = Date.now() - locFetchStartRef.current
+    const delay = Math.max(0, LOC_FETCH_MIN_MS - elapsed)
+    if (delay === 0) { setLocFetching(false); return }
+    setTimeout(() => setLocFetching(false), delay)
+  }
   useEffect(() => {
     if (notifPerm !== 'granted' || locPerm !== 'granted') return
     if (startupSentRef.current) return
     startupSentRef.current = true
     ;(async () => {
       // Get location + push token in parallel, then send app/start.
+      startLocFetch()
       const [location, token] = await Promise.all([
-        getLocation(),
+        getLocation().finally(stopLocFetch),
         pushTokenRef.current
           ? Promise.resolve(pushTokenRef.current)
           : ensurePushToken().catch(() => null),
       ])
       // Only include push_token if it changed from what the server has.
       const pushChanged = token && token !== profile?.data?.push_token?.token
+      markStartupComplete()
       invoke('app/start', {
         ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
         ...(pushChanged ? { push_token: { type: 'expo', token } } : {}),
@@ -704,6 +856,7 @@ export default function HomePage() {
   const handleLocRetry = async () => {
     if (locBusy) return
     setLocBusy(true)
+    startLocFetch()
     try {
       const location = await getLocation()
       if (location) {
@@ -712,6 +865,7 @@ export default function HomePage() {
       }
     } finally {
       setLocBusy(false)
+      stopLocFetch()
     }
   }
 
@@ -731,6 +885,12 @@ export default function HomePage() {
       setNotifPerm(np)
       // Re-check location using the fresh notif result, not a stale closure value
       if (np === 'granted') getLocPermission().then(setLocPerm)
+      // Send app/focus with last known location (only after initial startup completed, max once per 30s)
+      if (startupSentRef.current && Date.now() - lastFocusRef.current > 30_000) {
+        lastFocusRef.current = Date.now()
+        const location = await getLastKnownLocation()
+        invoke('app/focus', location ? { location: { latitude: location.lat, longitude: location.lng } } : {}).catch(() => {})
+      }
     })
     return () => sub.remove()
   }, [])
@@ -745,6 +905,25 @@ export default function HomePage() {
     const id = setInterval(() => getLocPermission().then(setLocPerm), 2000)
     return () => clearInterval(id)
   }, [notifPerm])
+
+  // ── Continuous location tracking ──────────────────────────────────────
+  // After startup completes, watch for significant movement and push
+  // updates to the server so distance calculations stay fresh.
+  // A 60s interval guarantees at least one update per minute even when
+  // the user is standing still (watchLocation only fires on movement).
+  useEffect(() => {
+    if (!startupSentRef.current || locPerm !== 'granted') return
+    let sub: { remove(): void } | null = null
+    watchLocation((coords) => {
+      invoke('app/location', { location: { latitude: coords.lat, longitude: coords.lng } }).catch(() => {})
+    }).then(s => { sub = s }).catch(() => {})
+    const id = setInterval(() => {
+      getLastKnownLocation().then(coords => {
+        if (coords) invoke('app/location', { location: { latitude: coords.lat, longitude: coords.lng } }).catch(() => {})
+      })
+    }, 60_000)
+    return () => { sub?.remove(); clearInterval(id) }
+  }, [locPerm, locFailed])
 
   // Anchor pane on state transitions. Entering CHAT auto-navigates to the
   // chat pane; leaving CHAT snaps back to home. Because PagerView children
@@ -787,20 +966,24 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
 
-  const setVisibility = (next: 'VISIBLE' | 'HIDDEN'): Promise<void> => {
+  const isOff = state === 'OFF'
+  const setVisibility = (next: 'VISIBLE' | 'HIDDEN' | 'OFF'): Promise<void> => {
     if (busy) return Promise.resolve()
-    if (next === (isVisible ? 'VISIBLE' : 'HIDDEN')) return Promise.resolve()
+    const currentBase = isVisible ? 'VISIBLE' : isOff ? 'OFF' : 'HIDDEN'
+    if (next === currentBase) return Promise.resolve()
     setBusy(true)
     tap()
     return invoke('app/visibility', { state: next })
       .then(() => {
         setBusy(false)
         setHideConfirmOpen(false)
+        setOffConfirmOpen(false)
       })
       .catch(err => {
         console.warn('visibility toggle failed:', String(err).slice(0, 120))
         setBusy(false)
         setHideConfirmOpen(false)
+        setOffConfirmOpen(false)
       })
   }
 
@@ -811,10 +994,12 @@ export default function HomePage() {
   // Use displayedCardMode so card content only swaps at the flip midpoint.
   const showWatchers = !!profile && displayedCardMode === 'VISIBLE'
   const showHiddenPlaceholder = !!profile && displayedCardMode === 'HIDDEN'
+  const showOffScreen = !!profile && displayedCardMode === 'OFF'
 
   // If any watchers are listed when the user goes hidden, confirm first —
   // switching removes them all, which is destructive.
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
+  const [offConfirmOpen, setOffConfirmOpen] = useState(false)
   const [revealConfirmOpen, setRevealConfirmOpen] = useState(false)
   // Tracks whether the reveal dialog was opened from WATCHING state (skip toggle only shown then).
   const [revealIsForWatching, setRevealIsForWatching] = useState(false)
@@ -852,6 +1037,12 @@ export default function HomePage() {
       : t('home.hideConfirmPeople').replace('{n}', String(watchers.length)))
     + ' ' + tg('home.hideConfirmDesc', isMale)
 
+  const offConfirmDesc =
+    (watchers.length === 1
+      ? t('home.hideConfirmOnePerson')
+      : t('home.hideConfirmPeople').replace('{n}', String(watchers.length)))
+    + ' ' + tg('home.offConfirmDesc', isMale)
+
   // Match name (strip trailing ", age") and gendered invite confirm desc.
   const matchName = (profile?.match?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
   const matchIsMale = profile?.match?.is_male
@@ -859,29 +1050,31 @@ export default function HomePage() {
 
   // Status chip shown next to settings button.
   const statusGreen = false
-  const statusColor: string | undefined = state === 'VISIBLE' ? PURPLE : undefined
+  const statusColor: string | undefined = state === 'VISIBLE' ? GREEN : isOff ? RED : undefined
   const headerStatusLabel = (() => {
     if (state === 'WAITING' || state === 'REPLYING' || state === 'CHAT')
       return tg('home.statusOnlyMatch' as any, isMale).replace('{name}', matchName)
     if (state === 'VISIBLE')
-      return tg('home.statusVisible' as any, isMale)
-    return tg('home.statusHidden' as any, isMale)
+      return t('home.menuVisible')
+    if (isOff)
+      return t('home.menuInactive')
+    return t('home.menuHidden')
   })()
 
   // The match card surfaces both for live interaction states and for
-  // terminal/ended states (MISSED, CANCELLED, REFUSED, LEFT). The ended
+  // terminal/ended states (OTHER_CANCELLED, OTHER_REFUSED, OTHER_LEFT, etc.). The ended
   // states show the same match + a single dismiss button that clears the
   // record on the server and drops back to the HIDDEN shell.
   const isEndedState =
-    state === 'MISSED' || state === 'CANCELLED' || state === 'REFUSED' || state === 'LEFT' ||
-    state === 'REMOVED' || state === 'LOGGED_OUT' || state === 'INVITED' || state === 'HID' || state === 'DELETED'
+    state === 'OTHER_CANCELLED' || state === 'OTHER_REFUSED' || state === 'OTHER_LEFT' ||
+    state === 'OTHER_REMOVED' || state === 'OTHER_LOGGED_OUT' || state === 'OTHER_INVITED' || state === 'OTHER_HIDDEN' || state === 'OTHER_DELETED'
   const isMatchCardOpen =
     state === 'WATCHING' || state === 'WAITING' || state === 'REPLYING' || state === 'CHAT' ||
     isEndedState
   // Displayed versions — drive card rendering (lag during flip).
   const displayedIsEndedState =
-    displayedCardMode === 'MISSED' || displayedCardMode === 'CANCELLED' || displayedCardMode === 'REFUSED' || displayedCardMode === 'LEFT' ||
-    displayedCardMode === 'REMOVED' || displayedCardMode === 'LOGGED_OUT' || displayedCardMode === 'INVITED' || displayedCardMode === 'HID' || displayedCardMode === 'DELETED'
+    displayedCardMode === 'OTHER_CANCELLED' || displayedCardMode === 'OTHER_REFUSED' || displayedCardMode === 'OTHER_LEFT' ||
+    displayedCardMode === 'OTHER_REMOVED' || displayedCardMode === 'OTHER_LOGGED_OUT' || displayedCardMode === 'OTHER_INVITED' || displayedCardMode === 'OTHER_HIDDEN' || displayedCardMode === 'OTHER_DELETED'
   const displayedIsMatchCardOpen =
     displayedCardMode === 'WATCHING' || displayedCardMode === 'WAITING' || displayedCardMode === 'REPLYING' || displayedCardMode === 'CHAT' ||
     displayedIsEndedState
@@ -999,12 +1192,36 @@ export default function HomePage() {
   }
 
   const hiddenButtons = showHiddenPlaceholder
-    ? <Button variant="secondary" label={t('home.changePreferences')} onPress={goToPreferences} />
+    ? (
+      <View style={styles.buttonRow}>
+        <View style={styles.buttonCellAccept}>
+          <Button variant="primary" tone="positive" label={t('home.goAvailable')} onPress={() => setVisibility('VISIBLE')} disabled={busy} />
+        </View>
+        <View style={styles.buttonCellReject}>
+          <Button variant="secondary" label={t('home.changePreferences')} onPress={goToPreferences} />
+        </View>
+      </View>
+    )
+    : null
+
+  const offButton = showOffScreen
+    ? (
+      <View style={styles.buttonRow}>
+        <View style={styles.buttonCellAccept}>
+          <Button variant="primary" tone="positive" label={t('home.btnAvailable')} onPress={() => setVisibility('VISIBLE')} disabled={busy} />
+        </View>
+        <View style={styles.buttonCellReject}>
+          <Button variant="secondary" label={t('home.btnWatching')} onPress={() => setVisibility('HIDDEN')} disabled={busy} />
+        </View>
+      </View>
+    )
     : null
 
   const cardButtons = showNotifOverlay || showLocOverlay || locFailed
     ? permissionButton
-    : isMatchCardOpen ? matchButtons : hiddenButtons
+    : isMatchCardOpen ? matchButtons
+    : showOffScreen ? offButton
+    : hiddenButtons
 
   // ── Header props ──────────────────────────────────────────────────────
   const headerTitle =
@@ -1015,17 +1232,17 @@ export default function HomePage() {
     : state === 'WATCHING' ? t('push.WATCHING')
     : state === 'WAITING' ? t('push.WAITING')
     : state === 'REPLYING' ? t('push.REPLYING')
-    : state === 'MISSED' ? t('push.MISSED')
-    : state === 'CANCELLED' ? t('push.CANCELLED')
-    : state === 'REFUSED' ? t('push.REFUSED')
-    : state === 'LEFT' ? t('push.LEFT')
-    : state === 'REMOVED' ? tg('push.REMOVED' as any, matchIsMale)
-    : state === 'LOGGED_OUT' ? tg('push.LOGGED_OUT' as any, matchIsMale)
-    : state === 'INVITED' ? t('push.INVITED')
-    : state === 'HID' ? tg('push.HID' as any, matchIsMale)
-    : state === 'DELETED' ? tg('push.DELETED' as any, matchIsMale)
-    : isVisible ? t('home.watchersInnerTitle')
-    : t('home.scanningHeader')
+    : state === 'OTHER_CANCELLED' ? t('push.OTHER_CANCELLED')
+    : state === 'OTHER_REFUSED' ? t('push.OTHER_REFUSED')
+    : state === 'OTHER_LEFT' ? t('push.OTHER_LEFT')
+    : state === 'OTHER_REMOVED' ? tg('push.OTHER_REMOVED' as any, matchIsMale)
+    : state === 'OTHER_LOGGED_OUT' ? tg('push.OTHER_LOGGED_OUT' as any, matchIsMale)
+    : state === 'OTHER_INVITED' ? t('push.OTHER_INVITED')
+    : state === 'OTHER_HIDDEN' ? tg('push.OTHER_HIDDEN' as any, matchIsMale)
+    : state === 'OTHER_DELETED' ? tg('push.OTHER_DELETED' as any, matchIsMale)
+    : isVisible ? t('home.visibleHeader')
+    : isOff ? t('home.offHeader')
+    : t('home.hiddenHeader2')
 
   const headerArrow = (() => {
     if (state === 'CHAT') return { direction: 'side' as const, onPress: () => goToPane(CHAT_PANE) }
@@ -1035,8 +1252,8 @@ export default function HomePage() {
     return undefined
   })()
 
-  const headerBadge = state === 'CHAT' ? (chatUnread || undefined) : isVisible ? watchers.length : undefined
-  const headerBadgeColor = isVisible ? (watchers.length > 0 ? VISIBLE_ACCENT : 'rgba(0,0,0,0.25)') : undefined
+  const headerBadge = state === 'CHAT' ? (chatUnread || undefined) : undefined
+  const headerBadgeColor = undefined
 
   // ── Card props ────────────────────────────────────────────────────────
   // Pull gesture disabled — status chip is now the toggle.
@@ -1074,30 +1291,24 @@ export default function HomePage() {
     }
   }
 
-  // Status dropdown menu — shows options the user can switch to (excludes current state).
+  // Status dropdown menu — fixed order: צופה → נצפה → כיבוי. Active item marked.
   const statusMenuOptions = (() => {
-    if (state !== 'VISIBLE' && state !== 'HIDDEN' && state !== 'WATCHING') return undefined
-    const opts: Array<{ label: string; color?: string; onPress: () => void }> = []
-    if (!isVisible) {
-      opts.push({
-        label: t('home.menuVisible'),
-        color: PURPLE,
-        onPress: () => setVisibility('VISIBLE'),
-      })
-    }
-    if (state !== 'HIDDEN' && state !== 'WATCHING') {
-      opts.push({
+    if (state !== 'VISIBLE' && state !== 'HIDDEN' && state !== 'WATCHING' && !isOff) return undefined
+    const isHidden = state === 'HIDDEN' || state === 'WATCHING'
+    return [
+      {
         label: t('home.menuHidden'),
-        onPress: () => onSwitchToHidden(),
-      })
-    }
-    // "Inactive" — placeholder, not wired to backend yet.
-    opts.push({
-      label: t('home.menuInactive'),
-      color: RED,
-      onPress: () => {},
-    })
-    return opts
+        color: MUTED_TEXT,
+        active: isHidden,
+        onPress: isHidden ? () => {} : isOff ? () => setVisibility('HIDDEN') : () => onSwitchToHidden(),
+      },
+      {
+        label: t('home.menuVisible'),
+        color: GREEN,
+        active: isVisible,
+        onPress: isVisible ? () => {} : () => setVisibility('VISIBLE'),
+      },
+    ]
   })()
 
   const cardDescription = (() => {
@@ -1180,7 +1391,7 @@ export default function HomePage() {
 
   return (
     <View style={styles.backdrop}>
-      <View style={styles.shell}>
+      <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
         <StatusBar style="dark" />
         {/* react-native-pager-view's childrenWithOverriddenStyle casts
             every Children.map entry to ReactElement and accesses .props.
@@ -1189,6 +1400,7 @@ export default function HomePage() {
             must be excluded from the array entirely — not rendered as
             `{cond && <View>}`. We build the pages array here and pass
             it via the children prop. */}
+        <Animated.View style={[{ flex: 1 }, pagerPushStyle]}>
         <PagerView
           ref={pagerRef}
           style={{ flex: 1 }}
@@ -1224,6 +1436,7 @@ export default function HomePage() {
                   onSettingsPress={() => goToPane(SETTINGS_PANE)}
                   disabled={busy}
                   loading={busy}
+                  dotPulsing={locFetching || busy}
                 />
                 <HomeCard
                   onPull={cardOnPull}
@@ -1295,6 +1508,10 @@ export default function HomePage() {
                   {(displayedCardMode === 'loc' || displayedCardMode === 'locFailed') && (
                     <PermissionCardFace icon="location" />
                   )}
+
+                  {displayedCardMode === 'OFF' && (
+                    <OffCardFace />
+                  )}
                 </HomeCard>
 
                 <ConfirmDialog
@@ -1326,6 +1543,19 @@ export default function HomePage() {
                   destructive
                   onCancel={() => { if (!busy) { setHideConfirmOpen(false); releasePull() } }}
                   onConfirm={() => { setVisibility('HIDDEN').finally(releasePull) }}
+                  busy={busy}
+                />
+
+                <ConfirmDialog
+                  visible={offConfirmOpen}
+                  title={t('home.hideConfirmTitle')}
+                  description={offConfirmDesc}
+                  cancelLabel={t('home.hideConfirmCancel')}
+                  confirmLabel={tg('home.hideConfirmConfirm', isMale)}
+                  confirmFlex={0.6}
+                  destructive
+                  onCancel={() => { if (!busy) { setOffConfirmOpen(false); releasePull() } }}
+                  onConfirm={() => { setVisibility('OFF').finally(releasePull) }}
                   busy={busy}
                 />
 
@@ -1395,12 +1625,16 @@ export default function HomePage() {
             </View>,
 
             <View key="settings" style={{ flex: 1 }}>
-              <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} changeTabRef={settingsChangeTabRef} onTabChange={setSettingsTabIndex} />
+              <SettingsPage onBack={() => goToPane(HOME_PANE)} focused={paneIndex === SETTINGS_PANE} pagerIdle={pagerIdle} onOpenSubPage={openShellSubPage} changeTabRef={settingsChangeTabRef} onTabChange={setSettingsTabIndex} />
             </View>,
-
-            <View key="subpage" style={{ flex: 1, backgroundColor: '#eef0f3' }}>
-              {subPageConfig && (
-                subPageConfig.kind === 'ageRange'
+          ]}
+        </PagerView>
+        </Animated.View>
+        {subPageConfig && (
+          <Animated.View style={[styles.subPageOverlay, subPageAnimStyle]} pointerEvents={subPageOpen ? 'auto' : 'none'}>
+            <GestureDetector gesture={subPageSwipe}>
+              <View style={{ flex: 1 }}>
+                {subPageConfig.kind === 'ageRange'
                   ? <AgeRangeFieldPage config={subPageConfig} onBack={closeShellSubPage} />
                   : subPageConfig.kind === 'radius'
                     ? <RadiusFieldPage config={subPageConfig} onBack={closeShellSubPage} />
@@ -1412,11 +1646,11 @@ export default function HomePage() {
                           ? <AccountFieldPage config={subPageConfig} onBack={closeShellSubPage} />
                           : subPageConfig.kind === 'preview'
                             ? <PreviewFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                            : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-              )}
-            </View>,
-          ]}
-        </PagerView>
+                            : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />}
+              </View>
+            </GestureDetector>
+          </Animated.View>
+        )}
       </View>
       {bootVisible && (
         <Animated.View style={[StyleSheet.absoluteFill, bootOverlayStyle]} pointerEvents="none">
@@ -1438,7 +1672,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#eef0f3',
   },
-
+  subPageOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    start: 0,
+    end: 0,
+    backgroundColor: '#eef0f3',
+  },
   root: {
     flex: 1,
     backgroundColor: '#eef0f3',
