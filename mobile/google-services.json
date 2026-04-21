@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:734623738972:android:8f1d3932dcb1b2ae498a99",
+        "mobilesdk_app_id": "1:734623738972:android:a8ba420606682a16498a99",
         "android_client_info": {
-          "package_name": "com.syncwish.app"
+          "package_name": "com.livo.app"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "734623738972-2h13joogi6tonknrm310cp7217sgibb8.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.syncwish.app",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
-          }
-        },
         {
           "client_id": "734623738972-62iahq9pjtlv9pl78alf86pn4plsbdj8.apps.googleusercontent.com",
           "client_type": 3
