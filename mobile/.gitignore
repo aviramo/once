@@ -34,7 +34,7 @@ yarn-error.*
 .env*.local
 
 # Firebase credentials
-google-services.json
+# google-services.json is intentionally committed (EAS build requires it)
 GoogleService-Info.plist
 
 # typescript
