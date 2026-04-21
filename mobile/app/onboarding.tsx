@@ -13,7 +13,7 @@ import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
-import { TEXT, WHITE, RED, PURPLE_LIGHT } from '../src/colors'
+import { TEXT, WHITE, RED, GREEN_LIGHT, GRAY_50 } from '../src/colors'
 import { SINGLE } from '../src/fonts'
 
 const TOTAL_STEPS = 5
@@ -408,7 +408,7 @@ export default function OnboardingPage() {
             <View style={styles.subtitleAnchor}>
               <Text style={[styles.subtitle, { marginTop: 0 }]}>{tg('ob.howOld', isMale === true)}</Text>
               <View style={{ opacity: dateValid ? 1 : 0 }}>
-                <CountBadge value={age ?? 0} color="#6d28d9" />
+                <CountBadge value={age ?? 0} color="#1AC944" />
               </View>
             </View>
           </View>
@@ -555,7 +555,7 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#eef0f3' },
+  root: { flex: 1, backgroundColor: GRAY_50 },
 
   header: { paddingHorizontal: 40, paddingTop: 16, paddingBottom: 8 },
 
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
     width: 10, height: 10, borderRadius: 5,
     backgroundColor: 'rgba(0,0,0,0.12)',
   },
-  progressDotActive: { backgroundColor: '#6d28d9' },
+  progressDotActive: { backgroundColor: '#1AC944' },
   progressLine: {
     flex: 1, height: 1,
     backgroundColor: 'rgba(0,0,0,0.12)',
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: PURPLE_LIGHT,
+    backgroundColor: GREEN_LIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 14,

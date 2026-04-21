@@ -121,6 +121,7 @@ export default class User {
       state: state ?? null,
       match: this.match,
       icon: matchImageUrl,
+      collapseId: this.match?.user_id ?? undefined,
     };
     const log = logger.log("notify", payload);
     if (!this.data?.push_token) return logger.error('notify', "no push token", 400);
@@ -173,7 +174,7 @@ export default class User {
     } : this.match;
     if (match) {
       if (this.state == State.CHAT) delete match.distance;
-      if (!other) {
+      if (!this.other_id) {
         delete match.distance;
         delete match.last_seen;
         delete match.push_enabled;
@@ -227,7 +228,7 @@ export default class User {
 
   }
 
-  removeRrlations(logger: Logger, state: State, other?: Other, exclude?: User) {
+  removeRelations(logger: Logger, state: State, other?: Other, exclude?: User) {
     for (const watcher_id of Object.keys(this.watchers)) {
       if (watcher_id != exclude?.user_id)
         EdgeRuntime.waitUntil(this.removeRelation(logger, state, watcher_id));
@@ -250,14 +251,13 @@ export default class User {
   }
 
   async reset(logger: Logger, state: State) {
-    await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().not("user_id", "is", null));
-    await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().is("user_id", null));
-    await Tools.invoke(logger, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null));
-    await Tools.invoke(logger, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null));
+    await Promise.all([
+      await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().not("user_id", "is", null)),
+      await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().is("user_id", null)),
+      await Tools.invoke(logger, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null)),
+      await Tools.invoke(logger, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null)),
+    ]);
     await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
-    this.other_id = null;
-    this.match = null;
-    this.watchers = {};
   }
 
   async chat(logger: Logger, text: string, is_event: boolean = false) {
@@ -287,10 +287,10 @@ export default class User {
     else EdgeRuntime.waitUntil(this.update(logger, State.HIDDEN));
   }
 
-  async search(logger: Logger, event: string, exclude?: User) {
+  async search(logger: Logger,exclude?: User) {
     if (exclude) {
       const newUser = lodash.cloneDeep(this);
-      const newLogger = new Logger(event, {}, newUser, logger);
+      const newLogger = new Logger('search', {}, newUser, logger);
       await this.watch(newLogger, exclude);
       newLogger.response();
     } else await this.watch(logger, exclude);
@@ -300,7 +300,7 @@ export default class User {
     EdgeRuntime.waitUntil(this.action(logger, event));
     EdgeRuntime.waitUntil(this.chat(logger, event, true));
     if (other) EdgeRuntime.waitUntil(other.update(logger, state, this, true));
-    await this.search(logger, event, other);
+    await this.search(logger, other);
   }
 
 }

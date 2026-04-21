@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import Svg, { Path, Circle, Line } from 'react-native-svg'
 import { FONT_SCALE } from '../fonts'
-import { GREEN, GREEN_BG, RED, RED_BG } from '../colors'
+import { GREEN, GREEN_BG, GRAY, GRAY_BG } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -11,7 +11,7 @@ import { GREEN, GREEN_BG, RED, RED_BG } from '../colors'
 const TONES = {
   neutral:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)' },
   positive: { fg: GREEN, bg: GREEN_BG },
-  negative: { fg: RED, bg: RED_BG },
+  negative: { fg: GRAY,  bg: GRAY_BG  },
 } as const
 
 export type ChipTone = keyof typeof TONES

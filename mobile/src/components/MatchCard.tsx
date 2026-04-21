@@ -274,10 +274,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: DOUBLE,
-    marginHorizontal: SINGLE,
+    marginHorizontal: DOUBLE,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: DOUBLE,
+    borderRadius: SINGLE,
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   kidsLabel: {

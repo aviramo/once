@@ -12,7 +12,7 @@ import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SINGLE } from '../fonts'
-import { TEXT, WHITE, PURPLE, MUTED } from '../colors'
+import { TEXT, WHITE, GREEN, MUTED } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -216,7 +216,7 @@ function PhotoGrid({
               </Svg>
             </View>
           )}
-          <ActivityIndicator size="small" color={PURPLE} style={photoStyles.placeholderSpinner} />
+          <ActivityIndicator size="small" color={GREEN} style={photoStyles.placeholderSpinner} />
         </View>
       ))}
       {additionalChildren}

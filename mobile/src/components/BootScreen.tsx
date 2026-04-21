@@ -3,8 +3,8 @@ import { Animated, Easing, StyleSheet } from 'react-native'
 import { Text } from './AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { t } from '../i18n'
-import { SyncWishLogo } from './SyncWishLogo'
-import { WHITE, PURPLE } from '../colors'
+import { LivoLogo } from './LivoLogo'
+import { TEXT } from '../colors'
 
 export function BootScreen() {
   // Soft pulse on the logo — opacity + scale looped while we're waiting.
@@ -41,12 +41,12 @@ export function BootScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <Animated.View style={{ opacity, transform: [{ scale }] }}>
-        <SyncWishLogo size={96} />
+        <LivoLogo size={160} />
       </Animated.View>
       <Animated.Text
         style={[styles.name, { opacity: taglineFade, transform: [{ translateY: taglineY }] }]}
       >
-        SyncWish
+        Livo
       </Animated.Text>
       <Animated.Text
         style={[styles.tagline, { opacity: taglineFade, transform: [{ translateY: taglineY }] }]}
@@ -60,22 +60,22 @@ export function BootScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: PURPLE,
+    backgroundColor: '#f4f4f4',
     alignItems: 'center',
     justifyContent: 'center',
   },
   name: {
-    marginTop: 18,
-    fontSize: 22,
+    marginTop: 24,
+    fontSize: 28,
     fontWeight: '800',
-    color: WHITE,
+    color: TEXT,
     letterSpacing: -0.5,
     textAlign: 'center',
   },
   tagline: {
-    marginTop: 8,
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
+    marginTop: 10,
+    fontSize: 18,
+    color: 'rgba(0,0,0,0.5)',
     letterSpacing: 0.2,
     textAlign: 'center',
   },

@@ -26,9 +26,10 @@ export default class Tools {
       to: subJson.token,
       sound: "default",
       priority: "high",
-      title: (payload?.title as string) ?? "SyncWish",
+      title: (payload?.title as string) ?? "Livo",
       body: (payload?.body as string) ?? "",
       data: payload,
+      collapseKey: (payload?.collapseId as string) ?? undefined,
     };
     try {
       const res = await fetch("https://exp.host/--/api/v2/push/send", {

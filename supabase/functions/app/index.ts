@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
   const logger = new Logger(event, body);
   const user = await User.getByRequest(logger, req);
   logger.user = user;
-  if (!event && Object.keys(logger.body).length === 0) return logger.response('options');
+  if (!event && Object.keys(logger.body).length === 0) return logger.error('options', 'options', 200);
   if (!user) return logger.error('api', "unauthenticated", 401);
   user.last_seen = new Date();
 
@@ -58,16 +58,16 @@ Deno.serve(async (req) => {
       }
       break;
     case "profile":
-      await user.search(logger, event);
+      await user.search(logger);
       break;
     case "delete":
       await user.delete(logger);
-      user.removeRrlations(logger, State.OTHER_DELETED, other);
+      user.removeRelations(logger, State.OTHER_DELETED, other);
       break;
     case 'visibility': {
       switch (body.state) {
         case State.OFF:
-          user.removeRrlations(logger, State.OTHER_OFF, other);
+          user.removeRelations(logger, State.OTHER_OFF, other);
           user.location = null;
           EdgeRuntime.waitUntil(user.update(logger, body.state));
           break;
@@ -80,8 +80,8 @@ Deno.serve(async (req) => {
           EdgeRuntime.waitUntil(user.update(logger, body.state));
           break;
         case State.HIDDEN:
-          user.removeRrlations(logger, State.OTHER_HIDDEN, other);
-          await user.search(logger, event);
+          user.removeRelations(logger, State.OTHER_HIDDEN, other);
+          await user.search(logger);
           break;
         default:
           return logger.error('visibility', 'invalid state', 400);
@@ -90,17 +90,19 @@ Deno.serve(async (req) => {
     }
     case "ignore":
       if (user.state == State.WATCHING) {
-        user.action(logger, event);
-        delete other?.watchers[user.user_id];
-        if (other) EdgeRuntime.waitUntil(other.update(logger));
-        await user.search(logger, event, other);
+        EdgeRuntime.waitUntil(user.action(logger, event));
+        if (other) {
+          delete other.watchers[user.user_id];
+          EdgeRuntime.waitUntil(other.update(logger));
+        }
+        await user.search(logger, other);
       } else user.update(logger, State.HIDDEN, other);
       break;
     case "invite":
       if (user.state == State.WATCHING && other) {
         if (await other.update(logger, State.REPLYING, user, true)) {
           EdgeRuntime.waitUntil(user.chat(logger, event, true));
-          other.removeRrlations(logger, State.OTHER_INVITED, undefined, user);
+          other.removeRelations(logger, State.OTHER_INVITED, undefined, user);
           EdgeRuntime.waitUntil(user.update(logger, State.WAITING, other));
         } else EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN, other));
       }
@@ -129,7 +131,7 @@ Deno.serve(async (req) => {
         await user.removeOther(logger, event, State.OTHER_LEFT, other);
       break;
     case 'ok':
-      await user.search(logger, event);
+      await user.search(logger);
       break;
     case "reset": {
       if (user.role == 'ADMIN') await user.reset(logger, body.state as State || State.VISIBLE);
@@ -151,7 +153,7 @@ Deno.serve(async (req) => {
       break;
     }
     case "logout": {
-      user.removeRrlations(logger, State.OTHER_LOGGED_OUT, other);
+      user.removeRelations(logger, State.OTHER_LOGGED_OUT, other);
       if (user.data) user.data.push_token = null;
       user.location = null;
       EdgeRuntime.waitUntil(user.update(logger, State.HIDDEN));
@@ -171,7 +173,7 @@ Deno.serve(async (req) => {
           await user.updateRelations(logger, other);
           break;
         case State.HIDDEN:
-          await user.search(logger, event);
+          await user.search(logger);
           break;
       }
   }

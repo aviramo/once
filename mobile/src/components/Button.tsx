@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE, SINGLE, BUTTON } from '../fonts'
-import { TEXT, WHITE, PURPLE, PURPLE_PRESS, RED, RED_PRESS, GREEN, GREEN_PRESS, MUTED, MUTED_PRESS, MUTED_TEXT } from '../colors'
+import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY, GRAY_PRESS, RED, RED_PRESS } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -169,27 +169,43 @@ const TONE: Record<Tone, { btn: object; pressed: object }> = {
 
 const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
   primary: {
-    btn: { backgroundColor: PURPLE },
-    pressed: { backgroundColor: PURPLE_PRESS },
+    btn: {
+      backgroundColor: GREEN,
+      borderWidth: 1.5,
+      borderColor: GREEN_PRESS,
+      paddingVertical: BUTTON - 1.5,
+    },
+    pressed: { backgroundColor: GREEN_PRESS },
     text: { color: WHITE },
   },
   secondary: {
     btn: {
       backgroundColor: WHITE,
-      borderWidth: 1,
-      borderColor: 'rgba(0,0,0,0.12)',
+      borderWidth: 1.5,
+      borderColor: 'rgba(0,0,0,0.35)',
+      paddingVertical: BUTTON - 1.5,
     },
     pressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
     text: { color: TEXT, fontWeight: '600' },
   },
   destructive: {
-    btn: { backgroundColor: RED },
+    btn: {
+      backgroundColor: RED,
+      borderWidth: 1.5,
+      borderColor: RED_PRESS,
+      paddingVertical: BUTTON - 1.5,
+    },
     pressed: { backgroundColor: RED_PRESS },
     text: { color: WHITE },
   },
   soft: {
-    btn: { backgroundColor: MUTED },
-    pressed: { backgroundColor: MUTED_PRESS },
-    text: { color: MUTED_TEXT },
+    btn: {
+      backgroundColor: GRAY,
+      borderWidth: 1.5,
+      borderColor: GRAY_PRESS,
+      paddingVertical: BUTTON - 1.5,
+    },
+    pressed: { backgroundColor: GRAY_PRESS },
+    text: { color: WHITE },
   },
 }

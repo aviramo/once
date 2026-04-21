@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Text, TextInput } from 'react-native'
+import { Text, TextInput, AppState } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -23,7 +23,7 @@ import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
-import { unregisterPushNotifications } from '../src/lib/notifications'
+import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
@@ -171,6 +171,14 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError])
 
   useEffect(() => {
+    dismissAllNotifications()
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') dismissAllNotifications()
+    })
+    return () => sub.remove()
+  }, [])
+
+  useEffect(() => {
     if (fontsLoaded && !globalFontApplied) {
       applyGlobalFont()
       globalFontApplied = true
@@ -181,7 +189,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#6d28d9' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#f4f4f4' }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'none' }} />

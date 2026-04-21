@@ -3,16 +3,18 @@ import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
+// App is always in foreground when this handler fires — suppress visual display.
+// Notifications are only meaningful when the app is closed/backgrounded.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: false,
+    shouldShowList: false,
   }),
 })
 
-const PUSH_TOKEN_KEY = 'syncwish_push_token'
+const PUSH_TOKEN_KEY = 'livo_push_token'
 
 export type NotifPermission = 'granted' | 'denied' | 'undetermined'
 
@@ -78,4 +80,9 @@ export async function getSavedPushToken(): Promise<string | null> {
 
 export function unregisterPushNotifications() {
   AsyncStorage.removeItem(PUSH_TOKEN_KEY).catch(() => {})
+}
+
+/** Dismiss all notifications from the notification center. */
+export function dismissAllNotifications() {
+  Notifications.dismissAllNotificationsAsync().catch(() => {})
 }

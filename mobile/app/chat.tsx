@@ -16,7 +16,7 @@ import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE, DOUBLE } from '../src/fonts'
-import { TEXT, WHITE, BLACK, RED, GREEN, GREEN_BG } from '../src/colors'
+import { TEXT, WHITE, BLACK, RED, GREEN, GREEN_BG, GRAY_50, GRAY_BG } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -579,39 +579,41 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
           <View style={[styles.menuAnchor, { top: insets.top + 56 + 4 }]}>
             <Pressable style={styles.menuDropdown} onPress={e => e.stopPropagation()}>
+              <View style={styles.menuCard}>
 
-              <Pressable
-                onPress={toggleEnterSends}
-                style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
-              >
-                <Text style={styles.menuLabel}>{t('chat.enterSends')}</Text>
-                <View style={[styles.menuCheckbox, styles.menuCheckboxPos, enterSends && styles.menuCheckboxOn]}>
-                  {enterSends && (
-                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                      <Polyline points="20 6 9 17 4 12" stroke={WHITE} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  )}
-                </View>
-              </Pressable>
+                <Pressable
+                  onPress={toggleEnterSends}
+                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+                >
+                  <Text style={styles.menuLabel}>{t('chat.enterSends')}</Text>
+                  <View style={[styles.menuCheckbox, enterSends && styles.menuCheckboxOn]}>
+                    {enterSends && (
+                      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                        <Polyline points="20 6 9 17 4 12" stroke={WHITE} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                      </Svg>
+                    )}
+                  </View>
+                </Pressable>
 
-              <View style={styles.menuDivider} />
+                <View style={styles.menuDivider} />
 
-              <Pressable
-                onPress={() => { setMenuOpen(false); setConfirmAction('block') }}
-                style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
-              >
-                <Text style={[styles.menuLabel, { color: RED }]}>{t('chat.block')}</Text>
-              </Pressable>
+                <Pressable
+                  onPress={() => { setMenuOpen(false); setConfirmAction('block') }}
+                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+                >
+                  <Text style={[styles.menuLabel, styles.menuLabelDestructive]}>{t('chat.block')}</Text>
+                </Pressable>
 
-              <View style={styles.menuEndBtnWrap}>
+                <View style={styles.menuDivider} />
+
                 <Pressable
                   onPress={() => { setMenuOpen(false); setConfirmAction('leave') }}
-                  style={({ pressed }) => [styles.menuEndBtn, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
                 >
-                  <Text style={styles.menuEndBtnText}>{t('chat.leave')}</Text>
+                  <Text style={[styles.menuLabel, styles.menuLabelDestructive]}>{t('chat.leave')}</Text>
                 </Pressable>
-              </View>
 
+              </View>
             </Pressable>
           </View>
         </Pressable>
@@ -772,13 +774,13 @@ const evStyles = StyleSheet.create({
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#eef0f3' },
+  root: { flex: 1, backgroundColor: GRAY_50 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
     paddingStart: 10,
-    backgroundColor: '#eef0f3',
+    backgroundColor: GRAY_50,
     zIndex: 2,
   },
   // Icon slot: square 56×56 box. alignItems/justifyContent center the icon
@@ -829,7 +831,7 @@ const styles = StyleSheet.create({
     // Disable it so justifyContent:'center' on the wrapper actually centers.
     includeFontPadding: false,
   },
-  statusOnline: { color: '#16a34a' },
+  statusOnline: { color: GREEN },
 
   body: { flex: 1 },
   messages: { flex: 1 },
@@ -852,9 +854,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: DOUBLE,
   },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: TEXT },
+  bubbleMine: { alignSelf: 'flex-end', backgroundColor: GREEN },
   bubbleMineLast: { borderBottomEndRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: 'rgba(0,0,0,0.06)' },
+  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: GRAY_BG },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
   bubbleTextMine: { color: WHITE },
@@ -870,7 +872,7 @@ const styles = StyleSheet.create({
   // Outer wrapper: holds the single-row input + send button plus the
   // dynamic bottom spacer that clears the nav bar / keyboard.
   inputBarOuter: {
-    backgroundColor: '#eef0f3',
+    backgroundColor: GRAY_50,
     zIndex: 2,
   },
   inputRow: {
@@ -903,7 +905,7 @@ const styles = StyleSheet.create({
   },
   sendBtn: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: TEXT,
+    backgroundColor: GREEN,
     alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.3 },
@@ -920,36 +922,34 @@ const styles = StyleSheet.create({
     maxWidth: '92%',
   },
   menuDropdown: {
-    backgroundColor: WHITE,
-    borderRadius: 8,
-    paddingTop: 4,
-    paddingBottom: 10,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: GRAY_50,
+    borderRadius: 14,
+    padding: 10,
     shadowColor: BLACK,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
     elevation: 6,
+  },
+  menuCard: {
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 10,
     minHeight: 50,
-    gap: 12,
   },
-  menuRowPressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
+  menuRowPressed: { backgroundColor: 'rgba(0,0,0,0.06)' },
   menuLabel: {
     fontSize: 15,
-    color: TEXT,
-    textAlign: 'center',
+    color: 'rgba(0,0,0,0.5)',
     flex: 1,
   },
+  menuLabelDestructive: { color: 'rgba(180,60,60,0.6)' },
   menuCheckbox: {
     width: 22,
     height: 22,
@@ -960,27 +960,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: WHITE,
   },
-  menuCheckboxPos: {
-    position: 'absolute',
-    end: 8,
-  },
   menuCheckboxOn: {
-    backgroundColor: TEXT,
-    borderColor: TEXT,
+    backgroundColor: GREEN,
+    borderColor: GREEN,
   },
   menuDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(0,0,0,0.08)',
-    marginVertical: 2,
-    marginHorizontal: 4,
+    marginStart: 16,
   },
-  menuEndBtnWrap: { marginTop: 10, paddingHorizontal: 2 },
-  menuEndBtn: {
-    backgroundColor: RED,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuEndBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
 })

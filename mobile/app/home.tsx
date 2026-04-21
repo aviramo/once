@@ -6,7 +6,7 @@ import PagerView from 'react-native-pager-view'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import Svg, { Defs, Path, Circle, Rect, Ellipse, G, Pattern } from 'react-native-svg'
+import Svg, { Path, Circle, Ellipse } from 'react-native-svg'
 import { invoke, markStartupComplete } from '../src/lib/api'
 import { hasSeen, markSeen } from '../src/lib/seen'
 import { tap } from '../src/lib/haptics'
@@ -15,7 +15,7 @@ import { t, tg, tgg } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button, PrimaryButton } from '../src/components/Button'
-import { TEXT, WHITE, BLACK, GREEN, RED, MUTED_TEXT } from '../src/colors'
+import { TEXT, WHITE, BLACK, GREEN, RED, GRAY, MUTED_TEXT, GRAY_50 } from '../src/colors'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BootScreen } from '../src/components/BootScreen'
@@ -28,57 +28,10 @@ import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRan
 import ChatPage from './chat'
 
 
-// ── State Icons ────────────────────────────────────────────────────────────
-// Large pictographic glyph that anchors the content area. A coherent
-// envelope-in-circle pair: up-arrow (sending) for HIDDEN, down-arrow
-// (receiving) for VISIBLE — same envelope, opposite arrow direction.
-
-const ICON_SIZE = 220
-
-// Purple accent reserved for the VISIBLE state — signals "live / active /
-// discoverable" on the icon + title. Kept close to the components that use
-// it so it doesn't drift from the brand palette.
+// ── State accents ─────────────────────────────────────────────────────────
+// Green for VISIBLE, neutral gray for HIDDEN. Used for title coloring.
 const VISIBLE_ACCENT = '#15803d'
-// Neutral gray accent for the HIDDEN state — same hue as the incognito
-// disc so the icon and the title/subtitle read as one coherent badge.
 const HIDDEN_ACCENT = TEXT
-
-function EnvelopeIcon({ accent, direction, size = ICON_SIZE }: { accent: string; direction: 'up' | 'down'; size?: number }) {
-  // Paper plane mid-flight. The two triangles — top wing (bright white) and
-  // under-fold (dimmed) — meet at a center crease, giving the classic folded
-  // paper look. A trio of fading dots behind the tail reads as motion.
-  // 'up' (sending): plane flies up-right, dots trail down-left.
-  // 'down' (receiving): mirrored — plane flies down-right, dots trail up-left.
-  const isUp = direction === 'up'
-  return (
-    <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <Circle cx="60" cy="60" r="60" fill={accent} />
-      <G origin="60, 60" scaleY={isUp ? 1 : -1}>
-        {/* Top wing — bright white, the visible side of the paper */}
-        <Path d="M 26 62 L 92 32 L 58 60 Z" fill={WHITE} />
-        {/* Under fold — same white but dimmed, creating the folded look */}
-        <Path d="M 58 60 L 92 32 L 71 91 Z" fill={WHITE} fillOpacity={0.55} />
-        {/* Crease line along the fold for extra definition */}
-        <Path
-          d="M 92 32 L 58 60"
-          stroke={accent}
-          strokeWidth={1.5}
-          strokeOpacity={0.35}
-          strokeLinecap="round"
-        />
-        {/* Motion trail — three fading dots behind the tail */}
-        <Circle cx="36" cy="72" r="2.4" fill={WHITE} opacity={0.8} />
-        <Circle cx="26" cy="82" r="2" fill={WHITE} opacity={0.55} />
-        <Circle cx="18" cy="92" r="1.6" fill={WHITE} opacity={0.32} />
-      </G>
-    </Svg>
-  )
-}
-
-function StateIcon({ state }: { state: string }) {
-  if (state === 'VISIBLE') return <EnvelopeIcon accent={VISIBLE_ACCENT} direction="down" />
-  return <EnvelopeIcon accent={HIDDEN_ACCENT} direction="up" />
-}
 
 // Single-figure silhouette: circle head + trapezoid/rectangular torso.
 // `variant` shapes the torso so a viewer reads it as one gender or the other.
@@ -111,216 +64,67 @@ function PreferredGenderGlyph({ forMale, forFemale, size = 140 }: { forMale: boo
   return <PersonGlyph variant="M" size={size} />
 }
 
-// Board-game card back — playful, like Djeco: colored background with
-// texture, a big rounded SVG question mark, and the brand name with each
-// letter tilted at a different angle for a whimsical look.
-const BRAND_LETTERS = [
-  { ch: 'S', rot: -8 },
-  { ch: 'y', rot: 5 },
-  { ch: 'n', rot: -3 },
-  { ch: 'c', rot: 7 },
-  { ch: 'W', rot: -6 },
-  { ch: 'i', rot: 4 },
-  { ch: 's', rot: -5 },
-  { ch: 'h', rot: 8 },
-]
 
-// SyncWish star paths in 0–48 coordinate space — extracted from SyncWishLogo.
-const STAR_PATH_1 = "M16.8712 33.0436L15.9976 44.7036C15.9362 45.5229 16.6646 46.0872 17.3161 45.722C21.9289 43.1382 36.3783 33.6479 43.7017 12.7899C44.0376 11.8331 43.1352 10.9697 42.3646 11.5094C38.0387 14.539 28.5846 20.8006 22.7421 21.9934C22.7421 21.9934 26.4836 19.3946 28.7231 15.4053C28.9426 15.0143 28.9244 14.5136 28.6796 14.1606L20.5127 2.38925C20.0287 1.69147 19.0354 1.98057 18.8606 2.87002L16.3181 15.8073L4.38437 26.2226C3.78602 26.7446 3.90808 27.7996 4.5989 28.079L16.8712 33.0436Z"
-const STAR_PATH_2 = "M37.9745 28.448C37.2188 29.5025 35.5908 31.6717 34.0876 32.9974C33.7871 33.2624 33.8276 33.7068 34.1724 33.9234L42.1145 38.909C42.5926 39.2091 43.2384 38.8529 43.1576 38.3323C42.7882 35.9496 41.7237 30.9818 39.0328 28.3741C38.7322 28.083 38.2142 28.1136 37.9745 28.448Z"
-// Two stars per tile: one at top-left, one at centre — creates a natural
-// diagonal layout when tiled (no patternTransform rotation needed).
-const STAR_SCALE = 38 / 48
-const STAR_T1 = `translate(4, 4) scale(${STAR_SCALE})`
-const STAR_T2 = `translate(48, 48) scale(${STAR_SCALE})`
+// ── Permission card faces ─────────────────────────────────────────────────
+// Clean, minimal design — white background with a single large icon in brand
+// color. Location pin in red (attention-grabbing), bell in green (positive).
 
-const STAR_TILE = 88 // pattern repeat height
+function PermissionCardFace({ icon, color, animate }: { icon: 'bell' | 'location'; color: string; animate?: boolean }) {
+  const iconColor = color
+  const translateY = useSharedValue(0)
 
-function CardBack() {
-  return (
-    <View style={cardBackStyles.wrap}>
-      {/* Static star texture */}
-      <View style={StyleSheet.absoluteFill}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <Pattern id="cbTex" width={88} height={88} patternUnits="userSpaceOnUse">
-              <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_2} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_1} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_2} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-            </Pattern>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#cbTex)" />
-        </Svg>
-      </View>
-      {/* Incognito figure — fedora, glasses, coat */}
-      <Svg width={220} height={250} viewBox="0 0 220 250" fill="none">
-        {/* Body / shoulders — broad rounded mass */}
-        <Path
-          d="M 110 155 C 60 155 20 175 5 220 L 5 250 L 215 250 L 215 220 C 200 175 160 155 110 155 Z"
-          fill="#fff"
-        />
-        {/* Coat collar left lapel */}
-        <Path
-          d="M 110 155 L 55 125 L 15 210 L 5 220 C 20 175 60 155 110 155 Z"
-          fill="#fff"
-        />
-        {/* Coat collar right lapel */}
-        <Path
-          d="M 110 155 L 165 125 L 205 210 L 215 220 C 200 175 160 155 110 155 Z"
-          fill="#fff"
-        />
-        {/* Collar V-cut — reveals background between lapels */}
-        <Path
-          d="M 110 155 L 68 130 L 60 135 L 110 175 L 160 135 L 152 130 Z"
-          fill="#6b7280"
-        />
-        {/* Hat crown — tall rounded dome */}
-        <Path
-          d="M 55 88 C 55 45 75 20 110 20 C 145 20 165 45 165 88 Z"
-          fill="#fff"
-        />
-        {/* Hat brim — wide curved ellipse, dips at sides */}
-        <Path
-          d="M 20 92 C 20 82 60 72 110 72 C 160 72 200 82 200 92 C 200 102 160 108 110 108 C 60 108 20 102 20 92 Z"
-          fill="#fff"
-        />
-        {/* Hat band — thin dark strip at base of crown */}
-        <Path
-          d="M 58 88 C 58 84 80 78 110 78 C 140 78 162 84 162 88 C 162 90 140 86 110 86 C 80 86 58 90 58 88 Z"
-          fill="#6b7280"
-          opacity={0.3}
-        />
-        {/* Left glass lens */}
-        <Ellipse cx={85} cy={118} rx={22} ry={16} fill="#000" opacity={0.65} />
-        {/* Right glass lens */}
-        <Ellipse cx={135} cy={118} rx={22} ry={16} fill="#000" opacity={0.65} />
-        {/* Bridge between glasses */}
-        <Path
-          d="M 105 118 C 107 113 113 113 115 118"
-          stroke="#000"
-          strokeWidth={3}
-          opacity={0.5}
-        />
-      </Svg>
-      <View style={cardBackStyles.brandRow}>
-        {BRAND_LETTERS.map((l, i) => (
-          <Text
-            key={i}
-            style={[
-              cardBackStyles.brandLetter,
-              { transform: [{ rotate: `${l.rot}deg` }] },
-            ]}
-          >
-            {l.ch}
-          </Text>
-        ))}
-      </View>
-    </View>
-  )
-}
+  useEffect(() => {
+    if (!animate) { translateY.value = 0; return }
+    // Gentle bounce: drop 18px then spring back, repeat forever.
+    translateY.value = withRepeat(
+      withSpring(18, { damping: 3, stiffness: 120, mass: 0.8 }),
+      -1,
+      true,
+    )
+  }, [animate])
 
-const cardBackStyles = StyleSheet.create({
-  wrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6b7280',
-    overflow: 'hidden',
-  },
-  brandRow: {
-    position: 'absolute',
-    bottom: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    direction: 'ltr',
-    gap: 2,
-  },
-  brandLetter: {
-    fontSize: 32,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: 'rgba(255,255,255,0.85)',
-    includeFontPadding: false,
-  },
-})
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }))
 
-// ── Notification card faces ───────────────────────────────────────────────
-// Same gray card style as CardBack but with bell icons instead of "?".
-// Shown during the startup notification permission flow.
-
-function PermissionCardFace({ icon }: { icon: 'bell' | 'location' }) {
-  const PAT = 28
   return (
     <View style={permCardStyles.wrap}>
-      {/* Texture — SyncWish stars in a diagonal offset tile */}
-      <View style={StyleSheet.absoluteFill}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <Pattern id="pcTex" width={88} height={88} patternUnits="userSpaceOnUse">
-              <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_2} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_1} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_2} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-            </Pattern>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#pcTex)" />
+      <Animated.View style={animate ? animStyle : undefined}>
+        <Svg width={220} height={270} viewBox="0 0 180 240" fill="none">
+          {icon === 'bell' ? (
+            <>
+              {/* Bell dome — narrows to smooth apex, widens toward body */}
+              <Path
+                d="M 30 152 C 28 90 60 28 90 28 C 120 28 152 90 150 152"
+                stroke={iconColor}
+                strokeWidth={22}
+                strokeLinecap="round"
+              />
+              {/* Bottom rim — wider than the body */}
+              <Path
+                d="M 10 162 L 170 162"
+                stroke={iconColor}
+                strokeWidth={18}
+                strokeLinecap="round"
+              />
+              {/* Clapper */}
+              <Circle cx={90} cy={196} r={13} fill={iconColor} />
+            </>
+          ) : (
+            <>
+              {/* Map pin */}
+              <Path
+                d="M 90 205 C 32 162 22 115 22 78 C 22 38 52 16 90 16 C 128 16 158 38 158 78 C 158 115 148 162 90 205 Z"
+                stroke={iconColor}
+                strokeWidth={22}
+                strokeLinejoin="round"
+              />
+              {/* Center dot */}
+              <Circle cx={90} cy={78} r={18} fill={iconColor} />
+            </>
+          )}
         </Svg>
-      </View>
-      {/* Icon — bold, wide, matches the CardBack ? style */}
-      <Svg width={180} height={240} viewBox="0 0 180 240" fill="none">
-        {icon === 'bell' ? (
-          <>
-            {/* Bell dome — narrows to smooth apex, widens toward body */}
-            <Path
-              d="M 30 152 C 28 90 60 28 90 28 C 120 28 152 90 150 152"
-              stroke="#fff"
-              strokeWidth={28}
-              strokeLinecap="round"
-            />
-            {/* Bottom rim — wider than the body */}
-            <Path
-              d="M 10 162 L 170 162"
-              stroke="#fff"
-              strokeWidth={24}
-              strokeLinecap="round"
-            />
-            {/* Clapper */}
-            <Circle cx={90} cy={196} r={14} fill="#fff" />
-          </>
-        ) : (
-          <>
-            {/* Map pin outline */}
-            <Path
-              d="M 90 205 C 32 162 22 115 22 78 C 22 38 52 16 90 16 C 128 16 158 38 158 78 C 158 115 148 162 90 205 Z"
-              stroke="#fff"
-              strokeWidth={28}
-              strokeLinejoin="round"
-            />
-            {/* Center circle */}
-            <Circle
-              cx={90}
-              cy={78}
-              r={26}
-              stroke="#fff"
-              strokeWidth={28}
-            />
-          </>
-        )}
-      </Svg>
-      <View style={permCardStyles.brandRow}>
-        {BRAND_LETTERS.map((l, i) => (
-          <Text
-            key={i}
-            style={[
-              permCardStyles.brandLetter,
-              { transform: [{ rotate: `${l.rot}deg` }] },
-            ]}
-          >
-            {l.ch}
-          </Text>
-        ))}
-      </View>
+      </Animated.View>
     </View>
   )
 }
@@ -330,100 +134,7 @@ const permCardStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6b7280',
-    overflow: 'hidden',
-  },
-  brandRow: {
-    position: 'absolute',
-    bottom: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    direction: 'ltr',
-    gap: 2,
-  },
-  brandLetter: {
-    fontSize: 32,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: 'rgba(255,255,255,0.85)',
-    includeFontPadding: false,
-  },
-})
-
-// ── OFF state card face ──────────────────────────────────────────────────
-// Red card with power-off icon. Shown when the user turns the app off.
-
-function OffCardFace() {
-  return (
-    <View style={offCardStyles.wrap}>
-      <View style={StyleSheet.absoluteFill}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <Pattern id="offTex" width={88} height={88} patternUnits="userSpaceOnUse">
-              <Path d={STAR_PATH_1} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_2} transform={STAR_T1} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_1} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-              <Path d={STAR_PATH_2} transform={STAR_T2} fillRule="evenodd" fill="rgba(255,255,255,0.17)" />
-            </Pattern>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#offTex)" />
-        </Svg>
-      </View>
-      <Svg width={200} height={200} viewBox="0 0 100 100" fill="none">
-        {/* Power icon — open arc + vertical bar, centered in viewBox */}
-        <Path
-          d="M 34 30 A 30 30 0 1 0 66 30"
-          stroke="#fff"
-          strokeWidth={11}
-          strokeLinecap="round"
-          fill="none"
-        />
-        <Path
-          d="M 50 12 L 50 50"
-          stroke="#fff"
-          strokeWidth={11}
-          strokeLinecap="round"
-        />
-      </Svg>
-      <View style={offCardStyles.brandRow}>
-        {BRAND_LETTERS.map((l, i) => (
-          <Text
-            key={i}
-            style={[
-              offCardStyles.brandLetter,
-              { transform: [{ rotate: `${l.rot}deg` }] },
-            ]}
-          >
-            {l.ch}
-          </Text>
-        ))}
-      </View>
-    </View>
-  )
-}
-
-const offCardStyles = StyleSheet.create({
-  wrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#9b1239',
-    overflow: 'hidden',
-  },
-  brandRow: {
-    position: 'absolute',
-    bottom: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    direction: 'ltr',
-    gap: 2,
-  },
-  brandLetter: {
-    fontSize: 32,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: 'rgba(255,255,255,0.85)',
-    includeFontPadding: false,
+    backgroundColor: 'transparent',
   },
 })
 
@@ -444,7 +155,6 @@ function Message({
   title,
   subtitle,
   desc,
-  hideIcon,
   hideDesc,
   badgeCount,
   titleColorOverride,
@@ -453,9 +163,6 @@ function Message({
   title?: string
   subtitle?: string
   desc: string
-  // Suppress the icon when watcher cards take over as the visual anchor
-  // below the message (VISIBLE state with at least one watcher).
-  hideIcon?: boolean
   // Suppress the desc when it's rendered separately below the watchers.
   hideDesc?: boolean
   // Optional count pill rendered next to the title. Used for the
@@ -473,11 +180,6 @@ function Message({
   ) : null
   return (
     <View style={messageStyles.wrap}>
-      {!hideIcon && (
-        <View style={[messageStyles.icon, messageStyles.iconFaded]}>
-          <StateIcon state={state} />
-        </View>
-      )}
       {badgeCount != null && badgeCount !== 0 ? (
         <View style={messageStyles.titleRow}>
           {titleNode}
@@ -506,16 +208,6 @@ const messageStyles = StyleSheet.create({
     paddingVertical: 20,
     backgroundColor: WHITE,
     borderRadius: 20,
-  },
-  icon: {
-    marginTop: 28,
-    marginBottom: 24,
-    alignSelf: 'center',
-  },
-  // Faded so the glyph reads as a decorative status marker, not a tappable
-  // affordance.
-  iconFaded: {
-    opacity: 0.35,
   },
   title: {
     fontSize: 18,
@@ -1107,7 +799,7 @@ export default function HomePage() {
         <View style={styles.buttonRow}>
           <View style={styles.buttonCellReject}>
             <Button
-              variant="soft"
+              variant="destructive"
               label={t('home.watchingReject')}
               onPress={() => runAction('app/ignore', 'watching-reject')}
               disabled={busy}
@@ -1220,8 +912,7 @@ export default function HomePage() {
   const cardButtons = showNotifOverlay || showLocOverlay || locFailed
     ? permissionButton
     : isMatchCardOpen ? matchButtons
-    : showOffScreen ? offButton
-    : hiddenButtons
+    : null
 
   // ── Header props ──────────────────────────────────────────────────────
   const headerTitle =
@@ -1237,7 +928,7 @@ export default function HomePage() {
     : state === 'OTHER_LEFT' ? t('push.OTHER_LEFT')
     : state === 'OTHER_REMOVED' ? tg('push.OTHER_REMOVED' as any, matchIsMale)
     : state === 'OTHER_LOGGED_OUT' ? tg('push.OTHER_LOGGED_OUT' as any, matchIsMale)
-    : state === 'OTHER_INVITED' ? t('push.OTHER_INVITED')
+    : state === 'OTHER_INVITED' ? tg('push.OTHER_INVITED' as any, matchIsMale)
     : state === 'OTHER_HIDDEN' ? tg('push.OTHER_HIDDEN' as any, matchIsMale)
     : state === 'OTHER_DELETED' ? tg('push.OTHER_DELETED' as any, matchIsMale)
     : isVisible ? t('home.visibleHeader')
@@ -1252,7 +943,7 @@ export default function HomePage() {
     return undefined
   })()
 
-  const headerBadge = state === 'CHAT' ? (chatUnread || undefined) : undefined
+  const headerBadge = displayedCardMode === 'CHAT' ? (chatUnread || undefined) : undefined
   const headerBadgeColor = undefined
 
   // ── Card props ────────────────────────────────────────────────────────
@@ -1318,7 +1009,7 @@ export default function HomePage() {
           state="HIDDEN"
           title={notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : t('home.notifPromptTitle')}
           desc={notifPerm === 'denied' ? t('home.emptyNotifBlockedDesc') : t('home.notifPromptDesc')}
-          hideIcon
+
         />
       )
     }
@@ -1336,7 +1027,7 @@ export default function HomePage() {
             : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc')
             : t('home.locationPromptDesc')
           }
-          hideIcon
+
         />
       )
     }
@@ -1346,22 +1037,26 @@ export default function HomePage() {
           state="HIDDEN"
           title={t('home.locationUnavailableTitle')}
           desc={t('home.locationUnavailableDesc')}
-          hideIcon
-        />
-      )
-    }
-    if (displayedCardMode === 'HIDDEN') {
-      return (
-        <Message
-          state="HIDDEN"
-          title={t('home.hiddenInfoTitle')}
-          desc={tg('home.hiddenInfoDesc', isMale)}
-          hideIcon
+
         />
       )
     }
     return undefined
   })()
+
+  const isPermMode = showNotifOverlay || showLocOverlay || locFailed
+
+  const permTitle = showNotifOverlay
+    ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : t('home.notifPromptTitle'))
+    : showLocOverlay
+      ? (locPerm === 'services-off' ? t('home.locationUnavailableTitle') : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle') : t('home.locationPromptTitle'))
+      : t('home.locationUnavailableTitle')
+
+  const permDesc = showNotifOverlay
+    ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedDesc') : t('home.notifPromptDesc'))
+    : showLocOverlay
+      ? (locPerm === 'services-off' ? t('home.locationServicesOffDesc') : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc') : t('home.locationPromptDesc'))
+      : t('home.locationUnavailableDesc')
 
   const booting = !ready || notifPerm === null || (notifPerm === 'granted' && locPerm === null)
   const bootOpacity = useSharedValue(1)
@@ -1424,95 +1119,152 @@ export default function HomePage() {
 
             <View key="home" style={{ flex: 1 }}>
               <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
-                <HomeHeader
-                  title={headerTitle}
-                  statusLabel={headerStatusLabel}
-                  statusGreen={statusGreen}
-                  statusColor={statusColor}
-                  arrow={headerArrow}
-                  badge={headerBadge}
-                  badgeColor={headerBadgeColor}
-                  statusMenu={statusMenuOptions}
-                  onSettingsPress={() => goToPane(SETTINGS_PANE)}
-                  disabled={busy}
-                  loading={busy}
-                  dotPulsing={locFetching || busy}
-                />
-                <HomeCard
-                  onPull={cardOnPull}
-                  pullRef={cardPullRef}
-                  buttons={cardButtons}
-                  description={cardDescription}
-                >
-                  {displayedIsMatchCardOpen && (
-                    profile?.match ? (
-                      <MatchCard
-                        key={profile.match.user_id}
-                        match={profile.match}
-                        userIsMale={isMale}
-                        bottomInset={0}
-                        hideTime={state === 'CHAT'}
+                {!isPermMode && (
+                  <HomeHeader
+                    title={headerTitle}
+                    statusLabel={headerStatusLabel}
+                    statusGreen={statusGreen}
+                    statusColor={statusColor}
+                    arrow={headerArrow}
+                    badge={headerBadge}
+                    badgeColor={headerBadgeColor}
+                    statusMenu={statusMenuOptions}
+                    onSettingsPress={() => goToPane(SETTINGS_PANE)}
+                    disabled={busy}
+                    loading={busy}
+                    dotPulsing={locFetching || busy}
+                  />
+                )}
+                {isPermMode ? (
+                  <View style={styles.permScreen}>
+                    <View style={styles.permIconArea}>
+                      <PermissionCardFace
+                        icon={showNotifOverlay ? 'bell' : 'location'}
+                        color={
+                          showNotifOverlay
+                            ? (notifPerm === 'denied' ? RED : GRAY)
+                            : showLocOverlay
+                              ? (locPerm === 'denied' || locPerm === 'services-off' ? RED : GRAY)
+                              : GRAY
+                        }
+                        animate={locFetching}
                       />
-                    ) : null
-                  )}
-
-                  {showWatchers && (
-                    <PullScrollView
-                      showsVerticalScrollIndicator={false}
-                      keyboardShouldPersistTaps="handled"
-                      scrollEventThrottle={16}
-                    >
-                      <View style={styles.watchersDescRow}>
-                        <Text style={styles.watchersDescText}>{
-                          watchers.length === 0
-                            ? tg('home.nowVisibleDesc', isMale)
-                            : watchers.length === 1
-                              ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
-                              : tg('home.nowVisibleWithWatchersDesc', isMale)
-                        }</Text>
+                    </View>
+                    <View style={styles.permText}>
+                      <Text style={styles.permTitle}>{permTitle}</Text>
+                      <Text style={styles.permDesc}>{renderWithEmphasis(permDesc)}</Text>
+                    </View>
+                    <View style={styles.permActions}>
+                      {permissionButton}
+                    </View>
+                  </View>
+                ) : showHiddenPlaceholder ? (
+                  <View style={styles.permScreen}>
+                    <View style={styles.permIconArea}>
+                      <Svg width={220} height={250} viewBox="0 0 220 250" fill="none">
+                        <Path d="M 110 155 C 60 155 20 175 5 220 L 5 250 L 215 250 L 215 220 C 200 175 160 155 110 155 Z" fill={GRAY} />
+                        <Path d="M 110 155 L 55 125 L 15 210 L 5 220 C 20 175 60 155 110 155 Z" fill={GRAY} />
+                        <Path d="M 110 155 L 165 125 L 205 210 L 215 220 C 200 175 160 155 110 155 Z" fill={GRAY} />
+                        <Path d="M 110 155 L 68 130 L 60 135 L 110 175 L 160 135 L 152 130 Z" fill="#4b5563" />
+                        <Path d="M 55 88 C 55 45 75 20 110 20 C 145 20 165 45 165 88 Z" fill={GRAY} />
+                        <Path d="M 20 92 C 20 82 60 72 110 72 C 160 72 200 82 200 92 C 200 102 160 108 110 108 C 60 108 20 102 20 92 Z" fill={GRAY} />
+                        <Path d="M 58 88 C 58 84 80 78 110 78 C 140 78 162 84 162 88 C 162 90 140 86 110 86 C 80 86 58 90 58 88 Z" fill="#4b5563" opacity={0.3} />
+                        <Ellipse cx={85} cy={118} rx={22} ry={16} fill="#000" />
+                        <Ellipse cx={135} cy={118} rx={22} ry={16} fill="#000" />
+                        <Path d="M 105 118 C 107 113 113 113 115 118" stroke="#000" strokeWidth={3} opacity={0.6} />
+                      </Svg>
+                    </View>
+                    <View style={styles.permText}>
+                      <Text style={styles.permTitle}>{t('home.hiddenInfoTitle')}</Text>
+                      <Text style={styles.permDesc}>{renderWithEmphasis(tg('home.hiddenInfoDesc', isMale))}</Text>
+                    </View>
+                    <View style={styles.permActions}>
+                      {hiddenButtons}
+                    </View>
+                  </View>
+                ) : showOffScreen ? (
+                  <View style={styles.permScreen}>
+                    <View style={styles.permIconArea}>
+                      <View style={{ opacity: 0.25 }}>
+                        <Svg width={200} height={200} viewBox="0 0 100 100" fill="none">
+                          <Path d="M 34 30 A 30 30 0 1 0 66 30" stroke={RED} strokeWidth={11} strokeLinecap="round" fill="none" />
+                          <Path d="M 50 12 L 50 50" stroke={RED} strokeWidth={11} strokeLinecap="round" />
+                        </Svg>
                       </View>
-                      {watchers.map((w, i) => (
-                        <View key={w.user_id}>
-                          {i > 0 && <View style={styles.watchersRowDivider} />}
-                          <WatcherCard watcher={w} units={profile?.units} flat onPress={() => { tap(); setRemoveWatcherTarget(w) }} />
+                    </View>
+                    <View style={styles.permText}>
+                      <Text style={styles.permTitle}>{t('home.offTitle')}</Text>
+                      <Text style={styles.permDesc}>{renderWithEmphasis(tg('home.offDesc', isMale))}</Text>
+                    </View>
+                    <View style={styles.permActions}>
+                      {offButton}
+                    </View>
+                  </View>
+                ) : (
+                  <HomeCard
+                    onPull={cardOnPull}
+                    pullRef={cardPullRef}
+                    buttons={cardButtons}
+                    description={cardDescription}
+                  >
+                    {displayedIsMatchCardOpen && (
+                      profile?.match ? (
+                        <MatchCard
+                          key={profile.match.user_id}
+                          match={profile.match}
+                          userIsMale={isMale}
+                          bottomInset={0}
+                          hideTime={state === 'CHAT'}
+                        />
+                      ) : null
+                    )}
+
+                    {showWatchers && (
+                      <PullScrollView
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        scrollEventThrottle={16}
+                      >
+                        <View style={styles.watchersDescRow}>
+                          <Text style={styles.watchersDescText}>{
+                            watchers.length === 0
+                              ? tg('home.nowVisibleDesc', isMale)
+                              : watchers.length === 1
+                                ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
+                                : tg('home.nowVisibleWithWatchersDesc', isMale)
+                          }</Text>
                         </View>
-                      ))}
-                      {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
-                        <View key={`ph-${i}`}>
-                          {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
-                          <View style={styles.watcherPlaceholder}>
-                            <View style={styles.watcherPlaceholderAvatar} />
-                            <View style={styles.watcherPlaceholderBody}>
-                              <View style={styles.watcherPlaceholderTitleRow}>
-                                <View style={styles.watcherPlaceholderTitle} />
-                              </View>
-                              <View style={styles.watcherPlaceholderChips}>
-                                <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
-                                <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                        {watchers.map((w, i) => (
+                          <View key={w.user_id}>
+                            {i > 0 && <View style={styles.watchersRowDivider} />}
+                            <WatcherCard watcher={w} units={profile?.units} flat onPress={() => { tap(); setRemoveWatcherTarget(w) }} />
+                          </View>
+                        ))}
+                        {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
+                          <View key={`ph-${i}`}>
+                            {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
+                            <View style={styles.watcherPlaceholder}>
+                              <View style={styles.watcherPlaceholderAvatar} />
+                              <View style={styles.watcherPlaceholderBody}>
+                                <View style={styles.watcherPlaceholderTitleRow}>
+                                  <View style={styles.watcherPlaceholderTitle} />
+                                </View>
+                                <View style={styles.watcherPlaceholderChips}>
+                                  <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
+                                  <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
+                                </View>
                               </View>
                             </View>
                           </View>
-                        </View>
-                      ))}
-                    </PullScrollView>
-                  )}
+                        ))}
+                      </PullScrollView>
+                    )}
 
-                  {showHiddenPlaceholder && (
-                    <CardBack />
-                  )}
+                    {/* HIDDEN is now rendered as a flat screen above, not inside the card */}
 
-                  {displayedCardMode === 'notif' && (
-                    <PermissionCardFace icon="bell" />
-                  )}
-
-                  {(displayedCardMode === 'loc' || displayedCardMode === 'locFailed') && (
-                    <PermissionCardFace icon="location" />
-                  )}
-
-                  {displayedCardMode === 'OFF' && (
-                    <OffCardFace />
-                  )}
-                </HomeCard>
+                    {/* OFF is now rendered as a flat screen above, not inside the card */}
+                  </HomeCard>
+                )}
 
                 <ConfirmDialog
                   visible={revealConfirmOpen}
@@ -1665,12 +1417,12 @@ const styles = StyleSheet.create({
   // Outer, always-opaque backdrop behind the shell.
   backdrop: {
     flex: 1,
-    backgroundColor: '#eef0f3',
+    backgroundColor: GRAY_50,
   },
   shell: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: '#eef0f3',
+    backgroundColor: GRAY_50,
   },
   subPageOverlay: {
     position: 'absolute' as const,
@@ -1678,11 +1430,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     start: 0,
     end: 0,
-    backgroundColor: '#eef0f3',
+    backgroundColor: GRAY_50,
   },
   root: {
     flex: 1,
-    backgroundColor: '#eef0f3',
+    backgroundColor: GRAY_50,
   },
 
   // Inset divider between watcher rows — sits inside the outer card, not
@@ -1744,6 +1496,39 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  // ── Permission screen (no card) ────────────────────────────────────────
+  permScreen: {
+    flex: 1,
+  },
+  permIconArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permText: {
+    paddingHorizontal: 32,
+    paddingBottom: 28,
+    alignItems: 'center',
+    gap: 10,
+  },
+  permTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  permDesc: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(0,0,0,0.6)',
+    textAlign: 'center',
+  },
+  permActions: {
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+    paddingTop: 8,
   },
   // Two-button horizontal row used by WATCHING/REPLYING. flex:1 cells so
   // both buttons share width evenly regardless of label length.

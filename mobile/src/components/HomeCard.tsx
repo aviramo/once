@@ -175,18 +175,20 @@ export function HomeCard({
   return (
     <PullContext.Provider value={ctxValue}>
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.cardOuter, cardStyle]}>
-          <View style={styles.cardInner}>
-            <View style={{ flex: 1 }}>
-              {children}
+        <Animated.View style={[styles.cardWrapper, cardStyle]}>
+          <View style={styles.cardOuter}>
+            <View style={styles.cardInner}>
+              <View style={{ flex: 1 }}>
+                {children}
+              </View>
+              {description}
             </View>
-            {description}
-            {buttons && (
-              <HomeButtons>
-                {buttons}
-              </HomeButtons>
-            )}
           </View>
+          {buttons && (
+            <HomeButtons>
+              {buttons}
+            </HomeButtons>
+          )}
         </Animated.View>
       </GestureDetector>
     </PullContext.Provider>
@@ -194,12 +196,21 @@ export function HomeCard({
 }
 
 const styles = StyleSheet.create({
-  cardOuter: {
+  cardWrapper: {
     flex: 1,
     marginHorizontal: SINGLE,
     marginTop: 0,
-    marginBottom: DOUBLE,
+    marginBottom: DOUBLE + SINGLE,
+  },
+  cardOuter: {
+    flex: 1,
     borderRadius: SINGLE,
+    // Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    elevation: 1,
   },
   cardInner: {
     flex: 1,

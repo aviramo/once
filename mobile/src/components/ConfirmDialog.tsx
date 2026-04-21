@@ -200,8 +200,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#6d28d9',
-    borderColor: '#6d28d9',
+    backgroundColor: '#1AC944',
+    borderColor: '#1AC944',
   },
   checkboxTick: {
     fontSize: 13,

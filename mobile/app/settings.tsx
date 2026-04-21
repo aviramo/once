@@ -23,7 +23,7 @@ import { PhotoEditor, PhotoEditorRef, localPhotoUriCache } from '../src/componen
 import type { MatchData } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
-import { TEXT, WHITE, BLACK, PURPLE } from '../src/colors'
+import { TEXT, WHITE, BLACK, GREEN, GRAY_50 } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -883,28 +883,30 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
       delaysContentTouches={false}
     >
 
-      <View
-        style={styles.accountLinkRow}
-        {...accountTap}
-      >
-        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
-          <Polyline points="9 12 11.5 14.5 15.5 10.5" />
-        </Svg>
-        <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.account')}</Text>
-        <ForwardChevronIcon />
-      </View>
-
-      <View
-        style={styles.accountLinkRow}
-        {...previewTap}
-      >
-        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-          <Circle cx={12} cy={12} r={3} />
-        </Svg>
-        <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.preview')}</Text>
-        <ForwardChevronIcon />
+      <View style={styles.accountLinksCard}>
+        <View
+          style={styles.accountLinkRowInner}
+          {...previewTap}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <Circle cx={12} cy={12} r={3} />
+          </Svg>
+          <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.preview')}</Text>
+          <ForwardChevronIcon />
+        </View>
+        <View style={styles.accountActionDivider} />
+        <View
+          style={styles.accountLinkRowInner}
+          {...accountTap}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
+            <Polyline points="9 12 11.5 14.5 15.5 10.5" />
+          </Svg>
+          <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.account')}</Text>
+          <ForwardChevronIcon />
+        </View>
       </View>
 
       <View style={[styles.section, { marginTop: 0 }]}>
@@ -1796,7 +1798,7 @@ export default function SettingsPage({ onBack, focused = true, pagerIdle = true,
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: '#eef0f3' },
+  rootOuter: { flex: 1, backgroundColor: GRAY_50 },
   root: { flex: 1 },
 
   header: {
@@ -1833,7 +1835,13 @@ const styles = StyleSheet.create({
 
   previewTabWrap: {
     flex: 1,
-    marginHorizontal: SINGLE, marginTop: SINGLE, marginBottom: DOUBLE,
+    marginHorizontal: SINGLE, marginTop: 0, marginBottom: DOUBLE + SINGLE,
+    borderRadius: SINGLE,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    elevation: 1,
   },
   previewCard: {
     flex: 1, borderRadius: SINGLE, overflow: 'hidden',
@@ -1868,6 +1876,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
     marginBottom: DOUBLE,
   },
+  accountLinksCard: {
+    borderRadius: SINGLE, overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    marginBottom: DOUBLE,
+  },
+  accountLinkRowInner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
   accountActionsCard: {
     borderRadius: SINGLE, overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.04)',
@@ -1894,7 +1911,7 @@ const styles = StyleSheet.create({
   selectRowValue: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
 
   // Sub-page overlay panel
-  subPageRoot: { backgroundColor: '#eef0f3' },
+  subPageRoot: { backgroundColor: GRAY_50 },
   subPageHeaderTitle: {
     flex: 1, fontSize: 17, fontWeight: '600', color: TEXT,
     textAlign: 'center',
@@ -1911,7 +1928,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: BUTTON, paddingVertical: DOUBLE,
   },
   subPageOptionLabel: { fontSize: 17, color: TEXT },
-  subPageCheckmark: { fontSize: 17, color: PURPLE, fontWeight: '600' },
+  subPageCheckmark: { fontSize: 17, color: GREEN, fontWeight: '600' },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
     marginStart: 16,

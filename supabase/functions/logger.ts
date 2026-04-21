@@ -51,7 +51,7 @@ export default class Logger {
     await Tools.supabase.from("log").insert(values);
   }
 
-  response(error?: string) {
+  response() {
     const headers = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers":
@@ -65,10 +65,10 @@ export default class Logger {
     });
   }
 
-  error(action: string, error: string, status: number = 500) {
+  error(action: string, error: string, status: number) {
     this.log(action).result(error, status);
     this.status = status;
-    return this.response(error);
+    return this.response();
   }
 
 }

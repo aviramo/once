@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Green circle radial gradient for slight depth -->
+    <radialGradient id="greenGrad" cx="50%" cy="40%" r="55%" fx="50%" fy="35%">
+      <stop offset="0%" stop-color="#2EE85A"/>
+      <stop offset="100%" stop-color="#1AC944"/>
+    </radialGradient>
+
+    <!-- Gray circle gradient -->
+    <radialGradient id="grayGrad" cx="50%" cy="40%" r="60%" fx="50%" fy="35%">
+      <stop offset="0%" stop-color="#888888"/>
+      <stop offset="100%" stop-color="#666666"/>
+    </radialGradient>
+
+    <!-- Glow filter for the intersection spark -->
+    <filter id="glowFilter" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="14" result="blur1"/>
+      <feGaussianBlur stdDeviation="5" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Soft glow around intersection -->
+    <radialGradient id="sparkGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="70%" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Large green circle -->
+  <circle cx="610" cy="375" r="330" fill="url(#greenGrad)"/>
+
+  <!-- Small gray circle — tangent to green: distance between centers = 330+182 = 512 -->
+  <!-- green=(610,375), gray=(284,770): dist=sqrt(326²+395²)≈512 ✓ -->
+  <circle cx="284" cy="770" r="182" fill="url(#grayGrad)"/>
+
+  <!-- Touch point at (400,630): 330 units from green center along the line toward gray center -->
+
+  <!-- Intersection glow — soft halo -->
+  <circle cx="400" cy="630" r="80" fill="url(#sparkGlow)" filter="url(#glowFilter)"/>
+
+  <!-- Sharp bright center spark -->
+  <circle cx="400" cy="630" r="10" fill="#ffffff" opacity="1" filter="url(#glowFilter)"/>
+
+  <!-- Lens-flare cross arms -->
+  <line x1="400" y1="598" x2="400" y2="662" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.85" filter="url(#glowFilter)"/>
+  <line x1="368" y1="630" x2="432" y2="630" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.85" filter="url(#glowFilter)"/>
+
+  <!-- Diagonal flare arms (fainter) -->
+  <line x1="378" y1="608" x2="422" y2="652" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.45" filter="url(#glowFilter)"/>
+  <line x1="422" y1="608" x2="378" y2="652" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.45" filter="url(#glowFilter)"/>
+</svg>

@@ -12,8 +12,8 @@ import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
 import { Button } from '../src/components/Button'
-import { SyncWishLogo } from '../src/components/SyncWishLogo'
-import { TEXT, WHITE, PURPLE } from '../src/colors'
+import { LivoLogo } from '../src/components/LivoLogo'
+import { TEXT, WHITE, GREEN, GRAY_50 } from '../src/colors'
 
 // ── Brand icons ────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ function LoginSpinner() {
         <Circle cx={11} cy={11} r={8} stroke="rgba(109,40,217,0.2)" strokeWidth={2.5} fill="none" />
         <Path
           d="M 11 3 A 8 8 0 0 1 19 11"
-          stroke={PURPLE}
+          stroke={GREEN}
           strokeWidth={2.5}
           strokeLinecap="round"
           fill="none"
@@ -149,13 +149,13 @@ export default function LoginPage() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <View style={styles.center}>
         {/* ── Hero ── */}
         <View style={styles.hero}>
-          <Text style={styles.brandName}>SyncWish</Text>
+          <Text style={styles.brandName}>Livo</Text>
           <View style={styles.logoWrapper}>
-            <SyncWishLogo size={128} color={WHITE} />
+            <LivoLogo size={128} />
           </View>
         </View>
 
@@ -195,7 +195,7 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#6d28d9',
+    backgroundColor: GRAY_50,
   },
   center: {
     flex: 1,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: 40,
     fontWeight: '300',
-    color: WHITE,
+    color: TEXT,
     letterSpacing: -0.5,
     fontFamily: 'NotoSans_400Regular',
   },
@@ -231,14 +231,14 @@ const styles = StyleSheet.create({
   messageLine1: {
     fontSize: 18,
     fontWeight: '300',
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(0,0,0,0.5)',
     textAlign: 'center',
     letterSpacing: 0.2,
   },
   messageLine2: {
     fontSize: 22,
     fontWeight: '600',
-    color: WHITE,
+    color: TEXT,
     textAlign: 'center',
     letterSpacing: 0.2,
   },

@@ -37,11 +37,23 @@ export async function getLocation(): Promise<{ lat: number; lng: number } | null
   try {
     const servicesOn = await Location.hasServicesEnabledAsync()
     if (!servicesOn) return null
-    // Try to get a fresh fix; fall back to the last cached position on failure
-    // (e.g. GPS hasn't locked yet on cold start).
+    // Try to get a fresh fix with a generous timeout so the GPS has time to
+    // lock on cold start (avoids the "open Google Maps first" workaround).
     let pos = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
+      timeInterval: 15_000,
+      mayShowUserSettingsDialog: false,
     }).catch(() => null)
+
+    // If Balanced accuracy failed, retry with low accuracy (cell/wifi) which
+    // resolves much faster and doesn't need a full GPS lock.
+    if (!pos) {
+      pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Low,
+      }).catch(() => null)
+    }
+
+    // Last resort: use the OS-cached position from a previous session.
     if (!pos) pos = await Location.getLastKnownPositionAsync()
     if (!pos) return null
     return { lat: pos.coords.latitude, lng: pos.coords.longitude }
@@ -99,7 +111,7 @@ export async function watchLocation(
 /** Open the app-level permission settings (notification / location toggle). */
 export function openAppSettings() {
   if (Platform.OS === 'android') {
-    const pkg = Constants.expoConfig?.android?.package ?? 'com.syncwish.app'
+    const pkg = Constants.expoConfig?.android?.package ?? 'com.livo.app'
     // Try to open the app's permissions page directly; fall back to app details → generic settings.
     IntentLauncher.startActivityAsync(
       'android.settings.MANAGE_APP_PERMISSIONS',
