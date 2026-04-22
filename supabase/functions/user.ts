@@ -1,7 +1,7 @@
 import lodash from "lodash";
 import Tools from "./tools.ts";
-import Logger from "./logger.ts";
-import { State, Match, Watcher, UserData, PushToken } from "./global.ts";
+import Action from "./action.ts";
+import { Match, Watcher, UserData, PushToken, State } from "./global.ts";
 
 export default class User {
   user_id: string;
@@ -43,22 +43,22 @@ export default class User {
     return auth.data.user;
   }
 
-  static async getById(logger: Logger, user_id: string) {
-    const data = await Tools.invoke(logger, "get user", Tools.supabase.from("users").select().eq("user_id", user_id));
+  static async getById(action: Action, user_id: string) {
+    const data = await Tools.invoke(action, "get user", Tools.supabase.from("users").select().eq("user_id", user_id));
     if (data && data[0]) return new User(data[0]);
   }
 
-  static async getByRequest(logger: Logger, req: Request) {
+  static async getByRequest(action: Action, req: Request) {
     const token = req.headers.get("authorization")?.split(" ")[1];
     const auth = await Tools.supabase.auth.getUser(token);
     if (!auth.data.user) return;
-    return await User.getById(logger, auth.data.user.id) ?? new User(auth.data.user.id);
+    return await User.getById(action, auth.data.user.id) ?? new User(auth.data.user.id);
   }
 
-  async insert(logger: Logger, name: string, birth_date: Date, is_male: boolean) {
+  async insert(action: Action, name: string, birth_date: Date, is_male: boolean) {
     this.birth_date = birth_date;
     const age = this.age();
-    if (age < User.LEGAL) return logger.error('insert', 'age', 400);
+    if (age < User.LEGAL) return action.error('insert', 'age', 400);
     const values = {
       user_id: this.user_id,
       name: name,
@@ -71,7 +71,7 @@ export default class User {
       range: 100000,
       watchers: {},
     }
-    const data = await Tools.invoke(logger, 'insert', Tools.supabase.from("users").insert(values).select());
+    const data = await Tools.invoke(action, 'insert', Tools.supabase.from("users").insert(values).select());
     if (data) {
       lodash.merge(this, data[0]);
       lodash.merge(this.db.new, data[0]);
@@ -88,7 +88,7 @@ export default class User {
     else this.other_id = null;
   }
 
-  async update(logger: Logger, state?: State, other?: User, notify?: boolean) {
+  async update(action: Action, state?: State, other?: User, notify?: boolean) {
     if (state) {
       this.state = state;
       this.other_id = other?.user_id ?? null;
@@ -99,19 +99,19 @@ export default class User {
       Object.assign(this.db.new, delta);
       let query = Tools.supabase.from("users").update(delta).eq("user_id", this.user_id);
       if (this.state == State.REPLYING) query = query.is("other_id", null);
-      const data = await Tools.invoke(logger, 'update', query.select());
+      const data = await Tools.invoke(action, 'update', query.select());
       if (data && data[0]) {
+        if (state && (state != this.db.old.state || other?.user_id != this.db.old.other_id)) await Tools.stateChange(action, state, this.other_id);
         Object.assign(this, data[0]);
         Object.assign(this.db.new, data[0]);
-        if (notify) EdgeRuntime.waitUntil(this.notify(state));
+        if (notify) EdgeRuntime.waitUntil(this.notify(action, state));
         return true;
       } else lodash.merge(this.db.new, this.db.old);
     }
     return false;
   }
 
-  async notify(state?: State) {
-    const logger = new Logger('notify', { state }, this);
+  async notify(action: Action, state?: State) {
     const matchImageFilename = (this.match?.images as string[] | undefined)?.[0];
     const matchImageUrl = matchImageFilename && this.match?.user_id
       ? `${Tools.supabaseUrl}/storage/v1/object/public/users/${this.match.user_id}/normal/${matchImageFilename}`
@@ -123,39 +123,38 @@ export default class User {
       icon: matchImageUrl,
       collapseId: this.match?.user_id ?? undefined,
     };
-    const log = logger.log("notify", payload);
-    if (!this.data?.push_token) return logger.error('notify', "no push token", 400);
+    const log = action.log("notify", payload);
+    if (!this.data?.push_token) return;// action.error('notify', "no push token", 400);
     const subJson: PushToken | null =
       typeof this.data.push_token === "string"
         ? JSON.parse(this.data.push_token)
         : this.data.push_token as unknown as PushToken | null;
     if (subJson?.type !== "expo" || !subJson.token)
-      return logger.error('notify', "push token missing token", 400);
+      return; // action.error('notify', "push token missing token", 400);
     const result = await Tools.notify(log, subJson, payload);
     if (!result.ok) {
       const dead = result.error === "DeviceNotRegistered" || result.error === "InvalidCredentials";
       if (dead) {
         this.data.push_token = null;
-        EdgeRuntime.waitUntil(this.update(logger));
+        EdgeRuntime.waitUntil(this.update(action));
       }
-      return logger.error('notify', `failed to send notification: ${result.error ?? "unknown"}`, 500);
+      // return action.error('notify', `failed to send notification: ${result.error ?? "unknown"}`, 500);
     }
-    return logger.response();
   }
 
   // deno-lint-ignore no-explicit-any
-  async others(logger: Logger, extend?: (query: any) => any, exclude?: User) {
+  async others(action: Action, extend?: (query: any) => any, exclude?: User) {
     const others: Other[] = [];
     let query = Tools.supabase.rpc("others", { me: { ...this.db.new, location: this.location } });
     if (exclude) query = query.neq("user_id", exclude.user_id);
     if (extend) query = extend(query);
-    const data = await Tools.invoke(logger, "others", query.select());
+    const data = await Tools.invoke(action, "others", query.select());
     if (Array.isArray(data)) for (const d of data) others.push(new Other(d));
     return others;
   }
 
-  async other(logger: Logger) {
-    if (this.other_id) return (await this.others(logger, query => query.eq("user_id", this.other_id)))[0];
+  async other(action: Action) {
+    if (this.other_id) return (await this.others(action, query => query.eq("user_id", this.other_id)))[0];
   }
 
   renderMatch(other?: User) {
@@ -197,16 +196,16 @@ export default class User {
     }
   }
 
-  async addWatchers(logger: Logger) {
+  async addWatchers(action: Action) {
     const watchersToAdd = User.WATCHERS - Object.keys(this.watchers).length;
-    for (const watcher of await this.others(logger, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).limit(watchersToAdd).order("relevance", { ascending: false }))) {
+    for (const watcher of await this.others(action, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).limit(watchersToAdd).order("relevance", { ascending: false }))) {
       this.setWatcher(watcher);
-      EdgeRuntime.waitUntil(watcher.update(logger, State.WATCHING, this, true));
+      EdgeRuntime.waitUntil(watcher.update(action, State.WATCHING, this, true));
     }
   }
 
-  async updateRelations(logger: Logger, other?: Other) {
-    const watchers = await this.others(logger, query => {
+  async updateRelations(action: Action, other?: Other) {
+    const watchers = await this.others(action, query => {
       return query.eq("other_id", this.user_id);
     });
     let otherUpdated = false;
@@ -218,57 +217,55 @@ export default class User {
       }
       else
         this.setWatcher(watcher);
-      EdgeRuntime.waitUntil(watcher.update(logger));
+      EdgeRuntime.waitUntil(watcher.update(action));
     }
     if (!otherUpdated && other) {
       this.setMatch(other);
       other.setWatcher(this);
-      EdgeRuntime.waitUntil(other.update(logger));
+      EdgeRuntime.waitUntil(other.update(action));
     }
-
   }
 
-  removeRelations(logger: Logger, state: State, other?: Other, exclude?: User) {
+  removeRelations(action: Action, state: State, other?: Other, exclude?: User) {
     for (const watcher_id of Object.keys(this.watchers)) {
       if (watcher_id != exclude?.user_id)
-        EdgeRuntime.waitUntil(this.removeRelation(logger, state, watcher_id));
+        EdgeRuntime.waitUntil(this.removeRelation(action, state, watcher_id));
     }
-    if (other) EdgeRuntime.waitUntil(other.update(logger, state, this, true));
+    if (other) EdgeRuntime.waitUntil(other.update(action, state, this, true));
   }
 
-  async removeRelation(logger: Logger, state: State, watcher_id: string) {
+  async removeRelation(action: Action, state: State, watcher_id: string) {
     delete this.watchers[watcher_id];
-    const watcher = await User.getById(logger, watcher_id);
-    await watcher?.update(logger, state, this, true);
+    const watcher = await User.getById(action, watcher_id);
+    await watcher?.update(action, state, this, true);
   }
 
-  async action(logger: Logger, key: string) {
-    await Tools.invoke(logger, 'action', Tools.supabase.from("actions").insert({ user_id: this.user_id, other_id: this.other_id, key: key }));
+  async restriction(action: Action) {
+    await Tools.invoke(action, 'restriction', Tools.supabase.from("restrictions").insert({ user_id: this.user_id, other_id: this.other_id, key: action.key }));
   }
 
-  async delete(logger: Logger) {
-    await Tools.invoke(logger, 'delete', Tools.supabase.from("users").delete().eq("user_id", this.user_id));
+  async delete(action: Action) {
+    await Tools.invoke(action, 'delete', Tools.supabase.from("users").delete().eq("user_id", this.user_id));
   }
 
-  async reset(logger: Logger, state: State) {
+  async reset(action: Action, state: State) {
     await Promise.all([
-      await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().not("user_id", "is", null)),
-      await Tools.invoke(logger, 'reset log', Tools.supabase.from("log").delete().is("user_id", null)),
-      await Tools.invoke(logger, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null)),
-      await Tools.invoke(logger, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null)),
+      await Tools.invoke(action, 'reset actions', Tools.supabase.from("actions").delete().not("user_id", "is", null)),
+      await Tools.invoke(action, 'reset restrictions', Tools.supabase.from("restrictions").delete().not("user_id", "is", null)),
+      await Tools.invoke(action, 'reset states', Tools.supabase.from("states").delete().not("user_id", "is", null)),
+      await Tools.invoke(action, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null)),
     ]);
-    await Tools.invoke(logger, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
+    await Tools.invoke(action, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
   }
 
-  async chat(logger: Logger, text: string, is_event: boolean = false) {
-    const data = await Tools.invoke(logger, 'chat', Tools.supabase.from("chat").insert({ user_id: this.user_id, other_id: this.other_id, text: text, is_event: is_event }));
+  async chat(action: Action, text: string, is_event: boolean = false) {
+    const data = await Tools.invoke(action, 'chat', Tools.supabase.from("chat").insert({ user_id: this.user_id, other_id: this.other_id, text: text, is_event: is_event }));
     if (data) return data[0];
   }
 
   delta() {
     const delta = lodash.omitBy(this, (v: unknown, k: string) => lodash.isEqual(v, (this.db.new as Record<string, unknown>)?.[k]));
     delete (delta as Record<string, unknown>).db;
-    console.log("delta", delta);
     return delta;
   }
 
@@ -277,30 +274,20 @@ export default class User {
     return 0;
   }
 
-  async watch(logger: Logger, exclude?: User) {
-    const other = (await this.others(logger, query => query.eq('state', State.VISIBLE).gt("relevance", 0).order("relevance", { ascending: false }).limit(1), exclude))[0];
+  async search(action: Action, exclude?: User) {
+    const other = (await this.others(action, query => query.eq('state', State.VISIBLE).gt("relevance", 0).order("relevance", { ascending: false }).limit(1), exclude))[0];
     if (other) {
-      EdgeRuntime.waitUntil(this.update(logger, State.WATCHING, other));
+      EdgeRuntime.waitUntil(this.update(action, State.WATCHING, other));
       other.setWatcher(this);
-      EdgeRuntime.waitUntil(other.update(logger));
+      EdgeRuntime.waitUntil(other.update(action));
     }
-    else EdgeRuntime.waitUntil(this.update(logger, State.HIDDEN));
+    else EdgeRuntime.waitUntil(this.update(action, State.HIDDEN));
   }
 
-  async search(logger: Logger,exclude?: User) {
-    if (exclude) {
-      const newUser = lodash.cloneDeep(this);
-      const newLogger = new Logger('search', {}, newUser, logger);
-      await this.watch(newLogger, exclude);
-      newLogger.response();
-    } else await this.watch(logger, exclude);
-  }
-
-  async removeOther(logger: Logger, event: string, state: State, other?: User) {
-    EdgeRuntime.waitUntil(this.action(logger, event));
-    EdgeRuntime.waitUntil(this.chat(logger, event, true));
-    if (other) EdgeRuntime.waitUntil(other.update(logger, state, this, true));
-    await this.search(logger, other);
+  async removeOther(action: Action, state: State, other?: User) {
+    EdgeRuntime.waitUntil(this.restriction(action));
+    if (other) EdgeRuntime.waitUntil(other.update(action, state, this, true));
+    await this.search(action, other);
   }
 
 }

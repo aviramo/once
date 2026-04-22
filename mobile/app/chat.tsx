@@ -624,8 +624,6 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
         title={t('chat.blockTitle')}
         description={t('chat.blockDesc')}
         confirmLabel={t('chat.blockConfirm')}
-        confirmFlex={0.6}
-        cancelLabel={t('chat.menuCancel')}
         destructive
         onCancel={() => setConfirmAction(null)}
         onConfirm={async () => { await invoke('app/block'); setConfirmAction(null) }}
@@ -635,8 +633,6 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
         title={t('home.leaveTitle')}
         description={t('home.leaveDesc')}
         confirmLabel={t('home.leaveConfirm')}
-        confirmFlex={0.6}
-        cancelLabel={t('home.leaveBack')}
         destructive
         onCancel={() => setConfirmAction(null)}
         onConfirm={async () => { setConfirmAction(null); await invoke('app/leave') }}

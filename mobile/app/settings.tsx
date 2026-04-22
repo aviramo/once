@@ -1280,6 +1280,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
                 label={t('settings.resetVisible')}
                 onPress={() => handleReset('VISIBLE')}
                 disabled={!!resetting}
+                loading={resetting === 'VISIBLE'}
                 silentDisabled={resetting !== 'VISIBLE'}
                 variant="secondary"
                 size="md"
@@ -1290,6 +1291,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
                 label={t('settings.resetHidden')}
                 onPress={() => handleReset('HIDDEN')}
                 disabled={!!resetting}
+                loading={resetting === 'HIDDEN'}
                 silentDisabled={resetting !== 'HIDDEN'}
                 variant="secondary"
                 size="md"
@@ -1435,9 +1437,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
       visible={signOutDialog}
       title={t('settings.signOutConfirmTitle')}
       description={tg('settings.signOutConfirmDesc', profile.is_male)}
-      cancelLabel={t('settings.signOutNo')}
       confirmLabel={tg('settings.signOutYes', profile.is_male)}
-      confirmFlex={0.6}
       soft
       onCancel={() => setSignOutDialog(false)}
       onConfirm={onSignOutConfirmed}
@@ -1446,9 +1446,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
       visible={deleteDialog}
       title={t('settings.deleteConfirmTitle')}
       description={tg('settings.deleteConfirmDesc', profile.is_male)}
-      cancelLabel={t('settings.deleteNo')}
       confirmLabel={t('settings.deleteYes')}
-      confirmFlex={0.6}
       destructive
       busy={deleting}
       onCancel={() => setDeleteDialog(false)}

@@ -803,6 +803,7 @@ export default function HomePage() {
               label={t('home.watchingReject')}
               onPress={() => runAction('app/ignore', 'watching-reject')}
               disabled={busy}
+              loading={busy && pendingKey === 'watching-reject'}
               silentDisabled={pendingKey !== 'watching-reject'}
             />
           </View>
@@ -848,6 +849,7 @@ export default function HomePage() {
               label={t('home.replyingAccept')}
               onPress={() => runAction('app/approve', 'replying-accept')}
               disabled={busy}
+              loading={busy && pendingKey === 'replying-accept'}
               silentDisabled={pendingKey !== 'replying-accept'}
             />
           </View>
@@ -863,7 +865,7 @@ export default function HomePage() {
           variant="soft"
           label={tg('home.tapForMore', isMale)}
           onPress={() => runAction('app/ok', 'ended-ok')}
-          disabled={busy}
+          loading={busy}
         />
       )
     }
@@ -871,11 +873,11 @@ export default function HomePage() {
   })()
 
   const permissionButton = showNotifOverlay
-    ? <PrimaryButton label={t('home.notifPromptButton')} onPress={handlePermissionRequest} disabled={permBusy || notifPerm === null} />
+    ? <PrimaryButton label={t('home.notifPromptButton')} onPress={handlePermissionRequest} loading={permBusy} disabled={notifPerm === null} />
     : showLocOverlay
-      ? <PrimaryButton label={t('home.locationPromptButton')} onPress={handlePermissionRequest} disabled={permBusy || locPerm === null} />
+      ? <PrimaryButton label={t('home.locationPromptButton')} onPress={handlePermissionRequest} loading={permBusy} disabled={locPerm === null} />
       : locFailed
-        ? <PrimaryButton label={t('home.locationUnavailableButton')} onPress={handleLocRetry} disabled={locBusy} />
+        ? <PrimaryButton label={t('home.locationUnavailableButton')} onPress={handleLocRetry} loading={locBusy} />
         : null
 
   const goToPreferences = () => {
@@ -887,7 +889,7 @@ export default function HomePage() {
     ? (
       <View style={styles.buttonRow}>
         <View style={styles.buttonCellAccept}>
-          <Button variant="primary" tone="positive" label={t('home.goAvailable')} onPress={() => setVisibility('VISIBLE')} disabled={busy} />
+          <Button variant="primary" tone="positive" label={t('home.goAvailable')} onPress={() => setVisibility('VISIBLE')} loading={busy} />
         </View>
         <View style={styles.buttonCellReject}>
           <Button variant="secondary" label={t('home.changePreferences')} onPress={goToPreferences} />
@@ -900,10 +902,10 @@ export default function HomePage() {
     ? (
       <View style={styles.buttonRow}>
         <View style={styles.buttonCellAccept}>
-          <Button variant="primary" tone="positive" label={t('home.btnAvailable')} onPress={() => setVisibility('VISIBLE')} disabled={busy} />
+          <Button variant="primary" tone="positive" label={t('home.btnAvailable')} onPress={() => setVisibility('VISIBLE')} loading={busy} />
         </View>
         <View style={styles.buttonCellReject}>
-          <Button variant="secondary" label={t('home.btnWatching')} onPress={() => setVisibility('HIDDEN')} disabled={busy} />
+          <Button variant="secondary" label={t('home.btnWatching')} onPress={() => setVisibility('HIDDEN')} loading={busy} />
         </View>
       </View>
     )
@@ -1270,9 +1272,7 @@ export default function HomePage() {
                   visible={revealConfirmOpen}
                   title={t('home.revealConfirmTitle')}
                   description={tg('home.revealConfirmDesc', isMale)}
-                  cancelLabel={t('home.revealConfirmCancel')}
                   confirmLabel={t('home.revealConfirmConfirm')}
-                  cancelFlex={0.6}
                   onCancel={() => { if (!busy) { closeRevealConfirm(); releasePull() } }}
                   onConfirm={() => {
                     setVisibility('VISIBLE').finally(() => { closeRevealConfirm(); releasePull() })
@@ -1289,9 +1289,7 @@ export default function HomePage() {
                   visible={hideConfirmOpen}
                   title={t('home.hideConfirmTitle')}
                   description={hideConfirmDesc}
-                  cancelLabel={t('home.hideConfirmCancel')}
                   confirmLabel={tg('home.hideConfirmConfirm', isMale)}
-                  confirmFlex={0.6}
                   destructive
                   onCancel={() => { if (!busy) { setHideConfirmOpen(false); releasePull() } }}
                   onConfirm={() => { setVisibility('HIDDEN').finally(releasePull) }}
@@ -1302,9 +1300,7 @@ export default function HomePage() {
                   visible={offConfirmOpen}
                   title={t('home.hideConfirmTitle')}
                   description={offConfirmDesc}
-                  cancelLabel={t('home.hideConfirmCancel')}
                   confirmLabel={tg('home.hideConfirmConfirm', isMale)}
-                  confirmFlex={0.6}
                   destructive
                   onCancel={() => { if (!busy) { setOffConfirmOpen(false); releasePull() } }}
                   onConfirm={() => { setVisibility('OFF').finally(releasePull) }}
@@ -1315,8 +1311,6 @@ export default function HomePage() {
                   visible={inviteConfirmOpen}
                   title={t('home.inviteConfirmTitle').replace('{name}', matchName)}
                   description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
-                  cancelLabel={t('home.inviteConfirmCancel')}
-                  cancelFlex={0.6}
                   confirmLabel={t('home.inviteConfirmOk')}
                   tone="positive"
                   onCancel={() => { if (!busy) setInviteConfirmOpen(false) }}
@@ -1328,9 +1322,7 @@ export default function HomePage() {
                   visible={cancelConfirmOpen}
                   title={t('home.cancelWaitingTitle')}
                   description={tg('home.cancelWaitingDesc', matchIsMale).replace(/\{name\}/g, matchName)}
-                  cancelLabel={t('home.cancelWaitingBack')}
                   confirmLabel={t('home.cancelWaitingConfirm')}
-                  confirmFlex={0.6}
                   destructive
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={() => runAction('app/cancel', 'cancel-confirm', () => setCancelConfirmOpen(false))}
@@ -1341,9 +1333,7 @@ export default function HomePage() {
                   visible={refuseConfirmOpen}
                   title={t('home.refuseReplyTitle')}
                   description={tg('home.refuseReplyDesc', matchIsMale)}
-                  cancelLabel={t('home.refuseReplyBack')}
                   confirmLabel={t('home.refuseReplyConfirm')}
-                  confirmFlex={0.6}
                   destructive
                   onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
                   onConfirm={() => runAction('app/refuse', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
@@ -1354,8 +1344,6 @@ export default function HomePage() {
                   visible={!!removeWatcherTarget}
                   title={t('home.removeWatcherTitle')}
                   description={tg('home.removeWatcherDesc' as any, removeWatcherTarget?.is_male ?? null).replace('{name}', removeWatcherTarget?.name ?? '')}
-                  cancelLabel={t('home.removeWatcherCancel')}
-                  cancelFlex={0.6}
                   confirmLabel={t('home.removeWatcherConfirm')}
                   destructive
                   onCancel={() => { if (!removeWatcherBusy) setRemoveWatcherTarget(null) }}
@@ -1534,7 +1522,7 @@ const styles = StyleSheet.create({
   // both buttons share width evenly regardless of label length.
   buttonRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 20,
   },
   buttonCell: {
     flex: 1,

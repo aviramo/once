@@ -451,13 +451,15 @@ export default function OnboardingPage() {
                 variant="secondary"
                 size="lg"
                 disabled={submitting}
+                silentDisabled
               />
             </View>
             <View style={styles.continueSlot}>
               <Button
                 label={tg('ob.createAccount', isMale === true)}
                 onPress={onContinue}
-                disabled={!canContinue}
+                disabled={!dateValid}
+                loading={submitting}
                 variant="primary"
                 tone="visible"
                 size="lg"
@@ -485,7 +487,8 @@ export default function OnboardingPage() {
           <Button
             label={t('photo.confirm')}
             onPress={onContinue}
-            disabled={!canContinue}
+            disabled={totalPhotoCount < 1}
+            loading={savingImages}
             variant="primary"
             tone="visible"
             size="lg"
@@ -524,7 +527,8 @@ export default function OnboardingPage() {
             <Button
               label={t('bio.submit')}
               onPress={onContinue}
-              disabled={!canContinue}
+              disabled={!bioValid}
+              loading={bioSubmitting}
               variant="primary"
               tone="visible"
               size="lg"

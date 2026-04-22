@@ -125,6 +125,7 @@ export function ConfirmDialog({
                   variant="secondary"
                   size="lg"
                   disabled={busy}
+                  loading={busy && pressed === 'cancel'}
                   silentDisabled={pressed !== 'cancel'}
                 />
               </View>
@@ -137,6 +138,7 @@ export function ConfirmDialog({
                 tone={!destructive && !soft ? tone : undefined}
                 size="lg"
                 disabled={busy}
+                loading={busy && pressed === 'confirm'}
                 silentDisabled={pressed !== 'confirm'}
               />
             </View>
@@ -216,7 +218,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: SINGLE,
+    gap: DOUBLE,
     marginTop: DOUBLE + SINGLE,
     paddingBottom: DOUBLE,
   },

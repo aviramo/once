@@ -1,8 +1,8 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 import { PostgrestTransformBuilder, PostgrestFilterBuilder } from "https://esm.sh/@supabase/postgrest-js@1.16.3/dist/cjs/index.js";
-import Logger, { Log } from "./logger.ts";
-import { PushToken } from "./global.ts";
+import Action from "./action.ts";
+import { Log, PushToken, State } from "./global.ts";
 
 export default class Tools {
 
@@ -56,8 +56,8 @@ export default class Tools {
   }
 
   static async invoke(
-    logger: Logger,
-    action: string,
+    action: Action,
+    task: string,
     query:
       | PostgrestFilterBuilder<any, any, any, unknown, unknown>
       | PostgrestTransformBuilder<any, any, any, unknown, unknown>,
@@ -65,7 +65,7 @@ export default class Tools {
     let url = (query as any).url;
     url = url ? url.toString().split("v1/")[1] : undefined;
     const body = (query as any).body;
-    const log = logger.log(action, { url: url, body: action == 'others' ? { me: { user_id: body.me.user_id } } : body });
+    const log = action.log(task, { url: url, body: task == 'others' ? { me: { user_id: body.me.user_id } } : body });
     const res = await (query as any);
     if (res?.error) log.result(res.error, res.status);
     else {
@@ -74,4 +74,12 @@ export default class Tools {
     }
   }
 
+  static async stateChange(action: Action, state: State, other_id: string | null) {
+    await Tools.invoke(action, 'state', Tools.supabase.from("states").insert({
+      action_id: action.id,
+      user_id: action.user.user_id,
+      state,
+      other_id,
+    }));
+  }
 }

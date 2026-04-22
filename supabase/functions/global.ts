@@ -1,3 +1,5 @@
+import Action from "./action.ts";
+
 declare global {
 
   const EdgeRuntime: {
@@ -56,4 +58,50 @@ export type Watcher = BaseMatch & {
   image?: string;
 };
 
+export type StateChange = {
+  event_id: string;
+  created_at: Date;
+  user_id: string;
+  state: State;
+  other_id: string | null;
+};
+
 export type PushToken = { type: "expo"; token: string };
+
+export class Log {
+  action: Action
+  task: string;
+  body?: Record<string, unknown>;
+  created_at: Date = new Date();
+  run_ms?: number;
+  data?: unknown;
+  error?: unknown;
+
+  constructor(action: Action, task: string, body?: Record<string, unknown>) {
+    this.action = action;
+    this.task = task;
+    this.body = body;
+  }
+
+  result(data: unknown, status: number) {
+    this.run_ms = new Date().getTime() - this.created_at.getTime();
+    if (status >= 200 && status < 300) this.data = data;
+    else {
+      this.error = data;
+      this.action.status = status;
+      this.action.error_response = this.error;
+    }
+  }
+
+  toJSON() {
+    return {
+      task: this.task,
+      body: this.body,
+      created_at: this.created_at,
+      run_ms: this.run_ms,
+      data: this.data,
+      error: this.error,
+    };
+  }
+
+}

@@ -1,7 +1,7 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
-import { FONT_SCALE, SINGLE, BUTTON } from '../fonts'
+import { FONT_SCALE, SINGLE, DOUBLE, BUTTON } from '../fonts'
 import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY, GRAY_PRESS, RED, RED_PRESS } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
@@ -29,6 +29,7 @@ export function Button({
   label,
   onPress,
   disabled,
+  loading,
   variant = 'primary',
   size = 'lg',
   tone,
@@ -38,6 +39,10 @@ export function Button({
   label: string
   onPress: () => void
   disabled?: boolean
+  // In-flight server wait. Blocks taps like `disabled` but shows a subtle
+  // side-to-side shake instead of the gray fade, so the user sees the
+  // button "working" rather than just dimmed.
+  loading?: boolean
   variant?: Variant
   size?: Size
   tone?: Tone
@@ -51,7 +56,29 @@ export function Button({
   iconStart?: ReactNode
 }) {
   const scale = useRef(new Animated.Value(1)).current
+  const shake = useRef(new Animated.Value(0)).current
   const [pressed, setPressed] = useState(false)
+
+  useEffect(() => {
+    if (!loading) return
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shake, { toValue: 1, duration: 55, useNativeDriver: true }),
+        Animated.timing(shake, { toValue: -1, duration: 110, useNativeDriver: true }),
+        Animated.timing(shake, { toValue: 0, duration: 55, useNativeDriver: true }),
+        Animated.delay(120),
+      ]),
+    )
+    loop.start()
+    return () => {
+      loop.stop()
+      shake.setValue(0)
+    }
+  }, [loading, shake])
+
+  const shakeX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-2.5, 2.5] })
+
+  const blocked = disabled || loading
 
   const pressIn = () => {
     setPressed(true)
@@ -80,7 +107,10 @@ export function Button({
   const toneSkin = variant === 'primary' && tone ? TONE[tone] : null
 
   return (
-    <Animated.View collapsable={false} style={[styles.wrap, { transform: [{ scale }] }]}>
+    <Animated.View
+      collapsable={false}
+      style={[styles.wrap, { transform: [{ scale }, { translateX: shakeX }] }]}
+    >
       <View
         style={[
           styles.btn,
@@ -88,13 +118,13 @@ export function Button({
           skin.btn,
           toneSkin?.btn,
           pressed && (toneSkin?.pressed ?? skin.pressed),
-          disabled && !silentDisabled && styles.disabled,
+          disabled && !loading && !silentDisabled && styles.disabled,
         ]}
-        onStartShouldSetResponder={() => !disabled}
+        onStartShouldSetResponder={() => !blocked}
         onResponderGrant={pressIn}
         onResponderRelease={() => {
           pressOut()
-          if (!disabled) onPress()
+          if (!blocked) onPress()
         }}
         onResponderTerminate={pressOut}
       >
@@ -151,11 +181,11 @@ const styles = StyleSheet.create({
 
 const SIZE: Record<Size, { btn: object; text: object }> = {
   lg: {
-    btn: { borderRadius: SINGLE, paddingVertical: BUTTON },
+    btn: { borderRadius: DOUBLE, paddingVertical: BUTTON + 6 },
     text: { fontSize: 16, fontWeight: '700' },
   },
   md: {
-    btn: { borderRadius: SINGLE, paddingVertical: SINGLE },
+    btn: { borderRadius: DOUBLE, paddingVertical: SINGLE },
     text: { fontSize: 15, fontWeight: '700' },
   },
 }
@@ -167,44 +197,31 @@ const TONE: Record<Tone, { btn: object; pressed: object }> = {
   },
 }
 
+// boxShadow (RN 0.76+) renders consistently on iOS and Android, unlike the
+// legacy shadow* + elevation combo where Android's elevation always biases
+// the shadow downward. offset 0/0 keeps the halo fully symmetric.
+const SHADOW = {
+  boxShadow: '0 0 10px rgba(0,0,0,0.25)',
+}
+
 const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
   primary: {
-    btn: {
-      backgroundColor: GREEN,
-      borderWidth: 1.5,
-      borderColor: GREEN_PRESS,
-      paddingVertical: BUTTON - 1.5,
-    },
+    btn: { backgroundColor: GREEN, ...SHADOW },
     pressed: { backgroundColor: GREEN_PRESS },
     text: { color: WHITE },
   },
   secondary: {
-    btn: {
-      backgroundColor: WHITE,
-      borderWidth: 1.5,
-      borderColor: 'rgba(0,0,0,0.35)',
-      paddingVertical: BUTTON - 1.5,
-    },
+    btn: { backgroundColor: WHITE, ...SHADOW },
     pressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
     text: { color: TEXT, fontWeight: '600' },
   },
   destructive: {
-    btn: {
-      backgroundColor: RED,
-      borderWidth: 1.5,
-      borderColor: RED_PRESS,
-      paddingVertical: BUTTON - 1.5,
-    },
+    btn: { backgroundColor: RED, ...SHADOW },
     pressed: { backgroundColor: RED_PRESS },
     text: { color: WHITE },
   },
   soft: {
-    btn: {
-      backgroundColor: GRAY,
-      borderWidth: 1.5,
-      borderColor: GRAY_PRESS,
-      paddingVertical: BUTTON - 1.5,
-    },
+    btn: { backgroundColor: GRAY, ...SHADOW },
     pressed: { backgroundColor: GRAY_PRESS },
     text: { color: WHITE },
   },

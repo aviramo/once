@@ -1,57 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <!-- Green circle radial gradient for slight depth -->
-    <radialGradient id="greenGrad" cx="50%" cy="40%" r="55%" fx="50%" fy="35%">
-      <stop offset="0%" stop-color="#2EE85A"/>
-      <stop offset="100%" stop-color="#1AC944"/>
-    </radialGradient>
-
-    <!-- Gray circle gradient -->
-    <radialGradient id="grayGrad" cx="50%" cy="40%" r="60%" fx="50%" fy="35%">
-      <stop offset="0%" stop-color="#888888"/>
-      <stop offset="100%" stop-color="#666666"/>
-    </radialGradient>
-
-    <!-- Glow filter for the intersection spark -->
-    <filter id="glowFilter" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur stdDeviation="14" result="blur1"/>
-      <feGaussianBlur stdDeviation="5" result="blur2"/>
-      <feMerge>
-        <feMergeNode in="blur1"/>
-        <feMergeNode in="blur2"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <!-- Soft glow around intersection -->
+    <!-- Sparkle glow: a soft white halo on top of the contact point -->
     <radialGradient id="sparkGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.6"/>
-      <stop offset="70%" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="25%"  stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="60%"  stop-color="#ffffff" stop-opacity="0.25"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
+
+    <!-- Soft outer bloom for the lens-flare rays -->
+    <filter id="rayBloom" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+
+    <!-- Single sparkle, reused -->
+    <g id="spark">
+      <!-- soft halo -->
+      <circle r="110" fill="url(#sparkGlow)"/>
+      <!-- bright core -->
+      <circle r="14" fill="#ffffff"/>
+      <!-- lens-flare cross -->
+      <g filter="url(#rayBloom)" opacity="0.9" stroke="#ffffff" stroke-linecap="round">
+        <line x1="0" y1="-95" x2="0" y2="95"  stroke-width="4"/>
+        <line x1="-95" y1="0" x2="95" y2="0"  stroke-width="4"/>
+        <line x1="-60" y1="-60" x2="60" y2="60" stroke-width="2" opacity="0.6"/>
+        <line x1="-60" y1="60" x2="60" y2="-60" stroke-width="2" opacity="0.6"/>
+      </g>
+    </g>
   </defs>
 
-  <!-- Large green circle -->
-  <circle cx="610" cy="375" r="330" fill="url(#greenGrad)"/>
+  <!-- Large brand-green circle (back) -->
+  <circle cx="684" cy="448" r="244" fill="#1AB33D"/>
 
-  <!-- Small gray circle — tangent to green: distance between centers = 330+182 = 512 -->
-  <!-- green=(610,375), gray=(284,770): dist=sqrt(326²+395²)≈512 ✓ -->
-  <circle cx="284" cy="770" r="182" fill="url(#grayGrad)"/>
+  <!-- Small brand-gray circle (front, tangent to green) -->
+  <circle cx="287" cy="612" r="186" fill="#767676"/>
 
-  <!-- Touch point at (400,630): 330 units from green center along the line toward gray center -->
-
-  <!-- Intersection glow — soft halo -->
-  <circle cx="400" cy="630" r="80" fill="url(#sparkGlow)" filter="url(#glowFilter)"/>
-
-  <!-- Sharp bright center spark -->
-  <circle cx="400" cy="630" r="10" fill="#ffffff" opacity="1" filter="url(#glowFilter)"/>
-
-  <!-- Lens-flare cross arms -->
-  <line x1="400" y1="598" x2="400" y2="662" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.85" filter="url(#glowFilter)"/>
-  <line x1="368" y1="630" x2="432" y2="630" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.85" filter="url(#glowFilter)"/>
-
-  <!-- Diagonal flare arms (fainter) -->
-  <line x1="378" y1="608" x2="422" y2="652" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.45" filter="url(#glowFilter)"/>
-  <line x1="422" y1="608" x2="378" y2="652" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.45" filter="url(#glowFilter)"/>
+  <!-- Sparkle at tangent point of the two circles -->
+  <use href="#spark" x="458" y="541"/>
 </svg>

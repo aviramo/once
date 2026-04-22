@@ -3,10 +3,11 @@ export const WHITE        = '#fff'
 export const BLACK        = '#000'
 
 // ── Brand green — large circle in the Livo icon ───────────────────────────
-export const GREEN        = '#1AC944'
-export const GREEN_LIGHT  = '#6DF08D'
-export const GREEN_PRESS  = '#15A838'
-export const GREEN_BG     = 'rgba(26,201,68,0.10)'
+// Darkened to visually match the destructive red's weight.
+export const GREEN        = '#1AB33D'
+export const GREEN_LIGHT  = '#36E25E'
+export const GREEN_PRESS  = '#148F31'
+export const GREEN_BG     = 'rgba(26,179,61,0.10)'
 
 // ── Brand gray — small circle in the Livo icon ────────────────────────────
 // Full scale derived from the icon's gray (#767676):
