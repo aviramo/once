@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Image } from 'expo-image'
 import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
-import type { MatchData } from '../stores/userStore'
+import type { Profile } from '../stores/userStore'
 import { Chip, PinIcon, ClockIcon, BellOnIcon, BellOffIcon } from './Chip'
 import { SINGLE, DOUBLE } from '../fonts'
 import { TEXT, WHITE, GREEN, RED } from '../colors'
@@ -17,23 +17,18 @@ import { TEXT, WHITE, GREEN, RED } from '../colors'
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
 function toStorageUrl(userId: string, filename: string) {
-  if (filename.includes('://')) return filename
   return `${supabaseUrl}/storage/v1/object/public/users/${userId}/normal/${filename}`
 }
 
-function resolveImages(m: MatchData): string[] {
-  if (m.images) {
-    const arr = Array.isArray(m.images)
-      ? m.images
-      : (() => {
-          try { return JSON.parse(m.images as string) } catch { return null }
-        })()
-    if (Array.isArray(arr) && arr.length > 0) return arr.map(f => toStorageUrl(m.user_id, f))
-  }
-  if (m.image) {
-    return [m.image.includes('://') ? m.image : `${supabaseUrl}/storage/v1/object/public/users/${m.image}`]
-  }
-  return []
+function resolveImages(m: Profile): string[] {
+  return (m.images ?? [])
+    .filter(img => img.normal)
+    .map(img => toStorageUrl(m.user_id, img.normal!))
+}
+
+function hashPlaceholder(m: Profile, i: number): { blurhash: string } | undefined {
+  const hash = m.images?.[i]?.hash
+  return hash ? { blurhash: hash } : undefined
 }
 
 function formatDistance(m: number | null | undefined, units?: string | null): string {
@@ -50,6 +45,8 @@ function formatDistance(m: number | null | undefined, units?: string | null): st
   if (km > 10) return `${Math.round(km).toLocaleString()} ${t('settings.km')}`
   return `${km.toFixed(1)} ${t('settings.km')}`
 }
+
+// units not available on Profile — callers may pass from user profile
 
 function formatLocatedAt(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -98,15 +95,26 @@ function KidsXIcon({ color }: { color: string }) {
 export function MatchCard({
   match,
   userIsMale,
+  units,
   bottomInset = 0,
   hideTime = false,
+  onReady,
 }: {
-  match: MatchData
+  match: Profile
   userIsMale: boolean | null
+  units?: string | null
   bottomInset?: number
   hideTime?: boolean
+  onReady?: () => void
 }) {
   const imageUrls = useMemo(() => resolveImages(match), [match])
+  const loadedCount = useRef(0)
+  useEffect(() => { loadedCount.current = 0 }, [match.user_id])
+  useEffect(() => { if (imageUrls.length === 0) onReady?.() }, [imageUrls.length])
+  const onImageLoad = useCallback(() => {
+    loadedCount.current += 1
+    if (loadedCount.current >= imageUrls.length) onReady?.()
+  }, [imageUrls.length, onReady])
   // Measure both the card's full interior and the name+chips block. Sizing
   // the photo from the real card height (not windowHeight − estimates) makes
   // the layout robust to safe-area insets, header height, and Android nav
@@ -121,15 +129,10 @@ export function MatchCard({
   // measures. Render the content normally so onLayout fires for both nodes,
   // but keep the wrap invisible until measurements settle.
   const ready = cardH > 0 && headerBlockH > 0
-  const timeIso = match.last_seen ?? match.located_at
+  const timeIso = match.last_seen
   const timeStr = hideTime ? '' : formatLocatedAt(timeIso)
-  const distStr = formatDistance(match.distance, match.units)
-  const cleanTitle = match.title.replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
-  const age = match.age ?? (() => {
-    const mm = match.title.match(/,\s*(\d+)\s*$/)
-    return mm ? Number(mm[1]) : null
-  })()
-  const displayTitle = age != null ? `${cleanTitle}, ${age}` : cleanTitle
+  const distStr = formatDistance(match.distance, units)
+  const displayTitle = match.title
 
   const distGreen = isDistanceNear(match.distance)
   const timeGreen = isTimeRecent(timeIso)
@@ -147,7 +150,15 @@ export function MatchCard({
         keyboardShouldPersistTaps="handled"
       >
         {imageUrls.length > 0 && (
-          <Image source={imageUrls[0]} style={[styles.photo, { height: photoHeight }]} contentFit="cover" cachePolicy="disk" />
+          <Image
+            source={imageUrls[0]}
+            placeholder={hashPlaceholder(match, 0)}
+            placeholderContentFit="cover"
+            style={[styles.photo, { height: photoHeight }]}
+            contentFit="cover"
+            cachePolicy="disk"
+            onLoad={onImageLoad}
+          />
         )}
 
         <View onLayout={e => setHeaderBlockH(e.nativeEvent.layout.height)}>
@@ -187,7 +198,16 @@ export function MatchCard({
         {imageUrls.length > 1 && (
           <View style={styles.extraPhotos}>
             {imageUrls.slice(1).map((url, i) => (
-              <Image key={i} source={url} style={styles.extraPhoto} contentFit="cover" cachePolicy="disk" />
+              <Image
+                key={url}
+                source={url}
+                placeholder={hashPlaceholder(match, i + 1)}
+                placeholderContentFit="cover"
+                style={styles.extraPhoto}
+                contentFit="cover"
+                cachePolicy="disk"
+                onLoad={onImageLoad}
+              />
             ))}
           </View>
         )}

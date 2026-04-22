@@ -2,9 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, type GestureResponderEvent } from 'react-native'
 import { Image } from 'expo-image'
 import { Text } from './AppText'
-import { publicImageUrl } from '../lib/api'
 import { t, tg } from '../i18n'
-import type { WatcherInfo } from '../stores/userStore'
+import type { Profile } from '../stores/userStore'
 import { Chip, PinIcon, ClockIcon, BellOnIcon, BellOffIcon } from './Chip'
 import { SINGLE } from '../fonts'
 import { TEXT, WHITE } from '../colors'
@@ -49,7 +48,7 @@ function isTimeRecent(iso?: string | null) {
 // ── Component ─────────────────────────────────────────────────────────────
 
 type Props = {
-  watcher: WatcherInfo
+  watcher: Profile
   units?: string | null
   exiting?: boolean
   onExited?: () => void
@@ -58,8 +57,9 @@ type Props = {
 }
 
 export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }: Props) {
-  const distance = formatDistance(watcher.distance, units)
+  const distance = formatDistance(watcher.distance ?? undefined, units)
   const lastSeen = formatLastSeen(watcher.last_seen)
+  const hash = watcher.images?.[0]?.hash
 
   const anim = useRef(new Animated.Value(0)).current
   const exitedRef = useRef(false)
@@ -121,12 +121,11 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
         onPress={handlePress}
       >
         <View style={styles.avatar}>
-          {watcher.image ? (
+          {hash ? (
             <Image
-              source={publicImageUrl(watcher.user_id, 'blur', watcher.image)}
+              placeholder={{ blurhash: hash }}
+              placeholderContentFit="cover"
               style={styles.avatarImage}
-              contentFit="cover"
-              cachePolicy="disk"
             />
           ) : null}
         </View>
@@ -147,7 +146,7 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
                 tone={isTimeRecent(watcher.last_seen) ? 'positive' : 'neutral'}
               />
             ) : null}
-            {watcher.subscribed ? (
+            {watcher.push_enabled ? (
               <Chip
                 renderIcon={color => <BellOnIcon color={color} />}
                 text={tg('home.notifOn', watcher.is_male ?? null)}

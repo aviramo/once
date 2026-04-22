@@ -1,17 +1,15 @@
 import lodash from "lodash";
 import Tools from "./tools.ts";
 import Action from "./action.ts";
-import { Match, Watcher, UserData, PushToken, State } from "./global.ts";
+import { Data, PushToken, State, Profile } from "./global.ts";
 
 export default class User {
   user_id: string;
-  is_male?: boolean;
+  is_male: boolean = true;
   last_seen: Date = new Date();
-  name?: string;
   birth_date?: Date;
   state: State | null = null;
   other_id: string | null = null;
-  match: Match | null = null;
   location: string | null = null;
   range?: number;
   age_from?: number;
@@ -19,9 +17,8 @@ export default class User {
   is_for_male?: boolean;
   is_for_female?: boolean;
   is_for_kids: boolean | null = null;
-  role?: string | null;
-  watchers: Record<string, Watcher> = {};
-  data?: UserData;
+  relations: { match: Profile | null, watchers: Profile[] } = { match: null, watchers: [] };
+  data?: Data;
 
   db: { new: Record<string, unknown>, old: Record<string, unknown> } = { new: {}, old: {} };
 
@@ -61,7 +58,7 @@ export default class User {
     if (age < User.LEGAL) return action.error('insert', 'age', 400);
     const values = {
       user_id: this.user_id,
-      name: name,
+      data: { name: name },
       birth_date: birth_date,
       is_male: is_male,
       is_for_male: !is_male,
@@ -69,7 +66,6 @@ export default class User {
       age_from: Math.max(is_male ? age - 10 : age - 5, User.LEGAL),
       age_to: is_male ? age + 5 : age + 10,
       range: 100000,
-      watchers: {},
     }
     const data = await Tools.invoke(action, 'insert', Tools.supabase.from("users").insert(values).select());
     if (data) {
@@ -78,22 +74,12 @@ export default class User {
     }
   }
 
-  validate(other?: User) {
-    if (this.age_from && this.age_from < User.LEGAL) this.age_from = User.LEGAL;
-    if (this.age_from && this.age_to && this.age_from > this.age_to) this.age_to = this.age_from;
-    if (this.state && [State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)) {
-      this.setMatch(other);
-      this.watchers = {};
-    }
-    else this.other_id = null;
-  }
-
   async update(action: Action, state?: State, other?: User, notify?: boolean) {
     if (state) {
       this.state = state;
       this.other_id = other?.user_id ?? null;
     }
-    this.validate(other);
+    this.setMatch(other);
     const delta = this.delta();
     if (lodash.size(delta) > 0) {
       Object.assign(this.db.new, delta);
@@ -101,7 +87,9 @@ export default class User {
       if (this.state == State.REPLYING) query = query.is("other_id", null);
       const data = await Tools.invoke(action, 'update', query.select());
       if (data && data[0]) {
-        if (state && (state != this.db.old.state || other?.user_id != this.db.old.other_id)) await Tools.stateChange(action, state, this.other_id);
+        const otherId = this.other_id ?? this.db.old.other_id as string | null;
+        if (state && (state != this.db.old.state || otherId != this.db.old.other_id))
+          if (state && (state != this.db.old.state || this.other_id != this.db.old.other_id)) await Tools.stateChange(action, state, otherId);
         Object.assign(this, data[0]);
         Object.assign(this.db.new, data[0]);
         if (notify) EdgeRuntime.waitUntil(this.notify(action, state));
@@ -112,16 +100,16 @@ export default class User {
   }
 
   async notify(action: Action, state?: State) {
-    const matchImageFilename = (this.match?.images as string[] | undefined)?.[0];
-    const matchImageUrl = matchImageFilename && this.match?.user_id
-      ? `${Tools.supabaseUrl}/storage/v1/object/public/users/${this.match.user_id}/normal/${matchImageFilename}`
+    const matchImageFilename = (this.relations.match?.images as string[] | undefined)?.[0];
+    const matchImageUrl = matchImageFilename && this.relations.match?.user_id
+      ? `${Tools.supabaseUrl}/storage/v1/object/public/users/${this.relations.match.user_id}/normal/${matchImageFilename}`
       : null;
     const payload = {
       type: state ? 'state' : 'message',
       state: state ?? null,
-      match: this.match,
+      match: this.relations.match,
       icon: matchImageUrl,
-      collapseId: this.match?.user_id ?? undefined,
+      collapseId: this.relations.match?.user_id ?? undefined,
     };
     const log = action.log("notify", payload);
     if (!this.data?.push_token) return;// action.error('notify', "no push token", 400);
@@ -157,48 +145,51 @@ export default class User {
     if (this.other_id) return (await this.others(action, query => query.eq("user_id", this.other_id)))[0];
   }
 
-  renderMatch(other?: User) {
-    const match = other ? {
-      created_at: this.match?.created_at ?? new Date(),
+
+  profile(other: User): Profile | null {
+    const images = this.state == State.VISIBLE
+      ? (other.data?.images ?? []).map(img => ({ hash: img.hash }))
+      : (other.data?.images ?? [])
+    return other.data ? {
+      created_at: new Date(),
       user_id: other.user_id,
       last_seen: other.last_seen,
-      title: other.name + ', ' + other.age(),
-      name: other.name,
+      title: other.data.name + ', ' + other.age(),
+      name: other.data.name,
       is_male: other.is_male,
-      push_enabled: other.data?.push_token != null,
-      images: (other.data?.images)?.normal,
-      bio: other.data?.bio,
+      push_enabled: other.data.push_token != null,
+      images,
+      bio: other.data.bio,
       is_for_kids: other.is_for_kids,
       distance: other instanceof Other ? other.distance : this instanceof Other ? this.distance : undefined,
-    } : this.match;
-    if (match) {
-      if (this.state == State.CHAT) delete match.distance;
-      if (!this.other_id) {
-        delete match.distance;
-        delete match.last_seen;
-        delete match.push_enabled;
-      }
-    }
-    return match;
+    } : null
   }
 
   setMatch(other?: User) {
-    this.match = this.renderMatch(other);
-  }
-
-  setWatcher(other: User) {
-    const match = this.renderMatch(other);
-    if (match) {
-      const { images: _images, ...rest } = match;
-      const watcher: Watcher = { ...rest, image: other.data?.images?.blur?.[0] };
-      if (this.watchers[other.user_id]?.created_at) watcher.created_at = new Date();
-      this.watchers[other.user_id] = watcher;
+    if (this.state && [State.WATCHING, State.WAITING, State.REPLYING, State.CHAT].includes(this.state)) {
+      if (other) this.relations.match = this.profile(other);
+    }
+    else this.other_id = null;
+    if (this.relations.match) {
+      if (this.state == State.CHAT) delete this.relations.match.distance;
+      if (!this.other_id) {
+        delete this.relations.match.distance;
+        delete this.relations.match.last_seen;
+        delete this.relations.match.push_enabled;
+      }
     }
   }
 
+  setWatcher(other: User) {
+    const watcher = this.relations.watchers.find(w => w.user_id === other.user_id);
+    const newWatcher = this.profile(other);
+    if (watcher && newWatcher) Object.assign(watcher, newWatcher);
+    else if (newWatcher) this.relations.watchers.push(newWatcher);
+  }
+
   async addWatchers(action: Action) {
-    const watchersToAdd = User.WATCHERS - Object.keys(this.watchers).length;
-    for (const watcher of await this.others(action, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).limit(watchersToAdd).order("relevance", { ascending: false }))) {
+    if (this.relations.watchers.length >= User.WATCHERS) return;
+    for (const watcher of await this.others(action, query => query.is("other_id", null).gt("relevance", 0).eq('state', State.HIDDEN).order("relevance", { ascending: false }))) {
       this.setWatcher(watcher);
       EdgeRuntime.waitUntil(watcher.update(action, State.WATCHING, this, true));
     }
@@ -210,7 +201,7 @@ export default class User {
     });
     let otherUpdated = false;
     for (const watcher of watchers) {
-      watcher.setMatch(this);
+      this.setMatch(this);
       if (this.other_id == watcher.user_id) {
         this.setMatch(watcher);
         otherUpdated = true;
@@ -227,15 +218,15 @@ export default class User {
   }
 
   removeRelations(action: Action, state: State, other?: Other, exclude?: User) {
-    for (const watcher_id of Object.keys(this.watchers)) {
-      if (watcher_id != exclude?.user_id)
-        EdgeRuntime.waitUntil(this.removeRelation(action, state, watcher_id));
+    for (const watcher of this.relations.watchers) {
+      if (watcher.user_id != exclude?.user_id)
+        EdgeRuntime.waitUntil(this.removeRelation(action, state, watcher.user_id));
     }
     if (other) EdgeRuntime.waitUntil(other.update(action, state, this, true));
   }
 
   async removeRelation(action: Action, state: State, watcher_id: string) {
-    delete this.watchers[watcher_id];
+    this.relations.watchers = this.relations.watchers.filter(w => w.user_id !== watcher_id);
     const watcher = await User.getById(action, watcher_id);
     await watcher?.update(action, state, this, true);
   }
@@ -255,7 +246,7 @@ export default class User {
       await Tools.invoke(action, 'reset states', Tools.supabase.from("states").delete().not("user_id", "is", null)),
       await Tools.invoke(action, 'reset chat', Tools.supabase.from("chat").delete().not("user_id", "is", null)),
     ]);
-    await Tools.invoke(action, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, match: null, watchers: {} }).not("user_id", "is", null));
+    await Tools.invoke(action, 'reset users', Tools.supabase.from("users").update({ state: state, other_id: null, relations: { match: null, watchers: [] } }).not("user_id", "is", null));
   }
 
   async chat(action: Action, text: string, is_event: boolean = false) {

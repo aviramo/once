@@ -1,34 +1,23 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 
-export interface MatchData {
-  image: string
-  images?: string | string[] | null
-  user_id: string
-  title: string
-  bio: string
-  distance: number
-  located_at?: string | null
-  last_seen?: string | null
-  push_enabled?: boolean | null
-  is_for_kids?: boolean | null
-  age?: number
-  is_male?: boolean | null
-  units?: string | null
+export interface Image {
+  normal?: string
+  hash: string
 }
 
-export interface WatcherInfo {
+export interface Profile {
+  created_at?: string | null
   user_id: string
-  image: string
   title: string
   name: string
-  created_at?: string | null
-  distance?: number | null
-  last_seen?: string | null
-  is_male?: boolean | null
+  images: Image[]
   bio?: string | null
-  subscribed?: boolean | null
+  is_male?: boolean | null
   is_for_kids?: boolean | null
+  last_seen?: string | null
+  push_enabled?: boolean | null
+  distance?: number | null
 }
 
 export interface UserProfile {
@@ -43,14 +32,12 @@ export interface UserProfile {
   range: number | null
   bio: string | null
   is_for_kids: boolean | null
-  images: { normal: string[]; blur: string[] }
+  images: Image[]
   state: string | null
   units: string | null
   appearance: string | null
-  role: string | null
-  data?: { push_token?: { type: string; token: string } | null; [key: string]: unknown } | null
-  match?: MatchData | null
-  watchers?: Record<string, WatcherInfo> | null
+  data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
+  relations?: { match: Profile | null; watchers: Profile[] } | null
 }
 
 interface UserStore {
@@ -75,26 +62,8 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'appearance',
 ]
 
-// Monotonic gate on realtime snapshots. The server fires several
-// EdgeRuntime.waitUntil(user.update) tasks after the HTTP response, so
-// postgres_changes events can land out of order — and a stale one arriving
-// after a fresher invoke response would flicker the UI back to the old
-// state. We remember the newest `last_seen` ms we've applied from any
-// source and drop realtime events whose snapshot is same-or-older (both
-// the exact echo of our invoke and the tail of earlier writes still in
-// flight).
-//
-// Compared as epoch ms via Date.parse rather than string equality: postgrest
-// (`...+00:00`) and realtime/WAL (`...` / `...Z`) format the same timestamp
-// slightly differently, so string equality misses echoes it should catch.
 let lastAppliedLastSeen = 0
 
-// Pending local values for client-authored fields that haven't yet been
-// confirmed by a server response carrying the same value. While a field is
-// pending, incoming server data for that field is ignored unless it matches
-// the pending value (meaning our write landed) — protects the optimistic UI
-// from being clobbered by stale invoke responses or realtime events that
-// were emitted before our write hit the DB.
 const pending = new Map<keyof UserProfile, unknown>()
 
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
@@ -111,10 +80,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
         .select('*')
         .eq('user_id', userId)
         .single()
-      // Route through applyServerUser so the realtime gate + pending map
-      // stay consistent with the snapshot we just pulled. Otherwise the
-      // very next realtime event can be judged stale (or the inverse)
-      // against a lastAppliedLastSeen that wasn't updated.
       if (data) get().applyServerUser(data as Record<string, unknown>, 'invoke')
       else set({ profile: null })
     } finally {
@@ -136,17 +101,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const d = data as Record<string, unknown>
     const lastSeen = d.last_seen as string | undefined
     const ts = lastSeen ? Date.parse(lastSeen) : 0
-    // Strict `<`: same-timestamp events are legitimate (server-side writes
-    // can commit without bumping last_seen), so we must let them through.
-    // `<=` was dropping valid state transitions when last_seen stayed put.
     if (source === 'realtime' && ts && ts < lastAppliedLastSeen) return
     if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
-    // Compatibility: server still sends top-level `message` — map to `bio`.
-    // Also promote `data.bio/images/units` if the server sends them inside the
-    // `data` JSON column (new storage path).
-    if ('message' in d && !('bio' in d)) (d as Record<string, unknown>).bio = d.message
+    // Promote name/bio/images/units from the data JSONB column to top-level
+    // so CLIENT_AUTHORED protection and component reads work uniformly.
     if (d.data && typeof d.data === 'object') {
       const dd = d.data as Record<string, unknown>
+      if ('name' in dd) (d as Record<string, unknown>).name = dd.name
       if ('bio' in dd) (d as Record<string, unknown>).bio = dd.bio
       if ('images' in dd) (d as Record<string, unknown>).images = dd.images
       if ('units' in dd) (d as Record<string, unknown>).units = dd.units
@@ -158,10 +119,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
       if (!pending.has(k)) continue
       const pendingVal = pending.get(k)
       if (equal(d[k as string], pendingVal)) {
-        // Server caught up with our local write — accept server value, clear pending.
         pending.delete(k)
       } else {
-        // Server value is stale (predates our latest local write) — keep optimistic value.
         merged[k as string] = pendingVal
       }
     }

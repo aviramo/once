@@ -140,7 +140,7 @@ export default function OnboardingPage() {
   // render so the user can still navigate back via the Back button if desired.
   const initialStep =
     profile && profile.state == null
-      ? ((profile.images?.normal?.length ?? 0) >= 1 ? 5 : 4)
+      ? ((profile.images?.length ?? 0) >= 1 ? 5 : 4)
       : 1
   const [step, setStep] = useState(initialStep)
   const [isMale, setIsMale] = useState<boolean | null>(profile?.is_male ?? null)
@@ -153,7 +153,7 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
   const [savingImages, setSavingImages] = useState(false)
-  const [totalPhotoCount, setTotalPhotoCount] = useState(profile?.images?.normal?.length ?? 0)
+  const [totalPhotoCount, setTotalPhotoCount] = useState(profile?.images?.length ?? 0)
   const photoEditorRef = useRef<PhotoEditorRef>(null)
 
   const nameInputRef = useRef<RNTextInput>(null)
@@ -201,7 +201,7 @@ export default function OnboardingPage() {
     setIsMale(profile.is_male ?? null)
     setName(profile.name ?? '')
     setBio(profile.bio ?? '')
-    setStep((profile.images?.normal?.length ?? 0) >= 1 ? 5 : 4)
+    setStep((profile.images?.length ?? 0) >= 1 ? 5 : 4)
   }, [profile])
 
   // Focus the nickname input only when step 2 is active — autoFocus would fire

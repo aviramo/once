@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
           break;
         case State.VISIBLE:
           if (other) {
-            delete other.watchers[user.user_id];
+            other.relations.watchers = other.relations.watchers.filter(w => w.user_id !== user.user_id);
             EdgeRuntime.waitUntil(other.update(action));
           }
           await user.addWatchers(action);
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
       if (user.state == State.WATCHING) {
         EdgeRuntime.waitUntil(user.restriction(action));
         if (other) {
-          delete other.watchers[user.user_id];
+          other.relations.watchers = other.relations.watchers.filter(w => w.user_id !== user.user_id);
           EdgeRuntime.waitUntil(other.update(action));
         }
         await user.search(action, other);
@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
       await user.search(action);
       break;
     case "reset": {
-      if (user.role == 'ADMIN') await user.reset(action, body.state);
+      if (user.data?.role == 'ADMIN') await user.reset(action, body.state);
       else return action.error("reset", "unauthorized", 403);
       break;
     }
@@ -148,7 +148,6 @@ Deno.serve(async (req) => {
       break;
     }
     case "remove": {
-      if (typeof body.user_id !== 'string' || !user.watchers[body.user_id]) break;
       EdgeRuntime.waitUntil(user.removeRelation(action, State.OTHER_REMOVED, body.user_id));
       EdgeRuntime.waitUntil(user.update(action));
       break;

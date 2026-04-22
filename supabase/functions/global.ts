@@ -26,36 +26,34 @@ export enum State {
   OTHER_OFF = "OTHER_OFF",
 }
 
-export type UserData = {
-  bio?: string,
-  images: { normal: string[], blur: string[] },
-  units?: string,
-  os?: string,
-  lang?: string,
-  push_token: JSON | null,
-  match: Match | null,
-  wachers: Record<string, Watcher>;
+export type Image = {
+  normal?: string;
+  hash: string;
 };
 
-type BaseMatch = {
+export type Data = {
+  name: string;
+  bio: string,
+  images: Image[],
+  units: string,
+  os: string,
+  lang: string,
+  push_token: JSON | null,
+  role?: string | null;
+};
+
+export type Profile = {
   created_at: Date;
   user_id: string;
-  last_seen?: Date;
   title: string;
-  name?: string;
-  is_male?: boolean;
-  push_enabled?: boolean;
-  bio?: string;
+  name: string;
+  images: Image[],
+  bio: string;
+  is_male: boolean;
   is_for_kids: boolean | null;
+  last_seen?: Date;
+  push_enabled?: boolean;
   distance?: number;
-};
-
-export type Match = BaseMatch & {
-  images?: string[];
-};
-
-export type Watcher = BaseMatch & {
-  image?: string;
 };
 
 export type StateChange = {

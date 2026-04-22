@@ -1,19 +1,23 @@
-import { useState, useEffect } from 'react'
-import { View, StyleSheet, Platform } from 'react-native'
+import { useState, useEffect, useRef } from 'react'
+import { View, StyleSheet, Platform, Pressable, ScrollView, I18nManager, BackHandler } from 'react-native'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import Svg, { Path, G, Circle, Rect } from 'react-native-svg'
+import Svg, { Path, Circle } from 'react-native-svg'
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated'
+import PagerView from 'react-native-pager-view'
 import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { LivoLogo } from '../src/components/LivoLogo'
-import { TEXT, WHITE, GREEN, GRAY_50 } from '../src/colors'
+import { TEXT, GREEN, GRAY_50, GRAY_100 } from '../src/colors'
+import { SINGLE } from '../src/fonts'
+
+const isRTL = I18nManager.isRTL
 
 // ── Brand icons ────────────────────────────────────────────────────────────
 
@@ -69,9 +73,130 @@ function LoginSpinner() {
   )
 }
 
+// ── Header icons ───────────────────────────────────────────────────────────
+
+function ForwardChevron() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={isRTL ? 'M 15 6 L 9 12 L 15 18' : 'M 9 6 L 15 12 L 9 18'} />
+    </Svg>
+  )
+}
+
+function BackChevron() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={isRTL ? 'M 9 6 L 15 12 L 9 18' : 'M 15 6 L 9 12 L 15 18'} />
+    </Svg>
+  )
+}
+
+// ── Marketing page ─────────────────────────────────────────────────────────
+
+const FEATURES = [
+  {
+    title: 'קשר של אחד על אחד',
+    desc: 'אין ריבוי שיחות ואין תחרות על תשומת לב. כשנוצר חיבור, הוא בלעדי. פוגשים אדם, לא עוד אופציה.',
+  },
+  {
+    title: 'מהמסך למציאות',
+    desc: 'כשיש סנכרון בין שניכם, הקשר יכול להפוך למפגש במקום, כאן ועכשיו. לא עוד שיחות שלא מובילות לשום מקום.',
+  },
+  {
+    title: 'אתה שולט',
+    desc: 'רוצה שיגלו אותך? בחר מתי. רוצה פרטיות? פשוט תישאר מוסתר. הקצב שלך, הבחירה שלך.',
+  },
+  {
+    title: 'הסכמה הדדית תמיד',
+    desc: 'רק כשגם אתה וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אותך ואתה לא תפתיע אף אחד.',
+  },
+]
+
+function WhatsSpecialPage() {
+  return (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={mktStyles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Hero */}
+      <View style={mktStyles.hero}>
+        <Text style={mktStyles.heroTitle}>
+          {'פגישות אמיתיות.\nממש קרוב.\nעכשיו.'}
+        </Text>
+        <Text style={mktStyles.heroSub}>
+          מפגשים עם אנשים שנמצאים ממש קרובים אליך, בזמן אמת.
+        </Text>
+      </View>
+
+      {/* Divider */}
+      <View style={mktStyles.divider} />
+
+      {/* Features */}
+      {FEATURES.map((f, i) => (
+        <View key={i} style={mktStyles.feature}>
+          <Text style={mktStyles.featureLabel}>{f.title}</Text>
+          <Text style={mktStyles.featureDesc}>{f.desc}</Text>
+          {i < FEATURES.length - 1 && <View style={mktStyles.featureDivider} />}
+        </View>
+      ))}
+
+    </ScrollView>
+  )
+}
+
+const mktStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 48,
+  },
+  hero: {
+    marginBottom: 32,
+    gap: 14,
+  },
+  heroTitle: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: TEXT,
+    letterSpacing: -1,
+    lineHeight: 44,
+  },
+  heroSub: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: 'rgba(0,0,0,0.5)',
+    lineHeight: 24,
+  },
+  divider: {
+    height: 1.5,
+    backgroundColor: GRAY_100,
+    marginBottom: 32,
+  },
+  feature: {
+    gap: 10,
+  },
+  featureLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: GREEN,
+    letterSpacing: -0.3,
+  },
+  featureDesc: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: 'rgba(0,0,0,0.55)',
+    lineHeight: 23,
+  },
+  featureDivider: {
+    height: 1,
+    backgroundColor: GRAY_100,
+    marginTop: 22,
+    marginBottom: 22,
+  },
+})
+
 // ── Google Sign-In config ──────────────────────────────────────────────────
-// webClientId comes from Google Cloud Console → OAuth 2.0 → Web client
-// Replace with your actual Web Client ID from Supabase → Auth → Google provider
 GoogleSignin.configure({
   webClientId: '734623738972-62iahq9pjtlv9pl78alf86pn4plsbdj8.apps.googleusercontent.com',
   iosClientId: '734623738972-csljo0jmhcioedopq9o591ni506g5o1q.apps.googleusercontent.com',
@@ -82,8 +207,6 @@ GoogleSignin.configure({
 
 async function signInWithGoogle() {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
-  // Clear any cached Google session so the account picker always appears,
-  // even if the user previously signed in with a different account.
   await GoogleSignin.signOut().catch(() => {})
   const userInfo = await GoogleSignin.signIn()
   const idToken = userInfo.data?.idToken
@@ -110,16 +233,32 @@ async function signInWithApple() {
   if (error) throw error
 }
 
+const LOGO_SIZE = 192
+
 // ── Screen ─────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
   const [loadingProvider, setLoadingProvider] = useState<'google' | 'apple' | null>(null)
+  const [page, setPage] = useState(0)
+  const pagerRef = useRef<PagerView>(null)
   const { user } = useAuthStore()
   const router = useRouter()
 
   useEffect(() => {
     if (user) router.replace('/home')
   }, [user])
+
+  // Android hardware back: go back to login page when on marketing page
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (page === 1) {
+        pagerRef.current?.setPage(0)
+        return true
+      }
+      return false
+    })
+    return () => sub.remove()
+  }, [page])
 
   const handleGoogle = async () => {
     setLoadingProvider('google')
@@ -147,47 +286,118 @@ export default function LoginPage() {
     }
   }
 
+  const goToMarketing = () => pagerRef.current?.setPage(1)
+  const goToLogin = () => pagerRef.current?.setPage(0)
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
-      <View style={styles.center}>
-        {/* ── Hero ── */}
-        <View style={styles.hero}>
-          <Text style={styles.brandName}>Livo</Text>
-          <View style={styles.logoWrapper}>
-            <LivoLogo size={128} />
+
+      {/* ── Pager — headers live inside each page so they slide with content ── */}
+      <PagerView
+        ref={pagerRef}
+        style={{ flex: 1 }}
+        initialPage={0}
+        onPageSelected={e => setPage(e.nativeEvent.position)}
+      >
+        {/* Page 0: Login */}
+        <View key="login" style={{ flex: 1 }}>
+          {/* Header: left-aligned, [<][title] */}
+          <View style={[styles.header, styles.headerLeft]}>
+            <Pressable
+              style={({ pressed }) => [styles.headerTitleBtn, pressed && styles.headerBtnPressed]}
+              onPress={goToMarketing}
+            >
+              <ForwardChevron />
+              <Text style={styles.headerTitle}>{'דרך אחרת להכיר'}</Text>
+            </Pressable>
+          </View>
+
+          {/* Spacer so buttons sit at bottom */}
+          <View style={{ flex: 1 }} />
+
+          {/* Auth buttons */}
+          <View style={styles.bottom}>
+            {Platform.OS === 'ios' ? (
+              <Button
+                label={t('auth.signInApple')}
+                onPress={handleApple}
+                disabled={loadingProvider !== null}
+                silentDisabled
+                variant="secondary"
+                iconStart={loadingProvider === 'apple' ? <LoginSpinner /> : <AppleIcon />}
+              />
+            ) : (
+              <Button
+                label={t('auth.signInGoogle')}
+                onPress={handleGoogle}
+                disabled={loadingProvider !== null}
+                silentDisabled
+                variant="secondary"
+                iconStart={loadingProvider === 'google' ? <LoginSpinner /> : <GoogleIcon />}
+              />
+            )}
+          </View>
+
+          {/* Logo overlay — absoluteFill centers it in the full page height,
+              matching BootScreen's position regardless of header/buttons.
+              pointerEvents="none" keeps header and buttons tappable. */}
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View style={styles.logoCenter}>
+              <LivoLogo size={LOGO_SIZE} />
+
+              {/* "Livo" above the logo — absolute so it can't shift the logo */}
+              <View style={styles.brandAbove}>
+                <Text style={styles.brandName}>Livo</Text>
+              </View>
+
+              {/* Tagline below the logo */}
+              <View style={styles.taglineBelow}>
+                <Text style={styles.messageLine1}>{t('auth.msg1')}</Text>
+                <Text style={styles.messageLine2}>{t('auth.msg2')}</Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* ── Message ── */}
-        <View style={styles.message}>
-          <Text style={styles.messageLine1}>{t('auth.msg1')}</Text>
-          <Text style={styles.messageLine2}>{t('auth.msg2')}</Text>
-        </View>
-      </View>
+        {/* Page 1: Marketing */}
+        <View key="marketing" style={{ flex: 1 }}>
+          {/* Header: right-aligned, [title][>] */}
+          <View style={[styles.header, styles.headerRight]}>
+            <Pressable
+              style={({ pressed }) => [styles.headerTitleBtn, pressed && styles.headerBtnPressed]}
+              onPress={goToLogin}
+            >
+              <Text style={styles.headerTitle}>התחברות</Text>
+              <BackChevron />
+            </Pressable>
+          </View>
 
-      {/* ── Auth Buttons — pinned to bottom ── */}
-      <View style={styles.bottom}>
-        {Platform.OS === 'ios' ? (
-          <Button
-            label={t('auth.signInApple')}
-            onPress={handleApple}
-            disabled={loadingProvider !== null}
-            silentDisabled
-            variant="secondary"
-            iconStart={loadingProvider === 'apple' ? <LoginSpinner /> : <AppleIcon />}
-          />
-        ) : (
-          <Button
-            label={t('auth.signInGoogle')}
-            onPress={handleGoogle}
-            disabled={loadingProvider !== null}
-            silentDisabled
-            variant="secondary"
-            iconStart={loadingProvider === 'google' ? <LoginSpinner /> : <GoogleIcon />}
-          />
-        )}
-      </View>
+          <WhatsSpecialPage />
+
+          <View style={styles.bottom}>
+            {Platform.OS === 'ios' ? (
+              <Button
+                label={t('auth.signInApple')}
+                onPress={handleApple}
+                disabled={loadingProvider !== null}
+                silentDisabled
+                variant="secondary"
+                iconStart={loadingProvider === 'apple' ? <LoginSpinner /> : <AppleIcon />}
+              />
+            ) : (
+              <Button
+                label={t('auth.signInGoogle')}
+                onPress={handleGoogle}
+                disabled={loadingProvider !== null}
+                silentDisabled
+                variant="secondary"
+                iconStart={loadingProvider === 'google' ? <LoginSpinner /> : <GoogleIcon />}
+              />
+            )}
+          </View>
+        </View>
+      </PagerView>
     </SafeAreaView>
   )
 }
@@ -197,63 +407,92 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: GRAY_50,
   },
-  center: {
+
+  // ── Header ───────────────────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row',
+    height: 56,
+    paddingHorizontal: SINGLE,
+    alignItems: 'center',
+  },
+  // In RTL row: flex-start = RIGHT side, flex-end = LEFT side
+  headerRight: { justifyContent: 'flex-start' },
+  headerLeft:  { justifyContent: 'flex-end' },
+  // row-reverse in RTL flows left→right: first item on LEFT, second on RIGHT
+  headerTitleBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: TEXT,
+    letterSpacing: -0.5,
+    lineHeight: 26,
+    includeFontPadding: false,
+  },
+  headerBtnPressed: {
+    opacity: 0.45,
+  },
+
+  // ── Login page ────────────────────────────────────────────────────────────
+
+  // Full-height centering container for the logo overlay
+  logoCenter: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
   },
 
-  // Hero
-  hero: {
+  // "Livo" brand name sits above the logo; absolutely positioned so it
+  // can't push the logo off the true vertical center.
+  brandAbove: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    marginTop: -(LOGO_SIZE / 2 + 20 + 52),
     alignItems: 'center',
-    marginBottom: 32,
-    gap: 8,
-  },
-  logoWrapper: {
-    marginTop: 20,
-    marginBottom: 20,
   },
   brandName: {
     fontSize: 40,
     fontWeight: '300',
     color: TEXT,
     letterSpacing: -0.5,
-    fontFamily: 'NotoSans_400Regular',
   },
 
-  // Message
-  message: {
+  // Tagline below the logo — mirrors BootScreen's taglineWrap offset.
+  taglineBelow: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    marginTop: LOGO_SIZE / 2 + 28,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 10,
+    paddingHorizontal: 24,
+    gap: 8,
   },
   messageLine1: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '300',
-    color: 'rgba(0,0,0,0.5)',
+    color: 'rgba(0,0,0,0.45)',
     textAlign: 'center',
     letterSpacing: 0.2,
   },
   messageLine2: {
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
     color: TEXT,
     textAlign: 'center',
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
+    lineHeight: 32,
   },
 
-  // Bottom — matches home.tsx's buttons container so the CTA sits at the
-  // same inset on both screens.
   bottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 20,
     paddingBottom: 36,
     paddingTop: 8,
-    backgroundColor: 'transparent',
     gap: 10,
   },
 })

@@ -108,27 +108,17 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const userId = profile?.user_id ?? ''
-  const otherId = profile?.match?.user_id ?? ''
-  const matchLastSeen = profile?.match?.last_seen ?? null
+  const match = profile?.relations?.match
+  const otherId = match?.user_id ?? ''
+  const matchLastSeen = match?.last_seen ?? null
   const isMale = profile?.is_male ?? null
-  const matchIsMale = profile?.match?.is_male ?? null
-  const myImage = profile?.images?.normal?.[0]
-    ? publicImageUrl(userId, 'normal', profile.images.normal[0])
+  const matchIsMale = match?.is_male ?? null
+  const myImage = profile?.images?.[0]?.normal
+    ? publicImageUrl(userId, 'normal', profile.images[0].normal)
     : undefined
-  const match = profile?.match
-  const matchImage = (() => {
-    if (!match) return undefined
-    if (match.images) {
-      const arr = Array.isArray(match.images)
-        ? match.images
-        : (() => { try { return JSON.parse(match.images as string) } catch { return null } })()
-      if (Array.isArray(arr) && arr.length > 0) return publicImageUrl(match.user_id, 'normal', arr[0])
-    }
-    if (match.image) {
-      return match.image.includes('://') ? match.image : `${SUPABASE_URL}/storage/v1/object/public/users/${match.image}`
-    }
-    return undefined
-  })()
+  const matchImage = match?.images?.[0]?.normal
+    ? publicImageUrl(match.user_id, 'normal', match.images[0].normal)
+    : undefined
 
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
@@ -610,7 +600,7 @@ export default function ChatPage({ onBack, isActive = true, onUnreadChange }: Ch
                   onPress={() => { setMenuOpen(false); setConfirmAction('leave') }}
                   style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
                 >
-                  <Text style={[styles.menuLabel, styles.menuLabelDestructive]}>{t('chat.leave')}</Text>
+                  <Text style={[styles.menuLabel, styles.menuLabelDestructive, styles.menuLabelEmphasis]}>{t('chat.leave')}</Text>
                 </Pressable>
 
               </View>
@@ -946,6 +936,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuLabelDestructive: { color: 'rgba(180,60,60,0.6)' },
+  menuLabelEmphasis: { color: 'rgba(200,40,40,1)', fontWeight: '600' },
   menuCheckbox: {
     width: 22,
     height: 22,

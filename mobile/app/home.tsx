@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState, Dimensions } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
@@ -10,7 +10,7 @@ import Svg, { Path, Circle, Ellipse } from 'react-native-svg'
 import { invoke, markStartupComplete } from '../src/lib/api'
 import { hasSeen, markSeen } from '../src/lib/seen'
 import { tap } from '../src/lib/haptics'
-import { useUserStore, type WatcherInfo } from '../src/stores/userStore'
+import { useUserStore, type Profile } from '../src/stores/userStore'
 import { t, tg, tgg } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
@@ -679,8 +679,87 @@ export default function HomePage() {
       })
   }
 
-  const watchers = profile?.watchers
-    ? Object.values(profile.watchers).sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+  // Two-slot system: A and B alternate as active/incoming.
+  // The incoming slot loads invisibly on top (via topSlot zIndex), then
+  // cross-fades over the active slot. finishTransition swaps roles and
+  // clears the old slot — no remount of an already-measured MatchCard.
+  type SlotId = 'A' | 'B'
+  const [matchA, setMatchA] = useState<typeof profile.relations.match>(profile?.relations?.match ?? null)
+  const [matchB, setMatchB] = useState<typeof profile.relations.match>(null)
+  const activeSlotRef = useRef<SlotId>('A')
+  const [topSlot, setTopSlot] = useState<SlotId>('B')
+  const animRunning = useRef(false)
+
+  const opacityA = useSharedValue(profile?.relations?.match ? 1 : 0)
+  const opacityB = useSharedValue(0)
+
+  const cardStyleA = useAnimatedStyle(() => ({ opacity: opacityA.value }))
+  const cardStyleB = useAnimatedStyle(() => ({ opacity: opacityB.value }))
+
+  const matchARef = useRef(matchA)
+  const matchBRef = useRef(matchB)
+  useEffect(() => { matchARef.current = matchA }, [matchA])
+  useEffect(() => { matchBRef.current = matchB }, [matchB])
+
+  useEffect(() => {
+    const next = profile?.relations?.match ?? null
+    const active = activeSlotRef.current
+    const activeMatch = active === 'A' ? matchARef.current : matchBRef.current
+    if (!next) return
+    if (next.user_id === activeMatch?.user_id) {
+      if (active === 'A') setMatchA(next)
+      else setMatchB(next)
+      return
+    }
+    // Load new person into inactive slot (on top), reset its transform first
+    if (active === 'A') {
+      opacityB.value = 0
+      setTopSlot('B')
+      setMatchB(next)
+    } else {
+      opacityA.value = 0
+      setTopSlot('A')
+      setMatchA(next)
+    }
+  }, [profile?.relations?.match])
+
+  const finishTransition = useCallback((newActive: SlotId) => {
+    activeSlotRef.current = newActive
+    if (newActive === 'B') {
+      setMatchA(null)
+      opacityA.value = 0
+    } else {
+      setMatchB(null)
+      opacityB.value = 0
+    }
+    animRunning.current = false
+  }, [])
+
+  const handleSlotReady = useCallback((slot: SlotId) => {
+    if (slot === activeSlotRef.current) return
+    if (animRunning.current) return
+    animRunning.current = true
+    const cfg = { duration: 420 }
+    if (slot === 'B') {
+      opacityA.value = withTiming(0, cfg)
+      opacityB.value = withTiming(1, cfg, (finished) => {
+        'worklet'
+        if (finished) runOnJS(finishTransition)('B')
+      })
+    } else {
+      opacityB.value = withTiming(0, cfg)
+      opacityA.value = withTiming(1, cfg, (finished) => {
+        'worklet'
+        if (finished) runOnJS(finishTransition)('A')
+      })
+    }
+  }, [finishTransition])
+
+  const handleSlotReadyA = useCallback(() => handleSlotReady('A'), [handleSlotReady])
+  const handleSlotReadyB = useCallback(() => handleSlotReady('B'), [handleSlotReady])
+
+  const watchers = profile?.relations?.watchers
+    ? [...profile.relations.watchers].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
     : []
 
   // Use displayedCardMode so card content only swaps at the flip midpoint.
@@ -736,8 +815,8 @@ export default function HomePage() {
     + ' ' + tg('home.offConfirmDesc', isMale)
 
   // Match name (strip trailing ", age") and gendered invite confirm desc.
-  const matchName = (profile?.match?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
-  const matchIsMale = profile?.match?.is_male
+  const matchName = (profile?.relations?.match?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
+  const matchIsMale = profile?.relations?.match?.is_male
   const inviteConfirmDesc = tgg('home.inviteConfirmDesc' as any, isMale, matchIsMale)
 
   // Status chip shown next to settings button.
@@ -778,7 +857,7 @@ export default function HomePage() {
   const [inviteConfirmOpen, setInviteConfirmOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
-  const [removeWatcherTarget, setRemoveWatcherTarget] = useState<WatcherInfo | null>(null)
+  const [removeWatcherTarget, setRemoveWatcherTarget] = useState<Profile | null>(null)
   const [removeWatcherBusy, setRemoveWatcherBusy] = useState(false)
 
   const runAction = (endpoint: string, key: string, onDone?: () => void) => {
@@ -1210,15 +1289,34 @@ export default function HomePage() {
                     description={cardDescription}
                   >
                     {displayedIsMatchCardOpen && (
-                      profile?.match ? (
-                        <MatchCard
-                          key={profile.match.user_id}
-                          match={profile.match}
-                          userIsMale={isMale}
-                          bottomInset={0}
-                          hideTime={state === 'CHAT'}
-                        />
-                      ) : null
+                      <View style={StyleSheet.absoluteFill}>
+                        {matchA && (
+                          <Animated.View style={[StyleSheet.absoluteFill, cardStyleA, { zIndex: topSlot === 'A' ? 2 : 1 }]}>
+                            <MatchCard
+                              key={matchA.user_id}
+                              match={matchA}
+                              userIsMale={isMale}
+                              units={profile?.units}
+                              bottomInset={0}
+                              hideTime={state === 'CHAT'}
+                              onReady={handleSlotReadyA}
+                            />
+                          </Animated.View>
+                        )}
+                        {matchB && (
+                          <Animated.View style={[StyleSheet.absoluteFill, cardStyleB, { zIndex: topSlot === 'B' ? 2 : 1 }]}>
+                            <MatchCard
+                              key={matchB.user_id}
+                              match={matchB}
+                              userIsMale={isMale}
+                              units={profile?.units}
+                              bottomInset={0}
+                              hideTime={state === 'CHAT'}
+                              onReady={handleSlotReadyB}
+                            />
+                          </Animated.View>
+                        )}
+                      </View>
                     )}
 
                     {showWatchers && (

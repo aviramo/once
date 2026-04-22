@@ -1,11 +1,15 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
 import { View, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
-import { Image } from 'expo-image'
+import { Image as ExpoImage } from 'expo-image'
+import type { Image as ImageData } from '../stores/userStore'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Path, Line, Circle } from 'react-native-svg'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as FileSystem from 'expo-file-system/legacy'
+import { encode as encodeBlurhash } from 'blurhash'
+// @ts-expect-error upng-js ships no type definitions
+import UPNG from 'upng-js'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
@@ -68,7 +72,7 @@ function PhotoCell({
       style={photoStyles.cell}
       onLayout={onLayout}
     >
-      <Image
+      <ExpoImage
         source={uri}
         placeholder={localUri ? { uri: localUri } : undefined}
         style={photoStyles.img}
@@ -207,7 +211,7 @@ function PhotoGrid({
       {uploads.filter(u => !u.filename).map(u => (
         <View key={u.id} style={photoStyles.cell}>
           {u.uri ? (
-            <Image source={u.uri} style={photoStyles.img} cachePolicy="disk" />
+            <ExpoImage source={u.uri} style={photoStyles.img} cachePolicy="disk" />
           ) : (
             <View style={photoStyles.placeholderBg}>
               <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
@@ -272,9 +276,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   // remove and skip stale entries in flush().
   const pendingUploads = useRef<Map<string, {
     normalFilename: string
-    blurFilename: string
     normalUri: string
-    blurUri: string
   }>>(new Map())
 
   useEffect(() => {
@@ -285,8 +287,8 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   const sigByFilename = useRef<Map<string, string>>(new Map())
   const [duplicateDialog, setDuplicateDialog] = useState(false)
 
-  const storeImages = profile?.images ?? { normal: [], blur: [] }
-  const photos = storeImages.normal
+  const storeImages = profile?.images ?? []
+  const photos = storeImages.map(e => e.normal ?? '')
 
   useEffect(() => { onTotalCountChange?.(photos.length) }, [photos.length, onTotalCountChange])
 
@@ -307,16 +309,13 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
 
       for (const lp of entries) {
         // Photo may have been removed while awaiting — skip stale entries.
-        const currentNormal = useUserStore.getState().profile?.images?.normal ?? []
+        const currentNormal = useUserStore.getState().profile?.images?.map(e => e.normal ?? '') ?? []
         if (!currentNormal.includes(lp.normalFilename)) {
           pendingUploads.current.delete(lp.normalFilename)
           continue
         }
         try {
-          await Promise.all([
-            uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId),
-            uploadFileToStorage(lp.blurUri, lp.blurFilename, 'image/webp', 'blur', token, userId),
-          ])
+          await uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId)
         } catch (e) {
           console.error('Deferred upload error:', e)
         }
@@ -349,32 +348,40 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     return out.uri
   }
 
-  const compressBlur = async (uri: string): Promise<string> => {
-    const tiny = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 8 } }],
-      { format: ImageManipulator.SaveFormat.PNG }
-    )
-    return (await ImageManipulator.manipulateAsync(
-      tiny.uri,
-      [{ resize: { width: 200 } }],
-      { compress: 0.9, format: ImageManipulator.SaveFormat.WEBP }
-    )).uri
+  // Encodes a blurhash string (~30 chars) from the source image. Pure-JS:
+  // resize to 32px PNG, decode to RGBA, feed to blurhash encoder. Runs in
+  // the background alongside compression; returns '' on failure so the
+  // caller can still proceed (rendering falls back to a flat placeholder).
+  const computeBlurhash = async (uri: string): Promise<string> => {
+    try {
+      const small = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 32 } }],
+        { format: ImageManipulator.SaveFormat.PNG, base64: true }
+      )
+      const base64 = small.base64
+      if (!base64) return ''
+      const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+      const png = UPNG.decode(binary.buffer)
+      const rgba = new Uint8ClampedArray(UPNG.toRGBA8(png)[0])
+      return encodeBlurhash(rgba, png.width, png.height, 4, 3)
+    } catch (e) {
+      console.error('blurhash encode failed', e)
+      return ''
+    }
   }
 
-  const uploadOne = async (asset: DocumentPicker.DocumentPickerAsset) => {
+  const uploadOne = async (asset: DocumentPicker.DocumentPickerAsset): Promise<ImageData | null> => {
     if (!user) return null
     const normalFilename = `${uuidv4()}.webp`
-    const blurFilename = `${uuidv4()}.webp`
-    const [normalUri, blurred] = await Promise.all([
+    const [normalUri, hash] = await Promise.all([
       compressUnder200K(asset.uri),
-      compressBlur(asset.uri),
+      computeBlurhash(asset.uri),
     ])
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token ?? ''
     await uploadFileToStorage(normalUri, normalFilename, 'image/webp', 'normal', token, user.id)
-    await uploadFileToStorage(blurred, blurFilename, 'image/webp', 'blur', token, user.id)
-    return { normal: normalFilename, blur: blurFilename }
+    return { normal: normalFilename, hash }
   }
 
   const pickPhoto = async () => {
@@ -424,40 +431,46 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       // upload happen later.
       const entries = assets.map((a, i) => {
         const normalFilename = `${uuidv4()}.webp`
-        const blurFilename = `${uuidv4()}.webp`
         sigByFilename.current.set(normalFilename, filteredSigs[i])
-        return { normalFilename, blurFilename, originalUri: a.uri }
+        return { normalFilename, originalUri: a.uri }
       })
 
       // ── synchronous: add to store + cache local URIs ───────────
-      const currentImages = useUserStore.getState().profile?.images ?? { normal: [], blur: [] }
+      const currentImages = useUserStore.getState().profile?.images ?? []
       useUserStore.getState().update({
-        images: {
-          normal: [...currentImages.normal, ...entries.map(e => e.normalFilename)],
-          blur: [...currentImages.blur, ...entries.map(e => e.blurFilename)],
-        },
+        images: [
+          ...currentImages,
+          ...entries.map(e => ({ normal: e.normalFilename, hash: '' }) satisfies ImageData),
+        ],
       })
       for (const e of entries) {
         localPhotoUriCache.set(e.normalFilename, e.originalUri)
         pendingUploads.current.set(e.normalFilename, {
           normalFilename: e.normalFilename,
-          blurFilename: e.blurFilename,
           normalUri: e.originalUri,
-          blurUri: e.originalUri,
         })
       }
 
-      // Compress in the background — update the pending entry URIs.
+      // Compress + hash in the background. Hash is patched by filename index
+      // (user may have reordered/removed by the time this resolves).
       for (const e of entries) {
         try {
-          const [normalUri, blurUri] = await Promise.all([
+          const [normalUri, hash] = await Promise.all([
             compressUnder200K(e.originalUri),
-            compressBlur(e.originalUri),
+            computeBlurhash(e.originalUri),
           ])
           const pending = pendingUploads.current.get(e.normalFilename)
-          if (pending) {
-            pending.normalUri = normalUri
-            pending.blurUri = blurUri
+          if (pending) pending.normalUri = normalUri
+          if (hash) {
+            const imgs = useUserStore.getState().profile?.images
+            if (imgs) {
+              const idx = imgs.findIndex(e2 => e2.normal === e.normalFilename)
+              if (idx >= 0) {
+                const next = [...imgs]
+                next[idx] = { ...next[idx], hash }
+                useUserStore.getState().update({ images: next })
+              }
+            }
           }
         } catch (err) {
           console.error('Photo compress error:', err)
@@ -478,13 +491,10 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       try {
         const result = await uploadOne(assets[i])
         if (result) {
-          sigByFilename.current.set(result.normal, newUploads[i].sig)
+          sigByFilename.current.set(result.normal!, newUploads[i].sig)
           setUploads(prev => prev.map(u => u.id === newUploads[i].id ? { ...u, filename: result.normal } : u))
-          const currentImages = useUserStore.getState().profile?.images ?? { normal: [], blur: [] }
-          update({ images: {
-            normal: [...currentImages.normal, result.normal],
-            blur: [...currentImages.blur, result.blur],
-          } })
+          const currentImages = useUserStore.getState().profile?.images ?? []
+          update({ images: [...currentImages, result] })
         } else {
           setUploads(prev => prev.filter(u => u.id !== newUploads[i].id))
         }
@@ -497,24 +507,19 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
 
   const removePhoto = (filename: string) => {
     if (photos.length <= 1) return
-    const idx = storeImages.normal.indexOf(filename)
+    const idx = storeImages.findIndex(e => e.normal === filename)
     if (idx < 0) return
     sigByFilename.current.delete(filename)
     localPhotoUriCache.delete(filename)
     pendingUploads.current.delete(filename)
-    update({ images: {
-      normal: storeImages.normal.filter((_, i) => i !== idx),
-      blur: storeImages.blur.filter((_, i) => i !== idx),
-    } })
+    update({ images: storeImages.filter((_, i) => i !== idx) })
   }
 
   const reorderPhotos = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
-    const nextNormal = [...storeImages.normal]
-    const nextBlur = [...storeImages.blur]
-    ;[nextNormal[from], nextNormal[to]] = [nextNormal[to], nextNormal[from]]
-    ;[nextBlur[from], nextBlur[to]] = [nextBlur[to], nextBlur[from]]
-    update({ images: { normal: nextNormal, blur: nextBlur } })
+    const next = [...storeImages]
+    ;[next[from], next[to]] = [next[to], next[from]]
+    update({ images: next })
   }
 
   const onPhotoLoaded = (filename: string) => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE, SINGLE, DOUBLE, BUTTON } from '../fonts'
@@ -10,7 +10,9 @@ import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY, GRAY_PRESS, RED, RED_PRESS } fro
 //
 // Press feedback: a quick scale-down followed by a spring-back bump, driven
 // natively so it stays smooth even when the JS thread is busy with the
-// in-flight action that the press kicks off.
+// in-flight action that the press kicks off. During loading the button
+// stays in its pressed (darker) fill so it reads as "working" without a
+// shaky/bouncy cue.
 //
 // Tap target is built on raw View responder callbacks rather than Pressable:
 // RN 0.81's Pressability has an aggressive cancel-on-movement threshold that
@@ -39,9 +41,9 @@ export function Button({
   label: string
   onPress: () => void
   disabled?: boolean
-  // In-flight server wait. Blocks taps like `disabled` but shows a subtle
-  // side-to-side shake instead of the gray fade, so the user sees the
-  // button "working" rather than just dimmed.
+  // In-flight server wait. Blocks taps like `disabled` but keeps the
+  // button in its pressed (darker) fill so it reads as "working" rather
+  // than dimmed or shaking.
   loading?: boolean
   variant?: Variant
   size?: Size
@@ -56,27 +58,7 @@ export function Button({
   iconStart?: ReactNode
 }) {
   const scale = useRef(new Animated.Value(1)).current
-  const shake = useRef(new Animated.Value(0)).current
   const [pressed, setPressed] = useState(false)
-
-  useEffect(() => {
-    if (!loading) return
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shake, { toValue: 1, duration: 55, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: -1, duration: 110, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: 0, duration: 55, useNativeDriver: true }),
-        Animated.delay(120),
-      ]),
-    )
-    loop.start()
-    return () => {
-      loop.stop()
-      shake.setValue(0)
-    }
-  }, [loading, shake])
-
-  const shakeX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-2.5, 2.5] })
 
   const blocked = disabled || loading
 
@@ -109,7 +91,7 @@ export function Button({
   return (
     <Animated.View
       collapsable={false}
-      style={[styles.wrap, { transform: [{ scale }, { translateX: shakeX }] }]}
+      style={[styles.wrap, { transform: [{ scale }] }]}
     >
       <View
         style={[
@@ -117,7 +99,7 @@ export function Button({
           base.btn,
           skin.btn,
           toneSkin?.btn,
-          pressed && (toneSkin?.pressed ?? skin.pressed),
+          (pressed || loading) && (toneSkin?.pressed ?? skin.pressed),
           disabled && !loading && !silentDisabled && styles.disabled,
         ]}
         onStartShouldSetResponder={() => !blocked}

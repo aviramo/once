@@ -20,7 +20,7 @@ import { Button } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
 import { PhotoEditor, PhotoEditorRef, localPhotoUriCache } from '../src/components/PhotoEditor'
-import type { MatchData } from '../src/stores/userStore'
+import type { Profile } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
 import { TEXT, WHITE, BLACK, GREEN, GRAY_50 } from '../src/colors'
@@ -863,7 +863,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
 
   if (!profile) return <View style={styles.tabContent} />
 
-  const photos = profile.images?.normal ?? []
+  const photos = profile.images?.map(e => e.normal ?? '') ?? []
   const isForKids = profile.is_for_kids
   const kidsOptions: SelectOption[] = [
     { value: 'yes', label: t('settings.kidsYes') },
@@ -1045,7 +1045,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
       // ~1s later, which left the home screen showing stale data in the
       // gap. Apply the known post-reset shape locally so the store reflects
       // the new truth before we navigate home.
-      update({ state, match: null, watchers: {} })
+      update({ state, relations: { match: null, watchers: [] } })
       // Navigate back to home once the store matches the post-reset state.
       // When embedded in the shell pager the parent slides back to home;
       // standalone falls back to router.back().
@@ -1075,7 +1075,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
         />
       </View>
 
-      {profile.role === 'ADMIN' && (
+      {profile.data?.role === 'ADMIN' && (
         <View style={styles.section}>
           <SectionLabel>{t('settings.adminTitle').toUpperCase()}</SectionLabel>
           <SelectFieldRow
@@ -1464,26 +1464,23 @@ export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfi
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const { user } = useAuthStore()
-  const previewData: MatchData | null = useMemo(() => {
+  const previewData: Profile | null = useMemo(() => {
     if (!profile) return null
     const userId = user?.id ?? profile.user_id
-    const filenames = profile.images?.normal ?? []
-    const imgs = filenames.map(f =>
-      localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}`
-    )
+    const images = (profile.images ?? []).map(img => ({
+      normal: img.normal
+        ? (localPhotoUriCache.get(img.normal) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${img.normal}`)
+        : undefined,
+      hash: img.hash,
+    }))
     return {
       user_id: profile.user_id,
-      image: imgs[0] ?? '',
-      images: imgs,
       title: profile.name ?? '—',
+      name: profile.name ?? '—',
+      images,
       bio: profile.bio ?? '',
-      distance: 0,
-      located_at: new Date().toISOString(),
-      subscribed: !!profile.data?.push_token,
       is_for_kids: profile.is_for_kids ?? null,
-      age: profile.birth_date ? calcAge(profile.birth_date) : undefined,
-      is_male: profile.is_male,
-      units: profile.units,
+      is_male: profile.is_male ?? undefined,
     }
   }, [profile, user?.id])
 

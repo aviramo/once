@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "734623738972-66fs3vkiqi4vo16fk65sn1ofemkk0aj1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.livo.app",
+            "certificate_hash": "0ec59dc7de4437efe4e13c808b0a700c2f44b69c"
+          }
+        },
+        {
           "client_id": "734623738972-62iahq9pjtlv9pl78alf86pn4plsbdj8.apps.googleusercontent.com",
           "client_type": 3
         }
