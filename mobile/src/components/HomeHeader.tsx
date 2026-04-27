@@ -4,13 +4,13 @@ import { Text } from './AppText'
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg'
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withTiming, withRepeat, Easing,
+  withTiming, withRepeat, withSequence, Easing,
 } from 'react-native-reanimated'
 import { IconPressable } from './IconPressable'
 import { CountBadge } from './CountBadge'
 import { tapMedium } from '../lib/haptics'
 import { FONT_SCALE, SINGLE } from '../fonts'
-import { TEXT, GREEN } from '../colors'
+import { TEXT, GREEN, GRAY_400, RED } from '../colors'
 
 const isRTL = I18nManager.isRTL
 
@@ -25,26 +25,73 @@ function SettingsIcon() {
   )
 }
 
-function SettingsArrowIcon() {
+function SearchIcon() {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d={isRTL ? 'M 15 6 L 9 12 L 15 18' : 'M 9 6 L 15 12 L 9 18'} />
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={11} cy={11} r={7} />
+      <Path d="M 16.5 16.5 L 21 21" />
+    </Svg>
+  )
+}
+
+function ChatIcon({ color = TEXT }: { color?: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </Svg>
+  )
+}
+
+function SendInviteIcon({ color = TEXT }: { color?: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M17 8l-5-5-5 5" />
+      <Path d="M12 3v12" />
+    </Svg>
+  )
+}
+
+function ReceiveInviteIcon({ color = TEXT }: { color?: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M7 10l5 5 5-5" />
+      <Path d="M12 15V3" />
+    </Svg>
+  )
+}
+
+function HamburgerIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M 4 6 L 20 6" />
+      <Path d="M 4 12 L 20 12" />
+      <Path d="M 4 18 L 20 18" />
+    </Svg>
+  )
+}
+
+function BackArrowIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={isRTL ? 'M 9 6 L 15 12 L 9 18' : 'M 15 6 L 9 12 L 15 18'} />
     </Svg>
   )
 }
 
 function DownArrowIcon() {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M12 5 L12 19 M5 13 L12 20 L19 13" />
     </Svg>
   )
 }
 
-function SideArrowIcon() {
+function SideArrowIcon({ color = TEXT }: { color?: string }) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d={isRTL ? 'M 9 6 L 15 12 L 9 18' : 'M 15 6 L 9 12 L 15 18'} />
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={isRTL ? 'M 15 6 L 9 12 L 15 18' : 'M 9 6 L 15 12 L 9 18'} />
     </Svg>
   )
 }
@@ -104,6 +151,14 @@ export type HomeHeaderProps = {
   loading?: boolean
   /** Pulse the status dot (e.g. while fetching location). */
   dotPulsing?: boolean
+  /** Render the title centered (absolute overlay) instead of start-aligned. */
+  centered?: boolean
+  /** Icon to show in the end slot. Defaults to 'settings'. Use 'none' for arrow only. */
+  endIcon?: 'settings' | 'search' | 'send' | 'none'
+  /** Icon to show in the start slot. Defaults to 'hamburger'. */
+  startIcon?: 'hamburger' | 'back'
+  /** When provided, replaces the start slot with a binoculars + arrow button. */
+  page2Arrow?: { onPress: () => void; hasInvite?: boolean; hasDead?: boolean; alerting?: boolean; icon?: 'binoculars' | 'chat'; badge?: number; count?: number }
 }
 
 export function HomeHeader({
@@ -119,6 +174,10 @@ export function HomeHeader({
   disabled,
   loading = false,
   dotPulsing = false,
+  centered = false,
+  endIcon = 'settings',
+  startIcon = 'hamburger',
+  page2Arrow,
 }: HomeHeaderProps) {
   const icon = arrow
     ? (arrow.direction === 'down' ? <DownArrowIcon /> : <SideArrowIcon />)
@@ -139,6 +198,34 @@ export function HomeHeader({
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulse.value,
   }))
+
+  const badgeOpacity = useSharedValue(1)
+  const arrowNudge = useSharedValue(0)
+  useEffect(() => {
+    if (page2Arrow?.alerting) {
+      badgeOpacity.value = withRepeat(
+        withSequence(
+          withTiming(0.08, { duration: 300, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1, { duration: 300, easing: Easing.inOut(Easing.sin) }),
+        ),
+        6,
+        false,
+      )
+      arrowNudge.value = withRepeat(
+        withSequence(
+          withTiming(isRTL ? -10 : 10, { duration: 280, easing: Easing.out(Easing.quad) }),
+          withTiming(0, { duration: 280, easing: Easing.in(Easing.quad) }),
+        ),
+        4,
+        false,
+      )
+    } else {
+      badgeOpacity.value = withTiming(1, { duration: 150 })
+      arrowNudge.value = withTiming(0, { duration: 150 })
+    }
+  }, [page2Arrow?.alerting])
+  const badgeAnimStyle = useAnimatedStyle(() => ({ opacity: badgeOpacity.value }))
+  const arrowNudgeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: arrowNudge.value }] }))
 
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -201,22 +288,43 @@ export function HomeHeader({
 
   return (
     <View style={styles.header}>
-      {/* Start side: title always start-aligned */}
+      {/* Start side (right in RTL): settings — navigates to settings pane to the right */}
       <View style={[styles.sideSlot, styles.sideSlotStart]}>
-        {titleContent}
-      </View>
-
-      {/* End side: settings */}
-      <View style={[styles.sideSlot, styles.sideSlotEnd]}>
         <IconPressable
           style={styles.settingsBtn}
           pressedStyle={styles.settingsBtnPressed}
           onPress={onSettingsPress}
         >
-          <SettingsIcon />
-          <SettingsArrowIcon />
+          {startIcon === 'back' ? <BackArrowIcon /> : <HamburgerIcon />}
+          {endIcon === 'send' ? <SendInviteIcon /> : endIcon === 'search' ? <SearchIcon /> : null}
         </IconPressable>
       </View>
+
+      {/* End side (left in RTL): page2/chat — navigates to page2/chat pane to the left */}
+      <View style={[styles.sideSlot, styles.sideSlotEnd]}>
+        {page2Arrow ? (
+          <IconPressable style={styles.titleBtn} pressedStyle={styles.titleBtnPressed} onPress={page2Arrow.onPress}>
+            {page2Arrow.count != null && (page2Arrow.icon === 'chat' ? page2Arrow.count > 0 : true) && (
+              <Animated.View style={[styles.viewerChip, (page2Arrow.hasInvite || page2Arrow.icon === 'chat') && { backgroundColor: GREEN }, page2Arrow.hasDead && { backgroundColor: RED }, badgeAnimStyle]}>
+                <Text style={[styles.viewerChipText, { color: page2Arrow.hasInvite || page2Arrow.hasDead || page2Arrow.icon === 'chat' ? '#fff' : GRAY_400 }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+                  {page2Arrow.hasInvite ? 1 : page2Arrow.count}
+                </Text>
+              </Animated.View>
+            )}
+            {page2Arrow.icon === 'chat' && (page2Arrow.count ?? 0) === 0 && <ChatIcon />}
+            <Animated.View style={arrowNudgeStyle}>
+              <SideArrowIcon color={(page2Arrow.hasInvite || (page2Arrow.icon === 'chat' && (page2Arrow.count ?? 0) > 0)) ? GREEN : undefined} />
+            </Animated.View>
+          </IconPressable>
+        ) : !centered ? titleContent : null}
+      </View>
+
+      {/* Centered title overlay */}
+      {centered && titleContent && (
+        <View style={styles.titleCenter} pointerEvents="box-none">
+          {titleContent}
+        </View>
+      )}
 
       {menuOpen && (
         <>
@@ -280,7 +388,7 @@ const styles = StyleSheet.create({
   titleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   titleBtnPressed: {
     opacity: 0.5,
@@ -298,6 +406,25 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     includeFontPadding: false,
     textAlignVertical: 'center',
+  },
+  page2SlotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  viewerChip: {
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  viewerChipText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    lineHeight: 18,
   },
   endRow: {
     flexDirection: 'row',

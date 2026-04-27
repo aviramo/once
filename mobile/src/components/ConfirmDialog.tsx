@@ -122,7 +122,7 @@ export function ConfirmDialog({
                 <Button
                   label={cancelLabel}
                   onPress={() => { setPressed('cancel'); onCancel?.() }}
-                  variant="secondary"
+                  variant="soft"
                   size="lg"
                   disabled={busy}
                   loading={busy && pressed === 'cancel'}
@@ -167,7 +167,8 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: WHITE,
-    padding: DOUBLE,
+    padding: SINGLE,
+    paddingTop: DOUBLE,
     paddingBottom: SINGLE,
   },
   title: {
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: DOUBLE,
+    gap: SINGLE,
     marginTop: DOUBLE + SINGLE,
     paddingBottom: DOUBLE,
   },

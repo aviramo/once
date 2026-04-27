@@ -143,16 +143,10 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
               <Chip
                 renderIcon={color => <ClockIcon color={color} />}
                 text={lastSeen}
-                tone={isTimeRecent(watcher.last_seen) ? 'positive' : 'neutral'}
+                tone="neutral"
               />
             ) : null}
-            {watcher.push_enabled ? (
-              <Chip
-                renderIcon={color => <BellOnIcon color={color} />}
-                text={tg('home.notifOn', watcher.is_male ?? null)}
-                tone="positive"
-              />
-            ) : (
+            {!watcher.push_enabled && (
               <Chip
                 renderIcon={color => <BellOffIcon color={color} />}
                 text={tg('home.notifOff', watcher.is_male ?? null)}

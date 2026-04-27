@@ -1,17 +1,17 @@
 import { StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import Svg, { Path, Circle, Line } from 'react-native-svg'
-import { FONT_SCALE } from '../fonts'
-import { GREEN, GREEN_BG, GRAY, GRAY_BG } from '../colors'
+import { FONT_SCALE, SINGLE } from '../fonts'
+import { GREEN, GREEN_BG, RED } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
 // lightweight fabric swatches instead of bordered stickers.
 
 const TONES = {
-  neutral:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)' },
-  positive: { fg: GREEN, bg: GREEN_BG },
-  negative: { fg: GRAY,  bg: GRAY_BG  },
+  neutral:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(0,0,0,0.45)'        },
+  positive: { fg: GREEN,             bg: GREEN_BG,             photoBg: 'rgba(26,179,61,0.55)'    },
+  negative: { fg: RED,               bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(160,15,35,0.50)'    },
 } as const
 
 export type ChipTone = keyof typeof TONES
@@ -20,16 +20,20 @@ export function Chip({
   renderIcon,
   text,
   tone = 'neutral',
+  onPhoto = false,
 }: {
   renderIcon?: (color: string) => React.ReactNode
   text: string
   tone?: ChipTone
+  onPhoto?: boolean
 }) {
-  const { fg, bg } = TONES[tone]
+  const { fg, bg, photoBg } = TONES[tone]
+  const bgColor = onPhoto ? photoBg : bg
+  const fgColor = onPhoto ? '#ffffff' : fg
   return (
-    <View style={[styles.chip, { backgroundColor: bg }]}>
-      {renderIcon?.(fg)}
-      <Text style={[styles.chipText, { color: fg }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.heading}>{text}</Text>
+    <View style={[styles.chip, { backgroundColor: bgColor }]}>
+      {renderIcon?.(fgColor)}
+      <Text style={[styles.chipText, { color: fgColor }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.heading}>{text}</Text>
     </View>
   )
 }
@@ -76,6 +80,7 @@ export function BellOffIcon({ color }: { color: string }) {
   )
 }
 
+
 const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
@@ -83,7 +88,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: SINGLE,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   chipText: {
     fontSize: 11,

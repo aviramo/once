@@ -1,0 +1,57 @@
+import Log from "../log.ts";
+import Tools from "../tools.ts";
+import User from "../user.ts";
+import { PushToken } from "../global.ts";
+
+async function firePush(log: Log, target_user_id: string, code: string) {
+  const data = await Tools.invoke(
+    log,
+    `push_lookup:${code}`,
+    Tools.supabase.from("users").select("data").eq("user_id", target_user_id),
+  );
+  if (!data || !data[0]) return;
+  const raw = (data[0] as { data?: { push_token?: unknown } }).data?.push_token;
+  if (!raw) return;
+  const token: PushToken | null = typeof raw === "string"
+    ? (() => { try { return JSON.parse(raw) as PushToken; } catch { return null; } })()
+    : (raw as unknown as PushToken);
+  if (!token || token.type !== "expo" || !token.token) return;
+  const payload = { type: code, collapseId: code };
+  const entry = log.log(`push:${code}`, { target: target_user_id, payload });
+  await Tools.notify(entry, token, payload);
+}
+
+async function handleCron(log: Log) {
+  const result = await Tools.rpc(log, "app_expire_sweep", {});
+  const notifyList: Array<{ user_id: string; code: string }> = result?.notify ?? [];
+
+  for (const n of notifyList) {
+    if (!n.user_id) continue;
+    EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code));
+  }
+
+  return log.success({ processed: result?.processed ?? 0 });
+}
+
+Deno.serve(async (req) => {
+  const body = await Tools.getBody(req);
+  const segments = new URL(req.url).pathname.split("/").filter(Boolean);
+  const route = segments[segments.indexOf("ext") + 1] ?? "cron";
+
+  const log = new Log(`ext/${route}`, body, new User({ user_id: null as unknown as string }));
+
+  try {
+    const auth = req.headers.get("Authorization") ?? "";
+    const expected = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    if (!expected || auth !== `Bearer ${expected}`) {
+      return log.error("auth", "unauthorized", 401);
+    }
+
+    if (route === "cron") return await handleCron(log);
+
+    return log.error("route", `unknown route: ${route}`, 404);
+  } catch (err) {
+    const msg = (err as Error)?.message ?? "unknown";
+    return log.error("handler", msg, 500);
+  }
+});

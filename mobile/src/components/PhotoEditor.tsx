@@ -11,12 +11,13 @@ import { encode as encodeBlurhash } from 'blurhash'
 // @ts-expect-error upng-js ships no type definitions
 import UPNG from 'upng-js'
 import { supabase } from '../lib/supabase'
+import { invoke } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SINGLE } from '../fonts'
-import { TEXT, WHITE, GREEN, MUTED } from '../colors'
+import { TEXT, WHITE, GREEN } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -36,6 +37,12 @@ function uuidv4(): string {
 // on the profile tab) read from this map so they can show the image from
 // the device cache while the background upload runs.
 export const localPhotoUriCache = new Map<string, string>()
+
+// Filenames committed to the store but not yet uploaded to storage.
+// useDataSave in settings.tsx filters these out so the DB never receives a
+// filename that has no corresponding file in storage, preventing empty slots
+// if the app is closed before flush() runs.
+export const pendingDeferred = new Set<string>()
 
 async function uploadFileToStorage(uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string, userId: string) {
   const formData = new FormData()
@@ -226,7 +233,9 @@ function PhotoGrid({
       {additionalChildren}
       {(() => {
         const pendingCount = uploads.filter(u => !u.filename).length
-        const addCount = additionalChildren ? 1 : 0
+        const addCount = Array.isArray(additionalChildren)
+          ? additionalChildren.length
+          : additionalChildren ? 1 : 0
         const total = photos.length + pendingCount + addCount
         const fillers = (3 - (total % 3)) % 3
         return Array.from({ length: fillers }).map((_, i) => (
@@ -271,12 +280,12 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   const { user } = useAuthStore()
   const { profile, update } = useUserStore()
   const [uploads, setUploads] = useState<{ id: string; uri: string; filename?: string; sig: string }[]>([])
-  // Deferred uploads: photos already committed to the store but not yet
-  // uploaded to storage.  Keyed by normalFilename so we can clean up on
-  // remove and skip stale entries in flush().
+  // Deferred uploads: photos NOT yet in the store, waiting for flush().
+  // Keyed by normalFilename. flush() uploads and then commits to the store.
   const pendingUploads = useRef<Map<string, {
     normalFilename: string
     normalUri: string
+    hash: string
   }>>(new Map())
 
   useEffect(() => {
@@ -292,38 +301,63 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
 
   useEffect(() => { onTotalCountChange?.(photos.length) }, [photos.length, onTotalCountChange])
 
-  // ── Flush: upload pending deferred photos to storage ─────────────────
-  // Filenames are already in the store and local URIs are already cached,
-  // so callers can navigate away immediately.  flush() only handles the
-  // actual network upload.
-  useImperativeHandle(ref, () => ({
-    flush: async () => {
-      const entries = Array.from(pendingUploads.current.values())
-      if (entries.length === 0) return
+  // ── Flush: upload pending deferred photos and persist to the server ──
+  // Photos in pendingUploads are committed to the local store but excluded
+  // from useDataSave via pendingDeferred until upload succeeds. flush()
+  // uploads each file, patches the hash, then calls invoke('app/images')
+  // directly so the save is not lost if the parent unmounts before the
+  // useDataSave debounce timer can fire.
+  const flushRef = useRef<() => Promise<void>>(async () => {})
+  flushRef.current = async () => {
+    const entries = Array.from(pendingUploads.current.values())
+    if (entries.length === 0) return
 
-      const userId = user?.id
-      if (!userId) return
+    const userId = user?.id
+    if (!userId) return
 
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token ?? ''
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token ?? ''
 
-      for (const lp of entries) {
-        // Photo may have been removed while awaiting — skip stale entries.
-        const currentNormal = useUserStore.getState().profile?.images?.map(e => e.normal ?? '') ?? []
-        if (!currentNormal.includes(lp.normalFilename)) {
-          pendingUploads.current.delete(lp.normalFilename)
-          continue
+    for (const lp of entries) {
+      try {
+        await uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId)
+        pendingDeferred.delete(lp.normalFilename)
+        const imgs = useUserStore.getState().profile?.images
+        if (imgs) {
+          const idx = imgs.findIndex(e => e.normal === lp.normalFilename)
+          if (idx >= 0) {
+            const next = [...imgs]
+            next[idx] = { ...next[idx], hash: lp.hash }
+            useUserStore.getState().update({ images: next })
+          }
         }
-        try {
-          await uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId)
-        } catch (e) {
-          console.error('Deferred upload error:', e)
+      } catch (e) {
+        console.error('Deferred upload error:', e)
+        pendingDeferred.delete(lp.normalFilename)
+        const imgs = useUserStore.getState().profile?.images
+        if (imgs) {
+          useUserStore.getState().update({ images: imgs.filter(img => img.normal !== lp.normalFilename) })
         }
-        pendingUploads.current.delete(lp.normalFilename)
-        localPhotoUriCache.delete(lp.normalFilename)
       }
-    },
-  }), [user?.id])
+      pendingUploads.current.delete(lp.normalFilename)
+      localPhotoUriCache.delete(lp.normalFilename)
+    }
+
+    const finalImgs = useUserStore.getState().profile?.images
+    if (finalImgs) await invoke('app/images', { images: finalImgs }).catch(console.error)
+  }
+
+  useImperativeHandle(ref, () => ({ flush: () => flushRef.current() }), [])
+
+  // Safety net: if PhotoEditor unmounts via a path that bypasses the parent's
+  // explicit flush() call (swipe-back, hardware-back, etc.), still upload and
+  // persist any pending photos. Fire-and-forget — the global store survives
+  // even after the parent component is gone.
+  useEffect(() => {
+    return () => {
+      if (pendingUploads.current.size > 0) flushRef.current().catch(console.error)
+    }
+  }, [])
 
   const compressUnder200K = async (uri: string): Promise<string> => {
     const MAX_BYTES = 200 * 1024
@@ -425,17 +459,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     const assets = filtered.slice(0, maxPick)
 
     if (deferUpload) {
-      // Commit filenames to the store immediately so they participate in
-      // the single photos array (and thus reordering).  The original URI
-      // is cached so the image is visible instantly; compression and
-      // upload happen later.
       const entries = assets.map((a, i) => {
         const normalFilename = `${uuidv4()}.webp`
         sigByFilename.current.set(normalFilename, filteredSigs[i])
         return { normalFilename, originalUri: a.uri }
       })
 
-      // ── synchronous: add to store + cache local URIs ───────────
+      // Commit to the store immediately so the image is visible and reorderable.
+      // Also add to pendingDeferred so useDataSave skips it until flush() succeeds,
+      // preventing a dangling DB reference if the app closes before the upload runs.
       const currentImages = useUserStore.getState().profile?.images ?? []
       useUserStore.getState().update({
         images: [
@@ -445,14 +477,11 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       })
       for (const e of entries) {
         localPhotoUriCache.set(e.normalFilename, e.originalUri)
-        pendingUploads.current.set(e.normalFilename, {
-          normalFilename: e.normalFilename,
-          normalUri: e.originalUri,
-        })
+        pendingUploads.current.set(e.normalFilename, { normalFilename: e.normalFilename, normalUri: e.originalUri, hash: '' })
+        pendingDeferred.add(e.normalFilename)
       }
 
-      // Compress + hash in the background. Hash is patched by filename index
-      // (user may have reordered/removed by the time this resolves).
+      // Compress in the background; results go into pendingUploads for flush().
       for (const e of entries) {
         try {
           const [normalUri, hash] = await Promise.all([
@@ -460,18 +489,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
             computeBlurhash(e.originalUri),
           ])
           const pending = pendingUploads.current.get(e.normalFilename)
-          if (pending) pending.normalUri = normalUri
-          if (hash) {
-            const imgs = useUserStore.getState().profile?.images
-            if (imgs) {
-              const idx = imgs.findIndex(e2 => e2.normal === e.normalFilename)
-              if (idx >= 0) {
-                const next = [...imgs]
-                next[idx] = { ...next[idx], hash }
-                useUserStore.getState().update({ images: next })
-              }
-            }
-          }
+          if (pending) { pending.normalUri = normalUri; if (hash) pending.hash = hash }
         } catch (err) {
           console.error('Photo compress error:', err)
         }
@@ -512,6 +530,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     sigByFilename.current.delete(filename)
     localPhotoUriCache.delete(filename)
     pendingUploads.current.delete(filename)
+    pendingDeferred.delete(filename)
     update({ images: storeImages.filter((_, i) => i !== idx) })
   }
 
@@ -538,16 +557,21 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         uploads={uploads}
         onDragStateChange={onDragStateChange}
         additionalChildren={
-          photos.length + uploads.filter(u => !u.filename).length < 6 ? (
-            <Pressable
-              style={photoStyles.add}
-              onPress={() => { tap(); pickPhoto() }}
-            >
-              <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} strokeLinecap="round">
-                <Path d="M12 5v14M5 12h14" />
-              </Svg>
-            </Pressable>
-          ) : null
+          (() => {
+            const filledCount = photos.length + uploads.filter(u => !u.filename).length
+            const emptySlots = Math.max(0, 6 - filledCount)
+            return Array.from({ length: emptySlots }).map((_, i) => (
+              <Pressable
+                key={`add-${i}`}
+                style={photoStyles.add}
+                onPress={() => { tap(); pickPhoto() }}
+              >
+                <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} strokeLinecap="round">
+                  <Path d="M12 5v14M5 12h14" />
+                </Svg>
+              </Pressable>
+            ))
+          })()
         }
       />
       <ConfirmDialog
@@ -577,7 +601,7 @@ const photoStyles = StyleSheet.create({
   img: { width: '100%', height: '100%' },
   placeholderBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: MUTED,
+    backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
   },

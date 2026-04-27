@@ -70,9 +70,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const segments = useSegments()
 
-  // Derive a stable boolean so the effect doesn't re-fire on every profile
-  // object-reference change (realtime / invoke / fetch all create new objs).
-  const needsOnboarding = !profile || profile.state == null
+  // Onboarding is needed when profile is absent (new user not yet in DB) or
+  // when it exists but bio is empty (partially completed). The !profileLoading
+  // guard in each routing condition prevents redirecting while the fetch is
+  // still in flight.
+  const needsOnboarding = !profile || !profile.bio
 
   // ── Routing guard ─────────────────────────────────────────────────────
   // `segments` is intentionally excluded from the dependency array.

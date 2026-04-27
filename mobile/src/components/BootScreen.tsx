@@ -27,7 +27,7 @@ export function BootScreen() {
 
   return (
     <View style={styles.root}>
-      <LivoLogo size={LOGO_SIZE} />
+      <LivoLogo size={LOGO_SIZE} animate />
       <Animated.View
         style={[
           styles.taglineWrap,

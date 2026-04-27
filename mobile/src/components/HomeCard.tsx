@@ -172,25 +172,27 @@ export function HomeCard({
     },
   }), [extraSimultaneousRefs])
 
+  const inner = (
+    <Animated.View style={[styles.cardWrapper, cardStyle]}>
+      <View style={styles.cardOuter}>
+        <View style={styles.cardInner}>
+          <View style={{ flex: 1 }}>
+            {children}
+          </View>
+          {description}
+        </View>
+      </View>
+      {buttons && (
+        <HomeButtons>
+          {buttons}
+        </HomeButtons>
+      )}
+    </Animated.View>
+  )
+
   return (
     <PullContext.Provider value={ctxValue}>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.cardWrapper, cardStyle]}>
-          <View style={styles.cardOuter}>
-            <View style={styles.cardInner}>
-              <View style={{ flex: 1 }}>
-                {children}
-              </View>
-              {description}
-            </View>
-          </View>
-          {buttons && (
-            <HomeButtons>
-              {buttons}
-            </HomeButtons>
-          )}
-        </Animated.View>
-      </GestureDetector>
+      {hasPull ? <GestureDetector gesture={pan}>{inner}</GestureDetector> : inner}
     </PullContext.Provider>
   )
 }
@@ -205,12 +207,6 @@ const styles = StyleSheet.create({
   cardOuter: {
     flex: 1,
     borderRadius: SINGLE,
-    // Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    elevation: 1,
   },
   cardInner: {
     flex: 1,

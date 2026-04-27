@@ -30,31 +30,41 @@ export async function requestLocPermission(): Promise<LocPermission> {
   return 'denied'
 }
 
+const withTimeout = <T>(p: Promise<T | null>, ms: number): Promise<T | null> =>
+  Promise.race([p, new Promise<null>((res) => setTimeout(() => res(null), ms))])
+
 /** Get the device's current position. Returns null on failure.
- *  Falls back to last known position if a fresh fix isn't available quickly.
  *  Checks services first to avoid the Android system dialog. */
 export async function getLocation(): Promise<{ lat: number; lng: number } | null> {
   try {
     const servicesOn = await Location.hasServicesEnabledAsync()
     if (!servicesOn) return null
-    // Try to get a fresh fix with a generous timeout so the GPS has time to
-    // lock on cold start (avoids the "open Google Maps first" workaround).
-    let pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 15_000,
-      mayShowUserSettingsDialog: false,
-    }).catch(() => null)
 
-    // If Balanced accuracy failed, retry with low accuracy (cell/wifi) which
-    // resolves much faster and doesn't need a full GPS lock.
-    if (!pos) {
-      pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Low,
-      }).catch(() => null)
-    }
+    // Last known is instant — prefer it if it's fresh (within 10 min).
+    // On emulators this is populated once any other app (e.g. Google Maps)
+    // has triggered location, so we don't need to warm up separately.
+    const cached = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 })
+    if (cached) return { lat: cached.coords.latitude, lng: cached.coords.longitude }
 
-    // Last resort: use the OS-cached position from a previous session.
-    if (!pos) pos = await Location.getLastKnownPositionAsync()
+    // No recent cache — try a fresh fix. Wrap in race so we never hang
+    // indefinitely on emulators that lack a GPS lock.
+    const pos =
+      (await withTimeout(
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          mayShowUserSettingsDialog: false,
+        }).catch(() => null),
+        8_000,
+      )) ??
+      (await withTimeout(
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Low,
+          mayShowUserSettingsDialog: false,
+        }).catch(() => null),
+        5_000,
+      )) ??
+      (await Location.getLastKnownPositionAsync())
+
     if (!pos) return null
     return { lat: pos.coords.latitude, lng: pos.coords.longitude }
   } catch {

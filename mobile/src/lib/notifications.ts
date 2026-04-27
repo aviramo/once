@@ -86,3 +86,16 @@ export function unregisterPushNotifications() {
 export function dismissAllNotifications() {
   Notifications.dismissAllNotificationsAsync().catch(() => {})
 }
+
+/**
+ * Register a listener for when the user taps a notification.
+ * The handler receives the notification `type` code (e.g. 'chat', 'invite-in').
+ * Returns a cleanup function — call it on unmount.
+ */
+export function addNotificationTapListener(handler: (type: string) => void): () => void {
+  const sub = Notifications.addNotificationResponseReceivedListener(response => {
+    const type = response.notification.request.content.data?.type as string | undefined
+    if (type) handler(type)
+  })
+  return () => sub.remove()
+}

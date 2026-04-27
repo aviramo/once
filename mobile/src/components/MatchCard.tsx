@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { StyleSheet, View, ActivityIndicator } from 'react-native'
 import { Image } from 'expo-image'
 import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
 import type { Profile } from '../stores/userStore'
-import { Chip, PinIcon, ClockIcon, BellOnIcon, BellOffIcon } from './Chip'
+import { Chip, PinIcon, ClockIcon, BellOffIcon } from './Chip'
 import { SINGLE, DOUBLE } from '../fonts'
 import { TEXT, WHITE, GREEN, RED } from '../colors'
 
@@ -23,13 +23,12 @@ function toStorageUrl(userId: string, filename: string) {
 function resolveImages(m: Profile): string[] {
   return (m.images ?? [])
     .filter(img => img.normal)
-    .map(img => toStorageUrl(m.user_id, img.normal!))
+    .map(img => {
+      const n = img.normal!
+      return n.includes('://') ? n : toStorageUrl(m.user_id, n)
+    })
 }
 
-function hashPlaceholder(m: Profile, i: number): { blurhash: string } | undefined {
-  const hash = m.images?.[i]?.hash
-  return hash ? { blurhash: hash } : undefined
-}
 
 function formatDistance(m: number | null | undefined, units?: string | null): string {
   if (m == null || isNaN(m)) return ''
@@ -59,8 +58,9 @@ function formatLocatedAt(iso: string | null | undefined): string {
 
 const isDistanceNear = (m: number | null | undefined) =>
   m != null && !isNaN(m) && m < 1000
-const isTimeRecent = (iso: string | null | undefined) =>
-  !!iso && (Date.now() - new Date(iso).getTime()) / 1000 < 600
+
+const isOnlineNow = (iso: string | null | undefined) =>
+  !!iso && (Date.now() - new Date(iso).getTime()) / 1000 < 60
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +90,32 @@ function KidsXIcon({ color }: { color: string }) {
   )
 }
 
+// ── LoadingImage ───────────────────────────────────────────────────────────
+
+const spinnerOverlay = [StyleSheet.absoluteFillObject, { justifyContent: 'center' as const, alignItems: 'center' as const }]
+
+function LoadingImage({
+  style,
+  onSettle,
+  ...props
+}: Omit<React.ComponentProps<typeof Image>, 'onLoad' | 'onError' | 'placeholder' | 'placeholderContentFit'> & {
+  style?: any
+  onSettle?: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const settle = useCallback(() => { setLoading(false); onSettle?.() }, [onSettle])
+  return (
+    <View style={style}>
+      <Image {...props} style={StyleSheet.absoluteFill} onLoad={settle} onError={settle} />
+      {loading && (
+        <View style={spinnerOverlay}>
+          <ActivityIndicator size="large" color={WHITE} />
+        </View>
+      )}
+    </View>
+  )
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function MatchCard({
@@ -111,32 +137,19 @@ export function MatchCard({
   const loadedCount = useRef(0)
   useEffect(() => { loadedCount.current = 0 }, [match.user_id])
   useEffect(() => { if (imageUrls.length === 0) onReady?.() }, [imageUrls.length])
-  const onImageLoad = useCallback(() => {
+  const onImageSettle = useCallback(() => {
     loadedCount.current += 1
     if (loadedCount.current >= imageUrls.length) onReady?.()
   }, [imageUrls.length, onReady])
-  // Measure both the card's full interior and the name+chips block. Sizing
-  // the photo from the real card height (not windowHeight − estimates) makes
-  // the layout robust to safe-area insets, header height, and Android nav
-  // bars. bottomInset is subtracted because the floating action bar covers
-  // that slice of the card visually.
   const [cardH, setCardH] = useState(0)
-  const [headerBlockH, setHeaderBlockH] = useState(0)
-  const photoHeight = Math.max(280, cardH - headerBlockH - bottomInset)
-  // Both measurements feed photoHeight, so we have to wait for both — if only
-  // cardH is known and headerBlockH is still 0, the photo paints at almost
-  // the full card height and then visibly shrinks once the header block
-  // measures. Render the content normally so onLayout fires for both nodes,
-  // but keep the wrap invisible until measurements settle.
-  const ready = cardH > 0 && headerBlockH > 0
+  const photoHeight = Math.max(280, cardH - bottomInset)
+  const ready = cardH > 0
   const timeIso = match.last_seen
   const timeStr = hideTime ? '' : formatLocatedAt(timeIso)
   const distStr = formatDistance(match.distance, units)
   const displayTitle = match.title
 
   const distGreen = isDistanceNear(match.distance)
-  const timeGreen = isTimeRecent(timeIso)
-  const hasChips = !!distStr || !!timeStr || match.push_enabled != null
   const endsWithPhoto = imageUrls.length > 1 && match.is_for_kids == null
 
   return (
@@ -149,46 +162,52 @@ export function MatchCard({
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
       >
-        {imageUrls.length > 0 && (
-          <Image
-            source={imageUrls[0]}
-            placeholder={hashPlaceholder(match, 0)}
-            placeholderContentFit="cover"
-            style={[styles.photo, { height: photoHeight }]}
-            contentFit="cover"
-            cachePolicy="disk"
-            onLoad={onImageLoad}
-          />
-        )}
-
-        <View onLayout={e => setHeaderBlockH(e.nativeEvent.layout.height)}>
-          <Text style={[styles.name, !hasChips && styles.nameNoChips]}>{displayTitle}</Text>
-
-          {hasChips && (
-            <View style={styles.chips}>
-              {distStr ? (
-                <Chip
-                  renderIcon={c => <PinIcon color={c} />}
-                  text={distStr}
-                  tone={distGreen ? 'positive' : 'neutral'}
-                />
-              ) : null}
-              {timeStr ? (
-                <Chip
-                  renderIcon={c => <ClockIcon color={c} />}
-                  text={timeStr}
-                  tone={timeGreen ? 'positive' : 'neutral'}
-                />
-              ) : null}
-              {match.push_enabled != null ? (
-                <Chip
-                  renderIcon={c => match.push_enabled ? <BellOnIcon color={c} /> : <BellOffIcon color={c} />}
-                  text={match.push_enabled ? tg('home.notifOn', match.is_male) : tg('home.notifOff', match.is_male)}
-                  tone={match.push_enabled ? 'positive' : 'negative'}
-                />
-              ) : null}
-            </View>
+        <View style={{ height: photoHeight }}>
+          {imageUrls.length > 0 && (
+            <LoadingImage
+              source={imageUrls[0]}
+              style={[styles.photo, StyleSheet.absoluteFill]}
+              contentFit="cover"
+              cachePolicy="disk"
+              onSettle={onImageSettle}
+            />
           )}
+
+          <View style={styles.infoOverlay}>
+            <Text style={styles.name}>{displayTitle}</Text>
+
+            <View style={styles.chipsRow}>
+              <View style={styles.chipsLeft}>
+                {distStr ? (
+                  <Chip
+                    renderIcon={c => <PinIcon color={c} />}
+                    text={distStr}
+                    tone="neutral"
+                    onPhoto
+                  />
+                ) : null}
+                {timeStr ? (
+                  <Chip
+                    renderIcon={c => <ClockIcon color={c} />}
+                    text={timeStr}
+                    tone="neutral"
+                    onPhoto
+                  />
+                ) : null}
+              </View>
+
+              <View style={styles.chipsRight}>
+                {match.push_enabled === false && (
+                  <Chip
+                    renderIcon={c => <BellOffIcon color={c} />}
+                    text={tg('home.notifOff', match.is_male)}
+                    tone="neutral"
+                    onPhoto
+                  />
+                )}
+              </View>
+            </View>
+          </View>
         </View>
 
         {match.bio ? (
@@ -197,16 +216,14 @@ export function MatchCard({
 
         {imageUrls.length > 1 && (
           <View style={styles.extraPhotos}>
-            {imageUrls.slice(1).map((url, i) => (
-              <Image
+            {imageUrls.slice(1).map((url) => (
+              <LoadingImage
                 key={url}
                 source={url}
-                placeholder={hashPlaceholder(match, i + 1)}
-                placeholderContentFit="cover"
-                style={styles.extraPhoto}
+                style={[styles.extraPhoto, { height: photoHeight }]}
                 contentFit="cover"
                 cachePolicy="disk"
-                onLoad={onImageLoad}
+                onSettle={onImageSettle}
               />
             ))}
           </View>
@@ -229,14 +246,9 @@ export function MatchCard({
 }
 
 const styles = StyleSheet.create({
-  // Card chrome (rounding + clipping) lives on the outer matchCard wrapper
-  // in home.tsx now — this inner wrap only needs to stretch.
   wrap: {
     flex: 1,
   },
-  // Applied during the brief window between mount and the first onLayout pass
-  // that resolves both cardH and headerBlockH. Layout still flows so onLayout
-  // fires; only the visual is suppressed to hide the size correction.
   hidden: {
     opacity: 0,
   },
@@ -244,57 +256,76 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 0,
   },
-  // Height is set inline so the photo fills the viewport above the name/chips
-  // — chips become the last row visible before the user scrolls.
   photo: {
-    width: '100%',
     backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: SINGLE,
+    overflow: 'hidden',
+  },
+  infoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'column',
+    padding: SINGLE,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: SINGLE,
+  },
+  chipsLeft: {
+    width: '50%',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  chipsRight: {
+    width: '50%',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    gap: 4,
   },
   name: {
     fontSize: 26,
     fontWeight: '800',
-    color: TEXT,
-    marginTop: DOUBLE,
-    marginHorizontal: SINGLE,
-    textAlign: 'center',
+    color: WHITE,
+    textAlign: 'left',
     letterSpacing: -0.4,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   nameNoChips: {
-    marginBottom: 28,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: SINGLE,
-    marginTop: SINGLE,
-    marginBottom: DOUBLE,
-    marginHorizontal: SINGLE,
+    marginBottom: SINGLE,
   },
   message: {
     fontSize: 15,
     lineHeight: 22,
     color: 'rgba(0,0,0,0.6)',
     marginTop: DOUBLE,
+    marginBottom: SINGLE,
     marginHorizontal: SINGLE,
     textAlign: 'center',
   },
   extraPhotos: {
     marginTop: 20,
     backgroundColor: WHITE,
-    gap: 2,
+    gap: SINGLE,
   },
   extraPhoto: {
     width: '100%',
-    aspectRatio: 3 / 4,
     backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: SINGLE,
+    overflow: 'hidden',
   },
   kidsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: DOUBLE,
-    marginHorizontal: DOUBLE,
+    marginHorizontal: 0,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: SINGLE,

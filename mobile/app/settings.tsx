@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react'
 import {
-  View, Pressable, StyleSheet, ScrollView, Image,
-  PanResponder, I18nManager,
-  Keyboard, Platform, Animated, Dimensions,
+  View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator,
+  PanResponder, I18nManager, Easing,
+  Keyboard, Platform, Animated as RNAnimated, Dimensions,
 } from 'react-native'
+import Animated, { SharedValue, useSharedValue, useAnimatedStyle, withTiming, runOnJS, Easing as REasing } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
-import { Gesture, GestureDetector, TextInput as GHTextInput, ScrollView as GHScrollView } from 'react-native-gesture-handler'
+import { TextInput as GHTextInput } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
@@ -19,7 +20,9 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
-import { PhotoEditor, PhotoEditorRef, localPhotoUriCache } from '../src/components/PhotoEditor'
+import { LivoLogo } from '../src/components/LivoLogo'
+import { WhatsSpecialPage } from './login'
+import { PhotoEditor, PhotoEditorRef, localPhotoUriCache, pendingDeferred } from '../src/components/PhotoEditor'
 import type { Profile } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
@@ -29,6 +32,20 @@ const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 const THUMB = 22
 const TAP_SLOP = 10
+
+// Provided by the shell (home.tsx) so section pages can share their inner
+// sub-page slide animation with the shell. The shell hosts the SharedValue
+// (so its swipe-back gesture worklet can drive it) and offers callbacks
+// for the section page to register open/close state and a finalize hook
+// that runs after a shell-driven swipe finishes the close animation.
+export type ShellInnerNav = {
+  // 0 = closed (no inner sub-page), 1 = inner sub-page fully covering section.
+  slideProgress: SharedValue<number>
+  // Section calls this on open/close so the shell knows whether to route
+  // hardware-back and swipe-back to the inner level.
+  setHandlers: (h: { isOpen: boolean; close: () => void; finalizeClose: () => void } | null) => void
+}
+export const ShellInnerNavContext = createContext<ShellInnerNav | null>(null)
 
 // Returns responder props that fire `onPress` only on clean taps (movement < TAP_SLOP).
 function useTapResponder(onPress: () => void) {
@@ -48,8 +65,8 @@ function useTapResponder(onPress: () => void) {
 
 function BackIcon() {
   return (
-    <Svg width={DOUBLE} height={DOUBLE} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
     </Svg>
   )
 }
@@ -61,7 +78,79 @@ function BackIcon() {
 function ForwardChevronIcon() {
   return (
     <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-      <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
+      <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
+    </Svg>
+  )
+}
+
+// ── Field Icons ────────────────────────────────────────────────────────────
+
+const FIELD_ICON_STROKE = 'rgba(0,0,0,0.5)'
+
+function SlidersIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="4" y1="21" x2="4" y2="14" />
+      <Line x1="4" y1="10" x2="4" y2="3" />
+      <Line x1="12" y1="21" x2="12" y2="12" />
+      <Line x1="12" y1="8" x2="12" y2="3" />
+      <Line x1="20" y1="21" x2="20" y2="16" />
+      <Line x1="20" y1="12" x2="20" y2="3" />
+      <Line x1="1" y1="14" x2="7" y2="14" />
+      <Line x1="9" y1="8" x2="15" y2="8" />
+      <Line x1="17" y1="16" x2="23" y2="16" />
+    </Svg>
+  )
+}
+
+function MapPinIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <Circle cx="12" cy="10" r="3" />
+    </Svg>
+  )
+}
+
+function GenderIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="10" r="5" />
+      <Line x1="16" y1="6" x2="20" y2="2" />
+      <Polyline points="16 2 20 2 20 6" />
+      <Line x1="12" y1="15" x2="12" y2="22" />
+      <Line x1="9" y1="19" x2="15" y2="19" />
+    </Svg>
+  )
+}
+
+function BabyCarIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 6h3l3 9h8l2-6H8" />
+      <Circle cx={9} cy={19} r={1.5} />
+      <Circle cx={17} cy={19} r={1.5} />
+    </Svg>
+  )
+}
+
+function RulerIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z" />
+      <Path d="m14.5 12.5 2-2" />
+      <Path d="m11.5 9.5 2-2" />
+      <Path d="m8.5 6.5 2-2" />
+      <Path d="m17.5 15.5 2-2" />
+    </Svg>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 20h9" />
+      <Path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </Svg>
   )
 }
@@ -121,24 +210,54 @@ export type PreviewFieldConfig = {
   title: string
 }
 
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig | AccountFieldConfig | PreviewFieldConfig
+export type AboutFieldConfig = {
+  kind: 'about'
+  title: string
+}
+
+export type ProfileSectionFieldConfig = {
+  kind: 'profileSection'
+  title: string
+}
+
+export type AppSectionFieldConfig = {
+  kind: 'appSection'
+  title: string
+}
+
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig | AccountFieldConfig | PreviewFieldConfig | AboutFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Tappable settings row: label on the start side, current value + forward
 // chevron on the end side. Tapping opens the sub-page via onPress.
 
 function SelectFieldRow({
+  label,
   displayValue,
   onPress,
+  icon,
+  grouped,
 }: {
+  label?: string
   displayValue: string
   onPress: () => void
+  icon?: React.ReactNode
+  grouped?: boolean
 }) {
   const tapProps = useTapResponder(onPress)
   return (
-    <View style={styles.selectRow} {...tapProps}>
-      <Text style={styles.selectRowValue}>{displayValue}</Text>
+    <View style={grouped ? styles.selectRowInner : styles.selectRow} {...tapProps}>
       <ForwardChevronIcon />
+      {label != null ? (
+        <>
+          <Text style={styles.selectRowLabel} numberOfLines={1}>{label}</Text>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.selectRowValue} numberOfLines={1}>{displayValue}</Text>
+        </>
+      ) : (
+        <Text style={[styles.selectRowValue, { flex: 1 }]} numberOfLines={1}>{displayValue}</Text>
+      )}
+      {icon}
     </View>
   )
 }
@@ -573,7 +692,7 @@ function calcAge(birthDate: string): number {
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
 export type Tab = 'preferences' | 'profile' | 'app'
-const TABS: Tab[] = ['preferences', 'profile', 'app']
+const TABS: Tab[] = ['app', 'profile', 'preferences']
 
 // Per-tab glyph. Drawn twice by TabIconStack (gray + white) so the active
 // state can cross-fade over the pill indicator on the native driver.
@@ -610,23 +729,8 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   )
 }
 
-// Stacks an active (white) icon over the inactive (gray) icon. The white
-// opacity is driven by the pill indicator's position (passed in by the parent)
-// so the cross-fade stays in lockstep with the pill — otherwise the pill can
-// sit over a still-gray icon (gray on black = invisible) or leave a tab whose
-// icon is still white (white on light bg = invisible).
-function TabIconStack({ opacity, tab }: { opacity: Animated.AnimatedInterpolation<number> | number; tab: Tab }) {
-  return (
-    <View style={{ width: TAB_ICON_SIZE, height: TAB_ICON_SIZE }}>
-      <TabIcon tab={tab} color="rgba(0,0,0,0.5)" />
-      <Animated.View
-        pointerEvents="none"
-        style={{ position: 'absolute', top: 0, start: 0, opacity }}
-      >
-        <TabIcon tab={tab} color="#fff" />
-      </Animated.View>
-    </View>
-  )
+function TabIconStack({ active, tab }: { active: boolean; tab: Tab }) {
+  return <TabIcon tab={tab} color={active ? '#fff' : 'rgba(0,0,0,0.5)'} />
 }
 
 // ── Animated Toggle Button ─────────────────────────────────────────────────
@@ -638,23 +742,23 @@ function AnimatedToggleButton({
 }: { active: boolean; onPress: () => void; label: string }) {
   // Stacked layers cross-faded with opacity — lets us run on the native driver
   // (backgroundColor interpolation can't). Active layer sits on top.
-  const activeOpacity = useRef(new Animated.Value(active ? 1 : 0)).current
-  const scale = useRef(new Animated.Value(1)).current
+  const activeOpacity = useRef(new RNAnimated.Value(active ? 1 : 0)).current
+  const scale = useRef(new RNAnimated.Value(1)).current
   const startRef = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
-    Animated.timing(activeOpacity, {
+    RNAnimated.timing(activeOpacity, {
       toValue: active ? 1 : 0,
       duration: 220,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start()
   }, [active])
 
   const handlePress = () => {
     tap()
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }),
+    RNAnimated.sequence([
+      RNAnimated.timing(scale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
+      RNAnimated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start()
     onPress()
   }
@@ -662,7 +766,7 @@ function AnimatedToggleButton({
   // Raw responder callbacks (not Pressable) for the same reason as Button /
   // IconPressable: RN 0.81 Pressability cancels single taps inside ScrollView.
   return (
-    <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
+    <RNAnimated.View style={{ flex: 1, transform: [{ scale }] }}>
       <View
         onStartShouldSetResponder={() => true}
         onResponderGrant={e => { startRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY } }}
@@ -678,7 +782,7 @@ function AnimatedToggleButton({
             <Text style={{ fontSize: 14, fontWeight: '600', color: 'rgba(0,0,0,0.5)' }}>{label}</Text>
           </View>
           {/* Active layer — fades over the top */}
-          <Animated.View
+          <RNAnimated.View
             pointerEvents="none"
             style={{
               position: 'absolute', top: 0, start: 0, end: 0, bottom: 0,
@@ -687,10 +791,92 @@ function AnimatedToggleButton({
             }}
           >
             <Text style={{ fontSize: 14, fontWeight: '600', color: WHITE }}>{label}</Text>
-          </Animated.View>
+          </RNAnimated.View>
         </View>
       </View>
-    </Animated.View>
+    </RNAnimated.View>
+  )
+}
+
+// ── Preferences Content ────────────────────────────────────────────────────
+// Renders the search-preferences sections without an outer ScrollView so they
+// can be embedded inside a parent ScrollView on the main settings screen.
+
+function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => void }) {
+  const { profile, update } = useUserStore()
+
+  const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
+  const ageSliderMin = Math.max(18, age - 20)
+  const ageSliderMax = Math.min(80, age + 20)
+
+  if (!profile) return null
+
+  const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax))
+  const ageMax = Math.max(ageMin, Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin)))
+  const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
+  const forMale = profile.is_for_male
+  const forFemale = profile.is_for_female
+  const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
+  const genderOptions: SelectOption[] = [
+    { value: 'M', label: t('settings.genderM') },
+    { value: 'F', label: t('settings.genderF') },
+    { value: 'B', label: t('settings.genderB') },
+  ]
+  const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
+
+  return (
+    <View style={styles.section}>
+      <SectionLabel>{t('settings.searchPreferences').toUpperCase()}</SectionLabel>
+      <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        <SelectFieldRow
+          grouped
+          label={t('settings.range')}
+          displayValue={formatRadius(radius)}
+          onPress={() => onOpenSubPage?.({
+            kind: 'radius',
+            title: t('settings.range'),
+            stepCount: RADIUS_STEPS.length,
+            value: Math.max(0, RADIUS_STEPS.indexOf(radius)),
+            onChangeLocal: i => { update({ range: radiusToServer(RADIUS_STEPS[i]) }) },
+            onClose: i => { invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) }).catch(console.error) },
+            formatStep: i => formatRadius(RADIUS_STEPS[i]),
+          })}
+          icon={<MapPinIcon />}
+        />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={t('settings.ageRange')}
+          displayValue={`⁦${ageMin} – ${ageMax}⁩`}
+          onPress={() => onOpenSubPage?.({
+            kind: 'ageRange',
+            title: t('settings.ageRange'),
+            ageMin, ageMax,
+            sliderMin: ageSliderMin, sliderMax: ageSliderMax,
+            onChangeLocal: (min, max) => { update({ age_from: min, age_to: max }) },
+            onClose: (min, max) => { invoke('app/age', { age_from: min, age_to: max }).catch(console.error) },
+          })}
+          icon={<SlidersIcon />}
+        />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={t('settings.preferredGender')}
+          displayValue={genderDisplayValue}
+          onPress={() => onOpenSubPage?.({
+            kind: 'select',
+            title: t('settings.preferredGender'),
+            options: genderOptions,
+            value: genderPref,
+            onSelect: async (v) => {
+              update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+              await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+            },
+          })}
+          icon={<GenderIcon />}
+        />
+      </View>
+    </View>
   )
 }
 
@@ -719,23 +905,7 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
   const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
 
   return (
-    <GHScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
-
-      {/* Age Range */}
-      <View style={styles.section}>
-        <SectionLabel>{t('settings.ageRange').toUpperCase()}</SectionLabel>
-        <SelectFieldRow
-          displayValue={`\u2066${ageMin} – ${ageMax}\u2069`}
-          onPress={() => onOpenSubPage?.({
-            kind: 'ageRange',
-            title: t('settings.ageRange'),
-            ageMin, ageMax,
-            sliderMin: ageSliderMin, sliderMax: ageSliderMax,
-            onChangeLocal: (min, max) => { update({ age_from: min, age_to: max }) },
-            onClose: (min, max) => { invoke('app/age', { age_from: min, age_to: max }).catch(console.error) },
-          })}
-        />
-      </View>
+    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
 
       {/* Search Radius */}
       <View style={styles.section}>
@@ -751,6 +921,24 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
             onClose: i => { invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) }).catch(console.error) },
             formatStep: i => formatRadius(RADIUS_STEPS[i]),
           })}
+          icon={<MapPinIcon />}
+        />
+      </View>
+
+      {/* Age Range */}
+      <View style={styles.section}>
+        <SectionLabel>{t('settings.ageRange').toUpperCase()}</SectionLabel>
+        <SelectFieldRow
+          displayValue={`\u2066${ageMin} – ${ageMax}\u2069`}
+          onPress={() => onOpenSubPage?.({
+            kind: 'ageRange',
+            title: t('settings.ageRange'),
+            ageMin, ageMax,
+            sliderMin: ageSliderMin, sliderMax: ageSliderMax,
+            onChangeLocal: (min, max) => { update({ age_from: min, age_to: max }) },
+            onClose: (min, max) => { invoke('app/age', { age_from: min, age_to: max }).catch(console.error) },
+          })}
+          icon={<SlidersIcon />}
         />
       </View>
 
@@ -769,10 +957,11 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
               await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
             },
           })}
+          icon={<GenderIcon />}
         />
       </View>
 
-    </GHScrollView>
+    </ScrollView>
   )
 }
 
@@ -780,23 +969,29 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
 // Thumbnail strip inside a tappable field row — same height as SelectFieldRow.
 // Shows up to 6 small round thumbnails + a forward chevron.
 
-function PhotoFieldRow({ photos, userId, onPress }: { photos: string[]; userId: string; onPress: () => void }) {
+function PhotoFieldRow({ photos, userId, onPress, label, grouped }: { photos: string[]; userId: string; onPress: () => void; label?: string; grouped?: boolean }) {
   const tapProps = useTapResponder(onPress)
-  const slots = Array.from({ length: 6 }, (_, i) => photos[i] ?? null)
+  const visible = photos.slice(0, 6)
   return (
-    <View style={styles.selectRow} {...tapProps}>
-      <View style={styles.photoThumbStrip}>
-        {slots.map((f, i) => f ? (
-          <Image
-            key={`${i}-${f}`}
-            source={{ uri: localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}` }}
-            style={styles.photoThumb}
-          />
-        ) : (
-          <View key={`empty-${i}`} style={styles.photoThumb} />
-        ))}
-      </View>
+    <View style={[grouped ? styles.selectRowInner : styles.selectRow, { alignItems: 'flex-start' }]} {...tapProps}>
       <ForwardChevronIcon />
+      {label != null && (
+        <>
+          <Text style={styles.selectRowLabel} numberOfLines={1}>{label}</Text>
+          <View style={{ flex: 1 }} />
+        </>
+      )}
+      {visible.length > 0 && (
+        <View style={styles.photoThumbStrip}>
+          {visible.map((f, i) => (
+            <Image
+              key={`${i}-${f}`}
+              source={{ uri: localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}` }}
+              style={styles.photoThumb}
+            />
+          ))}
+        </View>
+      )}
     </View>
   )
 }
@@ -815,6 +1010,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   const [bioFocused, setBioFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const messageSectionYRef = useRef(0)
+  const profileCardYRef = useRef(0)
 
   // Keep localBio in sync when profile loads or changes from elsewhere
   useEffect(() => {
@@ -824,6 +1020,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   }, [profile?.bio])
 
   useEffect(() => { localBioRef.current = localBio }, [localBio])
+
 
   const flushBio = () => {
     const next = localBioRef.current.replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
@@ -850,16 +1047,15 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
   }, [])
 
   useAutoSave({ is_for_kids: profile?.is_for_kids ?? null }, !!profile)
-  useDataSave({ images: profile?.images }, !!profile)
+  useDataSave({ images: profile?.images?.filter(img => !pendingDeferred.has(img.normal ?? '')) }, !!profile)
 
   // Hook calls must be above the early return to keep count stable.
-  const accountTap = useTapResponder(() => onOpenSubPage?.({ kind: 'account', title: t('settings.account') }))
   const previewTap = useTapResponder(() => onOpenSubPage?.({ kind: 'preview', title: t('settings.myProfile') }))
-  const bioTapGesture = useMemo(() =>
-    Gesture.Tap()
-      .onEnd(() => { tap(); bioInputRef.current?.focus() })
-      .runOnJS(true)
-  , [])
+  const bioTapProps = useTapResponder(() => {
+    tap()
+    setBioFocused(true)
+    setTimeout(() => bioInputRef.current?.focus(), 100)
+  })
 
   if (!profile) return <View style={styles.tabContent} />
 
@@ -871,10 +1067,10 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
     { value: 'na',  label: t('settings.kidsNa')  },
   ]
   const kidsValue = isForKids === true ? 'yes' : isForKids === false ? 'no' : 'na'
-  const kidsDisplayValue = kidsOptions.find(o => o.value === kidsValue)?.label ?? t('settings.kidsNa')
+  const kidsDisplayValue = kidsValue === 'na' ? '' : (kidsOptions.find(o => o.value === kidsValue)?.label ?? '')
 
   return (
-    <GHScrollView
+    <ScrollView
       ref={scrollRef}
       style={styles.tabScroll}
       contentContainerStyle={[styles.tabContent, { paddingBottom: 40 + keyboardHeight }]}
@@ -884,84 +1080,77 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
     >
 
       <View style={styles.accountLinksCard}>
-        <View
-          style={styles.accountLinkRowInner}
-          {...previewTap}
-        >
+        <View style={styles.accountLinkRowInner} {...previewTap}>
+          <ForwardChevronIcon />
+          <Text style={styles.accountActionText}>{t('settings.preview')}</Text>
+          <View style={{ flex: 1 }} />
           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
             <Circle cx={12} cy={12} r={3} />
           </Svg>
-          <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.preview')}</Text>
-          <ForwardChevronIcon />
-        </View>
-        <View style={styles.accountActionDivider} />
-        <View
-          style={styles.accountLinkRowInner}
-          {...accountTap}
-        >
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
-            <Polyline points="9 12 11.5 14.5 15.5 10.5" />
-          </Svg>
-          <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.account')}</Text>
-          <ForwardChevronIcon />
         </View>
       </View>
 
-      <View style={[styles.section, { marginTop: 0 }]}>
-        <SectionLabel>{t('settings.photo').toUpperCase()}</SectionLabel>
-        <PhotoFieldRow
-          photos={photos}
+      <View style={styles.section}>
+        <SectionLabel>{t('settings.myInfo').toUpperCase()}</SectionLabel>
+        <View
+          style={[styles.accountLinksCard, { marginBottom: 0 }]}
+          onLayout={(e) => { profileCardYRef.current = e.nativeEvent.layout.y }}
+        >
+          <PhotoFieldRow
+            grouped
+            photos={photos}
           userId={user!.id}
+          label={t('settings.photo')}
           onPress={() => onOpenSubPage?.({ kind: 'photos', title: t('settings.photo') })}
         />
-      </View>
-
-      <View
-        style={styles.section}
-        onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
-      >
-        <SectionLabel>{t('settings.aboutMe').toUpperCase()}</SectionLabel>
-        <View style={styles.textInputWrap}>
-          <GHTextInput
-            ref={bioInputRef}
-            style={[styles.textInput, { fontFamily: DEFAULT_FAMILY }]}
-            value={localBio}
-            onChangeText={(text) => {
-              if (text.length > 150) text = text.slice(0, 150)
-              setLocalBio(text)
-            }}
-            onFocus={() => {
-              setBioFocused(true)
-              setTimeout(() => {
-                scrollRef.current?.scrollTo({
-                  y: Math.max(0, messageSectionYRef.current - 12),
-                  animated: true,
-                })
-              }, 300)
-            }}
-            onBlur={() => { setBioFocused(false); flushBio() }}
-            multiline
-            scrollEnabled={false}
-            maxLength={150}
-            textAlign="center"
-            textAlignVertical="top"
-          />
+        <View style={styles.accountActionDivider} />
+        <View
+          style={styles.textInputWrapInner}
+          onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
+        >
+          <View style={styles.textInputHeader}>
+            <View style={styles.textInputHeaderSpacer} />
+            <Text style={styles.selectRowLabel} numberOfLines={1}>{t('settings.aboutMe')}</Text>
+            <View style={{ flex: 1 }} />
+            <PencilIcon />
+          </View>
+          <View pointerEvents={bioFocused ? 'auto' : 'none'}>
+            <GHTextInput
+              ref={bioInputRef}
+              style={[styles.textInput, { fontFamily: DEFAULT_FAMILY }]}
+              value={localBio}
+              onChangeText={(text) => {
+                if (text.length > 150) text = text.slice(0, 150)
+                setLocalBio(text)
+              }}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollRef.current?.scrollTo({
+                    y: Math.max(0, profileCardYRef.current + messageSectionYRef.current - 12),
+                    animated: true,
+                  })
+                }, 300)
+              }}
+              onBlur={() => { setBioFocused(false); flushBio() }}
+              multiline
+              scrollEnabled={false}
+              maxLength={150}
+              textAlign="center"
+              textAlignVertical="top"
+            />
+          </View>
           {!bioFocused && (
-            <GestureDetector gesture={bioTapGesture}>
-              <View style={StyleSheet.absoluteFill} />
-            </GestureDetector>
+            <View style={StyleSheet.absoluteFill} {...bioTapProps} />
           )}
           {localBio.length >= 20 && (
             <Text style={styles.charCount}>{150 - localBio.length}</Text>
           )}
         </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionLabel>{tg('settings.kidsLabel', profile.is_male).toUpperCase()}</SectionLabel>
+        <View style={styles.accountActionDivider} />
         <SelectFieldRow
+          grouped
+          label={tg('settings.kidsLabel', profile.is_male)}
           displayValue={kidsDisplayValue}
           onPress={() => onOpenSubPage?.({
             kind: 'select',
@@ -974,10 +1163,12 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
               await invoke('app/is_for_kids', { is_for_kids: val })
             },
           })}
+          icon={<BabyCarIcon />}
         />
+        </View>
       </View>
 
-    </GHScrollView>
+    </ScrollView>
   )
 }
 
@@ -1021,7 +1212,20 @@ function formatBirthDate(iso: string): string {
 function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => void }) {
   const router = useRouter()
   const { profile, update } = useUserStore()
-  const [resetting, setResetting] = useState<null | 'VISIBLE' | 'HIDDEN'>(null)
+  const [resetting, setResetting] = useState(false)
+
+  const onReset = useCallback(async () => {
+    if (resetting) return
+    setResetting(true)
+    try {
+      await invoke('app/reset', {})
+      if (onBack) onBack()
+      else router.back()
+    } catch (e) { console.error(e) }
+    finally { setResetting(false) }
+  }, [resetting, onBack, router])
+
+  const resetTap = useTapResponder(onReset)
 
   useDataSave({ units: profile?.units }, !!profile)
 
@@ -1034,61 +1238,51 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
   ]
   const unitsDisplayValue = unitsOptions.find(o => o.value === units)?.label ?? t('settings.unitsMetricDesc')
 
-  const onReset = async (state: 'VISIBLE' | 'HIDDEN') => {
-    if (resetting) return
-    setResetting(state)
-    try {
-      await invoke('app/reset', { state })
-      // The reset edge function runs bulk UPDATEs on the DB but doesn't
-      // refresh the request's in-memory user, so the response body carries
-      // the PRE-reset snapshot. Realtime delivers the real post-reset state
-      // ~1s later, which left the home screen showing stale data in the
-      // gap. Apply the known post-reset shape locally so the store reflects
-      // the new truth before we navigate home.
-      update({ state, relations: { match: null, watchers: [] } })
-      // Navigate back to home once the store matches the post-reset state.
-      // When embedded in the shell pager the parent slides back to home;
-      // standalone falls back to router.back().
-      if (onBack) onBack()
-      else router.back()
-    } catch (e) { console.error(e) }
-    finally { setResetting(null) }
-  }
-
   return (
-    <GHScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
-        <SectionLabel>{t('settings.unitsLabel').toUpperCase()}</SectionLabel>
-        <SelectFieldRow
-          displayValue={unitsDisplayValue}
-          onPress={() => onOpenSubPage?.({
-            kind: 'select',
-            title: t('settings.unitsLabel'),
-            options: unitsOptions,
-            value: units,
-            onSelect: async (v) => {
-              update({ units: v })
-              const p = useUserStore.getState().profile
-              if (p) await invoke('app/units', { units: v })
-            },
-          })}
-        />
+        <View style={styles.accountLinksCard}>
+          <SelectFieldRow
+            grouped
+            label={t('settings.unitsLabel')}
+            displayValue={unitsDisplayValue}
+            onPress={() => onOpenSubPage?.({
+              kind: 'select',
+              title: t('settings.unitsLabel'),
+              options: unitsOptions,
+              value: units,
+              onSelect: async (v) => {
+                update({ units: v })
+                const p = useUserStore.getState().profile
+                if (p) await invoke('app/units', { units: v })
+              },
+            })}
+            icon={<RulerIcon />}
+          />
+        </View>
       </View>
 
       {profile.data?.role === 'ADMIN' && (
         <View style={styles.section}>
           <SectionLabel>{t('settings.adminTitle').toUpperCase()}</SectionLabel>
-          <SelectFieldRow
-            displayValue={t('settings.adminEntry')}
-            onPress={() => onOpenSubPage?.({
-              kind: 'admin',
-              title: t('settings.adminTitle'),
-              onReset: async (state) => { await onReset(state) },
-            })}
-          />
+          <View style={styles.accountActionsCard}>
+            <View
+              style={[styles.accountActionRow, resetting && { opacity: 0.5 }]}
+              {...(resetting ? {} : resetTap)}
+            >
+              {resetting
+                ? <ActivityIndicator size={18} color="rgba(0,0,0,0.5)" />
+                : <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <Path d="M3 3v5h5" />
+                  </Svg>
+              }
+              <Text style={styles.accountActionText}>{t('settings.adminEntry')}</Text>
+            </View>
+          </View>
         </View>
       )}
-    </GHScrollView>
+    </ScrollView>
   )
 }
 
@@ -1133,10 +1327,11 @@ export function SelectFieldPage({
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -1185,10 +1380,11 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       <View style={spStyles.content}>
         <Text style={spStyles.displayValue}>{`\u2066${ageMin} – ${ageMax}\u2069`}</Text>
@@ -1224,10 +1420,11 @@ export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig;
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       <View style={spStyles.content}>
         <Text style={spStyles.displayValue}>{config.formatStep(value)}</Text>
@@ -1266,10 +1463,11 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
@@ -1282,7 +1480,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
                 disabled={!!resetting}
                 loading={resetting === 'VISIBLE'}
                 silentDisabled={resetting !== 'VISIBLE'}
-                variant="secondary"
+                variant="soft"
                 size="md"
               />
             </View>
@@ -1293,7 +1491,7 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
                 disabled={!!resetting}
                 loading={resetting === 'HIDDEN'}
                 silentDisabled={resetting !== 'HIDDEN'}
-                variant="secondary"
+                variant="soft"
                 size="md"
               />
             </View>
@@ -1310,9 +1508,14 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
 export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; onBack: () => void }) {
   const insets = useSafeAreaInsets()
   const photoRef = useRef<PhotoEditorRef>(null)
+  const [uploading, setUploading] = useState(false)
 
-  const handleBack = () => {
-    photoRef.current?.flush().catch(console.error)
+  const handleBack = async () => {
+    if (uploading) return
+    if (photoRef.current) {
+      setUploading(true)
+      await photoRef.current.flush().catch(console.error)
+    }
     onBack()
   }
 
@@ -1320,10 +1523,11 @@ export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; o
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <IconPressable style={styles.backBtn} onPress={handleBack}>
-          <BackIcon />
-        </IconPressable>
+        <View style={styles.backBtn} />
         <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <IconPressable style={styles.backBtn} onPress={handleBack} disabled={uploading}>
+          {uploading ? <ActivityIndicator size="small" color={TEXT} /> : <BackIcon />}
+        </IconPressable>
       </View>
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: SINGLE, paddingTop: 12, paddingBottom: 40 }}
@@ -1397,20 +1601,26 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
-        {rows.map((r) => (
-          <View key={r.label} style={styles.section}>
-            <SectionLabel>{r.label.toUpperCase()}</SectionLabel>
-            <View style={styles.selectRow} pointerEvents="none">
-              <Text style={styles.selectRowLabel} numberOfLines={1}>{r.value}</Text>
-            </View>
+        <View style={styles.section}>
+          <View style={styles.accountLinksCard}>
+            {rows.map((r, i) => (
+              <React.Fragment key={r.label}>
+                {i > 0 && <View style={styles.accountActionDivider} />}
+                <View style={styles.selectRowInner}>
+                  <Text style={[styles.selectRowLabel, { flex: 1 }]} numberOfLines={1}>{r.label}</Text>
+                  <Text style={styles.selectRowValue} numberOfLines={1}>{r.value}</Text>
+                </View>
+              </React.Fragment>
+            ))}
           </View>
-        ))}
+        </View>
 
         <View style={styles.section}>
           <View style={styles.accountActionsCard}>
@@ -1473,14 +1683,26 @@ export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfi
         : undefined,
       hash: img.hash,
     }))
+    const name = profile.name ?? '—'
+    let age: number | null = null
+    if (profile.birth_date) {
+      const birth = new Date(profile.birth_date)
+      const now = new Date()
+      age = now.getFullYear() - birth.getFullYear()
+      const m = now.getMonth() - birth.getMonth()
+      if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
+    }
+    const title = age != null ? `${name}, ${age}` : name
     return {
       user_id: profile.user_id,
-      title: profile.name ?? '—',
-      name: profile.name ?? '—',
+      title,
+      name,
       images,
       bio: profile.bio ?? '',
       is_for_kids: profile.is_for_kids ?? null,
       is_male: profile.is_male ?? undefined,
+      distance: 0,
+      last_seen: new Date().toISOString(),
     }
   }, [profile, user?.id])
 
@@ -1488,19 +1710,197 @@ export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfi
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
       </View>
       {previewData ? (
-        <View style={styles.previewTabWrap}>
-          <View style={styles.previewCard}>
-            <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+        <View style={styles.previewWrap}>
+          <View style={styles.previewOuter}>
+            <View style={styles.previewInner}>
+              <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+            </View>
           </View>
         </View>
       ) : (
         <View style={styles.tabContent} />
+      )}
+    </View>
+  )
+}
+
+// ── About Field Page ─────────────────────────────────────────────────────────
+// Full-screen pane showing the marketing/about content from the login screen.
+
+export function AboutFieldPage({ config, onBack }: { config: AboutFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
+  return (
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <View style={styles.backBtn} />
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <IconPressable style={styles.backBtn} onPress={onBack}>
+          <BackIcon />
+        </IconPressable>
+      </View>
+      <WhatsSpecialPage />
+    </View>
+  )
+}
+
+// ── Inner Sub-Page Renderer ────────────────────────────────────────────────
+// Used by ProfileSectionPage and AppSectionPage to render a second-level
+// sub-page on top of themselves without involving the shell's subPage state.
+
+function InnerSubPageRenderer({ config, onBack }: { config: SubPageConfig; onBack: (after?: () => Promise<void> | void) => void }) {
+  if (config.kind === 'ageRange') return <AgeRangeFieldPage config={config} onBack={onBack} />
+  if (config.kind === 'radius')   return <RadiusFieldPage   config={config} onBack={onBack} />
+  if (config.kind === 'photos')   return <PhotoFieldPage    config={config} onBack={onBack} />
+  if (config.kind === 'account')  return <AccountFieldPage  config={config} onBack={onBack} />
+  if (config.kind === 'preview')  return <PreviewFieldPage  config={config} onBack={onBack} />
+  if (config.kind === 'about')    return <AboutFieldPage    config={config} onBack={() => onBack()} />
+  if (config.kind === 'admin')    return <AdminFieldPage    config={config} onBack={() => onBack()} />
+  if (config.kind === 'select')   return <SelectFieldPage   config={config} onBack={onBack} />
+  return null
+}
+
+// ── Section Page Shell ─────────────────────────────────────────────────────
+// Shared navigation logic for ProfileSectionPage and AppSectionPage.
+// Replicates the shell's push-navigation: section content slides out while the
+// sub-page slides in, both driven by the same `slideProgress` value —
+// identical to pagerPushStyle + subPageAnimStyle in home.tsx.
+
+function useSectionNav() {
+  const width = useRef(Dimensions.get('window').width).current
+  const dir = isRTL ? 1 : -1  // matches subPageDir in home.tsx
+  const [subConfig, setSubConfig] = useState<SubPageConfig | null>(null)
+
+  // Use the shell's shared slide value when available so the shell's
+  // swipe-back gesture can drive the same animation. Fallback to a local
+  // SharedValue if the section page is rendered outside the shell.
+  const shell = useContext(ShellInnerNavContext)
+  const localSlide = useSharedValue(0)
+  const slideProgress = shell?.slideProgress ?? localSlide
+
+  // Section content slides out as inner slides in (mirrors pagerPushStyle).
+  const sectionPushStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -dir * slideProgress.value * width }],
+  }))
+
+  // Inner sub-page slides in from the start edge (mirrors subPageAnimStyle).
+  const subPageSlideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dir * width * (1 - slideProgress.value) }],
+  }))
+
+  // Stable refs so handlers registered with the shell don't go stale.
+  const closeInnerRef = useRef<(after?: () => Promise<void> | void) => void>(() => {})
+  const finalizeCloseRef = useRef<() => void>(() => {})
+
+  const openInner = (cfg: SubPageConfig) => {
+    setSubConfig(cfg)
+    shell?.setHandlers({
+      isOpen: true,
+      close: () => closeInnerRef.current(),
+      finalizeClose: () => finalizeCloseRef.current(),
+    })
+    slideProgress.value = withTiming(1, { duration: 300, easing: REasing.out(REasing.cubic) })
+  }
+
+  const finalizeClose = () => {
+    setSubConfig(null)
+    shell?.setHandlers(null)
+  }
+  finalizeCloseRef.current = finalizeClose
+
+  const closeInner = (after?: () => Promise<void> | void) => {
+    slideProgress.value = withTiming(
+      0,
+      { duration: 300, easing: REasing.in(REasing.cubic) },
+      (finished) => {
+        'worklet'
+        if (finished) {
+          runOnJS(finalizeClose)()
+          if (after) runOnJS(runAfter)(after)
+        }
+      },
+    )
+  }
+  closeInnerRef.current = closeInner
+
+  useEffect(() => {
+    // Reset on mount in case the shell's SharedValue carries a stale value
+    // from a previous section page.
+    slideProgress.value = 0
+    return () => {
+      // Section page is unmounting (shell sub-page closed) — make sure the
+      // shell doesn't hold a stale inner handler.
+      shell?.setHandlers(null)
+      slideProgress.value = 0
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return { subConfig, openInner, closeInner, sectionPushStyle, subPageSlideStyle }
+}
+
+function runAfter(after: () => Promise<void> | void) {
+  Promise.resolve(after()).catch(console.error)
+}
+
+// ── Profile Section Page ───────────────────────────────────────────────────
+
+export function ProfileSectionPage({ config, onBack }: { config: ProfileSectionFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
+  const { subConfig, openInner, closeInner, sectionPushStyle, subPageSlideStyle } = useSectionNav()
+
+  return (
+    <View style={[styles.rootOuter, styles.root, { paddingTop: insets.top, overflow: 'hidden' }]}>
+      <StatusBar style="dark" />
+      <Animated.View style={[{ flex: 1 }, sectionPushStyle]}>
+        <View style={styles.header}>
+          <View style={styles.backBtn} />
+          <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+          <IconPressable style={styles.backBtn} onPress={onBack}>
+            <BackIcon />
+          </IconPressable>
+        </View>
+        <ProfileTab onOpenSubPage={openInner} />
+      </Animated.View>
+      {subConfig && (
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: WHITE }, subPageSlideStyle]}>
+          <InnerSubPageRenderer config={subConfig} onBack={closeInner} />
+        </Animated.View>
+      )}
+    </View>
+  )
+}
+
+// ── App Section Page ───────────────────────────────────────────────────────
+
+export function AppSectionPage({ config, onBack }: { config: AppSectionFieldConfig; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
+  const { subConfig, openInner, closeInner, sectionPushStyle, subPageSlideStyle } = useSectionNav()
+
+  return (
+    <View style={[styles.rootOuter, styles.root, { paddingTop: insets.top, overflow: 'hidden' }]}>
+      <StatusBar style="dark" />
+      <Animated.View style={[{ flex: 1 }, sectionPushStyle]}>
+        <View style={styles.header}>
+          <View style={styles.backBtn} />
+          <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+          <IconPressable style={styles.backBtn} onPress={onBack}>
+            <BackIcon />
+          </IconPressable>
+        </View>
+        <AppTab onBack={onBack} onOpenSubPage={openInner} />
+      </Animated.View>
+      {subConfig && (
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: WHITE }, subPageSlideStyle]}>
+          <InnerSubPageRenderer config={subConfig} onBack={closeInner} />
+        </Animated.View>
       )}
     </View>
   )
@@ -1532,260 +1932,95 @@ const spStyles = StyleSheet.create({
   },
 })
 
-type SettingsPageProps = { onBack?: () => void; focused?: boolean; pagerIdle?: boolean; onOpenSubPage?: (config: SubPageConfig) => void; changeTabRef?: React.MutableRefObject<((tab: Tab) => void) | null>; onTabChange?: (index: number) => void }
+type SettingsPageProps = { topInset?: number; onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void }
 
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
 // left in LTR) reliably — textAlign/writingDirection alone proved
 // inconsistent at runtime.
-function SectionLabel({ children }: { children: any }) {
+function SectionLabel({ children, icon }: { children: any; icon?: React.ReactNode }) {
   return (
-    <View style={styles.sectionLabelRow}>
+    <View style={[styles.sectionLabelRow, icon ? { justifyContent: 'space-between', alignItems: 'center' } : { justifyContent: 'center' }]}>
       <Text style={styles.sectionLabel}>{children}</Text>
+      {icon}
     </View>
   )
 }
 
-export default function SettingsPage({ onBack, focused = true, pagerIdle = true, onOpenSubPage, changeTabRef, onTabChange }: SettingsPageProps = {}) {
+export default function SettingsPage({ topInset = 0, onBack, focused = true, onOpenSubPage }: SettingsPageProps = {}) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<Tab>('preferences')
-  // Disable the tab pan whenever a slider is mid-drag, so gesture-handler's
-  // 10px activeOffsetX doesn't claim the gesture out from under the slider's
-  // legacy PanResponder.
-  const sliding = useSlidingActive()
-  // pagerIdle prop kept for API compat but no longer used — PagerView
-  // scrollEnabled is false on the settings pane so there is no race.
-  // Pager-style: all 4 tabs are laid out side-by-side in a strip, we just
-  // translate the strip to reveal the selected one. No mount/unmount during
-  // the transition, so nothing re-renders — the motion runs on the native
-  // driver and the content is already there to be seen.
-  //
-  // Initialize width from the window dimensions so the tab content mounts on
-  // the very first render. Waiting for onLayout adds a visible frame where
-  // the tab bar shows with an empty strip underneath. onLayout still updates
-  // the value if the actual content region turns out to be narrower.
-  const [width, setWidth] = useState(() => Dimensions.get('window').width)
-  const translate = useRef(new Animated.Value(0)).current
-  // Sliding pill indicator in the tab bar — matches the content strip motion
-  const [tabBarWidth, setTabBarWidth] = useState(0)
-  const indicator = useRef(new Animated.Value(0)).current
 
-  // Refs mirror state so the animateToIndex closure and the PanResponder
-  // handlers (created once) see live values without re-binding.
-  const activeTabRef = useRef(activeTab)
-  const widthRef = useRef(width)
-  const tabBarWidthRef = useRef(tabBarWidth)
-  useEffect(() => { activeTabRef.current = activeTab; Keyboard.dismiss() }, [activeTab])
-  useEffect(() => { widthRef.current = width }, [width])
-  useEffect(() => { tabBarWidthRef.current = tabBarWidth }, [tabBarWidth])
-
-  // Single animation entry point — used both by tab taps and by swipe release.
-  // Spring with an initial velocity carries the finger's momentum forward
-  // without the "stop, then re-start" feel that timing() produces. Velocity
-  // is in px/s (gestureState.vx is px/ms, so callers multiply by 1000).
-  const animateToIndex = (index: number, velocity = 0) => {
-    const w = widthRef.current
-    const tbw = tabBarWidthRef.current
-    if (!w || !tbw) return
-    const tabW = tbw / TABS.length
-    const translateTarget = (isRTL ? 1 : -1) * index * w
-    const indicatorTarget = (isRTL ? -1 : 1) * index * tabW
-    // Content spring — initial velocity is the gesture velocity (LTR:
-    // negative dx = forward = translate moves negative, vx mirrors sign).
-    Animated.spring(translate, {
-      toValue: translateTarget,
-      velocity,
-      tension: 68,
-      friction: 14,
-      useNativeDriver: true,
-    }).start()
-    // Indicator spring — mirror relationship: indicator = -translate * tabW/w,
-    // so its velocity is the negated, scaled content velocity.
-    Animated.spring(indicator, {
-      toValue: indicatorTarget,
-      velocity: -velocity * (tabW / w),
-      tension: 68,
-      friction: 14,
-      useNativeDriver: true,
-    }).start()
-  }
-
-  // Snap to the active tab when layout dimensions change (initial mount,
-  // orientation change). No animation — layout shifts should be instant.
-  useEffect(() => {
-    if (!width || !tabBarWidth) return
-    const index = TABS.indexOf(activeTab)
-    const tabW = tabBarWidth / TABS.length
-    translate.setValue((isRTL ? 1 : -1) * index * width)
-    indicator.setValue((isRTL ? -1 : 1) * index * tabW)
-    // activeTab intentionally NOT in deps — changes to activeTab go through
-    // animateToIndex, not this instant-snap path.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, tabBarWidth])
-
-  const changeTab = (tab: Tab) => {
-    if (tab === activeTab) return
-    tap()
-    Keyboard.dismiss()
-    setActiveTab(tab)
-    onTabChange?.(TABS.indexOf(tab))
-    animateToIndex(TABS.indexOf(tab))
-  }
-
-  useEffect(() => {
-    if (changeTabRef) changeTabRef.current = changeTab
-    return () => { if (changeTabRef) changeTabRef.current = null }
-  })
-
-  // Swipe-to-change-tab — dragging horizontally moves both the content strip
-  // and the tab indicator together under the finger, then springs to the
-  // nearest tab on release (distance past 30% of the screen OR a flick faster
-  // than 0.4 px/ms advances). The release spring inherits the gesture's
-  // velocity so the motion is one continuous gesture.
-  // Swipe-to-change-tab using gesture-handler. activeOffsetX/failOffsetY let
-  // the inner ScrollView own vertical drags unambiguously while horizontal
-  // intent (>=10px) claims us declaratively. At the first tab, backward
-  // swipes rubber-band and navigate home on release; at the last tab,
-  // forward swipes are refused so there's no elastic feel.
-  const tabIdx = TABS.indexOf(activeTab)
-  const canGoBack = tabIdx > 0
-  const canGoFwd  = tabIdx < TABS.length - 1
-  const activeOffsetX: [number, number] = isRTL
-    ? [canGoBack ? -10 : -99999, canGoFwd ? 10 : 99999]
-    : [canGoFwd ? -10 : -99999, canGoBack ? 10 : 99999]
-  const tabPan = useMemo(() =>
-    Gesture.Pan()
-      .enabled(!sliding)
-      .activeOffsetX(activeOffsetX)
-      .failOffsetY([-20, 20])
-      .onUpdate(e => {
-        if (slidingActiveRef.current) return
-        const w = widthRef.current
-        const tbw = tabBarWidthRef.current
-        if (!w || !tbw) return
-        const tabW = tbw / TABS.length
-        const index = TABS.indexOf(activeTabRef.current)
-        const base = (isRTL ? 1 : -1) * index * w
-        const edge = (isRTL ? 1 : -1) * (TABS.length - 1) * w
-        const [lo, hi] = isRTL ? [0, edge] : [edge, 0]
-        let next = base + e.translationX
-        // Rubber-band overscroll at the last tab's forward edge
-        if (next < lo) next = lo + (next - lo) * 0.3
-        else if (next > hi) next = hi + (next - hi) * 0.3
-        translate.setValue(next)
-        indicator.setValue(-next * (tabW / w))
-      })
-      .onEnd(e => {
-        const w = widthRef.current
-        if (!w) return
-        const index = TABS.indexOf(activeTabRef.current)
-        const forward = isRTL ? e.translationX > 0 : e.translationX < 0
-        const vx = e.velocityX / 1000
-        const flick = Math.abs(vx) > 0.4
-        const past = Math.abs(e.translationX) > w * 0.3
-        let delta = 0
-        if ((past || flick) && forward && index < TABS.length - 1) delta = 1
-        else if ((past || flick) && !forward && index > 0) delta = -1
-        const targetIndex = index + delta
-        animateToIndex(targetIndex, e.velocityX)
-        const targetTab = TABS[targetIndex]
-        if (targetTab !== activeTabRef.current) {
-          tap()
-          setActiveTab(targetTab)
-          onTabChange?.(targetIndex)
-        }
-      })
-      .runOnJS(true)
-  , [activeOffsetX[0], activeOffsetX[1], sliding])
+  const profileTap = useTapResponder(() => onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }))
+  const accountTap = useTapResponder(() => onOpenSubPage?.({ kind: 'account',        title: t('settings.account') }))
+  const appTap     = useTapResponder(() => onOpenSubPage?.({ kind: 'appSection',     title: t('settings.appSettings') }))
+  const aboutTap   = useTapResponder(() => onOpenSubPage?.({ kind: 'about',          title: t('settings.about') }))
 
   return (
     <View style={styles.rootOuter}>
-    <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
+      <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['bottom', 'left', 'right']}>
+        <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <IconPressable
-          style={styles.backBtn}
-          onPress={() => { tap(); onBack ? onBack() : router.back() }}
-        >
-          <BackIcon />
-        </IconPressable>
-        <View
-          style={styles.tabBar}
-          onLayout={e => setTabBarWidth(e.nativeEvent.layout.width)}
-        >
-        {/* Sliding pill behind the active label. Sits below the Pressables
-            in render order so touches still hit the buttons. */}
-        {tabBarWidth > 0 && (
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              start: 0,
-              width: tabBarWidth / TABS.length,
-              borderRadius: SINGLE,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              transform: [{ translateX: indicator }],
-            }}
-          />
-        )}
-        {TABS.map((tab, i) => {
-          const tabW = tabBarWidth > 0 ? tabBarWidth / TABS.length : 0
-          const center = (isRTL ? -1 : 1) * i * tabW
-          // White opacity peaks when the pill is centered on this tab and
-          // falls to zero at the neighboring tabs — fades track pill motion.
-          const whiteOpacity: Animated.AnimatedInterpolation<number> | number =
-            tabW > 0
-              ? indicator.interpolate({
-                  inputRange: [center - tabW, center, center + tabW],
-                  outputRange: [0, 1, 0],
-                  extrapolate: 'clamp',
-                })
-              : (activeTab === tab ? 1 : 0)
-          return (
-            <IconPressable
-              key={tab}
-              style={styles.tabItem}
-              onPress={() => changeTab(tab)}
-            >
-              <TabIconStack opacity={whiteOpacity} tab={tab} />
-            </IconPressable>
-          )
-        })}
+        <View style={styles.header}>
+          <View style={styles.backBtn} />
+          <Text style={styles.subPageHeaderTitle}>{t('settings.preferences')}</Text>
+          <IconPressable
+            style={styles.backBtn}
+            onPress={() => { tap(); onBack ? onBack() : router.back() }}
+          >
+            <BackIcon />
+          </IconPressable>
         </View>
-      </View>
 
-      <GestureDetector gesture={tabPan}>
-      <View
-        style={{ flex: 1, overflow: 'hidden' }}
-        onLayout={e => setWidth(e.nativeEvent.layout.width)}
-      >
-        <Animated.View style={{ flex: 1, transform: [{ translateX: translate }] }}>
-          {TABS.map((tab, i) => (
-            <View
-              key={tab}
-              // Inactive tabs must not steal touches or keyboard focus
-              pointerEvents={activeTab === tab ? 'auto' : 'none'}
-              style={{
-                position: 'absolute',
-                top: 0, bottom: 0,
-                // `start` is RTL-aware: maps to left in LTR, right in RTL.
-                // Combined with the translateX sign flip above, child i lands
-                // on-screen when activeTab === TABS[i] in both directions.
-                start: i * width,
-                width,
-              }}
-            >
-              {renderTab(tab, onBack, focused && activeTab === tab, onOpenSubPage)}
+        <ScrollView
+          style={styles.tabScroll}
+          contentContainerStyle={styles.tabContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          delaysContentTouches={false}
+        >
+          <View style={styles.accountLinksCard}>
+            <View style={styles.accountLinkRowInner} {...profileTap}>
+              <ForwardChevronIcon />
+              <Text style={styles.accountActionText}>{t('settings.profile')}</Text>
+              <View style={{ flex: 1 }} />
+              <TabIcon tab="profile" color="rgba(0,0,0,0.5)" />
             </View>
-          ))}
-        </Animated.View>
-      </View>
-      </GestureDetector>
+          </View>
 
-    </SafeAreaView>
+          <PreferencesContent onOpenSubPage={onOpenSubPage} />
+
+          <View>
+            <SectionLabel>{t('settings.settings').toUpperCase()}</SectionLabel>
+            <View style={styles.accountLinksCard}>
+              <View style={styles.accountLinkRowInner} {...accountTap}>
+                <ForwardChevronIcon />
+                <Text style={styles.accountActionText}>{t('settings.account')}</Text>
+                <View style={{ flex: 1 }} />
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
+                  <Polyline points="9 12 11.5 14.5 15.5 10.5" />
+                </Svg>
+              </View>
+              <View style={styles.accountActionDivider} />
+              <View style={styles.accountLinkRowInner} {...appTap}>
+                <ForwardChevronIcon />
+                <Text style={styles.accountActionText}>{t('settings.appSettings')}</Text>
+                <View style={{ flex: 1 }} />
+                <TabIcon tab="app" color="rgba(0,0,0,0.5)" />
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.accountLinksCard, { marginTop: DOUBLE }]}>
+            <View style={styles.accountLinkRowInner} {...aboutTap}>
+              <ForwardChevronIcon />
+              <Text style={styles.accountActionText}>{t('settings.about')}</Text>
+              <View style={{ flex: 1 }} />
+              <LivoLogo size={20} color="rgba(0,0,0,0.5)" />
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </View>
   )
 }
@@ -1793,34 +2028,36 @@ export default function SettingsPage({ onBack, focused = true, pagerIdle = true,
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: GRAY_50 },
+  rootOuter: { flex: 1, backgroundColor: WHITE },
   root: { flex: 1 },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 0, height: 56,
   },
-  backBtn: { padding: BUTTON, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { minWidth: DOUBLE + SINGLE * 2, paddingHorizontal: SINGLE, paddingVertical: BUTTON, alignItems: 'center', justifyContent: 'center' },
 
   tabBar: {
     flex: 1, flexDirection: 'row', marginHorizontal: SINGLE,
-    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: SINGLE, padding: 0,
+    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: SINGLE, padding: 2,
   },
-  tabItem: { flex: 1, paddingVertical: SINGLE, alignItems: 'center', borderRadius: SINGLE },
+  tabItem: { flex: 1, paddingVertical: SINGLE, alignItems: 'center', borderRadius: SINGLE - 2 },
+  tabItemActive: { backgroundColor: 'rgba(0,0,0,0.5)' },
+  tabPill: { position: 'absolute', top: 2, bottom: 2, borderRadius: SINGLE - 2, backgroundColor: 'rgba(0,0,0,0.5)' },
 
   tabScroll: { flex: 1 },
   tabContent: { paddingHorizontal: SINGLE, paddingTop: 24, paddingBottom: 40 },
 
-  section: { marginBottom: DOUBLE },
+  section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionLabelRow: { flexDirection: 'row', marginBottom: 0 },
+  sectionLabelRow: { flexDirection: 'row', marginTop: DOUBLE * 2, marginBottom: DOUBLE },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.5)', letterSpacing: 1 },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: TEXT, marginBottom: 10 },
   sectionValue: { fontSize: 15, fontWeight: '700', color: TEXT },
   divider: { height: 0 },
 
-  photoThumbStrip: { flexDirection: 'row', gap: SINGLE, flex: 1, marginEnd: DOUBLE },
-  photoThumb: { flex: 1, aspectRatio: 1, borderRadius: SINGLE },
+  photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SINGLE, justifyContent: 'flex-end', width: 44 * 3 + SINGLE * 2 },
+  photoThumb: { width: 44, height: 44, borderRadius: SINGLE },
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   slider: { width: '100%', height: 40 },
@@ -1828,23 +2065,26 @@ const styles = StyleSheet.create({
 
   genderRow: { flexDirection: 'row', gap: 10, marginTop: SINGLE },
 
-  previewTabWrap: {
+  previewWrap: {
     flex: 1,
-    marginHorizontal: SINGLE, marginTop: 0, marginBottom: DOUBLE + SINGLE,
+    marginHorizontal: SINGLE,
+    marginBottom: DOUBLE + SINGLE,
+  },
+  previewOuter: {
+    flex: 1,
     borderRadius: SINGLE,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    elevation: 1,
   },
-  previewCard: {
-    flex: 1, borderRadius: SINGLE, overflow: 'hidden',
+  previewInner: {
+    flex: 1,
     backgroundColor: WHITE,
+    borderRadius: SINGLE,
+    overflow: 'hidden',
   },
-
 
   textInputWrap: { marginTop: SINGLE, borderRadius: SINGLE, paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE, backgroundColor: 'rgba(0,0,0,0.06)' },
+  textInputWrapInner: { paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE },
+  textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SINGLE },
+  textInputHeaderSpacer: { width: 16, height: 16 },
   textInput: { fontSize: 16, color: TEXT, padding: 0, textAlign: 'center', minHeight: 56 },
   charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.35)' },
 
@@ -1882,7 +2122,7 @@ const styles = StyleSheet.create({
   },
   accountActionsCard: {
     borderRadius: SINGLE, overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: 'rgba(0,0,0,0.04)', marginTop: SINGLE,
   },
   accountActionRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -1897,21 +2137,25 @@ const styles = StyleSheet.create({
 
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 10,
     backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: SINGLE,
     paddingHorizontal: BUTTON, paddingVertical: BUTTON, marginTop: SINGLE,
   },
-  selectRowLabel: { fontSize: 15, color: TEXT },
+  // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
+  // background or rounded corners; the parent card provides those.
+  selectRowInner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: BUTTON, paddingVertical: BUTTON,
+  },
+  selectRowLabel: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectRowValue: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
+  selectRowValue: { fontSize: 15, color: TEXT },
 
   // Sub-page overlay panel
-  subPageRoot: { backgroundColor: GRAY_50 },
+  subPageRoot: { backgroundColor: WHITE },
   subPageHeaderTitle: {
     flex: 1, fontSize: 17, fontWeight: '600', color: TEXT,
     textAlign: 'center',
-    // balance the back-button width so the title is visually centred
-    marginEnd: 36,
   },
   subPageOptionsCard: {
     marginHorizontal: SINGLE, marginTop: DOUBLE,

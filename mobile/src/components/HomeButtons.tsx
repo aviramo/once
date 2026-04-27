@@ -15,8 +15,6 @@ export function HomeButtons({ children }: HomeButtonsProps) {
 
 const styles = StyleSheet.create({
   wrap: {
-    padding: SINGLE,
-    paddingTop: DOUBLE,
-    paddingBottom: SINGLE,
+    paddingTop: SINGLE,
   },
 })

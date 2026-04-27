@@ -1,8 +1,8 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE, SINGLE, DOUBLE, BUTTON } from '../fonts'
-import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY, GRAY_PRESS, RED, RED_PRESS } from '../colors'
+import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY_400, GRAY_800, RED, RED_PRESS } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -21,7 +21,7 @@ import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY, GRAY_PRESS, RED, RED_PRESS } fro
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'destructive' | 'soft'
+type Variant = 'primary' | 'secondary' | 'destructive' | 'soft' | 'dark'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -58,7 +58,23 @@ export function Button({
   iconStart?: ReactNode
 }) {
   const scale = useRef(new Animated.Value(1)).current
+  const heartbeat = useRef(new Animated.Value(1)).current
   const [pressed, setPressed] = useState(false)
+
+  useEffect(() => {
+    if (loading) {
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(heartbeat, { toValue: 0.55, duration: 300, useNativeDriver: true }),
+          Animated.timing(heartbeat, { toValue: 1, duration: 450, useNativeDriver: true }),
+        ])
+      )
+      anim.start()
+      return () => anim.stop()
+    } else {
+      heartbeat.setValue(1)
+    }
+  }, [loading])
 
   const blocked = disabled || loading
 
@@ -91,7 +107,7 @@ export function Button({
   return (
     <Animated.View
       collapsable={false}
-      style={[styles.wrap, { transform: [{ scale }] }]}
+      style={[styles.wrap, { transform: [{ scale }], opacity: heartbeat }]}
     >
       <View
         style={[
@@ -163,11 +179,11 @@ const styles = StyleSheet.create({
 
 const SIZE: Record<Size, { btn: object; text: object }> = {
   lg: {
-    btn: { borderRadius: DOUBLE, paddingVertical: BUTTON + 6 },
+    btn: { borderRadius: SINGLE, paddingVertical: DOUBLE },
     text: { fontSize: 16, fontWeight: '700' },
   },
   md: {
-    btn: { borderRadius: DOUBLE, paddingVertical: SINGLE },
+    btn: { borderRadius: SINGLE, paddingVertical: SINGLE },
     text: { fontSize: 15, fontWeight: '700' },
   },
 }
@@ -179,32 +195,30 @@ const TONE: Record<Tone, { btn: object; pressed: object }> = {
   },
 }
 
-// boxShadow (RN 0.76+) renders consistently on iOS and Android, unlike the
-// legacy shadow* + elevation combo where Android's elevation always biases
-// the shadow downward. offset 0/0 keeps the halo fully symmetric.
-const SHADOW = {
-  boxShadow: '0 0 10px rgba(0,0,0,0.25)',
-}
-
 const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
   primary: {
-    btn: { backgroundColor: GREEN, ...SHADOW },
+    btn: { backgroundColor: GREEN },
     pressed: { backgroundColor: GREEN_PRESS },
     text: { color: WHITE },
   },
   secondary: {
-    btn: { backgroundColor: WHITE, ...SHADOW },
+    btn: { backgroundColor: WHITE, borderWidth: 1.5, borderColor: TEXT },
     pressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
     text: { color: TEXT, fontWeight: '600' },
   },
   destructive: {
-    btn: { backgroundColor: RED, ...SHADOW },
+    btn: { backgroundColor: RED },
     pressed: { backgroundColor: RED_PRESS },
     text: { color: WHITE },
   },
   soft: {
-    btn: { backgroundColor: GRAY, ...SHADOW },
-    pressed: { backgroundColor: GRAY_PRESS },
+    btn: { backgroundColor: GRAY_400 },
+    pressed: { backgroundColor: GRAY_800 },
+    text: { color: WHITE },
+  },
+  dark: {
+    btn: { backgroundColor: '#000' },
+    pressed: { backgroundColor: '#222' },
     text: { color: WHITE },
   },
 }
