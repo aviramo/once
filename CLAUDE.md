@@ -180,8 +180,8 @@ All live under `POST /app/<action>`. Each executes as a single Postgres transact
 
 ### Invitation timeout and extension
 
-- Initial expiry: `expires_at = invited_at + 10 minutes`.
-- **`extend` is additive and one-shot per invitation.** The inviter taps an Extend button once and picks from: **10 min, 30 min, 1h, 2h, 4h, 8h, 24h**. Server adds that many minutes to `expires_at` on both sides and marks the invitation as extended so the button disables/disappears.
+- Initial expiry: `expires_at = invited_at + 1 hour`.
+- **`extend` is additive and one-shot per invitation.** Server-side functionality only. Mobile UI does not surface an extend button; the waiting state shows a full-width cancel. Server adds the requested minutes to `expires_at` on both sides and marks the invitation as extended.
 - Only the inviter (A) can extend. Only while the invite is still live (`expires_at > now()`). Only if it has not been extended before (`!page1.extended`).
 - Expiration is enforced two ways:
   - **Lazy:** `approve` / `extend` / `decline` check `expires_at > now()` inside the transaction. If expired, they fail with the appropriate state.
@@ -263,7 +263,7 @@ All other null-state events (`cancel`, `leave`, `block`, `ok`, `logout`) require
 
 ### Pending mobile work
 
-- **Invite timer UI:** countdown driven by `page1.expires_at`, extend button with duration picker (10/30/60/120/240/480/1440 min). Not yet implemented.
+- **Invite timer UI:** countdown driven by `page1.expires_at` is implemented. Extend UI deliberately omitted — extend is server-only. Cancel button is full-width.
 - **Incoming invitation UI (page2 object form):** accept/decline buttons when `page2` is an object. Not yet implemented.
 - **Push notification handler:** `data.type` codes need routing to the correct screen. Only token registration exists currently.
 - **Dead code cleanup:** `setVisibility`, `app/visibility`, OFF mode, reveal/hide confirm dialogs, `showOffScreen`, `offButton` are still in `home.tsx` but unreachable at runtime. Can be removed when convenient.

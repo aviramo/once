@@ -14,7 +14,7 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { LivoLogo } from '../src/components/LivoLogo'
-import { TEXT, WHITE, GREEN, GRAY_50, GRAY_100 } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, PRIMARY, GRAY_50, GRAY_100 } from '../src/colors'
 import { SINGLE, DOUBLE } from '../src/fonts'
 
 const isRTL = I18nManager.isRTL
@@ -77,7 +77,7 @@ function LoginSpinner() {
 
 function ForwardChevron() {
   return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={isRTL ? 'M 15 6 L 9 12 L 15 18' : 'M 9 6 L 15 12 L 9 18'} />
     </Svg>
   )
@@ -85,7 +85,7 @@ function ForwardChevron() {
 
 function BackChevron() {
   return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={isRTL ? 'M 9 6 L 15 12 L 9 18' : 'M 15 6 L 9 12 L 15 18'} />
     </Svg>
   )
@@ -141,7 +141,7 @@ const mktStyles = StyleSheet.create({
   heroTitle: {
     fontSize: 36,
     fontWeight: '800',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     letterSpacing: -1,
     lineHeight: 44,
     textAlign: 'center',
@@ -164,7 +164,7 @@ const mktStyles = StyleSheet.create({
   featureLabel: {
     fontSize: 18,
     fontWeight: '700',
-    color: GREEN,
+    color: PRIMARY,
     letterSpacing: -0.3,
     textAlign: 'center',
   },
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     letterSpacing: -0.5,
     lineHeight: 26,
     includeFontPadding: false,
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: 40,
     fontWeight: '300',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     letterSpacing: -0.5,
   },
   taglineBelow: {
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   messageLine2: {
     fontSize: 24,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     letterSpacing: -0.3,
     lineHeight: 32,

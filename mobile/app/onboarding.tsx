@@ -13,7 +13,7 @@ import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
-import { TEXT, WHITE, RED, GREEN, GRAY_50 } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, DESTRUCTIVE, PRIMARY, GRAY_50 } from '../src/colors'
 import { SINGLE } from '../src/fonts'
 
 const TOTAL_STEPS = 5
@@ -84,7 +84,7 @@ function GenderCard({
         onResponderRelease={handlePress}
       >
         <View style={styles.cardInner}>
-          {icon(TEXT)}
+          {icon(TEXT_PRIMARY)}
           <Text style={styles.cardLabel}>{label}</Text>
         </View>
         <Animated.View
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: GREEN,
+    backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 14,
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
   },
   cardLabelActive: { color: WHITE },
 
@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 16,
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     padding: 0,
   },
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
   dateInput: {
     fontSize: 20,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     padding: 0,
   },
@@ -752,14 +752,14 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 12,
     fontSize: 13,
-    color: RED,
+    color: DESTRUCTIVE,
     textAlign: 'center',
   },
 
   bioEmphasis: {
     marginTop: 14,
     fontSize: 15,
-    color: TEXT,
+    color: TEXT_PRIMARY,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
   },
   bioInput: {
     fontSize: 16,
-    color: TEXT,
+    color: TEXT_PRIMARY,
     padding: 0,
     minHeight: 96,
     textAlign: 'center',
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(0,0,0,0.5)',
   },
-  bioCounterWarn: { color: RED },
+  bioCounterWarn: { color: DESTRUCTIVE },
   bioTip: {
     marginTop: 14,
     fontSize: 13,

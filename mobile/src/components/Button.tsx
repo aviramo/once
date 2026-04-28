@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE, SINGLE, DOUBLE, BUTTON } from '../fonts'
-import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY_400, GRAY_800, RED, RED_PRESS } from '../colors'
+import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50, GRAY_100, GRAY_400, GRAY_800, DESTRUCTIVE, DESTRUCTIVE_PRESS } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -21,7 +21,7 @@ import { TEXT, WHITE, GREEN, GREEN_PRESS, GRAY_400, GRAY_800, RED, RED_PRESS } f
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'destructive' | 'soft' | 'dark'
+type Variant = 'primary' | 'secondary' | 'destructive' | 'softDestructive' | 'soft' | 'dark'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -37,6 +37,7 @@ export function Button({
   tone,
   silentDisabled,
   iconStart,
+  iconEnd,
 }: {
   label: string
   onPress: () => void
@@ -53,9 +54,8 @@ export function Button({
   // another action in the same row is in-flight — we want the lockout, not a
   // visual flicker as the user sees every button go gray for a frame.
   silentDisabled?: boolean
-  // Optional leading glyph pinned to the start edge. Positioned absolutely
-  // so the label stays visually centered regardless of the icon's width.
   iconStart?: ReactNode
+  iconEnd?: ReactNode
 }) {
   const scale = useRef(new Animated.Value(1)).current
   const heartbeat = useRef(new Animated.Value(1)).current
@@ -131,15 +131,30 @@ export function Button({
             {iconStart}
           </View>
         ) : null}
-        <Text
-          style={[styles.text, base.text, skin.text]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.85}
-          maxFontSizeMultiplier={FONT_SCALE.ui}
-        >
-          {label}
-        </Text>
+        {iconEnd ? (
+          <View style={styles.labelRow} pointerEvents="none">
+            <Text
+              style={[styles.text, base.text, skin.text]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+              maxFontSizeMultiplier={FONT_SCALE.ui}
+            >
+              {label}
+            </Text>
+            <View>{iconEnd}</View>
+          </View>
+        ) : (
+          <Text
+            style={[styles.text, base.text, skin.text]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+            maxFontSizeMultiplier={FONT_SCALE.ui}
+          >
+            {label}
+          </Text>
+        )}
       </View>
     </Animated.View>
   )
@@ -161,13 +176,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   disabled: { opacity: 0.45 },
-  // Absolute so the label stays visually centered regardless of icon width.
   iconStart: {
     position: 'absolute',
     start: 20,
     top: 0,
     bottom: 0,
     justifyContent: 'center',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   text: {
     letterSpacing: -0.2,
@@ -179,37 +198,42 @@ const styles = StyleSheet.create({
 
 const SIZE: Record<Size, { btn: object; text: object }> = {
   lg: {
-    btn: { borderRadius: SINGLE, paddingVertical: DOUBLE },
+    btn: { borderRadius: 12, paddingVertical: DOUBLE },
     text: { fontSize: 16, fontWeight: '700' },
   },
   md: {
-    btn: { borderRadius: SINGLE, paddingVertical: SINGLE },
+    btn: { borderRadius: 12, paddingVertical: SINGLE },
     text: { fontSize: 15, fontWeight: '700' },
   },
 }
 
 const TONE: Record<Tone, { btn: object; pressed: object }> = {
   positive: {
-    btn: { backgroundColor: GREEN },
-    pressed: { backgroundColor: GREEN_PRESS },
+    btn: { backgroundColor: PRIMARY },
+    pressed: { backgroundColor: PRIMARY_PRESS },
   },
 }
 
 const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
   primary: {
-    btn: { backgroundColor: GREEN },
-    pressed: { backgroundColor: GREEN_PRESS },
+    btn: { backgroundColor: PRIMARY },
+    pressed: { backgroundColor: PRIMARY_PRESS },
     text: { color: WHITE },
   },
   secondary: {
-    btn: { backgroundColor: WHITE, borderWidth: 1.5, borderColor: TEXT },
-    pressed: { backgroundColor: 'rgba(0,0,0,0.04)' },
-    text: { color: TEXT, fontWeight: '600' },
+    btn: { backgroundColor: GRAY_50 },
+    pressed: { backgroundColor: GRAY_100 },
+    text: { color: GRAY_800, fontWeight: '600' },
   },
   destructive: {
-    btn: { backgroundColor: RED },
-    pressed: { backgroundColor: RED_PRESS },
+    btn: { backgroundColor: DESTRUCTIVE },
+    pressed: { backgroundColor: DESTRUCTIVE_PRESS },
     text: { color: WHITE },
+  },
+  softDestructive: {
+    btn: { backgroundColor: GRAY_50 },
+    pressed: { backgroundColor: GRAY_100 },
+    text: { color: DESTRUCTIVE },
   },
   soft: {
     btn: { backgroundColor: GRAY_400 },

@@ -1,8 +1,8 @@
 import { StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import Svg, { Path, Circle, Line } from 'react-native-svg'
-import { FONT_SCALE, SINGLE } from '../fonts'
-import { GREEN, GREEN_BG, RED } from '../colors'
+import { FONT_SCALE } from '../fonts'
+import { PRIMARY, PRIMARY_BG, DESTRUCTIVE } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -10,8 +10,8 @@ import { GREEN, GREEN_BG, RED } from '../colors'
 
 const TONES = {
   neutral:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(0,0,0,0.45)'        },
-  positive: { fg: GREEN,             bg: GREEN_BG,             photoBg: 'rgba(26,179,61,0.55)'    },
-  negative: { fg: RED,               bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(160,15,35,0.50)'    },
+  positive: { fg: PRIMARY,             bg: PRIMARY_BG,             photoBg: 'rgba(26,179,61,0.55)'    },
+  negative: { fg: DESTRUCTIVE,               bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(160,15,35,0.50)'    },
 } as const
 
 export type ChipTone = keyof typeof TONES
@@ -39,9 +39,9 @@ export function Chip({
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
-// All chip icons render at 12×12 so chips share one baseline across cards.
+// All chip icons render at 16×16 so chips share one baseline across cards.
 
-const ICON_SIZE = 12
+const ICON_SIZE = 16
 
 export function PinIcon({ color }: { color: string }) {
   return (
@@ -85,15 +85,13 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: SINGLE,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   chipText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
   },
 })

@@ -26,7 +26,9 @@ import { PhotoEditor, PhotoEditorRef, localPhotoUriCache, pendingDeferred } from
 import type { Profile } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
-import { TEXT, WHITE, BLACK, GREEN, GRAY_50 } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_400 } from '../src/colors'
+
+const WARM_WHITE = '#FFFDFB'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -48,16 +50,25 @@ export type ShellInnerNav = {
 export const ShellInnerNavContext = createContext<ShellInnerNav | null>(null)
 
 // Returns responder props that fire `onPress` only on clean taps (movement < TAP_SLOP).
-function useTapResponder(onPress: () => void) {
+// `onPressStateChange` lets the caller drive a visual pressed-state (e.g. fade
+// in a GRAY_50 background) without losing the raw-responder behaviour that's
+// required for reliable taps inside ScrollView (Pressability cancels them on
+// RN 0.81).
+function useTapResponder(onPress: () => void, onPressStateChange?: (pressed: boolean) => void) {
   const start = useRef({ x: 0, y: 0 })
   return {
     onStartShouldSetResponder: () => true,
-    onResponderGrant: (e: any) => { start.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY } },
+    onResponderGrant: (e: any) => {
+      start.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }
+      onPressStateChange?.(true)
+    },
     onResponderRelease: (e: any) => {
+      onPressStateChange?.(false)
       const dx = Math.abs(e.nativeEvent.pageX - start.current.x)
       const dy = Math.abs(e.nativeEvent.pageY - start.current.y)
       if (dx < TAP_SLOP && dy < TAP_SLOP) { tap(); onPress() }
     },
+    onResponderTerminate: () => onPressStateChange?.(false),
   }
 }
 
@@ -65,7 +76,7 @@ function useTapResponder(onPress: () => void) {
 
 function BackIcon() {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
     </Svg>
   )
@@ -77,7 +88,7 @@ function BackIcon() {
 
 function ForwardChevronIcon() {
   return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={GRAY_400} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
     </Svg>
   )
@@ -85,7 +96,7 @@ function ForwardChevronIcon() {
 
 // ── Field Icons ────────────────────────────────────────────────────────────
 
-const FIELD_ICON_STROKE = 'rgba(0,0,0,0.5)'
+const FIELD_ICON_STROKE = GRAY_400
 
 function SlidersIcon() {
   return (
@@ -228,36 +239,89 @@ export type AppSectionFieldConfig = {
 export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig | AccountFieldConfig | PreviewFieldConfig | AboutFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
-// Tappable settings row: label on the start side, current value + forward
-// chevron on the end side. Tapping opens the sub-page via onPress.
+// Shared tappable settings row used across Preferences, Profile, App and the
+// Main Menu. Layout (logical order, flips automatically in RTL):
+//   [chevron] [label / title+subtitle] ... [value] [trailing icon | avatar]
+// Variants:
+//   - displayValue?      → orange right-aligned value (radius/age/gender/units/kids)
+//   - subtitle?          → small secondary text under the label (profile row)
+//   - avatar?            → image URI rendered as a circular avatar at the end
+//   - tone='accent'      → soft PRIMARY_BG halo behind the trailing icon
+// Press feedback fades in a GRAY_50 background; `grouped` rows inherit
+// rounding from their parent card so the press state stays inside the card.
 
 function SelectFieldRow({
   label,
+  subtitle,
   displayValue,
   onPress,
   icon,
+  avatar,
   grouped,
+  tone = 'default',
+  size = 'default',
 }: {
   label?: string
-  displayValue: string
+  subtitle?: string
+  displayValue?: string
   onPress: () => void
   icon?: React.ReactNode
+  avatar?: string
   grouped?: boolean
+  tone?: 'default' | 'accent'
+  size?: 'default' | 'large'
 }) {
-  const tapProps = useTapResponder(onPress)
+  const press = useRef(new RNAnimated.Value(0)).current
+  const tapProps = useTapResponder(onPress, (pressed) => {
+    RNAnimated.timing(press, {
+      toValue: pressed ? 1 : 0,
+      duration: pressed ? 80 : 180,
+      useNativeDriver: false,
+    }).start()
+  })
+  const isLarge = size === 'large'
   return (
-    <View style={grouped ? styles.selectRowInner : styles.selectRow} {...tapProps}>
+    <View
+      style={[
+        grouped ? styles.selectRowInner : styles.selectRow,
+        isLarge && styles.selectRowLarge,
+      ]}
+      {...tapProps}
+    >
+      <RNAnimated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, {
+          backgroundColor: GRAY_50,
+          opacity: press,
+          borderRadius: grouped ? 0 : 16,
+        }]}
+      />
       <ForwardChevronIcon />
       {label != null ? (
         <>
-          <Text style={styles.selectRowLabel} numberOfLines={1}>{label}</Text>
+          <View style={styles.selectRowTextCol}>
+            <Text style={styles.selectRowLabel} numberOfLines={1}>{label}</Text>
+            {subtitle ? (
+              <Text style={styles.selectRowSubtitle} numberOfLines={1}>{subtitle}</Text>
+            ) : null}
+          </View>
           <View style={{ flex: 1 }} />
-          <Text style={styles.selectRowValue} numberOfLines={1}>{displayValue}</Text>
+          {displayValue != null ? (
+            <Text style={styles.selectRowValue} numberOfLines={1}>{displayValue}</Text>
+          ) : null}
         </>
       ) : (
-        <Text style={[styles.selectRowValue, { flex: 1 }]} numberOfLines={1}>{displayValue}</Text>
+        <Text style={[styles.selectRowValue, { flex: 1 }]} numberOfLines={1}>{displayValue ?? ''}</Text>
       )}
-      {icon}
+      {avatar ? (
+        <Image source={{ uri: avatar }} style={styles.selectRowAvatar} />
+      ) : icon ? (
+        tone === 'accent' ? (
+          <View style={styles.selectRowAccentIcon}>{icon}</View>
+        ) : (
+          icon
+        )
+      ) : null}
     </View>
   )
 }
@@ -344,9 +408,9 @@ const rs = StyleSheet.create({
   container: { height: THUMB + 8, justifyContent: 'center', marginVertical: 4, paddingHorizontal: THUMB / 2 },
   track: { flex: 1, height: THUMB, justifyContent: 'center' },
   trackBg: { position: 'absolute', start: 0, end: 0, height: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 2 },
-  trackFill: { position: 'absolute', height: 3, backgroundColor: TEXT, borderRadius: 2 },
+  trackFill: { position: 'absolute', height: 3, backgroundColor: TEXT_PRIMARY, borderRadius: 2 },
   thumb: {
-    position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: TEXT,
+    position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: TEXT_PRIMARY,
     shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
   },
 })
@@ -594,9 +658,9 @@ const vrs = StyleSheet.create({
   container: { width: VTHUMB + 16, flex: 1, alignItems: 'center', paddingVertical: VTHUMB / 2 },
   track: { width: VTHUMB, flex: 1, alignItems: 'center' },
   trackBg: { position: 'absolute', top: 0, bottom: 0, width: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 2 },
-  trackFill: { position: 'absolute', width: 3, backgroundColor: TEXT, borderRadius: 2 },
+  trackFill: { position: 'absolute', width: 3, backgroundColor: TEXT_PRIMARY, borderRadius: 2 },
   thumb: {
-    position: 'absolute', width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2, backgroundColor: TEXT,
+    position: 'absolute', width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2, backgroundColor: TEXT_PRIMARY,
     shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
   },
 })
@@ -786,7 +850,7 @@ function AnimatedToggleButton({
             pointerEvents="none"
             style={{
               position: 'absolute', top: 0, start: 0, end: 0, bottom: 0,
-              backgroundColor: TEXT, alignItems: 'center', justifyContent: 'center',
+              backgroundColor: TEXT_PRIMARY, alignItems: 'center', justifyContent: 'center',
               opacity: activeOpacity,
             }}
           >
@@ -970,10 +1034,25 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
 // Shows up to 6 small round thumbnails + a forward chevron.
 
 function PhotoFieldRow({ photos, userId, onPress, label, grouped }: { photos: string[]; userId: string; onPress: () => void; label?: string; grouped?: boolean }) {
-  const tapProps = useTapResponder(onPress)
+  const press = useRef(new RNAnimated.Value(0)).current
+  const tapProps = useTapResponder(onPress, (pressed) => {
+    RNAnimated.timing(press, {
+      toValue: pressed ? 1 : 0,
+      duration: pressed ? 80 : 180,
+      useNativeDriver: false,
+    }).start()
+  })
   const visible = photos.slice(0, 6)
   return (
     <View style={[grouped ? styles.selectRowInner : styles.selectRow, { alignItems: 'flex-start' }]} {...tapProps}>
+      <RNAnimated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, {
+          backgroundColor: GRAY_50,
+          opacity: press,
+          borderRadius: grouped ? 0 : 16,
+        }]}
+      />
       <ForwardChevronIcon />
       {label != null && (
         <>
@@ -1178,7 +1257,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
 // module-load time.
 // ── Account Tab ────────────────────────────────────────────────────────────
 
-function SignOutIcon({ color = TEXT }: { color?: string }) {
+function SignOutIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -1188,7 +1267,7 @@ function SignOutIcon({ color = TEXT }: { color?: string }) {
   )
 }
 
-function TrashIcon({ color = TEXT }: { color?: string }) {
+function TrashIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="3 6 5 6 21 6" />
@@ -1526,7 +1605,7 @@ export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; o
         <View style={styles.backBtn} />
         <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={handleBack} disabled={uploading}>
-          {uploading ? <ActivityIndicator size="small" color={TEXT} /> : <BackIcon />}
+          {uploading ? <ActivityIndicator size="small" color={TEXT_PRIMARY} /> : <BackIcon />}
         </IconPressable>
       </View>
       <ScrollView
@@ -1615,7 +1694,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
                 {i > 0 && <View style={styles.accountActionDivider} />}
                 <View style={styles.selectRowInner}>
                   <Text style={[styles.selectRowLabel, { flex: 1 }]} numberOfLines={1}>{r.label}</Text>
-                  <Text style={styles.selectRowValue} numberOfLines={1}>{r.value}</Text>
+                  <Text style={[styles.selectRowValue, { color: GRAY_400 }]} numberOfLines={1}>{r.value}</Text>
                 </View>
               </React.Fragment>
             ))}
@@ -1916,7 +1995,7 @@ const spStyles = StyleSheet.create({
   displayValue: {
     fontSize: 40,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     letterSpacing: -0.5,
     marginBottom: 28,
   },
@@ -1949,11 +2028,13 @@ function SectionLabel({ children, icon }: { children: any; icon?: React.ReactNod
 
 export default function SettingsPage({ topInset = 0, onBack, focused = true, onOpenSubPage }: SettingsPageProps = {}) {
   const router = useRouter()
+  const { profile } = useUserStore()
+  const { user } = useAuthStore()
 
-  const profileTap = useTapResponder(() => onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }))
-  const accountTap = useTapResponder(() => onOpenSubPage?.({ kind: 'account',        title: t('settings.account') }))
-  const appTap     = useTapResponder(() => onOpenSubPage?.({ kind: 'appSection',     title: t('settings.appSettings') }))
-  const aboutTap   = useTapResponder(() => onOpenSubPage?.({ kind: 'about',          title: t('settings.about') }))
+  const firstPhoto = profile?.images?.[0]?.normal
+  const avatarUri = firstPhoto
+    ? (localPhotoUriCache.get(firstPhoto) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user?.id ?? profile?.user_id}/normal/${firstPhoto}`)
+    : undefined
 
   return (
     <View style={styles.rootOuter}>
@@ -1979,12 +2060,15 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
           delaysContentTouches={false}
         >
           <View style={styles.accountLinksCard}>
-            <View style={styles.accountLinkRowInner} {...profileTap}>
-              <ForwardChevronIcon />
-              <Text style={styles.accountActionText}>{t('settings.profile')}</Text>
-              <View style={{ flex: 1 }} />
-              <TabIcon tab="profile" color="rgba(0,0,0,0.5)" />
-            </View>
+            <SelectFieldRow
+              grouped
+              size="large"
+              label={t('settings.profile')}
+              subtitle={t('settings.profileSubtitle')}
+              avatar={avatarUri}
+              icon={!avatarUri ? <TabIcon tab="profile" color={GRAY_400} /> : undefined}
+              onPress={() => onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') })}
+            />
           </View>
 
           <PreferencesContent onOpenSubPage={onOpenSubPage} />
@@ -1992,32 +2076,37 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
           <View>
             <SectionLabel>{t('settings.settings').toUpperCase()}</SectionLabel>
             <View style={styles.accountLinksCard}>
-              <View style={styles.accountLinkRowInner} {...accountTap}>
-                <ForwardChevronIcon />
-                <Text style={styles.accountActionText}>{t('settings.account')}</Text>
-                <View style={{ flex: 1 }} />
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
-                  <Polyline points="9 12 11.5 14.5 15.5 10.5" />
-                </Svg>
-              </View>
+              <SelectFieldRow
+                grouped
+                label={t('settings.account')}
+                onPress={() => onOpenSubPage?.({ kind: 'account', title: t('settings.account') })}
+                icon={
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={GRAY_400} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
+                    <Polyline points="9 12 11.5 14.5 15.5 10.5" />
+                  </Svg>
+                }
+              />
               <View style={styles.accountActionDivider} />
-              <View style={styles.accountLinkRowInner} {...appTap}>
-                <ForwardChevronIcon />
-                <Text style={styles.accountActionText}>{t('settings.appSettings')}</Text>
-                <View style={{ flex: 1 }} />
-                <TabIcon tab="app" color="rgba(0,0,0,0.5)" />
-              </View>
+              <SelectFieldRow
+                grouped
+                label={t('settings.appSettings')}
+                onPress={() => onOpenSubPage?.({ kind: 'appSection', title: t('settings.appSettings') })}
+                icon={<TabIcon tab="app" color={GRAY_400} />}
+              />
             </View>
           </View>
 
-          <View style={[styles.accountLinksCard, { marginTop: DOUBLE }]}>
-            <View style={styles.accountLinkRowInner} {...aboutTap}>
-              <ForwardChevronIcon />
-              <Text style={styles.accountActionText}>{t('settings.about')}</Text>
-              <View style={{ flex: 1 }} />
-              <LivoLogo size={20} color="rgba(0,0,0,0.5)" />
-            </View>
+          <View style={[styles.accountLinksCard, styles.accentCard, { marginTop: DOUBLE }]}>
+            <SelectFieldRow
+              grouped
+              size="large"
+              tone="accent"
+              label={t('settings.about')}
+              subtitle={t('settings.aboutSubtitle')}
+              onPress={() => onOpenSubPage?.({ kind: 'about', title: t('settings.about') })}
+              icon={<LivoLogo size={20} color={PRIMARY} />}
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -2028,7 +2117,7 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: WHITE },
+  rootOuter: { flex: 1, backgroundColor: WARM_WHITE },
   root: { flex: 1 },
 
   header: {
@@ -2050,10 +2139,10 @@ const styles = StyleSheet.create({
 
   section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionLabelRow: { flexDirection: 'row', marginTop: DOUBLE * 2, marginBottom: DOUBLE },
-  sectionLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(0,0,0,0.5)', letterSpacing: 1 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: TEXT, marginBottom: 10 },
-  sectionValue: { fontSize: 15, fontWeight: '700', color: TEXT },
+  sectionLabelRow: { flexDirection: 'row', marginTop: 24, marginBottom: 8, paddingHorizontal: SINGLE },
+  sectionLabel: { fontSize: 12, fontWeight: '600', color: GRAY_400, letterSpacing: 1 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: TEXT_PRIMARY, marginBottom: 10 },
+  sectionValue: { fontSize: 15, fontWeight: '700', color: TEXT_PRIMARY },
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SINGLE, justifyContent: 'flex-end', width: 44 * 3 + SINGLE * 2 },
@@ -2085,7 +2174,7 @@ const styles = StyleSheet.create({
   textInputWrapInner: { paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SINGLE },
   textInputHeaderSpacer: { width: 16, height: 16 },
-  textInput: { fontSize: 16, color: TEXT, padding: 0, textAlign: 'center', minHeight: 56 },
+  textInput: { fontSize: 16, color: TEXT_PRIMARY, padding: 0, textAlign: 'center', minHeight: 56 },
   charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.35)' },
 
   // Account tab
@@ -2101,7 +2190,7 @@ const styles = StyleSheet.create({
   infoRowLast: { borderBottomWidth: 0 },
   infoLabel: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
   infoValue: {
-    fontSize: 15, fontWeight: '600', color: TEXT,
+    fontSize: 15, fontWeight: '600', color: TEXT_PRIMARY,
     flexShrink: 1, marginStart: 16,
   },
 
@@ -2112,17 +2201,22 @@ const styles = StyleSheet.create({
     marginBottom: DOUBLE,
   },
   accountLinksCard: {
-    borderRadius: SINGLE, overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: 16, overflow: 'hidden',
+    backgroundColor: WHITE,
     marginBottom: DOUBLE,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
+  // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
+  // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
+  accentCard: { backgroundColor: '#FFF0EB' },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingVertical: 14,
   },
   accountActionsCard: {
-    borderRadius: SINGLE, overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.04)', marginTop: SINGLE,
+    borderRadius: 16, overflow: 'hidden',
+    backgroundColor: WHITE, marginTop: SINGLE,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   accountActionRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -2132,29 +2226,43 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
     marginStart: 16,
   },
-  accountActionText: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
+  accountActionText: { fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500' },
   accountActionTextDestructive: { color: 'rgba(180,60,60,0.6)' },
 
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 10,
-    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: SINGLE,
+    backgroundColor: WHITE, borderRadius: 16,
     paddingHorizontal: BUTTON, paddingVertical: BUTTON, marginTop: SINGLE,
+    overflow: 'hidden',
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.
   selectRowInner: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: BUTTON, paddingVertical: BUTTON,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
   },
-  selectRowLabel: { fontSize: 15, color: 'rgba(0,0,0,0.5)' },
+  selectRowLarge: { paddingVertical: 18 },
+  selectRowTextCol: { justifyContent: 'center' },
+  selectRowLabel: { fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500' },
+  selectRowSubtitle: { fontSize: 13, color: GRAY_400, marginTop: 2 },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectRowValue: { fontSize: 15, color: TEXT },
+  selectRowValue: { fontSize: 15, color: PRIMARY, fontWeight: '500' },
+  selectRowAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: GRAY_50,
+  },
+  selectRowAccentIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: PRIMARY_BG,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // Sub-page overlay panel
   subPageRoot: { backgroundColor: WHITE },
   subPageHeaderTitle: {
-    flex: 1, fontSize: 17, fontWeight: '600', color: TEXT,
+    flex: 1, fontSize: 17, fontWeight: '600', color: TEXT_PRIMARY,
     textAlign: 'center',
   },
   subPageOptionsCard: {
@@ -2166,8 +2274,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: BUTTON, paddingVertical: DOUBLE,
   },
-  subPageOptionLabel: { fontSize: 17, color: TEXT },
-  subPageCheckmark: { fontSize: 17, color: GREEN, fontWeight: '600' },
+  subPageOptionLabel: { fontSize: 17, color: TEXT_PRIMARY },
+  subPageCheckmark: { fontSize: 17, color: PRIMARY, fontWeight: '600' },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
     marginStart: 16,

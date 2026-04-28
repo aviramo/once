@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, type GestureResponderEvent } from 'react-native'
 import { Image } from 'expo-image'
+import Svg, { Path, Circle, Line } from 'react-native-svg'
 import { Text } from './AppText'
 import { t, tg } from '../i18n'
 import type { Profile } from '../stores/userStore'
-import { Chip, PinIcon, ClockIcon, BellOnIcon, BellOffIcon } from './Chip'
-import { SINGLE } from '../fonts'
-import { TEXT, WHITE } from '../colors'
+import { Chip, PinIcon, ClockIcon, BellOffIcon } from './Chip'
+import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY } from '../colors'
 
 // ── Format helpers ────────────────────────────────────────────────────────
 
@@ -35,14 +35,31 @@ function formatLastSeen(iso: string | null | undefined): string {
 }
 
 const NEAR_METERS = 1000
-const RECENT_SECONDS = 600
+const ONLINE_SECONDS = 60
+const NEW_SECONDS = 3600
 
 function isDistanceNear(m?: number | null) {
   return m != null && !isNaN(m) && m < NEAR_METERS
 }
-function isTimeRecent(iso?: string | null) {
+function isOnlineNow(iso?: string | null) {
   if (!iso) return false
-  return (Date.now() - new Date(iso).getTime()) / 1000 < RECENT_SECONDS
+  return (Date.now() - new Date(iso).getTime()) / 1000 < ONLINE_SECONDS
+}
+function isRecentlyCreated(iso?: string | null) {
+  if (!iso) return false
+  return (Date.now() - new Date(iso).getTime()) / 1000 < NEW_SECONDS
+}
+
+// ── Eye-off overlay icon (small badge on the blurred photo) ───────────────
+
+function EyeOffBadge() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M2 12s3.5-7 10-7c2.1 0 3.9.7 5.4 1.7M22 12s-3.5 7-10 7c-2.1 0-3.9-.7-5.4-1.7" stroke={WHITE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx={12} cy={12} r={3} stroke={WHITE} strokeWidth={2} />
+      <Line x1={3} y1={3} x2={21} y2={21} stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" />
+    </Svg>
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -52,13 +69,14 @@ type Props = {
   units?: string | null
   exiting?: boolean
   onExited?: () => void
-  flat?: boolean
   onPress?: () => void
 }
 
-export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }: Props) {
+export function WatcherCard({ watcher, units, exiting, onExited, onPress }: Props) {
   const distance = formatDistance(watcher.distance ?? undefined, units)
   const lastSeen = formatLastSeen(watcher.last_seen)
+  const online = isOnlineNow(watcher.last_seen)
+  const isNew = isRecentlyCreated(watcher.created_at)
   const hash = watcher.images?.[0]?.hash
 
   const anim = useRef(new Animated.Value(0)).current
@@ -115,7 +133,7 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
       <Pressable
-        style={[styles.card, flat && styles.cardFlat]}
+        style={styles.card}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={handlePress}
@@ -128,6 +146,14 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
               style={styles.avatarImage}
             />
           ) : null}
+          {isNew ? (
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>{t('home.watchingMeNew')}</Text>
+            </View>
+          ) : null}
+          <View style={styles.eyeBadge}>
+            <EyeOffBadge />
+          </View>
         </View>
         <View style={styles.body}>
           <Text style={styles.title} numberOfLines={1}>{watcher.title}</Text>
@@ -140,11 +166,11 @@ export function WatcherCard({ watcher, units, exiting, onExited, flat, onPress }
               />
             ) : null}
             {lastSeen ? (
-              <Chip
-                renderIcon={color => <ClockIcon color={color} />}
-                text={lastSeen}
-                tone="neutral"
-              />
+              <View style={styles.onlineChip}>
+                <ClockIcon color="rgba(0,0,0,0.6)" />
+                <Text style={styles.onlineChipText} numberOfLines={1}>{lastSeen}</Text>
+                {online ? <View style={styles.onlineDot} /> : null}
+              </View>
             ) : null}
             {!watcher.push_enabled && (
               <Chip
@@ -166,42 +192,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     padding: 12,
-    borderRadius: SINGLE,
-    backgroundColor: WHITE,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-  },
-  cardFlat: {
-    borderRadius: 0,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
+    borderRadius: 16,
+    backgroundColor: '#FFF0EB',
+    shadowColor: BLACK,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
   },
   avatar: {
-    width: 66,
-    height: 88,
-    borderRadius: SINGLE,
+    width: 72,
+    height: 92,
+    borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
+    position: 'relative',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
   },
+  newBadge: {
+    position: 'absolute',
+    top: 6,
+    start: 6,
+    backgroundColor: PRIMARY,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  newBadgeText: {
+    color: WHITE,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  eyeBadge: {
+    position: 'absolute',
+    bottom: 6,
+    start: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   body: {
     flex: 1,
     justifyContent: 'center',
-    minHeight: 88,
+    minHeight: 92,
     gap: 8,
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+  },
+  onlineChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  onlineChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(0,0,0,0.6)',
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#2BB673',
   },
 })

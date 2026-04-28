@@ -58,7 +58,38 @@ export type Pages = {
   page2: Profile[] | Page2Invite;
 };
 
-export type Notify = { user_id: string; code: string };
+export type Notify = { user_id: string; code: string; actor_id?: string };
+
+export const PUSH_BODY: Record<string, Record<string, string>> = {
+  he: {
+    'invite-in': "הזמנה לצ'אט",
+    'match': 'אתם אחד על אחד',
+    'declined': 'ההזמנה נדחתה',
+    'expired-out': 'ההזמנה פגה',
+    'expired-in': 'ההזמנה פגה',
+    'cancelled-in': 'ההזמנה בוטלה',
+    'removed': 'הוסרת מרשימת הצופים',
+    'left': "הצ'אט הסתיים",
+    'extended': 'ההזמנה הוארכה',
+    'invite-fail': 'איחרת להזמנה',
+    'approve-fail': 'איחרת לאישור',
+    'chat': 'התקבלה הודעה',
+  },
+  en: {
+    'invite-in': 'Chat invitation',
+    'match': 'One on one',
+    'declined': 'Invitation declined',
+    'expired-out': 'Invitation expired',
+    'expired-in': 'Invitation expired',
+    'cancelled-in': 'Invitation cancelled',
+    'removed': 'Removed from viewers',
+    'left': 'Chat ended',
+    'extended': 'Invitation extended',
+    'invite-fail': 'You missed it',
+    'approve-fail': 'You missed the approval',
+    'chat': 'New message',
+  },
+};
 
 export type RpcResult = {
   user?: Record<string, unknown>;

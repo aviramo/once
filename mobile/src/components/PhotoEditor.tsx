@@ -17,7 +17,7 @@ import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SINGLE } from '../fonts'
-import { TEXT, WHITE, GREEN } from '../colors'
+import { TEXT_PRIMARY, WHITE, PRIMARY } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -91,7 +91,7 @@ function PhotoCell({
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
       {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={3} strokeLinecap="round">
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={3} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
@@ -227,7 +227,7 @@ function PhotoGrid({
               </Svg>
             </View>
           )}
-          <ActivityIndicator size="small" color={GREEN} style={photoStyles.placeholderSpinner} />
+          <ActivityIndicator size="small" color={PRIMARY} style={photoStyles.placeholderSpinner} />
         </View>
       ))}
       {additionalChildren}

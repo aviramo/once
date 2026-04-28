@@ -10,7 +10,7 @@ import { IconPressable } from './IconPressable'
 import { CountBadge } from './CountBadge'
 import { tapMedium } from '../lib/haptics'
 import { FONT_SCALE, SINGLE } from '../fonts'
-import { TEXT, GREEN, GRAY_400, RED } from '../colors'
+import { TEXT_PRIMARY, PRIMARY, GRAY_400, DESTRUCTIVE } from '../colors'
 
 const isRTL = I18nManager.isRTL
 
@@ -18,7 +18,7 @@ const isRTL = I18nManager.isRTL
 
 function SettingsIcon() {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
       <Circle cx={12} cy={12} r={3} />
     </Svg>
@@ -27,14 +27,14 @@ function SettingsIcon() {
 
 function SearchIcon() {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx={11} cy={11} r={7} />
       <Path d="M 16.5 16.5 L 21 21" />
     </Svg>
   )
 }
 
-function ChatIcon({ color = TEXT }: { color?: string }) {
+function ChatIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -42,7 +42,7 @@ function ChatIcon({ color = TEXT }: { color?: string }) {
   )
 }
 
-function SendInviteIcon({ color = TEXT }: { color?: string }) {
+function SendInviteIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   return (
     <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -52,7 +52,7 @@ function SendInviteIcon({ color = TEXT }: { color?: string }) {
   )
 }
 
-function ReceiveInviteIcon({ color = TEXT }: { color?: string }) {
+function ReceiveInviteIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   return (
     <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -64,7 +64,7 @@ function ReceiveInviteIcon({ color = TEXT }: { color?: string }) {
 
 function HamburgerIcon() {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M 4 6 L 20 6" />
       <Path d="M 4 12 L 20 12" />
       <Path d="M 4 18 L 20 18" />
@@ -74,7 +74,7 @@ function HamburgerIcon() {
 
 function BackArrowIcon() {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={isRTL ? 'M 9 6 L 15 12 L 9 18' : 'M 15 6 L 9 12 L 15 18'} />
     </Svg>
   )
@@ -82,13 +82,13 @@ function BackArrowIcon() {
 
 function DownArrowIcon() {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M12 5 L12 19 M5 13 L12 20 L19 13" />
     </Svg>
   )
 }
 
-function SideArrowIcon({ color = TEXT }: { color?: string }) {
+function SideArrowIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={isRTL ? 'M 15 6 L 9 12 L 15 18' : 'M 9 6 L 15 12 L 9 18'} />
@@ -139,7 +139,7 @@ export type HomeHeaderProps = {
   }
   /** Badge count shown next to the title (e.g. chat unread). */
   badge?: number
-  /** Badge color override (defaults to GREEN). */
+  /** Badge color override (defaults to PRIMARY). */
   badgeColor?: string
   /** Status menu options. When provided, the chip becomes tappable and opens a dropdown. */
   statusMenu?: Array<{ label: string; color?: string; active?: boolean; onPress: () => void }>
@@ -237,7 +237,7 @@ export function HomeHeader({
   }
 
   // Resolve the fill color for the title text when a menu is present.
-  const titleColor = statusColor ?? (statusGreen ? GREEN : TEXT)
+  const titleColor = statusColor ?? (statusGreen ? PRIMARY : TEXT_PRIMARY)
 
   const hasMenu = statusMenu && statusMenu.length > 0
 
@@ -252,7 +252,7 @@ export function HomeHeader({
         {icon}
         <Text style={[styles.title, hasMenu && { color: titleColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
         {badge != null && (
-          <CountBadge value={badge} color={badgeColor ?? GREEN} />
+          <CountBadge value={badge} color={badgeColor ?? PRIMARY} />
         )}
       </IconPressable>
     ) : hasMenu ? (
@@ -273,14 +273,14 @@ export function HomeHeader({
         )}
         <Text style={[styles.title, { color: titleColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
         {badge != null && (
-          <CountBadge value={badge} color={badgeColor ?? GREEN} />
+          <CountBadge value={badge} color={badgeColor ?? PRIMARY} />
         )}
       </IconPressable>
     ) : (
       <View style={styles.titleRow}>
         <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
         {badge != null && (
-          <CountBadge value={badge} color={badgeColor ?? GREEN} />
+          <CountBadge value={badge} color={badgeColor ?? PRIMARY} />
         )}
       </View>
     )
@@ -305,7 +305,7 @@ export function HomeHeader({
         {page2Arrow ? (
           <IconPressable style={styles.titleBtn} pressedStyle={styles.titleBtnPressed} onPress={page2Arrow.onPress}>
             {page2Arrow.count != null && (page2Arrow.icon === 'chat' ? page2Arrow.count > 0 : true) && (
-              <Animated.View style={[styles.viewerChip, (page2Arrow.hasInvite || page2Arrow.icon === 'chat') && { backgroundColor: GREEN }, page2Arrow.hasDead && { backgroundColor: RED }, badgeAnimStyle]}>
+              <Animated.View style={[styles.viewerChip, (page2Arrow.hasInvite || page2Arrow.icon === 'chat') && { backgroundColor: PRIMARY }, page2Arrow.hasDead && { backgroundColor: DESTRUCTIVE }, badgeAnimStyle]}>
                 <Text style={[styles.viewerChipText, { color: page2Arrow.hasInvite || page2Arrow.hasDead || page2Arrow.icon === 'chat' ? '#fff' : GRAY_400 }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
                   {page2Arrow.hasInvite ? 1 : page2Arrow.count}
                 </Text>
@@ -313,7 +313,7 @@ export function HomeHeader({
             )}
             {page2Arrow.icon === 'chat' && (page2Arrow.count ?? 0) === 0 && <ChatIcon />}
             <Animated.View style={arrowNudgeStyle}>
-              <SideArrowIcon color={(page2Arrow.hasInvite || (page2Arrow.icon === 'chat' && (page2Arrow.count ?? 0) > 0)) ? GREEN : undefined} />
+              <SideArrowIcon color={(page2Arrow.hasInvite || (page2Arrow.icon === 'chat' && (page2Arrow.count ?? 0) > 0)) ? PRIMARY : undefined} />
             </Animated.View>
           </IconPressable>
         ) : !centered ? titleContent : null}
@@ -336,7 +336,7 @@ export function HomeHeader({
                   <View key={i} style={styles.menuOptionActive}>
                     <View style={[styles.menuDot, { backgroundColor: opt.color ?? 'rgba(0,0,0,0.25)' }]} />
                     <Text style={[styles.menuOptionText, opt.color ? { color: opt.color } : null]} maxFontSizeMultiplier={FONT_SCALE.ui}>{opt.label}</Text>
-                    <CheckIcon color={opt.color ?? TEXT} />
+                    <CheckIcon color={opt.color ?? TEXT_PRIMARY} />
                   </View>
                 ) : (
                   <IconPressable
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     letterSpacing: -0.5,
     lineHeight: 26,
     includeFontPadding: false,
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   viewerChipText: {
     fontSize: 14,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     includeFontPadding: false,
     textAlignVertical: 'center',
     lineHeight: 18,
@@ -463,10 +463,10 @@ const styles = StyleSheet.create({
   statusChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: TEXT,
+    color: TEXT_PRIMARY,
   },
   statusChipTextGreen: {
-    color: GREEN,
+    color: PRIMARY,
   },
   settingsBtn: {
     height: 40,
@@ -530,6 +530,6 @@ const styles = StyleSheet.create({
   menuOptionText: {
     fontSize: 15,
     fontWeight: '600',
-    color: TEXT,
+    color: TEXT_PRIMARY,
   },
 })

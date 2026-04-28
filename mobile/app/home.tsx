@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState, Dimensions, Pressable, Modal, Platform, useColorScheme } from 'react-native'
+import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, withDelay, cancelAnimation, interpolateColor, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
 import PagerView from 'react-native-pager-view'
@@ -14,7 +14,7 @@ import { t, tg, tgg, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button } from '../src/components/Button'
-import { TEXT, WHITE, BLACK, GREEN, RED, GRAY_50 } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_50, GRAY_100, GRAY_400 } from '../src/colors'
 import { SINGLE, DOUBLE } from '../src/fonts'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -30,49 +30,46 @@ import { LivoLogo } from '../src/components/LivoLogo'
 import { Image } from 'expo-image'
 
 
-// ── GPS pulse rings ────────────────────────────────────────────────────────
+// ── Avatar rings: static halo + radar pulse ───────────────────────────────
 
 const AVATAR_SIZE = 130
-const RING_COUNT = 1
-const RING_DURATION = 3000
-const RING_STAGGER = 0
+const RADAR_RING_COUNT = 3
+const RADAR_DURATION = 1800
+const RADAR_STAGGER = RADAR_DURATION / RADAR_RING_COUNT
+const RADAR_START_SCALE = 1.05
+const RADAR_END_SCALE = 1.5
+const RADAR_PEAK_OPACITY = 0.22
 
-function PulseRing({ delay, active }: { delay: number; active: boolean }) {
+function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }) {
   const progress = useSharedValue(1)
 
   useEffect(() => {
+    cancelAnimation(progress)
     if (active) {
       progress.value = withDelay(
-        delay,
+        ringIndex * RADAR_STAGGER,
         withRepeat(
           withSequence(
             withTiming(0, { duration: 0 }),
-            withTiming(1, { duration: RING_DURATION, easing: Easing.out(Easing.cubic) }),
+            withTiming(1, { duration: RADAR_DURATION, easing: Easing.out(Easing.quad) }),
           ),
           -1,
-          false
-        )
+          false,
+        ),
       )
     } else {
-      cancelAnimation(progress)
-      progress.value = withTiming(1, { duration: 400 })
+      progress.value = withTiming(1, { duration: 200 })
     }
   }, [active])
 
-  const style = useAnimatedStyle(() => ({
-    opacity: (1 - progress.value) * 0.75,
-    transform: [{ scale: 1 + progress.value * 0.95 }],
-    borderColor: interpolateColor(
-      progress.value,
-      [0, 0.5, 1],
-      ['#767676', '#a0a0a0', '#767676']
-    ),
-    backgroundColor: interpolateColor(
-      progress.value,
-      [0, 0.5, 1],
-      ['rgba(118,118,118,0.22)', 'rgba(160,160,160,0.08)', 'rgba(118,118,118,0)']
-    ),
-  }))
+  const style = useAnimatedStyle(() => {
+    const t = progress.value
+    const fade = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85
+    return {
+      opacity: RADAR_PEAK_OPACITY * fade,
+      transform: [{ scale: RADAR_START_SCALE + (RADAR_END_SCALE - RADAR_START_SCALE) * t }],
+    }
+  })
 
   return (
     <Animated.View
@@ -82,18 +79,63 @@ function PulseRing({ delay, active }: { delay: number; active: boolean }) {
         width: AVATAR_SIZE,
         height: AVATAR_SIZE,
         borderRadius: AVATAR_SIZE / 2,
-        borderWidth: 3,
+        borderWidth: 2,
+        borderColor: PRIMARY,
       }, style]}
     />
   )
 }
 
-function PulseRings({ active }: { active: boolean }) {
+function RadarRings({ active }: { active: boolean }) {
   return (
     <>
-      {Array.from({ length: RING_COUNT }, (_, i) => (
-        <PulseRing key={i} delay={i * RING_STAGGER} active={active} />
+      {Array.from({ length: RADAR_RING_COUNT }, (_, i) => (
+        <RadarRing key={i} active={active} ringIndex={i} />
       ))}
+    </>
+  )
+}
+
+const HALO_SIZE = Math.round(AVATAR_SIZE * 1.55)
+const SOLID_RING_SIZE = Math.round(AVATAR_SIZE * 1.18)
+const DOTTED_RING_SIZE = Math.round(AVATAR_SIZE * 1.55)
+
+function AvatarHaloRings() {
+  return (
+    <>
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        width: HALO_SIZE,
+        height: HALO_SIZE,
+        borderRadius: HALO_SIZE / 2,
+        backgroundColor: PRIMARY_BG,
+      }} />
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        width: SOLID_RING_SIZE,
+        height: SOLID_RING_SIZE,
+        borderRadius: SOLID_RING_SIZE / 2,
+        borderWidth: 1.5,
+        borderColor: PRIMARY,
+        opacity: 0.5,
+      }} />
+      <Svg
+        pointerEvents="none"
+        width={DOTTED_RING_SIZE}
+        height={DOTTED_RING_SIZE}
+        style={{ position: 'absolute' }}
+      >
+        <Circle
+          cx={DOTTED_RING_SIZE / 2}
+          cy={DOTTED_RING_SIZE / 2}
+          r={DOTTED_RING_SIZE / 2 - 2}
+          stroke={PRIMARY}
+          strokeWidth={1.5}
+          strokeDasharray="2 5"
+          fill="none"
+          opacity={0.45}
+        />
+      </Svg>
     </>
   )
 }
@@ -113,6 +155,146 @@ function PersonGlyph({ variant, size = 140 }: { variant: 'M' | 'F'; size?: numbe
         <Path d="M22 116 V 82 C 22 66 34 54 50 54 C 66 54 78 66 78 82 V 116 Z" fill={color} />
       )}
     </Svg>
+  )
+}
+
+function ChatBubbleIcon({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </Svg>
+  )
+}
+
+function HeartIcon({ color, size = 28, filled }: { color: string; size?: number; filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </Svg>
+  )
+}
+
+function SmallSearchIcon({ color }: { color: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={11} cy={11} r={7} />
+      <Path d="M 16.5 16.5 L 21 21" />
+    </Svg>
+  )
+}
+
+function PaperPlaneIcon({ color, size = 18 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M22 2L11 13" />
+      <Path d="M22 2l-7 20-4-9-9-4 20-7z" />
+    </Svg>
+  )
+}
+
+// ── Watching-Me page icons ────────────────────────────────────────────────
+
+function EyeOpenIcon({ color, size = 22 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx={12} cy={12} r={3} fill={color} />
+    </Svg>
+  )
+}
+
+function EyeClosedIcon({ color, size = 22 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 13c2 3 5.5 5 9 5s7-2 9-5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M5 16l-1.5 2M19 16l1.5 2M9 18l-.5 2.2M15 18l.5 2.2M12 19v2.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  )
+}
+
+function LockIcon({ color, size = 14 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M5 11h14v10H5z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M8 11V8a4 4 0 1 1 8 0v3" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  )
+}
+
+function SparkleIcon({ color, size = 14, style }: { color: string; size?: number; style?: any }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={style}>
+      <Path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z" />
+    </Svg>
+  )
+}
+
+// Telescope illustration: stars + clouds + a soft telescope on a tripod.
+function TelescopeIllustration() {
+  const sky = '#FAD7C9'
+  const cloud = '#F1E8E2'
+  const tube = '#FFFFFF'
+  const tubeStroke = '#E0CFC4'
+  const accent = PRIMARY
+  const tripod = '#C9B8AE'
+  return (
+    <Svg width={220} height={170} viewBox="0 0 220 170" fill="none">
+      {/* sparkles */}
+      <Path d="M30 30 l1.4 4 4 1.4 -4 1.4 -1.4 4 -1.4-4 -4-1.4 4-1.4z" fill={accent} opacity={0.55} />
+      <Path d="M188 22 l1.2 3.4 3.4 1.2 -3.4 1.2 -1.2 3.4 -1.2-3.4 -3.4-1.2 3.4-1.2z" fill={accent} opacity={0.45} />
+      <Path d="M170 92 l1 3 3 1 -3 1 -1 3 -1-3 -3-1 3-1z" fill={accent} opacity={0.5} />
+      <Path d="M40 90 l1 3 3 1 -3 1 -1 3 -1-3 -3-1 3-1z" fill={accent} opacity={0.4} />
+
+      {/* clouds */}
+      <Path d="M16 70 q-6 0 -6 6 q0 6 6 6 h22 q6 0 6 -6 q0-6 -6-6 q-2 -6 -8-6 q-7 0 -10 6 z" fill={cloud} opacity={0.85} />
+      <Path d="M170 56 q-5 0 -5 5 q0 5 5 5 h22 q6 0 6-5 q0-5 -6-5 q-3-5 -9-5 q-7 0 -13 5 z" fill={cloud} opacity={0.85} />
+
+      {/* tripod */}
+      <Path d="M110 110 L92 158" stroke={tripod} strokeWidth={4} strokeLinecap="round" />
+      <Path d="M110 110 L128 158" stroke={tripod} strokeWidth={4} strokeLinecap="round" />
+      <Path d="M110 110 L110 156" stroke={tripod} strokeWidth={4} strokeLinecap="round" />
+
+      {/* telescope tube — tilted up to the right */}
+      <Path d="M64 96 L162 60 L172 78 L74 114 Z" fill={tube} stroke={tubeStroke} strokeWidth={2} strokeLinejoin="round" />
+      {/* eyepiece */}
+      <Path d="M58 99 L72 91 L74 96 L60 104 Z" fill={tubeStroke} />
+      {/* lens accent ring */}
+      <Path d="M158 56 L172 53 L176 70 L162 73 Z" fill={accent} opacity={0.35} />
+      <Circle cx={167} cy={62} r={6} fill={sky} />
+
+      {/* base mount */}
+      <Circle cx={110} cy={110} r={8} fill={tripod} />
+    </Svg>
+  )
+}
+
+// Three blurred avatar-like circles with subtle decorative sparkles —
+// communicates "more might be watching" without showing fake data.
+function PotentialPresence() {
+  const pulse = useSharedValue(0)
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    )
+  }, [])
+  const aStyle = useAnimatedStyle(() => ({ opacity: 0.22 + pulse.value * 0.10 }))
+  const bStyle = useAnimatedStyle(() => ({ opacity: 0.30 + pulse.value * 0.10 }))
+  const cStyle = useAnimatedStyle(() => ({ opacity: 0.22 + pulse.value * 0.10 }))
+  return (
+    <View style={{ alignItems: 'center', marginTop: 20 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <SparkleIcon color={PRIMARY} size={14} style={{ opacity: 0.55 }} />
+        <Animated.View style={[{ width: 44, height: 44, borderRadius: 22, backgroundColor: PRIMARY }, aStyle]} />
+        <Animated.View style={[{ width: 56, height: 56, borderRadius: 28, backgroundColor: PRIMARY }, bStyle]} />
+        <Animated.View style={[{ width: 44, height: 44, borderRadius: 22, backgroundColor: PRIMARY }, cStyle]} />
+        <SparkleIcon color={PRIMARY} size={12} style={{ opacity: 0.45 }} />
+      </View>
+    </View>
   )
 }
 
@@ -173,7 +355,7 @@ function Message({
       {badgeCount != null && badgeCount !== 0 ? (
         <View style={messageStyles.titleRow}>
           {titleNode}
-          <CountBadge value={badgeCount} color={titleColor ?? TEXT} />
+          <CountBadge value={badgeCount} color={titleColor ?? TEXT_PRIMARY} />
         </View>
       ) : titleNode}
       {subtitle ? (
@@ -202,7 +384,7 @@ const messageStyles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
@@ -215,7 +397,7 @@ const messageStyles = StyleSheet.create({
     marginTop: 6,
     fontSize: 15,
     fontWeight: '600',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     letterSpacing: -0.2,
   },
@@ -235,14 +417,6 @@ const messageStyles = StyleSheet.create({
 })
 
 // ── Invite timer ──────────────────────────────────────────────────────────
-
-const EXTEND_MINUTES = [10, 30, 60, 120, 240, 480, 1440]
-
-function formatExtendOption(minutes: number): string {
-  if (minutes < 60) return `${minutes} ${t('home.extendOptionMin')}`
-  if (minutes === 1440) return t('home.extendOptionDay')
-  return `${minutes / 60} ${t('home.extendOptionHr')}`
-}
 
 function useSecsLeft(expiresAt: string) {
   const [secsLeft, setSecsLeft] = useState(() =>
@@ -266,127 +440,118 @@ function formatClock(secsLeft: number): string {
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-// Overlay shown on top of the profile image in the invited state.
-function InviteTimerOverlay({ expiresAt, extended }: { expiresAt: string; extended?: boolean }) {
+const TIMER_RING_SIZE = 112
+const TIMER_RING_RADIUS = (TIMER_RING_SIZE - 8) / 2
+const TIMER_RING_CIRCUMFERENCE = 2 * Math.PI * TIMER_RING_RADIUS
+
+function CircularTimer({ expiresAt, totalSecs, extended, targetIsMale }: { expiresAt: string; totalSecs: number; extended?: boolean; targetIsMale?: boolean | null }) {
   const secsLeft = useSecsLeft(expiresAt)
   const isExpired = secsLeft === 0
   const isUrgent = secsLeft > 0 && secsLeft < 120
-  const pulse = useSharedValue(1)
-  const enter = useSharedValue(0)
-  const bump = useSharedValue(1)
-  const isFirstRender = useRef(true)
+  const progress = Math.max(0, Math.min(1, secsLeft / Math.max(1, totalSecs)))
 
-  useEffect(() => {
-    enter.value = withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) })
-  }, [])
+  const ringColor = isExpired ? DESTRUCTIVE : PRIMARY
+  const labelColor = isExpired ? DESTRUCTIVE : PRIMARY
+  const dashLen = TIMER_RING_CIRCUMFERENCE * progress
 
+  // Gentle blink when expired.
+  const blink = useSharedValue(1)
   useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return }
-    bump.value = withSequence(
-      withTiming(1.12, { duration: 140, easing: Easing.out(Easing.quad) }),
-      withTiming(0.94, { duration: 100 }),
-      withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) }),
-    )
-  }, [expiresAt])
-
-  useEffect(() => {
+    cancelAnimation(blink)
     if (isExpired) {
-      pulse.value = withRepeat(
+      blink.value = withRepeat(
         withSequence(
-          withTiming(0.2, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.35, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
         ),
         -1,
         false,
       )
-    } else if (isUrgent) {
-      pulse.value = withRepeat(
-        withTiming(0.55, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true,
-      )
     } else {
-      pulse.value = withTiming(1, { duration: 300 })
+      blink.value = withTiming(1, { duration: 200 })
     }
-  }, [isExpired, isUrgent])
-
-  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }))
-  const enterStyle = useAnimatedStyle(() => ({
-    opacity: enter.value,
-    transform: [{ translateY: (enter.value - 1) * 24 }],
-  }))
-  const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }))
-
-  const clockColor = isExpired ? '#ef4444' : isUrgent ? '#fb923c' : '#4ade80'
-  const labelColor = isExpired ? 'rgba(239,68,68,0.7)' : isUrgent ? 'rgba(251,146,60,0.7)' : 'rgba(134,239,172,0.72)'
+  }, [isExpired])
+  const blinkStyle = useAnimatedStyle(() => ({ opacity: blink.value }))
 
   return (
-    <Animated.View style={[overlayStyles.container, enterStyle]}>
-      <View style={[overlayStyles.topLine, isExpired && overlayStyles.topLineExpired, isUrgent && overlayStyles.topLineUrgent]} />
-      <View style={overlayStyles.band}>
-        <Animated.View style={[overlayStyles.content, pulseStyle, bumpStyle]}>
-          <Text style={[overlayStyles.label, { color: labelColor }]}>{t(extended ? 'home.inviteTimerLabelExtended' : 'home.inviteTimerLabel')}</Text>
-          <Text style={[overlayStyles.clock, { color: clockColor }]}>{formatClock(secsLeft)}</Text>
+    <View style={timerStyles.container}>
+      <View style={timerStyles.ringWrap}>
+        <Svg width={TIMER_RING_SIZE} height={TIMER_RING_SIZE}>
+          <Circle
+            cx={TIMER_RING_SIZE / 2}
+            cy={TIMER_RING_SIZE / 2}
+            r={TIMER_RING_RADIUS}
+            stroke={PRIMARY_BG}
+            strokeWidth={4}
+            fill="none"
+          />
+          <Circle
+            cx={TIMER_RING_SIZE / 2}
+            cy={TIMER_RING_SIZE / 2}
+            r={TIMER_RING_RADIUS}
+            stroke={ringColor}
+            strokeWidth={4}
+            fill="none"
+            strokeDasharray={`${dashLen} ${TIMER_RING_CIRCUMFERENCE}`}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${TIMER_RING_SIZE / 2} ${TIMER_RING_SIZE / 2})`}
+          />
+        </Svg>
+        <Animated.View style={[timerStyles.ringCenter, blinkStyle]} pointerEvents="none">
+          <Text style={[timerStyles.expiresLabel, { color: labelColor }]}>
+            {t(extended ? 'home.inviteTimerLabelExtended' : 'home.inviteTimerLabel')}
+          </Text>
+          <Text style={[timerStyles.clock, (isUrgent || isExpired) && { color: ringColor }]}>{formatClock(secsLeft)}</Text>
         </Animated.View>
       </View>
-    </Animated.View>
+      <Text style={timerStyles.combinedText}>
+        {`${tg('home.waitingNoInvitesTitle', targetIsMale ?? null)} ${tg('home.waitingNoInvitesSubtext', targetIsMale ?? null)}`}
+      </Text>
+    </View>
   )
 }
 
-const overlayStyles = StyleSheet.create({
+const timerStyles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    start: 0,
-    end: 0,
-    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF2EE',
+    paddingTop: 20,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderRadius: 12,
   },
-  topLine: {
-    height: 3,
-    backgroundColor: '#22c55e',
+  expiresLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 2,
   },
-  topLineExpired: {
-    backgroundColor: '#ef4444',
-  },
-  topLineUrgent: {
-    backgroundColor: '#fb923c',
-  },
-  band: {
-    backgroundColor: 'rgba(0, 15, 4, 0.76)',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  content: {
-    flexDirection: 'column',
+  ringWrap: {
+    width: TIMER_RING_SIZE,
+    height: TIMER_RING_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
   },
-  label: {
-    fontSize: 13,
-    fontWeight: '500',
+  ringCenter: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   clock: {
-    fontSize: 42,
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: -1,
+    letterSpacing: -0.4,
+    color: TEXT_PRIMARY,
     fontVariant: ['tabular-nums'],
   },
+  combinedText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 21,
+    color: TEXT_PRIMARY,
+    marginStart: 20,
+  },
 })
-
-function ExtendButton({ busy, pendingKey, onOpen }: {
-  busy: boolean; pendingKey: string | null; onOpen: () => void
-}) {
-  return (
-    <Button
-      variant="primary"
-      label={t('home.extendBtn')}
-      onPress={onOpen}
-      disabled={busy}
-      loading={busy && pendingKey === 'extend'}
-    />
-  )
-}
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
@@ -762,9 +927,19 @@ export default function HomePage() {
 
   const showLocOverlay = locPerm !== 'granted'
 
-  // Unified card mode — derived synchronously so the header title never
-  // flashes a stale value between state changes and the next render.
-  const displayedCardMode = state
+  // Unified card mode — sticky against transient null transitions (e.g. brief
+  // gaps when invoke→realtime races on invite). Holds the last valid state for
+  // 250ms before flipping to null, so the card doesn't unmount and remount
+  // during a state change like watching → waiting on the same match.
+  const [displayedCardMode, setDisplayedCardMode] = useState<string | null>(state)
+  useEffect(() => {
+    if (state !== null) {
+      setDisplayedCardMode(state)
+      return
+    }
+    const id = setTimeout(() => setDisplayedCardMode(null), 250)
+    return () => clearTimeout(id)
+  }, [state])
 
   // ── Re-check permissions when app returns to foreground ────────────────
   // Covers the user changing app permissions in device settings, etc.
@@ -840,7 +1015,6 @@ export default function HomePage() {
         setPaneIndex(HOME_PANE)
         pagerRef.current?.setPage(HOME_PANE)
       }
-      setExtendPickerOpen(false)
     }
   }, [state])
 
@@ -880,28 +1054,6 @@ export default function HomePage() {
   // visually normal but non-interactive via `silentDisabled`.
   const [busy, setBusy] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
-  const [extendPickerOpen, setExtendPickerOpen] = useState(false)
-  const [extendModalVisible, setExtendModalVisible] = useState(false)
-  const extendSheetY = useSharedValue(400)
-  const extendSheetHeight = useRef(400)
-  const extendSheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: extendSheetY.value }],
-  }))
-  useEffect(() => {
-    if (extendPickerOpen) {
-      extendSheetY.value = extendSheetHeight.current
-      setExtendModalVisible(true)
-      requestAnimationFrame(() => {
-        extendSheetY.value = withTiming(0, { duration: 350, easing: Easing.out(Easing.cubic) })
-      })
-    } else {
-      extendSheetY.value = withTiming(extendSheetHeight.current, { duration: 250, easing: Easing.in(Easing.cubic) }, () => {
-        runOnJS(setExtendModalVisible)(false)
-      })
-    }
-  }, [extendPickerOpen])
-
-
 
   // Two-slot system: A and B alternate as active/incoming.
   // The incoming slot loads invisibly on top (via topSlot zIndex), then
@@ -925,15 +1077,26 @@ export default function HomePage() {
   useEffect(() => { matchARef.current = matchA }, [matchA])
   useEffect(() => { matchBRef.current = matchB }, [matchB])
 
+  // Defer clearing matchA/matchB on transient nulls so a brief gap during
+  // state transitions (e.g. invoke→realtime races on invite) doesn't unmount
+  // the card. Only clear if the match stays null for 250ms.
+  const clearMatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const next = profile?.relations?.match ?? null
     const active = activeSlotRef.current
     const activeMatch = active === 'A' ? matchARef.current : matchBRef.current
+    if (clearMatchTimeoutRef.current) {
+      clearTimeout(clearMatchTimeoutRef.current)
+      clearMatchTimeoutRef.current = null
+    }
     if (!next) {
-      opacityA.value = 0
-      opacityB.value = 0
-      setMatchA(null)
-      setMatchB(null)
+      clearMatchTimeoutRef.current = setTimeout(() => {
+        opacityA.value = 0
+        opacityB.value = 0
+        setMatchA(null)
+        setMatchB(null)
+        clearMatchTimeoutRef.current = null
+      }, 250)
       return
     }
     if (next.user_id === activeMatch?.user_id) {
@@ -1002,10 +1165,22 @@ export default function HomePage() {
   const handleSlotReadyB = useCallback(() => handleSlotReady('B'), [handleSlotReady])
 
   const watchers = profile?.relations?.watchers
-    ? [...profile.relations.watchers].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+    ? [...profile.relations.watchers].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
     : []
 
-  const showHiddenPlaceholder = !!profile && displayedCardMode === null
+  const rawShowHiddenPlaceholder = !!profile && displayedCardMode === null
+  // Stickiness: delay flipping into the placeholder by 250ms so brief null
+  // transitions during state changes (e.g. invoke→realtime races on invite)
+  // don't cause the card to unmount and remount.
+  const [showHiddenPlaceholder, setShowHiddenPlaceholder] = useState(rawShowHiddenPlaceholder)
+  useEffect(() => {
+    if (!rawShowHiddenPlaceholder) {
+      setShowHiddenPlaceholder(false)
+      return
+    }
+    const id = setTimeout(() => setShowHiddenPlaceholder(true), 250)
+    return () => clearTimeout(id)
+  }, [rawShowHiddenPlaceholder])
   const firstProfileImage = profile?.images?.[0]?.normal
   const profileAvatarUrl = firstProfileImage
     ? publicImageUrl(profile.user_id, 'normal', firstProfileImage)
@@ -1054,30 +1229,21 @@ export default function HomePage() {
       .catch(err => { console.error(err); done() })
   }
 
-  const runExtend = (minutes: number) => {
-    if (busy) return
-    tap()
-    setBusy(true)
-    setPendingKey('extend')
-    setExtendPickerOpen(false)
-    invoke('app/extend', { minutes })
-      .then(() => { setBusy(false); setPendingKey(null) })
-      .catch(err => { console.error(err); setBusy(false); setPendingKey(null) })
-  }
-
-  const invitedPage1 = profile?.relations?.page1 as { expires_at?: string; extended?: boolean } | undefined
+  const invitedPage1 = profile?.relations?.page1 as { expires_at?: string; invited_at?: string; extended?: boolean } | undefined
   const inviteExpiresAt = invitedPage1?.expires_at
-  const inviteCanExtend = !!(inviteExpiresAt && !invitedPage1?.extended)
-  const page2CanExtend = !!(page2PendingInvite?.expires_at && !page2PendingInvite?.extended)
+  const inviteInvitedAt = invitedPage1?.invited_at
+  const inviteTotalSecs = inviteExpiresAt && inviteInvitedAt
+    ? Math.max(60, Math.round((new Date(inviteExpiresAt).getTime() - new Date(inviteInvitedAt).getTime()) / 1000))
+    : 3600
 
   const matchButtons = (() => {
     if (!isMatchCardOpen) return null
     if (state === 'watching') {
       return (
-        <View style={styles.buttonRow}>
+        <View style={styles.watchingButtonRow}>
           <View style={styles.buttonCellReject}>
             <Button
-              variant="destructive"
+              variant="secondary"
               label={t('home.watchingReject')}
               onPress={() => runAction('app/ignore', 'watching-reject')}
               disabled={busy}
@@ -1089,7 +1255,8 @@ export default function HomePage() {
             <Button
               variant="primary"
               tone="positive"
-              label={t('home.watchingAccept')}
+              label={tg('home.watchingAccept', matchIsMale ?? null)}
+              iconEnd={<ChatBubbleIcon color={WHITE} />}
               onPress={() => { tap(); setInviteConfirmOpen(true) }}
               disabled={busy}
               silentDisabled
@@ -1100,16 +1267,7 @@ export default function HomePage() {
     }
     if (state === 'waiting') {
       return (
-        <View style={styles.buttonRow}>
-          <View style={styles.buttonCellReject}>
-            <Button variant="destructive" label={t('home.cancelWaitingBtn')} onPress={() => { tap(); setCancelConfirmOpen(true) }} disabled={busy} />
-          </View>
-          {inviteCanExtend && (
-            <View style={styles.buttonCellAccept}>
-              <ExtendButton busy={busy} pendingKey={pendingKey} onOpen={() => { tap(); setExtendPickerOpen(true) }} />
-            </View>
-          )}
-        </View>
+        <Button variant="secondary" label={t('home.cancelWaitingBtn')} onPress={() => { tap(); setCancelConfirmOpen(true) }} disabled={busy} />
       )
     }
     if (state === 'chat') {
@@ -1144,13 +1302,14 @@ export default function HomePage() {
   }
 
   const page1Event = profile?.relations?.page1?.event
+  const isReadyToFind = page1Event === 'clear1' || page1Event === 'cancel' || page1Event === 'leave'
   const hiddenButtons = showHiddenPlaceholder
-    ? (page1Event === 'clear1' || page1Event === 'cancel' || page1Event === 'leave')
+    ? isReadyToFind
       ? (
         <Button
           variant="primary"
           tone="positive"
-          label={tg('home.tapForMore', isMale)}
+          label={t('home.startNow')}
           onPress={() => runAction('app/find', 'hidden-find')}
           disabled={busy}
           loading={busy && pendingKey === 'hidden-find'}
@@ -1168,7 +1327,7 @@ export default function HomePage() {
   const endedProfileIsMale = profile?.relations?.page1?.profile?.is_male ?? null
   const headerTitle =
     state === 'chat' ? t('home.chatHeader')
-    : state === 'watching' ? t('push.WATCHING')
+    : state === 'watching' ? t('home.watchingTitle')
     : state === 'waiting' ? t('push.WAITING')
     : isEndedState ? tg(`home.ended.${state}.${page1Event}` as any, endedProfileIsMale)
     : t('home.hiddenHeader2')
@@ -1269,7 +1428,8 @@ export default function HomePage() {
                   <View style={styles.permScreen}>
                     <View style={styles.permAvatarSection}>
                       <View style={styles.permAvatarWrap}>
-                        <PulseRings active={locFetching} />
+                        <AvatarHaloRings />
+                        <RadarRings active={locFetching} />
                         {profileAvatarUrl ? (
                           <Image source={{ uri: profileAvatarUrl }} style={styles.permAvatar} contentFit="cover" />
                         ) : (
@@ -1277,9 +1437,31 @@ export default function HomePage() {
                         )}
                       </View>
                     </View>
-                    <View style={styles.permTextSection}>
-                      <Text style={styles.permDesc}>{locFetching ? t('home.locatingDesc') : renderWithEmphasis((page1Event === 'clear1' || page1Event === 'cancel' || page1Event === 'leave') ? tg('home.readyToFindDesc', isMale) : tg('home.hiddenInfoDesc', isMale))}</Text>
+                    <View style={[styles.permTextSection, !isReadyToFind && !locFetching && { marginTop: 24 }]}>
+                      {locFetching ? (
+                        <Text style={styles.permDesc}>{t('home.locatingDesc')}</Text>
+                      ) : isReadyToFind ? (
+                        <>
+                          <Text style={styles.permHeadline}>{t('home.startHeadline')}</Text>
+                          <Text style={styles.permSubhead}>{t('home.startSubhead')}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <View style={styles.emptySearchCircle}>
+                            <SmallSearchIcon color={PRIMARY} />
+                          </View>
+                          <Text style={[styles.permHeadline, { marginTop: 16 }]}>{t('home.noOneNearbyTitle')}</Text>
+                          <Text style={[styles.permDesc, { marginTop: 8 }]}>{tg('home.noOneNearbyDesc', isMale)}</Text>
+                          <View style={styles.heartDivider}>
+                            <View style={styles.heartDividerLine} />
+                            <HeartIcon color={PRIMARY} size={14} filled />
+                            <View style={styles.heartDividerLine} />
+                          </View>
+                          <Text style={[styles.permSubhead, { marginTop: 8 }]}>{t('home.startSubhead')}</Text>
+                        </>
+                      )}
                     </View>
+                    <View style={{ flex: 1 }} />
                     <View style={styles.permActions}>
                       {hiddenButtons}
                     </View>
@@ -1302,6 +1484,9 @@ export default function HomePage() {
                               bottomInset={0}
                               hideTime={state === 'chat'}
                               onReady={handleSlotReadyA}
+                              topBlock={displayedCardMode === 'waiting' && inviteExpiresAt ? (
+                                <CircularTimer expiresAt={inviteExpiresAt} totalSecs={inviteTotalSecs} extended={invitedPage1?.extended} targetIsMale={matchIsMale} />
+                              ) : undefined}
                             />
                           </Animated.View>
                         )}
@@ -1315,11 +1500,11 @@ export default function HomePage() {
                               bottomInset={0}
                               hideTime={state === 'chat'}
                               onReady={handleSlotReadyB}
+                              topBlock={displayedCardMode === 'waiting' && inviteExpiresAt ? (
+                                <CircularTimer expiresAt={inviteExpiresAt} totalSecs={inviteTotalSecs} extended={invitedPage1?.extended} targetIsMale={matchIsMale} />
+                              ) : undefined}
                             />
                           </Animated.View>
-                        )}
-                        {displayedCardMode === 'waiting' && inviteExpiresAt && (
-                          <InviteTimerOverlay expiresAt={inviteExpiresAt} extended={invitedPage1?.extended} />
                         )}
                       </View>
                     )}
@@ -1329,8 +1514,10 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={inviteConfirmOpen}
+                  icon={<HeartIcon color={PRIMARY} />}
                   title={t('home.inviteConfirmTitle').replace('{name}', matchName)}
                   description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
+                  cancelLabel={t('home.watchingReject')}
                   confirmLabel={t('home.inviteConfirmOk')}
                   tone="positive"
                   onCancel={() => { if (!busy) setInviteConfirmOpen(false) }}
@@ -1393,43 +1580,6 @@ export default function HomePage() {
                   tone="positive"
                 />
 
-                <Modal
-                  visible={extendModalVisible}
-                  transparent
-                  animationType="none"
-                  onRequestClose={() => { if (!busy) setExtendPickerOpen(false) }}
-                  statusBarTranslucent
-                >
-                  <View style={styles.extendModalWrap}>
-                    <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!busy) setExtendPickerOpen(false) }} />
-                    <Animated.View
-                      style={extendSheetStyle}
-                      onLayout={e => { extendSheetHeight.current = e.nativeEvent.layout.height }}
-                    >
-                      <View style={styles.extendModalShadow} pointerEvents="none">
-                        {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
-                          <View key={i} style={[styles.extendModalShadowLayer, { opacity: o }]} />
-                        ))}
-                      </View>
-                      <View style={styles.extendModalSheet}>
-                        <View style={styles.extendModalHandle} />
-                        <Text style={styles.extendModalTitle}>{t('home.extendBtn')}</Text>
-                        <View style={styles.extendOptions}>
-                          {EXTEND_MINUTES.map(m => (
-                            <Pressable
-                              key={m}
-                              style={({ pressed }) => [styles.extendChip, pressed && styles.extendChipPressed]}
-                              onPress={() => runExtend(m)}
-                              disabled={busy}
-                            >
-                              <Text style={styles.extendChipText}>{formatExtendOption(m)}</Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      </View>
-                    </Animated.View>
-                  </View>
-                </Modal>
               </View>
             </View>,
 
@@ -1464,7 +1614,7 @@ export default function HomePage() {
                         <View style={styles.buttonRow}>
                           <View style={styles.buttonCellReject}>
                             <Button
-                              variant="destructive"
+                              variant="softDestructive"
                               label={t('home.replyingReject')}
                               onPress={() => { tap(); setRefuseConfirmOpen(true) }}
                               disabled={busy}
@@ -1476,6 +1626,7 @@ export default function HomePage() {
                               variant="primary"
                               tone="positive"
                               label={t('home.replyingAccept')}
+                              iconEnd={<PaperPlaneIcon color={WHITE} />}
                               onPress={() => runAction('app/approve', 'replying-accept')}
                               disabled={busy}
                               loading={busy && pendingKey === 'replying-accept'}
@@ -1492,8 +1643,17 @@ export default function HomePage() {
                         userIsMale={isMale}
                         units={profile?.units}
                         bottomInset={0}
+                        topBlock={page2PendingInvite.expires_at ? (
+                          <CircularTimer
+                            expiresAt={page2PendingInvite.expires_at}
+                            totalSecs={page2PendingInvite.invited_at
+                              ? Math.max(60, Math.round((new Date(page2PendingInvite.expires_at).getTime() - new Date(page2PendingInvite.invited_at).getTime()) / 1000))
+                              : 600}
+                            extended={page2PendingInvite.extended}
+                            targetIsMale={page2PendingInvite.is_male}
+                          />
+                        ) : undefined}
                       />
-                      {page2PendingInvite.expires_at && <InviteTimerOverlay expiresAt={page2PendingInvite.expires_at} extended={page2PendingInvite.extended} />}
                     </View>
                   </HomeCard>
                 ) : page2DeadInvite ? (
@@ -1517,44 +1677,66 @@ export default function HomePage() {
                       />
                     </View>
                   </HomeCard>
+                ) : watchers.length > 0 ? (
+                  <PullScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    scrollEventThrottle={16}
+                    contentContainerStyle={styles.watchingMeContent}
+                  >
+                    <View style={styles.watchingMeIconWrap}>
+                      <View style={[styles.watchingMeIconCircle, { backgroundColor: PRIMARY_BG }]}>
+                        <EyeOpenIcon color={PRIMARY} />
+                      </View>
+                    </View>
+                    <Text style={styles.watchingMeSubtitle}>
+                      {watchers.length === 1
+                        ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
+                        : tg('home.nowVisibleWithWatchersDesc', isMale)}
+                    </Text>
+                    <View style={styles.rightNowRow}>
+                      <View style={styles.rightNowLine} />
+                      <Text style={styles.rightNowText}>{t('home.watchingMeRightNow')}</Text>
+                      <View style={styles.rightNowLine} />
+                    </View>
+                    {watchers.map((w) => (
+                      <View key={w.user_id} style={styles.watcherCardWrap}>
+                        <WatcherCard
+                          watcher={w}
+                          units={profile?.units}
+                          onPress={() => { tap(); setRemoveWatcherTarget(w) }}
+                        />
+                      </View>
+                    ))}
+                    <View style={styles.photosHiddenRow}>
+                      <LockIcon color={GRAY_400} />
+                      <Text style={styles.photosHiddenText}>{t('home.watchingMePhotosHidden')}</Text>
+                    </View>
+                    <PotentialPresence />
+                    <Text style={styles.morePeopleText}>{t('home.watchingMeMorePeopleNearby')}</Text>
+                  </PullScrollView>
                 ) : (
                   <PullScrollView
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     scrollEventThrottle={16}
+                    contentContainerStyle={styles.watchingMeContent}
                   >
-                    <View key="desc" style={styles.watchersDescRow}>
-                      <Text style={styles.watchersDescText}>{
-                        watchers.length === 0
-                          ? tg('home.nowVisibleDesc', isMale)
-                          : watchers.length === 1
-                            ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
-                            : tg('home.nowVisibleWithWatchersDesc', isMale)
-                      }</Text>
+                    <View style={styles.watchingMeIconWrap}>
+                      <View style={[styles.watchingMeIconCircle, { backgroundColor: 'rgba(0,0,0,0.06)' }]}>
+                        <EyeClosedIcon color={GRAY_400} />
+                      </View>
                     </View>
-                    {watchers.map((w, i) => (
-                      <View key={w.user_id}>
-                        {i > 0 && <View style={styles.watchersRowDivider} />}
-                        <WatcherCard watcher={w} units={profile?.units} flat onPress={() => { tap(); setRemoveWatcherTarget(w) }} />
-                      </View>
-                    ))}
-                    {Array.from({ length: watchers.length >= 5 ? 0 : watchers.length <= 1 ? 3 - watchers.length : 1 }).map((_, i) => (
-                      <View key={`ph-${i}`}>
-                        {(watchers.length > 0 || i > 0) && <View style={styles.watchersRowDivider} />}
-                        <View style={styles.watcherPlaceholder}>
-                          <View style={styles.watcherPlaceholderAvatar} />
-                          <View style={styles.watcherPlaceholderBody}>
-                            <View style={styles.watcherPlaceholderTitleRow}>
-                              <View style={styles.watcherPlaceholderTitle} />
-                            </View>
-                            <View style={styles.watcherPlaceholderChips}>
-                              <View style={[styles.watcherPlaceholderChip, { width: 64 }]} />
-                              <View style={[styles.watcherPlaceholderChip, { width: 80 }]} />
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                    ))}
+                    <Text style={styles.watchingMeSubtitle}>{t('home.watchingMeNoOneDesc')}</Text>
+                    <View style={styles.telescopeWrap}>
+                      <TelescopeIllustration />
+                    </View>
+                    <Text style={styles.emptyTitle}>{t('home.watchingMeNoOneTitle')}</Text>
+                    <Text style={styles.emptySubtitle}>{t('home.watchingMeNoOneSubtitle')}</Text>
+                    <View style={styles.photosHiddenRow}>
+                      <LockIcon color={GRAY_400} />
+                      <Text style={styles.photosHiddenText}>{t('home.watchingMePhotosHidden')}</Text>
+                    </View>
                   </PullScrollView>
                 )}
               </View>}
@@ -1624,85 +1806,105 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE,
   },
 
-  // Inset divider between watcher rows — sits inside the outer card, not
-  // flush to its edges, so the list reads as grouped rows rather than
-  // edge-to-edge strips.
-  watchersRowDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    marginHorizontal: 12,
-  },
-  watchersDescRow: {
+  // ── Watching Me page (page2 viewers) ───────────────────────────────────
+  watchingMeContent: {
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 8,
+    paddingBottom: 32,
+    alignItems: 'stretch',
   },
-  watchersDescText: {
+  watchingMeIconWrap: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  watchingMeIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  watchingMeSubtitle: {
     fontSize: 15,
     lineHeight: 22,
     color: 'rgba(0,0,0,0.6)',
     textAlign: 'center',
+    marginTop: 14,
+    paddingHorizontal: 6,
   },
-  // Ghosted slot hinting that more watchers can land here. Dashed border +
-  // translucent fills read as "empty space to fill" rather than a real row.
-  watcherPlaceholder: {
+  rightNowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 12,
-    opacity: 0.55,
-  },
-  watcherPlaceholderAvatar: {
-    width: 66,
-    height: 88,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(0,0,0,0.12)',
-    backgroundColor: 'rgba(0,0,0,0.06)',
-  },
-  watcherPlaceholderBody: {
-    flex: 1,
     justifyContent: 'center',
-    minHeight: 88,
-    gap: 10,
+    gap: 12,
+    marginTop: 22,
+    marginBottom: 14,
   },
-  watcherPlaceholderTitleRow: {
+  rightNowLine: {
+    height: 1,
+    width: 36,
+    backgroundColor: PRIMARY,
+    opacity: 0.5,
+  },
+  rightNowText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: PRIMARY,
+    letterSpacing: 1.4,
+  },
+  watcherCardWrap: {
+    marginBottom: 10,
+  },
+  photosHiddenRow: {
     flexDirection: 'row',
-  },
-  watcherPlaceholderTitle: {
-    width: 120,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-  },
-  watcherPlaceholderChips: {
-    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    marginTop: 16,
   },
-  watcherPlaceholderChip: {
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+  photosHiddenText: {
+    fontSize: 13,
+    color: GRAY_400,
+  },
+  morePeopleText: {
+    fontSize: 13,
+    color: GRAY_400,
+    textAlign: 'center',
+    marginTop: 14,
+  },
+  telescopeWrap: {
+    alignItems: 'center',
+    marginTop: 30,
+    marginBottom: 18,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: 'rgba(0,0,0,0.55)',
+    textAlign: 'center',
+    marginTop: 4,
   },
   // ── Permission screen (no card) ────────────────────────────────────────
   permScreen: {
     flex: 1,
   },
   permAvatarSection: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 40,
+    paddingTop: 120,
   },
   permTextSection: {
-    flex: 1,
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingTop: 24,
+    marginTop: 40,
   },
   permAvatarWrap: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
+    width: DOTTED_RING_SIZE,
+    height: DOTTED_RING_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1710,6 +1912,8 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 2,
+    borderColor: WHITE,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -1720,6 +1924,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.08)',
     borderRadius: AVATAR_SIZE / 2,
   },
+  permHeadline: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  permSubhead: {
+    fontSize: 15,
+    color: GRAY_400,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  emptySearchCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: PRIMARY_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 12,
+  },
+  heartDividerLine: {
+    width: 60,
+    height: 1,
+    backgroundColor: GRAY_100,
+  },
   permDesc: {
     fontSize: 15,
     lineHeight: 22,
@@ -1727,66 +1962,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   permActions: {
-    paddingHorizontal: SINGLE,
-    paddingBottom: DOUBLE + SINGLE,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
     paddingTop: 0,
   },
   waitingActions: {
     gap: 12,
-  },
-  extendModalWrap: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  extendModalShadow: {
-    height: 60,
-    marginBottom: -1,
-  },
-  extendModalShadowLayer: {
-    flex: 1,
-    backgroundColor: BLACK,
-  },
-  extendModalSheet: {
-    backgroundColor: WHITE,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
-    gap: 16,
-  },
-  extendModalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.16)',
-    alignSelf: 'center',
-  },
-  extendModalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: TEXT,
-    textAlign: 'center',
-  },
-  extendOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  extendChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: WHITE,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.12)',
-  },
-  extendChipPressed: {
-    opacity: 0.55,
-  },
-  extendChipText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: TEXT,
   },
   // Two-button horizontal row used by WATCHING/REPLYING. flex:1 cells so
   // both buttons share width evenly regardless of label length.
@@ -1794,11 +1975,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SINGLE,
   },
+  watchingButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   buttonCell: {
     flex: 1,
   },
-  // Unequal split for reject/accept pairs: destructive stays compact so
-  // the affirmative green action reads as the primary path.
   buttonCellReject: {
     flex: 1,
   },

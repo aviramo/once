@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View, ActivityIndicator } from 'react-native'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
@@ -8,7 +9,7 @@ import { t, tg } from '../i18n'
 import type { Profile } from '../stores/userStore'
 import { Chip, PinIcon, ClockIcon, BellOffIcon } from './Chip'
 import { SINGLE, DOUBLE } from '../fonts'
-import { TEXT, WHITE, GREEN, RED } from '../colors'
+import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_400 } from '../colors'
 
 // Display-only card for non-resting states. Action buttons live in the
 // home screen's pinned bottom bar so they share spacing + positioning with
@@ -125,6 +126,7 @@ export function MatchCard({
   bottomInset = 0,
   hideTime = false,
   onReady,
+  topBlock,
 }: {
   match: Profile
   userIsMale: boolean | null
@@ -132,6 +134,7 @@ export function MatchCard({
   bottomInset?: number
   hideTime?: boolean
   onReady?: () => void
+  topBlock?: React.ReactNode
 }) {
   const imageUrls = useMemo(() => resolveImages(match), [match])
   const loadedCount = useRef(0)
@@ -151,6 +154,38 @@ export function MatchCard({
 
   const distGreen = isDistanceNear(match.distance)
   const endsWithPhoto = imageUrls.length > 1 && match.is_for_kids == null
+  const hasTopBlock = !!topBlock
+  const [topBlockHeight, setTopBlockHeight] = useState(0)
+  // If the card mounts already with a topBlock (cold start), start expanded
+  // so it shows in place without animation. Otherwise start collapsed so the
+  // watching → waiting transition can slide in from above.
+  const slideAnim = useSharedValue(hasTopBlock ? 1 : 0)
+  const animatedRef = useRef(false)
+  const wasAbsentRef = useRef(false)
+  useEffect(() => {
+    if (!hasTopBlock) {
+      wasAbsentRef.current = true
+      animatedRef.current = false
+      slideAnim.value = 0
+      if (topBlockHeight !== 0) setTopBlockHeight(0)
+      return
+    }
+    // Cold start with topBlock present (new screen, not a transition): show
+    // it in place without animation.
+    if (!wasAbsentRef.current) {
+      slideAnim.value = 1
+      return
+    }
+    // watching → waiting transition: photo stays put, timer slides in from
+    // above using marginTop animation on the topBlock wrapper.
+    if (animatedRef.current || topBlockHeight === 0) return
+    animatedRef.current = true
+    slideAnim.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) })
+  }, [hasTopBlock, topBlockHeight])
+
+  const animatedTopBlockStyle = useAnimatedStyle(() => ({
+    marginTop: (slideAnim.value - 1) * topBlockHeight,
+  }), [topBlockHeight])
 
   return (
     <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
@@ -162,7 +197,22 @@ export function MatchCard({
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={{ height: photoHeight }}>
+        {topBlock && (
+          <Animated.View
+            key="top"
+            style={[
+              topBlockHeight === 0 && { position: 'absolute', opacity: 0, start: 0, end: 0 },
+              animatedTopBlockStyle,
+            ]}
+            onLayout={e => {
+              const h = e.nativeEvent.layout.height
+              if (h > 0 && topBlockHeight === 0) setTopBlockHeight(h)
+            }}
+          >
+            {topBlock}
+          </Animated.View>
+        )}
+        <View key="photo" style={{ height: photoHeight }}>
           {imageUrls.length > 0 && (
             <LoadingImage
               source={imageUrls[0]}
@@ -211,11 +261,17 @@ export function MatchCard({
         </View>
 
         {match.bio ? (
-          <Text style={styles.message}>{match.bio}</Text>
+          <View key="bio" style={styles.aboutSection}>
+            <View style={styles.aboutBubble}>
+              <Text style={[styles.aboutQuote, styles.aboutQuoteOpen]}>“</Text>
+              <Text style={styles.aboutText}>{match.bio}</Text>
+              <Text style={[styles.aboutQuote, styles.aboutQuoteClose]}>”</Text>
+            </View>
+          </View>
         ) : null}
 
         {imageUrls.length > 1 && (
-          <View style={styles.extraPhotos}>
+          <View key="extras" style={styles.extraPhotos}>
             {imageUrls.slice(1).map((url) => (
               <LoadingImage
                 key={url}
@@ -230,12 +286,12 @@ export function MatchCard({
         )}
 
         {match.is_for_kids != null && (
-          <View style={styles.kidsRow}>
+          <View key="kids" style={styles.kidsRow}>
             <View style={styles.kidsLabel}>
-              <BabyIcon color={TEXT} />
+              <BabyIcon color={TEXT_PRIMARY} />
               <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', match.is_male)}</Text>
             </View>
-            <Text style={[styles.kidsValue, { color: match.is_for_kids ? GREEN : RED }]}>
+            <Text style={[styles.kidsValue, { color: match.is_for_kids ? PRIMARY : DESTRUCTIVE }]}>
               {match.is_for_kids ? t('settings.kidsYes') : t('settings.kidsNo')}
             </Text>
           </View>
@@ -267,25 +323,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'column',
-    padding: SINGLE,
+    padding: 16,
   },
   chipsRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginTop: SINGLE,
+    marginTop: 8,
   },
   chipsLeft: {
     width: '50%',
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: 4,
+    gap: 8,
   },
   chipsRight: {
     width: '50%',
     flexDirection: 'column',
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
-    gap: 4,
+    gap: 8,
   },
   name: {
     fontSize: 26,
@@ -300,17 +356,42 @@ const styles = StyleSheet.create({
   nameNoChips: {
     marginBottom: SINGLE,
   },
-  message: {
+  aboutSection: {
+    marginTop: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  aboutBubble: {
+    alignSelf: 'stretch',
+    backgroundColor: PRIMARY_BG,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    position: 'relative',
+  },
+  aboutQuote: {
+    position: 'absolute',
+    fontSize: 32,
+    color: PRIMARY,
+    fontWeight: '700',
+    lineHeight: 32,
+  },
+  aboutQuoteOpen: {
+    top: 4,
+    start: 10,
+  },
+  aboutQuoteClose: {
+    bottom: 4,
+    end: 10,
+  },
+  aboutText: {
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(0,0,0,0.6)',
-    marginTop: DOUBLE,
-    marginBottom: SINGLE,
-    marginHorizontal: SINGLE,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
+    paddingHorizontal: 12,
   },
   extraPhotos: {
-    marginTop: 20,
     backgroundColor: WHITE,
     gap: SINGLE,
   },
@@ -339,7 +420,7 @@ const styles = StyleSheet.create({
   kidsLabelText: {
     fontSize: 14,
     fontWeight: '600',
-    color: TEXT,
+    color: TEXT_PRIMARY,
   },
   kidsValue: {
     fontSize: 14,

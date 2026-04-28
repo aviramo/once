@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Modal, Pressable, StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text } from './AppText'
 import { Button } from './Button'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated'
 import { SINGLE, DOUBLE } from '../fonts'
-import { TEXT, WHITE, BLACK } from '../colors'
+import { TEXT_PRIMARY, WHITE, BLACK, GRAY_100, GRAY_400, PRIMARY_BG } from '../colors'
 
 export function ConfirmDialog({
   visible,
@@ -15,6 +15,7 @@ export function ConfirmDialog({
   destructive,
   soft,
   tone,
+  icon,
   onCancel,
   onConfirm,
   busy,
@@ -30,14 +31,13 @@ export function ConfirmDialog({
   destructive?: boolean
   soft?: boolean
   tone?: 'positive'
+  /** Optional icon rendered in a tinted circle above the title. */
+  icon?: ReactNode
   onCancel?: () => void
   onConfirm: () => void
   busy?: boolean
-  /** Optional "don't show again" toggle rendered below the description. */
   skipToggle?: { label: string; checked: boolean; onToggle: () => void }
-  /** Flex ratio for the cancel button slot (default 1). */
   cancelFlex?: number
-  /** Flex ratio for the confirm button slot (default 1). */
   confirmFlex?: number
 }) {
   const translateY = useSharedValue(400)
@@ -99,6 +99,12 @@ export function ConfirmDialog({
             ))}
           </View>
           <View style={styles.card}>
+          <View style={styles.dragHandle} />
+          {icon ? (
+            <View style={styles.iconWrap}>
+              <View style={styles.iconCircle}>{icon}</View>
+            </View>
+          ) : null}
           <Text style={styles.title}>{title}</Text>
           {description ? <Text style={styles.desc}>{description}</Text> : null}
 
@@ -122,7 +128,7 @@ export function ConfirmDialog({
                 <Button
                   label={cancelLabel}
                   onPress={() => { setPressed('cancel'); onCancel?.() }}
-                  variant="soft"
+                  variant="secondary"
                   size="lg"
                   disabled={busy}
                   loading={busy && pressed === 'cancel'}
@@ -167,23 +173,43 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: WHITE,
-    padding: SINGLE,
-    paddingTop: DOUBLE,
-    paddingBottom: SINGLE,
+    padding: 24,
+    paddingTop: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  dragHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: GRAY_100,
+    marginBottom: 16,
+  },
+  iconWrap: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: PRIMARY_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   desc: {
-    marginTop: DOUBLE,
-    paddingHorizontal: SINGLE,
+    marginTop: 8,
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(0,0,0,0.6)',
+    color: GRAY_400,
     textAlign: 'center',
   },
   skipRow: {
@@ -219,9 +245,8 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: SINGLE,
-    marginTop: DOUBLE + SINGLE,
-    paddingBottom: DOUBLE,
+    gap: 12,
+    marginTop: 20,
   },
   slot: { flex: 1 },
 })

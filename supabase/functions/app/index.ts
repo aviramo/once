@@ -1,41 +1,10 @@
 import Log from "../log.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
-import { Notify, PushToken } from "../global.ts";
+import { Notify, PushToken, PUSH_BODY } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range", "is_for_kids"];
 const updatable = ["bio", "images", "units", "os", "lang", "appearance", "push_token"];
-
-const PUSH_BODY: Record<string, Record<string, string>> = {
-  he: {
-    'invite-in': "הזמנה לצ'אט",
-    'match': 'אתם אחד על אחד',
-    'declined': 'ההזמנה נדחתה',
-    'expired-out': 'ההזמנה פגה',
-    'expired-in': 'ההזמנה פגה',
-    'cancelled-in': 'ההזמנה בוטלה',
-    'removed': 'הוסרת מרשימת הצופים',
-    'left': "הצ'אט הסתיים",
-    'extended': 'ההזמנה הוארכה',
-    'invite-fail': 'איחרת להזמנה',
-    'approve-fail': 'איחרת לאישור',
-    'chat': 'התקבלה הודעה',
-  },
-  en: {
-    'invite-in': 'Chat invitation',
-    'match': 'One on one',
-    'declined': 'Invitation declined',
-    'expired-out': 'Invitation expired',
-    'expired-in': 'Invitation expired',
-    'cancelled-in': 'Invitation cancelled',
-    'removed': 'Removed from viewers',
-    'left': 'Chat ended',
-    'extended': 'Invitation extended',
-    'invite-fail': 'You missed it',
-    'approve-fail': 'You missed the approval',
-    'chat': 'New message',
-  },
-};
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {

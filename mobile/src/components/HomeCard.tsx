@@ -7,7 +7,7 @@ import Animated, {
   withTiming, Easing, runOnJS,
 } from 'react-native-reanimated'
 import { HomeButtons } from './HomeButtons'
-import { SINGLE, DOUBLE } from '../fonts'
+import { SINGLE } from '../fonts'
 import { WHITE } from '../colors'
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: SINGLE,
     marginTop: 0,
-    marginBottom: DOUBLE + SINGLE,
+    marginBottom: 24,
   },
   cardOuter: {
     flex: 1,

@@ -23,7 +23,7 @@ import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE, SINGLE } from '../src/fonts'
-import { TEXT, WHITE, BLACK, RED, GREEN, GREEN_BG, GRAY_50, GRAY_BG } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, BLACK, DESTRUCTIVE, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_BG } from '../src/colors'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -111,14 +111,14 @@ function formatLastSeen(iso: string | null | undefined, isMale: boolean | null |
 
 function BackIcon() {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
     </Svg>
   )
 }
 function DotsIcon() {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill={TEXT}>
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill={TEXT_PRIMARY}>
       <Circle cx={12} cy={5} r={1.6} />
       <Circle cx={12} cy={12} r={1.6} />
       <Circle cx={12} cy={19} r={1.6} />
@@ -1276,7 +1276,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             style={styles.retryRow}
             hitSlop={6}
           >
-            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={RED} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={DESTRUCTIVE} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 9v4M12 17h.01" />
               <Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </Svg>
@@ -1457,7 +1457,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                   <View style={styles.recWaveWrap} onLayout={e => setRecWaveWidth(e.nativeEvent.layout.width)}>
                     {recWaveWidth > 0 && (
                       <Svg width={recWaveWidth} height={24}>
-                        <Path d={buildRecWavePath(liveBars, recWaveWidth, 24)} fill={GREEN} />
+                        <Path d={buildRecWavePath(liveBars, recWaveWidth, 24)} fill={PRIMARY} />
                       </Svg>
                     )}
                   </View>
@@ -1478,7 +1478,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                   </Svg>
                 </Pressable>
                 <Pressable onPress={handlePreviewPlayPause} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={TEXT}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={TEXT_PRIMARY}>
                     {previewPlaying
                       ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" />
                       : <Path d="M8 5v14l11-7z" />}
@@ -1489,8 +1489,8 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                     bars={previewBars}
                     height={28}
                     inactiveColor="rgba(0,0,0,0.18)"
-                    activeColor={GREEN}
-                    thumbColor={GREEN}
+                    activeColor={PRIMARY}
+                    thumbColor={PRIMARY}
                     progressAnim={previewProgressAnim}
                     seekable={(previewStatus.duration ?? 0) > 0}
                     onScrub={r => {
@@ -1626,7 +1626,7 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
         </Pressable>
       ) : (
         <View style={styles.chatImagePlaceholder}>
-          <ActivityIndicator color={isMine ? WHITE : TEXT} />
+          <ActivityIndicator color={isMine ? WHITE : TEXT_PRIMARY} />
         </View>
       )}
       <View style={[styles.imageTimeRow, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
@@ -1663,7 +1663,7 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
 
-  const textColor = isMine ? WHITE : TEXT
+  const textColor = isMine ? WHITE : TEXT_PRIMARY
   const subColor = isMine ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)'
   const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
   const iconBg = isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)'
@@ -2072,8 +2072,8 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const iconColor = isMine ? WHITE : TEXT
-  const barActive = isMine ? 'rgba(255,255,255,0.9)' : GREEN
+  const iconColor = isMine ? WHITE : TEXT_PRIMARY
+  const barActive = isMine ? 'rgba(255,255,255,0.9)' : PRIMARY
   const barInactive = isMine ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)'
   const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
@@ -2140,7 +2140,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
 
 const EVENT_COLORS = {
   invite:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)' },
-  approve: { fg: GREEN, bg: GREEN_BG },
+  approve: { fg: PRIMARY, bg: PRIMARY_BG },
 } as const
 
 function EventStrip({
@@ -2371,7 +2371,7 @@ const styles = StyleSheet.create({
     // Disable it so justifyContent:'center' on the wrapper actually centers.
     includeFontPadding: false,
   },
-  statusOnline: { color: GREEN },
+  statusOnline: { color: PRIMARY },
 
   body: { flex: 1 },
   messages: { flex: 1 },
@@ -2392,7 +2392,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     paddingVertical: 2,
   },
-  retryLabel: { fontSize: 11, color: RED },
+  retryLabel: { fontSize: 11, color: DESTRUCTIVE },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.12)' },
@@ -2404,13 +2404,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: SINGLE,
   },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: GREEN },
+  bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
   bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: GRAY_BG },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
   bubbleTextMine: { color: WHITE },
-  bubbleTextTheirs: { color: TEXT },
+  bubbleTextTheirs: { color: TEXT_PRIMARY },
 
   inlineTime: { fontSize: 11, lineHeight: 16, letterSpacing: 0.3 },
   inlineTimeMine: { color: 'rgba(255,255,255,0.75)' },
@@ -2461,14 +2461,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     lineHeight: 22,
-    color: TEXT,
+    color: TEXT_PRIMARY,
     textAlign: isRTL ? 'right' : 'left',
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
   sendBtn: {
     width: 49, height: 49, borderRadius: SINGLE,
-    backgroundColor: GREEN,
+    backgroundColor: PRIMARY,
     alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.3 },
@@ -2524,8 +2524,8 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE,
   },
   menuCheckboxOn: {
-    backgroundColor: GREEN,
-    borderColor: GREEN,
+    backgroundColor: PRIMARY,
+    borderColor: PRIMARY,
   },
   menuDivider: {
     height: StyleSheet.hairlineWidth,
@@ -2544,7 +2544,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     end: 0, top: 0, bottom: 0,
     borderRadius: SINGLE,
-    backgroundColor: GREEN,
+    backgroundColor: PRIMARY,
     overflow: 'hidden',
   },
   attachBarInner: {
@@ -2671,12 +2671,12 @@ const styles = StyleSheet.create({
   recDot: {
     width: 8, height: 8,
     borderRadius: 4,
-    backgroundColor: RED,
+    backgroundColor: DESTRUCTIVE,
   },
   recTime: {
     fontSize: 15,
     fontWeight: '500',
-    color: TEXT,
+    color: TEXT_PRIMARY,
     fontVariant: ['tabular-nums'],
   },
   recWaveWrap: {
