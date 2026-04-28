@@ -17,7 +17,7 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedKeyboard, withSpring, withTiming, runOnJS, Easing as REasing } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { invoke, publicImageUrl } from '../src/lib/api'
-import { tap } from '../src/lib/haptics'
+import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg } from '../src/i18n'
 import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -976,6 +976,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
       if (!perm.granted) { tap(); return }
       recordingPermGrantedRef.current = true
     }
+    tapMedium()
     amplitudeBufferRef.current = []
     livePhaseRef.current = 0
     setLiveBars(Array(N_REC_BARS).fill(0.07))
@@ -993,6 +994,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
 
   const handleStopRecording = useCallback(async () => {
     if (!audioRecorder.isRecording) return
+    tapMedium()
     if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null }
     await audioRecorder.stop()
     const uri = audioRecorder.uri ?? null
@@ -1027,6 +1029,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [])
 
   const handleCancelRecording = useCallback(async () => {
+    tap()
     if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null }
     if (audioRecorder.isRecording) {
       await audioRecorder.stop().catch(() => {})
@@ -1043,6 +1046,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
 
   const handlePreviewPlayPause = useCallback(async () => {
     if (!audioUri) return
+    tap()
     await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
     if (previewStatus.playing) {
       previewPlayer.pause()
@@ -1079,6 +1083,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
 
   const handleSendAudio = useCallback(async () => {
     if (!audioUri || !userId || !otherId) return
+    tapSuccess()
     const key = `${userId}/${Date.now()}.m4a`
     const now = new Date().toISOString()
     seenSet.current.add(userId + now)
@@ -1903,7 +1908,15 @@ function Waveform({
                 style={{
                   position: 'absolute',
                   top: (height - THUMB) / 2,
-                  left: 0,
+                  ...(isRTL ? { right: 0 } : { left: 0 }),
+                  width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, width] }),
+                  height: THUMB,
+                }}
+              >
+                <View style={{
+                  position: 'absolute',
+                  top: 0,
+                  ...(isRTL ? { left: -THUMB / 2 } : { right: -THUMB / 2 }),
                   width: THUMB,
                   height: THUMB,
                   borderRadius: THUMB / 2,
@@ -1913,16 +1926,8 @@ function Waveform({
                   shadowOpacity: 0.18,
                   shadowRadius: 1.5,
                   elevation: 2,
-                  transform: [{
-                    translateX: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: isRTL
-                        ? [width - THUMB / 2, -THUMB / 2]
-                        : [-THUMB / 2, width - THUMB / 2],
-                    }),
-                  }],
-                }}
-              />
+                }} />
+              </Animated.View>
             )}
           </>
         )}
@@ -2022,6 +2027,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
 
   const handlePlayPause = async () => {
     if (!uri || loading) return
+    tap()
     await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
     if (status.playing) {
       player.pause()
@@ -2637,6 +2643,7 @@ const styles = StyleSheet.create({
   audioWave: {
     flex: 1,
     height: 26,
+    marginHorizontal: SINGLE,
   },
   audioDurationRow: {
     flexDirection: 'row',
