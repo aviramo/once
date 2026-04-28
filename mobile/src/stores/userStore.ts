@@ -140,19 +140,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const d = data as Record<string, unknown>
     const lastSeen = d.last_seen as string | undefined
     const ts = lastSeen ? Date.parse(lastSeen) : 0
-    // ── DEBUG: trace every applyServerUser to find where page1.profile flips null
-    try {
-      const incomingRelations = d.relations as { page1?: { state?: string; profile?: { user_id?: string } | null }; page2?: unknown } | undefined
-      const prevProfile = get().profile as { state?: string; relations?: { page1?: { state?: string; profile?: { user_id?: string } | null } } } | null
-      console.log('[applyServerUser]', {
-        source,
-        ts: lastSeen,
-        incoming_state: incomingRelations?.page1?.state ?? null,
-        incoming_p1_profile: incomingRelations?.page1?.profile?.user_id ?? null,
-        prev_state: prevProfile?.state ?? null,
-        prev_p1_profile: prevProfile?.relations?.page1?.profile?.user_id ?? null,
-      })
-    } catch {}
     if (ts && ts < lastAppliedLastSeen) return
     if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
     // Promote bio/images/units from data JSONB for CLIENT_AUTHORED protection.

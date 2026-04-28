@@ -55,19 +55,6 @@ function connect(userId: string) {
       { event: 'UPDATE', schema: 'public', table: 'users', filter: `user_id=eq.${userId}` },
       (payload: any) => {
         const row = payload?.new
-        // ── DEBUG: log every realtime UPDATE payload to find the source of the null flicker
-        try {
-          console.log('[realtime UPDATE]', {
-            commit_ts: payload?.commit_timestamp,
-            new_last_seen: row?.last_seen,
-            new_p1_state: row?.relations?.page1?.state ?? null,
-            new_p1_profile: row?.relations?.page1?.profile?.user_id ?? null,
-            new_p1_event: row?.relations?.page1?.event ?? null,
-            old_last_seen: payload?.old?.last_seen,
-            old_p1_state: payload?.old?.relations?.page1?.state ?? null,
-            old_p1_profile: payload?.old?.relations?.page1?.profile?.user_id ?? null,
-          })
-        } catch {}
         // Source: 'realtime' — a DB UPDATE has committed, so this is fully
         // authoritative and overrides any local optimistic state.
         if (row) useUserStore.getState().applyServerUser(row, 'realtime')
