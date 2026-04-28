@@ -136,7 +136,15 @@ export function MatchCard({
   onReady?: () => void
   topBlock?: React.ReactNode
 }) {
-  const imageUrls = useMemo(() => resolveImages(match), [match])
+  // Stabilise imageUrls against profile-ref churn from periodic Realtime
+  // updates (every-minute location refresh recreates page1.profile, even
+  // when image filenames are identical). Memo on the joined filename list
+  // so the underlying Image component sees the same source value.
+  const imageKey = useMemo(
+    () => (match.images ?? []).map(i => i.normal ?? '').filter(Boolean).join('|'),
+    [match.images],
+  )
+  const imageUrls = useMemo(() => resolveImages(match), [match.user_id, imageKey])
   const loadedCount = useRef(0)
   useEffect(() => { loadedCount.current = 0 }, [match.user_id])
   useEffect(() => { if (imageUrls.length === 0) onReady?.() }, [imageUrls.length])
