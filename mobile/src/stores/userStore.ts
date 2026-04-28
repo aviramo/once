@@ -171,6 +171,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // overwrite Realtime-delivered state.
       delete (d as Record<string, unknown>).relations
       delete (d as Record<string, unknown>).state
+    } else if (!('relations' in d)) {
+      // Realtime payload from a partial UPDATE (REPLICA IDENTITY default sends
+      // only changed columns + primary key). When `relations` isn't in the
+      // payload, the row's relations didn't actually change — preserve the
+      // previous state instead of overwriting with an empty derived shape.
+      // Same logic applies to `state` (top-level derived field).
+      delete (d as Record<string, unknown>).state
     } else {
       // Inject derived state + synthesized watchers/match into the relations
       // namespace so existing UI reading profile.state / profile.relations.watchers
