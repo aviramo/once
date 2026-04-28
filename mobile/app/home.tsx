@@ -520,6 +520,7 @@ const timerStyles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderRadius: 12,
+    marginBottom: 12,
   },
   expiresLabel: {
     fontSize: 11,
@@ -1071,15 +1072,31 @@ export default function HomePage() {
 
   // The home pane wraps both panes in opacity-driven Animated.Views, so the
   // match card stays visually hidden when state is null without needing to
-  // clear matchA/matchB. We keep the last known match in its slot so
-  // returning to a card state (or transitioning watching → waiting on the
-  // same match) finds the card already mounted with state preserved.
+  // clear matchA/matchB synchronously. We keep the last known match in its
+  // slot so brief null blips (e.g. ordering quirks between invoke responses
+  // and realtime events) don't unmount the card.
+  //
+  // For genuine null states (cancel, leave, decline) we *do* want to clear
+  // — otherwise a subsequent new match would cross-fade from the stale
+  // card. Defer the clear by 250ms (just longer than the pane cross-fade);
+  // quick blips never trigger it, but a real "back to empty" state does.
+  const clearMatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const next = profile?.relations?.match ?? null
     const active = activeSlotRef.current
     const activeMatch = active === 'A' ? matchARef.current : matchBRef.current
+    if (clearMatchTimeoutRef.current) {
+      clearTimeout(clearMatchTimeoutRef.current)
+      clearMatchTimeoutRef.current = null
+    }
     if (!next) {
-      // Don't clear — the empty pane covers the stale card via opacity.
+      clearMatchTimeoutRef.current = setTimeout(() => {
+        setMatchA(null)
+        setMatchB(null)
+        opacityA.value = 0
+        opacityB.value = 0
+        clearMatchTimeoutRef.current = null
+      }, 250)
       return
     }
     if (next.user_id === activeMatch?.user_id) {
