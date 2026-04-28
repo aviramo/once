@@ -927,19 +927,11 @@ export default function HomePage() {
 
   const showLocOverlay = locPerm !== 'granted'
 
-  // Unified card mode — sticky against transient null transitions (e.g. brief
-  // gaps when invoke→realtime races on invite). Holds the last valid state for
-  // 250ms before flipping to null, so the card doesn't unmount and remount
-  // during a state change like watching → waiting on the same match.
-  const [displayedCardMode, setDisplayedCardMode] = useState<string | null>(state)
-  useEffect(() => {
-    if (state !== null) {
-      setDisplayedCardMode(state)
-      return
-    }
-    const id = setTimeout(() => setDisplayedCardMode(null), 250)
-    return () => clearTimeout(id)
-  }, [state])
+  // Unified card mode — derived synchronously. The home pane is laid out
+  // with both the empty/no-match content and the match-card content always
+  // mounted; visibility is driven by `paneOpacity` below, so transient state
+  // transitions can't unmount the match card.
+  const displayedCardMode = state
 
   // ── Re-check permissions when app returns to foreground ────────────────
   // Covers the user changing app permissions in device settings, etc.
@@ -1077,26 +1069,17 @@ export default function HomePage() {
   useEffect(() => { matchARef.current = matchA }, [matchA])
   useEffect(() => { matchBRef.current = matchB }, [matchB])
 
-  // Defer clearing matchA/matchB on transient nulls so a brief gap during
-  // state transitions (e.g. invoke→realtime races on invite) doesn't unmount
-  // the card. Only clear if the match stays null for 250ms.
-  const clearMatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The home pane wraps both panes in opacity-driven Animated.Views, so the
+  // match card stays visually hidden when state is null without needing to
+  // clear matchA/matchB. We keep the last known match in its slot so
+  // returning to a card state (or transitioning watching → waiting on the
+  // same match) finds the card already mounted with state preserved.
   useEffect(() => {
     const next = profile?.relations?.match ?? null
     const active = activeSlotRef.current
     const activeMatch = active === 'A' ? matchARef.current : matchBRef.current
-    if (clearMatchTimeoutRef.current) {
-      clearTimeout(clearMatchTimeoutRef.current)
-      clearMatchTimeoutRef.current = null
-    }
     if (!next) {
-      clearMatchTimeoutRef.current = setTimeout(() => {
-        opacityA.value = 0
-        opacityB.value = 0
-        setMatchA(null)
-        setMatchB(null)
-        clearMatchTimeoutRef.current = null
-      }, 250)
+      // Don't clear — the empty pane covers the stale card via opacity.
       return
     }
     if (next.user_id === activeMatch?.user_id) {
@@ -1168,19 +1151,17 @@ export default function HomePage() {
     ? [...profile.relations.watchers].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
     : []
 
-  const rawShowHiddenPlaceholder = !!profile && displayedCardMode === null
-  // Stickiness: delay flipping into the placeholder by 250ms so brief null
-  // transitions during state changes (e.g. invoke→realtime races on invite)
-  // don't cause the card to unmount and remount.
-  const [showHiddenPlaceholder, setShowHiddenPlaceholder] = useState(rawShowHiddenPlaceholder)
+  const showHiddenPlaceholder = !!profile && displayedCardMode === null
+  // Both home-pane sections (empty placeholder and match card) are always
+  // mounted. paneOpacity drives a cross-fade between them so brief state
+  // transitions (e.g. invoke↔realtime races on invite) can't unmount the
+  // match card. 0 = match visible, 1 = empty visible.
+  const paneOpacity = useSharedValue(showHiddenPlaceholder ? 1 : 0)
   useEffect(() => {
-    if (!rawShowHiddenPlaceholder) {
-      setShowHiddenPlaceholder(false)
-      return
-    }
-    const id = setTimeout(() => setShowHiddenPlaceholder(true), 250)
-    return () => clearTimeout(id)
-  }, [rawShowHiddenPlaceholder])
+    paneOpacity.value = withTiming(showHiddenPlaceholder ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) })
+  }, [showHiddenPlaceholder])
+  const emptyPaneStyle = useAnimatedStyle(() => ({ opacity: paneOpacity.value }))
+  const matchPaneStyle = useAnimatedStyle(() => ({ opacity: 1 - paneOpacity.value }))
   const firstProfileImage = profile?.images?.[0]?.normal
   const profileAvatarUrl = firstProfileImage
     ? publicImageUrl(profile.user_id, 'normal', firstProfileImage)
@@ -1202,12 +1183,6 @@ export default function HomePage() {
   const isMatchCardOpen =
     state === 'watching' || state === 'waiting' || state === 'chat' ||
     isEndedState
-  // Displayed versions — drive card rendering (lag during flip).
-  const displayedIsEndedState = displayedCardMode === 'missed' || displayedCardMode === 'fail'
-  const displayedIsMatchCardOpen =
-    displayedCardMode === 'watching' || displayedCardMode === 'waiting' || displayedCardMode === 'chat' ||
-    displayedIsEndedState
-
   // ── Match-state actions ────────────────────────────────────────────────
   // The pinned bottom slot swaps in per-state buttons when the match card
   // is open, replacing the visibility toggle. Destructive actions route
@@ -1424,55 +1399,67 @@ export default function HomePage() {
                   loading={busy}
                   dotPulsing={locFetching || busy}
                 />
-                {showHiddenPlaceholder ? (
-                  <View style={styles.permScreen}>
-                    <View style={styles.permAvatarSection}>
-                      <View style={styles.permAvatarWrap}>
-                        <AvatarHaloRings />
-                        <RadarRings active={locFetching} />
-                        {profileAvatarUrl ? (
-                          <Image source={{ uri: profileAvatarUrl }} style={styles.permAvatar} contentFit="cover" />
+                <View style={{ flex: 1 }}>
+                  {/* Empty / no-match pane — always mounted, opacity-driven */}
+                  <Animated.View
+                    style={[StyleSheet.absoluteFill, emptyPaneStyle]}
+                    pointerEvents={showHiddenPlaceholder ? 'auto' : 'none'}
+                  >
+                    <View style={styles.permScreen}>
+                      <View style={styles.permAvatarSection}>
+                        <View style={styles.permAvatarWrap}>
+                          <AvatarHaloRings />
+                          <RadarRings active={showHiddenPlaceholder && locFetching} />
+                          {profileAvatarUrl ? (
+                            <Image source={{ uri: profileAvatarUrl }} style={styles.permAvatar} contentFit="cover" />
+                          ) : (
+                            <View style={[styles.permAvatar, styles.permAvatarFallback]} />
+                          )}
+                        </View>
+                      </View>
+                      <View style={[styles.permTextSection, !isReadyToFind && !locFetching && { marginTop: 24 }]}>
+                        {locFetching ? (
+                          <Text style={styles.permDesc}>{t('home.locatingDesc')}</Text>
+                        ) : isReadyToFind ? (
+                          <>
+                            <Text style={styles.permHeadline}>{t('home.startHeadline')}</Text>
+                            <Text style={styles.permSubhead}>{t('home.startSubhead')}</Text>
+                          </>
                         ) : (
-                          <View style={[styles.permAvatar, styles.permAvatarFallback]} />
+                          <>
+                            <View style={styles.emptySearchCircle}>
+                              <SmallSearchIcon color={PRIMARY} />
+                            </View>
+                            <Text style={[styles.permHeadline, { marginTop: 16 }]}>{t('home.noOneNearbyTitle')}</Text>
+                            <Text style={[styles.permDesc, { marginTop: 8 }]}>{tg('home.noOneNearbyDesc', isMale)}</Text>
+                            <View style={styles.heartDivider}>
+                              <View style={styles.heartDividerLine} />
+                              <HeartIcon color={PRIMARY} size={14} filled />
+                              <View style={styles.heartDividerLine} />
+                            </View>
+                            <Text style={[styles.permSubhead, { marginTop: 8 }]}>{t('home.startSubhead')}</Text>
+                          </>
                         )}
                       </View>
+                      <View style={{ flex: 1 }} />
+                      <View style={styles.permActions}>
+                        {hiddenButtons}
+                      </View>
                     </View>
-                    <View style={[styles.permTextSection, !isReadyToFind && !locFetching && { marginTop: 24 }]}>
-                      {locFetching ? (
-                        <Text style={styles.permDesc}>{t('home.locatingDesc')}</Text>
-                      ) : isReadyToFind ? (
-                        <>
-                          <Text style={styles.permHeadline}>{t('home.startHeadline')}</Text>
-                          <Text style={styles.permSubhead}>{t('home.startSubhead')}</Text>
-                        </>
-                      ) : (
-                        <>
-                          <View style={styles.emptySearchCircle}>
-                            <SmallSearchIcon color={PRIMARY} />
-                          </View>
-                          <Text style={[styles.permHeadline, { marginTop: 16 }]}>{t('home.noOneNearbyTitle')}</Text>
-                          <Text style={[styles.permDesc, { marginTop: 8 }]}>{tg('home.noOneNearbyDesc', isMale)}</Text>
-                          <View style={styles.heartDivider}>
-                            <View style={styles.heartDividerLine} />
-                            <HeartIcon color={PRIMARY} size={14} filled />
-                            <View style={styles.heartDividerLine} />
-                          </View>
-                          <Text style={[styles.permSubhead, { marginTop: 8 }]}>{t('home.startSubhead')}</Text>
-                        </>
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }} />
-                    <View style={styles.permActions}>
-                      {hiddenButtons}
-                    </View>
-                  </View>
-                ) : (
-                  <HomeCard
-                    onPull={cardOnPull}
-                    pullRef={cardPullRef}
-                    buttons={cardButtons}
+                  </Animated.View>
+
+                  {/* Match-card pane — always mounted, opacity-driven */}
+                  <Animated.View
+                    style={[StyleSheet.absoluteFill, matchPaneStyle]}
+                    pointerEvents={showHiddenPlaceholder ? 'none' : 'auto'}
                   >
-                    {displayedIsMatchCardOpen && (
+                    <HomeCard
+                      onPull={cardOnPull}
+                      pullRef={cardPullRef}
+                      buttons={cardButtons}
+                    >
+                      {/* Slots stay mounted while a match exists, regardless of
+                          state — visibility is driven by paneOpacity above. */}
                       <View style={StyleSheet.absoluteFill}>
                         {matchA && (
                           <Animated.View style={[StyleSheet.absoluteFill, cardStyleA, { zIndex: topSlot === 'A' ? 2 : 1 }]}>
@@ -1507,10 +1494,9 @@ export default function HomePage() {
                           </Animated.View>
                         )}
                       </View>
-                    )}
-
-                  </HomeCard>
-                )}
+                    </HomeCard>
+                  </Animated.View>
+                </View>
 
                 <ConfirmDialog
                   visible={inviteConfirmOpen}
