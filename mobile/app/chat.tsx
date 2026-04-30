@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator, Animated, AppState, Easing, FlatList, I18nManager, Image, Keyboard,
+  ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, Keyboard,
   Linking, Modal, Platform, Pressable, StyleSheet, View,
 } from 'react-native'
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, requestRecordingPermissionsAsync, setAudioModeAsync, RecordingPresets } from 'expo-audio'
@@ -14,7 +14,7 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as Location from 'expo-location'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
-import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedKeyboard, withSpring, withTiming, runOnJS, Easing as REasing } from 'react-native-reanimated'
+import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, Easing as REasing, interpolateColor } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { invoke, publicImageUrl } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
@@ -212,16 +212,20 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [])
 
   useEffect(() => {
-    if (!cacheKey) return
+    if (!cacheKey || !userId || !otherId) return
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
     persistTimerRef.current = setTimeout(() => {
       const clean = messages
-        .filter(m => !m._pending && !m._failed)
+        .filter(m =>
+          !m._pending && !m._failed &&
+          ((m.user_id === userId && m.other_id === otherId) ||
+            (m.user_id === otherId && m.other_id === userId)),
+        )
         .map(({ _pending, _failed, _localUri, _audioUri, _loadingLocation, ...rest }) => rest)
       if (clean.length > 0) AsyncStorage.setItem(cacheKey, JSON.stringify(clean)).catch(() => {})
     }, 800)
     return () => { if (persistTimerRef.current) clearTimeout(persistTimerRef.current) }
-  }, [messages, cacheKey])
+  }, [messages, cacheKey, userId, otherId])
 
   const scrollRef = useRef<FlatList>(null)
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -266,6 +270,9 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   const attachBarStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
   }))
+  const inputWrapBorderStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(attachAnim.value, [0, 1], ['rgba(0,0,0,0.12)', PRIMARY]),
+  }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
   const signedUrlCache = useRef<Map<string, string>>(new Map())
@@ -282,15 +289,103 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   const previewAnimRef = useRef<Animated.CompositeAnimation | null>(null)
   const [liveBars, setLiveBars] = useState<number[]>(() => Array(N_REC_BARS).fill(0.07))
   const [recWaveWidth, setRecWaveWidth] = useState(0)
-  const livePhaseRef = useRef(0)
   const audioRecorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true })
   const recorderState = useAudioRecorderState(audioRecorder, 50)
   const previewPlayer = useAudioPlayer(null)
   const previewStatus = useAudioPlayerStatus(previewPlayer)
+  // Subtle transition tone played between auto-played voice messages.
+  const tickPlayer = useAudioPlayer(null)
+  const tickReadyRef = useRef(false)
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recordElapsedRef = useRef(0)
   const amplitudeBufferRef = useRef<number[]>([])
   const signedAudioUrlCache = useRef<Map<string, string>>(new Map())
+
+  // Audio output routing: false = loud speaker, true = earpiece (receiver)
+  const [routedToEarpiece, setRoutedToEarpiece] = useState(false)
+  const toggleAudioRouting = useCallback(() => {
+    tap()
+    setRoutedToEarpiece(prev => {
+      const next = !prev
+      setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: next,
+        shouldRouteThroughEarpiece: next,
+      }).catch(() => {})
+      return next
+    })
+  }, [])
+
+  // Generate a tiny WAV transition tone once and load it into tickPlayer so
+  // we can fire .play() instantly without per-call file I/O. The file is a
+  // 90 ms 660 Hz sine wrapped in a half-cosine envelope (no clicks at the
+  // edges), 8 kHz mono 16-bit PCM (~1.5 KB on disk).
+  useEffect(() => {
+    const path = FileSystem.cacheDirectory + 'audio-transition-tick.wav'
+    const ensure = async () => {
+      const info = await FileSystem.getInfoAsync(path)
+      if (!info.exists) {
+        const sampleRate = 8000
+        const numSamples = Math.floor(sampleRate * 0.09)
+        const dataSize = numSamples * 2
+        const buf = new ArrayBuffer(44 + dataSize)
+        const view = new DataView(buf)
+        const writeStr = (off: number, s: string) => {
+          for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i))
+        }
+        writeStr(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeStr(8, 'WAVE')
+        writeStr(12, 'fmt '); view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true); view.setUint16(22, 1, true)
+        view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true)
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true)
+        writeStr(36, 'data'); view.setUint32(40, dataSize, true)
+        for (let i = 0; i < numSamples; i++) {
+          const t = i / sampleRate
+          const env = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / numSamples)
+          const s = Math.sin(2 * Math.PI * 660 * t) * env * 0.18
+          view.setInt16(44 + i * 2, Math.round(s * 32767), true)
+        }
+        const bytes = new Uint8Array(buf)
+        let bin = ''
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+        await FileSystem.writeAsStringAsync(path, btoa(bin), { encoding: FileSystem.EncodingType.Base64 })
+      }
+      tickPlayer.replace({ uri: path })
+      tickReadyRef.current = true
+    }
+    ensure().catch(() => {})
+  }, [])
+
+  const playTransitionTick = useCallback(() => {
+    if (!tickReadyRef.current) return
+    try {
+      tickPlayer.seekTo(0)
+      tickPlayer.play()
+    } catch {}
+  }, [])
+
+  // Single-active-player coordination: whichever bubble is currently
+  // playing sets this to its audio_key; every other bubble pauses on change.
+  const [activePlayingKey, setActivePlayingKey] = useState<string | null>(null)
+  const handlePlayStart = useCallback((key: string) => setActivePlayingKey(key), [])
+
+  // Auto-play next voice message after the current one finishes naturally.
+  // Reuses the existing messagesRef (kept in sync with `messages`) declared above.
+  const [autoPlayKey, setAutoPlayKey] = useState<string | null>(null)
+  const handleAudioFinished = useCallback((finishedKey: string) => {
+    const msgs = messagesRef.current
+    const idx = msgs.findIndex(m => m.audio_key === finishedKey)
+    if (idx === -1) return
+    for (let i = idx + 1; i < msgs.length; i++) {
+      const k = msgs[i].audio_key
+      if (k) {
+        playTransitionTick()
+        setAutoPlayKey(k)
+        return
+      }
+    }
+  }, [playTransitionTick])
+  const consumeAutoPlay = useCallback(() => setAutoPlayKey(null), [])
 
   // ── Reversed messages for inverted FlatList ──────────────────────────────
   const reversedMessages = useMemo(() => messages.reduceRight<Message[]>((acc, m) => { acc.push(m); return acc }, []), [messages])
@@ -304,6 +399,11 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current)
       audioRecorder.stop().catch(() => {})
+      setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: false,
+        shouldRouteThroughEarpiece: false,
+      }).catch(() => {})
     }
   }, [])
 
@@ -312,14 +412,10 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     const db = recorderState.metering ?? -50
     const amp = Math.max(0.07, Math.min(1, 1 + db / 40))
     amplitudeBufferRef.current.push(amp)
-    livePhaseRef.current += 0.4
-    const p = livePhaseRef.current
-    const bars = Array.from({ length: N_REC_BARS }, (_, i) => {
-      const t = (i / N_REC_BARS) * Math.PI * 5
-      const wave = Math.abs(0.6 * Math.sin(p + t) + 0.4 * Math.sin(p * 1.5 + t * 1.8))
-      return Math.max(0.07, amp * (0.2 + 0.8 * wave))
-    })
-    setLiveBars(bars)
+    const buf = amplitudeBufferRef.current
+    const tail = buf.length >= N_REC_BARS ? buf.slice(-N_REC_BARS) : buf
+    const pad = Array(N_REC_BARS - tail.length).fill(0.07)
+    setLiveBars([...pad, ...tail])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorderState])
 
@@ -408,27 +504,37 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [isActive])
 
   // ── Keyboard avoidance ───────────────────────────────────────────────────
-  // useAnimatedKeyboard runs on the UI thread and tracks the keyboard frame
-  // every animation frame, so the layout follows the keyboard with zero lag.
-  // kbHeight (JS state) is kept only to trigger the scroll-to-bottom effect.
-  const animKeyboard = useAnimatedKeyboard()
+  // RN's KeyboardAvoidingView doesn't cope with the chat sitting inside the
+  // home pager shell on Android edge-to-edge, so we drive bottom padding
+  // ourselves: the spacer below the input row grows by the keyboard height
+  // when it's open, pushing the input row above the keyboard.
   const safeBottom = Math.max(insets.bottom, 8)
-  // Translate body up by (keyboard - safeBottom) so the static safeBottom spacer
-  // stays hidden behind the keyboard frame, keeping paddingTop stable.
-  const bodyAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -Math.max(animKeyboard.height.value - safeBottom + 8, 0) }],
-  }))
   const hasTextShared = useSharedValue(0)
   const micIconStyle = useAnimatedStyle(() => ({ opacity: hasTextShared.value === 0 ? 1 : 0 }))
   const sendIconStyle = useAnimatedStyle(() => ({ opacity: hasTextShared.value === 1 ? 1 : 0, position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }))
-  const [inputRowHeight, setInputRowHeight] = useState(48)
 
   const [kbHeight, setKbHeight] = useState(0)
   useEffect(() => {
-    const isIOS = Platform.OS === 'ios'
+    // Compute the keyboard's visible bottom area from screen geometry rather
+    // than from `endCoordinates.height` directly: Gboard's clipboard /
+    // suggestion strip lives in the screen between `screenY` and the bottom
+    // of the device, but isn't always counted in `height`. screenHeight −
+    // screenY gives the full strip + keyboard area.
+    //
+    // We listen to `keyboardWillShow` on both platforms so the spacer
+    // updates *before* the keyboard animation starts — that way the input
+    // bar rides up in sync with the keyboard instead of jumping after it.
+    const onShow = (e: any) => {
+      const screenH = Dimensions.get('screen').height
+      const fromScreenY = screenH - (e.endCoordinates?.screenY ?? screenH)
+      const reportedH = e.endCoordinates?.height ?? 0
+      setKbHeight(Math.max(reportedH, fromScreenY))
+    }
     const subs = [
-      Keyboard.addListener(isIOS ? 'keyboardWillShow' : 'keyboardDidShow', e => setKbHeight(e.endCoordinates.height)),
-      Keyboard.addListener(isIOS ? 'keyboardWillHide' : 'keyboardDidHide', () => setKbHeight(0)),
+      Keyboard.addListener('keyboardWillShow', onShow),
+      Keyboard.addListener('keyboardDidShow', onShow),
+      Keyboard.addListener('keyboardWillHide', () => setKbHeight(0)),
+      Keyboard.addListener('keyboardDidHide', () => setKbHeight(0)),
     ]
     return () => { subs.forEach(s => s.remove()) }
   }, [])
@@ -448,11 +554,14 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     lastReadSentRef.current = null
     setHasMore(false)
     hasMoreRef.current = false
-    if (!cacheKey) return
+    if (!cacheKey || !userId || !otherId) return
     AsyncStorage.getItem(cacheKey).then(raw => {
       if (cancelled || !raw) return
       try {
-        const cached = JSON.parse(raw) as Message[]
+        const cached = (JSON.parse(raw) as Message[]).filter(m =>
+          (m.user_id === userId && m.other_id === otherId) ||
+          (m.user_id === otherId && m.other_id === userId),
+        )
         if (cached.length > 0) {
           cached.forEach(m => seenSet.current.add(m.user_id + m.created_at))
           setMessagesRaw(cached)
@@ -460,7 +569,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
       } catch {}
     })
     return () => { cancelled = true }
-  }, [cacheKey])
+  }, [cacheKey, userId, otherId])
 
   // ── Persist + restore otherLastRead (read receipts) ─────────────────────
   // On first open per conversation (no stored value), seed to now so all
@@ -641,6 +750,8 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
         fresh.forEach(m => {
           if (m.user_id === userId || isActiveRef.current)
             seenSet.current.add(m.user_id + m.created_at)
+          if (m.user_id === otherId)
+            newMsgKeysRef.current.add(m.user_id + m.created_at)
         })
         if (!isActiveRef.current) {
           const incoming = fresh.filter(m => m.user_id === otherId).length
@@ -726,11 +837,13 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   const handleSend = useCallback(async (override?: string) => {
     const msg = (override ?? text).trim()
     if (!msg || sending || !userId || !otherId) return
+    tap()
     setSending(true)
     setText('')
     hasTextShared.value = 0
     const now = new Date().toISOString()
     seenSet.current.add(userId + now)
+    newMsgKeysRef.current.add(userId + now)
     setMessages(prev => [...prev, { user_id: userId, other_id: otherId, created_at: now, text: msg, _pending: true }])
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
     try {
@@ -830,6 +943,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     const now = new Date().toISOString()
     // Optimistic bubble with local preview
     seenSet.current.add(userId + now)
+    newMsgKeysRef.current.add(userId + now)
     setMessages(prev => [...prev, {
       user_id: userId, other_id: otherId, created_at: now,
       image_key: key, _localUri: localUri, _pending: true,
@@ -898,6 +1012,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     const now = new Date().toISOString()
     const loadingKey = userId + now
     seenSet.current.add(loadingKey)
+    newMsgKeysRef.current.add(loadingKey)
     setMessages(prev => [...prev, {
       user_id: userId, other_id: otherId, created_at: now,
       _pending: true, _loadingLocation: true,
@@ -978,7 +1093,6 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     }
     tapMedium()
     amplitudeBufferRef.current = []
-    livePhaseRef.current = 0
     setLiveBars(Array(N_REC_BARS).fill(0.07))
     recordElapsedRef.current = 0
     setRecordElapsed(0)
@@ -1087,6 +1201,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     const key = `${userId}/${Date.now()}.m4a`
     const now = new Date().toISOString()
     seenSet.current.add(userId + now)
+    newMsgKeysRef.current.add(userId + now)
     const localUri = audioUri
     const bars = previewBars.length >= 8 ? previewBars : null
     const durationMs = audioDuration > 0 ? audioDuration : null
@@ -1220,6 +1335,13 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
               getChatAudioUrl={getChatAudioUrl}
               time={formatTime(msg.created_at)}
               msgStatus={msgStatus}
+              routedToEarpiece={routedToEarpiece}
+              onToggleRouting={toggleAudioRouting}
+              autoPlayKey={autoPlayKey}
+              onAudioFinished={handleAudioFinished}
+              onAutoPlayConsumed={consumeAutoPlay}
+              activePlayingKey={activePlayingKey}
+              onPlayStart={handlePlayStart}
             />
           ) : msg.image_key || msg._localUri ? (
             <ImageBubble
@@ -1286,10 +1408,12 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
       </View>
     )
   }, [reversedMessages, messages.length, firstNewIdx, userId, otherLastRead, getChatImageUrl, getChatAudioUrl,
-      handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation])
+      handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation,
+      routedToEarpiece, toggleAudioRouting, autoPlayKey, handleAudioFinished, consumeAutoPlay,
+      activePlayingKey, handlePlayStart])
 
   return (
-    <View style={[styles.root, { paddingTop: topInset }]}>
+    <View style={[styles.root, { paddingTop: topInset, paddingBottom: Math.max(safeBottom, kbHeight > 0 ? kbHeight + 8 : 0) }]}>
       <StatusBar style="dark" />
 
       {/* ── Header ──
@@ -1323,13 +1447,16 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
         </IconPressable>
       </View>
 
-      {/* ── Messages ── */}
-      <View style={{ flex: 1, overflow: 'hidden' }}>
-      <ReAnimated.View style={[styles.body, bodyAnimStyle]}>
+      {/* ── Messages ──
+          The body uses a plain View. Keyboard avoidance is driven entirely
+          by the bottom spacer below the input row: spacer = kbHeight when
+          the keyboard is open pushes the input row to sit exactly on top of
+          the keyboard, regardless of platform-specific OS resize behavior. */}
+      <View style={styles.body}>
         <FlatList
           ref={scrollRef}
           style={styles.messages}
-          contentContainerStyle={[styles.messagesContent, { paddingTop: inputRowHeight + safeBottom }]}
+          contentContainerStyle={styles.messagesContent}
           automaticallyAdjustKeyboardInsets={false}
           data={reversedMessages}
           keyExtractor={(item) => `${item.user_id}-${item.created_at}`}
@@ -1340,11 +1467,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
           keyboardShouldPersistTaps="handled"
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
-          ListHeaderComponent={otherIsTyping ? (
-            <View style={[styles.msgWrap, styles.msgWrapFirst]}>
-              <TypingDots />
-            </View>
-          ) : null}
+          ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: 12, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={GRAY_50} />
@@ -1357,17 +1480,17 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
 
         {/* ── Input bar ──
             Fixed-height white footer with the input field and the send
-            button on one horizontal line. `bottomPad` is the only dynamic
-            bit: when the keyboard is open we lift the bar above it; when
-            it's closed we still clear the nav-bar gesture area.
-            Android edge-to-edge: `endCoordinates.height` excludes the
-            bottom system inset, so we add it back when the keyboard is up. */}
-        <View style={[styles.inputBarOuter, { position: 'absolute', left: 0, right: 0, bottom: 0 }]}>
-          <View onLayout={e => setInputRowHeight(e.nativeEvent.layout.height)}>
+            button on one horizontal line. The root view's paddingBottom
+            (Math.max(safeBottom, kbHeight)) carries the bottom inset for
+            both the nav-bar / home-indicator gesture area when the keyboard
+            is closed and the keyboard height when it's open, so the input
+            bar lands just above whatever sits at the bottom of the screen
+            via flex layout — no per-platform spacer needed. */}
+        <View style={styles.inputBarOuter}>
           {/* Always render the text input row so the keyboard stays open while
               recording/previewing. The recording and preview UIs overlay on top. */}
           <View style={styles.inputRow}>
-            <View style={styles.inputWrap} onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}>
+            <ReAnimated.View style={[styles.inputWrap, inputWrapBorderStyle]} onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}>
               <View style={styles.inputAnimWrap} pointerEvents={attachVisible ? 'none' : 'auto'}>
                 <TextInput
                   style={styles.input}
@@ -1416,19 +1539,20 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                         </Svg>
                         <Text style={styles.attachBarLabel}>{t('chat.attachMenu.location')}</Text>
                       </Pressable>
+                      <View style={styles.attachBarDivider} />
+                      <Pressable
+                        onPress={() => { tap(); setAttachMenuOpen(false) }}
+                        style={({ pressed }) => [styles.attachBarClose, pressed && styles.attachBarItemPressed]}
+                      >
+                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                          <Path d="M18 6L6 18M6 6l12 12" />
+                        </Svg>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => { tap(); setAttachMenuOpen(false) }}
-                      style={({ pressed }) => [styles.attachBarClose, pressed && styles.attachBtnPressed]}
-                    >
-                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                        <Path d="M18 6L6 18M6 6l12 12" />
-                      </Svg>
-                    </Pressable>
                   </View>
                 </ReAnimated.View>
               )}
-            </View>
+            </ReAnimated.View>
             <Pressable
               onPress={() => text.trim() ? handleSend() : handleMicPress()}
               disabled={!!text.trim() && sending}
@@ -1511,10 +1635,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
               </View>
             )}
           </View>
-          </View>
-          <View style={{ height: safeBottom }} />
         </View>
-      </ReAnimated.View>
       </View>
 
       {/* ── Menu dropdown ── */}
@@ -1744,6 +1865,37 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
 // Three dots rising in a staggered loop — the same pattern iMessage/WhatsApp
 // use. Each dot runs its own Animated.loop with a delay so the wave is
 // smooth even if the component remounts mid-cycle.
+function TypingIndicator({ visible }: { visible: boolean }) {
+  const [mounted, setMounted] = useState(visible)
+  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current
+  const translateY = useRef(new Animated.Value(visible ? 0 : 8)).current
+  const scale = useRef(new Animated.Value(visible ? 1 : 0.9)).current
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true)
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, damping: 22, stiffness: 320, useNativeDriver: true }),
+      ]).start()
+    } else {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 8, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.9, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]).start(({ finished }) => { if (finished) setMounted(false) })
+    }
+  }, [visible])
+
+  if (!mounted && !visible) return null
+  return (
+    <Animated.View style={[styles.msgWrap, styles.msgWrapFirst, { opacity, transform: [{ translateY }, { scale }] }]}>
+      <TypingDots />
+    </Animated.View>
+  )
+}
+
 function TypingDots() {
   const a = useRef(new Animated.Value(0)).current
   const b = useRef(new Animated.Value(0)).current
@@ -1838,8 +1990,7 @@ function Waveform({
 
   const xToRatio = (x: number) => {
     if (width <= 0) return 0
-    const r = Math.max(0, Math.min(1, x / width))
-    return isRTL ? 1 - r : r
+    return Math.max(0, Math.min(1, x / width))
   }
 
   const scrubStart = (x: number) => {
@@ -1936,7 +2087,7 @@ function Waveform({
   )
 }
 
-function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgStatus }: {
+function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgStatus, routedToEarpiece, onToggleRouting, autoPlayKey, onAudioFinished, onAutoPlayConsumed, activePlayingKey, onPlayStart }: {
   animate: boolean
   isMine: boolean
   isLast: boolean
@@ -1944,6 +2095,13 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
   getChatAudioUrl: (key: string) => Promise<string | null>
   time: string
   msgStatus: 'pending' | 'failed' | 'sent' | 'read'
+  routedToEarpiece: boolean
+  onToggleRouting: () => void
+  autoPlayKey: string | null
+  onAudioFinished: (key: string) => void
+  onAutoPlayConsumed: () => void
+  activePlayingKey: string | null
+  onPlayStart: (key: string) => void
 }) {
   const [pos, setPos] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -1988,6 +2146,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
       animRef.current = null
       setPos(0)
       progressAnim.setValue(0)
+      if (msg.audio_key) onAudioFinished(msg.audio_key)
     }
   }, [status.currentTime, status.duration, status.didJustFinish])
 
@@ -2012,6 +2171,13 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     }
   }, [status.playing])
 
+  // Pause this bubble whenever another bubble becomes the active player.
+  useEffect(() => {
+    if (!activePlayingKey) return
+    if (activePlayingKey === msg.audio_key) return
+    if (status.playing) player.pause()
+  }, [activePlayingKey, status.playing])
+
   const BARS = 60
   const seed = msg.audio_key ?? msg.created_at
   const bars = useMemo(() => {
@@ -2025,14 +2191,14 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     })
   }, [seed, msg.audio_bars])
 
-  const handlePlayPause = async () => {
+  const startPlay = async () => {
     if (!uri || loading) return
-    tap()
-    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
-    if (status.playing) {
-      player.pause()
-      return
-    }
+    if (msg.audio_key) onPlayStart(msg.audio_key)
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      allowsRecording: routedToEarpiece,
+      shouldRouteThroughEarpiece: routedToEarpiece,
+    })
     if (!replacedRef.current) {
       replacedRef.current = true
       playOnLoadRef.current = true
@@ -2044,6 +2210,23 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     if (dur > 0 && status.currentTime >= dur - 0.1) player.seekTo(0)
     player.play()
   }
+
+  const handlePlayPause = async () => {
+    if (!uri || loading) return
+    tap()
+    if (status.playing) {
+      player.pause()
+      return
+    }
+    await startPlay()
+  }
+
+  // Auto-play when chat signals this bubble is the next to play.
+  useEffect(() => {
+    if (!autoPlayKey || autoPlayKey !== msg.audio_key) return
+    onAutoPlayConsumed()
+    startPlay().catch(() => {})
+  }, [autoPlayKey])
 
   const handleSeek = (ratio: number) => {
     const dur = status.duration ?? 0
@@ -2078,58 +2261,80 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
   const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
+  const routeBtn = playing ? (
+    <Pressable
+      onPress={onToggleRouting}
+      style={[styles.audioRouteBtn, routedToEarpiece && styles.audioRouteBtnActive]}
+      hitSlop={8}
+    >
+      {routedToEarpiece ? (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill={WHITE}>
+          <Path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.05-.24c1.16.39 2.41.6 3.7.6a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A18 18 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.29.21 2.54.6 3.7a1 1 0 0 1-.24 1.05l-2.2 2.04z" />
+        </Svg>
+      ) : (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill={TEXT_PRIMARY}>
+          <Path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05a4.5 4.5 0 0 0 2.5-4.02zM14 3.23v2.06a8 8 0 0 1 0 14.66v2.06a10 10 0 0 0 0-18.78z" />
+        </Svg>
+      )}
+    </Pressable>
+  ) : null
+
   return (
-    <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
-      <View style={styles.audioRow}>
-        <Pressable
-          onPress={handlePlayPause}
-          disabled={!ready}
-          style={[styles.audioPlayBtn, { backgroundColor: isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)' }]}
-          hitSlop={8}
-        >
-          {ready ? (
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill={iconColor}>
-              {playing ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" /> : <Path d="M8 5v14l11-7z" />}
-            </Svg>
-          ) : (
-            <ActivityIndicator size="small" color={iconColor} />
-          )}
-        </Pressable>
-        <View style={styles.audioWave}>
-          <Waveform
-            bars={bars}
-            height={26}
-            inactiveColor={barInactive}
-            activeColor={barActive}
-            thumbColor={barActive}
-            progressAnim={progressAnim}
-            seekable={(status.duration ?? 0) > 0}
-            onScrub={r => {
-              if (r != null) {
-                const dur = status.duration ?? 0
-                setScrubMs(Math.round(r * dur * 1000))
-              } else {
-                setScrubMs(null)
-              }
-            }}
-            onSeek={handleSeek}
-          />
+    <View style={[styles.audioOuter, { justifyContent: isMine ? 'flex-end' : 'flex-start' }]}>
+      {isMine && routeBtn}
+      <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
+        <View style={styles.audioRow}>
+          <Pressable
+            onPress={handlePlayPause}
+            disabled={!ready}
+            style={[styles.audioPlayBtn, { backgroundColor: isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)' }]}
+            hitSlop={8}
+          >
+            {ready ? (
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill={iconColor}>
+                {playing ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" /> : <Path d="M8 5v14l11-7z" />}
+              </Svg>
+            ) : (
+              <ActivityIndicator size="small" color={iconColor} />
+            )}
+          </Pressable>
+          <View style={styles.audioWave}>
+            <Waveform
+              bars={bars}
+              height={26}
+              inactiveColor={barInactive}
+              activeColor={barActive}
+              thumbColor={barActive}
+              progressAnim={progressAnim}
+              seekable={(status.duration ?? 0) > 0}
+              onScrub={r => {
+                if (r != null) {
+                  const dur = status.duration ?? 0
+                  setScrubMs(Math.round(r * dur * 1000))
+                } else {
+                  setScrubMs(null)
+                }
+              }}
+              onSeek={handleSeek}
+            />
+          </View>
         </View>
-      </View>
-      <View style={styles.audioDurationRow}>
-        <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
-          {scrubMs != null
-            ? fmt(scrubMs)
-            : duration > 0
-              ? (playing ? fmt(pos) : fmt(duration))
-              : (msg.audio_duration_ms ? fmt(msg.audio_duration_ms) : '–:––')}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-          <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{time}</Text>
-          {isMine && msgStatus !== 'failed' && <CheckMark status={msgStatus} isMine />}
+        <View style={styles.audioDurationRow}>
+          <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+            {scrubMs != null
+              ? fmt(scrubMs)
+              : duration > 0
+                ? (playing ? fmt(pos) : fmt(duration))
+                : (msg.audio_duration_ms ? fmt(msg.audio_duration_ms) : '–:––')}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{time}</Text>
+            {isMine && msgStatus !== 'failed' && <CheckMark status={msgStatus} isMine />}
+          </View>
         </View>
-      </View>
-    </AnimatedBubble>
+      </AnimatedBubble>
+      {!isMine && routeBtn}
+    </View>
   )
 }
 
@@ -2335,7 +2540,7 @@ const styles = StyleSheet.create({
   menuBtn: {
     height: 36,
     width: 36,
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2345,7 +2550,7 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     height: 56,
-    borderRadius: 10,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2402,7 +2607,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
     paddingVertical: 8,
     paddingHorizontal: 13,
-    borderRadius: SINGLE,
+    borderRadius: 16,
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
@@ -2442,7 +2647,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     minHeight: 44,
     maxHeight: 174,
-    borderRadius: SINGLE,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.12)',
     backgroundColor: WHITE,
@@ -2467,7 +2672,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   sendBtn: {
-    width: 49, height: 49, borderRadius: SINGLE,
+    width: 49, height: 49, borderRadius: 12,
     backgroundColor: PRIMARY,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -2486,7 +2691,7 @@ const styles = StyleSheet.create({
   },
   menuDropdown: {
     backgroundColor: WHITE,
-    borderRadius: 14,
+    borderRadius: 16,
     shadowColor: BLACK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -2495,7 +2700,7 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     backgroundColor: WHITE,
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   menuRow: {
@@ -2543,9 +2748,7 @@ const styles = StyleSheet.create({
   attachBar: {
     position: 'absolute',
     end: 0, top: 0, bottom: 0,
-    borderRadius: SINGLE,
     backgroundColor: PRIMARY,
-    overflow: 'hidden',
   },
   attachBarInner: {
     position: 'absolute',
@@ -2575,34 +2778,35 @@ const styles = StyleSheet.create({
   },
   attachBarLabel: { fontSize: 14, color: WHITE, fontWeight: '500' },
   attachBarClose: {
-    width: 36, height: 36,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 6,
+    alignSelf: 'stretch',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Image bubble
   imageBubble: {
     width: '80%',
-    borderRadius: SINGLE,
+    borderRadius: 16,
     overflow: 'hidden',
     padding: SINGLE,
   },
   chatImage: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: SINGLE,
+    borderRadius: 12,
   },
   chatImagePlaceholder: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: SINGLE,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.08)',
   },
   chatImageSpinnerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: SINGLE,
+    borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2624,11 +2828,26 @@ const styles = StyleSheet.create({
   },
 
   // Audio bubble
+  audioOuter: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   audioBubble: {
     width: '80%',
-    borderRadius: SINGLE,
+    borderRadius: 16,
     paddingVertical: 10,
     paddingHorizontal: 10,
+  },
+  audioRouteBtn: {
+    width: 32, height: 32,
+    borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  audioRouteBtnActive: {
+    backgroundColor: PRIMARY,
   },
   audioRow: {
     flexDirection: 'row',
@@ -2700,7 +2919,7 @@ const styles = StyleSheet.create({
   // Location bubble
   locationBubble: {
     width: '80%',
-    borderRadius: SINGLE,
+    borderRadius: 16,
     paddingVertical: 10,
     paddingHorizontal: 10,
   },

@@ -37,25 +37,31 @@ export type Profile = {
   distance?: number;
 };
 
+export type Page1State = 'free' | 'watching' | 'waiting' | 'chat' | 'locked';
+export type Page2State = 'free' | 'pending' | 'chat' | 'locked';
+
 export type Page1 = {
+  state: Page1State;
   profile?: Profile;
-  state: string | null;
-  event: string;
+  message?: string;
   invited_at?: string;
   expires_at?: string;
   extended?: boolean;
 };
 
-export type Page2Invite = Profile & {
-  state: 'pending' | 'missed' | 'fail';
+export type Page2 = {
+  state: Page2State;
+  profile?: Profile;
+  profiles?: Profile[];
+  message?: string;
   invited_at?: string;
   expires_at?: string;
   extended?: boolean;
 };
 
 export type Pages = {
-  page1?: Page1;
-  page2: Profile[] | Page2Invite;
+  page1: Page1;
+  page2: Page2;
 };
 
 export type Notify = { user_id: string; code: string; actor_id?: string };

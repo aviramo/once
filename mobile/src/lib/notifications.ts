@@ -14,7 +14,7 @@ Notifications.setNotificationHandler({
   }),
 })
 
-const PUSH_TOKEN_KEY = 'livo_push_token'
+const PUSH_TOKEN_KEY = 'once_push_token'
 
 export type NotifPermission = 'granted' | 'denied' | 'undetermined'
 
@@ -98,4 +98,24 @@ export function addNotificationTapListener(handler: (type: string) => void): () 
     if (type) handler(type)
   })
   return () => sub.remove()
+}
+
+/**
+ * Returns the `data.type` of the notification that launched the app from a killed
+ * state, or null if the app wasn't opened via a notification tap. Synchronous so
+ * callers can use it to pick PagerView's initialPage on first render.
+ */
+export function getInitialNotificationType(): string | null {
+  try {
+    const r = Notifications.getLastNotificationResponse()
+    const type = r?.notification.request.content.data?.type
+    return typeof type === 'string' ? type : null
+  } catch {
+    return null
+  }
+}
+
+/** Clears the cached cold-start notification so it doesn't replay on remount. */
+export function clearInitialNotification() {
+  try { Notifications.clearLastNotificationResponse() } catch {}
 }

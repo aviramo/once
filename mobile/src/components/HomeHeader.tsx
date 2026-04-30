@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { View, StyleSheet, I18nManager, Pressable, ActivityIndicator } from 'react-native'
 import { Text } from './AppText'
-import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg'
+import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from 'react-native-svg'
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withTiming, withRepeat, withSequence, Easing,
+  withTiming, withRepeat, withSequence, withDelay, Easing,
 } from 'react-native-reanimated'
 import { IconPressable } from './IconPressable'
 import { CountBadge } from './CountBadge'
@@ -201,6 +201,10 @@ export function HomeHeader({
 
   const badgeOpacity = useSharedValue(1)
   const arrowNudge = useSharedValue(0)
+  // Wind sweep: a soft PRIMARY band drifts across the header from the page1
+  // side toward the page2 side when an invite is alerting.
+  const sweepProgress = useSharedValue(0)
+  const [headerWidth, setHeaderWidth] = useState(0)
   useEffect(() => {
     if (page2Arrow?.alerting) {
       badgeOpacity.value = withRepeat(
@@ -219,13 +223,30 @@ export function HomeHeader({
         4,
         false,
       )
+      sweepProgress.value = 0
+      sweepProgress.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.cubic) }),
+          withDelay(180, withTiming(0, { duration: 0 })),
+        ),
+        3,
+        false,
+      )
     } else {
       badgeOpacity.value = withTiming(1, { duration: 150 })
       arrowNudge.value = withTiming(0, { duration: 150 })
+      sweepProgress.value = 0
     }
   }, [page2Arrow?.alerting])
   const badgeAnimStyle = useAnimatedStyle(() => ({ opacity: badgeOpacity.value }))
   const arrowNudgeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: arrowNudge.value }] }))
+  const SWEEP_RATIO = 0.55
+  const sweepWidth = Math.max(140, Math.round(headerWidth * SWEEP_RATIO))
+  const sweepStyle = useAnimatedStyle(() => {
+    const startX = isRTL ? headerWidth : -sweepWidth
+    const endX = isRTL ? -sweepWidth : headerWidth
+    return { transform: [{ translateX: startX + (endX - startX) * sweepProgress.value }] }
+  })
 
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -287,7 +308,45 @@ export function HomeHeader({
   ) : null
 
   return (
-    <View style={styles.header}>
+    <View
+      style={styles.header}
+      onLayout={e => setHeaderWidth(e.nativeEvent.layout.width)}
+    >
+      {/* Wind sweep: arrow-shaped PRIMARY band drifting toward page2 side
+          while alerting. Tip points in the direction of motion, gradient
+          fades from solid at the tip back to transparent along the trail.
+          Sits behind all other header content via z-order. */}
+      {headerWidth > 0 && (() => {
+        const TIP = 22
+        const PAD = 12  // vertical margin so the arrow doesn't fill full header height
+        const top = PAD
+        const bottom = 56 - PAD
+        const midY = 28
+        const arrowPath = isRTL
+          ? `M ${sweepWidth} ${top} L ${TIP} ${top} L 0 ${midY} L ${TIP} ${bottom} L ${sweepWidth} ${bottom} Z`
+          : `M 0 ${top} L ${sweepWidth - TIP} ${top} L ${sweepWidth} ${midY} L ${sweepWidth - TIP} ${bottom} L 0 ${bottom} Z`
+        return (
+          <View pointerEvents="none" style={styles.sweepClipper}>
+            <Animated.View
+              style={[
+                { position: 'absolute', top: 0, left: 0, width: sweepWidth, height: '100%' },
+                sweepStyle,
+              ]}
+            >
+              <Svg width={sweepWidth} height={56}>
+                <Defs>
+                  <LinearGradient id="windSweep" x1="0" y1="0" x2={sweepWidth} y2="0" gradientUnits="userSpaceOnUse">
+                    <Stop offset="0%" stopColor={PRIMARY} stopOpacity={isRTL ? 0.45 : 0} />
+                    <Stop offset="100%" stopColor={PRIMARY} stopOpacity={isRTL ? 0 : 0.45} />
+                  </LinearGradient>
+                </Defs>
+                <Path d={arrowPath} fill="url(#windSweep)" />
+              </Svg>
+            </Animated.View>
+          </View>
+        )
+      })()}
+
       {/* Start side (right in RTL): settings — navigates to settings pane to the right */}
       <View style={[styles.sideSlot, styles.sideSlotStart]}>
         <IconPressable
@@ -366,6 +425,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SINGLE,
     height: 56,
     zIndex: 10,
+  },
+  sweepClipper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
   },
   sideSlot: {
     zIndex: 1,
@@ -470,7 +537,7 @@ const styles = StyleSheet.create({
   },
   settingsBtn: {
     height: 40,
-    borderRadius: SINGLE,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -495,7 +562,7 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     backgroundColor: '#fff',
-    borderRadius: SINGLE,
+    borderRadius: 16,
     paddingVertical: 4,
     minWidth: 160,
     shadowColor: '#000',

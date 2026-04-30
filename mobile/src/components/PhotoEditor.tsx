@@ -83,7 +83,7 @@ function PhotoCell({
         source={uri}
         placeholder={localUri ? { uri: localUri } : undefined}
         style={photoStyles.img}
-        cachePolicy="disk"
+        cachePolicy="memory-disk"
         recyclingKey={uri}
         transition={200}
         onLoad={() => onLoaded?.()}
@@ -596,7 +596,7 @@ const photoStyles = StyleSheet.create({
     marginTop: 12,
     overflow: 'visible',
   },
-  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: SINGLE, overflow: 'hidden' },
+  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: 16, overflow: 'hidden' },
   filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
   img: { width: '100%', height: '100%' },
   placeholderBg: {
@@ -618,7 +618,7 @@ const photoStyles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
   add: {
-    width: '31.5%', aspectRatio: 3 / 4, borderRadius: SINGLE,
+    width: '31.5%', aspectRatio: 3 / 4, borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', borderStyle: 'dashed',
@@ -626,13 +626,13 @@ const photoStyles = StyleSheet.create({
   dropTarget: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.45)',
-    borderRadius: SINGLE,
+    borderRadius: 16,
   },
   spinnerBadge: {
     position: 'absolute',
     top: '50%', start: '50%',
     width: 36, height: 36, marginStart: -18, marginTop: -18,
-    borderRadius: SINGLE,
+    borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center', justifyContent: 'center',
   },

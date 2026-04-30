@@ -26,8 +26,8 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
   if (!token || token.type !== "expo" || !token.token) return;
 
   const lang = typeof targetData?.lang === "string" ? targetData.lang : "he";
-  const bodyText = (PUSH_BODY[lang] ?? PUSH_BODY.he)[code] ?? "Livo";
-  const title = typeof actorRow?.name === "string" && actorRow.name ? actorRow.name : "Livo";
+  const bodyText = (PUSH_BODY[lang] ?? PUSH_BODY.he)[code] ?? "Once";
+  const title = typeof actorRow?.name === "string" && actorRow.name ? actorRow.name : "Once";
 
   const payload: Record<string, unknown> = {
     type: code,

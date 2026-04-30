@@ -45,8 +45,8 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
   if (!token || token.type !== "expo" || !token.token) return;
 
   const lang = typeof targetData?.lang === "string" ? targetData.lang : "he";
-  const bodyText = (PUSH_BODY[lang] ?? PUSH_BODY.he)[code] ?? "Livo";
-  const title = typeof actorRow?.name === "string" && actorRow.name ? actorRow.name : "Livo";
+  const bodyText = (PUSH_BODY[lang] ?? PUSH_BODY.he)[code] ?? "Once";
+  const title = typeof actorRow?.name === "string" && actorRow.name ? actorRow.name : "Once";
 
   const payload: Record<string, unknown> = {
     type: code,
@@ -96,12 +96,10 @@ Deno.serve(async (req) => {
       case "location":
       case "focus": {
         await user.persist(log);
-        const p1 = user.relations?.page1 as { state?: string; event?: string } | undefined;
-        const isActive = ["watching", "waiting", "chat"].includes(p1?.state ?? "");
-        const autoFindEvents = ["find", "start", "ignore", "location"];
-        const shouldAutoFind = !isActive && (!p1 || (p1.state === null && autoFindEvents.includes(p1.event ?? "")));
-        if (shouldAutoFind) {
-          const eventKey = key === "location" ? "location" : "start";
+        // v3: auto-find only when page1.state === 'free' (the user has nothing
+        // active and hasn't been parked into 'locked' awaiting a manual clear).
+        if (user.relations?.page1?.state === "free") {
+          const eventKey = key === "location" ? "location" : key;
           const result = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: eventKey });
           if (result && !result.error) {
             rpcUser = result.user;
@@ -115,9 +113,7 @@ Deno.serve(async (req) => {
       case "range":
       case "preferred_gender": {
         await user.persist(log);
-        const p1 = user.relations?.page1 as { state?: string; event?: string } | undefined;
-        const shouldAutoFind = !p1 || (p1.state === null && p1.event !== "clear1");
-        if (shouldAutoFind) {
+        if (user.relations?.page1?.state === "free") {
           const result = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: "find" });
           if (result && !result.error) {
             rpcUser = result.user;
@@ -154,7 +150,8 @@ Deno.serve(async (req) => {
       case "approve":
       case "decline":
       case "clear1":
-      case "clear2": {
+      case "clear2":
+      case "free2": {
         const result = await Tools.rpc(log, `app_${key}`, { me_id: user.user_id });
         await user.persist(log);
         if (result?.error) return log.error(key, result.error, 400);
@@ -250,7 +247,7 @@ Deno.serve(async (req) => {
         await Tools.invoke(log, "reset_chat", Tools.supabase.from("chat").delete().not("user_id", "is", null));
         await Tools.invoke(log, "reset_log", Tools.supabase.from("log").delete().not("user_id", "is", null));
         await Tools.invoke(log, "reset_restrictions", Tools.supabase.from("restrictions").delete().not("id", "is", null));
-        await Tools.invoke(log, "reset_relations", Tools.supabase.from("users").update({ relations: { page1: { state: null, event: 'clear1' }, page2: [] } }).not("user_id", "is", null));
+        await Tools.invoke(log, "reset_relations", Tools.supabase.from("users").update({ relations: { page1: { state: 'free' }, page2: { state: 'free', profiles: [] } } }).not("user_id", "is", null));
         await user.persist(log);
         break;
       }

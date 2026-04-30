@@ -3,7 +3,7 @@ import Tools from "./tools.ts";
 import Log from "./log.ts";
 import { Data, Pages, PushToken } from "./global.ts";
 
-const defaultRelations: Pages = { page2: [] };
+const defaultRelations: Pages = { page1: { state: "locked" }, page2: { state: "locked" } };
 
 export default class User {
   user_id: string;
@@ -29,7 +29,8 @@ export default class User {
     else {
       this.user_id = data.user_id as string;
       lodash.merge(this, data);
-      // lodash.merge corrupts object-form page2 into the default [] array; override to preserve.
+      // lodash.merge can clobber the relations subtree by merging keys instead
+      // of replacing the page1/page2 objects wholesale; override to preserve.
       this.relations = (data.relations as Pages) ?? defaultRelations;
       this.db = { new: { ...data }, old: lodash.cloneDeep(data) };
     }

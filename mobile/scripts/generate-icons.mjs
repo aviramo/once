@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(__dirname, '..', 'assets')
 
-// Source of truth: the Livo icon SVG (1024×1024, white bg, two circles).
+// Source of truth: the Once icon SVG (1024×1024, white bg, two circles).
 const LOGO_SVG_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.svg')
 
 const APP_BG = '#f4f4f4' // matches GestureHandlerRootView backgroundColor in _layout.tsx

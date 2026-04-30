@@ -176,7 +176,7 @@ export default {
   // Home — match teaser
   'home.tapForMore': 'מי נמצא בסביבה',
   'home.startHeadline': 'הכל מתחיל ממך',
-  'home.startSubhead': 'Livo · אחד בכל פעם',
+  'home.startSubhead': 'Once · אחד בכל פעם',
   'home.startNow': 'להתחיל',
   'home.endedBack': 'חזרה למשחק',
 
@@ -282,7 +282,7 @@ export default {
   'home.locationUnavailableTitle': 'מיקום לא זמין',
   'home.locationUnavailableDesc': 'לא הצלחנו לאתר את המיקום שלך. נסה לעבור למקום עם קליטה טובה יותר ולחץ על שדר מיקום.',
   'home.locationUnavailableButton': 'שדר מיקום',
-  'home.hiddenHeader2': 'Livo',
+  'home.hiddenHeader2': 'Once',
   'home.locatingDesc': 'סורק אנשים בסביבתך...',
   'home.noOneNearbyTitle': 'אין אף אחד בקרבתך כרגע',
   'home.noOneNearbyDesc': 'לא מצאנו אף אחד בסביבתך. אפשר לנסות שוב בעוד זמן מה.',

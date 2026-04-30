@@ -206,12 +206,12 @@ const styles = StyleSheet.create({
   },
   cardOuter: {
     flex: 1,
-    borderRadius: SINGLE,
+    borderRadius: 16,
   },
   cardInner: {
     flex: 1,
     backgroundColor: WHITE,
-    borderRadius: SINGLE,
+    borderRadius: 16,
     overflow: 'hidden',
   },
 })

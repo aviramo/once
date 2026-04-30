@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
   },
   card: {
     aspectRatio: 1,
-    borderRadius: SINGLE,
+    borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
   },
@@ -710,7 +710,7 @@ const styles = StyleSheet.create({
   inputWrap: {
     marginTop: 32,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
   dateBox: {
     alignSelf: 'stretch',
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 8,
   },
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
   bioField: {
     marginTop: 12,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 28,

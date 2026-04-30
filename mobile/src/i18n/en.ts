@@ -151,7 +151,7 @@ export default {
   'home.emptyLocationBlockedDesc': 'To show you people close to you, please enable location access in your device settings.',
   'home.emptyNotifBlockedTitle': 'Everything happens in real time',
   'home.emptyNotifBlockedDesc': 'To receive invitations and stay updated the moment someone is interested in you, please enable notifications in your device settings.',
-  'home.notifPromptTitle': 'Livo works in real time',
+  'home.notifPromptTitle': 'Once works in real time',
   'home.notifPromptDesc': 'To receive invitations and stay updated the moment someone is interested in you, please enable notifications.',
   'home.notifPromptButton': 'Enable Notifications',
   'home.locationServicesOffDesc': 'To show you people close to you, please enable location services in your device settings.',
@@ -175,7 +175,7 @@ export default {
   // Home — match teaser
   'home.tapForMore': "Who's nearby",
   'home.startHeadline': 'It starts with you.',
-  'home.startSubhead': 'Livo · One at a time',
+  'home.startSubhead': 'Once · One at a time',
   'home.startNow': 'Start now',
   'home.endedBack': 'Back to game',
 
@@ -275,7 +275,7 @@ export default {
   'home.locationUnavailableTitle': 'Location unavailable',
   'home.locationUnavailableDesc': 'We couldn\'t determine your location. Try moving to a spot with better reception and tap Broadcast Location.',
   'home.locationUnavailableButton': 'Broadcast Location',
-  'home.hiddenHeader2': 'Livo',
+  'home.hiddenHeader2': 'Once',
   'home.locatingDesc': 'Scanning for people around you...',
   'home.noOneNearbyTitle': 'No one nearby right now',
   'home.noOneNearbyDesc': 'We didn\'t find anyone around you. Try again in a little while.',

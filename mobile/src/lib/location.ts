@@ -121,7 +121,7 @@ export async function watchLocation(
 /** Open the app-level permission settings (notification / location toggle). */
 export function openAppSettings() {
   if (Platform.OS === 'android') {
-    const pkg = Constants.expoConfig?.android?.package ?? 'com.livo.app'
+    const pkg = Constants.expoConfig?.android?.package ?? 'com.aviramo.once'
     // Try to open the app's permissions page directly; fall back to app details → generic settings.
     IntentLauncher.startActivityAsync(
       'android.settings.MANAGE_APP_PERMISSIONS',

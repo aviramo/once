@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import { t } from '../i18n'
-import { LivoLogo } from './LivoLogo'
+import { OnceLogo } from './OnceLogo'
 
 // Size chosen to visually match the native splash icon so the handoff from
 // the OS splash screen (assets/splash-icon.png, contain-fit on #f4f4f4) to
@@ -27,7 +27,7 @@ export function BootScreen() {
 
   return (
     <View style={styles.root}>
-      <LivoLogo size={LOGO_SIZE} animate />
+      <OnceLogo size={LOGO_SIZE} animate />
       <Animated.View
         style={[
           styles.taglineWrap,

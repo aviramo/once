@@ -10,6 +10,7 @@ import { TextInput as GHTextInput } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Path, Line, Polyline, Circle, Rect } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
@@ -20,13 +21,13 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
-import { LivoLogo } from '../src/components/LivoLogo'
+import { OnceLogo } from '../src/components/OnceLogo'
 import { WhatsSpecialPage } from './login'
 import { PhotoEditor, PhotoEditorRef, localPhotoUriCache, pendingDeferred } from '../src/components/PhotoEditor'
 import type { Profile } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
-import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_400 } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_100, GRAY_400 } from '../src/colors'
 
 const WARM_WHITE = '#FFFDFB'
 
@@ -54,7 +55,7 @@ export const ShellInnerNavContext = createContext<ShellInnerNav | null>(null)
 // in a GRAY_50 background) without losing the raw-responder behaviour that's
 // required for reliable taps inside ScrollView (Pressability cancels them on
 // RN 0.81).
-function useTapResponder(onPress: () => void, onPressStateChange?: (pressed: boolean) => void) {
+function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateChange?: (pressed: boolean) => void) {
   const start = useRef({ x: 0, y: 0 })
   return {
     onStartShouldSetResponder: () => true,
@@ -63,10 +64,22 @@ function useTapResponder(onPress: () => void, onPressStateChange?: (pressed: boo
       onPressStateChange?.(true)
     },
     onResponderRelease: (e: any) => {
-      onPressStateChange?.(false)
       const dx = Math.abs(e.nativeEvent.pageX - start.current.x)
       const dy = Math.abs(e.nativeEvent.pageY - start.current.y)
-      if (dx < TAP_SLOP && dy < TAP_SLOP) { tap(); onPress() }
+      if (dx < TAP_SLOP && dy < TAP_SLOP) {
+        tap()
+        const result = onPress() as void | Promise<unknown>
+        // If onPress is async (e.g. opens a subPage and resolves when the
+        // slide starts), keep the pressed visual until it settles so the
+        // user gets feedback that something is happening.
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          ;(result as Promise<unknown>).finally(() => onPressStateChange?.(false))
+        } else {
+          onPressStateChange?.(false)
+        }
+      } else {
+        onPressStateChange?.(false)
+      }
     },
     onResponderTerminate: () => onPressStateChange?.(false),
   }
@@ -264,7 +277,7 @@ function SelectFieldRow({
   label?: string
   subtitle?: string
   displayValue?: string
-  onPress: () => void
+  onPress: () => void | Promise<unknown>
   icon?: React.ReactNode
   avatar?: string
   grouped?: boolean
@@ -499,8 +512,11 @@ interface VerticalRangeSliderProps {
   onChangeMax: (v: number) => void
 }
 
+const VTRACK = 4
+const VGLOW = 44
+
 function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }: VerticalRangeSliderProps) {
-  const s = useRef({ trackHeight: 0, min, max, valueMin, valueMax, startPosMin: 0, startPosMax: 0, startedStackedMin: false, startedStackedMax: false })
+  const s = useRef({ trackHeight: 0, min, max, valueMin, valueMax, startPosMin: 0, startPosMax: 0, startedStackedMin: false, startedStackedMax: false, draggingMin: false, draggingMax: false })
   const cbs = useRef({ onChangeMin, onChangeMax })
 
   useEffect(() => { s.current.min = min }, [min])
@@ -509,16 +525,37 @@ function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChan
   useEffect(() => { s.current.valueMax = valueMax }, [valueMax])
   useEffect(() => { cbs.current = { onChangeMin, onChangeMax } }, [onChangeMin, onChangeMax])
 
+  const trackHeightSv = useSharedValue(0)
+  const minPctSv = useSharedValue(max > min ? (valueMin - min) / (max - min) : 0)
+  const maxPctSv = useSharedValue(max > min ? (valueMax - min) / (max - min) : 1)
+  const minDragSv = useSharedValue(0)
+  const maxDragSv = useSharedValue(0)
+
+  // Sync thumb position from prop only when the user is NOT dragging that thumb.
+  // During drag, the gesture handler writes minPctSv/maxPctSv directly for smooth tracking.
+  useEffect(() => {
+    if (s.current.draggingMin) return
+    if (max > min) minPctSv.value = withTiming((valueMin - min) / (max - min), { duration: 150 })
+  }, [valueMin, min, max])
+  useEffect(() => {
+    if (s.current.draggingMax) return
+    if (max > min) maxPctSv.value = withTiming((valueMax - min) / (max - min), { duration: 150 })
+  }, [valueMax, min, max])
+
   // y=0 is top of track (high value), y=trackHeight is bottom (low value)
   const toPosY = (v: number) => {
     const { trackHeight, min, max } = s.current
     if (!trackHeight) return 0
     return (1 - (v - min) / (max - min)) * trackHeight
   }
-  const toVal = (posY: number) => {
-    const { min, max, trackHeight } = s.current
-    if (!trackHeight) return min
-    return Math.round(min + (1 - Math.max(0, Math.min(posY, trackHeight)) / trackHeight) * (max - min))
+  const rawPctFromPosY = (posY: number) => {
+    const { trackHeight } = s.current
+    if (!trackHeight) return 0
+    return 1 - Math.max(0, Math.min(posY, trackHeight)) / trackHeight
+  }
+  const valFromPct = (pct: number) => {
+    const { min, max } = s.current
+    return Math.round(min + pct * (max - min))
   }
 
   const minPan = useRef(PanResponder.create({
@@ -527,22 +564,51 @@ function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChan
     onPanResponderTerminationRequest: () => false,
     onPanResponderGrant: () => {
       slidingActiveRef.current = true
+      s.current.draggingMin = true
       s.current.startPosMin = toPosY(s.current.valueMin)
       s.current.startedStackedMin = s.current.valueMin === s.current.valueMax
+      minDragSv.value = withTiming(1, { duration: 120 })
     },
     onPanResponderMove: (_, { dy }) => {
-      const v = toVal(s.current.startPosMin + dy)
+      const { min: mn, max: mx } = s.current
+      if (mx <= mn) return
+      const rawPct = rawPctFromPosY(s.current.startPosMin + dy)
+      const v = valFromPct(rawPct)
       if (s.current.startedStackedMin && dy < 0) {
         // Started stacked and dragging up → move max instead
+        const minPct = (s.current.valueMin - mn) / (mx - mn)
+        maxPctSv.value = Math.max(minPct, rawPct)
         if (v !== s.current.valueMax && v >= s.current.valueMin)
           cbs.current.onChangeMax(v)
       } else {
+        const maxPct = (s.current.valueMax - mn) / (mx - mn)
+        minPctSv.value = Math.min(maxPct, rawPct)
         if (v !== s.current.valueMin && v <= s.current.valueMax)
           cbs.current.onChangeMin(v)
       }
     },
-    onPanResponderRelease: () => { slidingActiveRef.current = false },
-    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+    onPanResponderRelease: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMin = false
+      minDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMin)
+          maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+      }
+    },
+    onPanResponderTerminate: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMin = false
+      minDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMin)
+          maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+      }
+    },
   })).current
 
   const maxPan = useRef(PanResponder.create({
@@ -551,71 +617,168 @@ function VerticalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChan
     onPanResponderTerminationRequest: () => false,
     onPanResponderGrant: () => {
       slidingActiveRef.current = true
+      s.current.draggingMax = true
       s.current.startPosMax = toPosY(s.current.valueMax)
       s.current.startedStackedMax = s.current.valueMin === s.current.valueMax
+      maxDragSv.value = withTiming(1, { duration: 120 })
     },
     onPanResponderMove: (_, { dy }) => {
-      const v = toVal(s.current.startPosMax + dy)
+      const { min: mn, max: mx } = s.current
+      if (mx <= mn) return
+      const rawPct = rawPctFromPosY(s.current.startPosMax + dy)
+      const v = valFromPct(rawPct)
       if (s.current.startedStackedMax && dy > 0) {
         // Started stacked and dragging down → move min instead
+        const maxPct = (s.current.valueMax - mn) / (mx - mn)
+        minPctSv.value = Math.min(maxPct, rawPct)
         if (v !== s.current.valueMin && v <= s.current.valueMax)
           cbs.current.onChangeMin(v)
       } else {
+        const minPct = (s.current.valueMin - mn) / (mx - mn)
+        maxPctSv.value = Math.max(minPct, rawPct)
         if (v !== s.current.valueMax && v >= s.current.valueMin)
           cbs.current.onChangeMax(v)
       }
     },
-    onPanResponderRelease: () => { slidingActiveRef.current = false },
-    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+    onPanResponderRelease: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMax = false
+      maxDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMax)
+          minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+      }
+    },
+    onPanResponderTerminate: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMax = false
+      maxDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMax)
+          minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+      }
+    },
   })).current
 
-  const minPct = (valueMin - min) / (max - min)
-  const maxPct = (valueMax - min) / (max - min)
+  const trackFillStyle = useAnimatedStyle(() => {
+    const h = trackHeightSv.value
+    return {
+      top: (1 - maxPctSv.value) * h,
+      height: Math.max(0, (maxPctSv.value - minPctSv.value) * h),
+    }
+  })
+  const minWrapStyle = useAnimatedStyle(() => ({
+    top: (1 - minPctSv.value) * trackHeightSv.value - VTHUMB / 2,
+  }))
+  const maxWrapStyle = useAnimatedStyle(() => ({
+    top: (1 - maxPctSv.value) * trackHeightSv.value - VTHUMB / 2,
+  }))
+  const minThumbInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + minDragSv.value * 0.1 }],
+  }))
+  const maxThumbInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + maxDragSv.value * 0.1 }],
+  }))
+  const minGlowStyle = useAnimatedStyle(() => ({
+    opacity: minDragSv.value,
+    transform: [{ scale: 0.6 + minDragSv.value * 0.4 }],
+  }))
+  const maxGlowStyle = useAnimatedStyle(() => ({
+    opacity: maxDragSv.value,
+    transform: [{ scale: 0.6 + maxDragSv.value * 0.4 }],
+  }))
 
   return (
-    <View style={vrs.container}>
+    <View style={vrange.container}>
       <View
-        style={vrs.track}
-        onLayout={e => { s.current.trackHeight = e.nativeEvent.layout.height }}
+        style={vrange.track}
+        onLayout={e => {
+          s.current.trackHeight = e.nativeEvent.layout.height
+          trackHeightSv.value = e.nativeEvent.layout.height
+        }}
       >
-        <View style={vrs.trackBg} />
-        <View style={[vrs.trackFill, { top: `${(1 - maxPct) * 100}%`, bottom: `${minPct * 100}%` }]} />
+        <View style={vrange.trackBg} />
+        <Animated.View style={[vrange.trackFill, trackFillStyle]} />
         {/* Min thumb — near bottom */}
-        <View
-          style={[vrs.thumb, { top: `${(1 - minPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+        <Animated.View
+          style={[vrange.thumbWrap, minWrapStyle]}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           {...minPan.panHandlers}
-        />
+        >
+          <Animated.View style={[vrange.glow, minGlowStyle]} />
+          <Animated.View style={[vrange.thumb, minThumbInnerStyle]} />
+        </Animated.View>
         {/* Max thumb — near top (rendered last = higher z-index, wins when thumbs overlap) */}
-        <View
-          style={[vrs.thumb, { top: `${(1 - maxPct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+        <Animated.View
+          style={[vrange.thumbWrap, maxWrapStyle]}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           {...maxPan.panHandlers}
-        />
+        >
+          <Animated.View style={[vrange.glow, maxGlowStyle]} />
+          <Animated.View style={[vrange.thumb, maxThumbInnerStyle]} />
+        </Animated.View>
       </View>
     </View>
   )
 }
 
+const vrange = StyleSheet.create({
+  container: { width: VTHUMB + 24, flex: 1, alignItems: 'center', paddingVertical: VTHUMB / 2 },
+  track: { width: VTHUMB, flex: 1, alignItems: 'center' },
+  trackBg: { position: 'absolute', top: 0, bottom: 0, width: VTRACK, backgroundColor: GRAY_100, borderRadius: VTRACK / 2 },
+  trackFill: { position: 'absolute', width: VTRACK, backgroundColor: PRIMARY, borderRadius: VTRACK / 2 },
+  thumbWrap: {
+    position: 'absolute', width: VTHUMB, height: VTHUMB,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  thumb: {
+    width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2,
+    backgroundColor: WHITE, borderWidth: 2, borderColor: PRIMARY,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 3,
+  },
+  glow: {
+    position: 'absolute', width: VGLOW, height: VGLOW, borderRadius: VGLOW / 2, backgroundColor: PRIMARY_BG,
+  },
+})
+
 // ── Vertical Radius Slider ─────────────────────────────────────────────────
 
 function VerticalRadiusSlider({ stepCount, value, onChange }: RadiusSliderProps) {
-  const s = useRef({ trackHeight: 0, startPos: 0, value, stepCount })
+  const s = useRef({ trackHeight: 0, startPos: 0, value, stepCount, dragging: false })
   s.current.value = value
   s.current.stepCount = stepCount
   const cbs = useRef({ onChange })
   useEffect(() => { cbs.current = { onChange } }, [onChange])
+
+  const trackHeightSv = useSharedValue(0)
+  const pctSv = useSharedValue(stepCount <= 1 ? 0 : value / (stepCount - 1))
+  const dragSv = useSharedValue(0)
+
+  // Sync thumb position from prop only when not actively dragging.
+  // During drag, the gesture handler writes pctSv directly for smooth tracking.
+  useEffect(() => {
+    if (s.current.dragging) return
+    if (stepCount > 1) pctSv.value = withTiming(value / (stepCount - 1), { duration: 150 })
+  }, [value, stepCount])
 
   const toPosY = (v: number) => {
     const { trackHeight, stepCount: sc } = s.current
     if (sc <= 1 || !trackHeight) return trackHeight
     return (1 - v / (sc - 1)) * trackHeight
   }
-  const toVal = (posY: number) => {
-    const { trackHeight, stepCount: sc } = s.current
-    if (sc <= 1 || !trackHeight) return 0
-    const frac = 1 - Math.max(0, Math.min(posY, trackHeight)) / trackHeight
-    return Math.round(frac * (sc - 1))
+  const rawPctFromPosY = (posY: number) => {
+    const { trackHeight } = s.current
+    if (!trackHeight) return 0
+    return 1 - Math.max(0, Math.min(posY, trackHeight)) / trackHeight
+  }
+  const valFromPct = (pct: number) => {
+    const { stepCount: sc } = s.current
+    if (sc <= 1) return 0
+    return Math.round(pct * (sc - 1))
   }
 
   const thumbPan = useRef(PanResponder.create({
@@ -624,46 +787,75 @@ function VerticalRadiusSlider({ stepCount, value, onChange }: RadiusSliderProps)
     onPanResponderTerminationRequest: () => false,
     onPanResponderGrant: () => {
       slidingActiveRef.current = true
+      s.current.dragging = true
       s.current.startPos = toPosY(s.current.value)
+      dragSv.value = withTiming(1, { duration: 120 })
     },
     onPanResponderMove: (_, { dy }) => {
-      const v = toVal(s.current.startPos + dy)
+      const { stepCount: sc } = s.current
+      if (sc <= 1) return
+      const rawPct = rawPctFromPosY(s.current.startPos + dy)
+      pctSv.value = rawPct
+      const v = valFromPct(rawPct)
       if (v !== s.current.value) cbs.current.onChange(v)
     },
-    onPanResponderRelease: () => { slidingActiveRef.current = false },
-    onPanResponderTerminate: () => { slidingActiveRef.current = false },
+    onPanResponderRelease: () => {
+      slidingActiveRef.current = false
+      s.current.dragging = false
+      dragSv.value = withTiming(0, { duration: 150 })
+      const { stepCount: sc } = s.current
+      if (sc > 1) pctSv.value = withTiming(s.current.value / (sc - 1), { duration: 100 })
+    },
+    onPanResponderTerminate: () => {
+      slidingActiveRef.current = false
+      s.current.dragging = false
+      dragSv.value = withTiming(0, { duration: 150 })
+      const { stepCount: sc } = s.current
+      if (sc > 1) pctSv.value = withTiming(s.current.value / (sc - 1), { duration: 100 })
+    },
   })).current
 
-  const pct = stepCount <= 1 ? 0 : value / (stepCount - 1)
+  const trackFillStyle = useAnimatedStyle(() => {
+    const h = trackHeightSv.value
+    return {
+      top: (1 - pctSv.value) * h,
+      height: pctSv.value * h,
+    }
+  })
+  const wrapStyle = useAnimatedStyle(() => ({
+    top: (1 - pctSv.value) * trackHeightSv.value - VTHUMB / 2,
+  }))
+  const thumbInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + dragSv.value * 0.1 }],
+  }))
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: dragSv.value,
+    transform: [{ scale: 0.6 + dragSv.value * 0.4 }],
+  }))
 
   return (
-    <View style={vrs.container}>
+    <View style={vrange.container}>
       <View
-        style={vrs.track}
-        onLayout={e => { s.current.trackHeight = e.nativeEvent.layout.height }}
+        style={vrange.track}
+        onLayout={e => {
+          s.current.trackHeight = e.nativeEvent.layout.height
+          trackHeightSv.value = e.nativeEvent.layout.height
+        }}
       >
-        <View style={vrs.trackBg} />
-        <View style={[vrs.trackFill, { bottom: 0, top: `${(1 - pct) * 100}%` }]} />
-        <View
-          style={[vrs.thumb, { top: `${(1 - pct) * 100}%`, transform: [{ translateY: -VTHUMB / 2 }] }]}
+        <View style={vrange.trackBg} />
+        <Animated.View style={[vrange.trackFill, trackFillStyle]} />
+        <Animated.View
+          style={[vrange.thumbWrap, wrapStyle]}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           {...thumbPan.panHandlers}
-        />
+        >
+          <Animated.View style={[vrange.glow, glowStyle]} />
+          <Animated.View style={[vrange.thumb, thumbInnerStyle]} />
+        </Animated.View>
       </View>
     </View>
   )
 }
-
-const vrs = StyleSheet.create({
-  container: { width: VTHUMB + 16, flex: 1, alignItems: 'center', paddingVertical: VTHUMB / 2 },
-  track: { width: VTHUMB, flex: 1, alignItems: 'center' },
-  trackBg: { position: 'absolute', top: 0, bottom: 0, width: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 2 },
-  trackFill: { position: 'absolute', width: 3, backgroundColor: TEXT_PRIMARY, borderRadius: 2 },
-  thumb: {
-    position: 'absolute', width: VTHUMB, height: VTHUMB, borderRadius: VTHUMB / 2, backgroundColor: TEXT_PRIMARY,
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 4,
-  },
-})
 
 // ── Radius helpers ─────────────────────────────────────────────────────────
 
@@ -840,7 +1032,7 @@ function AnimatedToggleButton({
           if (dx < TAP_SLOP && dy < TAP_SLOP) handlePress()
         }}
       >
-        <View style={{ borderRadius: SINGLE, overflow: 'hidden' }}>
+        <View style={{ borderRadius: 12, overflow: 'hidden' }}>
           {/* Inactive layer — always rendered underneath */}
           <View style={{ backgroundColor: 'rgba(0,0,0,0.06)', paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ fontSize: 14, fontWeight: '600', color: 'rgba(0,0,0,0.5)' }}>{label}</Text>
@@ -866,7 +1058,7 @@ function AnimatedToggleButton({
 // Renders the search-preferences sections without an outer ScrollView so they
 // can be embedded inside a parent ScrollView on the main settings screen.
 
-function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => void }) {
+function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile, update } = useUserStore()
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
@@ -946,7 +1138,7 @@ function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPag
 
 // ── Preferences Tab ────────────────────────────────────────────────────────
 
-function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => void }) {
+function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile, update } = useUserStore()
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
@@ -1033,7 +1225,7 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
 // Thumbnail strip inside a tappable field row — same height as SelectFieldRow.
 // Shows up to 6 small round thumbnails + a forward chevron.
 
-function PhotoFieldRow({ photos, userId, onPress, label, grouped }: { photos: string[]; userId: string; onPress: () => void; label?: string; grouped?: boolean }) {
+function PhotoFieldRow({ photos, userId, onPress, label, grouped }: { photos: string[]; userId: string; onPress: () => void | Promise<unknown>; label?: string; grouped?: boolean }) {
   const press = useRef(new RNAnimated.Value(0)).current
   const tapProps = useTapResponder(onPress, (pressed) => {
     RNAnimated.timing(press, {
@@ -1077,7 +1269,7 @@ function PhotoFieldRow({ photos, userId, onPress, label, grouped }: { photos: st
 
 // ── Profile Tab ────────────────────────────────────────────────────────────
 
-function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void }) {
+function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile, update } = useUserStore()
   const { user } = useAuthStore()
   // Bio is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
@@ -1192,7 +1384,7 @@ function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOp
             <View style={styles.textInputHeaderSpacer} />
             <Text style={styles.selectRowLabel} numberOfLines={1}>{t('settings.aboutMe')}</Text>
             <View style={{ flex: 1 }} />
-            <PencilIcon />
+            <Text style={styles.aboutMeQuote}>“</Text>
           </View>
           <View pointerEvents={bioFocused ? 'auto' : 'none'}>
             <GHTextInput
@@ -1288,7 +1480,7 @@ function formatBirthDate(iso: string): string {
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
-function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => void }) {
+function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const router = useRouter()
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState(false)
@@ -1298,6 +1490,11 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
     setResetting(true)
     try {
       await invoke('app/reset', {})
+      const keys = await AsyncStorage.getAllKeys()
+      const chatKeys = keys.filter(k =>
+        k.startsWith('chatCache_') || k.startsWith('chatLastOpened_') || k.startsWith('chatLastRead_'),
+      )
+      if (chatKeys.length > 0) await AsyncStorage.multiRemove(chatKeys)
       if (onBack) onBack()
       else router.back()
     } catch (e) { console.error(e) }
@@ -1367,7 +1564,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
-function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onOpenSubPage?: (config: SubPageConfig) => void) {
+function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onOpenSubPage?: (config: SubPageConfig) => Promise<void>) {
   if (tab === 'preferences') return <PreferencesTab onOpenSubPage={onOpenSubPage} />
   if (tab === 'profile')     return <ProfileTab focused={focused} onOpenSubPage={onOpenSubPage} />
   if (tab === 'app')         return <AppTab onBack={onBack} onOpenSubPage={onOpenSubPage} />
@@ -1385,7 +1582,7 @@ function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean,
 // Full-screen pane used as pane 3 in the home shell pager. Mirrors the
 // visual style of the settings screen (same background, header, card).
 
-function OptionRow({ onPress, children }: { onPress: () => void; children: React.ReactNode }) {
+function OptionRow({ onPress, children }: { onPress: () => void | Promise<unknown>; children: React.ReactNode }) {
   const tapProps = useTapResponder(onPress)
   return <View style={styles.subPageOptionRow} {...tapProps}>{children}</View>
 }
@@ -1878,7 +2075,7 @@ function useSectionNav() {
   const closeInnerRef = useRef<(after?: () => Promise<void> | void) => void>(() => {})
   const finalizeCloseRef = useRef<() => void>(() => {})
 
-  const openInner = (cfg: SubPageConfig) => {
+  const openInner = (cfg: SubPageConfig): Promise<void> => {
     setSubConfig(cfg)
     shell?.setHandlers({
       isOpen: true,
@@ -1886,6 +2083,7 @@ function useSectionNav() {
       finalizeClose: () => finalizeCloseRef.current(),
     })
     slideProgress.value = withTiming(1, { duration: 300, easing: REasing.out(REasing.cubic) })
+    return Promise.resolve()
   }
 
   const finalizeClose = () => {
@@ -2002,16 +2200,16 @@ const spStyles = StyleSheet.create({
   sliderArea: {
     flex: 1,
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
   endLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(0,0,0,0.35)',
+    color: GRAY_400,
   },
 })
 
-type SettingsPageProps = { topInset?: number; onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => void }
+type SettingsPageProps = { topInset?: number; onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }
 
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
@@ -2105,7 +2303,7 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
               label={t('settings.about')}
               subtitle={t('settings.aboutSubtitle')}
               onPress={() => onOpenSubPage?.({ kind: 'about', title: t('settings.about') })}
-              icon={<LivoLogo size={20} color={PRIMARY} />}
+              icon={<OnceLogo size={20} color={PRIMARY} />}
             />
           </View>
         </ScrollView>
@@ -2128,11 +2326,11 @@ const styles = StyleSheet.create({
 
   tabBar: {
     flex: 1, flexDirection: 'row', marginHorizontal: SINGLE,
-    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: SINGLE, padding: 2,
+    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 16, padding: 2,
   },
-  tabItem: { flex: 1, paddingVertical: SINGLE, alignItems: 'center', borderRadius: SINGLE - 2 },
+  tabItem: { flex: 1, paddingVertical: SINGLE, alignItems: 'center', borderRadius: 12 },
   tabItemActive: { backgroundColor: 'rgba(0,0,0,0.5)' },
-  tabPill: { position: 'absolute', top: 2, bottom: 2, borderRadius: SINGLE - 2, backgroundColor: 'rgba(0,0,0,0.5)' },
+  tabPill: { position: 'absolute', top: 2, bottom: 2, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)' },
 
   tabScroll: { flex: 1 },
   tabContent: { paddingHorizontal: SINGLE, paddingTop: 24, paddingBottom: 40 },
@@ -2146,7 +2344,7 @@ const styles = StyleSheet.create({
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SINGLE, justifyContent: 'flex-end', width: 44 * 3 + SINGLE * 2 },
-  photoThumb: { width: 44, height: 44, borderRadius: SINGLE },
+  photoThumb: { width: 44, height: 44, borderRadius: 12 },
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   slider: { width: '100%', height: 40 },
@@ -2161,25 +2359,26 @@ const styles = StyleSheet.create({
   },
   previewOuter: {
     flex: 1,
-    borderRadius: SINGLE,
+    borderRadius: 16,
   },
   previewInner: {
     flex: 1,
     backgroundColor: WHITE,
-    borderRadius: SINGLE,
+    borderRadius: 16,
     overflow: 'hidden',
   },
 
-  textInputWrap: { marginTop: SINGLE, borderRadius: SINGLE, paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE, backgroundColor: 'rgba(0,0,0,0.06)' },
+  textInputWrap: { marginTop: SINGLE, borderRadius: 12, paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE, backgroundColor: 'rgba(0,0,0,0.06)' },
   textInputWrapInner: { paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SINGLE },
   textInputHeaderSpacer: { width: 16, height: 16 },
+  aboutMeQuote: { width: 18, fontSize: 28, lineHeight: 18, color: FIELD_ICON_STROKE, fontWeight: '700', textAlign: 'center' },
   textInput: { fontSize: 16, color: TEXT_PRIMARY, padding: 0, textAlign: 'center', minHeight: 56 },
   charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.35)' },
 
   // Account tab
   infoCard: {
-    marginTop: SINGLE, borderRadius: SINGLE, overflow: 'hidden',
+    marginTop: SINGLE, borderRadius: 16, overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   infoRow: {
@@ -2196,7 +2395,7 @@ const styles = StyleSheet.create({
 
   accountLinkRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: SINGLE,
+    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 12,
     paddingHorizontal: 16, paddingVertical: 14,
     marginBottom: DOUBLE,
   },
@@ -2267,7 +2466,7 @@ const styles = StyleSheet.create({
   },
   subPageOptionsCard: {
     marginHorizontal: SINGLE, marginTop: DOUBLE,
-    borderRadius: SINGLE, overflow: 'hidden',
+    borderRadius: 16, overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   subPageOptionRow: {

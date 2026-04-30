@@ -74,7 +74,7 @@ const MEN_COUNT = 25
 const WOMEN_COUNT = TOTAL - MEN_COUNT
 const AGE_MIN = 30
 const AGE_MAX = 50
-const SEED_EMAIL_DOMAIN = 'seed.syncwish.local'
+const SEED_EMAIL_DOMAIN = 'seed.once.local'
 
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {

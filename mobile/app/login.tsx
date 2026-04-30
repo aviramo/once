@@ -13,7 +13,7 @@ import { supabase } from '../src/lib/supabase'
 import { useAuthStore } from '../src/stores/authStore'
 import { t } from '../src/i18n'
 import { Button } from '../src/components/Button'
-import { LivoLogo } from '../src/components/LivoLogo'
+import { OnceLogo } from '../src/components/OnceLogo'
 import { TEXT_PRIMARY, WHITE, PRIMARY, GRAY_50, GRAY_100 } from '../src/colors'
 import { SINGLE, DOUBLE } from '../src/fonts'
 
@@ -188,11 +188,11 @@ const mktStyles = StyleSheet.create({
 async function signInWithGoogle() {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: 'livo://', skipBrowserRedirect: true },
+    options: { redirectTo: 'once://', skipBrowserRedirect: true },
   })
   if (error || !data.url) throw error ?? new Error('No OAuth URL')
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, 'livo://')
+  const result = await WebBrowser.openAuthSessionAsync(data.url, 'once://')
   if (result.type === 'cancel') return
   if (result.type !== 'success') throw new Error('OAuth failed')
 
@@ -304,8 +304,8 @@ export default function LoginPage() {
 
           {/* Center content: fills space between header and buttons */}
           <View style={styles.logoCenter}>
-            <Text style={styles.brandName}>Livo</Text>
-            <LivoLogo size={LOGO_SIZE} />
+            <Text style={styles.brandName}>Once</Text>
+            <OnceLogo size={LOGO_SIZE} />
             <View style={styles.taglineBelow}>
               <Text style={styles.messageLine1}>{t('auth.msg1')}</Text>
               <Text style={styles.messageLine2}>{t('auth.msg2')}</Text>

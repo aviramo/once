@@ -201,8 +201,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   avatar: {
-    width: 72,
-    height: 92,
+    width: 84,
+    height: 108,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   newBadgeText: {
     color: WHITE,
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     justifyContent: 'center',
-    minHeight: 92,
+    minHeight: 108,
     gap: 8,
   },
   title: {

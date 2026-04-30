@@ -21,7 +21,7 @@ export default class Tools {
   }
 
   static async notify(entry: LogEntry, subJson: PushToken, payload: Record<string, unknown>) {
-    const title = (payload?.title as string) ?? "Livo";
+    const title = (payload?.title as string) ?? "Once";
     const body = {
       to: subJson.token,
       sound: "default",
@@ -87,19 +87,23 @@ export default class Tools {
     let logData: Record<string, unknown> | null = null;
     if (rpcResult) {
       const rels = rpcResult.user?.relations as Record<string, unknown> | undefined;
-      const p1 = rels?.page1 as { state?: string; profile?: { user_id?: string }; expires_at?: string; extended?: boolean } | undefined;
-      const p2 = rels?.page2;
+      const p1 = rels?.page1 as { state?: string; profile?: { user_id?: string }; message?: string; expires_at?: string; extended?: boolean } | undefined;
+      const p2 = rels?.page2 as { state?: string; profile?: { user_id?: string }; profiles?: { user_id?: string }[]; message?: string } | undefined;
       logData = {
         user: rpcResult.user?.user_id,
         page1: p1 ? {
           state: p1.state,
-          with: p1.profile?.user_id,
+          ...(p1.profile?.user_id ? { with: p1.profile.user_id } : {}),
+          ...(p1.message ? { message: p1.message } : {}),
           ...(p1.expires_at ? { expires_at: p1.expires_at } : {}),
           ...(p1.extended !== undefined ? { extended: p1.extended } : {}),
         } : undefined,
-        page2: Array.isArray(p2)
-          ? (p2 as { user_id?: string }[]).map(p => p.user_id)
-          : (p2 as { user_id?: string } | undefined)?.user_id,
+        page2: p2 ? {
+          state: p2.state,
+          ...(p2.profile?.user_id ? { with: p2.profile.user_id } : {}),
+          ...(p2.profiles ? { profiles: p2.profiles.map(p => p.user_id) } : {}),
+          ...(p2.message ? { message: p2.message } : {}),
+        } : undefined,
         notify: rpcResult.notify,
         ...(rpcResult.error ? { error: rpcResult.error } : {}),
       };

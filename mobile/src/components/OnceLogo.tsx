@@ -7,12 +7,12 @@ import Svg, { Circle, Defs, G, Line, RadialGradient, Stop } from 'react-native-s
 
 const AnimatedG = Animated.createAnimatedComponent(G)
 
-// Livo brand logo: two tangent circles (green + gray) with a lens-flare
+// Once brand logo: two tangent circles (green + gray) with a lens-flare
 // sparkle at the single point of tangency. Matches assets/icon.svg so the
 // in-app logo reads identically to the app icon. viewBox: 100×100.
 //
 // animate=true: every 10s the sparkle briefly flares up (pleasant twinkle).
-export function LivoLogo({ size = 96, animate = false, color }: { size?: number; animate?: boolean; color?: string }) {
+export function OnceLogo({ size = 96, animate = false, color }: { size?: number; animate?: boolean; color?: string }) {
   // Tangent point of the two circles.
   const cx = 44.7
   const cy = 52.8

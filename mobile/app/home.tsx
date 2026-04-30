@@ -11,7 +11,7 @@ import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { useUserStore, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, lang } from '../src/i18n'
-import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, type NotifPermission } from '../src/lib/notifications'
+import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
 import { Button } from '../src/components/Button'
 import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_50, GRAY_100, GRAY_400 } from '../src/colors'
@@ -20,13 +20,14 @@ import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BootScreen } from '../src/components/BootScreen'
 import { MatchCard } from '../src/components/MatchCard'
+import { DiscoveryReveal } from '../src/components/DiscoveryReveal'
 import { CountBadge } from '../src/components/CountBadge'
 import { HomeHeader } from '../src/components/HomeHeader'
 import { HomeCard, PullScrollView } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage, AccountFieldPage, PreviewFieldPage, AboutFieldPage, ProfileSectionPage, AppSectionPage, ShellInnerNavContext } from './settings'
 import ChatPage from './chat'
-import { LivoLogo } from '../src/components/LivoLogo'
+import { OnceLogo } from '../src/components/OnceLogo'
 import { Image } from 'expo-image'
 
 
@@ -34,11 +35,11 @@ import { Image } from 'expo-image'
 
 const AVATAR_SIZE = 130
 const RADAR_RING_COUNT = 3
-const RADAR_DURATION = 1800
+const RADAR_DURATION = 4200
 const RADAR_STAGGER = RADAR_DURATION / RADAR_RING_COUNT
-const RADAR_START_SCALE = 1.05
-const RADAR_END_SCALE = 1.5
-const RADAR_PEAK_OPACITY = 0.22
+const RADAR_START_SCALE = 1.0
+const RADAR_END_SCALE = 2.6
+const RADAR_PEAK_OPACITY = 0.42
 
 function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }) {
   const progress = useSharedValue(1)
@@ -64,7 +65,10 @@ function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }
 
   const style = useAnimatedStyle(() => {
     const t = progress.value
-    const fade = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85
+    // Ring is brightest right at the photo edge (t≈0) and dissolves
+    // smoothly with a cubic ease-out as it sweeps outward — classic ripple.
+    const out = 1 - t
+    const fade = out * out * out
     return {
       opacity: RADAR_PEAK_OPACITY * fade,
       transform: [{ scale: RADAR_START_SCALE + (RADAR_END_SCALE - RADAR_START_SCALE) * t }],
@@ -97,7 +101,6 @@ function RadarRings({ active }: { active: boolean }) {
 }
 
 const HALO_SIZE = Math.round(AVATAR_SIZE * 1.55)
-const SOLID_RING_SIZE = Math.round(AVATAR_SIZE * 1.18)
 const DOTTED_RING_SIZE = Math.round(AVATAR_SIZE * 1.55)
 
 function AvatarHaloRings() {
@@ -109,15 +112,6 @@ function AvatarHaloRings() {
         height: HALO_SIZE,
         borderRadius: HALO_SIZE / 2,
         backgroundColor: PRIMARY_BG,
-      }} />
-      <View pointerEvents="none" style={{
-        position: 'absolute',
-        width: SOLID_RING_SIZE,
-        height: SOLID_RING_SIZE,
-        borderRadius: SOLID_RING_SIZE / 2,
-        borderWidth: 1.5,
-        borderColor: PRIMARY,
-        opacity: 0.5,
       }} />
       <Svg
         pointerEvents="none"
@@ -174,15 +168,6 @@ function HeartIcon({ color, size = 28, filled }: { color: string; size?: number;
   )
 }
 
-function SmallSearchIcon({ color }: { color: string }) {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx={11} cy={11} r={7} />
-      <Path d="M 16.5 16.5 L 21 21" />
-    </Svg>
-  )
-}
-
 function PaperPlaneIcon({ color, size = 18 }: { color: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -193,24 +178,6 @@ function PaperPlaneIcon({ color, size = 18 }: { color: string; size?: number }) 
 }
 
 // ── Watching-Me page icons ────────────────────────────────────────────────
-
-function EyeOpenIcon({ color, size = 22 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx={12} cy={12} r={3} fill={color} />
-    </Svg>
-  )
-}
-
-function EyeClosedIcon({ color, size = 22 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M3 13c2 3 5.5 5 9 5s7-2 9-5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M5 16l-1.5 2M19 16l1.5 2M9 18l-.5 2.2M15 18l.5 2.2M12 19v2.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    </Svg>
-  )
-}
 
 function LockIcon({ color, size = 14 }: { color: string; size?: number }) {
   return (
@@ -519,7 +486,7 @@ const timerStyles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 12,
   },
   expiresLabel: {
@@ -569,7 +536,21 @@ export default function HomePage() {
   const HOME_PANE: PaneIndex = 1
   const PAGE2_PANE: PaneIndex = 2
   const CHAT_PANE: PaneIndex = 2  // same slot as PAGE2_PANE
-  const [paneIndex, setPaneIndex] = useState<PaneIndex>(HOME_PANE)
+  // If the app was launched from a killed state by tapping a push, pick the
+  // matching pane up front so the user lands on it instead of seeing a flash
+  // of Home before re-routing. Cleared after first read so it doesn't replay
+  // on remount.
+  const initialPaneFromNotif = useMemo<PaneIndex | null>(() => {
+    const type = getInitialNotificationType()
+    if (!type) return null
+    if (type === 'chat' || type === 'match') return CHAT_PANE
+    if (type === 'invite-in' || type === 'extended') return PAGE2_PANE
+    return null
+  }, [])
+  useEffect(() => {
+    if (initialPaneFromNotif !== null) clearInitialNotification()
+  }, [])
+  const [paneIndex, setPaneIndex] = useState<PaneIndex>(initialPaneFromNotif ?? HOME_PANE)
   const [subPageConfig, setSubPageConfig] = useState<SubPageConfig | null>(null)
   // Unread message count reported by ChatPage — shown as a badge next to the
   // "Chat" title while we're on the home pane.
@@ -691,10 +672,18 @@ export default function HomePage() {
       })
   , [])
 
+  // Resolved when subPageOpen flips to true — lets a button that triggered
+  // the open await the moment the slide actually starts and show a loading
+  // state until then.
+  const subPageOpenResolveRef = useRef<(() => void) | null>(null)
+
   // Drive sub-page slide from open/closed state.
   useEffect(() => {
     if (subPageOpen) {
       subPageSlide.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) })
+      const resolve = subPageOpenResolveRef.current
+      subPageOpenResolveRef.current = null
+      resolve?.()
     } else if (subPageConfigRef.current) {
       subPageSlide.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.cubic) }, (finished) => {
         'worklet'
@@ -746,10 +735,18 @@ export default function HomePage() {
     if (cb) Promise.resolve(cb()).catch(console.error)
   }
 
-  const openShellSubPage = (config: SubPageConfig) => {
+  const openShellSubPage = (config: SubPageConfig): Promise<void> => {
     tap()
     setSubPageConfig(config)
-    setSubPageOpen(true)
+    // setSubPageOpen is triggered by the overlay's onLayout once native
+    // finishes laying out the subPage tree — guarantees the slide starts
+    // on a free UI thread without a fixed-time wait. The returned promise
+    // resolves when the slide actually starts, so callers can show a
+    // loading state on the triggering button until then.
+    return new Promise<void>(resolve => {
+      const prev = subPageOpenResolveRef.current
+      subPageOpenResolveRef.current = () => { prev?.(); resolve() }
+    })
   }
 
   const closeShellSubPage = (afterSlide?: () => Promise<void> | void) => {
@@ -796,6 +793,7 @@ export default function HomePage() {
   const ready = !!profile
 
   const [page2Alerting, setPage2Alerting] = useState(false)
+  const [page2Discovery, setPage2Discovery] = useState(false)
   const [chatUnreadAlerting, setChatUnreadAlerting] = useState(false)
   const prevChatUnreadRef = useRef(0)
   const page2InviteUserId = page2PendingInvite?.user_id ?? null
@@ -1015,10 +1013,18 @@ export default function HomePage() {
     const prev = prevPage2InviteUserIdRef.current
     prevPage2InviteUserIdRef.current = page2InviteUserId
     if (prev === undefined) return
-    if (prev === null && page2InviteUserId !== null && paneIndexRef.current !== PAGE2_PANE) {
-      setPage2Alerting(true)
-      const timer = setTimeout(() => setPage2Alerting(false), 4900)
-      return () => { clearTimeout(timer); setPage2Alerting(false) }
+    // Clear discovery flag if invite went away (cancelled / approved / etc).
+    if (prev !== null && page2InviteUserId === null) {
+      setPage2Discovery(false)
+    }
+    if (prev === null && page2InviteUserId !== null) {
+      // Fresh incoming invite — fire discovery animation when the card mounts.
+      setPage2Discovery(true)
+      if (paneIndexRef.current !== PAGE2_PANE) {
+        setPage2Alerting(true)
+        const timer = setTimeout(() => setPage2Alerting(false), 4900)
+        return () => { clearTimeout(timer); setPage2Alerting(false) }
+      }
     }
   }, [page2InviteUserId])
 
@@ -1058,6 +1064,10 @@ export default function HomePage() {
   const activeSlotRef = useRef<SlotId>('A')
   const [topSlot, setTopSlot] = useState<SlotId>('B')
   const animRunning = useRef(false)
+  // Discovery animation flags — set when slot transitions from null→profile.
+  // Cleared when the DiscoveryReveal sequence completes.
+  const [discoveryA, setDiscoveryA] = useState(false)
+  const [discoveryB, setDiscoveryB] = useState(false)
 
   const opacityA = useSharedValue(profile?.relations?.match ? 1 : 0)
   const opacityB = useSharedValue(0)
@@ -1095,6 +1105,8 @@ export default function HomePage() {
         setMatchB(null)
         opacityA.value = 0
         opacityB.value = 0
+        setDiscoveryA(false)
+        setDiscoveryB(false)
         clearMatchTimeoutRef.current = null
       }, 250)
       return
@@ -1109,8 +1121,9 @@ export default function HomePage() {
     if (next.user_id === inactiveMatch?.user_id) return
     if (active === 'A') {
       if (!activeMatch) {
-        // No current card — show incoming slot immediately so the placeholder is visible
+        // Fresh appear — DiscoveryReveal owns the visual entrance.
         opacityB.value = 1
+        setDiscoveryB(true)
       } else {
         opacityB.value = 0
       }
@@ -1119,6 +1132,7 @@ export default function HomePage() {
     } else {
       if (!activeMatch) {
         opacityA.value = 1
+        setDiscoveryA(true)
       } else {
         opacityA.value = 0
       }
@@ -1294,7 +1308,8 @@ export default function HomePage() {
   }
 
   const page1Event = profile?.relations?.page1?.event
-  const isReadyToFind = page1Event === 'clear1' || page1Event === 'cancel' || page1Event === 'leave'
+  // v3: any null synth state (free, or locked without message) is ready to find.
+  const isReadyToFind = state === null
   const hiddenButtons = showHiddenPlaceholder
     ? isReadyToFind
       ? (
@@ -1386,7 +1401,7 @@ export default function HomePage() {
         <PagerView
           ref={pagerRef}
           style={{ flex: 1 }}
-          initialPage={chatAvailable ? CHAT_PANE : HOME_PANE}
+          initialPage={initialPaneFromNotif ?? (chatAvailable ? CHAT_PANE : HOME_PANE)}
           scrollEnabled={!sliding && !subPageOpen}
           overdrag={false}
           overScrollMode="never"
@@ -1434,7 +1449,7 @@ export default function HomePage() {
                           )}
                         </View>
                       </View>
-                      <View style={[styles.permTextSection, !isReadyToFind && !locFetching && { marginTop: 24 }]}>
+                      <View style={styles.permTextSection}>
                         {locFetching ? (
                           <Text style={styles.permDesc}>{t('home.locatingDesc')}</Text>
                         ) : isReadyToFind ? (
@@ -1444,10 +1459,7 @@ export default function HomePage() {
                           </>
                         ) : (
                           <>
-                            <View style={styles.emptySearchCircle}>
-                              <SmallSearchIcon color={PRIMARY} />
-                            </View>
-                            <Text style={[styles.permHeadline, { marginTop: 16 }]}>{t('home.noOneNearbyTitle')}</Text>
+                            <Text style={styles.permHeadline}>{t('home.noOneNearbyTitle')}</Text>
                             <Text style={[styles.permDesc, { marginTop: 8 }]}>{tg('home.noOneNearbyDesc', isMale)}</Text>
                             <View style={styles.heartDivider}>
                               <View style={styles.heartDividerLine} />
@@ -1480,34 +1492,62 @@ export default function HomePage() {
                       <View style={StyleSheet.absoluteFill}>
                         {matchA && (
                           <Animated.View style={[StyleSheet.absoluteFill, cardStyleA, { zIndex: topSlot === 'A' ? 2 : 1 }]}>
-                            <MatchCard
+                            <DiscoveryReveal
                               key={matchA.user_id}
-                              match={matchA}
-                              userIsMale={isMale}
-                              units={profile?.units}
-                              bottomInset={0}
-                              hideTime={state === 'chat'}
-                              onReady={handleSlotReadyA}
-                              topBlock={displayedCardMode === 'waiting' && inviteExpiresAt ? (
-                                <CircularTimer expiresAt={inviteExpiresAt} totalSecs={inviteTotalSecs} extended={invitedPage1?.extended} targetIsMale={matchIsMale} />
-                              ) : undefined}
-                            />
+                              enabled={discoveryA}
+                              centerAvatarUrl={profileAvatarUrl}
+                              onComplete={() => {
+                                if (discoveryA) {
+                                  finishTransition('A')
+                                  setDiscoveryA(false)
+                                }
+                              }}
+                            >
+                              {({ onImagesReady, revealPhase }) => (
+                                <MatchCard
+                                  match={matchA}
+                                  userIsMale={isMale}
+                                  units={profile?.units}
+                                  bottomInset={0}
+                                  hideTime={state === 'chat'}
+                                  onReady={discoveryA ? onImagesReady : handleSlotReadyA}
+                                  revealPhase={revealPhase}
+                                  topBlock={displayedCardMode === 'waiting' && inviteExpiresAt ? (
+                                    <CircularTimer expiresAt={inviteExpiresAt} totalSecs={inviteTotalSecs} extended={invitedPage1?.extended} targetIsMale={matchIsMale} />
+                                  ) : undefined}
+                                />
+                              )}
+                            </DiscoveryReveal>
                           </Animated.View>
                         )}
                         {matchB && (
                           <Animated.View style={[StyleSheet.absoluteFill, cardStyleB, { zIndex: topSlot === 'B' ? 2 : 1 }]}>
-                            <MatchCard
+                            <DiscoveryReveal
                               key={matchB.user_id}
-                              match={matchB}
-                              userIsMale={isMale}
-                              units={profile?.units}
-                              bottomInset={0}
-                              hideTime={state === 'chat'}
-                              onReady={handleSlotReadyB}
-                              topBlock={displayedCardMode === 'waiting' && inviteExpiresAt ? (
-                                <CircularTimer expiresAt={inviteExpiresAt} totalSecs={inviteTotalSecs} extended={invitedPage1?.extended} targetIsMale={matchIsMale} />
-                              ) : undefined}
-                            />
+                              enabled={discoveryB}
+                              centerAvatarUrl={profileAvatarUrl}
+                              onComplete={() => {
+                                if (discoveryB) {
+                                  finishTransition('B')
+                                  setDiscoveryB(false)
+                                }
+                              }}
+                            >
+                              {({ onImagesReady, revealPhase }) => (
+                                <MatchCard
+                                  match={matchB}
+                                  userIsMale={isMale}
+                                  units={profile?.units}
+                                  bottomInset={0}
+                                  hideTime={state === 'chat'}
+                                  onReady={discoveryB ? onImagesReady : handleSlotReadyB}
+                                  revealPhase={revealPhase}
+                                  topBlock={displayedCardMode === 'waiting' && inviteExpiresAt ? (
+                                    <CircularTimer expiresAt={inviteExpiresAt} totalSecs={inviteTotalSecs} extended={invitedPage1?.extended} targetIsMale={matchIsMale} />
+                                  ) : undefined}
+                                />
+                              )}
+                            </DiscoveryReveal>
                           </Animated.View>
                         )}
                       </View>
@@ -1590,6 +1630,7 @@ export default function HomePage() {
             <View key="side" style={{ flex: 1 }}>
               {chatAvailable ? (
                 <ChatPage
+                  key={profile?.relations?.match?.user_id ?? 'no-match'}
                   onBack={() => goToPane(HOME_PANE)}
                   isActive={paneIndex === CHAT_PANE}
                   onUnreadChange={setChatUnread}
@@ -1641,22 +1682,33 @@ export default function HomePage() {
                     }
                   >
                     <View style={StyleSheet.absoluteFill}>
-                      <MatchCard
-                        match={page2PendingInvite}
-                        userIsMale={isMale}
-                        units={profile?.units}
-                        bottomInset={0}
-                        topBlock={page2PendingInvite.expires_at ? (
-                          <CircularTimer
-                            expiresAt={page2PendingInvite.expires_at}
-                            totalSecs={page2PendingInvite.invited_at
-                              ? Math.max(60, Math.round((new Date(page2PendingInvite.expires_at).getTime() - new Date(page2PendingInvite.invited_at).getTime()) / 1000))
-                              : 600}
-                            extended={page2PendingInvite.extended}
-                            targetIsMale={page2PendingInvite.is_male}
+                      <DiscoveryReveal
+                        key={page2PendingInvite.user_id}
+                        enabled={page2Discovery}
+                        centerAvatarUrl={profileAvatarUrl}
+                        onComplete={() => setPage2Discovery(false)}
+                      >
+                        {({ onImagesReady, revealPhase }) => (
+                          <MatchCard
+                            match={page2PendingInvite}
+                            userIsMale={isMale}
+                            units={profile?.units}
+                            bottomInset={0}
+                            onReady={page2Discovery ? onImagesReady : undefined}
+                            revealPhase={revealPhase}
+                            topBlock={page2PendingInvite.expires_at ? (
+                              <CircularTimer
+                                expiresAt={page2PendingInvite.expires_at}
+                                totalSecs={page2PendingInvite.invited_at
+                                  ? Math.max(60, Math.round((new Date(page2PendingInvite.expires_at).getTime() - new Date(page2PendingInvite.invited_at).getTime()) / 1000))
+                                  : 600}
+                                extended={page2PendingInvite.extended}
+                                targetIsMale={page2PendingInvite.is_male}
+                              />
+                            ) : undefined}
                           />
-                        ) : undefined}
-                      />
+                        )}
+                      </DiscoveryReveal>
                     </View>
                   </HomeCard>
                 ) : page2DeadInvite ? (
@@ -1687,11 +1739,6 @@ export default function HomePage() {
                     scrollEventThrottle={16}
                     contentContainerStyle={styles.watchingMeContent}
                   >
-                    <View style={styles.watchingMeIconWrap}>
-                      <View style={[styles.watchingMeIconCircle, { backgroundColor: PRIMARY_BG }]}>
-                        <EyeOpenIcon color={PRIMARY} />
-                      </View>
-                    </View>
                     <Text style={styles.watchingMeSubtitle}>
                       {watchers.length === 1
                         ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
@@ -1725,11 +1772,6 @@ export default function HomePage() {
                     scrollEventThrottle={16}
                     contentContainerStyle={styles.watchingMeContent}
                   >
-                    <View style={styles.watchingMeIconWrap}>
-                      <View style={[styles.watchingMeIconCircle, { backgroundColor: 'rgba(0,0,0,0.06)' }]}>
-                        <EyeClosedIcon color={GRAY_400} />
-                      </View>
-                    </View>
                     <Text style={styles.watchingMeSubtitle}>{t('home.watchingMeNoOneDesc')}</Text>
                     <View style={styles.telescopeWrap}>
                       <TelescopeIllustration />
@@ -1748,7 +1790,11 @@ export default function HomePage() {
         </PagerView>
         </Animated.View>
         {subPageConfig && (
-          <Animated.View style={[styles.subPageOverlay, subPageAnimStyle]} pointerEvents={subPageOpen ? 'auto' : 'none'}>
+          <Animated.View
+            style={[styles.subPageOverlay, subPageAnimStyle]}
+            pointerEvents={subPageOpen ? 'auto' : 'none'}
+            onLayout={subPageOpen ? undefined : () => setSubPageOpen(true)}
+          >
             <GestureDetector gesture={subPageSwipe}>
               <View style={{ flex: 1 }}>
                 <ShellInnerNavContext.Provider value={shellInnerNav}>
@@ -1815,17 +1861,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 32,
     alignItems: 'stretch',
-  },
-  watchingMeIconWrap: {
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  watchingMeIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   watchingMeSubtitle: {
     fontSize: 15,
@@ -1903,7 +1938,7 @@ const styles = StyleSheet.create({
   permTextSection: {
     alignItems: 'center',
     paddingHorizontal: 32,
-    marginTop: 40,
+    marginTop: 72,
   },
   permAvatarWrap: {
     width: DOTTED_RING_SIZE,
@@ -1938,14 +1973,6 @@ const styles = StyleSheet.create({
     color: GRAY_400,
     textAlign: 'center',
     marginTop: 6,
-  },
-  emptySearchCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: PRIMARY_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   heartDivider: {
     flexDirection: 'row',

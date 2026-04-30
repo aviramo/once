@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Livo",
+    "name": "Once",
     "slug": "syncwish",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "livo",
+    "scheme": "once",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,24 +15,24 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.livo.app",
+      "bundleIdentifier": "com.aviramo.once",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "NSMicrophoneUsageDescription": "Livo needs access to your microphone to record and send voice messages."
+        "NSMicrophoneUsageDescription": "Once needs access to your microphone to record and send voice messages."
       }
     },
     "android": {
-      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.livo.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "package": "com.aviramo.once",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -46,8 +46,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Livo uses your location to find nearby people.",
-          "locationWhenInUsePermission": "Livo uses your location to find nearby people."
+          "locationAlwaysAndWhenInUsePermission": "Once uses your location to find nearby people.",
+          "locationWhenInUsePermission": "Once uses your location to find nearby people."
         }
       ],
       [
@@ -60,8 +60,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Livo needs access to your photos to set a profile picture.",
-          "cameraPermission": "Livo needs access to your camera to take a profile picture."
+          "photosPermission": "Once needs access to your photos to set a profile picture.",
+          "cameraPermission": "Once needs access to your camera to take a profile picture."
         }
       ],
       "expo-web-browser",

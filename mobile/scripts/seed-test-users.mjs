@@ -28,7 +28,7 @@ const AGE_MIN = 25
 const AGE_MAX = 55
 const MIN_PHOTOS = 2
 const MAX_PHOTOS = 6
-const SEED_EMAIL_DOMAIN = 'test.syncwish.local'
+const SEED_EMAIL_DOMAIN = 'test.once.local'
 
 const MALE_NAMES = ['אבי', 'יוסי', 'רן', 'עומר', 'ניר', 'איתי', 'גיא', 'רועי', 'שחר', 'יובל', 'אסף', 'טל', 'אלון', 'עידן', 'אריאל', 'תומר', 'עמית', 'דני', 'יואב', 'בן', 'גל', 'עופר', 'אמיר', 'נועם', 'שי']
 const FEMALE_NAMES = ['נועה', 'שירה', 'מיכל', 'יעל', 'עדי', 'תמר', 'הדר', 'רוני', 'מעיין', 'ליאור', 'דנה', 'הילה', 'מורן', 'ענבל', 'שני', 'קרן', 'אביגיל', 'שלומית', 'רותם', 'ליאת', 'מיה', 'אור', 'נטע', 'טליה', 'איילת']
@@ -371,7 +371,7 @@ async function insertProfile(user, p, filenames) {
 }
 
 async function main() {
-  console.log(`\n=== SyncWish TEST user seeder ===`)
+  console.log(`\n=== Once TEST user seeder ===`)
   console.log(`target: ${SUPABASE_URL}`)
   console.log(`plan: ${TOTAL} users (${MEN_COUNT}M / ${WOMEN_COUNT}F), ${MIN_PHOTOS}-${MAX_PHOTOS} photos each\n`)
 

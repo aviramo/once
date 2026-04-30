@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View, ActivityIndicator } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
@@ -127,6 +127,7 @@ export function MatchCard({
   hideTime = false,
   onReady,
   topBlock,
+  revealPhase,
 }: {
   match: Profile
   userIsMale: boolean | null
@@ -135,6 +136,11 @@ export function MatchCard({
   hideTime?: boolean
   onReady?: () => void
   topBlock?: React.ReactNode
+  /** Drives the staggered reveal of name + chips when wrapped by DiscoveryReveal.
+   *  - 'idle': fully hidden (still mounted, awaiting reveal)
+   *  - 'reveal': animate in (name first, chips +100ms)
+   *  - 'done' / undefined: fully visible (default behavior) */
+  revealPhase?: 'idle' | 'reveal' | 'done'
 }) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -195,6 +201,26 @@ export function MatchCard({
     marginTop: (slideAnim.value - 1) * topBlockHeight,
   }), [topBlockHeight])
 
+  // ── Reveal stagger (name → chips) when used with DiscoveryReveal ──────────
+  const initialRevealOpacity = revealPhase === 'idle' || revealPhase === 'reveal' ? 0 : 1
+  const nameOpacity = useSharedValue(initialRevealOpacity)
+  const chipsOpacity = useSharedValue(initialRevealOpacity)
+  useEffect(() => {
+    if (revealPhase === 'idle') {
+      nameOpacity.value = 0
+      chipsOpacity.value = 0
+    } else if (revealPhase === 'reveal') {
+      nameOpacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) })
+      chipsOpacity.value = withDelay(100, withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) }))
+    } else {
+      // 'done' or undefined: fully visible (no animation)
+      nameOpacity.value = 1
+      chipsOpacity.value = 1
+    }
+  }, [revealPhase])
+  const nameRevealStyle = useAnimatedStyle(() => ({ opacity: nameOpacity.value }))
+  const chipsRevealStyle = useAnimatedStyle(() => ({ opacity: chipsOpacity.value }))
+
   return (
     <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
       <PullScrollView
@@ -232,9 +258,11 @@ export function MatchCard({
           )}
 
           <View style={styles.infoOverlay}>
-            <Text style={styles.name}>{displayTitle}</Text>
+            <Animated.View style={nameRevealStyle}>
+              <Text style={styles.name}>{displayTitle}</Text>
+            </Animated.View>
 
-            <View style={styles.chipsRow}>
+            <Animated.View style={[styles.chipsRow, chipsRevealStyle]}>
               <View style={styles.chipsLeft}>
                 {distStr ? (
                   <Chip
@@ -264,7 +292,7 @@ export function MatchCard({
                   />
                 )}
               </View>
-            </View>
+            </Animated.View>
           </View>
         </View>
 
@@ -322,7 +350,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: SINGLE,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   infoOverlay: {
@@ -406,7 +434,7 @@ const styles = StyleSheet.create({
   extraPhoto: {
     width: '100%',
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: SINGLE,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   kidsRow: {
@@ -417,7 +445,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: SINGLE,
+    borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   kidsLabel: {
