@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service – Once</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #FAF4EE;
+      color: #2C1A0E;
+      line-height: 1.7;
+      padding: 24px 20px 48px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #E8DDD6;
+    }
+    .brand { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #2C1A0E; }
+    .lang-btn {
+      font-size: 13px;
+      font-weight: 600;
+      color: #8B5E3C;
+      background: none;
+      border: 1.5px solid #C4A882;
+      border-radius: 8px;
+      padding: 4px 12px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .updated { font-size: 13px; color: #9E8070; margin-bottom: 32px; }
+    h2 { font-size: 16px; font-weight: 700; margin-top: 28px; margin-bottom: 8px; color: #4A2E1A; }
+    p { margin-bottom: 12px; font-size: 15px; }
+    ul { padding-inline-start: 20px; margin-bottom: 12px; }
+    li { font-size: 15px; margin-bottom: 6px; }
+    .contact { margin-top: 36px; padding-top: 20px; border-top: 1px solid #E8DDD6; font-size: 14px; color: #9E8070; }
+    .contact a { color: #8B5E3C; }
+    [dir="rtl"] body { text-align: right; }
+    [dir="rtl"] ul { padding-inline-start: 20px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">Once</span>
+    <a class="lang-btn" id="lang-toggle" href="#"></a>
+  </header>
+
+  <div id="content"></div>
+
+  <script>
+    const params = new URLSearchParams(location.search)
+    const urlLang = params.get('lang')
+    const browserLang = (navigator.language || '').startsWith('he') ? 'he' : 'en'
+    let lang = (urlLang === 'he' || urlLang === 'en') ? urlLang : browserLang
+
+    const toggleBtn = document.getElementById('lang-toggle')
+
+    function applyLang() {
+      document.documentElement.lang = lang
+      document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr'
+      toggleBtn.textContent = lang === 'he' ? 'EN' : 'עב'
+      toggleBtn.href = '?lang=' + (lang === 'he' ? 'en' : 'he')
+      document.title = lang === 'he' ? 'תנאי שימוש – Once' : 'Terms of Service – Once'
+      document.getElementById('content').innerHTML = lang === 'he' ? contentHE : contentEN
+    }
+
+    toggleBtn.addEventListener('click', function(e) {
+      e.preventDefault()
+      lang = lang === 'he' ? 'en' : 'he'
+      history.replaceState(null, '', '?lang=' + lang)
+      applyLang()
+    })
+
+    const UPDATED_EN = 'Last updated: April 30, 2026'
+    const UPDATED_HE = 'עודכן לאחרונה: 30 באפריל 2026'
+
+    const contentEN = `
+      <h1>Terms of Service</h1>
+      <p class="updated">${UPDATED_EN}</p>
+
+      <h2>1. Acceptance of Terms</h2>
+      <p>By using Once (the "App"), you agree to these Terms of Service. If you do not agree, please do not use the App.</p>
+
+      <h2>2. Eligibility</h2>
+      <p>You must be at least 18 years old to use Once. By using the App, you confirm that you are 18 or older.</p>
+
+      <h2>3. Your Account</h2>
+      <ul>
+        <li>You are responsible for maintaining the security of your account.</li>
+        <li>You must provide accurate and truthful information about yourself.</li>
+        <li>You may not impersonate others or create fake profiles.</li>
+      </ul>
+
+      <h2>4. Acceptable Use</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Use the App for any illegal purpose.</li>
+        <li>Harass, abuse, or harm other users.</li>
+        <li>Post false, misleading, or inappropriate content.</li>
+        <li>Send spam or unsolicited messages.</li>
+        <li>Attempt to access other users' accounts or data.</li>
+      </ul>
+
+      <h2>5. Content</h2>
+      <ul>
+        <li>You retain ownership of content you post.</li>
+        <li>By posting content, you grant us a license to use it solely to operate the App.</li>
+        <li>We may remove content that violates these Terms.</li>
+      </ul>
+
+      <h2>6. Matching</h2>
+      <p>Once shows you one person at a time based on your preferences and location. We do not guarantee any matches, compatibility, or relationships.</p>
+
+      <h2>7. Termination</h2>
+      <p>We may suspend or terminate your account for violations of these Terms. You may delete your account at any time through the App settings.</p>
+
+      <h2>8. Limitation of Liability</h2>
+      <p>Once is provided "as is" without warranties of any kind. We are not liable for any damages arising from your use of the App, including any loss of data or failed connections.</p>
+
+      <h2>9. Changes to Terms</h2>
+      <p>We may update these Terms from time to time. Continued use of the App after changes constitutes your acceptance of the updated Terms.</p>
+
+      <h2>10. Governing Law</h2>
+      <p>These Terms are governed by the laws of the State of Israel. Any disputes will be resolved in the courts of Israel.</p>
+
+      <div class="contact">
+        Questions? Contact us at <a href="mailto:ofir.aviram@gmail.com">ofir.aviram@gmail.com</a>
+      </div>
+    `
+
+    const contentHE = `
+      <h1>תנאי שימוש</h1>
+      <p class="updated">${UPDATED_HE}</p>
+
+      <h2>1. קבלת התנאים</h2>
+      <p>בשימוש ב-Once ("האפליקציה"), אתה/את מסכים/ה לתנאי שירות אלה. אם אינך מסכים/ה, אנא הפסק/י להשתמש באפליקציה.</p>
+
+      <h2>2. זכאות</h2>
+      <p>עליך להיות בן/בת 18 לפחות כדי להשתמש ב-Once. בשימוש באפליקציה, אתה/את מאשר/ת שהנך בן/בת 18 ומעלה.</p>
+
+      <h2>3. החשבון שלך</h2>
+      <ul>
+        <li>אתה/את אחראי/ת על שמירת אבטחת חשבונך.</li>
+        <li>עליך לספק מידע אמיתי ומדויק על עצמך.</li>
+        <li>אין להתחזות לאחרים או ליצור פרופילים מזויפים.</li>
+      </ul>
+
+      <h2>4. שימוש מותר</h2>
+      <p>אתה/את מתחייב/ת לא:</p>
+      <ul>
+        <li>להשתמש באפליקציה למטרות בלתי חוקיות.</li>
+        <li>להטריד, לפגוע או לזלזל במשתמשים אחרים.</li>
+        <li>לפרסם תוכן שקרי, מטעה או פוגעני.</li>
+        <li>לשלוח ספאם או הודעות לא רצויות.</li>
+        <li>לנסות לגשת לחשבונות או למידע של משתמשים אחרים.</li>
+      </ul>
+
+      <h2>5. תוכן</h2>
+      <ul>
+        <li>אתה/את שומר/ת על בעלות התוכן שאתה/את מפרסם/ת.</li>
+        <li>על ידי פרסום תוכן, אתה/את מעניק/ה לנו רישיון להשתמש בו אך ורק לצורך הפעלת האפליקציה.</li>
+        <li>אנחנו רשאים להסיר תוכן שמפר תנאים אלה.</li>
+      </ul>
+
+      <h2>6. התאמות</h2>
+      <p>Once מציגה לך אדם אחד בכל פעם בהתאם להעדפותיך ומיקומך. אנחנו לא מבטיחים התאמות, תאימות או קשרים.</p>
+
+      <h2>7. סיום חשבון</h2>
+      <p>אנחנו רשאים להשעות או לסגור את חשבונך בגין הפרת תנאים אלה. באפשרותך למחוק את חשבונך בכל עת דרך הגדרות האפליקציה.</p>
+
+      <h2>8. הגבלת אחריות</h2>
+      <p>Once מסופקת "כפי שהיא" ללא כל אחריות. אנחנו לא אחראים לנזקים הנובעים מהשימוש שלך באפליקציה, לרבות אובדן מידע או חיבורים שנכשלו.</p>
+
+      <h2>9. שינויים בתנאים</h2>
+      <p>אנחנו רשאים לעדכן תנאים אלה מעת לעת. המשך השימוש באפליקציה לאחר שינויים מהווה הסכמתך לתנאים המעודכנים.</p>
+
+      <h2>10. דין חל</h2>
+      <p>תנאים אלה כפופים לחוקי מדינת ישראל. כל מחלוקת תידון בבתי המשפט בישראל.</p>
+
+      <div class="contact">
+        לשאלות ופניות: <a href="mailto:ofir.aviram@gmail.com">ofir.aviram@gmail.com</a>
+      </div>
+    `
+
+    applyLang()
+  </script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy – Once</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #FAF4EE;
+      color: #2C1A0E;
+      line-height: 1.7;
+      padding: 24px 20px 48px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #E8DDD6;
+    }
+    .brand { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #2C1A0E; }
+    .lang-btn {
+      font-size: 13px;
+      font-weight: 600;
+      color: #8B5E3C;
+      background: none;
+      border: 1.5px solid #C4A882;
+      border-radius: 8px;
+      padding: 4px 12px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .updated { font-size: 13px; color: #9E8070; margin-bottom: 32px; }
+    h2 { font-size: 16px; font-weight: 700; margin-top: 28px; margin-bottom: 8px; color: #4A2E1A; }
+    p { margin-bottom: 12px; font-size: 15px; }
+    ul { padding-inline-start: 20px; margin-bottom: 12px; }
+    li { font-size: 15px; margin-bottom: 6px; }
+    .contact { margin-top: 36px; padding-top: 20px; border-top: 1px solid #E8DDD6; font-size: 14px; color: #9E8070; }
+    .contact a { color: #8B5E3C; }
+    [dir="rtl"] body { text-align: right; }
+    [dir="rtl"] ul { padding-inline-start: 20px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">Once</span>
+    <a class="lang-btn" id="lang-toggle" href="#"></a>
+  </header>
+
+  <div id="content"></div>
+
+  <script>
+    const params = new URLSearchParams(location.search)
+    const urlLang = params.get('lang')
+    const browserLang = (navigator.language || '').startsWith('he') ? 'he' : 'en'
+    let lang = (urlLang === 'he' || urlLang === 'en') ? urlLang : browserLang
+
+    const toggleBtn = document.getElementById('lang-toggle')
+
+    function applyLang() {
+      document.documentElement.lang = lang
+      document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr'
+      toggleBtn.textContent = lang === 'he' ? 'EN' : 'עב'
+      toggleBtn.href = '?lang=' + (lang === 'he' ? 'en' : 'he')
+      document.title = lang === 'he' ? 'מדיניות פרטיות – Once' : 'Privacy Policy – Once'
+      document.getElementById('content').innerHTML = lang === 'he' ? contentHE : contentEN
+    }
+
+    toggleBtn.addEventListener('click', function(e) {
+      e.preventDefault()
+      lang = lang === 'he' ? 'en' : 'he'
+      history.replaceState(null, '', '?lang=' + lang)
+      applyLang()
+    })
+
+    const UPDATED_EN = 'Last updated: April 30, 2026'
+    const UPDATED_HE = 'עודכן לאחרונה: 30 באפריל 2026'
+
+    const contentEN = `
+      <h1>Privacy Policy</h1>
+      <p class="updated">${UPDATED_EN}</p>
+
+      <h2>1. Introduction</h2>
+      <p>Once ("we," "us," or "our") operates the Once mobile application. This Privacy Policy explains how we collect, use, and protect your personal information when you use our App.</p>
+
+      <h2>2. Information We Collect</h2>
+      <ul>
+        <li><strong>Account information:</strong> Name, date of birth, gender, and gender preferences you provide during onboarding.</li>
+        <li><strong>Location data:</strong> Your device location, used to find nearby matches. Location is updated periodically while you use the App.</li>
+        <li><strong>Profile content:</strong> Photos and other content you choose to upload.</li>
+        <li><strong>Usage data:</strong> Actions you take in the App (e.g., searching, inviting, chatting) and timestamps.</li>
+        <li><strong>Device information:</strong> Device type, operating system, and push notification token.</li>
+        <li><strong>Authentication data:</strong> Managed securely through Google or Apple sign-in. We do not store passwords.</li>
+      </ul>
+
+      <h2>3. How We Use Your Information</h2>
+      <ul>
+        <li>To provide and improve the matching service.</li>
+        <li>To show your profile to potential matches nearby.</li>
+        <li>To send push notifications about matches, invitations, and messages.</li>
+        <li>To enforce our Terms of Service and keep the App safe.</li>
+        <li>To analyze usage patterns and improve the App experience.</li>
+      </ul>
+
+      <h2>4. Location Data</h2>
+      <p>Your location is stored and used only to find matches near you. We do not share your precise location with other users — they see only an approximate distance. You can stop location sharing by revoking the App's location permission in your device settings.</p>
+
+      <h2>5. Information Sharing</h2>
+      <p>We do not sell your personal information. We may share data with:</p>
+      <ul>
+        <li><strong>Service providers</strong> who help us operate the App (including Supabase for database and authentication, and Apple/Google for sign-in).</li>
+        <li><strong>Law enforcement</strong> if required by applicable law or to protect the safety of our users.</li>
+      </ul>
+
+      <h2>6. Data Retention</h2>
+      <p>We retain your data as long as your account is active. When you delete your account, your profile and personal data are permanently deleted within 30 days. Chat messages are deleted immediately upon account deletion.</p>
+
+      <h2>7. Your Rights</h2>
+      <p>You have the right to access, correct, or delete your personal data. You can delete your account directly from the App settings. For other requests, contact us at the address below.</p>
+
+      <h2>8. Security</h2>
+      <p>We use industry-standard security measures, including encrypted connections and access controls, to protect your data. However, no method of internet transmission is completely secure.</p>
+
+      <h2>9. Children's Privacy</h2>
+      <p>Once is not intended for users under 18. We do not knowingly collect personal data from minors. If you believe a minor has created an account, please contact us immediately.</p>
+
+      <h2>10. Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time. We will notify you of significant changes through the App. Continued use after changes constitutes acceptance of the updated policy.</p>
+
+      <div class="contact">
+        Questions about your data? Contact us at <a href="mailto:ofir.aviram@gmail.com">ofir.aviram@gmail.com</a>
+      </div>
+    `
+
+    const contentHE = `
+      <h1>מדיניות פרטיות</h1>
+      <p class="updated">${UPDATED_HE}</p>
+
+      <h2>1. מבוא</h2>
+      <p>Once ("אנחנו") מפעילה את אפליקציית Once. מדיניות פרטיות זו מסבירה כיצד אנחנו אוספים, משתמשים ומגינים על המידע האישי שלך בעת השימוש באפליקציה.</p>
+
+      <h2>2. מידע שאנחנו אוספים</h2>
+      <ul>
+        <li><strong>פרטי חשבון:</strong> שם, תאריך לידה, מגדר והעדפות מגדר שתספק/י בתהליך ההרשמה.</li>
+        <li><strong>נתוני מיקום:</strong> מיקום המכשיר שלך, לצורך מציאת התאמות בקרבתך. המיקום מתעדכן מעת לעת בזמן השימוש באפליקציה.</li>
+        <li><strong>תוכן פרופיל:</strong> תמונות ותכנים אחרים שאתה/את בוחר/ת להעלות.</li>
+        <li><strong>נתוני שימוש:</strong> פעולות שביצעת באפליקציה (כגון חיפוש, הזמנה, צ'אט) וחותמות זמן.</li>
+        <li><strong>מידע על המכשיר:</strong> סוג המכשיר, מערכת הפעלה וטוקן להתראות דחיפה.</li>
+        <li><strong>נתוני אימות:</strong> מנוהלים בצורה מאובטחת דרך כניסה עם Google או Apple. אנחנו לא שומרים סיסמאות.</li>
+      </ul>
+
+      <h2>3. כיצד אנחנו משתמשים במידע</h2>
+      <ul>
+        <li>לספק ולשפר את שירות ההתאמה.</li>
+        <li>להציג את הפרופיל שלך למשתמשים פוטנציאליים בקרבתך.</li>
+        <li>לשלוח התראות על התאמות, הזמנות והודעות.</li>
+        <li>לאכוף את תנאי השירות ולשמור על בטיחות האפליקציה.</li>
+        <li>לנתח דפוסי שימוש ולשפר את חוויית האפליקציה.</li>
+      </ul>
+
+      <h2>4. נתוני מיקום</h2>
+      <p>המיקום שלך נשמר ומשמש אך ורק למציאת התאמות בקרבתך. אנחנו לא משתפים את מיקומך המדויק עם משתמשים אחרים, הם רואים רק מרחק משוער. ניתן להפסיק שיתוף מיקום על ידי ביטול הרשאת המיקום לאפליקציה בהגדרות המכשיר שלך.</p>
+
+      <h2>5. שיתוף מידע</h2>
+      <p>אנחנו לא מוכרים את המידע האישי שלך. אנחנו עשויים לשתף מידע עם:</p>
+      <ul>
+        <li><strong>ספקי שירות</strong> המסייעים לנו להפעיל את האפליקציה (כולל Supabase לבסיס נתונים ואימות, ו-Apple/Google לכניסה).</li>
+        <li><strong>רשויות אכיפת חוק</strong> אם נדרש על פי חוק או לשם הגנה על בטיחות המשתמשים שלנו.</li>
+      </ul>
+
+      <h2>6. שמירת מידע</h2>
+      <p>אנחנו שומרים את המידע שלך כל עוד חשבונך פעיל. כאשר אתה/את מוחק/ת את החשבון, הפרופיל והנתונים האישיים שלך יימחקו לצמיתות תוך 30 ימים. הודעות צ'אט נמחקות מיידית עם מחיקת החשבון.</p>
+
+      <h2>7. הזכויות שלך</h2>
+      <p>יש לך זכות לגשת, לתקן או למחוק את המידע האישי שלך. ניתן למחוק את החשבון ישירות מהגדרות האפליקציה. לבקשות אחרות, פנה/י אלינו בכתובת שלמטה.</p>
+
+      <h2>8. אבטחה</h2>
+      <p>אנחנו משתמשים באמצעי אבטחה מקובלים בתעשייה, כולל חיבורים מוצפנים ובקרות גישה, להגנה על המידע שלך. עם זאת, אין שיטת העברה באינטרנט שהיא מאובטחת לחלוטין.</p>
+
+      <h2>9. פרטיות ילדים</h2>
+      <p>Once אינה מיועדת למשתמשים מתחת לגיל 18. אנחנו לא אוספים ביודעין מידע אישי מקטינים. אם אתה/את סבור/ה שקטין/ה יצר/ה חשבון, אנא פנה/י אלינו מיידית.</p>
+
+      <h2>10. שינויים במדיניות</h2>
+      <p>אנחנו עשויים לעדכן מדיניות פרטיות זו מעת לעת. נודיע לך על שינויים משמעותיים דרך האפליקציה. המשך השימוש לאחר שינויים מהווה קבלת המדיניות המעודכנת.</p>
+
+      <div class="contact">
+        שאלות בנוגע למידע שלך? פנה/י אלינו בכתובת <a href="mailto:ofir.aviram@gmail.com">ofir.aviram@gmail.com</a>
+      </div>
+    `
+
+    applyLang()
+  </script>
+</body>
+</html>
