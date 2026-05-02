@@ -5,7 +5,7 @@ import Svg, { Path, Circle, Line } from 'react-native-svg'
 import { Text } from './AppText'
 import { t, tg } from '../i18n'
 import type { Profile } from '../stores/userStore'
-import { Chip, PinIcon, ClockIcon, BellOffIcon } from './Chip'
+import { Chip, PinIcon, ClockIcon } from './Chip'
 import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY } from '../colors'
 
 // ── Format helpers ────────────────────────────────────────────────────────
@@ -172,13 +172,6 @@ export function WatcherCard({ watcher, units, exiting, onExited, onPress }: Prop
                 {online ? <View style={styles.onlineDot} /> : null}
               </View>
             ) : null}
-            {!watcher.push_enabled && (
-              <Chip
-                renderIcon={color => <BellOffIcon color={color} />}
-                text={tg('home.notifOff', watcher.is_male ?? null)}
-                tone="negative"
-              />
-            )}
           </View>
         </View>
       </Pressable>

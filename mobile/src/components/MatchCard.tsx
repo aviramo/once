@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View, ActivityIndicator } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing } from 'react-native-reanimated'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
-import type { Profile } from '../stores/userStore'
-import { Chip, PinIcon, ClockIcon, BellOffIcon } from './Chip'
+import type { Profile, ProfileItem } from '../stores/userStore'
+import { Chip, PinIcon, ClockIcon } from './Chip'
 import { SINGLE, DOUBLE } from '../fonts'
 import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_400 } from '../colors'
 
@@ -127,7 +127,6 @@ export function MatchCard({
   hideTime = false,
   onReady,
   topBlock,
-  revealPhase,
 }: {
   match: Profile
   userIsMale: boolean | null
@@ -136,11 +135,6 @@ export function MatchCard({
   hideTime?: boolean
   onReady?: () => void
   topBlock?: React.ReactNode
-  /** Drives the staggered reveal of name + chips when wrapped by DiscoveryReveal.
-   *  - 'idle': fully hidden (still mounted, awaiting reveal)
-   *  - 'reveal': animate in (name first, chips +100ms)
-   *  - 'done' / undefined: fully visible (default behavior) */
-  revealPhase?: 'idle' | 'reveal' | 'done'
 }) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -151,13 +145,38 @@ export function MatchCard({
     [match.images],
   )
   const imageUrls = useMemo(() => resolveImages(match), [match.user_id, imageKey])
+
+  // Build ordered sections from items (own-profile preview) or flat fields (remote snapshots).
+  type CardSection =
+    | { type: 'photo'; url: string }
+    | { type: 'bio'; value: string }
+    | { type: 'kids'; value: boolean }
+  const sections = useMemo((): CardSection[] => {
+    if (match.items && match.items.length > 0) {
+      return match.items.flatMap((item): CardSection[] => {
+        if (item.kind === 'photo' && item.normal) {
+          const url = item.normal.includes('://') ? item.normal : toStorageUrl(match.user_id, item.normal)
+          return [{ type: 'photo', url }]
+        }
+        if (item.kind === 'bio' && item.value) return [{ type: 'bio', value: item.value }]
+        if (item.kind === 'kids') return [{ type: 'kids', value: item.value }]
+        return []
+      })
+    }
+    const result: CardSection[] = imageUrls.map(url => ({ type: 'photo', url }))
+    if (match.bio) result.push({ type: 'bio', value: match.bio })
+    if (match.is_for_kids != null) result.push({ type: 'kids', value: match.is_for_kids })
+    return result
+  }, [match.items, match.user_id, imageUrls, match.bio, match.is_for_kids])
+
+  const photoCount = sections.filter(s => s.type === 'photo').length
   const loadedCount = useRef(0)
   useEffect(() => { loadedCount.current = 0 }, [match.user_id])
-  useEffect(() => { if (imageUrls.length === 0) onReady?.() }, [imageUrls.length])
+  useEffect(() => { if (photoCount === 0) onReady?.() }, [photoCount])
   const onImageSettle = useCallback(() => {
     loadedCount.current += 1
-    if (loadedCount.current >= imageUrls.length) onReady?.()
-  }, [imageUrls.length, onReady])
+    if (loadedCount.current >= photoCount) onReady?.()
+  }, [photoCount, onReady])
   const [cardH, setCardH] = useState(0)
   const photoHeight = Math.max(280, cardH - bottomInset)
   const ready = cardH > 0
@@ -167,7 +186,7 @@ export function MatchCard({
   const displayTitle = match.title
 
   const distGreen = isDistanceNear(match.distance)
-  const endsWithPhoto = imageUrls.length > 1 && match.is_for_kids == null
+  const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'
   const hasTopBlock = !!topBlock
   const [topBlockHeight, setTopBlockHeight] = useState(0)
   // If the card mounts already with a topBlock (cold start), start expanded
@@ -176,6 +195,7 @@ export function MatchCard({
   const slideAnim = useSharedValue(hasTopBlock ? 1 : 0)
   const animatedRef = useRef(false)
   const wasAbsentRef = useRef(false)
+  const scrollRef = useRef<any>(null)
   useEffect(() => {
     if (!hasTopBlock) {
       wasAbsentRef.current = true
@@ -190,8 +210,8 @@ export function MatchCard({
       slideAnim.value = 1
       return
     }
-    // watching → waiting transition: photo stays put, timer slides in from
-    // above using marginTop animation on the topBlock wrapper.
+    // watching → waiting transition: scroll to top first, then slide timer in.
+    scrollRef.current?.scrollTo({ y: 0, animated: true })
     if (animatedRef.current || topBlockHeight === 0) return
     animatedRef.current = true
     slideAnim.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) })
@@ -201,29 +221,11 @@ export function MatchCard({
     marginTop: (slideAnim.value - 1) * topBlockHeight,
   }), [topBlockHeight])
 
-  // ── Reveal stagger (name → chips) when used with DiscoveryReveal ──────────
-  const initialRevealOpacity = revealPhase === 'idle' || revealPhase === 'reveal' ? 0 : 1
-  const nameOpacity = useSharedValue(initialRevealOpacity)
-  const chipsOpacity = useSharedValue(initialRevealOpacity)
-  useEffect(() => {
-    if (revealPhase === 'idle') {
-      nameOpacity.value = 0
-      chipsOpacity.value = 0
-    } else if (revealPhase === 'reveal') {
-      nameOpacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) })
-      chipsOpacity.value = withDelay(100, withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) }))
-    } else {
-      // 'done' or undefined: fully visible (no animation)
-      nameOpacity.value = 1
-      chipsOpacity.value = 1
-    }
-  }, [revealPhase])
-  const nameRevealStyle = useAnimatedStyle(() => ({ opacity: nameOpacity.value }))
-  const chipsRevealStyle = useAnimatedStyle(() => ({ opacity: chipsOpacity.value }))
 
   return (
     <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
       <PullScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + (endsWithPhoto ? 0 : DOUBLE) }]}
         showsVerticalScrollIndicator={false}
@@ -246,23 +248,24 @@ export function MatchCard({
             {topBlock}
           </Animated.View>
         )}
-        <View key="photo" style={{ height: photoHeight }}>
-          {imageUrls.length > 0 && (
+        {/* Hero: always the first section (expected to be a photo) */}
+        <View key="hero" style={{ height: photoHeight }}>
+          {sections[0]?.type === 'photo' && (
             <LoadingImage
-              source={imageUrls[0]}
+              source={sections[0].url}
               style={[styles.photo, StyleSheet.absoluteFill]}
               contentFit="cover"
-              cachePolicy="disk"
+              cachePolicy="memory-disk"
               onSettle={onImageSettle}
             />
           )}
 
           <View style={styles.infoOverlay}>
-            <Animated.View style={nameRevealStyle}>
+            <View>
               <Text style={styles.name}>{displayTitle}</Text>
-            </Animated.View>
+            </View>
 
-            <Animated.View style={[styles.chipsRow, chipsRevealStyle]}>
+            <View style={styles.chipsRow}>
               <View style={styles.chipsLeft}>
                 {distStr ? (
                   <Chip
@@ -282,56 +285,45 @@ export function MatchCard({
                 ) : null}
               </View>
 
-              <View style={styles.chipsRight}>
-                {match.push_enabled === false && (
-                  <Chip
-                    renderIcon={c => <BellOffIcon color={c} />}
-                    text={tg('home.notifOff', match.is_male)}
-                    tone="neutral"
-                    onPhoto
-                  />
-                )}
-              </View>
-            </Animated.View>
+              <View style={styles.chipsRight} />
+            </View>
           </View>
         </View>
 
-        {match.bio ? (
-          <View key="bio" style={styles.aboutSection}>
-            <View style={styles.aboutBubble}>
-              <Text style={[styles.aboutQuote, styles.aboutQuoteOpen]}>“</Text>
-              <Text style={styles.aboutText}>{match.bio}</Text>
-              <Text style={[styles.aboutQuote, styles.aboutQuoteClose]}>”</Text>
+        {/* Rest of sections rendered in items order */}
+        {sections.slice(1).map((section, i) => {
+          if (section.type === 'photo') return (
+            <LoadingImage
+              key={`photo-${i}`}
+              source={section.url}
+              style={[styles.extraPhoto, { height: photoHeight, marginTop: SINGLE }]}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              onSettle={onImageSettle}
+            />
+          )
+          if (section.type === 'bio') return (
+            <View key={`bio-${i}`} style={styles.aboutSection}>
+              <View style={styles.aboutBubble}>
+                <Text style={[styles.aboutQuote, styles.aboutQuoteOpen]}>"</Text>
+                <Text style={styles.aboutText}>{section.value}</Text>
+                <Text style={[styles.aboutQuote, styles.aboutQuoteClose]}>"</Text>
+              </View>
             </View>
-          </View>
-        ) : null}
-
-        {imageUrls.length > 1 && (
-          <View key="extras" style={styles.extraPhotos}>
-            {imageUrls.slice(1).map((url) => (
-              <LoadingImage
-                key={url}
-                source={url}
-                style={[styles.extraPhoto, { height: photoHeight }]}
-                contentFit="cover"
-                cachePolicy="disk"
-                onSettle={onImageSettle}
-              />
-            ))}
-          </View>
-        )}
-
-        {match.is_for_kids != null && (
-          <View key="kids" style={styles.kidsRow}>
-            <View style={styles.kidsLabel}>
-              <BabyIcon color={TEXT_PRIMARY} />
-              <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', match.is_male)}</Text>
+          )
+          if (section.type === 'kids') return (
+            <View key={`kids-${i}`} style={styles.kidsRow}>
+              <View style={styles.kidsLabel}>
+                <BabyIcon color={TEXT_PRIMARY} />
+                <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', match.is_male)}</Text>
+              </View>
+              <Text style={[styles.kidsValue, { color: section.value ? PRIMARY : DESTRUCTIVE }]}>
+                {section.value ? t('settings.kidsYes') : t('settings.kidsNo')}
+              </Text>
             </View>
-            <Text style={[styles.kidsValue, { color: match.is_for_kids ? PRIMARY : DESTRUCTIVE }]}>
-              {match.is_for_kids ? t('settings.kidsYes') : t('settings.kidsNo')}
-            </Text>
-          </View>
-        )}
+          )
+          return null
+        })}
       </PullScrollView>
     </View>
   )
@@ -426,10 +418,6 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
     textAlign: 'center',
     paddingHorizontal: 12,
-  },
-  extraPhotos: {
-    backgroundColor: WHITE,
-    gap: SINGLE,
   },
   extraPhoto: {
     width: '100%',

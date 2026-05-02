@@ -26,7 +26,7 @@ export default class Tools {
       to: subJson.token,
       sound: "default",
       priority: "high",
-      channelId: "default",
+      channelId: (payload?.channelId as string) ?? "default",
       title,
       body: (payload?.body as string) || title,
       data: payload,

@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Modal, Pressable, StyleSheet, View, TouchableOpacity } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Text } from './AppText'
 import { Button } from './Button'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SINGLE, DOUBLE } from '../fonts'
-import { TEXT_PRIMARY, WHITE, BLACK, GRAY_100, GRAY_400, PRIMARY_BG } from '../colors'
+import { TEXT_PRIMARY, WHITE, BLACK, GRAY_100, GRAY_400, PRIMARY, PRIMARY_BG } from '../colors'
+
+const SWIPE_DISMISS_THRESHOLD = 80
 
 export function ConfirmDialog({
   visible,
@@ -22,6 +26,7 @@ export function ConfirmDialog({
   skipToggle,
   cancelFlex,
   confirmFlex,
+  draggable,
 }: {
   visible: boolean
   title: string
@@ -39,10 +44,12 @@ export function ConfirmDialog({
   skipToggle?: { label: string; checked: boolean; onToggle: () => void }
   cancelFlex?: number
   confirmFlex?: number
+  draggable?: boolean
 }) {
   const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
   const [modalVisible, setModalVisible] = useState(false)
-  const cardHeight = useRef(400)
+  const cardHeight = useSharedValue(400)
 
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
   useEffect(() => {
@@ -54,7 +61,8 @@ export function ConfirmDialog({
 
   useEffect(() => {
     if (visible) {
-      translateY.value = cardHeight.current
+      dragY.value = 0
+      translateY.value = cardHeight.value
       setModalVisible(true)
       requestAnimationFrame(() => {
         translateY.value = withTiming(0, {
@@ -63,7 +71,7 @@ export function ConfirmDialog({
         })
       })
     } else {
-      translateY.value = withTiming(cardHeight.current, {
+      translateY.value = withTiming(cardHeight.value, {
         duration: 250,
         easing: Easing.in(Easing.cubic),
       }, () => {
@@ -72,8 +80,31 @@ export function ConfirmDialog({
     }
   }, [visible])
 
+  const dismiss = () => {
+    if (busy) return
+    onCancel?.()
+  }
+
+  const pan = Gesture.Pan()
+    .enabled(!!draggable)
+    .activeOffsetY(8)
+    .failOffsetY(-8)
+    .onUpdate(e => {
+      'worklet'
+      dragY.value = Math.max(0, e.translationY)
+    })
+    .onEnd(e => {
+      'worklet'
+      if (e.translationY > SWIPE_DISMISS_THRESHOLD || e.velocityY > 800) {
+        dragY.value = withTiming(cardHeight.value, { duration: 250, easing: Easing.in(Easing.cubic) })
+        runOnJS(dismiss)()
+      } else {
+        dragY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
+      }
+    })
+
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.value + dragY.value }],
   }))
 
   return (
@@ -84,14 +115,16 @@ export function ConfirmDialog({
       onRequestClose={onCancel ?? onConfirm}
       statusBarTranslucent
     >
+      <GestureHandlerRootView style={styles.rootView}>
       <View style={styles.overlay}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={busy ? undefined : (onCancel ?? onConfirm)}
         />
+        <GestureDetector gesture={pan}>
         <Animated.View
           style={[styles.cardWrap, animStyle]}
-          onLayout={e => { cardHeight.current = e.nativeEvent.layout.height }}
+          onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
         >
           <View style={styles.shadowGradient} pointerEvents="none">
             {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
@@ -99,7 +132,7 @@ export function ConfirmDialog({
             ))}
           </View>
           <View style={styles.card}>
-          <View style={styles.dragHandle} />
+          {draggable ? <View style={styles.dragHandle} /> : null}
           {icon ? (
             <View style={styles.iconWrap}>
               <View style={styles.iconCircle}>{icon}</View>
@@ -151,12 +184,17 @@ export function ConfirmDialog({
           </View>
           </View>
         </Animated.View>
+        </GestureDetector>
       </View>
+      </GestureHandlerRootView>
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
+  rootView: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -229,8 +267,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#1AC944',
-    borderColor: '#1AC944',
+    backgroundColor: PRIMARY,
+    borderColor: PRIMARY,
   },
   checkboxTick: {
     fontSize: 13,

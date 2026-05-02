@@ -373,11 +373,13 @@ export default function OnboardingPage() {
     if (bioSubmitting) return
     setBioSubmitting(true)
     try {
-      const images = useUserStore.getState().profile?.images
-      await invoke('app/profile', {
-        bio: bio.trim().replace(/\n{3,}/g, '\n\n'),
-        images,
-      })
+      const currentItems = useUserStore.getState().profile?.items ?? []
+      const bioValue = bio.trim().replace(/\n{3,}/g, '\n\n')
+      const items = [
+        ...currentItems.filter(it => it.kind !== 'bio'),
+        { kind: 'bio' as const, value: bioValue },
+      ]
+      await invoke('app/items', { items })
     } catch {
       setBioSubmitting(false)
     }
@@ -464,7 +466,7 @@ export default function OnboardingPage() {
             <View style={styles.subtitleAnchor}>
               <Text style={[styles.subtitle, { marginTop: 0 }]}>{tg('ob.howOld', isMale === true)}</Text>
               <View style={{ opacity: dateValid ? 1 : 0 }}>
-                <CountBadge value={age ?? 0} color="#1AC944" />
+                <CountBadge value={age ?? 0} color={PRIMARY} />
               </View>
             </View>
           </View>
@@ -570,7 +572,7 @@ export default function OnboardingPage() {
 
           <Text style={styles.bioTip}>{t('bio.tip')}</Text>
 
-          <View style={styles.ctaWrap}>
+          <View style={[styles.ctaWrap, { marginBottom: 16 }]}>
             <Button
               label={t('bio.submit')}
               onPress={onContinue}

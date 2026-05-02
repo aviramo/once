@@ -10,12 +10,19 @@ import fsp   from 'node:fs/promises'
 const MOBILE  = path.resolve('.')                  // cwd = mobile/
 const ROOT    = path.resolve(MOBILE, '..')          // project root
 const SRC_SVG = path.join(ROOT, 'assets/icon.svg')
-const BG      = { r: 0xf4, g: 0xf4, b: 0xf4 }
+const BG      = { r: 0xff, g: 0x7a, b: 0x5c }      // brand orange (matches icon bg)
 
 const svgWithBg = fs.readFileSync(SRC_SVG)
-// Strip the <rect ... fill="#f4f4f4"/> background to get a transparent version.
+// Strip the brand-orange background rect to get a transparent variant of the
+// glyph (used for splash & favicon — anywhere we want the torch/flame alone).
 const svgTransparent = Buffer.from(
-  svgWithBg.toString().replace(/<rect[^/]*fill="#f4f4f4"\s*\/>\s*/i, ''),
+  svgWithBg.toString().replace(/<rect[^/]*fill="#FF7A5C"\s*\/>\s*/i, ''),
+)
+
+// All-white version for the splash icon — flame becomes white so it's
+// visible on the coral splash background (#FF7A5C).
+const svgSplash = Buffer.from(
+  svgTransparent.toString().replace(/fill="#FFF1E8"/gi, 'fill="#FFFFFF"'),
 )
 
 // SVG → raster. density scales with size so paths stay crisp.
@@ -58,8 +65,8 @@ async function main() {
   await writePng(flatOnBg(1024),                                  path.join(MOBILE, 'assets/icon.png'))
   await writePng(flatOnBg(96),                                    path.join(MOBILE, 'assets/favicon.png'))
   await writePng(await paddedForAdaptive(1024),                   path.join(MOBILE, 'assets/adaptive-icon.png'))
-  await writePng(rasterize(svgTransparent, 1024),                 path.join(MOBILE, 'assets/splash-icon.png'))
-  await writePng(rasterize(svgTransparent, 512),                  path.join(MOBILE, 'assets/livo-512.png'))
+  await writePng(rasterize(svgSplash, 1024),                      path.join(MOBILE, 'assets/splash-icon.png'))
+  await writePng(rasterize(svgTransparent, 512),                  path.join(MOBILE, 'assets/once-512.png'))
 
   console.log('project assets/:')
   await writePng(rasterize(svgTransparent, 512),                  path.join(ROOT, 'assets/icon-512.png'))
@@ -89,11 +96,8 @@ async function main() {
   ]
   for (const [d, sz] of splash) {
     const file = path.join(MOBILE, `android/app/src/main/res/drawable-${d}/splashscreen_logo.png`)
-    await writePng(rasterize(svgTransparent, sz), file)
+    await writePng(rasterize(svgSplash, sz), file)
   }
-
-  console.log('extras:')
-  await writePng(rasterize(svgTransparent, 512), 'c:/Users/ofira/Downloads/Livo-512-transparent.png')
 
   console.log('\nDone.')
 }

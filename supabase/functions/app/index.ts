@@ -4,7 +4,7 @@ import User from "../user.ts";
 import { Notify, PushToken, PUSH_BODY } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range", "is_for_kids"];
-const updatable = ["bio", "images", "units", "os", "lang", "appearance", "push_token"];
+const updatable = ["units", "os", "lang", "appearance", "push_token"];
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
@@ -50,9 +50,10 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
 
   const payload: Record<string, unknown> = {
     type: code,
-    collapseId: `${code}:${actor_id}`,
+    collapseId: actor_id,
     title,
     body: bodyText,
+    channelId: "default",
   };
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
   await Tools.notify(entry, token, payload);
@@ -247,8 +248,19 @@ Deno.serve(async (req) => {
         await Tools.invoke(log, "reset_chat", Tools.supabase.from("chat").delete().not("user_id", "is", null));
         await Tools.invoke(log, "reset_log", Tools.supabase.from("log").delete().not("user_id", "is", null));
         await Tools.invoke(log, "reset_restrictions", Tools.supabase.from("restrictions").delete().not("id", "is", null));
-        await Tools.invoke(log, "reset_relations", Tools.supabase.from("users").update({ relations: { page1: { state: 'free' }, page2: { state: 'free', profiles: [] } } }).not("user_id", "is", null));
+        await Tools.invoke(log, "reset_relations", Tools.supabase.from("users").update({ last_seen: new Date(), relations: { page1: { state: 'locked' }, page2: { state: 'free', profiles: [] } } }).not("user_id", "is", null));
         await user.persist(log);
+        break;
+      }
+
+      case "items":
+      case "profile": {
+        const items = Array.isArray(body.items) ? body.items : null;
+        if (!items) return log.error(key, "no_items", 400);
+        const result = await Tools.rpc(log, "app_save_items", { me_id: user.user_id, items });
+        await user.persist(log);
+        if (result?.error) return log.error(key, result.error, 400);
+        rpcUser = result?.user;
         break;
       }
 

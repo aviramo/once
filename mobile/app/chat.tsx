@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, Keyboard,
+  ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Keyboard,
   Linking, Modal, Platform, Pressable, StyleSheet, View,
 } from 'react-native'
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, requestRecordingPermissionsAsync, setAudioModeAsync, RecordingPresets } from 'expo-audio'
@@ -173,9 +173,10 @@ type ChatPageProps = {
   // messages only count toward the unread badge when this is false.
   isActive?: boolean
   onUnreadChange?: (count: number) => void
+  autoFocusInput?: boolean
 }
 
-export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnreadChange }: ChatPageProps = {}) {
+export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnreadChange, autoFocusInput }: ChatPageProps = {}) {
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const userId = profile?.user_id ?? ''
@@ -228,6 +229,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [messages, cacheKey, userId, otherId])
 
   const scrollRef = useRef<FlatList>(null)
+  const inputRef = useRef<any>(null)
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seenSet = useRef<Set<string>>(new Set())
   const initialLoaded = useRef(false)
@@ -486,6 +488,11 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   // the live value without re-subscribing on every toggle.
   const isActiveRef = useRef(isActive)
   useEffect(() => { isActiveRef.current = isActive }, [isActive])
+  useEffect(() => {
+    if (!autoFocusInput) return
+    const task = InteractionManager.runAfterInteractions(() => { inputRef.current?.focus() })
+    return () => task.cancel()
+  }, [])
   const [unread, setUnread] = useState(0)
   useEffect(() => { if (isActive) setUnread(0) }, [isActive])
   useEffect(() => { onUnreadChange?.(unread) }, [unread, onUnreadChange])
@@ -1429,6 +1436,11 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
           onPress={() => { tap(); onBack?.() }}
         >
           <BackIcon />
+          {matchImage ? (
+            <Image source={{ uri: matchImage }} style={styles.headerAvatar} />
+          ) : (
+            <View style={styles.headerAvatarPlaceholder} />
+          )}
         </IconPressable>
         <View style={styles.headerCenter}>
           <Text
@@ -1493,6 +1505,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             <ReAnimated.View style={[styles.inputWrap, inputWrapBorderStyle]} onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}>
               <View style={styles.inputAnimWrap} pointerEvents={attachVisible ? 'none' : 'auto'}>
                 <TextInput
+                  ref={inputRef}
                   style={styles.input}
                   value={text}
                   onChangeText={onInputChange}
@@ -1694,6 +1707,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
         destructive
         onCancel={() => setConfirmAction(null)}
         onConfirm={async () => { await invoke('app/block'); setConfirmAction(null) }}
+        draggable
       />
       <ConfirmDialog
         visible={confirmAction === 'leave'}
@@ -1703,6 +1717,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
         destructive
         onCancel={() => setConfirmAction(null)}
         onConfirm={async () => { setConfirmAction(null); await invoke('app/leave') }}
+        draggable
       />
     </View>
   )
@@ -2558,6 +2573,19 @@ const styles = StyleSheet.create({
   },
   backBtnPressed: {
     opacity: 0.5,
+  },
+  headerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    marginHorizontal: 4,
+  },
+  headerAvatarPlaceholder: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    marginHorizontal: 4,
+    backgroundColor: 'rgba(0,0,0,0.08)',
   },
   // Center slot fills whatever space is left between the two icon boxes.
   headerCenter: {

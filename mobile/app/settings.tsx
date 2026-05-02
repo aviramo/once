@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react'
 import {
   View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator,
-  PanResponder, I18nManager, Easing,
-  Keyboard, Platform, Animated as RNAnimated, Dimensions,
+  PanResponder, I18nManager, Easing, Modal,
+  Animated as RNAnimated, Dimensions,
 } from 'react-native'
 import Animated, { SharedValue, useSharedValue, useAnimatedStyle, withTiming, runOnJS, Easing as REasing } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
-import { TextInput as GHTextInput } from 'react-native-gesture-handler'
+import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
@@ -21,9 +21,11 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
 import { IconPressable } from '../src/components/IconPressable'
 import { MatchCard } from '../src/components/MatchCard'
+import { PullContext, type PullCtx } from '../src/components/HomeCard'
+import type { GestureType } from 'react-native-gesture-handler'
 import { OnceLogo } from '../src/components/OnceLogo'
 import { WhatsSpecialPage } from './login'
-import { PhotoEditor, PhotoEditorRef, localPhotoUriCache, pendingDeferred } from '../src/components/PhotoEditor'
+import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import type { Profile } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
@@ -90,7 +92,16 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
 function BackIcon() {
   return (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
+      <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
+    </Svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="18" y1="6" x2="6" y2="18" />
+      <Line x1="6" y1="6" x2="18" y2="18" />
     </Svg>
   )
 }
@@ -144,16 +155,6 @@ function GenderIcon() {
       <Polyline points="16 2 20 2 20 6" />
       <Line x1="12" y1="15" x2="12" y2="22" />
       <Line x1="9" y1="19" x2="15" y2="19" />
-    </Svg>
-  )
-}
-
-function BabyCarIcon() {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={FIELD_ICON_STROKE} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 6h3l3 9h8l2-6H8" />
-      <Circle cx={9} cy={19} r={1.5} />
-      <Circle cx={17} cy={19} r={1.5} />
     </Svg>
   )
 }
@@ -219,11 +220,6 @@ export type AdminFieldConfig = {
   onReset: (state: 'VISIBLE' | 'HIDDEN') => Promise<void>
 }
 
-export type PhotoFieldConfig = {
-  kind: 'photos'
-  title: string
-}
-
 export type AccountFieldConfig = {
   kind: 'account'
   title: string
@@ -249,7 +245,7 @@ export type AppSectionFieldConfig = {
   title: string
 }
 
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | PhotoFieldConfig | AccountFieldConfig | PreviewFieldConfig | AboutFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | AccountFieldConfig | PreviewFieldConfig | AboutFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Shared tappable settings row used across Preferences, Profile, App and the
@@ -309,7 +305,6 @@ function SelectFieldRow({
           borderRadius: grouped ? 0 : 16,
         }]}
       />
-      <ForwardChevronIcon />
       {label != null ? (
         <>
           <View style={styles.selectRowTextCol}>
@@ -745,6 +740,362 @@ const vrange = StyleSheet.create({
   },
 })
 
+// ── Horizontal Range Slider ────────────────────────────────────────────────
+// Horizontal variant of VerticalRangeSlider. Left = low value, right = high value.
+// Used in the age-range popup so the slider fits the bottom-sheet layout.
+
+const HTHUMB = 28
+const HTRACK = 4
+const HGLOW = 44
+
+interface HorizontalRangeSliderProps {
+  min: number; max: number
+  valueMin: number; valueMax: number
+  onChangeMin: (v: number) => void
+  onChangeMax: (v: number) => void
+}
+
+function HorizontalRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }: HorizontalRangeSliderProps) {
+  const s = useRef({ trackWidth: 0, min, max, valueMin, valueMax, startPosMin: 0, startPosMax: 0, startedStackedMin: false, startedStackedMax: false, draggingMin: false, draggingMax: false })
+  const cbs = useRef({ onChangeMin, onChangeMax })
+
+  useEffect(() => { s.current.min = min }, [min])
+  useEffect(() => { s.current.max = max }, [max])
+  useEffect(() => { s.current.valueMin = valueMin }, [valueMin])
+  useEffect(() => { s.current.valueMax = valueMax }, [valueMax])
+  useEffect(() => { cbs.current = { onChangeMin, onChangeMax } }, [onChangeMin, onChangeMax])
+
+  const trackWidthSv = useSharedValue(0)
+  const minPctSv = useSharedValue(max > min ? (valueMin - min) / (max - min) : 0)
+  const maxPctSv = useSharedValue(max > min ? (valueMax - min) / (max - min) : 1)
+  const minDragSv = useSharedValue(0)
+  const maxDragSv = useSharedValue(0)
+
+  useEffect(() => {
+    if (s.current.draggingMin) return
+    if (max > min) minPctSv.value = withTiming((valueMin - min) / (max - min), { duration: 150 })
+  }, [valueMin, min, max])
+  useEffect(() => {
+    if (s.current.draggingMax) return
+    if (max > min) maxPctSv.value = withTiming((valueMax - min) / (max - min), { duration: 150 })
+  }, [valueMax, min, max])
+
+  const toPosX = (v: number) => {
+    const { trackWidth, min, max } = s.current
+    if (!trackWidth) return 0
+    return ((v - min) / (max - min)) * trackWidth
+  }
+  const rawPctFromPosX = (posX: number) => {
+    const { trackWidth } = s.current
+    if (!trackWidth) return 0
+    return Math.max(0, Math.min(posX, trackWidth)) / trackWidth
+  }
+  const valFromPct = (pct: number) => {
+    const { min, max } = s.current
+    return Math.round(min + pct * (max - min))
+  }
+
+  const minPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.draggingMin = true
+      s.current.startPosMin = toPosX(s.current.valueMin)
+      s.current.startedStackedMin = s.current.valueMin === s.current.valueMax
+      minDragSv.value = withTiming(1, { duration: 120 })
+    },
+    onPanResponderMove: (_, { dx }) => {
+      const { min: mn, max: mx } = s.current
+      if (mx <= mn) return
+      const rawPct = rawPctFromPosX(s.current.startPosMin + dx)
+      const v = valFromPct(rawPct)
+      if (s.current.startedStackedMin && dx > 0) {
+        // Started stacked and dragging right → move max instead
+        const minPct = (s.current.valueMin - mn) / (mx - mn)
+        maxPctSv.value = Math.max(minPct, rawPct)
+        if (v !== s.current.valueMax && v >= s.current.valueMin)
+          cbs.current.onChangeMax(v)
+      } else {
+        const maxPct = (s.current.valueMax - mn) / (mx - mn)
+        minPctSv.value = Math.min(maxPct, rawPct)
+        if (v !== s.current.valueMin && v <= s.current.valueMax)
+          cbs.current.onChangeMin(v)
+      }
+    },
+    onPanResponderRelease: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMin = false
+      minDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMin)
+          maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+      }
+    },
+    onPanResponderTerminate: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMin = false
+      minDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMin)
+          maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+      }
+    },
+  })).current
+
+  const maxPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.draggingMax = true
+      s.current.startPosMax = toPosX(s.current.valueMax)
+      s.current.startedStackedMax = s.current.valueMin === s.current.valueMax
+      maxDragSv.value = withTiming(1, { duration: 120 })
+    },
+    onPanResponderMove: (_, { dx }) => {
+      const { min: mn, max: mx } = s.current
+      if (mx <= mn) return
+      const rawPct = rawPctFromPosX(s.current.startPosMax + dx)
+      const v = valFromPct(rawPct)
+      if (s.current.startedStackedMax && dx < 0) {
+        // Started stacked and dragging left → move min instead
+        const maxPct = (s.current.valueMax - mn) / (mx - mn)
+        minPctSv.value = Math.min(maxPct, rawPct)
+        if (v !== s.current.valueMin && v <= s.current.valueMax)
+          cbs.current.onChangeMin(v)
+      } else {
+        const minPct = (s.current.valueMin - mn) / (mx - mn)
+        maxPctSv.value = Math.max(minPct, rawPct)
+        if (v !== s.current.valueMax && v >= s.current.valueMin)
+          cbs.current.onChangeMax(v)
+      }
+    },
+    onPanResponderRelease: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMax = false
+      maxDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMax)
+          minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+      }
+    },
+    onPanResponderTerminate: () => {
+      slidingActiveRef.current = false
+      s.current.draggingMax = false
+      maxDragSv.value = withTiming(0, { duration: 150 })
+      const { min: mn, max: mx } = s.current
+      if (mx > mn) {
+        maxPctSv.value = withTiming((s.current.valueMax - mn) / (mx - mn), { duration: 100 })
+        if (s.current.startedStackedMax)
+          minPctSv.value = withTiming((s.current.valueMin - mn) / (mx - mn), { duration: 100 })
+      }
+    },
+  })).current
+
+  const trackFillStyle = useAnimatedStyle(() => {
+    const w = trackWidthSv.value
+    return {
+      left: minPctSv.value * w,
+      width: Math.max(0, (maxPctSv.value - minPctSv.value) * w),
+    }
+  })
+  const minWrapStyle = useAnimatedStyle(() => ({
+    left: minPctSv.value * trackWidthSv.value - HTHUMB / 2,
+  }))
+  const maxWrapStyle = useAnimatedStyle(() => ({
+    left: maxPctSv.value * trackWidthSv.value - HTHUMB / 2,
+  }))
+  const minThumbInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + minDragSv.value * 0.1 }],
+  }))
+  const maxThumbInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + maxDragSv.value * 0.1 }],
+  }))
+  const minGlowStyle = useAnimatedStyle(() => ({
+    opacity: minDragSv.value,
+    transform: [{ scale: 0.6 + minDragSv.value * 0.4 }],
+  }))
+  const maxGlowStyle = useAnimatedStyle(() => ({
+    opacity: maxDragSv.value,
+    transform: [{ scale: 0.6 + maxDragSv.value * 0.4 }],
+  }))
+
+  return (
+    <View style={hrange.container}>
+      <View
+        style={hrange.track}
+        onLayout={e => {
+          s.current.trackWidth = e.nativeEvent.layout.width
+          trackWidthSv.value = e.nativeEvent.layout.width
+        }}
+      >
+        <View style={hrange.trackBg} />
+        <Animated.View style={[hrange.trackFill, trackFillStyle]} />
+        {/* Min thumb — near left */}
+        <Animated.View
+          style={[hrange.thumbWrap, minWrapStyle]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...minPan.panHandlers}
+        >
+          <Animated.View style={[hrange.glow, minGlowStyle]} />
+          <Animated.View style={[hrange.thumb, minThumbInnerStyle]} />
+        </Animated.View>
+        {/* Max thumb — near right (rendered last = higher z-index, wins when thumbs overlap) */}
+        <Animated.View
+          style={[hrange.thumbWrap, maxWrapStyle]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...maxPan.panHandlers}
+        >
+          <Animated.View style={[hrange.glow, maxGlowStyle]} />
+          <Animated.View style={[hrange.thumb, maxThumbInnerStyle]} />
+        </Animated.View>
+      </View>
+    </View>
+  )
+}
+
+const hrange = StyleSheet.create({
+  container: { height: HTHUMB + 24, flex: 1, justifyContent: 'center', paddingHorizontal: HTHUMB / 2 },
+  track: { height: HTHUMB, flex: 1, justifyContent: 'center' },
+  trackBg: { position: 'absolute', left: 0, right: 0, height: HTRACK, backgroundColor: GRAY_100, borderRadius: HTRACK / 2 },
+  trackFill: { position: 'absolute', height: HTRACK, backgroundColor: PRIMARY, borderRadius: HTRACK / 2 },
+  thumbWrap: {
+    position: 'absolute', width: HTHUMB, height: HTHUMB,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  thumb: {
+    width: HTHUMB, height: HTHUMB, borderRadius: HTHUMB / 2,
+    backgroundColor: WHITE, borderWidth: 2, borderColor: PRIMARY,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 4, elevation: 3,
+  },
+  glow: {
+    position: 'absolute', width: HGLOW, height: HGLOW, borderRadius: HGLOW / 2, backgroundColor: PRIMARY_BG,
+  },
+})
+
+// ── Horizontal Step Slider ─────────────────────────────────────────────────
+// Single-thumb step-snapping slider oriented horizontally.
+// Left = step 0, right = step (stepCount-1). Used in the radius popup.
+
+interface HorizontalStepSliderProps {
+  stepCount: number
+  value: number
+  onChange: (v: number) => void
+}
+
+function HorizontalStepSlider({ stepCount, value, onChange }: HorizontalStepSliderProps) {
+  const s = useRef({ trackWidth: 0, startPos: 0, value, stepCount, dragging: false })
+  s.current.value = value
+  s.current.stepCount = stepCount
+  const cbs = useRef({ onChange })
+  useEffect(() => { cbs.current = { onChange } }, [onChange])
+
+  const trackWidthSv = useSharedValue(0)
+  const pctSv = useSharedValue(stepCount <= 1 ? 0 : value / (stepCount - 1))
+  const dragSv = useSharedValue(0)
+
+  useEffect(() => {
+    if (s.current.dragging) return
+    if (stepCount > 1) pctSv.value = withTiming(value / (stepCount - 1), { duration: 150 })
+  }, [value, stepCount])
+
+  const toPosX = (v: number) => {
+    const { trackWidth, stepCount: sc } = s.current
+    if (sc <= 1 || !trackWidth) return 0
+    return (v / (sc - 1)) * trackWidth
+  }
+  const rawPctFromPosX = (posX: number) => {
+    const { trackWidth } = s.current
+    if (!trackWidth) return 0
+    return Math.max(0, Math.min(posX, trackWidth)) / trackWidth
+  }
+  const valFromPct = (pct: number) => {
+    const { stepCount: sc } = s.current
+    if (sc <= 1) return 0
+    return Math.round(pct * (sc - 1))
+  }
+
+  const thumbPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      slidingActiveRef.current = true
+      s.current.dragging = true
+      s.current.startPos = toPosX(s.current.value)
+      dragSv.value = withTiming(1, { duration: 120 })
+    },
+    onPanResponderMove: (_, { dx }) => {
+      const { stepCount: sc } = s.current
+      if (sc <= 1) return
+      const rawPct = rawPctFromPosX(s.current.startPos + dx)
+      pctSv.value = rawPct
+      const v = valFromPct(rawPct)
+      if (v !== s.current.value) cbs.current.onChange(v)
+    },
+    onPanResponderRelease: () => {
+      slidingActiveRef.current = false
+      s.current.dragging = false
+      dragSv.value = withTiming(0, { duration: 150 })
+      const { stepCount: sc } = s.current
+      if (sc > 1) pctSv.value = withTiming(s.current.value / (sc - 1), { duration: 100 })
+    },
+    onPanResponderTerminate: () => {
+      slidingActiveRef.current = false
+      s.current.dragging = false
+      dragSv.value = withTiming(0, { duration: 150 })
+      const { stepCount: sc } = s.current
+      if (sc > 1) pctSv.value = withTiming(s.current.value / (sc - 1), { duration: 100 })
+    },
+  })).current
+
+  const trackFillStyle = useAnimatedStyle(() => ({
+    width: pctSv.value * trackWidthSv.value,
+  }))
+  const wrapStyle = useAnimatedStyle(() => ({
+    left: pctSv.value * trackWidthSv.value - HTHUMB / 2,
+  }))
+  const thumbInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + dragSv.value * 0.1 }],
+  }))
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: dragSv.value,
+    transform: [{ scale: 0.6 + dragSv.value * 0.4 }],
+  }))
+
+  return (
+    <View style={hrange.container}>
+      <View
+        style={hrange.track}
+        onLayout={e => {
+          s.current.trackWidth = e.nativeEvent.layout.width
+          trackWidthSv.value = e.nativeEvent.layout.width
+        }}
+      >
+        <View style={hrange.trackBg} />
+        <Animated.View style={[hrange.trackFill, trackFillStyle]} />
+        <Animated.View
+          style={[hrange.thumbWrap, wrapStyle]}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          {...thumbPan.panHandlers}
+        >
+          <Animated.View style={[hrange.glow, glowStyle]} />
+          <Animated.View style={[hrange.thumb, thumbInnerStyle]} />
+        </Animated.View>
+      </View>
+    </View>
+  )
+}
+
 // ── Vertical Radius Slider ─────────────────────────────────────────────────
 
 function VerticalRadiusSlider({ stepCount, value, onChange }: RadiusSliderProps) {
@@ -878,23 +1229,6 @@ function radiusToServer(km: number): number | null {
   if (km === Infinity) return null
   if (km === 0) return 250
   return Math.round(km * 1000)
-}
-
-// ── Auto-save hook ─────────────────────────────────────────────────────────
-
-function useAutoSave(data: object, ready: boolean, delay = 600) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isFirst = useRef(true)
-  const key = JSON.stringify(data)
-
-  useEffect(() => {
-    if (!ready) return
-    if (isFirst.current) { isFirst.current = false; return }
-    if (timer.current) clearTimeout(timer.current)
-    const field = Object.keys(data)[0]
-    timer.current = setTimeout(() => { invoke(`app/${field}`, data).catch(console.error) }, delay)
-    return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [key, ready])
 }
 
 // Saves a partial data object via app/data whenever the value changes.
@@ -1058,8 +1392,11 @@ function AnimatedToggleButton({
 // Renders the search-preferences sections without an outer ScrollView so they
 // can be embedded inside a parent ScrollView on the main settings screen.
 
-function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile, update } = useUserStore()
+  const [agePopupVisible, setAgePopupVisible] = useState(false)
+  const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
+  const [genderPopupVisible, setGenderPopupVisible] = useState(false)
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
   const ageSliderMin = Math.max(18, age - 20)
@@ -1070,6 +1407,7 @@ function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPag
   const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax))
   const ageMax = Math.max(ageMin, Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin)))
   const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
+  const radiusStep = Math.max(0, RADIUS_STEPS.indexOf(radius))
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
@@ -1088,30 +1426,15 @@ function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPag
           grouped
           label={t('settings.range')}
           displayValue={formatRadius(radius)}
-          onPress={() => onOpenSubPage?.({
-            kind: 'radius',
-            title: t('settings.range'),
-            stepCount: RADIUS_STEPS.length,
-            value: Math.max(0, RADIUS_STEPS.indexOf(radius)),
-            onChangeLocal: i => { update({ range: radiusToServer(RADIUS_STEPS[i]) }) },
-            onClose: i => { invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) }).catch(console.error) },
-            formatStep: i => formatRadius(RADIUS_STEPS[i]),
-          })}
+          onPress={() => setRadiusPopupVisible(true)}
           icon={<MapPinIcon />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.ageRange')}
-          displayValue={`⁦${ageMin} – ${ageMax}⁩`}
-          onPress={() => onOpenSubPage?.({
-            kind: 'ageRange',
-            title: t('settings.ageRange'),
-            ageMin, ageMax,
-            sliderMin: ageSliderMin, sliderMax: ageSliderMax,
-            onChangeLocal: (min, max) => { update({ age_from: min, age_to: max }) },
-            onClose: (min, max) => { invoke('app/age', { age_from: min, age_to: max }).catch(console.error) },
-          })}
+          displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
+          onPress={() => setAgePopupVisible(true)}
           icon={<SlidersIcon />}
         />
         <View style={styles.accountActionDivider} />
@@ -1119,27 +1442,56 @@ function PreferencesContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPag
           grouped
           label={t('settings.preferredGender')}
           displayValue={genderDisplayValue}
-          onPress={() => onOpenSubPage?.({
-            kind: 'select',
-            title: t('settings.preferredGender'),
-            options: genderOptions,
-            value: genderPref,
-            onSelect: async (v) => {
-              update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-              await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-            },
-          })}
+          onPress={() => setGenderPopupVisible(true)}
           icon={<GenderIcon />}
         />
       </View>
+      <RadiusPopup
+        visible={radiusPopupVisible}
+        stepCount={RADIUS_STEPS.length}
+        initialValue={radiusStep}
+        formatStep={i => formatRadius(RADIUS_STEPS[i])}
+        onSave={async i => {
+          update({ range: radiusToServer(RADIUS_STEPS[i]) })
+          await invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) })
+          setRadiusPopupVisible(false)
+        }}
+        onDismiss={() => setRadiusPopupVisible(false)}
+      />
+      <AgeRangePopup
+        visible={agePopupVisible}
+        ageMin={ageMin} ageMax={ageMax}
+        sliderMin={ageSliderMin} sliderMax={ageSliderMax}
+        onSave={async (min, max) => {
+          update({ age_from: min, age_to: max })
+          await invoke('app/age', { age_from: min, age_to: max })
+          setAgePopupVisible(false)
+        }}
+        onDismiss={() => setAgePopupVisible(false)}
+      />
+      <OptionPopup
+        visible={genderPopupVisible}
+        title={t('settings.preferredGender')}
+        initialValue={genderPref}
+        options={genderOptions}
+        onSave={async v => {
+          update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+          await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+          setGenderPopupVisible(false)
+        }}
+        onDismiss={() => setGenderPopupVisible(false)}
+      />
     </View>
   )
 }
 
 // ── Preferences Tab ────────────────────────────────────────────────────────
 
-function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function PreferencesTab({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile, update } = useUserStore()
+  const [agePopupVisible, setAgePopupVisible] = useState(false)
+  const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
+  const [genderPopupVisible, setGenderPopupVisible] = useState(false)
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
   const ageSliderMin = Math.max(18, age - 20)
@@ -1150,6 +1502,7 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
   const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax))
   const ageMax = Math.max(ageMin, Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin)))
   const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
+  const radiusStep = Math.max(0, RADIUS_STEPS.indexOf(radius))
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
@@ -1161,6 +1514,7 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
   const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
 
   return (
+    <>
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
 
       {/* Search Radius */}
@@ -1168,15 +1522,7 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
         <SectionLabel>{t('settings.range').toUpperCase()}</SectionLabel>
         <SelectFieldRow
           displayValue={formatRadius(radius)}
-          onPress={() => onOpenSubPage?.({
-            kind: 'radius',
-            title: t('settings.range'),
-            stepCount: RADIUS_STEPS.length,
-            value: Math.max(0, RADIUS_STEPS.indexOf(radius)),
-            onChangeLocal: i => { update({ range: radiusToServer(RADIUS_STEPS[i]) }) },
-            onClose: i => { invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) }).catch(console.error) },
-            formatStep: i => formatRadius(RADIUS_STEPS[i]),
-          })}
+          onPress={() => setRadiusPopupVisible(true)}
           icon={<MapPinIcon />}
         />
       </View>
@@ -1185,15 +1531,8 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
       <View style={styles.section}>
         <SectionLabel>{t('settings.ageRange').toUpperCase()}</SectionLabel>
         <SelectFieldRow
-          displayValue={`\u2066${ageMin} – ${ageMax}\u2069`}
-          onPress={() => onOpenSubPage?.({
-            kind: 'ageRange',
-            title: t('settings.ageRange'),
-            ageMin, ageMax,
-            sliderMin: ageSliderMin, sliderMax: ageSliderMax,
-            onChangeLocal: (min, max) => { update({ age_from: min, age_to: max }) },
-            onClose: (min, max) => { invoke('app/age', { age_from: min, age_to: max }).catch(console.error) },
-          })}
+          displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
+          onPress={() => setAgePopupVisible(true)}
           icon={<SlidersIcon />}
         />
       </View>
@@ -1203,250 +1542,50 @@ function PreferencesTab({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCon
         <SectionLabel>{t('settings.preferredGender').toUpperCase()}</SectionLabel>
         <SelectFieldRow
           displayValue={genderDisplayValue}
-          onPress={() => onOpenSubPage?.({
-            kind: 'select',
-            title: t('settings.preferredGender'),
-            options: genderOptions,
-            value: genderPref,
-            onSelect: async (v) => {
-              update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-              await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-            },
-          })}
+          onPress={() => setGenderPopupVisible(true)}
           icon={<GenderIcon />}
         />
       </View>
 
     </ScrollView>
+    <RadiusPopup
+      visible={radiusPopupVisible}
+      stepCount={RADIUS_STEPS.length}
+      initialValue={radiusStep}
+      formatStep={i => formatRadius(RADIUS_STEPS[i])}
+      onSave={async i => {
+        update({ range: radiusToServer(RADIUS_STEPS[i]) })
+        await invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) })
+        setRadiusPopupVisible(false)
+      }}
+      onDismiss={() => setRadiusPopupVisible(false)}
+    />
+    <AgeRangePopup
+      visible={agePopupVisible}
+      ageMin={ageMin} ageMax={ageMax}
+      sliderMin={ageSliderMin} sliderMax={ageSliderMax}
+      onSave={async (min, max) => {
+        update({ age_from: min, age_to: max })
+        await invoke('app/age', { age_from: min, age_to: max })
+        setAgePopupVisible(false)
+      }}
+      onDismiss={() => setAgePopupVisible(false)}
+    />
+    <GenderPopup
+      visible={genderPopupVisible}
+      initialValue={genderPref}
+      options={genderOptions}
+      onSave={async v => {
+        update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+        await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+        setGenderPopupVisible(false)
+      }}
+      onDismiss={() => setGenderPopupVisible(false)}
+    />
+    </>
   )
 }
 
-// ── Photo Field Row ───────────────────────────────────────────────────────
-// Thumbnail strip inside a tappable field row — same height as SelectFieldRow.
-// Shows up to 6 small round thumbnails + a forward chevron.
-
-function PhotoFieldRow({ photos, userId, onPress, label, grouped }: { photos: string[]; userId: string; onPress: () => void | Promise<unknown>; label?: string; grouped?: boolean }) {
-  const press = useRef(new RNAnimated.Value(0)).current
-  const tapProps = useTapResponder(onPress, (pressed) => {
-    RNAnimated.timing(press, {
-      toValue: pressed ? 1 : 0,
-      duration: pressed ? 80 : 180,
-      useNativeDriver: false,
-    }).start()
-  })
-  const visible = photos.slice(0, 6)
-  return (
-    <View style={[grouped ? styles.selectRowInner : styles.selectRow, { alignItems: 'flex-start' }]} {...tapProps}>
-      <RNAnimated.View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, {
-          backgroundColor: GRAY_50,
-          opacity: press,
-          borderRadius: grouped ? 0 : 16,
-        }]}
-      />
-      <ForwardChevronIcon />
-      {label != null && (
-        <>
-          <Text style={styles.selectRowLabel} numberOfLines={1}>{label}</Text>
-          <View style={{ flex: 1 }} />
-        </>
-      )}
-      {visible.length > 0 && (
-        <View style={styles.photoThumbStrip}>
-          {visible.map((f, i) => (
-            <Image
-              key={`${i}-${f}`}
-              source={{ uri: localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${f}` }}
-              style={styles.photoThumb}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  )
-}
-
-// ── Profile Tab ────────────────────────────────────────────────────────────
-
-function ProfileTab({ focused = true, onOpenSubPage }: { focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
-  const { profile, update } = useUserStore()
-  const { user } = useAuthStore()
-  // Bio is held locally while typing — flushed on blur / unmount to avoid per-keystroke server calls
-  const [localBio, setLocalBio] = useState(profile?.bio ?? '')
-  const localBioRef = useRef(localBio)
-  const savedBioRef = useRef(profile?.bio ?? '')
-  const scrollRef = useRef<any>(null)
-  const bioInputRef = useRef<any>(null)
-  const [bioFocused, setBioFocused] = useState(false)
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
-  const messageSectionYRef = useRef(0)
-  const profileCardYRef = useRef(0)
-
-  // Keep localBio in sync when profile loads or changes from elsewhere
-  useEffect(() => {
-    const serverBio = profile?.bio ?? ''
-    savedBioRef.current = serverBio
-    setLocalBio(serverBio)
-  }, [profile?.bio])
-
-  useEffect(() => { localBioRef.current = localBio }, [localBio])
-
-
-  const flushBio = () => {
-    const next = localBioRef.current.replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')
-    if (next !== localBioRef.current) { setLocalBio(next); localBioRef.current = next }
-    if (next === savedBioRef.current) return
-    if (next.length > 0 && next.length < 20) return
-    savedBioRef.current = next
-    update({ bio: next })
-    const p = useUserStore.getState().profile
-    if (!p) return
-    invoke('app/bio', { bio: next }).catch(console.error)
-  }
-
-  useEffect(() => {
-    return () => { flushBio() }
-  }, [])
-
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const showSub = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height))
-    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0))
-    return () => { showSub.remove(); hideSub.remove() }
-  }, [])
-
-  useAutoSave({ is_for_kids: profile?.is_for_kids ?? null }, !!profile)
-  useDataSave({ images: profile?.images?.filter(img => !pendingDeferred.has(img.normal ?? '')) }, !!profile)
-
-  // Hook calls must be above the early return to keep count stable.
-  const previewTap = useTapResponder(() => onOpenSubPage?.({ kind: 'preview', title: t('settings.myProfile') }))
-  const bioTapProps = useTapResponder(() => {
-    tap()
-    setBioFocused(true)
-    setTimeout(() => bioInputRef.current?.focus(), 100)
-  })
-
-  if (!profile) return <View style={styles.tabContent} />
-
-  const photos = profile.images?.map(e => e.normal ?? '') ?? []
-  const isForKids = profile.is_for_kids
-  const kidsOptions: SelectOption[] = [
-    { value: 'yes', label: t('settings.kidsYes') },
-    { value: 'no',  label: t('settings.kidsNo')  },
-    { value: 'na',  label: t('settings.kidsNa')  },
-  ]
-  const kidsValue = isForKids === true ? 'yes' : isForKids === false ? 'no' : 'na'
-  const kidsDisplayValue = kidsValue === 'na' ? '' : (kidsOptions.find(o => o.value === kidsValue)?.label ?? '')
-
-  return (
-    <ScrollView
-      ref={scrollRef}
-      style={styles.tabScroll}
-      contentContainerStyle={[styles.tabContent, { paddingBottom: 40 + keyboardHeight }]}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      delaysContentTouches={false}
-    >
-
-      <View style={styles.accountLinksCard}>
-        <View style={styles.accountLinkRowInner} {...previewTap}>
-          <ForwardChevronIcon />
-          <Text style={styles.accountActionText}>{t('settings.preview')}</Text>
-          <View style={{ flex: 1 }} />
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <Circle cx={12} cy={12} r={3} />
-          </Svg>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionLabel>{t('settings.myInfo').toUpperCase()}</SectionLabel>
-        <View
-          style={[styles.accountLinksCard, { marginBottom: 0 }]}
-          onLayout={(e) => { profileCardYRef.current = e.nativeEvent.layout.y }}
-        >
-          <PhotoFieldRow
-            grouped
-            photos={photos}
-          userId={user!.id}
-          label={t('settings.photo')}
-          onPress={() => onOpenSubPage?.({ kind: 'photos', title: t('settings.photo') })}
-        />
-        <View style={styles.accountActionDivider} />
-        <View
-          style={styles.textInputWrapInner}
-          onLayout={(e) => { messageSectionYRef.current = e.nativeEvent.layout.y }}
-        >
-          <View style={styles.textInputHeader}>
-            <View style={styles.textInputHeaderSpacer} />
-            <Text style={styles.selectRowLabel} numberOfLines={1}>{t('settings.aboutMe')}</Text>
-            <View style={{ flex: 1 }} />
-            <Text style={styles.aboutMeQuote}>“</Text>
-          </View>
-          <View pointerEvents={bioFocused ? 'auto' : 'none'}>
-            <GHTextInput
-              ref={bioInputRef}
-              style={[styles.textInput, { fontFamily: DEFAULT_FAMILY }]}
-              value={localBio}
-              onChangeText={(text) => {
-                if (text.length > 150) text = text.slice(0, 150)
-                setLocalBio(text)
-              }}
-              onFocus={() => {
-                setTimeout(() => {
-                  scrollRef.current?.scrollTo({
-                    y: Math.max(0, profileCardYRef.current + messageSectionYRef.current - 12),
-                    animated: true,
-                  })
-                }, 300)
-              }}
-              onBlur={() => { setBioFocused(false); flushBio() }}
-              multiline
-              scrollEnabled={false}
-              maxLength={150}
-              textAlign="center"
-              textAlignVertical="top"
-            />
-          </View>
-          {!bioFocused && (
-            <View style={StyleSheet.absoluteFill} {...bioTapProps} />
-          )}
-          {localBio.length >= 20 && (
-            <Text style={styles.charCount}>{150 - localBio.length}</Text>
-          )}
-        </View>
-        <View style={styles.accountActionDivider} />
-        <SelectFieldRow
-          grouped
-          label={tg('settings.kidsLabel', profile.is_male)}
-          displayValue={kidsDisplayValue}
-          onPress={() => onOpenSubPage?.({
-            kind: 'select',
-            title: tg('settings.kidsLabel', profile.is_male),
-            options: kidsOptions,
-            value: kidsValue,
-            onSelect: async (v) => {
-              const val = v === 'yes' ? true : v === 'no' ? false : null
-              update({ is_for_kids: val })
-              await invoke('app/is_for_kids', { is_for_kids: val })
-            },
-          })}
-          icon={<BabyCarIcon />}
-        />
-        </View>
-      </View>
-
-    </ScrollView>
-  )
-}
-
-// 3 columns × 2 rows (max 6 photos). Percentage width + space-between
-// lets the gaps adapt to the actual pane width, which varies with safe-area
-// insets on edge-to-edge Android, instead of relying on Dimensions at
-// module-load time.
 // ── Account Tab ────────────────────────────────────────────────────────────
 
 function SignOutIcon({ color = TEXT_PRIMARY }: { color?: string }) {
@@ -1471,6 +1610,105 @@ function TrashIcon({ color = TEXT_PRIMARY }: { color?: string }) {
   )
 }
 
+function InfoIcon({ color = TEXT_PRIMARY }: { color?: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Line x1="12" y1="16" x2="12" y2="12" />
+      <Line x1="12" y1="8" x2="12.01" y2="8" />
+    </Svg>
+  )
+}
+
+function AccountDetailsPopup({ visible, rows, onDismiss }: {
+  visible: boolean
+  rows: Array<{ label: string; value: string }>
+  onDismiss: () => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const insets = useSafeAreaInsets()
+
+  useEffect(() => {
+    if (visible) {
+      dragY.value = 0
+      translateY.value = withTiming(0, { duration: 280, easing: REasing.out(REasing.cubic) })
+    } else {
+      translateY.value = withTiming(400, { duration: 220, easing: REasing.in(REasing.cubic) })
+    }
+  }, [visible])
+
+  const animatedDismiss = useCallback(() => {
+    dragY.value = withTiming(400, { duration: 220 })
+    translateY.value = withTiming(400, { duration: 220, easing: REasing.in(REasing.cubic) }, () => runOnJS(onDismiss)())
+  }, [onDismiss])
+
+  const swipeDismiss = Gesture.Pan()
+    .onUpdate(e => { if (e.translationY > 0) dragY.value = e.translationY })
+    .onEnd(e => {
+      if (e.translationY > 80 || e.velocityY > 500) {
+        dragY.value = withTiming(400, { duration: 200 })
+        translateY.value = withTiming(400, { duration: 200 }, () => runOnJS(onDismiss)())
+      } else {
+        dragY.value = withTiming(0, { duration: 200 })
+      }
+    })
+
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={animatedDismiss}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }} onPress={animatedDismiss}>
+          <GestureDetector gesture={swipeDismiss}>
+            <Animated.View
+              style={[acctDetailsStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) }, slideStyle]}
+              onStartShouldSetResponder={() => true}
+            >
+              <View style={acctDetailsStyles.pill} />
+              {rows.map((r, i) => (
+                <React.Fragment key={r.label}>
+                  {i > 0 && <View style={acctDetailsStyles.divider} />}
+                  <View style={acctDetailsStyles.row}>
+                    <Text style={acctDetailsStyles.label}>{r.label}</Text>
+                    <Text style={acctDetailsStyles.value} numberOfLines={1}>{r.value}</Text>
+                  </View>
+                </React.Fragment>
+              ))}
+            </Animated.View>
+          </GestureDetector>
+        </Pressable>
+      </GestureHandlerRootView>
+    </Modal>
+  )
+}
+
+const acctDetailsStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+    paddingHorizontal: 0,
+  },
+  pill: {
+    width: 36, height: 4, borderRadius: 2, backgroundColor: GRAY_100,
+    alignSelf: 'center', marginBottom: 8,
+  },
+  row: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: DOUBLE, paddingVertical: 16,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)',
+    marginStart: DOUBLE,
+  },
+  label: { fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500' },
+  value: { fontSize: 15, color: GRAY_400, fontWeight: '400', flexShrink: 1, textAlign: isRTL ? 'left' : 'right', marginStart: 16 },
+})
+
 function formatBirthDate(iso: string): string {
   const d = new Date(iso)
   const dd = String(d.getDate()).padStart(2, '0')
@@ -1480,10 +1718,11 @@ function formatBirthDate(iso: string): string {
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
-function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function AppTab({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const router = useRouter()
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState(false)
+  const [unitsPopupVisible, setUnitsPopupVisible] = useState(false)
 
   const onReset = useCallback(async () => {
     if (resetting) return
@@ -1515,6 +1754,7 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
   const unitsDisplayValue = unitsOptions.find(o => o.value === units)?.label ?? t('settings.unitsMetricDesc')
 
   return (
+    <>
     <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
       <View style={styles.section}>
         <View style={styles.accountLinksCard}>
@@ -1522,53 +1762,45 @@ function AppTab({ onBack, onOpenSubPage }: { onBack?: () => void; onOpenSubPage?
             grouped
             label={t('settings.unitsLabel')}
             displayValue={unitsDisplayValue}
-            onPress={() => onOpenSubPage?.({
-              kind: 'select',
-              title: t('settings.unitsLabel'),
-              options: unitsOptions,
-              value: units,
-              onSelect: async (v) => {
-                update({ units: v })
-                const p = useUserStore.getState().profile
-                if (p) await invoke('app/units', { units: v })
-              },
-            })}
+            onPress={() => setUnitsPopupVisible(true)}
             icon={<RulerIcon />}
           />
+          {profile.data?.role === 'ADMIN' && (
+            <>
+              <View style={styles.accountActionDivider} />
+              <View
+                style={[styles.accountActionRow, resetting && { opacity: 0.5 }]}
+                {...(resetting ? {} : resetTap)}
+              >
+                <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.adminEntry')}</Text>
+                <View style={{ flex: 1 }} />
+                {resetting
+                  ? <ActivityIndicator size={18} color="rgba(180,60,60,0.6)" />
+                  : <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(180,60,60,0.6)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                      <Path d="M3 3v5h5" />
+                    </Svg>
+                }
+              </View>
+            </>
+          )}
         </View>
       </View>
-
-      {profile.data?.role === 'ADMIN' && (
-        <View style={styles.section}>
-          <SectionLabel>{t('settings.adminTitle').toUpperCase()}</SectionLabel>
-          <View style={styles.accountActionsCard}>
-            <View
-              style={[styles.accountActionRow, resetting && { opacity: 0.5 }]}
-              {...(resetting ? {} : resetTap)}
-            >
-              {resetting
-                ? <ActivityIndicator size={18} color="rgba(0,0,0,0.5)" />
-                : <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                    <Path d="M3 3v5h5" />
-                  </Svg>
-              }
-              <Text style={styles.accountActionText}>{t('settings.adminEntry')}</Text>
-            </View>
-          </View>
-        </View>
-      )}
     </ScrollView>
+    <OptionPopup
+      visible={unitsPopupVisible}
+      title={t('settings.unitsLabel')}
+      initialValue={units}
+      options={unitsOptions}
+      onSave={async v => {
+        update({ units: v })
+        await invoke('app/units', { units: v })
+        setUnitsPopupVisible(false)
+      }}
+      onDismiss={() => setUnitsPopupVisible(false)}
+    />
+    </>
   )
-}
-
-// ── Screen ─────────────────────────────────────────────────────────────────
-
-function renderTab(tab: Tab, onBack: (() => void) | undefined, focused: boolean, onOpenSubPage?: (config: SubPageConfig) => Promise<void>) {
-  if (tab === 'preferences') return <PreferencesTab onOpenSubPage={onOpenSubPage} />
-  if (tab === 'profile')     return <ProfileTab focused={focused} onOpenSubPage={onOpenSubPage} />
-  if (tab === 'app')         return <AppTab onBack={onBack} onOpenSubPage={onOpenSubPage} />
-  return <View style={styles.tabContent} />
 }
 
 // When embedded inside the home shell pager, the parent passes `onBack` so
@@ -1603,11 +1835,11 @@ export function SelectFieldPage({
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <View style={styles.backBtn} />
       </View>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -1656,14 +1888,14 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <View style={styles.backBtn} />
       </View>
       <View style={spStyles.content}>
-        <Text style={spStyles.displayValue}>{`\u2066${ageMin} – ${ageMax}\u2069`}</Text>
+        <Text style={spStyles.displayValue}>{ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}</Text>
         <View style={spStyles.sliderArea}>
           <Text style={spStyles.endLabel}>{config.sliderMax}</Text>
           <VerticalRangeSlider
@@ -1677,6 +1909,363 @@ export function AgeRangeFieldPage({ config, onBack }: { config: AgeRangeFieldCon
     </View>
   )
 }
+
+// ── Age Range Popup ────────────────────────────────────────────────────────
+// Bottom-sheet modal with a horizontal range slider for editing the age preference.
+// Changes are local until the user presses Save, which is the only path to the server.
+
+function AgeRangePopup({
+  visible, ageMin, ageMax, sliderMin, sliderMax, onSave, onDismiss,
+}: {
+  visible: boolean
+  ageMin: number; ageMax: number
+  sliderMin: number; sliderMax: number
+  onSave: (min: number, max: number) => Promise<void>
+  onDismiss: () => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const [modalVisible, setModalVisible] = useState(false)
+  const cardHeight = useSharedValue(400)
+  const [localMin, setLocalMin] = useState(ageMin)
+  const [localMax, setLocalMax] = useState(ageMax)
+  const localMinRef = useRef(ageMin)
+  const localMaxRef = useRef(ageMax)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      setLocalMin(ageMin); localMinRef.current = ageMin
+      setLocalMax(ageMax); localMaxRef.current = ageMax
+      setSaving(false)
+      dragY.value = 0
+      translateY.value = cardHeight.value
+      setModalVisible(true)
+      requestAnimationFrame(() => {
+        translateY.value = withTiming(0, { duration: 350, easing: REasing.out(REasing.cubic) })
+      })
+    } else {
+      translateY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) }, () => {
+        runOnJS(setModalVisible)(false)
+      })
+    }
+  }, [visible])
+
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .failOffsetY(-8)
+    .onUpdate(e => {
+      'worklet'
+      dragY.value = Math.max(0, e.translationY)
+    })
+    .onEnd(e => {
+      'worklet'
+      if (e.translationY > 80 || e.velocityY > 800) {
+        dragY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) })
+        runOnJS(onDismiss)()
+      } else {
+        dragY.value = withTiming(0, { duration: 300, easing: REasing.out(REasing.cubic) })
+      }
+    })
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await onSave(localMinRef.current, localMaxRef.current)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const displayValue = localMin === localMax ? `⁦${localMin}⁩` : `⁦${localMin} – ${localMax}⁩`
+
+  return (
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={onDismiss} statusBarTranslucent>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={agePopupStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={saving ? undefined : onDismiss} />
+          <GestureDetector gesture={pan}>
+            <Animated.View
+              style={[agePopupStyles.cardWrap, animStyle]}
+              onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
+            >
+              <View style={agePopupStyles.shadowGradient} pointerEvents="none">
+                {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
+                  <View key={i} style={[agePopupStyles.shadowLayer, { opacity: o }]} />
+                ))}
+              </View>
+              <View style={agePopupStyles.card}>
+                <View style={agePopupStyles.dragHandle} />
+                <Text style={agePopupStyles.title}>{t('settings.ageRange')}</Text>
+                <Text style={agePopupStyles.displayValue}>{displayValue}</Text>
+                <View style={agePopupStyles.sliderRow}>
+                  <Text style={agePopupStyles.endLabel}>{sliderMin}</Text>
+                  <HorizontalRangeSlider
+                    min={sliderMin} max={sliderMax}
+                    valueMin={localMin} valueMax={localMax}
+                    onChangeMin={v => { setLocalMin(v); localMinRef.current = v }}
+                    onChangeMax={v => { setLocalMax(v); localMaxRef.current = v }}
+                  />
+                  <Text style={agePopupStyles.endLabel}>{sliderMax}</Text>
+                </View>
+                <Button
+                  label={t('settings.save')}
+                  onPress={handleSave}
+                  variant="primary"
+                  size="lg"
+                  loading={saving}
+                  disabled={saving}
+                />
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </GestureHandlerRootView>
+    </Modal>
+  )
+}
+
+const agePopupStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  cardWrap: {},
+  shadowGradient: { height: 60, marginBottom: -1 },
+  shadowLayer: { flex: 1, backgroundColor: BLACK },
+  card: {
+    backgroundColor: WHITE,
+    padding: 24,
+    paddingTop: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  dragHandle: {
+    alignSelf: 'center',
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: GRAY_100,
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 17, fontWeight: '600', color: TEXT_PRIMARY,
+    textAlign: 'center', marginBottom: 8,
+  },
+  displayValue: {
+    fontSize: 36, fontWeight: '700', color: TEXT_PRIMARY,
+    textAlign: 'center', letterSpacing: -0.5,
+    marginBottom: 20,
+  },
+  sliderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginBottom: 24,
+  },
+  endLabel: { fontSize: 13, fontWeight: '500', color: GRAY_400, minWidth: 24, textAlign: 'center' },
+})
+
+// ── Radius Popup ───────────────────────────────────────────────────────────
+// Bottom-sheet modal with a horizontal step slider for the search radius.
+
+function RadiusPopup({
+  visible, stepCount, initialValue, formatStep, onSave, onDismiss,
+}: {
+  visible: boolean
+  stepCount: number
+  initialValue: number
+  formatStep: (i: number) => string
+  onSave: (stepIndex: number) => Promise<void>
+  onDismiss: () => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const [modalVisible, setModalVisible] = useState(false)
+  const cardHeight = useSharedValue(400)
+  const [localValue, setLocalValue] = useState(initialValue)
+  const localValueRef = useRef(initialValue)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      setLocalValue(initialValue); localValueRef.current = initialValue
+      setSaving(false)
+      dragY.value = 0
+      translateY.value = cardHeight.value
+      setModalVisible(true)
+      requestAnimationFrame(() => {
+        translateY.value = withTiming(0, { duration: 350, easing: REasing.out(REasing.cubic) })
+      })
+    } else {
+      translateY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) }, () => {
+        runOnJS(setModalVisible)(false)
+      })
+    }
+  }, [visible])
+
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .failOffsetY(-8)
+    .onUpdate(e => { 'worklet'; dragY.value = Math.max(0, e.translationY) })
+    .onEnd(e => {
+      'worklet'
+      if (e.translationY > 80 || e.velocityY > 800) {
+        dragY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) })
+        runOnJS(onDismiss)()
+      } else {
+        dragY.value = withTiming(0, { duration: 300, easing: REasing.out(REasing.cubic) })
+      }
+    })
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try { await onSave(localValueRef.current) } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={onDismiss} statusBarTranslucent>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={agePopupStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={saving ? undefined : onDismiss} />
+          <GestureDetector gesture={pan}>
+            <Animated.View
+              style={[agePopupStyles.cardWrap, animStyle]}
+              onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
+            >
+              <View style={agePopupStyles.shadowGradient} pointerEvents="none">
+                {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
+                  <View key={i} style={[agePopupStyles.shadowLayer, { opacity: o }]} />
+                ))}
+              </View>
+              <View style={agePopupStyles.card}>
+                <View style={agePopupStyles.dragHandle} />
+                <Text style={agePopupStyles.title}>{t('settings.range')}</Text>
+                <Text style={agePopupStyles.displayValue}>{formatStep(localValue)}</Text>
+                <View style={agePopupStyles.sliderRow}>
+                  <Text style={agePopupStyles.endLabel}>{formatStep(0)}</Text>
+                  <HorizontalStepSlider
+                    stepCount={stepCount}
+                    value={localValue}
+                    onChange={v => { setLocalValue(v); localValueRef.current = v }}
+                  />
+                  <Text style={agePopupStyles.endLabel}>{formatStep(stepCount - 1)}</Text>
+                </View>
+                <Button label={t('settings.save')} onPress={handleSave} variant="primary" size="lg" loading={saving} disabled={saving} />
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </GestureHandlerRootView>
+    </Modal>
+  )
+}
+
+// ── Gender Popup ───────────────────────────────────────────────────────────
+// Bottom-sheet modal with Men/Women/Both chips for the gender preference.
+
+function OptionPopup({
+  visible, title, initialValue, options, onSave, onDismiss,
+}: {
+  visible: boolean
+  title: string
+  initialValue: string
+  options: SelectOption[]
+  onSave: (value: string) => Promise<void>
+  onDismiss: () => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const [modalVisible, setModalVisible] = useState(false)
+  const cardHeight = useSharedValue(400)
+  const [localValue, setLocalValue] = useState(initialValue)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      setLocalValue(initialValue)
+      setSaving(false)
+      dragY.value = 0
+      translateY.value = cardHeight.value
+      setModalVisible(true)
+      requestAnimationFrame(() => {
+        translateY.value = withTiming(0, { duration: 350, easing: REasing.out(REasing.cubic) })
+      })
+    } else {
+      translateY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) }, () => {
+        runOnJS(setModalVisible)(false)
+      })
+    }
+  }, [visible])
+
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .failOffsetY(-8)
+    .onUpdate(e => { 'worklet'; dragY.value = Math.max(0, e.translationY) })
+    .onEnd(e => {
+      'worklet'
+      if (e.translationY > 80 || e.velocityY > 800) {
+        dragY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) })
+        runOnJS(onDismiss)()
+      } else {
+        dragY.value = withTiming(0, { duration: 300, easing: REasing.out(REasing.cubic) })
+      }
+    })
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try { await onSave(localValue) } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={onDismiss} statusBarTranslucent>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={agePopupStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={saving ? undefined : onDismiss} />
+          <GestureDetector gesture={pan}>
+            <Animated.View
+              style={[agePopupStyles.cardWrap, animStyle]}
+              onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
+            >
+              <View style={agePopupStyles.shadowGradient} pointerEvents="none">
+                {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
+                  <View key={i} style={[agePopupStyles.shadowLayer, { opacity: o }]} />
+                ))}
+              </View>
+              <View style={agePopupStyles.card}>
+                <View style={agePopupStyles.dragHandle} />
+                <Text style={agePopupStyles.title}>{title}</Text>
+                <View style={genderPopupStyles.chips}>
+                  {options.map(opt => (
+                    <AnimatedToggleButton
+                      key={opt.value}
+                      active={localValue === opt.value}
+                      label={opt.label}
+                      onPress={() => setLocalValue(opt.value)}
+                    />
+                  ))}
+                </View>
+                <Button label={t('settings.save')} onPress={handleSave} variant="primary" size="lg" loading={saving} disabled={saving} />
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </GestureHandlerRootView>
+    </Modal>
+  )
+}
+
+const genderPopupStyles = StyleSheet.create({
+  chips: { flexDirection: 'row', gap: 10, marginBottom: 24, marginTop: 8 },
+})
 
 // ── Radius Field Page ──────────────────────────────────────────────────────
 // Full-screen pane with a vertical single-thumb slider for editing the search radius.
@@ -1696,11 +2285,11 @@ export function RadiusFieldPage({ config, onBack }: { config: RadiusFieldConfig;
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <View style={styles.backBtn} />
       </View>
       <View style={spStyles.content}>
         <Text style={spStyles.displayValue}>{config.formatStep(value)}</Text>
@@ -1739,11 +2328,11 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <View style={styles.backBtn} />
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
@@ -1778,46 +2367,6 @@ export function AdminFieldPage({ config, onBack }: { config: AdminFieldConfig; o
   )
 }
 
-// ── Photo Field Page ──────────────────────────────────────────────────────
-// Full-screen photo editor opened from the profile photo field row.
-
-export function PhotoFieldPage({ config, onBack }: { config: PhotoFieldConfig; onBack: () => void }) {
-  const insets = useSafeAreaInsets()
-  const photoRef = useRef<PhotoEditorRef>(null)
-  const [uploading, setUploading] = useState(false)
-
-  const handleBack = async () => {
-    if (uploading) return
-    if (photoRef.current) {
-      setUploading(true)
-      await photoRef.current.flush().catch(console.error)
-    }
-    onBack()
-  }
-
-  return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <StatusBar style="dark" />
-      <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
-        <IconPressable style={styles.backBtn} onPress={handleBack} disabled={uploading}>
-          {uploading ? <ActivityIndicator size="small" color={TEXT_PRIMARY} /> : <BackIcon />}
-        </IconPressable>
-      </View>
-      <ScrollView
-        contentContainerStyle={{ paddingHorizontal: SINGLE, paddingTop: 12, paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        delaysContentTouches={false}
-      >
-        <Text style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', textAlign: 'center', marginBottom: 4 }}>{t('settings.photoHint')}</Text>
-        <PhotoEditor ref={photoRef} deferUpload />
-      </ScrollView>
-    </View>
-  )
-}
-
 // ── Account Field Page ───────────────────────────────────────────────────
 // Full-screen pane with account info + sign-out / delete, opened from the
 // profile tab via the sub-page mechanism.
@@ -1829,11 +2378,13 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
   const router = useRouter()
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
+  const [detailsVisible, setDetailsVisible] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   // Hook calls must be above the early return to keep count stable.
   const signOutTap = useTapResponder(() => { tap(); setSignOutDialog(true) })
   const deleteTap = useTapResponder(() => { tapWarning(); setDeleteDialog(true) })
+  const detailsTap = useTapResponder(() => { tap(); setDetailsVisible(true) })
 
   if (!profile || !user) return <View style={[styles.root, { paddingTop: insets.top }]} />
 
@@ -1865,7 +2416,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
     await finishAndGoToLogin()
   }
 
-  const rows: Array<{ label: string; value: string }> = [
+  const detailRows: Array<{ label: string; value: string }> = [
     { label: t('settings.name'),      value: profile.name ?? '—' },
     { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
     { label: t('settings.gender'),    value: gender },
@@ -1877,48 +2428,34 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <View style={styles.backBtn} />
       </View>
       <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false} delaysContentTouches={false} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
-          <View style={styles.accountLinksCard}>
-            {rows.map((r, i) => (
-              <React.Fragment key={r.label}>
-                {i > 0 && <View style={styles.accountActionDivider} />}
-                <View style={styles.selectRowInner}>
-                  <Text style={[styles.selectRowLabel, { flex: 1 }]} numberOfLines={1}>{r.label}</Text>
-                  <Text style={[styles.selectRowValue, { color: GRAY_400 }]} numberOfLines={1}>{r.value}</Text>
-                </View>
-              </React.Fragment>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <View style={styles.accountActionsCard}>
-            <View
-              style={styles.accountActionRow}
-              {...signOutTap}
-            >
-              <SignOutIcon color="rgba(0,0,0,0.5)" />
-              <Text style={styles.accountActionText}>{tg('settings.signOut', profile.is_male)}</Text>
+            <View style={styles.accountActionRow} {...detailsTap}>
+              <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.accountDetails')}</Text>
+              <InfoIcon color="rgba(0,0,0,0.5)" />
             </View>
             <View style={styles.accountActionDivider} />
-            <View
-              style={styles.accountActionRow}
-              {...deleteTap}
-            >
+            <View style={styles.accountActionRow} {...signOutTap}>
+              <Text style={[styles.accountActionText, { flex: 1 }]}>{tg('settings.signOut', profile.is_male)}</Text>
+              <SignOutIcon color="rgba(0,0,0,0.5)" />
+            </View>
+            <View style={styles.accountActionDivider} />
+            <View style={styles.accountActionRow} {...deleteTap}>
+              <Text style={[styles.accountActionText, styles.accountActionTextDestructive, { flex: 1 }]}>{t('settings.deleteAccount')}</Text>
               <TrashIcon color="rgba(180,60,60,0.5)" />
-              <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.deleteAccount')}</Text>
             </View>
           </View>
         </View>
       </ScrollView>
     </View>
+    <AccountDetailsPopup visible={detailsVisible} rows={detailRows} onDismiss={() => setDetailsVisible(false)} />
     <ConfirmDialog
       visible={signOutDialog}
       title={t('settings.signOutConfirmTitle')}
@@ -1927,6 +2464,7 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
       soft
       onCancel={() => setSignOutDialog(false)}
       onConfirm={onSignOutConfirmed}
+      draggable
     />
     <ConfirmDialog
       visible={deleteDialog}
@@ -1937,19 +2475,132 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
       busy={deleting}
       onCancel={() => setDeleteDialog(false)}
       onConfirm={onDeleteConfirmed}
+      draggable
     />
     </>
   )
 }
 
 // ── Preview Field Page ───────────────────────────────────────────────────
+// ── Add Options Popup ─────────────────────────────────────────────────────
+// Bottom-sheet modal listing profile items the user can still add.
+
+type AddOption = 'photo' | 'kids' | 'bio'
+
+function AddOptionsPopup({
+  visible, options, onDismiss, onSelect,
+}: {
+  visible: boolean
+  options: AddOption[]
+  onDismiss: () => void
+  onSelect: (option: AddOption) => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const insets = useSafeAreaInsets()
+
+  useEffect(() => {
+    if (visible) {
+      dragY.value = 0
+      translateY.value = withTiming(0, { duration: 280, easing: REasing.out(REasing.cubic) })
+    } else {
+      translateY.value = withTiming(400, { duration: 220, easing: REasing.in(REasing.cubic) })
+    }
+  }, [visible])
+
+  const swipeDismiss = Gesture.Pan()
+    .onUpdate(e => { if (e.translationY > 0) dragY.value = e.translationY })
+    .onEnd(e => {
+      if (e.translationY > 80 || e.velocityY > 500) {
+        dragY.value = withTiming(400, { duration: 200 })
+        translateY.value = withTiming(400, { duration: 200 }, () => runOnJS(onDismiss)())
+      } else {
+        dragY.value = withTiming(0, { duration: 200 })
+      }
+    })
+
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  const optionLabel = (opt: AddOption) => {
+    if (opt === 'photo') return t('settings.addPhoto')
+    if (opt === 'kids') return t('settings.addKids')
+    return t('settings.aboutMe')
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }} onPress={onDismiss}>
+        <GestureDetector gesture={swipeDismiss}>
+          <Animated.View
+            style={[addPopupStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) }, slideStyle]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={addPopupStyles.pill} />
+            {options.map((opt, i) => (
+              <Pressable
+                key={opt}
+                style={[addPopupStyles.option, i < options.length - 1 && addPopupStyles.optionBorder]}
+                onPress={() => { tap(); onSelect(opt) }}
+              >
+                <Text style={addPopupStyles.optionText}>{optionLabel(opt)}</Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+        </GestureDetector>
+      </Pressable>
+    </Modal>
+  )
+}
+
+const addPopupStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+  },
+  pill: {
+    width: 36, height: 4, borderRadius: 2, backgroundColor: GRAY_100,
+    alignSelf: 'center', marginBottom: 8,
+  },
+  option: {
+    paddingHorizontal: DOUBLE, paddingVertical: 18,
+  },
+  optionBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: GRAY_100,
+  },
+  optionText: {
+    fontSize: 17, color: TEXT_PRIMARY, textAlign: isRTL ? 'right' : 'left',
+  },
+})
+
 // Full-screen pane showing the user's profile card preview, opened from the
 // profile tab via the sub-page mechanism.
 
-export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfig; onBack: () => void }) {
+export function PreviewFieldPage({
+  config, onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, clipBottom,
+}: {
+  config: PreviewFieldConfig
+  onBack: () => void
+  dismissGestureRef?: React.MutableRefObject<GestureType | undefined>
+  onScrollAtTop?: (atTop: boolean) => void
+  headerBottomShared?: SharedValue<number>
+  clipBottom?: boolean
+}) {
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const { user } = useAuthStore()
+  const [addPopupVisible, setAddPopupVisible] = useState(false)
+
+  const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
+    panRef: dismissGestureRef,
+    extraRefs: [],
+    setScrollAtTop: onScrollAtTop ?? (() => {}),
+  } : null, [dismissGestureRef, onScrollAtTop])
+
   const previewData: Profile | null = useMemo(() => {
     if (!profile) return null
     const userId = user?.id ?? profile.user_id
@@ -1969,11 +2620,19 @@ export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfi
       if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
     }
     const title = age != null ? `${name}, ${age}` : name
+    const items = (profile.items ?? []).map(item => {
+      if (item.kind !== 'photo' || !item.normal) return item
+      return {
+        ...item,
+        normal: localPhotoUriCache.get(item.normal) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${userId}/normal/${item.normal}`,
+      }
+    })
     return {
       user_id: profile.user_id,
       title,
       name,
       images,
+      items,
       bio: profile.bio ?? '',
       is_for_kids: profile.is_for_kids ?? null,
       is_male: profile.is_male ?? undefined,
@@ -1982,27 +2641,52 @@ export function PreviewFieldPage({ config, onBack }: { config: PreviewFieldConfi
     }
   }, [profile, user?.id])
 
+  const addOptions = useMemo<AddOption[]>(() => {
+    if (!profile) return []
+    const opts: AddOption[] = []
+    if ((profile.images?.length ?? 0) < 6) opts.push('photo')
+    if (profile.is_for_kids == null) opts.push('kids')
+    if (!profile.bio) opts.push('bio')
+    return opts
+  }, [profile])
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
-        <IconPressable style={styles.backBtn} onPress={onBack}>
-          <BackIcon />
-        </IconPressable>
+      <View onLayout={e => {
+        if (headerBottomShared) headerBottomShared.value = e.nativeEvent.layout.y + e.nativeEvent.layout.height
+      }}>
+        <View style={styles.header}>
+          <View style={styles.backBtn} />
+          <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+          <IconPressable style={styles.backBtn} onPress={onBack}>
+            <CloseIcon />
+          </IconPressable>
+        </View>
+        <Text style={styles.previewHint}>{t('settings.myProfileHint')}</Text>
       </View>
       {previewData ? (
-        <View style={styles.previewWrap}>
-          <View style={styles.previewOuter}>
-            <View style={styles.previewInner}>
-              <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+        <View style={{ flex: 1 }}>
+          <View style={[styles.previewWrap, { marginBottom: 0 }]}>
+            <View style={styles.previewOuter}>
+              <View style={styles.previewInner}>
+                <PullContext.Provider value={pullCtx}>
+                  <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+                </PullContext.Provider>
+              </View>
             </View>
           </View>
+          <View style={{ paddingHorizontal: SINGLE, paddingTop: SINGLE, paddingBottom: Math.max(insets.bottom, SINGLE) }}>
+            <Button label={t('settings.addProfileItem')} onPress={() => setAddPopupVisible(true)} />
+          </View>
         </View>
-      ) : (
-        <View style={styles.tabContent} />
-      )}
+      ) : null}
+      <AddOptionsPopup
+        visible={addPopupVisible}
+        options={addOptions}
+        onDismiss={() => setAddPopupVisible(false)}
+        onSelect={() => setAddPopupVisible(false)}
+      />
     </View>
   )
 }
@@ -2016,11 +2700,11 @@ export function AboutFieldPage({ config, onBack }: { config: AboutFieldConfig; o
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View style={styles.backBtn} />
-        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
         <IconPressable style={styles.backBtn} onPress={onBack}>
           <BackIcon />
         </IconPressable>
+        <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+        <View style={styles.backBtn} />
       </View>
       <WhatsSpecialPage />
     </View>
@@ -2034,7 +2718,6 @@ export function AboutFieldPage({ config, onBack }: { config: AboutFieldConfig; o
 function InnerSubPageRenderer({ config, onBack }: { config: SubPageConfig; onBack: (after?: () => Promise<void> | void) => void }) {
   if (config.kind === 'ageRange') return <AgeRangeFieldPage config={config} onBack={onBack} />
   if (config.kind === 'radius')   return <RadiusFieldPage   config={config} onBack={onBack} />
-  if (config.kind === 'photos')   return <PhotoFieldPage    config={config} onBack={onBack} />
   if (config.kind === 'account')  return <AccountFieldPage  config={config} onBack={onBack} />
   if (config.kind === 'preview')  return <PreviewFieldPage  config={config} onBack={onBack} />
   if (config.kind === 'about')    return <AboutFieldPage    config={config} onBack={() => onBack()} />
@@ -2045,9 +2728,8 @@ function InnerSubPageRenderer({ config, onBack }: { config: SubPageConfig; onBac
 
 // ── Section Page Shell ─────────────────────────────────────────────────────
 // Shared navigation logic for ProfileSectionPage and AppSectionPage.
-// Replicates the shell's push-navigation: section content slides out while the
-// sub-page slides in, both driven by the same `slideProgress` value —
-// identical to pagerPushStyle + subPageAnimStyle in home.tsx.
+// Inner sub-page slides in as a pure overlay on top of the stationary section
+// content — matches how the shell's settings overlay sits over a stationary home.
 
 function useSectionNav() {
   const width = useRef(Dimensions.get('window').width).current
@@ -2061,12 +2743,8 @@ function useSectionNav() {
   const localSlide = useSharedValue(0)
   const slideProgress = shell?.slideProgress ?? localSlide
 
-  // Section content slides out as inner slides in (mirrors pagerPushStyle).
-  const sectionPushStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -dir * slideProgress.value * width }],
-  }))
-
-  // Inner sub-page slides in from the start edge (mirrors subPageAnimStyle).
+  // Inner sub-page slides in from the start edge as a pure overlay.
+  // Section content stays stationary beneath it.
   const subPageSlideStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: dir * width * (1 - slideProgress.value) }],
   }))
@@ -2120,60 +2798,32 @@ function useSectionNav() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { subConfig, openInner, closeInner, sectionPushStyle, subPageSlideStyle }
+  return { subConfig, openInner, closeInner, subPageSlideStyle }
 }
 
 function runAfter(after: () => Promise<void> | void) {
   Promise.resolve(after()).catch(console.error)
 }
 
-// ── Profile Section Page ───────────────────────────────────────────────────
-
-export function ProfileSectionPage({ config, onBack }: { config: ProfileSectionFieldConfig; onBack: () => void }) {
-  const insets = useSafeAreaInsets()
-  const { subConfig, openInner, closeInner, sectionPushStyle, subPageSlideStyle } = useSectionNav()
-
-  return (
-    <View style={[styles.rootOuter, styles.root, { paddingTop: insets.top, overflow: 'hidden' }]}>
-      <StatusBar style="dark" />
-      <Animated.View style={[{ flex: 1 }, sectionPushStyle]}>
-        <View style={styles.header}>
-          <View style={styles.backBtn} />
-          <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
-          <IconPressable style={styles.backBtn} onPress={onBack}>
-            <BackIcon />
-          </IconPressable>
-        </View>
-        <ProfileTab onOpenSubPage={openInner} />
-      </Animated.View>
-      {subConfig && (
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: WHITE }, subPageSlideStyle]}>
-          <InnerSubPageRenderer config={subConfig} onBack={closeInner} />
-        </Animated.View>
-      )}
-    </View>
-  )
-}
-
 // ── App Section Page ───────────────────────────────────────────────────────
 
 export function AppSectionPage({ config, onBack }: { config: AppSectionFieldConfig; onBack: () => void }) {
   const insets = useSafeAreaInsets()
-  const { subConfig, openInner, closeInner, sectionPushStyle, subPageSlideStyle } = useSectionNav()
+  const { subConfig, openInner, closeInner, subPageSlideStyle } = useSectionNav()
 
   return (
     <View style={[styles.rootOuter, styles.root, { paddingTop: insets.top, overflow: 'hidden' }]}>
       <StatusBar style="dark" />
-      <Animated.View style={[{ flex: 1 }, sectionPushStyle]}>
+      <View style={{ flex: 1 }}>
         <View style={styles.header}>
-          <View style={styles.backBtn} />
-          <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
           <IconPressable style={styles.backBtn} onPress={onBack}>
             <BackIcon />
           </IconPressable>
+          <Text style={styles.subPageHeaderTitle}>{config.title}</Text>
+          <View style={styles.backBtn} />
         </View>
         <AppTab onBack={onBack} onOpenSubPage={openInner} />
-      </Animated.View>
+      </View>
       {subConfig && (
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: WHITE }, subPageSlideStyle]}>
           <InnerSubPageRenderer config={subConfig} onBack={closeInner} />
@@ -2211,6 +2861,184 @@ const spStyles = StyleSheet.create({
 
 type SettingsPageProps = { topInset?: number; onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }
 
+// ── App Inline Content ─────────────────────────────────────────────────────
+
+function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+  const router = useRouter()
+  const { profile, update } = useUserStore()
+  const [resetting, setResetting] = useState(false)
+  const [unitsPopupVisible, setUnitsPopupVisible] = useState(false)
+
+  const onReset = useCallback(async () => {
+    if (resetting) return
+    setResetting(true)
+    try {
+      await invoke('app/reset', {})
+      const keys = await AsyncStorage.getAllKeys()
+      const chatKeys = keys.filter(k =>
+        k.startsWith('chatCache_') || k.startsWith('chatLastOpened_') || k.startsWith('chatLastRead_'),
+      )
+      if (chatKeys.length > 0) await AsyncStorage.multiRemove(chatKeys)
+      if (onBack) onBack()
+      else router.back()
+    } catch (e) { console.error(e) }
+    finally { setResetting(false) }
+  }, [resetting, onBack, router])
+
+  const resetTap = useTapResponder(onReset)
+
+  if (!profile) return null
+
+  const units = profile.units ?? 'metric'
+  const unitsOptions: SelectOption[] = [
+    { value: 'metric',   label: t('settings.unitsMetricDesc')   },
+    { value: 'imperial', label: t('settings.unitsImperialDesc') },
+  ]
+  const unitsDisplayValue = unitsOptions.find(o => o.value === units)?.label ?? t('settings.unitsMetricDesc')
+
+  return (
+    <>
+      <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        <SelectFieldRow
+          grouped
+          label={t('settings.unitsLabel')}
+          displayValue={unitsDisplayValue}
+          onPress={() => setUnitsPopupVisible(true)}
+          icon={<RulerIcon />}
+        />
+        {profile.data?.role === 'ADMIN' && (
+          <>
+            <View style={styles.accountActionDivider} />
+            <View
+              style={[styles.accountActionRow, resetting && { opacity: 0.5 }]}
+              {...(resetting ? {} : resetTap)}
+            >
+              <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.adminEntry')}</Text>
+              <View style={{ flex: 1 }} />
+              {resetting
+                ? <ActivityIndicator size={18} color="rgba(180,60,60,0.6)" />
+                : <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(180,60,60,0.6)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <Path d="M3 3v5h5" />
+                  </Svg>
+              }
+            </View>
+          </>
+        )}
+      </View>
+      <OptionPopup
+        visible={unitsPopupVisible}
+        title={t('settings.unitsLabel')}
+        initialValue={units}
+        options={unitsOptions}
+        onSave={async v => {
+          update({ units: v })
+          await invoke('app/units', { units: v })
+          setUnitsPopupVisible(false)
+        }}
+        onDismiss={() => setUnitsPopupVisible(false)}
+      />
+    </>
+  )
+}
+
+// ── Account Inline Content ─────────────────────────────────────────────────
+
+function AccountInlineContent() {
+  const { profile } = useUserStore()
+  const { user, signOut } = useAuthStore()
+  const router = useRouter()
+  const [signOutDialog, setSignOutDialog] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [detailsVisible, setDetailsVisible] = useState(false)
+
+  const signOutTap = useTapResponder(() => { tap(); setSignOutDialog(true) })
+  const deleteTap = useTapResponder(() => { tapWarning(); setDeleteDialog(true) })
+  const detailsTap = useTapResponder(() => { tap(); setDetailsVisible(true) })
+
+  if (!profile || !user) return null
+
+  const age = profile.birth_date ? calcAge(profile.birth_date) : null
+  const gender =
+    profile.is_male === true  ? t('settings.male')
+    : profile.is_male === false ? t('settings.female')
+    : '—'
+
+  const finishAndGoToLogin = async () => {
+    await signOut()
+    router.replace('/login')
+  }
+
+  const onSignOutConfirmed = async () => {
+    tap()
+    setSignOutDialog(false)
+    try { await invoke('app/logout') } catch (e) { console.error(e) }
+    await finishAndGoToLogin()
+  }
+
+  const onDeleteConfirmed = async () => {
+    if (deleting) return
+    tapWarning()
+    setDeleting(true)
+    try { await invoke('app/delete') } catch (e) { console.error(e); setDeleting(false); return }
+    setDeleteDialog(false)
+    setDeleting(false)
+    await finishAndGoToLogin()
+  }
+
+  const detailRows: Array<{ label: string; value: string }> = [
+    { label: t('settings.name'),      value: profile.name ?? '—' },
+    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
+    { label: t('settings.gender'),    value: gender },
+    { label: t('settings.email'),     value: user.email ?? '—' },
+  ]
+
+  return (
+    <>
+      <View style={styles.accountActionsCard}>
+        <View style={styles.accountActionRow} {...detailsTap}>
+          <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.accountDetails')}</Text>
+          <InfoIcon color="rgba(0,0,0,0.5)" />
+        </View>
+        <View style={styles.accountActionDivider} />
+        <View style={styles.accountActionRow} {...signOutTap}>
+          <Text style={[styles.accountActionText, { flex: 1 }]}>{tg('settings.signOut', profile.is_male)}</Text>
+          <SignOutIcon color="rgba(0,0,0,0.5)" />
+        </View>
+        <View style={styles.accountActionDivider} />
+        <View style={styles.accountActionRow} {...deleteTap}>
+          <Text style={[styles.accountActionText, styles.accountActionTextDestructive, { flex: 1 }]}>{t('settings.deleteAccount')}</Text>
+          <TrashIcon color="rgba(180,60,60,0.5)" />
+        </View>
+      </View>
+
+      <AccountDetailsPopup visible={detailsVisible} rows={detailRows} onDismiss={() => setDetailsVisible(false)} />
+      <ConfirmDialog
+        visible={signOutDialog}
+        title={t('settings.signOutConfirmTitle')}
+        description={tg('settings.signOutConfirmDesc', profile.is_male)}
+        confirmLabel={tg('settings.signOutYes', profile.is_male)}
+        soft
+        onCancel={() => setSignOutDialog(false)}
+        onConfirm={onSignOutConfirmed}
+        draggable
+      />
+      <ConfirmDialog
+        visible={deleteDialog}
+        title={t('settings.deleteConfirmTitle')}
+        description={tg('settings.deleteConfirmDesc', profile.is_male)}
+        confirmLabel={t('settings.deleteYes')}
+        destructive
+        busy={deleting}
+        onCancel={() => setDeleteDialog(false)}
+        onConfirm={onDeleteConfirmed}
+        draggable
+      />
+    </>
+  )
+}
+
 // Wraps a section label text in a row container so flexDirection:'row'
 // auto-flipping places the label on the logical start side (right in RTL,
 // left in LTR) reliably — textAlign/writingDirection alone proved
@@ -2240,24 +3068,24 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
         <StatusBar style="dark" />
 
         <View style={styles.header}>
-          <View style={styles.backBtn} />
-          <Text style={styles.subPageHeaderTitle}>{t('settings.preferences')}</Text>
           <IconPressable
             style={styles.backBtn}
             onPress={() => { tap(); onBack ? onBack() : router.back() }}
           >
             <BackIcon />
           </IconPressable>
+          <Text style={styles.subPageHeaderTitle}>{t('settings.preferences')}</Text>
+          <View style={styles.backBtn} />
         </View>
 
         <ScrollView
           style={styles.tabScroll}
-          contentContainerStyle={styles.tabContent}
+          contentContainerStyle={[styles.tabContent, { paddingTop: 0 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           delaysContentTouches={false}
         >
-          <View style={styles.accountLinksCard}>
+          <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
             <SelectFieldRow
               grouped
               size="large"
@@ -2273,39 +3101,14 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
 
           <View>
             <SectionLabel>{t('settings.settings').toUpperCase()}</SectionLabel>
-            <View style={styles.accountLinksCard}>
-              <SelectFieldRow
-                grouped
-                label={t('settings.account')}
-                onPress={() => onOpenSubPage?.({ kind: 'account', title: t('settings.account') })}
-                icon={
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={GRAY_400} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M12 3 4 6v6c0 4.6 3.3 8.7 8 9.4 4.7-.7 8-4.8 8-9.4V6l-8-3z" />
-                    <Polyline points="9 12 11.5 14.5 15.5 10.5" />
-                  </Svg>
-                }
-              />
-              <View style={styles.accountActionDivider} />
-              <SelectFieldRow
-                grouped
-                label={t('settings.appSettings')}
-                onPress={() => onOpenSubPage?.({ kind: 'appSection', title: t('settings.appSettings') })}
-                icon={<TabIcon tab="app" color={GRAY_400} />}
-              />
-            </View>
+            <AppInlineContent onBack={onBack} onOpenSubPage={onOpenSubPage} />
           </View>
 
-          <View style={[styles.accountLinksCard, styles.accentCard, { marginTop: DOUBLE }]}>
-            <SelectFieldRow
-              grouped
-              size="large"
-              tone="accent"
-              label={t('settings.about')}
-              subtitle={t('settings.aboutSubtitle')}
-              onPress={() => onOpenSubPage?.({ kind: 'about', title: t('settings.about') })}
-              icon={<OnceLogo size={20} color={PRIMARY} />}
-            />
+          <View>
+            <SectionLabel>{t('settings.account').toUpperCase()}</SectionLabel>
+            <AccountInlineContent />
           </View>
+
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -2352,6 +3155,14 @@ const styles = StyleSheet.create({
 
   genderRow: { flexDirection: 'row', gap: 10, marginTop: SINGLE },
 
+  previewHint: {
+    textAlign: 'center',
+    color: GRAY_400,
+    fontSize: 13,
+    paddingHorizontal: SINGLE,
+    marginTop: -4,
+    marginBottom: 10,
+  },
   previewWrap: {
     flex: 1,
     marginHorizontal: SINGLE,
@@ -2371,7 +3182,6 @@ const styles = StyleSheet.create({
   textInputWrap: { marginTop: SINGLE, borderRadius: 12, paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE, backgroundColor: 'rgba(0,0,0,0.06)' },
   textInputWrapInner: { paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SINGLE },
-  textInputHeaderSpacer: { width: 16, height: 16 },
   aboutMeQuote: { width: 18, fontSize: 28, lineHeight: 18, color: FIELD_ICON_STROKE, fontWeight: '700', textAlign: 'center' },
   textInput: { fontSize: 16, color: TEXT_PRIMARY, padding: 0, textAlign: 'center', minHeight: 56 },
   charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: 'rgba(0,0,0,0.35)' },

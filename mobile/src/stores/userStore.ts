@@ -6,12 +6,18 @@ export interface Image {
   hash: string
 }
 
+export type ProfileItem =
+  | { kind: 'photo'; normal?: string; hash: string }
+  | { kind: 'bio'; value: string }
+  | { kind: 'kids'; value: boolean }
+
 export interface Profile {
   created_at?: string | null
   user_id: string
   title: string
   name: string
   images: Image[]
+  items?: ProfileItem[]
   bio?: string | null
   is_male?: boolean | null
   is_for_kids?: boolean | null
@@ -71,6 +77,12 @@ export interface PagesCompat {
   page2: Profile[] | Page2Invite
   match?: Profile | null
   watchers?: Profile[]
+  /** Raw v3 page2.state, preserved so UI can branch on `locked` separately
+   * from the synthesized legacy shape (which folds locked-no-profile into
+   * the empty watchers array). */
+  page2State?: ServerPage2State
+  /** Raw v3 page2.message, when present. */
+  page2Message?: string
 }
 
 export interface UserProfile {
@@ -83,9 +95,13 @@ export interface UserProfile {
   age_from: number
   age_to: number
   range: number | null
+  /** Ordered profile items — single source of truth for photos, bio, and kids. */
+  items: ProfileItem[]
+  /** Derived from items for backward compat. Do not set directly. */
+  images: Image[]
+  /** Derived from items for backward compat. Do not set directly. */
   bio: string | null
   is_for_kids: boolean | null
-  images: Image[]
   units: string | null
   appearance: string | null
   data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
@@ -104,7 +120,7 @@ interface UserStore {
 }
 
 const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
-  'images', 'bio', 'is_for_kids',
+  'items',
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
   'units',
@@ -174,19 +190,26 @@ function deriveCompat(relations: Pages | null | undefined) {
       ...(page2.expires_at ? { expires_at: page2.expires_at } : {}),
       ...(page2.extended !== undefined ? { extended: page2.extended } : {}),
     } as Page2Invite
-  } else if (page2?.state === 'locked' && page2.profile) {
+  } else if (page2?.state === 'locked' && page2.profile && page2.message) {
+    // Dead-invite card surfaces only while the message is present. Once the
+    // user acknowledges via clear2 the message is gone and locked+profile is
+    // treated as plain "needs free2" (legacyPage2 = [] empty watchers).
     const synthState: 'missed' | 'fail' =
-      page2.message && FAIL_MESSAGES.has(page2.message) ? 'fail' : 'missed'
+      FAIL_MESSAGES.has(page2.message) ? 'fail' : 'missed'
     legacyPage2 = {
       ...(page2.profile as Profile),
       state: synthState,
-      ...(page2.message ? { message: page2.message } : {}),
+      message: page2.message,
     } as Page2Invite
   } else {
     legacyPage2 = watchers
   }
 
-  return { state, watchers, match, legacyPage2, legacyEvent }
+  return {
+    state, watchers, match, legacyPage2, legacyEvent,
+    page2State: (page2?.state ?? 'free') as ServerPage2State,
+    page2Message: page2?.message,
+  }
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -214,7 +237,17 @@ export const useUserStore = create<UserStore>((set, get) => ({
     for (const k of Object.keys(patch) as (keyof UserProfile)[]) {
       if (CLIENT_AUTHORED.includes(k)) pending.set(k, patch[k])
     }
-    set({ profile: { ...prev, ...patch } })
+    const derived: Partial<UserProfile> = {}
+    if ('items' in patch && Array.isArray(patch.items)) {
+      derived.images = patch.items
+        .filter((it): it is Extract<ProfileItem, { kind: 'photo' }> => it.kind === 'photo')
+        .map(({ kind: _k, ...rest }) => rest as Image)
+      const bioItem = patch.items.find((it): it is Extract<ProfileItem, { kind: 'bio' }> => it.kind === 'bio')
+      derived.bio = bioItem ? bioItem.value : null
+      const kidsItem = patch.items.find((it): it is Extract<ProfileItem, { kind: 'kids' }> => it.kind === 'kids')
+      if (kidsItem !== undefined) derived.is_for_kids = kidsItem.value
+    }
+    set({ profile: { ...prev, ...patch, ...derived } })
   },
 
   applyServerUser: (data, source = 'invoke') => {
@@ -224,13 +257,33 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const ts = lastSeen ? Date.parse(lastSeen) : 0
     if (ts && ts < lastAppliedLastSeen) return
     if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
-    // Promote bio/images/units from data JSONB for CLIENT_AUTHORED protection.
+    // Promote items/units from data JSONB for CLIENT_AUTHORED protection.
     // name lives top-level on the server now; no promotion needed.
     if (d.data && typeof d.data === 'object') {
       const dd = d.data as Record<string, unknown>
-      if ('bio' in dd) (d as Record<string, unknown>).bio = dd.bio
-      if ('images' in dd) (d as Record<string, unknown>).images = dd.images
       if ('units' in dd) (d as Record<string, unknown>).units = dd.units
+      if ('items' in dd && Array.isArray(dd.items)) {
+        const items = dd.items as ProfileItem[]
+        ;(d as Record<string, unknown>).items = items
+        ;(d as Record<string, unknown>).images = items
+          .filter((it): it is Extract<ProfileItem, { kind: 'photo' }> => it.kind === 'photo')
+          .map(({ kind: _k, ...rest }) => rest as Image)
+        const bioItem = items.find((it): it is Extract<ProfileItem, { kind: 'bio' }> => it.kind === 'bio')
+        ;(d as Record<string, unknown>).bio = bioItem ? bioItem.value : null
+        const kidsItem = items.find((it): it is Extract<ProfileItem, { kind: 'kids' }> => it.kind === 'kids')
+        if (kidsItem !== undefined) (d as Record<string, unknown>).is_for_kids = kidsItem.value
+      } else if ('images' in dd || 'bio' in dd) {
+        // Legacy fallback: row not yet migrated to items format
+        const legacyImages = Array.isArray(dd.images) ? dd.images as Image[] : []
+        const legacyBio = typeof dd.bio === 'string' ? dd.bio : null
+        const items: ProfileItem[] = [
+          ...legacyImages.map(img => ({ kind: 'photo' as const, ...img })),
+          ...(legacyBio ? [{ kind: 'bio' as const, value: legacyBio }] : []),
+        ]
+        ;(d as Record<string, unknown>).items = items
+        ;(d as Record<string, unknown>).images = legacyImages
+        ;(d as Record<string, unknown>).bio = legacyBio
+      }
     }
     const prev = get().profile
     if (source === 'invoke' && prev) {
@@ -259,6 +312,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
       ;(relationsWithCompat as Record<string, unknown>).watchers = compat.watchers
       ;(relationsWithCompat as Record<string, unknown>).match = compat.match
       ;(relationsWithCompat as Record<string, unknown>).page2 = compat.legacyPage2
+      ;(relationsWithCompat as Record<string, unknown>).page2State = compat.page2State
+      if (compat.page2Message !== undefined) {
+        ;(relationsWithCompat as Record<string, unknown>).page2Message = compat.page2Message
+      } else {
+        delete (relationsWithCompat as Record<string, unknown>).page2Message
+      }
       // Mirror the v3 message into a legacy `event` field on page1 so the
       // home.tsx i18n lookup `home.ended.<state>.<page1.event>` keeps working.
       const p1 = relationsWithCompat.page1 as Record<string, unknown> | undefined

@@ -3,7 +3,7 @@ import Tools from "./tools.ts";
 import Log from "./log.ts";
 import { Data, Pages, PushToken } from "./global.ts";
 
-const defaultRelations: Pages = { page1: { state: "locked" }, page2: { state: "locked" } };
+const defaultRelations: Pages = { page1: { state: "locked" }, page2: { state: "free" } };
 
 export default class User {
   user_id: string;
@@ -18,7 +18,7 @@ export default class User {
   is_for_female?: boolean;
   is_for_kids: boolean | null = null;
   name: string | null = null;
-  data: Data = { bio: "", images: [], units: "km", os: "unknown", lang: "unknown", appearance: "light", push_token: null };
+  data: Data = { items: [], units: "km", os: "unknown", lang: "unknown", appearance: "light", push_token: null };
   relations: Pages = defaultRelations;
   db: { new: Record<string, unknown>; old: Record<string, unknown> } = { new: {}, old: {} };
 

@@ -6,10 +6,10 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ASSETS = path.join(__dirname, '..', 'assets')
 
-// Source of truth: the Once icon SVG (1024×1024, white bg, two circles).
+// Source of truth: the Once icon SVG (1024×1024, orange bg, white torch + cream flame).
 const LOGO_SVG_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.svg')
 
-const APP_BG = '#f4f4f4' // matches GestureHandlerRootView backgroundColor in _layout.tsx
+const APP_BG = '#FF7A5C' // brand orange (matches the icon SVG's own background)
 
 // Render SVG into a `size`×`size` canvas with the logo scaled to `logoScale` (0–1).
 // The logo is centered; remaining area is filled with `bg`.
@@ -48,6 +48,6 @@ await render(512, 'splash-icon.png', { bg: APP_BG })
 await render(96, 'favicon.png', { bg: APP_BG })
 
 // Google OAuth branding / generic 512px square.
-await render(512, 'livo-512.png', { bg: APP_BG })
+await render(512, 'once-512.png', { bg: APP_BG })
 
 console.log('Done.')

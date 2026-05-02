@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as SplashScreen from 'expo-splash-screen'
 import { View, StyleSheet, I18nManager, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, withDelay, cancelAnimation, interpolateColor, useFrameCallback, Easing, runOnJS } from 'react-native-reanimated'
@@ -11,21 +12,20 @@ import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { useUserStore, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, lang } from '../src/i18n'
-import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, type NotifPermission } from '../src/lib/notifications'
-import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openAppSettings, type LocPermission } from '../src/lib/location'
+import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, type NotifPermission } from '../src/lib/notifications'
+import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import { Button } from '../src/components/Button'
 import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_50, GRAY_100, GRAY_400 } from '../src/colors'
 import { SINGLE, DOUBLE } from '../src/fonts'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { BootScreen } from '../src/components/BootScreen'
 import { MatchCard } from '../src/components/MatchCard'
 import { DiscoveryReveal } from '../src/components/DiscoveryReveal'
 import { CountBadge } from '../src/components/CountBadge'
 import { HomeHeader } from '../src/components/HomeHeader'
 import { HomeCard, PullScrollView } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
-import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, PhotoFieldPage, AccountFieldPage, PreviewFieldPage, AboutFieldPage, ProfileSectionPage, AppSectionPage, ShellInnerNavContext } from './settings'
+import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRangeFieldPage, RadiusFieldPage, AdminFieldPage, AccountFieldPage, AboutFieldPage, PreviewFieldPage, AppSectionPage, ShellInnerNavContext } from './settings'
 import ChatPage from './chat'
 import { OnceLogo } from '../src/components/OnceLogo'
 import { Image } from 'expo-image'
@@ -152,10 +152,14 @@ function PersonGlyph({ variant, size = 140 }: { variant: 'M' | 'F'; size?: numbe
   )
 }
 
-function ChatBubbleIcon({ color }: { color: string }) {
+function SparklesIcon({ color }: { color: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      <Path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+      <Path d="M20 3v4" />
+      <Path d="M22 5h-4" />
+      <Path d="M4 17v2" />
+      <Path d="M5 18H3" />
     </Svg>
   )
 }
@@ -164,6 +168,14 @@ function HeartIcon({ color, size = 28, filled }: { color: string; size?: number;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </Svg>
+  )
+}
+
+function CheckIcon({ color, size = 18 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 6L9 17l-5-5" />
     </Svg>
   )
 }
@@ -411,7 +423,7 @@ const TIMER_RING_SIZE = 112
 const TIMER_RING_RADIUS = (TIMER_RING_SIZE - 8) / 2
 const TIMER_RING_CIRCUMFERENCE = 2 * Math.PI * TIMER_RING_RADIUS
 
-function CircularTimer({ expiresAt, totalSecs, extended, targetIsMale }: { expiresAt: string; totalSecs: number; extended?: boolean; targetIsMale?: boolean | null }) {
+function CircularTimer({ expiresAt, totalSecs, extended, targetIsMale, userIsMale, mode = 'inviter' }: { expiresAt: string; totalSecs: number; extended?: boolean; targetIsMale?: boolean | null; userIsMale?: boolean | null; mode?: 'inviter' | 'invitee' }) {
   const secsLeft = useSecsLeft(expiresAt)
   const isExpired = secsLeft === 0
   const isUrgent = secsLeft > 0 && secsLeft < 120
@@ -472,7 +484,9 @@ function CircularTimer({ expiresAt, totalSecs, extended, targetIsMale }: { expir
         </Animated.View>
       </View>
       <Text style={timerStyles.combinedText}>
-        {`${tg('home.waitingNoInvitesTitle', targetIsMale ?? null)} ${tg('home.waitingNoInvitesSubtext', targetIsMale ?? null)}`}
+        {mode === 'invitee'
+          ? tg('home.replyingTimerDesc', userIsMale ?? null)
+          : `${tg('home.waitingNoInvitesTitle', targetIsMale ?? null)} ${tg('home.waitingNoInvitesSubtext', targetIsMale ?? null)}`}
       </Text>
     </View>
   )
@@ -524,18 +538,17 @@ const timerStyles = StyleSheet.create({
 // ── Screen ─────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
-  const { top: topInset } = useSafeAreaInsets()
+  const { top: topInset, bottom: bottomInset } = useSafeAreaInsets()
   const { profile } = useUserStore()
   const colorScheme = useColorScheme()
   // ── Horizontal pager shell ──────────────────────────────────────────────
-  // 3-page layout: [settings(0), home(1), side(2)]
-  // Slot 2 renders page2 or chat depending on chatAvailable — no slot added/removed.
-  // RTL right→left: Settings | Home | Side(page2/chat)
-  type PaneIndex = 0 | 1 | 2
-  const SETTINGS_PANE: PaneIndex = 0
-  const HOME_PANE: PaneIndex = 1
-  const PAGE2_PANE: PaneIndex = 2
-  const CHAT_PANE: PaneIndex = 2  // same slot as PAGE2_PANE
+  // 2-page layout: [home(0), side(1)]
+  // Settings opens as an overlay that slides over the current page — not a pager slot.
+  // RTL right→left: Home | Side(page2/chat)  — Settings overlays from the right
+  type PaneIndex = 0 | 1
+  const HOME_PANE: PaneIndex = 0
+  const PAGE2_PANE: PaneIndex = 1
+  const CHAT_PANE: PaneIndex = 1  // same slot as PAGE2_PANE
   // If the app was launched from a killed state by tapping a push, pick the
   // matching pane up front so the user lands on it instead of seeing a flash
   // of Home before re-routing. Cleared after first read so it doesn't replay
@@ -561,10 +574,84 @@ export default function HomePage() {
   const sliding = useSlidingActive()
   const pagerRef = useRef<PagerView>(null)
   const paneIndexRef = useRef(paneIndex)
-  useEffect(() => { paneIndexRef.current = paneIndex }, [paneIndex])
+  const paneIndexSV = useSharedValue<number>(paneIndex)
+  useEffect(() => {
+    paneIndexRef.current = paneIndex
+    paneIndexSV.value = paneIndex
+  }, [paneIndex])
   // Dismiss any open keyboard on every pane transition so it never lingers
   // visually over a pane that doesn't own the focused input.
   useEffect(() => { requestAnimationFrame(() => Keyboard.dismiss()) }, [paneIndex])
+
+  // Profile sheet — slides up from the bottom as a full-screen popup showing the user's own match card.
+  const [profileSheetOpen, setProfileSheetOpen] = useState(false)
+  const profileSheetConfigRef = useRef(profileSheetOpen)
+  useEffect(() => { profileSheetConfigRef.current = profileSheetOpen }, [profileSheetOpen])
+  const shellHeight = useSharedValue(Dimensions.get('window').height)
+  const profileSheetSlide = useSharedValue(0)
+  const profileSheetScrollAtTop = useSharedValue(true)
+  const profileSheetHeaderBottom = useSharedValue(0)
+  const profileSheetGestureRef = useRef<import('react-native-gesture-handler').GestureType | undefined>(undefined)
+  const profileSheetAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - profileSheetSlide.value) * shellHeight.value }],
+  }))
+  const closeProfileSheetFn = () => setProfileSheetOpen(false)
+  const closeProfileSheet = () => {
+    tap()
+    profileSheetScrollAtTop.value = true
+    profileSheetSlide.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.cubic) }, (finished) => {
+      'worklet'
+      if (finished) runOnJS(closeProfileSheetFn)()
+    })
+  }
+  const onProfileSheetScrollAtTop = useCallback((atTop: boolean) => {
+    profileSheetScrollAtTop.value = atTop
+  }, [profileSheetScrollAtTop])
+  const profileSheetSwipeStart = useSharedValue({ x: 0, y: 0 })
+  const profileSheetSwipe = useMemo(() =>
+    Gesture.Pan()
+      .withRef(profileSheetGestureRef)
+      .manualActivation(true)
+      .onTouchesDown((e, _manager) => {
+        'worklet'
+        const t = e.allTouches[0]
+        if (t) profileSheetSwipeStart.value = { x: t.absoluteX, y: t.absoluteY }
+      })
+      .onTouchesMove((e, manager) => {
+        'worklet'
+        const inHeader = profileSheetSwipeStart.value.y <= profileSheetHeaderBottom.value
+        if (!profileSheetScrollAtTop.value && !inHeader) { manager.fail(); return }
+        const t = e.allTouches[0]
+        if (!t) return
+        const dx = t.absoluteX - profileSheetSwipeStart.value.x
+        const dy = t.absoluteY - profileSheetSwipeStart.value.y
+        if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
+        if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 0.8) { manager.activate(); return }
+        manager.fail()
+      })
+      .onUpdate(e => {
+        'worklet'
+        const drag = e.translationY
+        if (drag <= 0) return
+        profileSheetSlide.value = 1 - Math.min(1, drag / shellHeight.value)
+      })
+      .onEnd(e => {
+        'worklet'
+        const drag = e.translationY
+        const vy = e.velocityY
+        const past = drag > shellHeight.value * 0.3
+        const flick = vy > 500
+        if (past || flick) {
+          profileSheetSlide.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }, (finished) => {
+            'worklet'
+            if (finished) runOnJS(closeProfileSheetFn)()
+          })
+        } else {
+          profileSheetSlide.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) })
+        }
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  , [])
 
   // SubPage — slides in as an overlay on top of Settings.
   // afterSlideRef holds a callback to run after the sub-page is removed
@@ -577,10 +664,12 @@ export default function HomePage() {
   const subPageAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: subPageDir * (1 - subPageSlide.value) * shellWidth.value }],
   }))
-  // Push-style: the PagerView slides out in the opposite direction so both
-  // pages move together as if connected.
-  const pagerPushStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -subPageDir * subPageSlide.value * shellWidth.value }],
+  // ── Settings overlay ────────────────────────────────────────────────────
+  const [settingsIsOpen, setSettingsIsOpen] = useState(false)
+  const settingsProgress = useSharedValue(0)
+  const settingsIsOpenSV = useSharedValue(0)
+const settingsAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: (I18nManager.isRTL ? 1 : -1) * (1 - settingsProgress.value) * shellWidth.value }],
   }))
 
   // Swipe-to-dismiss: manualActivation so we resolve direction before
@@ -672,6 +761,104 @@ export default function HomePage() {
       })
   , [])
 
+  const openSettings = useCallback(() => {
+    settingsIsOpenSV.value = 1
+    setSettingsIsOpen(true)
+    settingsProgress.value = withTiming(1, { duration: 260, easing: Easing.bezier(0.4, 0, 1, 1) })
+  }, [])
+
+  const closeSettings = useCallback(() => {
+    settingsIsOpenSV.value = 0
+    settingsProgress.value = withTiming(0, { duration: 240, easing: Easing.bezier(0.4, 0, 1, 1) }, (finished) => {
+      'worklet'
+      if (finished) runOnJS(setSettingsIsOpen)(false)
+    })
+  }, [])
+
+  const applySettingsOpen = useCallback(() => {
+    setSettingsIsOpen(true)
+  }, [])
+  const applySettingsClosed = useCallback(() => {
+    setSettingsIsOpen(false)
+  }, [])
+
+  const settingsGestureStartProgress = useSharedValue(1)
+
+  // Close gesture — lives inside the settings overlay, so it's only reachable
+  // when settings is visible. No conflict with PagerView.
+  const settingsCloseGesture = useMemo(() => {
+    const isRTL = I18nManager.isRTL
+    return Gesture.Pan()
+      .activeOffsetX(isRTL ? 5 : -5)
+      .failOffsetX(isRTL ? -5 : 5)
+      .failOffsetY([-10, 10])
+      .onBegin(() => {
+        'worklet'
+        cancelAnimation(settingsProgress)
+        settingsGestureStartProgress.value = settingsProgress.value
+      })
+      .onUpdate((e) => {
+        'worklet'
+        const closeDrag = isRTL ? e.translationX : -e.translationX
+        settingsProgress.value = Math.max(0, Math.min(1, settingsGestureStartProgress.value - closeDrag / shellWidth.value))
+      })
+      .onEnd((e) => {
+        'worklet'
+        const closeDrag = isRTL ? e.translationX : -e.translationX
+        const closeVel = isRTL ? e.velocityX : -e.velocityX
+        const shouldClose = closeDrag > shellWidth.value * 0.3 || closeVel > 400
+        if (shouldClose) {
+          settingsIsOpenSV.value = 0
+          runOnJS(applySettingsClosed)()
+          // Duration proportional to remaining distance so the slide-out is always visible.
+          const duration = Math.max(120, Math.round(settingsProgress.value * 220))
+          settingsProgress.value = withTiming(0, { duration, easing: Easing.bezier(0.4, 0, 1, 1) })
+        } else {
+          settingsProgress.value = withSpring(1, {
+            velocity: -closeVel / shellWidth.value,
+            stiffness: 300, damping: 40, mass: 1, overshootClamping: true,
+          })
+        }
+      })
+  }, [applySettingsClosed])
+
+  // Open gesture — covers the full home pane area; enabled only when settings is
+  // closed and the user is on HOME_PANE (same as original Drawer swipeEnabled logic).
+  // activeOffsetX/failOffsetX do direction detection immediately, so the gesture
+  // fails fast on wrong-direction swipes and lets PagerView / ScrollView handle them.
+  const settingsOpenGesture = useMemo(() => {
+    const isRTL = I18nManager.isRTL
+    return Gesture.Pan()
+      .activeOffsetX(isRTL ? -5 : 5)
+      .failOffsetX(isRTL ? 5 : -5)
+      .failOffsetY([-5, 5])
+      .enabled(paneIndex === HOME_PANE && !settingsIsOpen)
+      .onBegin(() => {
+        'worklet'
+        cancelAnimation(settingsProgress)
+        settingsGestureStartProgress.value = settingsProgress.value
+      })
+      .onUpdate((e) => {
+        'worklet'
+        const openDrag = isRTL ? -e.translationX : e.translationX
+        settingsProgress.value = Math.max(0, Math.min(1, settingsGestureStartProgress.value + openDrag / shellWidth.value))
+      })
+      .onEnd((e) => {
+        'worklet'
+        const openDrag = isRTL ? -e.translationX : e.translationX
+        const openVel = isRTL ? -e.velocityX : e.velocityX
+        const shouldOpen = openDrag > shellWidth.value * 0.3 || openVel > 400
+        if (shouldOpen) {
+          settingsIsOpenSV.value = 1
+          runOnJS(applySettingsOpen)()
+        }
+        settingsProgress.value = withSpring(shouldOpen ? 1 : 0, {
+          velocity: (shouldOpen ? openVel : -openVel) / shellWidth.value,
+          stiffness: 300, damping: 40, mass: 1, overshootClamping: true,
+        })
+      })
+  }, [paneIndex, settingsIsOpen, applySettingsOpen])
+
   // Resolved when subPageOpen flips to true — lets a button that triggered
   // the open await the moment the slide actually starts and show a loading
   // state until then.
@@ -694,6 +881,7 @@ export default function HomePage() {
 
   // chatAvailable: state is 'chat'
   const chatAvailable = profile?.state === 'chat'
+  const [chatJustStarted, setChatJustStarted] = useState(false)
 
 
   const goToPane = (index: PaneIndex) => {
@@ -728,15 +916,23 @@ export default function HomePage() {
   }
 
 
-  const onSubPageClosed = () => {
+  const [subPageCloseCount, setSubPageCloseCount] = useState(0)
+  const onSubPageClosed = useCallback(() => { setSubPageCloseCount(c => c + 1) }, [])
+  useEffect(() => {
+    if (subPageCloseCount === 0) return
     const cb = afterSlideRef.current
     afterSlideRef.current = null
     setSubPageConfig(null)
     if (cb) Promise.resolve(cb()).catch(console.error)
-  }
+  }, [subPageCloseCount])
 
   const openShellSubPage = (config: SubPageConfig): Promise<void> => {
     tap()
+    if (config.kind === 'profileSection') {
+      setProfileSheetOpen(true)
+      profileSheetSlide.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) })
+      return Promise.resolve()
+    }
     setSubPageConfig(config)
     // setSubPageOpen is triggered by the overlay's onLayout once native
     // finishes laying out the subPage tree — guarantees the slide starts
@@ -765,8 +961,16 @@ export default function HomePage() {
         innerCloseRef.current()
         return true
       }
+      if (profileSheetConfigRef.current) {
+        closeProfileSheet()
+        return true
+      }
       if (subPageConfigRef.current) {
         closeShellSubPage()
+        return true
+      }
+      if (settingsIsOpenSV.value > 0.5) {
+        closeSettings()
         return true
       }
       const idx = paneIndexRef.current
@@ -789,6 +993,16 @@ export default function HomePage() {
   const page2PendingInvite = page2InviteObj?.state === 'pending' ? page2InviteObj : null
   const page2DeadInvite = (page2InviteObj?.state === 'missed' || page2InviteObj?.state === 'fail') ? page2InviteObj : null
   const page2InviteName = (page2InviteObj?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
+  // v3: `page2.state = 'locked'` without a `message` means the user is
+  // off-market and needs `free2` to become discoverable again. Lands here
+  // for brand-new users, post-clear2, and after leave/logout/cron.
+  // Suppressed while page1 drives an active flow (waiting/watching/chat) —
+  // page2 resolves on its own when that flow resolves.
+  const rawPage1State = profile?.relations?.page1?.state
+  const rawPage2State = profile?.relations?.page2State
+  const rawPage2Message = profile?.relations?.page2Message
+  const page1InFlow = rawPage1State === 'waiting' || rawPage1State === 'watching' || rawPage1State === 'chat'
+  const page2NeedsFree2 = rawPage2State === 'locked' && !rawPage2Message && !page1InFlow
   const isMale = profile?.is_male ?? null
   const ready = !!profile
 
@@ -835,13 +1049,24 @@ export default function HomePage() {
     try {
       if (notifPerm !== 'granted') {
         const result = await requestNotifPermission()
-        setNotifPerm(result)
-        if (result === 'denied') openAppSettings()
+        setPermBusy(false)
+        if (result === 'granted') {
+          // Fetch locPerm before setting notifPerm so both land in the same
+          // React render batch — avoids a window where notifPerm='granted' and
+          // locPerm=null simultaneously, which would make isPermMode=false and
+          // hide the location permission card before it ever appears.
+          const lp = await getLocPermission()
+          setNotifPerm(result)
+          setLocPerm(lp)
+        } else {
+          setNotifPerm(result)
+          if (result === 'denied') openNotifSettings()
+        }
         return
       }
       const result = await requestLocPermission()
       setLocPerm(result)
-      if (result === 'denied') openAppSettings()
+      if (result === 'denied') openLocPermSettings()
       if (result === 'services-off') {
         try {
           await enableLocationServices()
@@ -858,7 +1083,7 @@ export default function HomePage() {
 
   // While we're still checking or the user hasn't granted permission,
   // the notification card overlay takes over the home pane content.
-  const showNotifOverlay = notifPerm !== 'granted'
+  const showNotifOverlay = notifPerm !== null && notifPerm !== 'granted'
 
   useEffect(() => {
     if (notifPerm !== 'granted') return
@@ -924,7 +1149,7 @@ export default function HomePage() {
     }
   }
 
-  const showLocOverlay = locPerm !== 'granted'
+  const showLocOverlay = locPerm !== null && locPerm !== 'granted'
 
   // Unified card mode — derived synchronously. The home pane is laid out
   // with both the empty/no-match content and the match-card content always
@@ -993,6 +1218,8 @@ export default function HomePage() {
       const leavingChat = state !== 'chat' && prev === 'chat'
 
       if (enteringChat) {
+        paneOpacity.value = 0
+        setChatJustStarted(true)
         requestAnimationFrame(() => { pagerRef.current?.setPage(CHAT_PANE) })
       } else if (leavingChat) {
         Keyboard.dismiss()
@@ -1053,6 +1280,12 @@ export default function HomePage() {
   // visually normal but non-interactive via `silentDisabled`.
   const [busy, setBusy] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
+  // ignoreLoading stays true from the ignore tap until the next card finishes
+  // its cross-fade (or until null-state cleanup fires). Keeps the skip button
+  // in loading state across the full latency: API round-trip + image load + animation.
+  const [ignoreLoading, setIgnoreLoadingState] = useState(false)
+  const ignoreLoadingRef = useRef(false)
+  const setIgnoreLoading = (v: boolean) => { ignoreLoadingRef.current = v; setIgnoreLoadingState(v) }
 
   // Two-slot system: A and B alternate as active/incoming.
   // The incoming slot loads invisibly on top (via topSlot zIndex), then
@@ -1101,6 +1334,7 @@ export default function HomePage() {
     }
     if (!next) {
       clearMatchTimeoutRef.current = setTimeout(() => {
+        if (ignoreLoadingRef.current) setIgnoreLoading(false)
         setMatchA(null)
         setMatchB(null)
         opacityA.value = 0
@@ -1151,6 +1385,7 @@ export default function HomePage() {
       opacityB.value = 0
     }
     animRunning.current = false
+    if (ignoreLoadingRef.current) setIgnoreLoading(false)
   }, [])
 
   const handleSlotReady = useCallback((slot: SlotId) => {
@@ -1223,6 +1458,7 @@ export default function HomePage() {
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
   const [removeWatcherTarget, setRemoveWatcherTarget] = useState<Profile | null>(null)
   const [removeWatcherBusy, setRemoveWatcherBusy] = useState(false)
+  const [hasBeenActiveThisSession, setHasBeenActiveThisSession] = useState(false)
 
   const runAction = (endpoint: string, key: string, onDone?: () => void) => {
     if (busy) return
@@ -1251,10 +1487,19 @@ export default function HomePage() {
             <Button
               variant="secondary"
               label={t('home.watchingReject')}
-              onPress={() => runAction('app/ignore', 'watching-reject')}
-              disabled={busy}
-              loading={busy && pendingKey === 'watching-reject'}
-              silentDisabled={pendingKey !== 'watching-reject'}
+              onPress={() => {
+                if (busy || ignoreLoading) return
+                tap()
+                setBusy(true)
+                setPendingKey('watching-reject')
+                setIgnoreLoading(true)
+                invoke('app/ignore', {})
+                  .then(() => { setBusy(false); setPendingKey(null) })
+                  .catch(err => { console.error(err); setBusy(false); setPendingKey(null); setIgnoreLoading(false) })
+              }}
+              disabled={busy || ignoreLoading}
+              loading={ignoreLoading}
+              silentDisabled={!ignoreLoading && pendingKey !== 'watching-reject'}
             />
           </View>
           <View style={styles.buttonCellAccept}>
@@ -1262,7 +1507,7 @@ export default function HomePage() {
               variant="primary"
               tone="positive"
               label={tg('home.watchingAccept', matchIsMale ?? null)}
-              iconEnd={<ChatBubbleIcon color={WHITE} />}
+              iconEnd={<SparklesIcon color={WHITE} />}
               onPress={() => { tap(); setInviteConfirmOpen(true) }}
               disabled={busy}
               silentDisabled
@@ -1295,28 +1540,35 @@ export default function HomePage() {
   })()
 
   const permConfirmLabel = showNotifOverlay
-    ? t('home.notifPromptButton')
+    ? tg('home.notifPromptButton', isMale)
     : showLocOverlay
-      ? t('home.locationPromptButton')
-      : t('home.locationUnavailableButton')
+      ? tg('home.locationPromptButton', isMale)
+      : tg('home.locationUnavailableButton', isMale)
 
   const permOnConfirm = locFailed ? handleLocRetry : handlePermissionRequest
   const permBusyState = locFailed ? locBusy : permBusy
 
   const goToPreferences = () => {
-    goToPane(SETTINGS_PANE)
+    openSettings()
   }
 
   const page1Event = profile?.relations?.page1?.event
-  // v3: any null synth state (free, or locked without message) is ready to find.
-  const isReadyToFind = state === null
+  // v3: synth state is null for both `free` (find ran, no candidate) and `locked`
+  // without message (brand-new user, or post-clear). Only the latter is "ready to
+  // find" — when state is `free` we surface the no-one-nearby + Search Preferences UI.
+  const isReadyToFind = state === null && rawPage1State !== 'free'
+  useEffect(() => {
+    if (state !== null && state !== undefined && !hasBeenActiveThisSession) {
+      setHasBeenActiveThisSession(true)
+    }
+  }, [state])
   const hiddenButtons = showHiddenPlaceholder
     ? isReadyToFind
       ? (
         <Button
           variant="primary"
           tone="positive"
-          label={t('home.startNow')}
+          label={hasBeenActiveThisSession ? tg('home.readyToContinue', isMale) : t('home.startNow')}
           onPress={() => runAction('app/find', 'hidden-find')}
           disabled={busy}
           loading={busy && pendingKey === 'hidden-find'}
@@ -1354,42 +1606,24 @@ export default function HomePage() {
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed))
 
   const permTitle = showNotifOverlay
-    ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : t('home.notifPromptTitle'))
+    ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : state !== null ? tg('home.notifPromptWithMatchTitle', isMale) : t('home.notifPromptTitle'))
     : showLocOverlay
-      ? (locPerm === 'services-off' ? t('home.locationUnavailableTitle') : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle') : t('home.locationPromptTitle'))
+      ? (locPerm === 'services-off' ? t('home.locationUnavailableTitle') : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle') : state !== null ? t('home.locationPromptWithMatchTitle') : t('home.locationPromptTitle'))
       : t('home.locationUnavailableTitle')
 
   const permDesc = showNotifOverlay
-    ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedDesc') : t('home.notifPromptDesc'))
+    ? (notifPerm === 'denied' ? tg('home.emptyNotifBlockedDesc', isMale) : state !== null ? t('home.notifPromptWithMatchDesc') : tg('home.notifPromptDesc', isMale))
     : showLocOverlay
-      ? (locPerm === 'services-off' ? t('home.locationServicesOffDesc') : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc') : t('home.locationPromptDesc'))
+      ? (locPerm === 'services-off' ? t('home.locationServicesOffDesc') : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc') : state !== null ? t('home.locationPromptWithMatchDesc') : t('home.locationPromptDesc'))
       : t('home.locationUnavailableDesc')
 
   const booting = !ready || notifPerm === null || (notifPerm === 'granted' && locPerm === null)
-  const bootOpacity = useSharedValue(1)
-  const [bootVisible, setBootVisible] = useState(true)
 
   useEffect(() => {
-    if (!booting && bootVisible) {
-      bootOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.quad) }, (finished) => {
-        'worklet'
-        if (finished) runOnJS(setBootVisible)(false)
-      })
+    if (!booting) {
+      SplashScreen.hideAsync().catch(() => {})
     }
   }, [booting])
-
-  const bootOverlayStyle = useAnimatedStyle(() => ({
-    opacity: bootOpacity.value,
-  }))
-
-  if (booting) {
-    return (
-      <>
-        <StatusBar style="dark" />
-        <BootScreen />
-      </>
-    )
-  }
 
   return (
     <View style={styles.backdrop}>
@@ -1397,27 +1631,24 @@ export default function HomePage() {
         <StatusBar style="dark" />
         {/* Pass pages as an array to avoid React 19 falsy-children issues
             with react-native-pager-view's childrenWithOverriddenStyle. */}
-        <Animated.View style={[{ flex: 1 }, pagerPushStyle]}>
+        <GestureDetector gesture={settingsOpenGesture}>
+        <View style={{ flex: 1 }}>
         <PagerView
           ref={pagerRef}
           style={{ flex: 1 }}
-          initialPage={initialPaneFromNotif ?? (chatAvailable ? CHAT_PANE : HOME_PANE)}
+          initialPage={initialPaneFromNotif ?? HOME_PANE}
           scrollEnabled={!sliding && !subPageOpen}
           overdrag={false}
           overScrollMode="never"
           onPageSelected={onPageSelected}
         >
           {[
-            // Slot 0: settings
-            <View key="settings" style={{ flex: 1 }}>
-              <SettingsPage onBack={() => goToPane((paneIndexRef.current + 1) as PaneIndex)} focused={paneIndex === SETTINGS_PANE} onOpenSubPage={openShellSubPage} topInset={topInset} />
-            </View>,
-
-            // Slot 1: home (page1 — outgoing)
+            // Slot 0: home (page1 — outgoing)
             <View key="home" style={{ flex: 1 }}>
               <View style={[styles.root, { paddingTop: topInset }]}>
                 <HomeHeader
                   title={headerTitle}
+                  titleColor={isEndedState ? DESTRUCTIVE : undefined}
                   arrow={headerArrow}
                   badge={headerBadge}
                   badgeColor={headerBadgeColor}
@@ -1426,7 +1657,7 @@ export default function HomePage() {
                     ? { onPress: () => goToPane(CHAT_PANE), icon: 'chat' as const, count: chatUnread, alerting: chatUnreadAlerting }
                     : { onPress: () => goToPane(PAGE2_PANE), hasInvite: !!page2PendingInvite, hasDead: !!page2DeadInvite, alerting: page2Alerting, count: watchers?.length ?? 0 }
                   }
-                  onSettingsPress={() => goToPane(SETTINGS_PANE)}
+                  onSettingsPress={openSettings}
                   disabled={busy}
                   loading={busy}
                   dotPulsing={locFetching || busy}
@@ -1453,20 +1684,11 @@ export default function HomePage() {
                         {locFetching ? (
                           <Text style={styles.permDesc}>{t('home.locatingDesc')}</Text>
                         ) : isReadyToFind ? (
-                          <>
-                            <Text style={styles.permHeadline}>{t('home.startHeadline')}</Text>
-                            <Text style={styles.permSubhead}>{t('home.startSubhead')}</Text>
-                          </>
+                          <Text style={styles.permHeadline}>{t(hasBeenActiveThisSession ? 'home.continueHeadline' : 'home.startHeadline')}</Text>
                         ) : (
                           <>
                             <Text style={styles.permHeadline}>{t('home.noOneNearbyTitle')}</Text>
                             <Text style={[styles.permDesc, { marginTop: 8 }]}>{tg('home.noOneNearbyDesc', isMale)}</Text>
-                            <View style={styles.heartDivider}>
-                              <View style={styles.heartDividerLine} />
-                              <HeartIcon color={PRIMARY} size={14} filled />
-                              <View style={styles.heartDividerLine} />
-                            </View>
-                            <Text style={[styles.permSubhead, { marginTop: 8 }]}>{t('home.startSubhead')}</Text>
                           </>
                         )}
                       </View>
@@ -1557,7 +1779,6 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={inviteConfirmOpen}
-                  icon={<HeartIcon color={PRIMARY} />}
                   title={t('home.inviteConfirmTitle').replace('{name}', matchName)}
                   description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
                   cancelLabel={t('home.watchingReject')}
@@ -1566,6 +1787,7 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setInviteConfirmOpen(false) }}
                   onConfirm={() => runAction('app/invite', 'invite-confirm', () => setInviteConfirmOpen(false))}
                   busy={busy}
+                  draggable
                 />
 
                 <ConfirmDialog
@@ -1577,6 +1799,7 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={() => runAction('app/cancel', 'cancel-confirm', () => setCancelConfirmOpen(false))}
                   busy={busy}
+                  draggable
                 />
 
                 <ConfirmDialog
@@ -1588,6 +1811,7 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
                   onConfirm={() => runAction('app/decline', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
                   busy={busy}
+                  draggable
                 />
 
                 <ConfirmDialog
@@ -1610,6 +1834,7 @@ export default function HomePage() {
                     }
                   }}
                   busy={removeWatcherBusy}
+                  draggable
                 />
 
                 <ConfirmDialog
@@ -1635,6 +1860,7 @@ export default function HomePage() {
                   isActive={paneIndex === CHAT_PANE}
                   onUnreadChange={setChatUnread}
                   topInset={topInset}
+                  autoFocusInput={chatJustStarted}
                 />
               ) : <View style={[styles.root, { paddingTop: topInset }]}>
                 <HomeHeader
@@ -1644,6 +1870,7 @@ export default function HomePage() {
                     : page2InviteObj?.state === 'fail' ? t('home.inviteExpired')
                     : t('home.hiddenHeaderTitle')
                   }
+                  titleColor={page2InviteObj?.state === 'missed' || page2InviteObj?.state === 'fail' ? DESTRUCTIVE : undefined}
                   centered
                   endIcon="none"
                   startIcon="back"
@@ -1670,7 +1897,7 @@ export default function HomePage() {
                               variant="primary"
                               tone="positive"
                               label={t('home.replyingAccept')}
-                              iconEnd={<PaperPlaneIcon color={WHITE} />}
+                              iconEnd={<CheckIcon color={WHITE} />}
                               onPress={() => runAction('app/approve', 'replying-accept')}
                               disabled={busy}
                               loading={busy && pendingKey === 'replying-accept'}
@@ -1704,6 +1931,8 @@ export default function HomePage() {
                                   : 600}
                                 extended={page2PendingInvite.extended}
                                 targetIsMale={page2PendingInvite.is_male}
+                                userIsMale={isMale}
+                                mode="invitee"
                               />
                             ) : undefined}
                           />
@@ -1715,11 +1944,10 @@ export default function HomePage() {
                   <HomeCard
                     buttons={
                       <Button
-                        variant="primary"
-                        tone="positive"
+                        variant="soft"
                         label={tg('home.tapForMore', isMale)}
-                        onPress={() => runAction('app/clear2', 'clear2')}
-                        loading={busy && pendingKey === 'clear2'}
+                        onPress={() => runAction('app/free2', 'free2')}
+                        loading={busy && pendingKey === 'free2'}
                       />
                     }
                   >
@@ -1732,6 +1960,19 @@ export default function HomePage() {
                       />
                     </View>
                   </HomeCard>
+                ) : page2NeedsFree2 ? (
+                  <PullScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    scrollEventThrottle={16}
+                    contentContainerStyle={styles.watchingMeContent}
+                  >
+                    <View style={styles.telescopeWrap}>
+                      <TelescopeIllustration />
+                    </View>
+                    <Text style={styles.emptyTitle}>{t('home.watchingMeNoOneTitle')}</Text>
+                    <Text style={styles.emptySubtitle}>{t('home.watchingMeNoOneSubtitle')}</Text>
+                  </PullScrollView>
                 ) : watchers.length > 0 ? (
                   <PullScrollView
                     showsVerticalScrollIndicator={false}
@@ -1739,16 +1980,6 @@ export default function HomePage() {
                     scrollEventThrottle={16}
                     contentContainerStyle={styles.watchingMeContent}
                   >
-                    <Text style={styles.watchingMeSubtitle}>
-                      {watchers.length === 1
-                        ? tgg('home.nowVisibleWithOneWatcherDesc', isMale, watchers[0].is_male)
-                        : tg('home.nowVisibleWithWatchersDesc', isMale)}
-                    </Text>
-                    <View style={styles.rightNowRow}>
-                      <View style={styles.rightNowLine} />
-                      <Text style={styles.rightNowText}>{t('home.watchingMeRightNow')}</Text>
-                      <View style={styles.rightNowLine} />
-                    </View>
                     {watchers.map((w) => (
                       <View key={w.user_id} style={styles.watcherCardWrap}>
                         <WatcherCard
@@ -1762,8 +1993,6 @@ export default function HomePage() {
                       <LockIcon color={GRAY_400} />
                       <Text style={styles.photosHiddenText}>{t('home.watchingMePhotosHidden')}</Text>
                     </View>
-                    <PotentialPresence />
-                    <Text style={styles.morePeopleText}>{t('home.watchingMeMorePeopleNearby')}</Text>
                   </PullScrollView>
                 ) : (
                   <PullScrollView
@@ -1772,23 +2001,29 @@ export default function HomePage() {
                     scrollEventThrottle={16}
                     contentContainerStyle={styles.watchingMeContent}
                   >
-                    <Text style={styles.watchingMeSubtitle}>{t('home.watchingMeNoOneDesc')}</Text>
                     <View style={styles.telescopeWrap}>
                       <TelescopeIllustration />
                     </View>
                     <Text style={styles.emptyTitle}>{t('home.watchingMeNoOneTitle')}</Text>
                     <Text style={styles.emptySubtitle}>{t('home.watchingMeNoOneSubtitle')}</Text>
-                    <View style={styles.photosHiddenRow}>
-                      <LockIcon color={GRAY_400} />
-                      <Text style={styles.photosHiddenText}>{t('home.watchingMePhotosHidden')}</Text>
-                    </View>
                   </PullScrollView>
                 )}
               </View>}
             </View>,
           ]}
         </PagerView>
+        <Animated.View
+          style={[StyleSheet.absoluteFill, styles.settingsOverlay, settingsAnimStyle]}
+          pointerEvents={settingsIsOpen ? 'auto' : 'none'}
+        >
+          <GestureDetector gesture={settingsCloseGesture}>
+            <View style={{ flex: 1 }}>
+              <SettingsPage onBack={closeSettings} focused={settingsIsOpen} onOpenSubPage={openShellSubPage} topInset={topInset} />
+            </View>
+          </GestureDetector>
         </Animated.View>
+        </View>
+        </GestureDetector>
         {subPageConfig && (
           <Animated.View
             style={[styles.subPageOverlay, subPageAnimStyle]}
@@ -1804,30 +2039,38 @@ export default function HomePage() {
                       ? <RadiusFieldPage config={subPageConfig} onBack={closeShellSubPage} />
                       : subPageConfig.kind === 'admin'
                         ? <AdminFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                        : subPageConfig.kind === 'photos'
-                          ? <PhotoFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                          : subPageConfig.kind === 'account'
+                        : subPageConfig.kind === 'account'
                             ? <AccountFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                            : subPageConfig.kind === 'preview'
-                              ? <PreviewFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                              : subPageConfig.kind === 'about'
+                            : subPageConfig.kind === 'about'
                                 ? <AboutFieldPage config={subPageConfig} onBack={closeShellSubPage} />
-                                : subPageConfig.kind === 'profileSection'
-                                    ? <ProfileSectionPage config={subPageConfig} onBack={closeShellSubPage} />
-                                    : subPageConfig.kind === 'appSection'
+                                : subPageConfig.kind === 'appSection'
                                       ? <AppSectionPage config={subPageConfig} onBack={closeShellSubPage} />
-                                      : <SelectFieldPage config={subPageConfig} onBack={closeShellSubPage} />}
+                                      : <SelectFieldPage config={subPageConfig as SelectFieldConfig} onBack={closeShellSubPage} />}
                 </ShellInnerNavContext.Provider>
               </View>
             </GestureDetector>
           </Animated.View>
         )}
+        {profileSheetOpen && (
+          <Animated.View style={[styles.profileSheetOverlay, profileSheetAnimStyle]}>
+            <GestureDetector gesture={profileSheetSwipe}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.profileSheetHandle} pointerEvents="none">
+                  <View style={styles.profileSheetPill} />
+                </View>
+                <PreviewFieldPage
+                  config={{ kind: 'preview', title: t('settings.myProfile') }}
+                  onBack={closeProfileSheet}
+                  dismissGestureRef={profileSheetGestureRef}
+                  onScrollAtTop={onProfileSheetScrollAtTop}
+                  headerBottomShared={profileSheetHeaderBottom}
+                  clipBottom
+                />
+              </View>
+            </GestureDetector>
+          </Animated.View>
+        )}
       </View>
-      {bootVisible && (
-        <Animated.View style={[StyleSheet.absoluteFill, bootOverlayStyle]} pointerEvents="none">
-          <BootScreen />
-        </Animated.View>
-      )}
     </View>
   )
 }
@@ -1842,6 +2085,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: WHITE,
   },
+  settingsOverlay: {
+    backgroundColor: WHITE,
+    shadowColor: '#000',
+    shadowOffset: { width: -3, height: 0 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   subPageOverlay: {
     position: 'absolute' as const,
     top: 0,
@@ -1849,6 +2100,39 @@ const styles = StyleSheet.create({
     start: 0,
     end: 0,
     backgroundColor: WHITE,
+    shadowColor: '#000',
+    shadowOffset: { width: -3, height: 0 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  profileSheetOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    start: 0,
+    end: 0,
+    backgroundColor: WHITE,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  profileSheetHandle: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingTop: 10,
+    zIndex: 10,
+  },
+  profileSheetPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
   root: {
     flex: 1,
@@ -1858,7 +2142,7 @@ const styles = StyleSheet.create({
   // ── Watching Me page (page2 viewers) ───────────────────────────────────
   watchingMeContent: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 0,
     paddingBottom: 32,
     alignItems: 'stretch',
   },
@@ -1912,8 +2196,8 @@ const styles = StyleSheet.create({
   },
   telescopeWrap: {
     alignItems: 'center',
-    marginTop: 30,
-    marginBottom: 18,
+    marginTop: 80,
+    marginBottom: 48,
   },
   emptyTitle: {
     fontSize: 18,
@@ -1967,23 +2251,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: TEXT_PRIMARY,
     textAlign: 'center',
-  },
-  permSubhead: {
-    fontSize: 15,
-    color: GRAY_400,
-    textAlign: 'center',
-    marginTop: 6,
-  },
-  heartDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 24,
-    gap: 12,
-  },
-  heartDividerLine: {
-    width: 60,
-    height: 1,
-    backgroundColor: GRAY_100,
   },
   permDesc: {
     fontSize: 15,

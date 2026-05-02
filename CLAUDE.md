@@ -29,30 +29,38 @@ These rules are absolute and must be applied any time the PagerView layout or pa
 - `page2` is an **object** → show incoming invitation card (with timer + approve/decline buttons).
 
 ### Visual order (immutable)
-RTL right→left: **Settings | Home | Side(page2/chat)**
-Logical pane constants (never change): `SETTINGS=0, HOME=1, PAGE2=2, CHAT=2`
+RTL right→left: **Home | Side(page2/chat)** — Settings overlays from the right as a layer over the current page.
+Logical pane constants (never change): `HOME=0, PAGE2=1, CHAT=1`
 
-`PAGE2_PANE === CHAT_PANE === 2` — they share the same physical slot.
+`PAGE2_PANE === CHAT_PANE === 1` — they share the same physical slot.
 
 ### PagerView layout
-Fixed 3-page layout:
-`[settings(slot 0), home(slot 1), side(slot 2)]`
+Fixed 2-page layout:
+`[home(slot 0), side(slot 1)]`
 
-Slot 2 renders `ChatPage` when `chatAvailable` (`state === 'chat'`), page2 content otherwise.
-No slot is added or removed — only the content of slot 2 changes.
+Settings is **not a PagerView slot**. It opens/closes as an `Animated.View` overlay that slides in from the right (RTL) on top of the current page. The overlay is always mounted; `settingsIsOpen` controls pointer events and the `focused` prop.
+
+Slot 1 renders `ChatPage` when `chatAvailable` (`state === 'chat'`), page2 content otherwise.
+No slot is added or removed — only the content of slot 1 changes.
+
+### Settings overlay
+- Opens via `openSettings()` → `settingsSlide` animates 0→1 (slides in from right in RTL).
+- Closes via `closeSettings()` (button/BackHandler) or swipe-to-dismiss gesture.
+- When a sub-page opens on top of settings, `settingsPushStyle` slides the settings content out (same push navigation feel as before).
+- BackHandler priority: inner sub-page → sub-page → settings → pager side pane → false.
 
 ### Chat transition animation
 When `state` transitions to `'chat'`:
-1. `chatAvailable` becomes true → slot 2 flips from page2 to `ChatPage` automatically.
-2. `setPage(2)` via `requestAnimationFrame` — navigates to slot 2 if not already there.
-3. If already on slot 2 (user just approved from page2), `setPage(2)` is a no-op; content flips in place.
+1. `chatAvailable` becomes true → slot 1 flips from page2 to `ChatPage` automatically.
+2. `setPage(1)` via `requestAnimationFrame` — navigates to slot 1 if not already there.
+3. If already on slot 1 (user just approved from page2), `setPage(1)` is a no-op; content flips in place.
 
 When `state` transitions away from `'chat'`:
-1. `setPageWithoutAnimation(HOME_PANE=1)` — instant snap to home.
-2. Slot 2 flips back to page2 content automatically.
+1. `setPageWithoutAnimation(HOME_PANE=0)` — instant snap to home.
+2. Slot 1 flips back to page2 content automatically.
 
 ### No guards or `paneToPage`/`pageToPane` helpers needed
-Slot 2 always has content (either chat or page2) — no guard needed in `onPageSelected`.
+Slot 1 always has content (either chat or page2) — no guard needed in `onPageSelected`.
 
 ---
 
@@ -180,7 +188,7 @@ All live under `POST /app/<action>`. Each executes as a single Postgres transact
 
 ### Invitation timeout and extension
 
-- Initial expiry: `expires_at = invited_at + 1 hour`.
+- Initial expiry: `expires_at = invited_at + 30 minutes`.
 - **`extend` is additive and one-shot per invitation.** Server-side functionality only. Mobile UI does not surface an extend button; the waiting state shows a full-width cancel. Server adds the requested minutes to `expires_at` on both sides and marks the invitation as extended.
 - Only the inviter (A) can extend. Only while the invite is still live (`expires_at > now()`). Only if it has not been extended before (`!page1.extended`).
 - Expiration is enforced two ways:
@@ -299,7 +307,7 @@ Identity, matching preferences, and the JSONB `relations` column that drives the
 | `age_from` / `age_to` | smallint | preferred age range |
 | `range` | integer | preferred max distance (meters) |
 | `location` | geography (PostGIS) | `SRID=4326;POINT(lng lat)` |
-| `data` | jsonb, default `{}` | name, bio, images, units, os, lang, push_token, role |
+| `data` | jsonb, default `{}` | `items` (ordered `ProfileItem[]`), units, os, lang, push_token, role. `bio` and `images` are legacy keys — migrated into `items`. |
 | `relations` | jsonb | `Pages` (see Game Logic). Source of truth for page1/page2. |
 
 **Removed columns (migration applied):** `state`, `other_id`, `is_visible`, `is_avaliable` are gone. `users.name` is a regular text column (was generated). `data->>'name'` removed.
@@ -410,7 +418,7 @@ The following server files have been fully rewritten and are clean:
 - `supabase/functions/tools.ts` — `invoke()`, `rpc()`, `notify()`
 
 The following RPCs exist in the DB and match the endpoint table above:
-`app_find`, `app_ignore`, `app_clear1`, `app_clear2`, `app_invite`, `app_extend`, `app_cancel`, `app_approve`, `app_decline`, `app_leave`, `app_block`, `app_remove`, `app_expire_sweep` (called by pg_cron every minute), `app_delete_cleanup` (called by the `delete` endpoint before row deletion), `app_logout_cleanup` (called by the `logout` endpoint: kicks page2 viewers to `logout`, clears page2), `app_refresh_snapshots` (see below).
+`app_find`, `app_ignore`, `app_clear1`, `app_clear2`, `app_invite`, `app_extend`, `app_cancel`, `app_approve`, `app_decline`, `app_leave`, `app_block`, `app_remove`, `app_expire_sweep` (called by pg_cron every minute), `app_delete_cleanup` (called by the `delete` endpoint before row deletion), `app_logout_cleanup` (called by the `logout` endpoint: kicks page2 viewers to `logout`, clears page2), `app_refresh_snapshots` (see below), `app_save_items` (called by the `items`/`profile` endpoints: saves `data.items`, syncs `is_for_kids`).
 
 Helper functions: `make_profile`, `_remove_from_page2`, `_kick_pointing_at`, `_add_restriction`.
 
@@ -484,6 +492,7 @@ So a fully-locked-with-message page exits in two taps: gray (clear message) → 
   - **Empty cell** = the page's `state` is not written by this transaction. `profile` / `profiles` populations are managed separately and don't appear in this table (the only exception is `page2.state = locked`, which by convention also clears the `profiles` array — see below).
 - **`locked` semantics**: end-of-interaction marker for that page. May be a successful terminal write (e.g., `cancel` writes A.page1=locked with no message) or a failure landing (e.g., `invite` failure writes A.page1=locked with `message=invite`).
 - **`page2.state = locked`** also implies the watcher array on that page is cleared as part of the same write (locked = "no incoming interaction; array deleted"). The array can re-populate after `free2` returns it to `free`.
+- **`page2.state = free`** (written by `leave/block` and `free2`) clears `profile` and `profiles` as part of the same write — the page returns to a fully empty state.
 
 ### State transition table
 
@@ -497,7 +506,7 @@ So a fully-locked-with-message page exits in two taps: gray (clear message) → 
 | 2 | remove | locked (B*) | |
 | 2 | approve | chat (A+B) + locked (C*) | locked (A*+B) |
 | 2 | decline | locked (B*) | locked (A) |
-| 1 | leave/block | locked (A) + locked (B*) | |
+| 1 | leave/block | locked (A) + locked (B*) | free (A) |
 | | logout/delete | locked (A+B*) | locked (A+B*) |
 | | cron | locked (A*/B*) | locked (A*/B*) |
 | 1 | clear1 | | |

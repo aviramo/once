@@ -30,8 +30,41 @@ export async function requestLocPermission(): Promise<LocPermission> {
   return 'denied'
 }
 
-const withTimeout = <T>(p: Promise<T | null>, ms: number): Promise<T | null> =>
-  Promise.race([p, new Promise<null>((res) => setTimeout(() => res(null), ms))])
+/** Race getCurrentPositionAsync and watchPositionAsync — whichever delivers
+ *  the first fix wins. On a cold Android GPS, getCurrentPositionAsync via the
+ *  fused provider can hang silently; watchPositionAsync wakes the GPS hardware
+ *  and reliably emits a sample once it locks. */
+async function raceForFirstFix(timeoutMs: number): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    let done = false
+    let sub: Location.LocationSubscription | null = null
+    const finish = (pos: { lat: number; lng: number } | null) => {
+      if (done) return
+      done = true
+      if (sub) sub.remove()
+      resolve(pos)
+    }
+
+    Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+      mayShowUserSettingsDialog: false,
+    })
+      .then((p) => finish({ lat: p.coords.latitude, lng: p.coords.longitude }))
+      .catch(() => {})
+
+    Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.High, distanceInterval: 0, timeInterval: 0 },
+      (p) => finish({ lat: p.coords.latitude, lng: p.coords.longitude }),
+    )
+      .then((s) => {
+        if (done) s.remove()
+        else sub = s
+      })
+      .catch(() => {})
+
+    setTimeout(() => finish(null), timeoutMs)
+  })
+}
 
 /** Get the device's current position. Returns null on failure.
  *  Checks services first to avoid the Android system dialog. */
@@ -41,32 +74,19 @@ export async function getLocation(): Promise<{ lat: number; lng: number } | null
     if (!servicesOn) return null
 
     // Last known is instant — prefer it if it's fresh (within 10 min).
-    // On emulators this is populated once any other app (e.g. Google Maps)
-    // has triggered location, so we don't need to warm up separately.
     const cached = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 })
     if (cached) return { lat: cached.coords.latitude, lng: cached.coords.longitude }
 
-    // No recent cache — try a fresh fix. Wrap in race so we never hang
-    // indefinitely on emulators that lack a GPS lock.
-    const pos =
-      (await withTimeout(
-        Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-          mayShowUserSettingsDialog: false,
-        }).catch(() => null),
-        8_000,
-      )) ??
-      (await withTimeout(
-        Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Low,
-          mayShowUserSettingsDialog: false,
-        }).catch(() => null),
-        5_000,
-      )) ??
-      (await Location.getLastKnownPositionAsync())
+    // Force a real GPS fix (High accuracy). On a cold start the fused provider
+    // returns nothing until another app warms it up — racing watchPositionAsync
+    // alongside getCurrentPositionAsync wakes the GPS hardware directly.
+    const fresh = await raceForFirstFix(15_000)
+    if (fresh) return fresh
 
-    if (!pos) return null
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
+    // Final fallback: last known at any age.
+    const stale = await Location.getLastKnownPositionAsync()
+    if (stale) return { lat: stale.coords.latitude, lng: stale.coords.longitude }
+    return null
   } catch {
     return null
   }
@@ -118,20 +138,24 @@ export async function watchLocation(
   )
 }
 
-/** Open the app-level permission settings (notification / location toggle). */
-export function openAppSettings() {
+/** Open the location permission settings page for this app directly. */
+export function openLocPermSettings() {
   if (Platform.OS === 'android') {
     const pkg = Constants.expoConfig?.android?.package ?? 'com.aviramo.once'
-    // Try to open the app's permissions page directly; fall back to app details → generic settings.
     IntentLauncher.startActivityAsync(
-      'android.settings.MANAGE_APP_PERMISSIONS',
-      { extra: { 'android.intent.extra.PACKAGE_NAME': pkg } },
+      'android.settings.APP_PERMISSION_DETAILS',
+      {
+        extra: {
+          'android.intent.extra.PERMISSION_NAME': 'android.permission.ACCESS_FINE_LOCATION',
+          'android.intent.extra.PACKAGE_NAME': pkg,
+        },
+      },
     ).catch(() =>
       IntentLauncher.startActivityAsync(
         IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
         { data: `package:${pkg}` },
-      ),
-    ).catch(() => Linking.openSettings())
+      ).catch(() => Linking.openSettings()),
+    )
   } else {
     Linking.openSettings()
   }

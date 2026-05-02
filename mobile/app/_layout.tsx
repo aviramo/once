@@ -184,14 +184,13 @@ export default function RootLayout() {
     if (fontsLoaded && !globalFontApplied) {
       applyGlobalFont()
       globalFontApplied = true
-      SplashScreen.hideAsync().catch(() => {})
     }
   }, [fontsLoaded])
 
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#f4f4f4' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#FF7A5C' }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'none' }} />

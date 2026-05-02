@@ -11,10 +11,13 @@ export type Image = {
   hash: string;
 };
 
+export type ProfileItem =
+  | { kind: "photo"; normal?: string; hash: string }
+  | { kind: "bio"; value: string }
+  | { kind: "kids"; value: boolean };
+
 export type Data = {
-  name?: string;
-  bio: string;
-  images: Image[];
+  items: ProfileItem[];
   units: string;
   os: string;
   lang: string;

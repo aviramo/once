@@ -1,10 +1,9 @@
 import * as Notifications from 'expo-notifications'
 import Constants from 'expo-constants'
-import { Platform } from 'react-native'
+import { Platform, Linking } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as IntentLauncher from 'expo-intent-launcher'
 
-// App is always in foreground when this handler fires — suppress visual display.
-// Notifications are only meaningful when the app is closed/backgrounded.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: false,
@@ -118,4 +117,17 @@ export function getInitialNotificationType(): string | null {
 /** Clears the cached cold-start notification so it doesn't replay on remount. */
 export function clearInitialNotification() {
   try { Notifications.clearLastNotificationResponse() } catch {}
+}
+
+/** Open the app's notification settings page directly. */
+export function openNotifSettings() {
+  if (Platform.OS === 'android') {
+    const pkg = Constants.expoConfig?.android?.package ?? 'com.aviramo.once'
+    IntentLauncher.startActivityAsync(
+      'android.settings.APP_NOTIFICATION_SETTINGS',
+      { extra: { 'android.provider.extra.APP_PACKAGE': pkg } },
+    ).catch(() => Linking.openSettings())
+  } else {
+    Linking.openSettings()
+  }
 }

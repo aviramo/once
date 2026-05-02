@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, type ScrollViewProps, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 import { Gesture, GestureDetector, ScrollView, type GestureType } from 'react-native-gesture-handler'
 import type { NativeViewGestureHandlerProps } from 'react-native-gesture-handler'
@@ -12,12 +12,12 @@ import { WHITE } from '../colors'
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
 
-type PullCtx = {
+export type PullCtx = {
   panRef: React.MutableRefObject<GestureType | undefined>
   extraRefs: React.MutableRefObject<GestureType | undefined>[]
   setScrollAtTop: (v: boolean) => void
 }
-const PullContext = createContext<PullCtx | null>(null)
+export const PullContext = createContext<PullCtx | null>(null)
 
 /** ScrollView that negotiates with the card's pull gesture.
  *  - simultaneousHandlers: lets scroll and pan coexist; pan's failOffsetY(-5)
@@ -80,33 +80,25 @@ export function HomeCard({
   const triggered = useSharedValue(false)
   const isLoading = useSharedValue(false)
 
-  // Stable ref so gesture callbacks always see the latest onPull
-  const onPullRef = useRef(onPull)
-  useEffect(() => { onPullRef.current = onPull }, [onPull])
-
-  const snapBack = () => {
-    spinning.value = false
-    pullProgress.value = 0
-    pullY.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) })
-  }
-
-  const doLoad = () => {
+  const doLoad = useCallback(() => {
     spinning.value = true
     // Card returns to its original position immediately — it swings
     // there while the confirm dialog is open.
     pullProgress.value = 0
     pullY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
-    Promise.resolve(onPullRef.current?.()).finally(() => {
+    Promise.resolve(onPull?.()).finally(() => {
       isLoading.value = false
       requestAnimationFrame(() => { spinning.value = false })
     })
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onPull])
 
-  const triggerLoad = () => {
-    if (isLoading.value || !onPullRef.current) return
+  const triggerLoad = useCallback(() => {
+    if (isLoading.value || !onPull) return
     isLoading.value = true
     doLoad()
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doLoad, onPull])
 
   // Expose programmatic trigger to parent
   useEffect(() => {
@@ -157,7 +149,7 @@ export function HomeCard({
         runOnJS(doLoad)()
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [hasPull])
+  , [hasPull, doLoad])
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: pullY.value }],

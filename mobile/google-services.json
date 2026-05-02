@@ -1,56 +1,56 @@
 {
   "project_info": {
-    "project_number": "734623738972",
-    "project_id": "syncwish-478111",
-    "storage_bucket": "syncwish-478111.firebasestorage.app"
+    "project_number": "243101157812",
+    "project_id": "once-4f584",
+    "storage_bucket": "once-4f584.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:734623738972:android:a8ba420606682a16498a99",
+        "mobilesdk_app_id": "1:243101157812:android:b3f5f9c44b00bbaac68ae1",
         "android_client_info": {
-          "package_name": "com.livo.app"
+          "package_name": "com.aviramo.once"
         }
       },
       "oauth_client": [
         {
-          "client_id": "734623738972-2h13joogi6tonknrm310cp7217sgibb8.apps.googleusercontent.com",
+          "client_id": "243101157812-7g08ep3eko7fcpd2fkfgn3v7vc60uka2.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.livo.app",
-            "certificate_hash": "c5900ee30a0ac3495864f40df4eb78b4f557f464"
+            "package_name": "com.aviramo.once",
+            "certificate_hash": "939c30c021bad67aecbe8753a7bbc74c96aa4673"
           }
         },
         {
-          "client_id": "734623738972-66fs3vkiqi4vo16fk65sn1ofemkk0aj1.apps.googleusercontent.com",
+          "client_id": "243101157812-gpfuu2d2ch5dldhpmnfu74268e9161t9.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.livo.app",
-            "certificate_hash": "0ec59dc7de4437efe4e13c808b0a700c2f44b69c"
+            "package_name": "com.aviramo.once",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
         {
-          "client_id": "734623738972-62iahq9pjtlv9pl78alf86pn4plsbdj8.apps.googleusercontent.com",
+          "client_id": "243101157812-7c1prvpn281b88oqnstdjbefecsid8q2.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAvWGArmykivfVeTBEsHJkeAFG57UtyR7k"
+          "current_key": "AIzaSyAACxc809TlPOQBNziI05qayRZBCa75wHQ"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "734623738972-62iahq9pjtlv9pl78alf86pn4plsbdj8.apps.googleusercontent.com",
+              "client_id": "243101157812-7c1prvpn281b88oqnstdjbefecsid8q2.apps.googleusercontent.com",
               "client_type": 3
             },
             {
-              "client_id": "734623738972-csljo0jmhcioedopq9o591ni506g5o1q.apps.googleusercontent.com",
+              "client_id": "243101157812-39cu77j7o0ukr8vvnl59mshsdelne3he.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.syncwish.app"
+                "bundle_id": "com.aviramo.once"
               }
             }
           ]

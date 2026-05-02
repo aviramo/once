@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
 import { View, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
-import type { Image as ImageData } from '../stores/userStore'
+import type { Image as ImageData, ProfileItem } from '../stores/userStore'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Path, Line, Circle } from 'react-native-svg'
 import * as DocumentPicker from 'expo-document-picker'
@@ -44,6 +44,14 @@ export const localPhotoUriCache = new Map<string, string>()
 // if the app is closed before flush() runs.
 export const pendingDeferred = new Set<string>()
 
+// Replaces the photo items in `currentItems` with `newPhotos`, preserving
+// non-photo items (bio, kids) in their relative order, photos first.
+function mergePhotosIntoItems(newPhotos: ImageData[], currentItems: ProfileItem[]): ProfileItem[] {
+  const nonPhotoItems = currentItems.filter(it => it.kind !== 'photo')
+  const photoItems: ProfileItem[] = newPhotos.map(img => ({ kind: 'photo' as const, ...img }))
+  return [...photoItems, ...nonPhotoItems]
+}
+
 async function uploadFileToStorage(uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string, userId: string) {
   const formData = new FormData()
   formData.append('', { uri, name: filename, type: contentType } as any)
@@ -63,10 +71,11 @@ export interface PhotoEditorRef {
 }
 
 function PhotoCell({
-  uri, localUri, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
+  uri, localUri, hash, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
 }: {
   uri: string
   localUri?: string
+  hash?: string
   onRemove: () => void
   onLoaded?: () => void
   canRemove: boolean
@@ -81,7 +90,7 @@ function PhotoCell({
     >
       <ExpoImage
         source={uri}
-        placeholder={localUri ? { uri: localUri } : undefined}
+        placeholder={localUri ? { uri: localUri } : hash ? { blurhash: hash } : undefined}
         style={photoStyles.img}
         cachePolicy="memory-disk"
         recyclingKey={uri}
@@ -103,11 +112,12 @@ function PhotoCell({
 
 // Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
-  photos, urlFor, onRemove, onLoaded, onReorder, canRemove, uploads,
+  photos, urlFor, hashFor, onRemove, onLoaded, onReorder, canRemove, uploads,
   additionalChildren, onDragStateChange,
 }: {
   photos: string[]
   urlFor: (f: string) => string
+  hashFor?: (f: string) => string | undefined
   onRemove: (f: string) => void
   onLoaded: (f: string) => void
   onReorder: (from: number, to: number) => void
@@ -206,6 +216,7 @@ function PhotoGrid({
             key={`${i}-${filename}`}
             uri={urlFor(filename)}
             localUri={matchingUpload?.uri ?? localPhotoUriCache.get(filename)}
+            hash={hashFor?.(filename)}
             onRemove={() => onRemove(filename)}
             onLoaded={() => onLoaded(filename)}
             canRemove={canRemove}
@@ -322,29 +333,30 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       try {
         await uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId)
         pendingDeferred.delete(lp.normalFilename)
-        const imgs = useUserStore.getState().profile?.images
-        if (imgs) {
+        const state = useUserStore.getState().profile
+        if (state) {
+          const imgs = state.images
           const idx = imgs.findIndex(e => e.normal === lp.normalFilename)
           if (idx >= 0) {
             const next = [...imgs]
             next[idx] = { ...next[idx], hash: lp.hash }
-            useUserStore.getState().update({ images: next })
+            useUserStore.getState().update({ items: mergePhotosIntoItems(next, state.items) })
           }
         }
       } catch (e) {
         console.error('Deferred upload error:', e)
         pendingDeferred.delete(lp.normalFilename)
-        const imgs = useUserStore.getState().profile?.images
-        if (imgs) {
-          useUserStore.getState().update({ images: imgs.filter(img => img.normal !== lp.normalFilename) })
+        const state = useUserStore.getState().profile
+        if (state) {
+          useUserStore.getState().update({ items: mergePhotosIntoItems(state.images.filter(img => img.normal !== lp.normalFilename), state.items) })
         }
       }
       pendingUploads.current.delete(lp.normalFilename)
       localPhotoUriCache.delete(lp.normalFilename)
     }
 
-    const finalImgs = useUserStore.getState().profile?.images
-    if (finalImgs) await invoke('app/images', { images: finalImgs }).catch(console.error)
+    const finalState = useUserStore.getState().profile
+    if (finalState) await invoke('app/items', { items: finalState.items }).catch(console.error)
   }
 
   useImperativeHandle(ref, () => ({ flush: () => flushRef.current() }), [])
@@ -468,12 +480,14 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       // Commit to the store immediately so the image is visible and reorderable.
       // Also add to pendingDeferred so useDataSave skips it until flush() succeeds,
       // preventing a dangling DB reference if the app closes before the upload runs.
-      const currentImages = useUserStore.getState().profile?.images ?? []
+      const currentState = useUserStore.getState().profile
+      const currentImages = currentState?.images ?? []
+      const currentItems = currentState?.items ?? []
       useUserStore.getState().update({
-        images: [
-          ...currentImages,
-          ...entries.map(e => ({ normal: e.normalFilename, hash: '' }) satisfies ImageData),
-        ],
+        items: mergePhotosIntoItems(
+          [...currentImages, ...entries.map(e => ({ normal: e.normalFilename, hash: '' }) satisfies ImageData)],
+          currentItems,
+        ),
       })
       for (const e of entries) {
         localPhotoUriCache.set(e.normalFilename, e.originalUri)
@@ -511,8 +525,8 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         if (result) {
           sigByFilename.current.set(result.normal!, newUploads[i].sig)
           setUploads(prev => prev.map(u => u.id === newUploads[i].id ? { ...u, filename: result.normal } : u))
-          const currentImages = useUserStore.getState().profile?.images ?? []
-          update({ images: [...currentImages, result] })
+          const currentState = useUserStore.getState().profile
+          update({ items: mergePhotosIntoItems([...(currentState?.images ?? []), result], currentState?.items ?? []) })
         } else {
           setUploads(prev => prev.filter(u => u.id !== newUploads[i].id))
         }
@@ -531,14 +545,14 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     localPhotoUriCache.delete(filename)
     pendingUploads.current.delete(filename)
     pendingDeferred.delete(filename)
-    update({ images: storeImages.filter((_, i) => i !== idx) })
+    update({ items: mergePhotosIntoItems(storeImages.filter((_, i) => i !== idx), profile?.items ?? []) })
   }
 
   const reorderPhotos = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
     const next = [...storeImages]
     ;[next[from], next[to]] = [next[to], next[from]]
-    update({ images: next })
+    update({ items: mergePhotosIntoItems(next, profile?.items ?? []) })
   }
 
   const onPhotoLoaded = (filename: string) => {
@@ -550,6 +564,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       <PhotoGrid
         photos={photos}
         urlFor={(f) => localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
+        hashFor={(f) => storeImages.find(e => e.normal === f)?.hash || undefined}
         onRemove={removePhoto}
         onLoaded={onPhotoLoaded}
         onReorder={reorderPhotos}
@@ -581,6 +596,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         confirmLabel={t('common.gotIt')}
         soft
         onConfirm={() => setDuplicateDialog(false)}
+        draggable
       />
     </>
   )

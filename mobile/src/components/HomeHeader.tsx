@@ -126,6 +126,8 @@ function Ball3D({ color, size = 28 }: { color: string; size?: number }) {
 export type HomeHeaderProps = {
   /** Header title. Omit for no title (e.g. profile preview). */
   title?: string
+  /** Override the title text color (e.g. DESTRUCTIVE when there's a message). */
+  titleColor?: string
   /** Status chip text shown next to the settings button. */
   statusLabel?: string
   /** Status chip tone: true = green, false = neutral gray. */
@@ -163,6 +165,7 @@ export type HomeHeaderProps = {
 
 export function HomeHeader({
   title,
+  titleColor: titleColorProp,
   statusLabel,
   statusGreen,
   statusColor,
@@ -257,8 +260,8 @@ export function HomeHeader({
     }
   }
 
-  // Resolve the fill color for the title text when a menu is present.
-  const titleColor = statusColor ?? (statusGreen ? PRIMARY : TEXT_PRIMARY)
+  // Resolve the fill color for the title text. Prop override takes priority.
+  const titleColor = titleColorProp ?? statusColor ?? (statusGreen ? PRIMARY : TEXT_PRIMARY)
 
   const hasMenu = statusMenu && statusMenu.length > 0
 
@@ -299,7 +302,7 @@ export function HomeHeader({
       </IconPressable>
     ) : (
       <View style={styles.titleRow}>
-        <Text style={styles.title} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
+        <Text style={[styles.title, titleColorProp ? { color: titleColorProp } : null]} maxFontSizeMultiplier={FONT_SCALE.ui}>{title}</Text>
         {badge != null && (
           <CountBadge value={badge} color={badgeColor ?? PRIMARY} />
         )}

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -15,6 +16,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user, loading: false }),
   signOut: async () => {
     await supabase.auth.signOut()
+    try { await GoogleSignin.signOut() } catch {}
     set({ user: null })
   },
 }))
