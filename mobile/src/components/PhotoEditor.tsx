@@ -66,6 +66,110 @@ async function uploadFileToStorage(uri: string, filename: string, contentType: s
   if (!res.ok) throw new Error(await res.text())
 }
 
+async function compressPhoto(uri: string): Promise<string> {
+  const MAX_BYTES = 300 * 1024
+  const qualities = [0.8, 0.6, 0.45, 0.3]
+  let lastUri = uri
+  for (const q of qualities) {
+    const out = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1080 } }],
+      { compress: q, format: ImageManipulator.SaveFormat.WEBP }
+    )
+    lastUri = out.uri
+    const size = (await (await fetch(out.uri)).blob()).size
+    if (size <= MAX_BYTES) return out.uri
+  }
+  return lastUri
+}
+
+// Encodes a blurhash string (~30 chars) from the source image. Pure-JS:
+// resize to 32px PNG, decode to RGBA, feed to blurhash encoder. Returns ''
+// on failure so the caller can still proceed (rendering falls back to a
+// flat placeholder).
+async function computeBlurhash(uri: string): Promise<string> {
+  try {
+    const small = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 32 } }],
+      { format: ImageManipulator.SaveFormat.PNG, base64: true }
+    )
+    const base64 = small.base64
+    if (!base64) return ''
+    const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    const png = UPNG.decode(binary.buffer)
+    const rgba = new Uint8ClampedArray(UPNG.toRGBA8(png)[0])
+    return encodeBlurhash(rgba, png.width, png.height, 4, 3)
+  } catch (e) {
+    console.error('blurhash encode failed', e)
+    return ''
+  }
+}
+
+// Public helper: pick the same compress + blurhash + upload pipeline used
+// by PhotoEditor, but for a single asset URI. Caller passes the source URI
+// (typically from DocumentPicker) and gets back the committed filename + hash.
+// Also primes localPhotoUriCache so renderers can show the image from the
+// device cache while subsequent storage fetches warm the ExpoImage cache.
+export async function processAndUploadPhoto(uri: string, userId: string, token: string): Promise<ImageData> {
+  const normalFilename = `${uuidv4()}.webp`
+  const [normalUri, hash] = await Promise.all([
+    compressPhoto(uri),
+    computeBlurhash(uri),
+  ])
+  // Prime the local cache before uploading so any render between commit
+  // and upload-completion shows the picked photo (mirrors onboarding/deferred).
+  localPhotoUriCache.set(normalFilename, normalUri)
+  try {
+    await uploadFileToStorage(normalUri, normalFilename, 'image/webp', 'normal', token, userId)
+  } catch (e) {
+    localPhotoUriCache.delete(normalFilename)
+    throw e
+  }
+  return { normal: normalFilename, hash }
+}
+
+// Deferred variant: synchronously assigns a filename and primes the local
+// cache from the original URI so the UI can render the picked photo
+// immediately, then runs compression + blurhash + upload in the background.
+// Mirrors the onboarding deferred-upload path (PhotoEditor.deferUpload=true).
+//
+// Returns the chosen filename and an `uploaded` promise that resolves with
+// the final hash once the upload lands. Callers should also `await` the
+// promise before persisting items to the server so the row references a
+// file that actually exists in storage.
+export function processAndUploadPhotoDeferred(
+  uri: string,
+  userId: string,
+  token: string,
+): { filename: string; uploaded: Promise<string> } {
+  const normalFilename = `${uuidv4()}.webp`
+  // Prime cache + mark deferred immediately so the UI shows the picked
+  // photo and any save path knows to wait for completion.
+  localPhotoUriCache.set(normalFilename, uri)
+  pendingDeferred.add(normalFilename)
+  const uploaded = (async () => {
+    try {
+      const [normalUri, hash] = await Promise.all([
+        compressPhoto(uri),
+        computeBlurhash(uri),
+      ])
+      // Swap the cache entry to the compressed copy so memory pressure
+      // pruning the original (DocumentPicker tmp file) doesn't break the
+      // local placeholder.
+      localPhotoUriCache.set(normalFilename, normalUri)
+      await uploadFileToStorage(normalUri, normalFilename, 'image/webp', 'normal', token, userId)
+      pendingDeferred.delete(normalFilename)
+      return hash
+    } catch (e) {
+      localPhotoUriCache.delete(normalFilename)
+      pendingDeferred.delete(normalFilename)
+      throw e
+    }
+  })()
+  return { filename: normalFilename, uploaded }
+}
+
 export interface PhotoEditorRef {
   flush: () => Promise<void>
 }
@@ -319,44 +423,51 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   // directly so the save is not lost if the parent unmounts before the
   // useDataSave debounce timer can fire.
   const flushRef = useRef<() => Promise<void>>(async () => {})
-  flushRef.current = async () => {
-    const entries = Array.from(pendingUploads.current.values())
-    if (entries.length === 0) return
+  const inFlightFlush = useRef<Promise<void> | null>(null)
+  flushRef.current = () => {
+    if (inFlightFlush.current) return inFlightFlush.current
+    const run = async () => {
+      const entries = Array.from(pendingUploads.current.values())
+      if (entries.length === 0) return
 
-    const userId = user?.id
-    if (!userId) return
+      const userId = user?.id
+      if (!userId) return
 
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token ?? ''
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? ''
 
-    for (const lp of entries) {
-      try {
-        await uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId)
-        pendingDeferred.delete(lp.normalFilename)
-        const state = useUserStore.getState().profile
-        if (state) {
-          const imgs = state.images
-          const idx = imgs.findIndex(e => e.normal === lp.normalFilename)
-          if (idx >= 0) {
-            const next = [...imgs]
-            next[idx] = { ...next[idx], hash: lp.hash }
-            useUserStore.getState().update({ items: mergePhotosIntoItems(next, state.items) })
+      for (const lp of entries) {
+        try {
+          await uploadFileToStorage(lp.normalUri, lp.normalFilename, 'image/webp', 'normal', token, userId)
+          pendingDeferred.delete(lp.normalFilename)
+          const state = useUserStore.getState().profile
+          if (state) {
+            const imgs = state.images
+            const idx = imgs.findIndex(e => e.normal === lp.normalFilename)
+            if (idx >= 0) {
+              const next = [...imgs]
+              next[idx] = { ...next[idx], hash: lp.hash }
+              useUserStore.getState().update({ items: mergePhotosIntoItems(next, state.items) })
+            }
+          }
+        } catch (e) {
+          console.error('Deferred upload error:', e)
+          pendingDeferred.delete(lp.normalFilename)
+          const state = useUserStore.getState().profile
+          if (state) {
+            useUserStore.getState().update({ items: mergePhotosIntoItems(state.images.filter(img => img.normal !== lp.normalFilename), state.items) })
           }
         }
-      } catch (e) {
-        console.error('Deferred upload error:', e)
-        pendingDeferred.delete(lp.normalFilename)
-        const state = useUserStore.getState().profile
-        if (state) {
-          useUserStore.getState().update({ items: mergePhotosIntoItems(state.images.filter(img => img.normal !== lp.normalFilename), state.items) })
-        }
+        pendingUploads.current.delete(lp.normalFilename)
+        localPhotoUriCache.delete(lp.normalFilename)
       }
-      pendingUploads.current.delete(lp.normalFilename)
-      localPhotoUriCache.delete(lp.normalFilename)
-    }
 
-    const finalState = useUserStore.getState().profile
-    if (finalState) await invoke('app/items', { items: finalState.items }).catch(console.error)
+      const finalState = useUserStore.getState().profile
+      if (finalState) await invoke('app/items', { items: finalState.items }).catch(console.error)
+    }
+    const p = run().finally(() => { inFlightFlush.current = null })
+    inFlightFlush.current = p
+    return p
   }
 
   useImperativeHandle(ref, () => ({ flush: () => flushRef.current() }), [])
@@ -371,63 +482,11 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     }
   }, [])
 
-  const compressUnder200K = async (uri: string): Promise<string> => {
-    const MAX_BYTES = 200 * 1024
-    const widths = [1080, 900, 720, 540]
-    const qualities = [0.8, 0.6, 0.45, 0.3]
-    for (const w of widths) {
-      for (const q of qualities) {
-        const out = await ImageManipulator.manipulateAsync(
-          uri,
-          [{ resize: { width: w } }],
-          { compress: q, format: ImageManipulator.SaveFormat.WEBP }
-        )
-        const size = (await (await fetch(out.uri)).blob()).size
-        if (size <= MAX_BYTES) return out.uri
-      }
-    }
-    const out = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 480 } }],
-      { compress: 0.25, format: ImageManipulator.SaveFormat.WEBP }
-    )
-    return out.uri
-  }
-
-  // Encodes a blurhash string (~30 chars) from the source image. Pure-JS:
-  // resize to 32px PNG, decode to RGBA, feed to blurhash encoder. Runs in
-  // the background alongside compression; returns '' on failure so the
-  // caller can still proceed (rendering falls back to a flat placeholder).
-  const computeBlurhash = async (uri: string): Promise<string> => {
-    try {
-      const small = await ImageManipulator.manipulateAsync(
-        uri,
-        [{ resize: { width: 32 } }],
-        { format: ImageManipulator.SaveFormat.PNG, base64: true }
-      )
-      const base64 = small.base64
-      if (!base64) return ''
-      const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-      const png = UPNG.decode(binary.buffer)
-      const rgba = new Uint8ClampedArray(UPNG.toRGBA8(png)[0])
-      return encodeBlurhash(rgba, png.width, png.height, 4, 3)
-    } catch (e) {
-      console.error('blurhash encode failed', e)
-      return ''
-    }
-  }
-
   const uploadOne = async (asset: DocumentPicker.DocumentPickerAsset): Promise<ImageData | null> => {
     if (!user) return null
-    const normalFilename = `${uuidv4()}.webp`
-    const [normalUri, hash] = await Promise.all([
-      compressUnder200K(asset.uri),
-      computeBlurhash(asset.uri),
-    ])
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token ?? ''
-    await uploadFileToStorage(normalUri, normalFilename, 'image/webp', 'normal', token, user.id)
-    return { normal: normalFilename, hash }
+    return processAndUploadPhoto(asset.uri, user.id, token)
   }
 
   const pickPhoto = async () => {
@@ -499,7 +558,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       for (const e of entries) {
         try {
           const [normalUri, hash] = await Promise.all([
-            compressUnder200K(e.originalUri),
+            compressPhoto(e.originalUri),
             computeBlurhash(e.originalUri),
           ])
           const pending = pendingUploads.current.get(e.normalFilename)

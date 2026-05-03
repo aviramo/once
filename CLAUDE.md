@@ -337,17 +337,17 @@ Every soft/hard refusal writes a row. The `others` RPC left-joins here to set `r
 | `created_at` | timestamptz | default `now()` |
 | `user_id` | uuid | who issued the restriction |
 | `other_id` | uuid | target |
-| `key` | text | reason. `others` treats `ignore`/`refuse`/`cancel`/`leave` as a 24h cooldown and `block` as permanent. |
+| `key` | text | reason. Cooldown duration depends on the key (see table below). |
 
-Keys under the new endpoint set:
-- `cancel` — A cancelled an outgoing invite to B → cooldown A→B (24h)
-- `decline` — B declined A's incoming invite → cooldown B→A (24h, replaces old `refuse`)
-- `remove` — B removed viewer X → cooldown B→X (24h)
-- `leave` — chat ended by one side (24h) — kept if chat-leave endpoint survives (open)
-- `ignore` — passive skip (24h) — kept if ignore endpoint survives (open)
+Keys and per-event cooldown durations:
+- `ignore` — passive skip → cooldown **24h**
+- `cancel` — A cancelled an outgoing invite to B → cooldown A→B **24h**
+- `remove` — B removed viewer X → cooldown B→X **24h**
+- `decline` — B declined A's incoming invite → cooldown B→A **7 days**
+- `leave` — chat ended by one side → cooldown **14 days**
 - `block` — hard block, **permanent** (no expiry)
 
-Cooldown is **24h for all keys except `block`, which never expires.** The `others` RPC currently implements this (`key in (...) and created_at > now() - interval '1 day' or key = 'block'`) and stays as-is.
+The `others` RPC implements per-key durations: `(key='ignore' AND created_at > now() - interval '1 day') OR (key='cancel' AND ...) OR (key='remove' AND ...) OR (key='decline' AND created_at > now() - interval '7 days') OR (key='leave' AND created_at > now() - interval '14 days') OR key='block'`.
 
 ### `chat` (message log)
 

@@ -24,7 +24,7 @@ import { SINGLE } from '../src/fonts'
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const SLIDE_COUNT = 9
-const AUTOPLAY_MS = 6000
+const AUTOPLAY_MS = 5000
 
 const CAROUSEL_DATA = [...Array(SLIDE_COUNT).keys()] as number[]
 
@@ -45,40 +45,40 @@ type Slide = { he: SlideLocale; en: SlideLocale }
 
 const SLIDES: Slide[] = [
   {
-    he: { title: 'כשיש חיבור,\nזה רק אתם', subtitle: 'מפגש אחד מקבל את כל המקום. בלי רעש, בלי הסחות.' },
-    en: { title: 'When it clicks,\nit\'s just you', subtitle: 'One connection gets the whole space. No noise, no distractions.' },
+    he: { title: 'אחד על אחד\nזה הכוח', subtitle: 'מפגש אחד בזמן אמת' },
+    en: { title: 'One on one\nis the power', subtitle: 'One real time moment' },
   },
   {
-    he: { title: 'יותר מדי אנשים.\nפחות מדי נוכחות', subtitle: 'כשכולם פתוחים במקביל, קשה להרגיש משהו אמיתי.' },
-    en: { title: 'Too many people.\nToo little presence', subtitle: 'When everything is open at once, it\'s hard to feel something real.' },
+    he: { title: 'בלי רעש\nבלי קטלוג', subtitle: 'רק מה שמרגיש אמיתי' },
+    en: { title: 'No noise\nNo catalog', subtitle: 'Only what feels real' },
   },
   {
-    he: { title: 'חיבור אמיתי\nמתחיל בפוקוס', subtitle: 'אדם אחד. קשב אחד.' },
-    en: { title: 'Real connection\nstarts with focus', subtitle: 'One person. One clear attention.' },
+    he: { title: 'הלב בוחר\nאדם אחד', subtitle: 'לא כולם רק מי שמרגיש' },
+    en: { title: 'Heart picks\none person', subtitle: 'Not all just one' },
   },
   {
-    he: { title: 'שולחים\nהזמנה אחת', subtitle: 'בכל רגע אפשר לבחור אדם אחד ולהושיט יד.' },
-    en: { title: 'Send\none invitation', subtitle: 'At any moment, choose one person and reach out.' },
+    he: { title: 'שולחים\nסימן אחד', subtitle: 'כשזה מרגיש נכון' },
+    en: { title: 'Send\none sign', subtitle: 'When it feels right' },
   },
   {
-    he: { title: 'או מקבלים\nהזמנה אחת', subtitle: 'רגע אחד קטן שמבקש תשובה אמיתית.' },
-    en: { title: 'Or receive\none invitation', subtitle: 'One small moment asking for a real answer.' },
+    he: { title: 'הזמנה\nמגיעה', subtitle: 'רגע לענות באמת' },
+    en: { title: 'Invite\narrives', subtitle: 'A real moment to reply' },
   },
   {
-    he: { title: 'כשיש חיבור,\nנפתח צ׳אט אחד', subtitle: 'מרגע שנכנסים, השיחה היא רק שלכם.' },
-    en: { title: 'When there\'s a match,\none chat opens', subtitle: 'Once you enter, the conversation is only yours.' },
+    he: { title: 'אם זה הדדי\nזה נפתח', subtitle: 'שיחה אחת לשניכם' },
+    en: { title: 'If mutual\nit opens', subtitle: 'One chat for two' },
   },
   {
-    he: { title: 'בועה\nלשניים', subtitle: 'אף אחד אחר לא בפנים. רק אתם והמפגש.' },
-    en: { title: 'A bubble\nfor two', subtitle: 'No one else inside. Just you and the moment.' },
+    he: { title: 'בועה אחת\nרק לשניים', subtitle: 'בלי הפרעות מבחוץ' },
+    en: { title: 'One bubble\nfor two', subtitle: 'No outside noise' },
   },
   {
-    he: { title: 'בלייב.\nבזמן אמת', subtitle: 'לא אחר כך. מה שקורה, קורה עכשיו.' },
-    en: { title: 'Live.\nIn real time', subtitle: 'Not later. What happens, happens now.' },
+    he: { title: 'כאן ועכשיו\nלא אחר כך', subtitle: 'החיבור קורה בלייב' },
+    en: { title: 'Here now\nnot later', subtitle: 'Connection happens live' },
   },
   {
-    he: { title: 'כאן מתחיל\nמשהו אמיתי', subtitle: 'פחות רעש. יותר נוכחות. מפגש אחד בזמן אמת.' },
-    en: { title: 'Something real\nstarts here', subtitle: 'Less noise. More presence. One connection in real time.' },
+    he: { title: 'ניצוץ אחד\nמתחיל הכל', subtitle: 'כאן מתחיל משהו אמיתי' },
+    en: { title: 'One spark\nstarts it', subtitle: 'Something real begins' },
   },
 ]
 
@@ -89,14 +89,15 @@ GoogleSignin.configure({
   iosClientId: '243101157812-39cu77j7o0ukr8vvnl59mshsdelne3he.apps.googleusercontent.com',
 })
 
-async function signInWithGoogle() {
+async function signInWithGoogle(): Promise<boolean> {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
   const response = await GoogleSignin.signIn()
-  if (response.type === 'cancelled') return
+  if (response.type === 'cancelled') return false
   const idToken = response.data.idToken
   if (!idToken) throw new Error('No idToken from Google')
   const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken })
   if (error) throw error
+  return true
 }
 
 async function signInWithApple() {
@@ -196,21 +197,33 @@ function CarouselCard({ slideIndex, cardWidth, cardHeight }: {
   const { title, subtitle } = SLIDES[slideIndex][locale]
 
   return (
-    <View style={[cardStyles.card, { width: cardWidth, height: cardHeight }]}>
-      <Image
-        source={SLIDE_IMAGES[slideIndex]}
-        style={{ position: 'absolute', top: 0, left: 0, width: cardWidth, height: cardHeight }}
-        resizeMode="cover"
-      />
-      <View style={cardStyles.textOverlay}>
-        <Text style={cardStyles.title}>{title}</Text>
-        <Text style={cardStyles.subtitle}>{subtitle}</Text>
+    <View style={{ width: cardWidth, height: cardHeight }}>
+      <View style={[StyleSheet.absoluteFill, cardStyles.shadowLayer]} />
+      <View style={[cardStyles.card, { width: cardWidth, height: cardHeight }]}>
+        <Image
+          source={SLIDE_IMAGES[slideIndex]}
+          style={{ position: 'absolute', top: 0, left: 0, width: cardWidth, height: cardHeight }}
+          resizeMode="cover"
+        />
+        <View style={cardStyles.textOverlay}>
+          <Text style={cardStyles.title}>{title}</Text>
+          <Text style={cardStyles.subtitle}>{subtitle}</Text>
+        </View>
       </View>
     </View>
   )
 }
 
 const cardStyles = StyleSheet.create({
+  shadowLayer: {
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   card: {
     borderRadius: 28,
     overflow: 'hidden',
@@ -247,33 +260,63 @@ const cardStyles = StyleSheet.create({
 
 // ── Progress bar ───────────────────────────────────────────────────────────
 
-function ProgressBar({ scrollAnim, step, slideCount, width }: {
+const PB_BTN = 28
+const PB_GAP = 10
+
+function ProgressBar({ scrollAnim, step, slideCount, width, isPaused, onReset, onTogglePause }: {
   scrollAnim: RNAnimated.Value
   step: number
   slideCount: number
   width: number
+  isPaused: boolean
+  onReset: () => void
+  onTogglePause: () => void
 }) {
-  const minFill = width / slideCount
+  const trackWidth = width - 2 * (PB_BTN + PB_GAP)
+  const minFill = trackWidth / slideCount
   const fillWidth = scrollAnim.interpolate({
     inputRange: [0, (slideCount - 1) * step],
-    outputRange: I18nManager.isRTL ? [width, minFill] : [minFill, width],
+    outputRange: I18nManager.isRTL ? [trackWidth, minFill] : [minFill, trackWidth],
     extrapolate: 'clamp',
   })
+  const ic = 'rgba(0,0,0,0.38)'
   return (
-    <View style={pbStyles.container}>
-      <View style={[pbStyles.track, { width }]}>
+    <View style={[pbStyles.container, { width }]}>
+      <Pressable onPress={onReset} hitSlop={10} style={({ pressed }) => [pbStyles.btn, pressed && pbStyles.btnPressed]}>
+        <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={ic} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <Path d="M3 3v5h5" />
+        </Svg>
+      </Pressable>
+
+      <View style={[pbStyles.track, { width: trackWidth }]}>
         <RNAnimated.View style={[pbStyles.fill, { width: fillWidth }]} />
       </View>
+
+      <Pressable onPress={onTogglePause} hitSlop={10} style={({ pressed }) => [pbStyles.btn, pressed && pbStyles.btnPressed]}>
+        {isPaused ? (
+          <Svg width={17} height={17} viewBox="0 0 24 24">
+            <Path d="M5 3l14 9-14 9V3z" fill={ic} />
+          </Svg>
+        ) : (
+          <Svg width={17} height={17} viewBox="0 0 24 24">
+            <Path d="M6 4h4v16H6zM14 4h4v16h-4z" fill={ic} />
+          </Svg>
+        )}
+      </Pressable>
     </View>
   )
 }
 
-const PROGRESS_HEIGHT = 31
+const PROGRESS_HEIGHT = 46
+const SHADOW_PAD = 18
 
 const pbStyles = StyleSheet.create({
-  container: { paddingVertical: 14, alignItems: 'center' },
-  track: { height: 3, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 1.5, overflow: 'hidden' },
-  fill: { position: 'absolute', top: 0, bottom: 0, start: 0, backgroundColor: PRIMARY, borderRadius: 1.5 },
+  container: { height: PROGRESS_HEIGHT, flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: PB_GAP },
+  track: { height: 5, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 3, overflow: 'hidden' },
+  fill: { position: 'absolute', top: 0, bottom: 0, start: 0, backgroundColor: PRIMARY, borderRadius: 3 },
+  btn: { width: PB_BTN, height: PB_BTN, alignItems: 'center', justifyContent: 'center', borderRadius: PB_BTN / 2 },
+  btnPressed: { backgroundColor: 'rgba(0,0,0,0.07)' },
 })
 
 // ── Screen ─────────────────────────────────────────────────────────────────
@@ -289,10 +332,11 @@ export default function LoginPage() {
 
   const [carouselSectionHeight, setCarouselSectionHeight] = useState(0)
   const CARD_HEIGHT = carouselSectionHeight > 0
-    ? Math.max(carouselSectionHeight - PROGRESS_HEIGHT, 100)
+    ? Math.max(carouselSectionHeight - PROGRESS_HEIGHT - SHADOW_PAD * 2, 100)
     : Math.floor(SH * 0.575)
 
   const [loadingProvider, setLoadingProvider] = useState<'google' | 'apple' | null>(null)
+  const [isPaused, setIsPaused] = useState(false)
 
   const listRef = useRef<FlatList<number>>(null)
   const activeRef = useRef(0)
@@ -314,18 +358,20 @@ export default function LoginPage() {
 
   // ── Autoplay ───────────────────────────────────────────────────────────
 
-  function stopAutoplay() {
+  function stopAutoplay(pause = false) {
     if (autoplayRef.current) {
       clearInterval(autoplayRef.current)
       autoplayRef.current = null
     }
+    if (pause) setIsPaused(true)
   }
 
   function startAutoplay() {
     stopAutoplay()
+    setIsPaused(false)
     autoplayRef.current = setInterval(() => {
       const next = activeRef.current + 1
-      if (next >= SLIDE_COUNT) { stopAutoplay(); return }
+      if (next >= SLIDE_COUNT) { stopAutoplay(true); return }
       listRef.current?.scrollToOffset({ offset: next * STEP, animated: true })
       activeRef.current = next
     }, AUTOPLAY_MS)
@@ -333,8 +379,21 @@ export default function LoginPage() {
 
   useEffect(() => {
     startAutoplay()
-    return stopAutoplay
+    return () => stopAutoplay()
   }, [STEP])
+
+  // ── Carousel controls ──────────────────────────────────────────────────
+
+  const handleReset = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+    activeRef.current = 0
+    startAutoplay()
+  }
+
+  const handleTogglePause = () => {
+    if (isPaused) startAutoplay()
+    else stopAutoplay(true)
+  }
 
   // ── Scroll handlers ────────────────────────────────────────────────────
 
@@ -343,10 +402,9 @@ export default function LoginPage() {
     activeRef.current = I18nManager.isRTL ? SLIDE_COUNT - 1 - raw : raw
   }
 
-  // Any user touch stops autoplay permanently
   const onScrollBeginDrag = () => {
     momentumStartedRef.current = false
-    stopAutoplay()
+    stopAutoplay(true)
   }
   const onMomentumScrollBegin = () => { momentumStartedRef.current = true }
   const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -360,16 +418,24 @@ export default function LoginPage() {
 
   const handleGoogle = async () => {
     setLoadingProvider('google')
-    try { await signInWithGoogle() }
-    catch (e: any) { console.error('Google sign-in error:', e) }
-    finally { setLoadingProvider(null) }
+    try {
+      const signedIn = await signInWithGoogle()
+      if (!signedIn) setLoadingProvider(null)
+      // On success: keep spinner — screen navigates away on auth state change
+    } catch (e: any) {
+      console.error('Google sign-in error:', e)
+      setLoadingProvider(null)
+    }
   }
 
   const handleApple = async () => {
     setLoadingProvider('apple')
     try { await signInWithApple() }
-    catch (e: any) { if (e.code !== 'ERR_REQUEST_CANCELED') console.error('Apple sign-in error:', e) }
-    finally { setLoadingProvider(null) }
+    // On success: no catch/finally — keep spinner until screen unmounts
+    catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') console.error('Apple sign-in error:', e)
+      setLoadingProvider(null)
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -378,12 +444,17 @@ export default function LoginPage() {
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
 
-      {/* Brand area — icon always on the left, name to its right */}
+      {/* Brand area — name centered on screen, matchstick to its right.
+          A transparent spacer of identical width balances the row so the
+          text "Once" sits at the geometric center. */}
       <View style={styles.brand}>
-        <View style={styles.logoWrapper}>
-          <OnceLogo size={52} />
+        <View style={styles.brandInner}>
+          <View style={styles.brandSpacer} />
+          <Text style={styles.brandName}>Once</Text>
+          <View style={styles.logoWrapper} pointerEvents="none">
+            <OnceLogo size={52} />
+          </View>
         </View>
-        <Text style={styles.brandName}>Once</Text>
       </View>
 
       {/* Carousel */}
@@ -397,10 +468,11 @@ export default function LoginPage() {
           snapToInterval={STEP}
           decelerationRate="fast"
           bounces={false}
-          contentContainerStyle={{ paddingHorizontal: SIDE_INSET }}
+          style={{ overflow: 'visible' }}
+          contentContainerStyle={{ paddingHorizontal: SIDE_INSET, paddingVertical: SHADOW_PAD }}
           ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
           getItemLayout={(_, index) => ({ length: STEP, offset: STEP * index, index })}
-          onTouchStart={stopAutoplay}
+          onTouchStart={() => stopAutoplay(true)}
           onScrollBeginDrag={onScrollBeginDrag}
           onMomentumScrollBegin={onMomentumScrollBegin}
           onMomentumScrollEnd={onMomentumScrollEnd}
@@ -418,7 +490,15 @@ export default function LoginPage() {
             />
           )}
         />
-        <ProgressBar scrollAnim={scrollAnim} step={STEP} slideCount={SLIDE_COUNT} width={CARD_WIDTH} />
+        <ProgressBar
+          scrollAnim={scrollAnim}
+          step={STEP}
+          slideCount={SLIDE_COUNT}
+          width={CARD_WIDTH}
+          isPaused={isPaused}
+          onReset={handleReset}
+          onTogglePause={handleTogglePause}
+        />
       </View>
 
       {/* Bottom — fixed login area */}
@@ -461,14 +541,23 @@ const styles = StyleSheet.create({
 
   // ── Brand ──────────────────────────────────────────────────────────────
   brand: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 40,
-    paddingBottom: 42,
-    gap: 12,
-    // Always LTR so icon stays on the left in RTL locales
+    paddingBottom: 16,
+  },
+  // brandInner is a 3-cell row: [spacer | "Once" | matchstick].
+  // Spacer + matchstick are equal width, so the text lands exactly centered.
+  // Forced LTR keeps the visual order stable in Hebrew (RTL) locales.
+  brandInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     direction: 'ltr',
+  },
+  brandSpacer: {
+    width: 52,
+    height: 52,
+    marginHorizontal: 6,
   },
   brandName: {
     fontSize: 34,
@@ -477,6 +566,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   logoWrapper: {
+    width: 52,
+    height: 52,
+    marginHorizontal: 6,
     borderRadius: 14,
     overflow: 'hidden',
   },
@@ -485,6 +577,7 @@ const styles = StyleSheet.create({
   carouselSection: {
     flex: 1,
     justifyContent: 'center',
+    overflow: 'visible',
   },
 
   // ── Bottom ─────────────────────────────────────────────────────────────

@@ -34,13 +34,9 @@ function formatLastSeen(iso: string | null | undefined): string {
   return t('match.daysAgo').replace('{n}', String(Math.floor(diff / 86400)))
 }
 
-const NEAR_METERS = 1000
 const ONLINE_SECONDS = 60
 const NEW_SECONDS = 3600
 
-function isDistanceNear(m?: number | null) {
-  return m != null && !isNaN(m) && m < NEAR_METERS
-}
 function isOnlineNow(iso?: string | null) {
   if (!iso) return false
   return (Date.now() - new Date(iso).getTime()) / 1000 < ONLINE_SECONDS
@@ -162,7 +158,7 @@ export function WatcherCard({ watcher, units, exiting, onExited, onPress }: Prop
               <Chip
                 renderIcon={color => <PinIcon color={color} />}
                 text={distance}
-                tone={isDistanceNear(watcher.distance) ? 'positive' : 'neutral'}
+                tone="neutral"
               />
             ) : null}
             {lastSeen ? (

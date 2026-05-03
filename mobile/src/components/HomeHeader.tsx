@@ -229,10 +229,10 @@ export function HomeHeader({
       sweepProgress.value = 0
       sweepProgress.value = withRepeat(
         withSequence(
-          withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.cubic) }),
-          withDelay(180, withTiming(0, { duration: 0 })),
+          withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.cubic) }),
+          withDelay(320, withTiming(0, { duration: 0 })),
         ),
-        3,
+        2,
         false,
       )
     } else {
@@ -339,8 +339,8 @@ export function HomeHeader({
               <Svg width={sweepWidth} height={56}>
                 <Defs>
                   <LinearGradient id="windSweep" x1="0" y1="0" x2={sweepWidth} y2="0" gradientUnits="userSpaceOnUse">
-                    <Stop offset="0%" stopColor={PRIMARY} stopOpacity={isRTL ? 0.45 : 0} />
-                    <Stop offset="100%" stopColor={PRIMARY} stopOpacity={isRTL ? 0 : 0.45} />
+                    <Stop offset="0%" stopColor={PRIMARY} stopOpacity={isRTL ? 0.2 : 0} />
+                    <Stop offset="100%" stopColor={PRIMARY} stopOpacity={isRTL ? 0 : 0.2} />
                   </LinearGradient>
                 </Defs>
                 <Path d={arrowPath} fill="url(#windSweep)" />

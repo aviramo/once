@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, Platform, PanResponder, BackHandler } from 'react-native'
+import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, Platform, PanResponder, BackHandler, Dimensions } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
+import { getLocales } from 'expo-localization'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
@@ -15,6 +16,10 @@ import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
 import { TEXT_PRIMARY, WHITE, DESTRUCTIVE, PRIMARY, GRAY_50 } from '../src/colors'
 import { SINGLE } from '../src/fonts'
+import { OnceLogo } from '../src/components/OnceLogo'
+
+const IMPERIAL_REGIONS = new Set(['US', 'LR', 'MM'])
+const autoUnits = IMPERIAL_REGIONS.has(getLocales()[0]?.regionCode ?? '') ? 'imperial' : 'metric'
 
 const TOTAL_STEPS = 5
 type DateUnit = 'dd' | 'mm' | 'yyyy'
@@ -122,23 +127,27 @@ export default function OnboardingPage() {
   const [dateError, setDateError] = useState<string | null>(null)
   const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
-  const [savingImages, setSavingImages] = useState(false)
   const [totalPhotoCount, setTotalPhotoCount] = useState(profile?.images?.length ?? 0)
   const photoEditorRef = useRef<PhotoEditorRef>(null)
 
-  const [containerH, setContainerH] = useState(0)
-  const slideY = useRef(new Animated.Value(0)).current
+  // Estimate the pager height for first paint so the initial step renders
+  // immediately (rather than flashing an empty background until onLayout fires).
+  const initialPagerH = Math.max(100, Dimensions.get('window').height - insets.top - insets.bottom)
+  const [containerH, setContainerH] = useState(initialPagerH)
+  const measuredOnceRef = useRef(false)
+  const slideY = useRef(new Animated.Value(-(initialStep - 1) * initialPagerH)).current
   const keyboardOffset = useRef(new Animated.Value(0)).current
   const keyboardShift = useRef(new Animated.Value(0)).current
   const totalY = useRef(Animated.add(slideY, keyboardShift)).current
   const stepRef = useRef(step)
   const containerHRef = useRef(containerH)
+  const bioSubmittingRef = useRef(false)
   useEffect(() => { stepRef.current = step }, [step])
   useEffect(() => { containerHRef.current = containerH }, [containerH])
 
   const canGoBack = (s: number) => s === 2 || s === 3 || s === 5
   const goBack = () => setStep(s => canGoBack(s) ? s - 1 : s)
-  const overlayY = useRef(new Animated.Value(9999)).current
+  const overlayY = useRef(new Animated.Value(initialStep === 5 ? 0 : initialPagerH)).current
 
   useEffect(() => {
     const onBack = () => {
@@ -209,6 +218,7 @@ export default function OnboardingPage() {
       ]).start()
     })
     const hide = Keyboard.addListener(hideEvent, (e) => {
+      if (bioSubmittingRef.current) return
       const duration = (e as any).duration ?? 250
       Animated.parallel([
         Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }),
@@ -304,13 +314,13 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (step === 2) {
-      const id = requestAnimationFrame(() => nameInputRef.current?.focus())
-      return () => cancelAnimationFrame(id)
+      const id = setTimeout(() => nameInputRef.current?.focus(), 0)
+      return () => clearTimeout(id)
     }
     if (step === 3) {
       const first = dateOrder[0]
-      const id = requestAnimationFrame(() => unitRefs[first].current?.focus())
-      return () => cancelAnimationFrame(id)
+      const id = setTimeout(() => unitRefs[first].current?.focus(), 280)
+      return () => clearTimeout(id)
     }
     if (step === 5) {
       const id = setTimeout(() => bioInputRef.current?.focus(), 280)
@@ -342,7 +352,7 @@ export default function OnboardingPage() {
     step === 1 ? isMale !== null :
     step === 2 ? nameValid :
     step === 3 ? dateValid && !submitting :
-    step === 4 ? totalPhotoCount >= 1 && !savingImages :
+    step === 4 ? totalPhotoCount >= 1 :
     step === 5 ? bioValid && !bioSubmitting :
     false
 
@@ -352,7 +362,7 @@ export default function OnboardingPage() {
     setDateError(null)
     try {
       seededFromProfileRef.current = true
-      await invoke('app/account', { birth_date: birthdate, name: name.trim(), is_male: isMale })
+      await invoke('app/account', { birth_date: birthdate, name: name.trim(), is_male: isMale, units: autoUnits })
       setStep(s => Math.min(TOTAL_STEPS, s + 1))
     } catch (e: any) {
       setDateError(e?.message ?? 'error')
@@ -361,26 +371,37 @@ export default function OnboardingPage() {
     }
   }
 
+  const flushPromiseRef = useRef<Promise<void> | null>(null)
   const saveImagesAndContinue = () => {
-    if (savingImages) return
-    setSavingImages(true)
-    photoEditorRef.current?.flush().catch(e => console.error('storage upload failed', e))
+    const p = photoEditorRef.current?.flush()
+    if (p) flushPromiseRef.current = p.catch(e => { console.error('storage upload failed', e) })
     setStep(s => Math.min(TOTAL_STEPS, s + 1))
-    setSavingImages(false)
   }
 
   const submitBio = async () => {
-    if (bioSubmitting) return
+    if (bioSubmittingRef.current) return
+    bioSubmittingRef.current = true
     setBioSubmitting(true)
     try {
+      if (flushPromiseRef.current) {
+        await flushPromiseRef.current
+        flushPromiseRef.current = null
+      }
       const currentItems = useUserStore.getState().profile?.items ?? []
       const bioValue = bio.trim().replace(/\n{3,}/g, '\n\n')
+      const bioItem = { kind: 'bio' as const, value: bioValue }
+      const withoutBio = currentItems.filter(it => it.kind !== 'bio')
+      const firstPhotoIdx = withoutBio.findIndex(it => it.kind === 'photo')
+      const insertAt = firstPhotoIdx >= 0 ? firstPhotoIdx + 1 : withoutBio.length
       const items = [
-        ...currentItems.filter(it => it.kind !== 'bio'),
-        { kind: 'bio' as const, value: bioValue },
+        ...withoutBio.slice(0, insertAt),
+        bioItem,
+        ...withoutBio.slice(insertAt),
       ]
       await invoke('app/items', { items })
+      useUserStore.getState().update({ items })
     } catch {
+      bioSubmittingRef.current = false
       setBioSubmitting(false)
     }
   }
@@ -393,7 +414,7 @@ export default function OnboardingPage() {
   const onContinue = () => {
     if (!canContinue) return
     tap()
-    Keyboard.dismiss()
+    if (step !== 2) Keyboard.dismiss()
     if (step === 3) { submitAccount(); return }
     if (step === 4) { saveImagesAndContinue(); return }
     if (step === 5) { submitBio(); return }
@@ -535,7 +556,6 @@ export default function OnboardingPage() {
             label={t('photo.confirm')}
             onPress={onContinue}
             disabled={totalPhotoCount < 1}
-            loading={savingImages}
             variant="primary"
             tone="positive"
             size="lg"
@@ -564,6 +584,7 @@ export default function OnboardingPage() {
               textAlignVertical="top"
               placeholder={t('bio.placeholder')}
               placeholderTextColor="rgba(0,0,0,0.3)"
+              editable={!bioSubmitting}
             />
             <Text style={[styles.bioCounter, !belowMin && bioRemaining < 20 && styles.bioCounterWarn]}>
               {belowMin ? t('bio.min') : bioRemaining}
@@ -600,9 +621,12 @@ export default function OnboardingPage() {
           style={styles.pagerWrap}
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height
-            if (h > 0 && containerH === 0) {
-              setContainerH(h)
-              slideY.setValue(-(step - 1) * h)
+            if (h > 0 && !measuredOnceRef.current) {
+              measuredOnceRef.current = true
+              if (h !== containerH) {
+                setContainerH(h)
+                slideY.setValue(-(stepRef.current - 1) * h)
+              }
             }
           }}
         >
@@ -627,6 +651,24 @@ export default function OnboardingPage() {
             </Animated.View>
           )}
         </View>
+        {bioSubmitting && (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: keyboardOffset,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <View style={{ borderRadius: 14, overflow: 'hidden' }}>
+              <OnceLogo size={52} />
+            </View>
+          </Animated.View>
+        )}
       </Animated.View>
     </SafeAreaView>
   )

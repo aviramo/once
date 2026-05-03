@@ -25,11 +25,13 @@ import { PullContext, type PullCtx } from '../src/components/HomeCard'
 import type { GestureType } from 'react-native-gesture-handler'
 import { OnceLogo } from '../src/components/OnceLogo'
 import { WhatsSpecialPage } from './login'
-import { localPhotoUriCache } from '../src/components/PhotoEditor'
-import type { Profile } from '../src/stores/userStore'
+import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from '../src/components/PhotoEditor'
+import * as DocumentPicker from 'expo-document-picker'
+import { supabase } from '../src/lib/supabase'
+import type { Profile, ProfileItem } from '../src/stores/userStore'
 import { slidingActiveRef, useSlidingActive } from '../src/lib/gesture'
 import { SINGLE, DOUBLE, BUTTON, DEFAULT_FAMILY } from '../src/fonts'
-import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_100, GRAY_400 } from '../src/colors'
+import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_100, GRAY_400, DESTRUCTIVE } from '../src/colors'
 
 const WARM_WHITE = '#FFFDFB'
 
@@ -1210,25 +1212,39 @@ function VerticalRadiusSlider({ stepCount, value, onChange }: RadiusSliderProps)
 
 // ── Radius helpers ─────────────────────────────────────────────────────────
 
-const RADIUS_STEPS = [0, 0.5, 1, 2, 5, 10, 20, 50, 70, 100, Infinity]
+const RADIUS_STEPS_KM = [0, 0.5, 1, 2, 5, 10, 20, 50, 70, 100, Infinity]
+// Miles steps chosen to roughly match the km steps in physical distance,
+// rounded to numbers that read nicely in miles.
+const RADIUS_STEPS_MI = [0, 0.3, 0.5, 1, 3, 5, 10, 30, 50, 60, Infinity]
+const M_PER_MI = 1609.344
 
-function snapRadius(km: number): number {
-  return RADIUS_STEPS.reduce((prev, curr) =>
-    Math.abs(curr - km) < Math.abs(prev - km) ? curr : prev
+function radiusSteps(units: string | null | undefined): number[] {
+  return units === 'imperial' ? RADIUS_STEPS_MI : RADIUS_STEPS_KM
+}
+
+function snapRadius(value: number, steps: number[]): number {
+  return steps.reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
   )
 }
 
-function formatRadius(km: number): string {
-  if (km === 0) return t('settings.rangeHere')
-  if (km === Infinity) return t('settings.rangeUnlimited')
-  if (km < 1) return `${km * 1000} ${t('settings.meter')}`
-  return `${km} ${t('settings.km')}`
+function formatRadius(value: number, units: string | null | undefined): string {
+  if (value === 0) return t('settings.rangeHere')
+  if (value === Infinity) return t('settings.rangeUnlimited')
+  if (units === 'imperial') return `${value} ${t('settings.miles')}`
+  if (value < 1) return `${value * 1000} ${t('settings.meter')}`
+  return `${value} ${t('settings.km')}`
 }
 
-function radiusToServer(km: number): number | null {
-  if (km === Infinity) return null
-  if (km === 0) return 250
-  return Math.round(km * 1000)
+function radiusToServer(value: number, units: string | null | undefined): number | null {
+  if (value === Infinity) return null
+  if (value === 0) return 250
+  return units === 'imperial' ? Math.round(value * M_PER_MI) : Math.round(value * 1000)
+}
+
+// Convert stored meters into the unit the slider/format uses.
+function metersToUnit(meters: number, units: string | null | undefined): number {
+  return units === 'imperial' ? meters / M_PER_MI : meters / 1000
 }
 
 // Saves a partial data object via app/data whenever the value changes.
@@ -1406,17 +1422,13 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
 
   const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax))
   const ageMax = Math.max(ageMin, Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin)))
-  const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
-  const radiusStep = Math.max(0, RADIUS_STEPS.indexOf(radius))
+  const units = profile.units
+  const STEPS = radiusSteps(units)
+  const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(metersToUnit(profile.range, units), STEPS)
+  const radiusStep = Math.max(0, STEPS.indexOf(radius))
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
-  const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
-  const genderOptions: SelectOption[] = [
-    { value: 'M', label: t('settings.genderM') },
-    { value: 'F', label: t('settings.genderF') },
-    { value: 'B', label: t('settings.genderB') },
-  ]
-  const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
+  const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
 
   return (
     <View style={styles.section}>
@@ -1425,7 +1437,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         <SelectFieldRow
           grouped
           label={t('settings.range')}
-          displayValue={formatRadius(radius)}
+          displayValue={formatRadius(radius, units)}
           onPress={() => setRadiusPopupVisible(true)}
           icon={<MapPinIcon />}
         />
@@ -1448,12 +1460,12 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
       </View>
       <RadiusPopup
         visible={radiusPopupVisible}
-        stepCount={RADIUS_STEPS.length}
+        stepCount={STEPS.length}
         initialValue={radiusStep}
-        formatStep={i => formatRadius(RADIUS_STEPS[i])}
+        formatStep={i => formatRadius(STEPS[i], units)}
         onSave={async i => {
-          update({ range: radiusToServer(RADIUS_STEPS[i]) })
-          await invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) })
+          update({ range: radiusToServer(STEPS[i], units) })
+          await invoke('app/range', { range: radiusToServer(STEPS[i], units) })
           setRadiusPopupVisible(false)
         }}
         onDismiss={() => setRadiusPopupVisible(false)}
@@ -1469,14 +1481,13 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         }}
         onDismiss={() => setAgePopupVisible(false)}
       />
-      <OptionPopup
+      <GenderPopup
         visible={genderPopupVisible}
-        title={t('settings.preferredGender')}
-        initialValue={genderPref}
-        options={genderOptions}
-        onSave={async v => {
-          update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-          await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+        initialForMale={forMale ?? true}
+        initialForFemale={forFemale ?? false}
+        onSave={async (m, f) => {
+          update({ is_for_male: m, is_for_female: f })
+          await invoke('app/preferred_gender', { is_for_male: m, is_for_female: f })
           setGenderPopupVisible(false)
         }}
         onDismiss={() => setGenderPopupVisible(false)}
@@ -1501,17 +1512,13 @@ function PreferencesTab({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (co
 
   const ageMin = Math.max(ageSliderMin, Math.min(profile.age_from, ageSliderMax))
   const ageMax = Math.max(ageMin, Math.min(ageSliderMax, Math.max(profile.age_to, ageSliderMin)))
-  const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(profile.range / 1000)
-  const radiusStep = Math.max(0, RADIUS_STEPS.indexOf(radius))
+  const units = profile.units
+  const STEPS = radiusSteps(units)
+  const radius = profile.range == null ? Infinity : profile.range <= 250 ? 0 : snapRadius(metersToUnit(profile.range, units), STEPS)
+  const radiusStep = Math.max(0, STEPS.indexOf(radius))
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
-  const genderPref = forMale && forFemale ? 'B' : forMale ? 'M' : 'F'
-  const genderOptions: SelectOption[] = [
-    { value: 'M', label: t('settings.genderM') },
-    { value: 'F', label: t('settings.genderF') },
-    { value: 'B', label: t('settings.genderB') },
-  ]
-  const genderDisplayValue = genderOptions.find(o => o.value === genderPref)?.label ?? t('settings.genderM')
+  const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
 
   return (
     <>
@@ -1521,7 +1528,7 @@ function PreferencesTab({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (co
       <View style={styles.section}>
         <SectionLabel>{t('settings.range').toUpperCase()}</SectionLabel>
         <SelectFieldRow
-          displayValue={formatRadius(radius)}
+          displayValue={formatRadius(radius, units)}
           onPress={() => setRadiusPopupVisible(true)}
           icon={<MapPinIcon />}
         />
@@ -1550,12 +1557,12 @@ function PreferencesTab({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (co
     </ScrollView>
     <RadiusPopup
       visible={radiusPopupVisible}
-      stepCount={RADIUS_STEPS.length}
+      stepCount={STEPS.length}
       initialValue={radiusStep}
-      formatStep={i => formatRadius(RADIUS_STEPS[i])}
+      formatStep={i => formatRadius(STEPS[i], units)}
       onSave={async i => {
-        update({ range: radiusToServer(RADIUS_STEPS[i]) })
-        await invoke('app/range', { range: radiusToServer(RADIUS_STEPS[i]) })
+        update({ range: radiusToServer(STEPS[i], units) })
+        await invoke('app/range', { range: radiusToServer(STEPS[i], units) })
         setRadiusPopupVisible(false)
       }}
       onDismiss={() => setRadiusPopupVisible(false)}
@@ -1573,11 +1580,11 @@ function PreferencesTab({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (co
     />
     <GenderPopup
       visible={genderPopupVisible}
-      initialValue={genderPref}
-      options={genderOptions}
-      onSave={async v => {
-        update({ is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
-        await invoke('app/preferred_gender', { is_for_male: v === 'M' || v === 'B', is_for_female: v === 'F' || v === 'B' })
+      initialForMale={forMale ?? true}
+      initialForFemale={forFemale ?? false}
+      onSave={async (m, f) => {
+        update({ is_for_male: m, is_for_female: f })
+        await invoke('app/preferred_gender', { is_for_male: m, is_for_female: f })
         setGenderPopupVisible(false)
       }}
       onDismiss={() => setGenderPopupVisible(false)}
@@ -1616,6 +1623,15 @@ function InfoIcon({ color = TEXT_PRIMARY }: { color?: string }) {
       <Circle cx="12" cy="12" r="10" />
       <Line x1="12" y1="16" x2="12" y2="12" />
       <Line x1="12" y1="8" x2="12.01" y2="8" />
+    </Svg>
+  )
+}
+
+function UserIcon({ color = TEXT_PRIMARY }: { color?: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <Circle cx="12" cy="7" r="4" />
     </Svg>
   )
 }
@@ -1707,6 +1723,9 @@ const acctDetailsStyles = StyleSheet.create({
   },
   label: { fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500' },
   value: { fontSize: 15, color: GRAY_400, fontWeight: '400', flexShrink: 1, textAlign: isRTL ? 'left' : 'right', marginStart: 16 },
+  detailField: { paddingHorizontal: DOUBLE, paddingVertical: 11 },
+  detailLabel: { fontSize: 12, color: GRAY_400, fontWeight: '400', marginBottom: 2 },
+  detailValue: { fontSize: 15, color: GRAY_400, fontWeight: '400' },
 })
 
 function formatBirthDate(iso: string): string {
@@ -1714,6 +1733,150 @@ function formatBirthDate(iso: string): string {
   const dd = String(d.getDate()).padStart(2, '0')
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   return `${dd}.${mm}.${d.getFullYear()}`
+}
+
+// ── Account Popup ──────────────────────────────────────────────────────────
+
+function AccountPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+  const { profile } = useUserStore()
+  const { user, signOut } = useAuthStore()
+  const router = useRouter()
+  const [signOutDialog, setSignOutDialog] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const insets = useSafeAreaInsets()
+
+  useEffect(() => {
+    if (visible) {
+      dragY.value = 0
+      translateY.value = withTiming(0, { duration: 280, easing: REasing.out(REasing.cubic) })
+    } else {
+      translateY.value = withTiming(400, { duration: 220, easing: REasing.in(REasing.cubic) })
+    }
+  }, [visible])
+
+  const animatedDismiss = useCallback(() => {
+    dragY.value = withTiming(400, { duration: 220 })
+    translateY.value = withTiming(400, { duration: 220, easing: REasing.in(REasing.cubic) }, () => runOnJS(onDismiss)())
+  }, [onDismiss])
+
+  const swipeDismiss = Gesture.Pan()
+    .onUpdate(e => { if (e.translationY > 0) dragY.value = e.translationY })
+    .onEnd(e => {
+      if (e.translationY > 80 || e.velocityY > 500) {
+        dragY.value = withTiming(400, { duration: 200 })
+        translateY.value = withTiming(400, { duration: 200 }, () => runOnJS(onDismiss)())
+      } else {
+        dragY.value = withTiming(0, { duration: 200 })
+      }
+    })
+
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  const signOutTap = useTapResponder(() => { tap(); setSignOutDialog(true) })
+  const deleteTap = useTapResponder(() => { tapWarning(); setDeleteDialog(true) })
+
+  if (!profile || !user) return null
+
+  const age = profile.birth_date ? calcAge(profile.birth_date) : null
+  const gender =
+    profile.is_male === true  ? t('settings.male')
+    : profile.is_male === false ? t('settings.female')
+    : '—'
+
+  const detailRows: Array<{ label: string; value: string }> = [
+    { label: t('settings.name'),      value: profile.name ?? '—' },
+    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
+    { label: t('settings.gender'),    value: gender },
+    { label: t('settings.email'),     value: user.email ?? '—' },
+  ]
+
+  const finishAndGoToLogin = async () => {
+    await signOut()
+    router.replace('/login')
+  }
+
+  const onSignOutConfirmed = async () => {
+    tap()
+    setSignOutDialog(false)
+    animatedDismiss()
+    try { await invoke('app/logout') } catch (e) { console.error(e) }
+    await finishAndGoToLogin()
+  }
+
+  const onDeleteConfirmed = async () => {
+    if (deleting) return
+    tapWarning()
+    setDeleting(true)
+    try { await invoke('app/delete') } catch (e) { console.error(e); setDeleting(false); return }
+    setDeleteDialog(false)
+    setDeleting(false)
+    animatedDismiss()
+    await finishAndGoToLogin()
+  }
+
+  return (
+    <>
+      <Modal visible={visible} transparent animationType="none" onRequestClose={animatedDismiss}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }} onPress={animatedDismiss}>
+            <GestureDetector gesture={swipeDismiss}>
+              <Animated.View
+                style={[acctDetailsStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) }, slideStyle]}
+                onStartShouldSetResponder={() => true}
+              >
+                <View style={acctDetailsStyles.pill} />
+                {detailRows.map((r, i) => (
+                  <React.Fragment key={r.label}>
+                    {i > 0 && <View style={acctDetailsStyles.divider} />}
+                    <View style={acctDetailsStyles.detailField}>
+                      <Text style={acctDetailsStyles.detailLabel}>{r.label}</Text>
+                      <Text style={acctDetailsStyles.detailValue} numberOfLines={1}>{r.value}</Text>
+                    </View>
+                  </React.Fragment>
+                ))}
+                <View style={[acctDetailsStyles.divider, { marginTop: 8, marginStart: 0 }]} />
+                <View style={[acctDetailsStyles.row, { gap: 12 }]} {...signOutTap}>
+                  <Text style={[acctDetailsStyles.label, { flex: 1 }]}>{tg('settings.signOut', profile.is_male)}</Text>
+                  <SignOutIcon color="rgba(0,0,0,0.5)" />
+                </View>
+                <View style={acctDetailsStyles.divider} />
+                <View style={[acctDetailsStyles.row, { gap: 12 }]} {...deleteTap}>
+                  <Text style={[acctDetailsStyles.label, styles.accountActionTextDestructive, { flex: 1 }]}>{t('settings.deleteAccount')}</Text>
+                  <TrashIcon color="rgba(180,60,60,0.5)" />
+                </View>
+              </Animated.View>
+            </GestureDetector>
+          </Pressable>
+        </GestureHandlerRootView>
+      </Modal>
+      <ConfirmDialog
+        visible={signOutDialog}
+        title={t('settings.signOutConfirmTitle')}
+        description={tg('settings.signOutConfirmDesc', profile.is_male)}
+        confirmLabel={tg('settings.signOutYes', profile.is_male)}
+        soft
+        onCancel={() => setSignOutDialog(false)}
+        onConfirm={onSignOutConfirmed}
+        draggable
+      />
+      <ConfirmDialog
+        visible={deleteDialog}
+        title={t('settings.deleteConfirmTitle')}
+        description={tg('settings.deleteConfirmDesc', profile.is_male)}
+        confirmLabel={t('settings.deleteYes')}
+        destructive
+        busy={deleting}
+        onCancel={() => setDeleteDialog(false)}
+        onConfirm={onDeleteConfirmed}
+        draggable
+      />
+    </>
+  )
 }
 
 // ── App Tab ────────────────────────────────────────────────────────────────
@@ -2003,7 +2166,7 @@ function AgeRangePopup({
                 <View style={agePopupStyles.dragHandle} />
                 <Text style={agePopupStyles.title}>{t('settings.ageRange')}</Text>
                 <Text style={agePopupStyles.displayValue}>{displayValue}</Text>
-                <View style={agePopupStyles.sliderRow}>
+                <View style={[agePopupStyles.sliderRow, { direction: 'ltr' }]}>
                   <Text style={agePopupStyles.endLabel}>{sliderMin}</Text>
                   <HorizontalRangeSlider
                     min={sliderMin} max={sliderMax}
@@ -2145,7 +2308,7 @@ function RadiusPopup({
                 <View style={agePopupStyles.dragHandle} />
                 <Text style={agePopupStyles.title}>{t('settings.range')}</Text>
                 <Text style={agePopupStyles.displayValue}>{formatStep(localValue)}</Text>
-                <View style={agePopupStyles.sliderRow}>
+                <View style={[agePopupStyles.sliderRow, { direction: 'ltr' }]}>
                   <Text style={agePopupStyles.endLabel}>{formatStep(0)}</Text>
                   <HorizontalStepSlider
                     stepCount={stepCount}
@@ -2165,7 +2328,126 @@ function RadiusPopup({
 }
 
 // ── Gender Popup ───────────────────────────────────────────────────────────
-// Bottom-sheet modal with Men/Women/Both chips for the gender preference.
+// Bottom-sheet modal with Men/Women chips — each independently toggleable.
+// At least one must remain selected.
+
+function GenderPopup({
+  visible, initialForMale, initialForFemale, onSave, onDismiss,
+}: {
+  visible: boolean
+  initialForMale: boolean
+  initialForFemale: boolean
+  onSave: (forMale: boolean, forFemale: boolean) => Promise<void>
+  onDismiss: () => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const [modalVisible, setModalVisible] = useState(false)
+  const cardHeight = useSharedValue(400)
+  const [localMale, setLocalMale] = useState(initialForMale)
+  const [localFemale, setLocalFemale] = useState(initialForFemale)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      setLocalMale(initialForMale)
+      setLocalFemale(initialForFemale)
+      setSaving(false)
+      dragY.value = 0
+      translateY.value = cardHeight.value
+      setModalVisible(true)
+      requestAnimationFrame(() => {
+        translateY.value = withTiming(0, { duration: 350, easing: REasing.out(REasing.cubic) })
+      })
+    } else {
+      translateY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) }, () => {
+        runOnJS(setModalVisible)(false)
+      })
+    }
+  }, [visible])
+
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .failOffsetY(-8)
+    .onUpdate(e => { 'worklet'; dragY.value = Math.max(0, e.translationY) })
+    .onEnd(e => {
+      'worklet'
+      if (e.translationY > 80 || e.velocityY > 800) {
+        dragY.value = withTiming(cardHeight.value, { duration: 250, easing: REasing.in(REasing.cubic) })
+        runOnJS(onDismiss)()
+      } else {
+        dragY.value = withTiming(0, { duration: 300, easing: REasing.out(REasing.cubic) })
+      }
+    })
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try { await onSave(localMale, localFemale) } finally { setSaving(false) }
+  }
+
+  const toggleMale = () => {
+    const next = !localMale
+    if (!next && !localFemale) return
+    setLocalMale(next)
+  }
+
+  const toggleFemale = () => {
+    const next = !localFemale
+    if (!next && !localMale) return
+    setLocalFemale(next)
+  }
+
+  return (
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={onDismiss} statusBarTranslucent>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={agePopupStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={saving ? undefined : onDismiss} />
+          <GestureDetector gesture={pan}>
+            <Animated.View
+              style={[agePopupStyles.cardWrap, animStyle]}
+              onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
+            >
+              <View style={agePopupStyles.shadowGradient} pointerEvents="none">
+                {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
+                  <View key={i} style={[agePopupStyles.shadowLayer, { opacity: o }]} />
+                ))}
+              </View>
+              <View style={agePopupStyles.card}>
+                <View style={agePopupStyles.dragHandle} />
+                <Text style={agePopupStyles.title}>{t('settings.preferredGender')}</Text>
+                <View style={genderPopupStyles.chips}>
+                  <AnimatedToggleButton
+                    active={localMale}
+                    label={t('settings.genderM')}
+                    onPress={toggleMale}
+                  />
+                  <AnimatedToggleButton
+                    active={localFemale}
+                    label={t('settings.genderF')}
+                    onPress={toggleFemale}
+                  />
+                </View>
+                <Button label={t('settings.save')} onPress={handleSave} variant="primary" size="lg" loading={saving} disabled={saving} />
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </GestureHandlerRootView>
+    </Modal>
+  )
+}
+
+const genderPopupStyles = StyleSheet.create({
+  chips: { flexDirection: 'row', gap: 10, marginBottom: 24, marginTop: 8 },
+})
+
+// ── Option Popup (single-select) ───────────────────────────────────────────
+// Generic single-select bottom sheet for units and similar one-of-N pickers.
 
 function OptionPopup({
   visible, title, initialValue, options, onSave, onDismiss,
@@ -2262,10 +2544,6 @@ function OptionPopup({
     </Modal>
   )
 }
-
-const genderPopupStyles = StyleSheet.create({
-  chips: { flexDirection: 'row', gap: 10, marginBottom: 24, marginTop: 8 },
-})
 
 // ── Radius Field Page ──────────────────────────────────────────────────────
 // Full-screen pane with a vertical single-thumb slider for editing the search radius.
@@ -2483,15 +2761,41 @@ export function AccountFieldPage({ config, onBack }: { config: AccountFieldConfi
 
 // ── Preview Field Page ───────────────────────────────────────────────────
 // ── Add Options Popup ─────────────────────────────────────────────────────
-// Bottom-sheet modal listing profile items the user can still add.
+// Bottom-sheet shown when the user taps "Add profile item". Lays out the
+// available top-level categories as a tile grid (icon + label) rather than
+// a flat list, so each entry reads as a discoverable action.
 
-type AddOption = 'photo' | 'kids' | 'bio'
+type AddOption = 'photo' | 'familyKids'
+
+function AddPhotoIcon({ color }: { color: string }) {
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="3" y="5" width="18" height="14" rx="2" />
+      <Circle cx="12" cy="12" r="3" />
+      <Line x1="17.5" y1="3" x2="17.5" y2="7" />
+      <Line x1="15.5" y1="5" x2="19.5" y2="5" />
+    </Svg>
+  )
+}
+
+function FamilyKidsIcon({ color }: { color: string }) {
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="7" cy="7" r="2.5" />
+      <Path d="M3 19c0-2.5 1.8-4.5 4-4.5s4 2 4 4.5" />
+      <Circle cx="17" cy="7" r="2.5" />
+      <Path d="M13 19c0-2.5 1.8-4.5 4-4.5s4 2 4 4.5" />
+      <Circle cx="12" cy="13" r="1.6" />
+      <Path d="M9.5 19c0-1.4 1.1-2.5 2.5-2.5s2.5 1.1 2.5 2.5" />
+    </Svg>
+  )
+}
 
 function AddOptionsPopup({
-  visible, options, onDismiss, onSelect,
+  visible, photoEnabled, onDismiss, onSelect,
 }: {
   visible: boolean
-  options: AddOption[]
+  photoEnabled: boolean
   onDismiss: () => void
   onSelect: (option: AddOption) => void
 }) {
@@ -2523,30 +2827,37 @@ function AddOptionsPopup({
     transform: [{ translateY: translateY.value + dragY.value }],
   }))
 
-  const optionLabel = (opt: AddOption) => {
-    if (opt === 'photo') return t('settings.addPhoto')
-    if (opt === 'kids') return t('settings.addKids')
-    return t('settings.aboutMe')
-  }
-
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }} onPress={onDismiss}>
         <GestureDetector gesture={swipeDismiss}>
           <Animated.View
-            style={[addPopupStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) }, slideStyle]}
+            style={[addPopupStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) + SINGLE }, slideStyle]}
             onStartShouldSetResponder={() => true}
           >
             <View style={addPopupStyles.pill} />
-            {options.map((opt, i) => (
+            <View style={addPopupStyles.row}>
               <Pressable
-                key={opt}
-                style={[addPopupStyles.option, i < options.length - 1 && addPopupStyles.optionBorder]}
-                onPress={() => { tap(); onSelect(opt) }}
+                style={[addPopupStyles.tile, !photoEnabled && addPopupStyles.tileDisabled]}
+                onPress={() => { if (photoEnabled) { tap(); onSelect('photo') } }}
               >
-                <Text style={addPopupStyles.optionText}>{optionLabel(opt)}</Text>
+                <View style={addPopupStyles.iconWrap}>
+                  <AddPhotoIcon color={photoEnabled ? PRIMARY : GRAY_400} />
+                </View>
+                <Text style={[addPopupStyles.tileLabel, !photoEnabled && addPopupStyles.tileLabelDisabled]}>
+                  {t('settings.addPhoto')}
+                </Text>
               </Pressable>
-            ))}
+              <Pressable
+                style={addPopupStyles.tile}
+                onPress={() => { tap(); onSelect('familyKids') }}
+              >
+                <View style={addPopupStyles.iconWrap}>
+                  <FamilyKidsIcon color={PRIMARY} />
+                </View>
+                <Text style={addPopupStyles.tileLabel}>{t('settings.addFamilyKids')}</Text>
+              </Pressable>
+            </View>
           </Animated.View>
         </GestureDetector>
       </Pressable>
@@ -2560,20 +2871,234 @@ const addPopupStyles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 12,
+    paddingHorizontal: SINGLE,
   },
   pill: {
     width: 36, height: 4, borderRadius: 2, backgroundColor: GRAY_100,
-    alignSelf: 'center', marginBottom: 8,
+    alignSelf: 'center', marginBottom: SINGLE,
   },
-  option: {
-    paddingHorizontal: DOUBLE, paddingVertical: 18,
+  row: {
+    flexDirection: 'row',
+    gap: SINGLE,
   },
-  optionBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: GRAY_100,
+  tile: {
+    flex: 1,
+    backgroundColor: GRAY_50,
+    borderRadius: 16,
+    paddingVertical: 22,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
-  optionText: {
-    fontSize: 17, color: TEXT_PRIMARY, textAlign: isRTL ? 'right' : 'left',
+  tileDisabled: {
+    opacity: 0.45,
+  },
+  iconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: PRIMARY_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileLabel: {
+    fontSize: 14, fontWeight: '600', color: TEXT_PRIMARY,
+  },
+  tileLabelDisabled: {
+    color: GRAY_400,
+  },
+})
+
+// ── Photo edit popup ────────────────────────────────────────────────────────
+// Bottom sheet shown when the user taps a photo on their own profile preview.
+// Lays out four actions in a 2-row grid: Move up / Move down on top, then a
+// full-width Replace, then a destructive-tinted Delete. Up/Down are disabled
+// at the photo-list boundaries.
+
+function ChevronUpIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points="6 15 12 9 18 15" />
+    </Svg>
+  )
+}
+
+function ChevronDownIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points="6 9 12 15 18 9" />
+    </Svg>
+  )
+}
+
+function PhotoReplaceIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 9h13l-3-3" />
+      <Path d="M20 15H7l3 3" />
+    </Svg>
+  )
+}
+
+function PhotoTrashIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points="3 6 5 6 21 6" />
+      <Path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <Path d="M10 11v6" />
+      <Path d="M14 11v6" />
+      <Path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    </Svg>
+  )
+}
+
+function PhotoOptionsPopup({
+  visible, canMoveUp, canMoveDown, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
+}: {
+  visible: boolean
+  canMoveUp: boolean
+  canMoveDown: boolean
+  onDismiss: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onReplace: () => void
+  onDelete: () => void
+}) {
+  const translateY = useSharedValue(400)
+  const dragY = useSharedValue(0)
+  const insets = useSafeAreaInsets()
+
+  useEffect(() => {
+    if (visible) {
+      dragY.value = 0
+      translateY.value = withTiming(0, { duration: 280, easing: REasing.out(REasing.cubic) })
+    } else {
+      translateY.value = withTiming(400, { duration: 220, easing: REasing.in(REasing.cubic) })
+    }
+  }, [visible])
+
+  const swipeDismiss = Gesture.Pan()
+    .onUpdate(e => { if (e.translationY > 0) dragY.value = e.translationY })
+    .onEnd(e => {
+      if (e.translationY > 80 || e.velocityY > 500) {
+        dragY.value = withTiming(400, { duration: 200 })
+        translateY.value = withTiming(400, { duration: 200 }, () => runOnJS(onDismiss)())
+      } else {
+        dragY.value = withTiming(0, { duration: 200 })
+      }
+    })
+
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value + dragY.value }],
+  }))
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }} onPress={onDismiss}>
+        <GestureDetector gesture={swipeDismiss}>
+          <Animated.View
+            style={[photoOptionsStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) + SINGLE }, slideStyle]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={photoOptionsStyles.pill} />
+
+            <View style={photoOptionsStyles.row}>
+              <Pressable
+                style={[photoOptionsStyles.tile, !canMoveUp && photoOptionsStyles.tileDisabled]}
+                onPress={() => { if (canMoveUp) { tap(); onMoveUp() } }}
+              >
+                <ChevronUpIcon color={canMoveUp ? TEXT_PRIMARY : GRAY_400} />
+                <Text style={[photoOptionsStyles.tileLabel, !canMoveUp && photoOptionsStyles.tileLabelDisabled]}>
+                  {t('settings.photoEditMoveUp')}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[photoOptionsStyles.tile, !canMoveDown && photoOptionsStyles.tileDisabled]}
+                onPress={() => { if (canMoveDown) { tap(); onMoveDown() } }}
+              >
+                <ChevronDownIcon color={canMoveDown ? TEXT_PRIMARY : GRAY_400} />
+                <Text style={[photoOptionsStyles.tileLabel, !canMoveDown && photoOptionsStyles.tileLabelDisabled]}>
+                  {t('settings.photoEditMoveDown')}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={photoOptionsStyles.fullRow}
+              onPress={() => { tap(); onReplace() }}
+            >
+              <PhotoReplaceIcon color={TEXT_PRIMARY} />
+              <Text style={photoOptionsStyles.fullRowLabel}>{t('settings.photoEditReplace')}</Text>
+            </Pressable>
+
+            <Pressable
+              style={[photoOptionsStyles.fullRow, photoOptionsStyles.destructiveRow]}
+              onPress={() => { tapWarning(); onDelete() }}
+            >
+              <PhotoTrashIcon color={DESTRUCTIVE} />
+              <Text style={[photoOptionsStyles.fullRowLabel, photoOptionsStyles.destructiveLabel]}>
+                {t('settings.photoEditDelete')}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </GestureDetector>
+      </Pressable>
+    </Modal>
+  )
+}
+
+const photoOptionsStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+    paddingHorizontal: SINGLE,
+  },
+  pill: {
+    width: 36, height: 4, borderRadius: 2, backgroundColor: GRAY_100,
+    alignSelf: 'center', marginBottom: SINGLE,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: SINGLE,
+    marginBottom: SINGLE,
+  },
+  tile: {
+    flex: 1,
+    backgroundColor: GRAY_50,
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  tileDisabled: {
+    opacity: 0.5,
+  },
+  tileLabel: {
+    fontSize: 14, fontWeight: '600', color: TEXT_PRIMARY,
+  },
+  tileLabelDisabled: {
+    color: GRAY_400,
+  },
+  fullRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: GRAY_50,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 14,
+    marginBottom: SINGLE,
+  },
+  fullRowLabel: {
+    fontSize: 16, fontWeight: '600', color: TEXT_PRIMARY,
+  },
+  destructiveRow: {
+    backgroundColor: 'rgba(217,107,107,0.10)',
+  },
+  destructiveLabel: {
+    color: DESTRUCTIVE,
   },
 })
 
@@ -2591,9 +3116,19 @@ export function PreviewFieldPage({
   clipBottom?: boolean
 }) {
   const insets = useSafeAreaInsets()
-  const { profile } = useUserStore()
+  const { profile, update } = useUserStore()
   const { user } = useAuthStore()
   const [addPopupVisible, setAddPopupVisible] = useState(false)
+  const [photoPopupItemIndex, setPhotoPopupItemIndex] = useState<number | null>(null)
+  // True when the user has made local edits that haven't been pushed to the
+  // server yet. Toggles the bottom button between gray "Add profile item"
+  // and coral "Save".
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // Tracks deferred uploads in flight so Save can await them before invoking
+  // app/items (preventing the server from receiving a filename whose upload
+  // has not yet landed in storage).
+  const inFlightUploads = useRef(new Set<Promise<unknown>>())
 
   const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
     panRef: dismissGestureRef,
@@ -2641,14 +3176,156 @@ export function PreviewFieldPage({
     }
   }, [profile, user?.id])
 
-  const addOptions = useMemo<AddOption[]>(() => {
-    if (!profile) return []
-    const opts: AddOption[] = []
-    if ((profile.images?.length ?? 0) < 6) opts.push('photo')
-    if (profile.is_for_kids == null) opts.push('kids')
-    if (!profile.bio) opts.push('bio')
-    return opts
-  }, [profile])
+  const photoAddEnabled = (profile?.images?.length ?? 0) < 6
+
+  // Photo positions inside the items array, used to compute Up/Down enablement
+  // and to swap with the previous / next photo without disturbing non-photo items.
+  const photoIndicesInItems = useMemo(() => {
+    const items = profile?.items ?? []
+    const out: number[] = []
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === 'photo' && (items[i] as { normal?: string }).normal) out.push(i)
+    }
+    return out
+  }, [profile?.items])
+
+  const popupItem = photoPopupItemIndex != null ? profile?.items?.[photoPopupItemIndex] : null
+  const popupPhotoOrdinal = photoPopupItemIndex != null
+    ? photoIndicesInItems.indexOf(photoPopupItemIndex)
+    : -1
+  const canMoveUp = popupPhotoOrdinal > 0
+  const canMoveDown = popupPhotoOrdinal >= 0 && popupPhotoOrdinal < photoIndicesInItems.length - 1
+  const photoCount = photoIndicesInItems.length
+
+  // Mutates items locally, sets dirty=true. Save sends the latest items to
+  // the server. The userStore's `pending` map protects items from realtime
+  // overwrite until the server echo confirms.
+  const commitItems = (nextItems: ProfileItem[]) => {
+    update({ items: nextItems })
+    setDirty(true)
+  }
+
+  const swapAt = (a: number, b: number) => {
+    const items = profile?.items
+    if (!items || a < 0 || b < 0 || a >= items.length || b >= items.length) return
+    const next = [...items]
+    ;[next[a], next[b]] = [next[b], next[a]]
+    commitItems(next)
+  }
+
+  const handleMoveUp = () => {
+    if (popupPhotoOrdinal <= 0) return
+    const from = photoIndicesInItems[popupPhotoOrdinal]
+    const to = photoIndicesInItems[popupPhotoOrdinal - 1]
+    setPhotoPopupItemIndex(null)
+    swapAt(from, to)
+  }
+
+  const handleMoveDown = () => {
+    if (popupPhotoOrdinal < 0 || popupPhotoOrdinal >= photoIndicesInItems.length - 1) return
+    const from = photoIndicesInItems[popupPhotoOrdinal]
+    const to = photoIndicesInItems[popupPhotoOrdinal + 1]
+    setPhotoPopupItemIndex(null)
+    swapAt(from, to)
+  }
+
+  const handleDelete = () => {
+    if (photoPopupItemIndex == null || !profile?.items) return
+    if (photoCount <= 1) {
+      // Last photo guard: the profile must have at least one photo. Bounce
+      // the popup but keep the item.
+      setPhotoPopupItemIndex(null)
+      return
+    }
+    const target = profile.items[photoPopupItemIndex] as { normal?: string }
+    const filename = target?.normal
+    setPhotoPopupItemIndex(null)
+    if (filename) {
+      localPhotoUriCache.delete(filename)
+      pendingDeferred.delete(filename)
+    }
+    const next = profile.items.filter((_, i) => i !== photoPopupItemIndex)
+    commitItems(next)
+  }
+
+  const handleReplace = async () => {
+    if (photoPopupItemIndex == null || !user || !profile?.items) return
+    const targetIndex = photoPopupItemIndex
+    setPhotoPopupItemIndex(null)
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'image/*',
+      copyToCacheDirectory: true,
+      multiple: false,
+    })
+    if (result.canceled || !result.assets?.[0]) return
+    const asset = result.assets[0]
+
+    const userId = user.id
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token ?? ''
+
+    // Deferred upload: assign filename + prime localPhotoUriCache synchronously
+    // so the new photo shows immediately, then upload in the background. Save
+    // awaits the `uploaded` promise via inFlightUploads before invoking app/items.
+    const { filename, uploaded } = processAndUploadPhotoDeferred(asset.uri, userId, token)
+
+    // Commit the new filename to items immediately. hash is empty until the
+    // upload completes; we patch it in when the promise resolves.
+    const current = useUserStore.getState().profile
+    if (current?.items) {
+      const oldItem = current.items[targetIndex]
+      const oldFilename = oldItem && oldItem.kind === 'photo' ? oldItem.normal : undefined
+      const next = [...current.items]
+      next[targetIndex] = { kind: 'photo', normal: filename, hash: '' }
+      if (oldFilename) {
+        localPhotoUriCache.delete(oldFilename)
+        pendingDeferred.delete(oldFilename)
+      }
+      useUserStore.getState().update({ items: next })
+      setDirty(true)
+    }
+
+    const tracker = uploaded
+      .then(hash => {
+        // Patch hash on the (possibly reordered) item now that it landed.
+        const latest = useUserStore.getState().profile
+        if (!latest?.items) return
+        const idx = latest.items.findIndex(it => it.kind === 'photo' && (it as { normal?: string }).normal === filename)
+        if (idx < 0) return
+        const next = [...latest.items]
+        next[idx] = { kind: 'photo', normal: filename, hash }
+        useUserStore.getState().update({ items: next })
+      })
+      .catch(e => {
+        console.error('Photo replace upload error:', e)
+        // Roll back the items patch so the user can retry.
+        const latest = useUserStore.getState().profile
+        if (!latest?.items) return
+        const next = latest.items.filter(it => !(it.kind === 'photo' && (it as { normal?: string }).normal === filename))
+        useUserStore.getState().update({ items: next })
+      })
+    inFlightUploads.current.add(tracker)
+    tracker.finally(() => inFlightUploads.current.delete(tracker))
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      // Wait for any in-flight replace uploads to finish so the items list
+      // we send references files that actually exist in storage.
+      if (inFlightUploads.current.size > 0) {
+        await Promise.all(Array.from(inFlightUploads.current))
+      }
+      const finalItems = useUserStore.getState().profile?.items ?? []
+      await invoke('app/items', { items: finalItems })
+      setDirty(false)
+    } catch (e) {
+      console.error('Save items error:', e)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -2671,21 +3348,54 @@ export function PreviewFieldPage({
             <View style={styles.previewOuter}>
               <View style={styles.previewInner}>
                 <PullContext.Provider value={pullCtx}>
-                  <MatchCard match={previewData} userIsMale={previewData.is_male ?? null} bottomInset={0} />
+                  <MatchCard
+                    match={previewData}
+                    userIsMale={previewData.is_male ?? null}
+                    bottomInset={0}
+                    onPhotoTap={(itemIndex) => {
+                      if (itemIndex < 0) return
+                      tap()
+                      setPhotoPopupItemIndex(itemIndex)
+                    }}
+                  />
                 </PullContext.Provider>
               </View>
             </View>
           </View>
           <View style={{ paddingHorizontal: SINGLE, paddingTop: SINGLE, paddingBottom: Math.max(insets.bottom, SINGLE) }}>
-            <Button label={t('settings.addProfileItem')} onPress={() => setAddPopupVisible(true)} />
+            {dirty ? (
+              <Button
+                label={t('settings.save')}
+                variant="primary"
+                tone="positive"
+                loading={saving}
+                onPress={handleSave}
+              />
+            ) : (
+              <Button
+                label={t('settings.addProfileItem')}
+                variant="secondary"
+                onPress={() => setAddPopupVisible(true)}
+              />
+            )}
           </View>
         </View>
       ) : null}
       <AddOptionsPopup
         visible={addPopupVisible}
-        options={addOptions}
+        photoEnabled={photoAddEnabled}
         onDismiss={() => setAddPopupVisible(false)}
         onSelect={() => setAddPopupVisible(false)}
+      />
+      <PhotoOptionsPopup
+        visible={photoPopupItemIndex != null && popupItem?.kind === 'photo'}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+        onDismiss={() => setPhotoPopupItemIndex(null)}
+        onMoveUp={handleMoveUp}
+        onMoveDown={handleMoveDown}
+        onReplace={handleReplace}
+        onDelete={handleDelete}
       />
     </View>
   )
@@ -2868,6 +3578,7 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
   const { profile, update } = useUserStore()
   const [resetting, setResetting] = useState(false)
   const [unitsPopupVisible, setUnitsPopupVisible] = useState(false)
+  const [accountPopupVisible, setAccountPopupVisible] = useState(false)
 
   const onReset = useCallback(async () => {
     if (resetting) return
@@ -2906,6 +3617,13 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
           onPress={() => setUnitsPopupVisible(true)}
           icon={<RulerIcon />}
         />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={t('settings.account')}
+          onPress={() => setAccountPopupVisible(true)}
+          icon={<UserIcon color={GRAY_400} />}
+        />
         {profile.data?.role === 'ADMIN' && (
           <>
             <View style={styles.accountActionDivider} />
@@ -2938,103 +3656,7 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
         }}
         onDismiss={() => setUnitsPopupVisible(false)}
       />
-    </>
-  )
-}
-
-// ── Account Inline Content ─────────────────────────────────────────────────
-
-function AccountInlineContent() {
-  const { profile } = useUserStore()
-  const { user, signOut } = useAuthStore()
-  const router = useRouter()
-  const [signOutDialog, setSignOutDialog] = useState(false)
-  const [deleteDialog, setDeleteDialog] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [detailsVisible, setDetailsVisible] = useState(false)
-
-  const signOutTap = useTapResponder(() => { tap(); setSignOutDialog(true) })
-  const deleteTap = useTapResponder(() => { tapWarning(); setDeleteDialog(true) })
-  const detailsTap = useTapResponder(() => { tap(); setDetailsVisible(true) })
-
-  if (!profile || !user) return null
-
-  const age = profile.birth_date ? calcAge(profile.birth_date) : null
-  const gender =
-    profile.is_male === true  ? t('settings.male')
-    : profile.is_male === false ? t('settings.female')
-    : '—'
-
-  const finishAndGoToLogin = async () => {
-    await signOut()
-    router.replace('/login')
-  }
-
-  const onSignOutConfirmed = async () => {
-    tap()
-    setSignOutDialog(false)
-    try { await invoke('app/logout') } catch (e) { console.error(e) }
-    await finishAndGoToLogin()
-  }
-
-  const onDeleteConfirmed = async () => {
-    if (deleting) return
-    tapWarning()
-    setDeleting(true)
-    try { await invoke('app/delete') } catch (e) { console.error(e); setDeleting(false); return }
-    setDeleteDialog(false)
-    setDeleting(false)
-    await finishAndGoToLogin()
-  }
-
-  const detailRows: Array<{ label: string; value: string }> = [
-    { label: t('settings.name'),      value: profile.name ?? '—' },
-    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
-    { label: t('settings.gender'),    value: gender },
-    { label: t('settings.email'),     value: user.email ?? '—' },
-  ]
-
-  return (
-    <>
-      <View style={styles.accountActionsCard}>
-        <View style={styles.accountActionRow} {...detailsTap}>
-          <Text style={[styles.accountActionText, { flex: 1 }]}>{t('settings.accountDetails')}</Text>
-          <InfoIcon color="rgba(0,0,0,0.5)" />
-        </View>
-        <View style={styles.accountActionDivider} />
-        <View style={styles.accountActionRow} {...signOutTap}>
-          <Text style={[styles.accountActionText, { flex: 1 }]}>{tg('settings.signOut', profile.is_male)}</Text>
-          <SignOutIcon color="rgba(0,0,0,0.5)" />
-        </View>
-        <View style={styles.accountActionDivider} />
-        <View style={styles.accountActionRow} {...deleteTap}>
-          <Text style={[styles.accountActionText, styles.accountActionTextDestructive, { flex: 1 }]}>{t('settings.deleteAccount')}</Text>
-          <TrashIcon color="rgba(180,60,60,0.5)" />
-        </View>
-      </View>
-
-      <AccountDetailsPopup visible={detailsVisible} rows={detailRows} onDismiss={() => setDetailsVisible(false)} />
-      <ConfirmDialog
-        visible={signOutDialog}
-        title={t('settings.signOutConfirmTitle')}
-        description={tg('settings.signOutConfirmDesc', profile.is_male)}
-        confirmLabel={tg('settings.signOutYes', profile.is_male)}
-        soft
-        onCancel={() => setSignOutDialog(false)}
-        onConfirm={onSignOutConfirmed}
-        draggable
-      />
-      <ConfirmDialog
-        visible={deleteDialog}
-        title={t('settings.deleteConfirmTitle')}
-        description={tg('settings.deleteConfirmDesc', profile.is_male)}
-        confirmLabel={t('settings.deleteYes')}
-        destructive
-        busy={deleting}
-        onCancel={() => setDeleteDialog(false)}
-        onConfirm={onDeleteConfirmed}
-        draggable
-      />
+      <AccountPopup visible={accountPopupVisible} onDismiss={() => setAccountPopupVisible(false)} />
     </>
   )
 }
@@ -3102,11 +3724,6 @@ export default function SettingsPage({ topInset = 0, onBack, focused = true, onO
           <View>
             <SectionLabel>{t('settings.settings').toUpperCase()}</SectionLabel>
             <AppInlineContent onBack={onBack} onOpenSubPage={onOpenSubPage} />
-          </View>
-
-          <View>
-            <SectionLabel>{t('settings.account').toUpperCase()}</SectionLabel>
-            <AccountInlineContent />
           </View>
 
         </ScrollView>

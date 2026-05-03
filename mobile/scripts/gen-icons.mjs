@@ -10,20 +10,10 @@ import fsp   from 'node:fs/promises'
 const MOBILE  = path.resolve('.')                  // cwd = mobile/
 const ROOT    = path.resolve(MOBILE, '..')          // project root
 const SRC_SVG = path.join(ROOT, 'assets/icon.svg')
-const BG      = { r: 0xff, g: 0x7a, b: 0x5c }      // brand orange (matches icon bg)
+const BG      = { r: 0xff, g: 0xff, b: 0xff }      // white — orange shape needs contrasting bg
 
-const svgWithBg = fs.readFileSync(SRC_SVG)
-// Strip the brand-orange background rect to get a transparent variant of the
-// glyph (used for splash & favicon — anywhere we want the torch/flame alone).
-const svgTransparent = Buffer.from(
-  svgWithBg.toString().replace(/<rect[^/]*fill="#FF7A5C"\s*\/>\s*/i, ''),
-)
-
-// All-white version for the splash icon — flame becomes white so it's
-// visible on the coral splash background (#FF7A5C).
-const svgSplash = Buffer.from(
-  svgTransparent.toString().replace(/fill="#FFF1E8"/gi, 'fill="#FFFFFF"'),
-)
+const svgTransparent = fs.readFileSync(SRC_SVG)
+const svgSplash      = svgTransparent
 
 // SVG → raster. density scales with size so paths stay crisp.
 function rasterize(svgBuf, size) {
@@ -60,12 +50,29 @@ async function paddedForAdaptive(size) {
   }).composite([{ input: inside, top: pad, left: pad }])
 }
 
+// Tall splash: match rises from the canvas bottom, head top at ~30% from the top.
+// Source SVG (1024 canvas) has the match content occupying y=225..1024.
+// Want on 1080x2400 splash: y=720..2400 — scale = 2.103, ty = 247, center x at 540 → tx = -537.
+function splashSvgBuf() {
+  const inner = svgTransparent.toString().replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '')
+  return Buffer.from(
+    `<svg width="1080" height="2400" viewBox="0 0 1080 2400" xmlns="http://www.w3.org/2000/svg" fill="none">` +
+    `<g transform="translate(-537, 247) scale(2.103)">${inner}</g></svg>`,
+  )
+}
+function rasterizeSplash() {
+  return sharp(splashSvgBuf(), { density: 144 }).resize(1080, 2400, {
+    fit: 'contain',
+    background: { r: 0, g: 0, b: 0, alpha: 0 },
+  })
+}
+
 async function main() {
   console.log('mobile/assets:')
   await writePng(flatOnBg(1024),                                  path.join(MOBILE, 'assets/icon.png'))
   await writePng(flatOnBg(96),                                    path.join(MOBILE, 'assets/favicon.png'))
   await writePng(await paddedForAdaptive(1024),                   path.join(MOBILE, 'assets/adaptive-icon.png'))
-  await writePng(rasterize(svgSplash, 1024),                      path.join(MOBILE, 'assets/splash-icon.png'))
+  await writePng(rasterizeSplash(),                               path.join(MOBILE, 'assets/splash-icon.png'))
   await writePng(rasterize(svgTransparent, 512),                  path.join(MOBILE, 'assets/once-512.png'))
 
   console.log('project assets/:')

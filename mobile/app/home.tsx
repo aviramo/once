@@ -14,6 +14,7 @@ import { useUserStore, type Profile, type Page2Invite } from '../src/stores/user
 import { t, tg, tgg, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
+import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_50, GRAY_100, GRAY_400 } from '../src/colors'
 import { SINGLE, DOUBLE } from '../src/fonts'
@@ -29,6 +30,7 @@ import SettingsPage, { SelectFieldConfig, SelectFieldPage, SubPageConfig, AgeRan
 import ChatPage from './chat'
 import { OnceLogo } from '../src/components/OnceLogo'
 import { Image } from 'expo-image'
+import { localPhotoUriCache } from '../src/components/PhotoEditor'
 
 
 // ── Avatar rings: static halo + radar pulse ───────────────────────────────
@@ -1151,6 +1153,36 @@ const settingsAnimStyle = useAnimatedStyle(() => ({
 
   const showLocOverlay = locPerm !== null && locPerm !== 'granted'
 
+  // ── Internet reachability ─────────────────────────────────────────────
+  // Tracks device-level connectivity so we can surface a "no internet"
+  // popup styled like the location/notification permission ones. The
+  // initial value is null until we get the first reading; only once it
+  // resolves to false do we show the overlay (avoids a startup flash).
+  const [netReachable, setNetReachable] = useState<boolean | null>(null)
+  const [netBusy, setNetBusy] = useState(false)
+  useEffect(() => {
+    let mounted = true
+    Network.getNetworkStateAsync()
+      .then(s => { if (mounted) setNetReachable(s.isInternetReachable ?? s.isConnected ?? true) })
+      .catch(() => { if (mounted) setNetReachable(true) })
+    const sub = Network.addNetworkStateListener(({ isConnected, isInternetReachable }) => {
+      setNetReachable(isInternetReachable ?? isConnected ?? true)
+    })
+    return () => { mounted = false; sub.remove() }
+  }, [])
+  const handleNetRetry = async () => {
+    if (netBusy) return
+    setNetBusy(true)
+    try {
+      const s = await Network.getNetworkStateAsync()
+      setNetReachable(s.isInternetReachable ?? s.isConnected ?? true)
+    } catch {
+    } finally {
+      setNetBusy(false)
+    }
+  }
+  const showNoInternetOverlay = netReachable === false
+
   // Unified card mode — derived synchronously. The home pane is laid out
   // with both the empty/no-match content and the match-card content always
   // mounted; visibility is driven by `paneOpacity` below, so transient state
@@ -1428,10 +1460,18 @@ const settingsAnimStyle = useAnimatedStyle(() => ({
   }, [showHiddenPlaceholder])
   const emptyPaneStyle = useAnimatedStyle(() => ({ opacity: paneOpacity.value }))
   const matchPaneStyle = useAnimatedStyle(() => ({ opacity: 1 - paneOpacity.value }))
-  const firstProfileImage = profile?.images?.[0]?.normal
+  const firstPhoto = profile?.images?.[0]
+  const firstProfileImage = firstPhoto?.normal
   const profileAvatarUrl = firstProfileImage
     ? publicImageUrl(profile.user_id, 'normal', firstProfileImage)
     : null
+  // While the photo is uploading to storage (deferred), use the local device URI
+  // so the circle is filled immediately after onboarding. Once the upload is done
+  // (localPhotoUriCache cleared), fall back to the remote URL with the blurhash
+  // as a placeholder so there's no blank flash while the remote image downloads.
+  const localAvatarUri = firstProfileImage ? (localPhotoUriCache.get(firstProfileImage) ?? null) : null
+  const avatarDisplayUrl = localAvatarUri ?? profileAvatarUrl
+  const avatarPlaceholder = !localAvatarUri && firstPhoto?.hash ? { blurhash: firstPhoto.hash } : undefined
 
   // If any watchers are listed when the user goes hidden, confirm first —
   // switching removes them all, which is destructive.
@@ -1539,14 +1579,22 @@ const settingsAnimStyle = useAnimatedStyle(() => ({
     return null
   })()
 
+  const isNetMode = !showNotifOverlay && !showLocOverlay && !locFailed && showNoInternetOverlay
+
   const permConfirmLabel = showNotifOverlay
     ? tg('home.notifPromptButton', isMale)
     : showLocOverlay
       ? tg('home.locationPromptButton', isMale)
-      : tg('home.locationUnavailableButton', isMale)
+      : locFailed
+        ? tg('home.locationUnavailableButton', isMale)
+        : tg('home.noInternetButton', isMale)
 
-  const permOnConfirm = locFailed ? handleLocRetry : handlePermissionRequest
-  const permBusyState = locFailed ? locBusy : permBusy
+  const permOnConfirm = locFailed
+    ? handleLocRetry
+    : isNetMode
+      ? handleNetRetry
+      : handlePermissionRequest
+  const permBusyState = locFailed ? locBusy : isNetMode ? netBusy : permBusy
 
   const goToPreferences = () => {
     openSettings()
@@ -1603,19 +1651,23 @@ const settingsAnimStyle = useAnimatedStyle(() => ({
   const statusMenuOptions = undefined
 
 
-  const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed))
+  const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
 
   const permTitle = showNotifOverlay
     ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : state !== null ? tg('home.notifPromptWithMatchTitle', isMale) : t('home.notifPromptTitle'))
     : showLocOverlay
       ? (locPerm === 'services-off' ? t('home.locationUnavailableTitle') : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle') : state !== null ? t('home.locationPromptWithMatchTitle') : t('home.locationPromptTitle'))
-      : t('home.locationUnavailableTitle')
+      : locFailed
+        ? t('home.locationUnavailableTitle')
+        : t('home.noInternetTitle')
 
   const permDesc = showNotifOverlay
     ? (notifPerm === 'denied' ? tg('home.emptyNotifBlockedDesc', isMale) : state !== null ? t('home.notifPromptWithMatchDesc') : tg('home.notifPromptDesc', isMale))
     : showLocOverlay
       ? (locPerm === 'services-off' ? t('home.locationServicesOffDesc') : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc') : state !== null ? t('home.locationPromptWithMatchDesc') : t('home.locationPromptDesc'))
-      : t('home.locationUnavailableDesc')
+      : locFailed
+        ? t('home.locationUnavailableDesc')
+        : t('home.noInternetDesc')
 
   const booting = !ready || notifPerm === null || (notifPerm === 'granted' && locPerm === null)
 
@@ -1673,8 +1725,8 @@ const settingsAnimStyle = useAnimatedStyle(() => ({
                         <View style={styles.permAvatarWrap}>
                           <AvatarHaloRings />
                           <RadarRings active={showHiddenPlaceholder && locFetching} />
-                          {profileAvatarUrl ? (
-                            <Image source={{ uri: profileAvatarUrl }} style={styles.permAvatar} contentFit="cover" />
+                          {avatarDisplayUrl ? (
+                            <Image source={{ uri: avatarDisplayUrl }} placeholder={avatarPlaceholder} style={styles.permAvatar} contentFit="cover" />
                           ) : (
                             <View style={[styles.permAvatar, styles.permAvatarFallback]} />
                           )}
@@ -1866,6 +1918,7 @@ const settingsAnimStyle = useAnimatedStyle(() => ({
                 <HomeHeader
                   title={
                     page2PendingInvite ? t('push.REPLYING')
+                    : page2InviteObj?.message ? tg(`home.page2.${page2InviteObj.message}` as any, page2InviteObj.is_male)
                     : page2InviteObj?.state === 'missed' ? t('push.OTHER_CANCELLED')
                     : page2InviteObj?.state === 'fail' ? t('home.inviteExpired')
                     : t('home.hiddenHeaderTitle')

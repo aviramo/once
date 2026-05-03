@@ -113,6 +113,8 @@ export interface UserProfile {
 interface UserStore {
   profile: UserProfile | null
   loading: boolean
+  /** True once the first fetch() for the current user has completed (success or failure). */
+  fetched: boolean
   fetch: (userId: string) => Promise<void>
   update: (patch: Partial<UserProfile>) => void
   applyServerUser: (data: Record<string, unknown> | null | undefined, source?: 'fetch' | 'invoke' | 'realtime') => void
@@ -215,6 +217,7 @@ function deriveCompat(relations: Pages | null | undefined) {
 export const useUserStore = create<UserStore>((set, get) => ({
   profile: null,
   loading: false,
+  fetched: false,
 
   fetch: async (userId: string) => {
     set({ loading: true })
@@ -227,7 +230,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       if (data) get().applyServerUser(data as Record<string, unknown>, 'fetch')
       else set({ profile: null })
     } finally {
-      set({ loading: false })
+      set({ loading: false, fetched: true })
     }
   },
 
@@ -329,6 +332,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
     if (!prev) { set({ profile: d as unknown as UserProfile }); return }
     const merged: Record<string, unknown> = { ...prev, ...d }
+    let itemsRestored = false
     for (const k of CLIENT_AUTHORED) {
       if (!pending.has(k)) continue
       const pendingVal = pending.get(k)
@@ -336,10 +340,22 @@ export const useUserStore = create<UserStore>((set, get) => ({
         pending.delete(k)
       } else {
         merged[k as string] = pendingVal
+        if (k === 'items') itemsRestored = true
       }
+    }
+    // When pending items override the server's items, re-derive images/bio
+    // so they stay in sync with the local photos instead of showing the
+    // server's stale empty list (which disables the photo-step Continue button).
+    if (itemsRestored && Array.isArray(merged.items)) {
+      const items = merged.items as ProfileItem[]
+      merged.images = items
+        .filter((it): it is Extract<ProfileItem, { kind: 'photo' }> => it.kind === 'photo')
+        .map(({ kind: _k, ...rest }) => rest as Image)
+      const bioItem = items.find((it): it is Extract<ProfileItem, { kind: 'bio' }> => it.kind === 'bio')
+      merged.bio = bioItem ? bioItem.value : null
     }
     set({ profile: merged as unknown as UserProfile })
   },
 
-  clear: () => { pending.clear(); lastAppliedLastSeen = 0; set({ profile: null }) },
+  clear: () => { pending.clear(); lastAppliedLastSeen = 0; set({ profile: null, fetched: false }) },
 }))

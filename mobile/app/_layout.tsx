@@ -66,7 +66,7 @@ const queryClient = new QueryClient({
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, loading, setUser } = useAuthStore()
-  const { profile, loading: profileLoading, fetch: fetchProfile, clear } = useUserStore()
+  const { profile, loading: profileLoading, fetched: profileFetched, fetch: fetchProfile, clear } = useUserStore()
   const router = useRouter()
   const segments = useSegments()
 
@@ -97,7 +97,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user && !onAuthScreen) {
       target = '/login'
     } else if (user && onAuthScreen) {
-      if (profileLoading) return                  // wait for profile fetch
+      if (profileLoading || !profileFetched) return  // wait for profile fetch to complete
       target = needsOnboarding ? '/onboarding' : '/home'
     } else if (user && !profileLoading && needsOnboarding && !onOnboarding && !onAuthScreen) {
       target = '/onboarding'
@@ -110,7 +110,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     if (current === targetSeg) return             // already there
     router.replace(target)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, needsOnboarding, profileLoading])
+  }, [user, loading, needsOnboarding, profileLoading, profileFetched])
 
   useEffect(() => {
     const timeout = setTimeout(() => setUser(null), 5000)
