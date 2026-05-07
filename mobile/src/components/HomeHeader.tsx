@@ -9,7 +9,7 @@ import Animated, {
 import { IconPressable } from './IconPressable'
 import { CountBadge } from './CountBadge'
 import { tapMedium } from '../lib/haptics'
-import { FONT_SCALE, SINGLE } from '../fonts'
+import { FONT_SCALE, SINGLE, RADIUS } from '../fonts'
 import { TEXT_PRIMARY, PRIMARY, GRAY_400, DESTRUCTIVE } from '../colors'
 
 const isRTL = I18nManager.isRTL
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
   },
   settingsBtn: {
     height: 40,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingVertical: 4,
     minWidth: 160,
     shadowColor: '#000',

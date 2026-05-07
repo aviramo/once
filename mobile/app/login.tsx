@@ -1,25 +1,24 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   View, StyleSheet, Platform, Pressable, I18nManager,
-  Linking, FlatList, Image, useWindowDimensions, Animated as RNAnimated,
+  Linking, FlatList, Image as RNImage, useWindowDimensions, Animated as RNAnimated,
   type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native'
+import { Image } from 'expo-image'
+import { Asset } from 'expo-asset'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import * as SplashScreen from 'expo-splash-screen'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import Svg, { Path, Circle } from 'react-native-svg'
-import ReAnimated, {
-  useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing,
-} from 'react-native-reanimated'
+import Svg, { Path } from 'react-native-svg'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
-import { OnceLogo } from '../src/components/OnceLogo'
-import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50 } from '../src/colors'
-import { SINGLE } from '../src/fonts'
+import { LoginSheet } from '../src/components/LoginSheet'
+import { TEXT_PRIMARY, PRIMARY } from '../src/colors'
+import { SINGLE, RADIUS } from '../src/fonts'
+import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -29,56 +28,60 @@ const AUTOPLAY_MS = 5000
 const CAROUSEL_DATA = [...Array(SLIDE_COUNT).keys()] as number[]
 
 const SLIDE_IMAGES = [
-  require('../assets/photos/1.jpg'),
+  require('../assets/photos/8.jpg'),
   require('../assets/photos/2.jpg'),
   require('../assets/photos/3.jpg'),
   require('../assets/photos/4.jpg'),
   require('../assets/photos/5.jpg'),
   require('../assets/photos/6.jpg'),
   require('../assets/photos/7.jpg'),
-  require('../assets/photos/8.jpg'),
   require('../assets/photos/9.jpg'),
+  require('../assets/photos/1.jpg'),
 ]
 
-type SlideLocale = { title: string; subtitle: string }
+// Warm expo-image's cache at module load — without this the FlatList renders
+// the white card + text before the bundled JPEG finishes decoding.
+Asset.loadAsync(SLIDE_IMAGES)
+
+type SlideLocale = { title: string }
 type Slide = { he: SlideLocale; en: SlideLocale }
 
 const SLIDES: Slide[] = [
   {
-    he: { title: 'אחד על אחד\nזה הכוח', subtitle: 'מפגש אחד בזמן אמת' },
-    en: { title: 'One on one\nis the power', subtitle: 'One real time moment' },
+    he: { title: 'זה קורה כאן ועכשיו' },
+    en: { title: 'It happens here and now' },
   },
   {
-    he: { title: 'בלי רעש\nבלי קטלוג', subtitle: 'רק מה שמרגיש אמיתי' },
-    en: { title: 'No noise\nNo catalog', subtitle: 'Only what feels real' },
+    he: { title: 'לא צריך לדבר עם כולם' },
+    en: { title: 'You do not chat with everyone' },
   },
   {
-    he: { title: 'הלב בוחר\nאדם אחד', subtitle: 'לא כולם רק מי שמרגיש' },
-    en: { title: 'Heart picks\none person', subtitle: 'Not all just one' },
+    he: { title: 'בוחרים אדם אחד שמסקרן' },
+    en: { title: 'You choose one person' },
   },
   {
-    he: { title: 'שולחים\nסימן אחד', subtitle: 'כשזה מרגיש נכון' },
-    en: { title: 'Send\none sign', subtitle: 'When it feels right' },
+    he: { title: 'שולחים לו הזמנה' },
+    en: { title: 'You send them an invite' },
   },
   {
-    he: { title: 'הזמנה\nמגיעה', subtitle: 'רגע לענות באמת' },
-    en: { title: 'Invite\narrives', subtitle: 'A real moment to reply' },
+    he: { title: 'הוא מקבל רגע לבחור' },
+    en: { title: 'They get a moment to choose' },
   },
   {
-    he: { title: 'אם זה הדדי\nזה נפתח', subtitle: 'שיחה אחת לשניכם' },
-    en: { title: 'If mutual\nit opens', subtitle: 'One chat for two' },
+    he: { title: 'אם שניכם רוצים זה נפתח' },
+    en: { title: 'If you both want it it opens' },
   },
   {
-    he: { title: 'בועה אחת\nרק לשניים', subtitle: 'בלי הפרעות מבחוץ' },
-    en: { title: 'One bubble\nfor two', subtitle: 'No outside noise' },
+    he: { title: 'ואז יש מקום רק לשניכם' },
+    en: { title: 'Then it is just the two of you' },
   },
   {
-    he: { title: 'כאן ועכשיו\nלא אחר כך', subtitle: 'החיבור קורה בלייב' },
-    en: { title: 'Here now\nnot later', subtitle: 'Connection happens live' },
+    he: { title: 'לפעמים מספיק ניצוץ קטן' },
+    en: { title: 'Sometimes one spark is enough' },
   },
   {
-    he: { title: 'ניצוץ אחד\nמתחיל הכל', subtitle: 'כאן מתחיל משהו אמיתי' },
-    en: { title: 'One spark\nstarts it', subtitle: 'Something real begins' },
+    he: { title: 'ומשם משהו אמיתי מתחיל' },
+    en: { title: 'And something real can begin' },
   },
 ]
 
@@ -112,79 +115,17 @@ async function signInWithApple() {
   if (error) throw error
 }
 
-// ── Icons ──────────────────────────────────────────────────────────────────
-
-function GoogleColoredIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 48 48">
-      <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-      <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-      <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-      <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-    </Svg>
-  )
+async function sendMagicLink(email: string): Promise<boolean> {
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: getMagicLinkRedirect() },
+  })
+  if (error) {
+    console.error('Magic link send error:', error)
+    return false
+  }
+  return true
 }
-
-function AppleIcon() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24">
-      <Path fill={WHITE} d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.44c1.32.07 2.24.74 3.01.8.94-.19 1.84-.89 2.9-.95 1.24-.07 2.41.4 3.26 1.3-2.93 1.75-2.21 5.59.54 6.68-.56 1.49-1.3 2.97-1.71 4.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-    </Svg>
-  )
-}
-
-function LoginSpinner({ dark = false }: { dark?: boolean }) {
-  const rotation = useSharedValue(0)
-  useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: 700, easing: Easing.linear }), -1, false)
-  }, [])
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
-  const arc = dark ? TEXT_PRIMARY : WHITE
-  const track = dark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.3)'
-  return (
-    <ReAnimated.View style={[{ width: 20, height: 20 }, animStyle]}>
-      <Svg width={20} height={20} viewBox="0 0 22 22">
-        <Circle cx={11} cy={11} r={8} stroke={track} strokeWidth={2.5} fill="none" />
-        <Path d="M 11 3 A 8 8 0 0 1 19 11" stroke={arc} strokeWidth={2.5} strokeLinecap="round" fill="none" />
-      </Svg>
-    </ReAnimated.View>
-  )
-}
-
-// ── Google button ──────────────────────────────────────────────────────────
-
-function GoogleButton({ onPress, loading, disabled }: { onPress: () => void; loading: boolean; disabled: boolean }) {
-  return (
-    <Pressable
-      style={({ pressed }) => [gBtnStyles.btn, pressed && gBtnStyles.pressed]}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityLabel={t('auth.continueGoogle')}
-      accessibilityRole="button"
-    >
-      <View style={gBtnStyles.iconSlot} pointerEvents="none">
-        {loading ? <LoginSpinner dark /> : <GoogleColoredIcon />}
-      </View>
-      <Text style={gBtnStyles.label}>{t('auth.continueGoogle')}</Text>
-    </Pressable>
-  )
-}
-
-const gBtnStyles = StyleSheet.create({
-  btn: {
-    height: 56,
-    backgroundColor: WHITE,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#E2DADA',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: { backgroundColor: GRAY_50 },
-  iconSlot: { position: 'absolute', start: 20, top: 0, bottom: 0, justifyContent: 'center' },
-  label: { fontSize: 17, fontWeight: '700', color: TEXT_PRIMARY, letterSpacing: -0.3 },
-})
 
 // ── Carousel card ──────────────────────────────────────────────────────────
 
@@ -194,7 +135,19 @@ function CarouselCard({ slideIndex, cardWidth, cardHeight }: {
   cardHeight: number
 }) {
   const locale = lang === 'en' ? 'en' : 'he'
-  const { title, subtitle } = SLIDES[slideIndex][locale]
+  const { title } = SLIDES[slideIndex][locale]
+
+  // Cover-mode crop anchored to the bottom: scale to fill the card while
+  // keeping aspect ratio, then if the result is taller than the card the
+  // overflow gets clipped from the top (not centered as resizeMode="cover" does).
+  const src = RNImage.resolveAssetSource(SLIDE_IMAGES[slideIndex])
+  const ratio = src && src.width > 0 ? src.height / src.width : 1.5
+  let imgW = cardWidth
+  let imgH = cardWidth * ratio
+  if (imgH < cardHeight) {
+    imgH = cardHeight
+    imgW = cardHeight / ratio
+  }
 
   return (
     <View style={{ width: cardWidth, height: cardHeight }}>
@@ -202,12 +155,19 @@ function CarouselCard({ slideIndex, cardWidth, cardHeight }: {
       <View style={[cardStyles.card, { width: cardWidth, height: cardHeight }]}>
         <Image
           source={SLIDE_IMAGES[slideIndex]}
-          style={{ position: 'absolute', top: 0, left: 0, width: cardWidth, height: cardHeight }}
-          resizeMode="cover"
+          contentFit="fill"
+          cachePolicy="memory-disk"
+          transition={0}
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: (cardWidth - imgW) / 2,
+            width: imgW,
+            height: imgH,
+          }}
         />
         <View style={cardStyles.textOverlay}>
           <Text style={cardStyles.title}>{title}</Text>
-          <Text style={cardStyles.subtitle}>{subtitle}</Text>
         </View>
       </View>
     </View>
@@ -216,7 +176,7 @@ function CarouselCard({ slideIndex, cardWidth, cardHeight }: {
 
 const cardStyles = StyleSheet.create({
   shadowLayer: {
-    borderRadius: 28,
+    borderRadius: RADIUS,
     backgroundColor: '#fff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -225,7 +185,7 @@ const cardStyles = StyleSheet.create({
     elevation: 2,
   },
   card: {
-    borderRadius: 28,
+    borderRadius: RADIUS,
     overflow: 'hidden',
   },
   textOverlay: {
@@ -247,14 +207,6 @@ const cardStyles = StyleSheet.create({
     color: '#2A211D',
     marginBottom: 18,
     maxWidth: '82%',
-  },
-  subtitle: {
-    textAlign: 'center',
-    fontSize: 16,
-    lineHeight: 23,
-    fontWeight: '400',
-    color: 'rgba(42,33,29,0.72)',
-    maxWidth: '84%',
   },
 })
 
@@ -283,9 +235,8 @@ function ProgressBar({ scrollAnim, step, slideCount, width, isPaused, onReset, o
   return (
     <View style={[pbStyles.container, { width }]}>
       <Pressable onPress={onReset} hitSlop={10} style={({ pressed }) => [pbStyles.btn, pressed && pbStyles.btnPressed]}>
-        <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={ic} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-          <Path d="M3 3v5h5" />
+        <Svg width={17} height={17} viewBox="0 0 24 24" style={{ transform: [{ scaleX: I18nManager.isRTL ? -1 : 1 }] }}>
+          <Path d="M4 3h3v18H4zM21 3L8 12l13 9z" fill={ic} />
         </Svg>
       </Pressable>
 
@@ -335,7 +286,7 @@ export default function LoginPage() {
     ? Math.max(carouselSectionHeight - PROGRESS_HEIGHT - SHADOW_PAD * 2, 100)
     : Math.floor(SH * 0.575)
 
-  const [loadingProvider, setLoadingProvider] = useState<'google' | 'apple' | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
 
   const listRef = useRef<FlatList<number>>(null)
@@ -343,10 +294,6 @@ export default function LoginPage() {
   const autoplayRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const scrollAnim = useRef(new RNAnimated.Value(0)).current
   const momentumStartedRef = useRef(false)
-
-  useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {})
-  }, [])
 
   // Ensure carousel starts at slide 0 regardless of RTL scroll initialization
   useEffect(() => {
@@ -414,29 +361,26 @@ export default function LoginPage() {
     if (!momentumStartedRef.current) resolveIndex(e.nativeEvent.contentOffset.x)
   }
 
-  // ── Auth handlers (unchanged) ──────────────────────────────────────────
+  // ── Auth handlers ──────────────────────────────────────────────────────
+  // Each provider throws on failure / cancellation so the sheet can clear
+  // its in-flight state. On success, the auth state change causes
+  // _layout.tsx to navigate away and unmount this screen, so we don't need
+  // to manually close the sheet.
 
   const handleGoogle = async () => {
-    setLoadingProvider('google')
-    try {
-      const signedIn = await signInWithGoogle()
-      if (!signedIn) setLoadingProvider(null)
-      // On success: keep spinner — screen navigates away on auth state change
-    } catch (e: any) {
-      console.error('Google sign-in error:', e)
-      setLoadingProvider(null)
-    }
+    const signedIn = await signInWithGoogle()
+    if (!signedIn) throw new Error('cancelled')
   }
 
   const handleApple = async () => {
-    setLoadingProvider('apple')
     try { await signInWithApple() }
-    // On success: no catch/finally — keep spinner until screen unmounts
     catch (e: any) {
       if (e.code !== 'ERR_REQUEST_CANCELED') console.error('Apple sign-in error:', e)
-      setLoadingProvider(null)
+      throw e
     }
   }
+
+  const handleEmail = async (email: string) => sendMagicLink(email)
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -444,17 +388,10 @@ export default function LoginPage() {
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
 
-      {/* Brand area — name centered on screen, matchstick to its right.
-          A transparent spacer of identical width balances the row so the
-          text "Once" sits at the geometric center. */}
+      {/* Brand area — name centered on screen. */}
       <View style={styles.brand}>
-        <View style={styles.brandInner}>
-          <View style={styles.brandSpacer} />
-          <Text style={styles.brandName}>Once</Text>
-          <View style={styles.logoWrapper} pointerEvents="none">
-            <OnceLogo size={52} />
-          </View>
-        </View>
+        <Text style={styles.brandName}>Once</Text>
+        <Text style={styles.brandSlogan}>{lang === 'en' ? 'Just one. now!' : 'רק אחד. עכשיו!'}</Text>
       </View>
 
       {/* Carousel */}
@@ -503,20 +440,11 @@ export default function LoginPage() {
 
       {/* Bottom — fixed login area */}
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 4 }]}>
-        {Platform.OS === 'ios' && (
-          <Button
-            label={t('auth.signInApple')}
-            onPress={handleApple}
-            disabled={loadingProvider !== null}
-            silentDisabled
-            variant="dark"
-            iconStart={loadingProvider === 'apple' ? <LoginSpinner /> : <AppleIcon />}
-          />
-        )}
-        <GoogleButton
-          onPress={handleGoogle}
-          loading={loadingProvider === 'google'}
-          disabled={loadingProvider !== null}
+        <Button
+          label={t('auth.startOneStep')}
+          onPress={() => setSheetOpen(true)}
+          variant="primary"
+          size="lg"
         />
         <Text style={styles.legalText}>
           {t('auth.legalPrefix')}{' '}
@@ -529,6 +457,15 @@ export default function LoginPage() {
           </Text>
         </Text>
       </View>
+
+      <LoginSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onGoogle={handleGoogle}
+        onApple={handleApple}
+        onEmail={handleEmail}
+        showApple={Platform.OS === 'ios'}
+      />
     </SafeAreaView>
   )
 }
@@ -543,21 +480,8 @@ const styles = StyleSheet.create({
   brand: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 40,
-    paddingBottom: 16,
-  },
-  // brandInner is a 3-cell row: [spacer | "Once" | matchstick].
-  // Spacer + matchstick are equal width, so the text lands exactly centered.
-  // Forced LTR keeps the visual order stable in Hebrew (RTL) locales.
-  brandInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    direction: 'ltr',
-  },
-  brandSpacer: {
-    width: 52,
-    height: 52,
-    marginHorizontal: 6,
+    paddingTop: 20,
+    paddingBottom: 4,
   },
   brandName: {
     fontSize: 34,
@@ -565,12 +489,12 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
     letterSpacing: -0.8,
   },
-  logoWrapper: {
-    width: 52,
-    height: 52,
-    marginHorizontal: 6,
-    borderRadius: 14,
-    overflow: 'hidden',
+  brandSlogan: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: 'rgba(0,0,0,0.55)',
+    letterSpacing: -0.2,
+    marginTop: 1,
   },
 
   // ── Carousel ───────────────────────────────────────────────────────────

@@ -1,15 +1,11 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import type { FamilyData } from '../lib/family'
 
 export interface Image {
   normal?: string
   hash: string
 }
-
-export type ProfileItem =
-  | { kind: 'photo'; normal?: string; hash: string }
-  | { kind: 'bio'; value: string }
-  | { kind: 'kids'; value: boolean }
 
 export interface Profile {
   created_at?: string | null
@@ -17,10 +13,9 @@ export interface Profile {
   title: string
   name: string
   images: Image[]
-  items?: ProfileItem[]
   bio?: string | null
+  family?: FamilyData | null
   is_male?: boolean | null
-  is_for_kids?: boolean | null
   last_seen?: string | null
   push_enabled?: boolean | null
   distance?: number | null
@@ -83,6 +78,8 @@ export interface PagesCompat {
   page2State?: ServerPage2State
   /** Raw v3 page2.message, when present. */
   page2Message?: string
+  /** ISO timestamp of last `app_add` press; gates the page2 "Show me to people" cooldown. */
+  last_add_at?: string
 }
 
 export interface UserProfile {
@@ -95,14 +92,13 @@ export interface UserProfile {
   age_from: number
   age_to: number
   range: number | null
-  /** Ordered profile items — single source of truth for photos, bio, and kids. */
-  items: ProfileItem[]
-  /** Derived from items for backward compat. Do not set directly. */
   images: Image[]
-  /** Derived from items for backward compat. Do not set directly. */
   bio: string | null
-  is_for_kids: boolean | null
+  family: FamilyData | null
   units: string | null
+  /** First day of the displayed week (0 = Sunday, 1 = Monday). Used by the
+   * family/kids schedule UI to know which day to show in the leftmost column. */
+  weekStart: number | null
   appearance: string | null
   data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
   relations?: PagesCompat | null
@@ -122,10 +118,10 @@ interface UserStore {
 }
 
 const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
-  'items',
+  'images', 'bio', 'family',
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
-  'units',
+  'units', 'weekStart',
   'appearance',
 ]
 
@@ -181,7 +177,12 @@ function deriveCompat(relations: Pages | null | undefined) {
     ? (page2.profiles as Profile[])
     : []
 
-  const match: Profile | null = page1?.profile ? (page1.profile as Profile) : null
+  // Match represents the other person whose card the home pane is showing.
+  // After clear1, page1 stays {state: 'locked'} with profile still attached
+  // server-side, but synthesized state goes to null — the card should slide
+  // out. Gating match on state prevents the locked-no-message profile from
+  // keeping the card mounted.
+  const match: Profile | null = state && page1?.profile ? (page1.profile as Profile) : null
 
   let legacyPage2: Profile[] | Page2Invite
   if (page2?.state === 'pending' && page2.profile) {
@@ -240,17 +241,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     for (const k of Object.keys(patch) as (keyof UserProfile)[]) {
       if (CLIENT_AUTHORED.includes(k)) pending.set(k, patch[k])
     }
-    const derived: Partial<UserProfile> = {}
-    if ('items' in patch && Array.isArray(patch.items)) {
-      derived.images = patch.items
-        .filter((it): it is Extract<ProfileItem, { kind: 'photo' }> => it.kind === 'photo')
-        .map(({ kind: _k, ...rest }) => rest as Image)
-      const bioItem = patch.items.find((it): it is Extract<ProfileItem, { kind: 'bio' }> => it.kind === 'bio')
-      derived.bio = bioItem ? bioItem.value : null
-      const kidsItem = patch.items.find((it): it is Extract<ProfileItem, { kind: 'kids' }> => it.kind === 'kids')
-      if (kidsItem !== undefined) derived.is_for_kids = kidsItem.value
-    }
-    set({ profile: { ...prev, ...patch, ...derived } })
+    set({ profile: { ...prev, ...patch } })
   },
 
   applyServerUser: (data, source = 'invoke') => {
@@ -258,35 +249,23 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const d = data as Record<string, unknown>
     const lastSeen = d.last_seen as string | undefined
     const ts = lastSeen ? Date.parse(lastSeen) : 0
-    if (ts && ts < lastAppliedLastSeen) return
+    // fetch is a direct SELECT — authoritative by definition. Other-user RPCs
+    // write A.relations without bumping A.last_seen, so the stored ts can sit
+    // ahead of DB.last_seen and would otherwise reject the fresh row.
+    if (source !== 'fetch' && ts && ts < lastAppliedLastSeen) return
     if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
-    // Promote items/units from data JSONB for CLIENT_AUTHORED protection.
-    // name lives top-level on the server now; no promotion needed.
+    // Promote flat profile fields + units/weekStart from data JSONB so they
+    // sit at the top level of UserProfile (and CLIENT_AUTHORED protection
+    // applies). name lives top-level on the server already.
     if (d.data && typeof d.data === 'object') {
       const dd = d.data as Record<string, unknown>
       if ('units' in dd) (d as Record<string, unknown>).units = dd.units
-      if ('items' in dd && Array.isArray(dd.items)) {
-        const items = dd.items as ProfileItem[]
-        ;(d as Record<string, unknown>).items = items
-        ;(d as Record<string, unknown>).images = items
-          .filter((it): it is Extract<ProfileItem, { kind: 'photo' }> => it.kind === 'photo')
-          .map(({ kind: _k, ...rest }) => rest as Image)
-        const bioItem = items.find((it): it is Extract<ProfileItem, { kind: 'bio' }> => it.kind === 'bio')
-        ;(d as Record<string, unknown>).bio = bioItem ? bioItem.value : null
-        const kidsItem = items.find((it): it is Extract<ProfileItem, { kind: 'kids' }> => it.kind === 'kids')
-        if (kidsItem !== undefined) (d as Record<string, unknown>).is_for_kids = kidsItem.value
-      } else if ('images' in dd || 'bio' in dd) {
-        // Legacy fallback: row not yet migrated to items format
-        const legacyImages = Array.isArray(dd.images) ? dd.images as Image[] : []
-        const legacyBio = typeof dd.bio === 'string' ? dd.bio : null
-        const items: ProfileItem[] = [
-          ...legacyImages.map(img => ({ kind: 'photo' as const, ...img })),
-          ...(legacyBio ? [{ kind: 'bio' as const, value: legacyBio }] : []),
-        ]
-        ;(d as Record<string, unknown>).items = items
-        ;(d as Record<string, unknown>).images = legacyImages
-        ;(d as Record<string, unknown>).bio = legacyBio
-      }
+      if ('weekStart' in dd) (d as Record<string, unknown>).weekStart = dd.weekStart
+      ;(d as Record<string, unknown>).images = Array.isArray(dd.images) ? dd.images as Image[] : []
+      ;(d as Record<string, unknown>).bio = typeof dd.bio === 'string' ? dd.bio : null
+      ;(d as Record<string, unknown>).family = dd.family && typeof dd.family === 'object' && !Array.isArray(dd.family)
+        ? (dd.family as FamilyData)
+        : null
     }
     const prev = get().profile
     if (source === 'invoke' && prev) {
@@ -332,7 +311,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
     if (!prev) { set({ profile: d as unknown as UserProfile }); return }
     const merged: Record<string, unknown> = { ...prev, ...d }
-    let itemsRestored = false
     for (const k of CLIENT_AUTHORED) {
       if (!pending.has(k)) continue
       const pendingVal = pending.get(k)
@@ -340,19 +318,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
         pending.delete(k)
       } else {
         merged[k as string] = pendingVal
-        if (k === 'items') itemsRestored = true
       }
-    }
-    // When pending items override the server's items, re-derive images/bio
-    // so they stay in sync with the local photos instead of showing the
-    // server's stale empty list (which disables the photo-step Continue button).
-    if (itemsRestored && Array.isArray(merged.items)) {
-      const items = merged.items as ProfileItem[]
-      merged.images = items
-        .filter((it): it is Extract<ProfileItem, { kind: 'photo' }> => it.kind === 'photo')
-        .map(({ kind: _k, ...rest }) => rest as Image)
-      const bioItem = items.find((it): it is Extract<ProfileItem, { kind: 'bio' }> => it.kind === 'bio')
-      merged.bio = bioItem ? bioItem.value : null
     }
     set({ profile: merged as unknown as UserProfile })
   },

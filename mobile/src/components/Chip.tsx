@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
 import Svg, { Path, Circle, Line } from 'react-native-svg'
-import { FONT_SCALE } from '../fonts'
+import { FONT_SCALE, RADIUS } from '../fonts'
 import { PRIMARY, PRIMARY_BG, DESTRUCTIVE } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
@@ -80,6 +80,17 @@ export function BellOffIcon({ color }: { color: string }) {
   )
 }
 
+export function KidsIcon({ color }: { color: string }) {
+  return (
+    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none">
+      <Circle cx={8} cy={7} r={3} stroke={color} strokeWidth={2} />
+      <Path d="M2 21v-2a6 6 0 0 1 12 0v2" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Circle cx={17} cy={10} r={2.2} stroke={color} strokeWidth={2} />
+      <Path d="M13 21v-1a4 4 0 0 1 8 0v1" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  )
+}
+
 
 const styles = StyleSheet.create({
   chip: {
@@ -88,7 +99,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: RADIUS,
   },
   chipText: {
     fontSize: 13,

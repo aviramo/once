@@ -17,23 +17,35 @@ const PUSH_TOKEN_KEY = 'once_push_token'
 
 export type NotifPermission = 'granted' | 'denied' | 'undetermined'
 
-/** Check current notification permission without prompting. */
+/** Check current notification permission without prompting.
+ *  Never rejects — falls back to 'undetermined' on native-module errors so
+ *  the caller can still surface the in-app prompt. */
 export async function getNotifPermission(): Promise<NotifPermission> {
-  const res = await Notifications.getPermissionsAsync()
-  if (res.status === 'granted') return 'granted'
-  // On Android 13+ a fresh install reports status='denied' but
-  // canAskAgain=true — the user was never prompted. Treat that as
-  // undetermined so the home screen shows the prompt button.
-  if (res.canAskAgain) return 'undetermined'
-  return 'denied'
+  try {
+    const res = await Notifications.getPermissionsAsync()
+    if (res.status === 'granted') return 'granted'
+    // On Android 13+ a fresh install reports status='denied' but
+    // canAskAgain=true — the user was never prompted. Treat that as
+    // undetermined so the home screen shows the prompt button.
+    if (res.canAskAgain) return 'undetermined'
+    return 'denied'
+  } catch (e) {
+    console.log('[notif] getPermissionsAsync failed:', e)
+    return 'undetermined'
+  }
 }
 
 /** Request notification permission from the OS. Returns the new status. */
 export async function requestNotifPermission(): Promise<NotifPermission> {
-  const res = await Notifications.requestPermissionsAsync()
-  if (res.status === 'granted') return 'granted'
-  if (res.canAskAgain) return 'undetermined'
-  return 'denied'
+  try {
+    const res = await Notifications.requestPermissionsAsync()
+    if (res.status === 'granted') return 'granted'
+    if (res.canAskAgain) return 'undetermined'
+    return 'denied'
+  } catch (e) {
+    console.log('[notif] requestPermissionsAsync failed:', e)
+    return 'undetermined'
+  }
 }
 
 /**

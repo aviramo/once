@@ -23,3 +23,11 @@ export const GRAY_BG      = 'rgba(118,118,118,0.10)'
 // ── Destructive ──────────────────────────────────────────────────────────
 export const DESTRUCTIVE       = '#D96B6B'
 export const DESTRUCTIVE_PRESS = '#C85A5A'
+
+// ── Premium ──────────────────────────────────────────────────────────────
+// Purple band reserved for paid / premium affordances. Distinct hue from
+// the brand coral so a premium control reads as "different surface" at a
+// glance, not just "another orange button".
+export const PREMIUM       = '#8B5CF6'
+export const PREMIUM_PRESS = '#7244D9'
+export const PREMIUM_BG    = 'rgba(139,92,246,0.10)'

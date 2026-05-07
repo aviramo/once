@@ -13,7 +13,20 @@ const SRC_SVG = path.join(ROOT, 'assets/icon.svg')
 const BG      = { r: 0xff, g: 0xff, b: 0xff }      // white — orange shape needs contrasting bg
 
 const svgTransparent = fs.readFileSync(SRC_SVG)
-const svgSplash      = svgTransparent
+
+// Dedicated silhouette for the Android notification small icon. Android renders
+// the small icon by drawing only the alpha channel, so the colored brand SVG
+// flattens into an indistinct blob at status-bar size — the head and stick
+// share a wavy boundary and visually merge. This SVG is a simplified matchstick:
+// a wide oval head, a clear vertical gap, and a narrow rounded stick. The
+// ~4× width ratio between head and stick plus the gap make the silhouette read
+// unmistakably as a matchstick at 24 px.
+const svgNotification = Buffer.from(
+  '<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="none">' +
+  '<ellipse cx="512" cy="295" rx="190" ry="210" fill="#FFFFFF"/>' +
+  '<rect x="436" y="535" width="152" height="405" rx="32" fill="#FFFFFF"/>' +
+  '</svg>',
+)
 
 // SVG → raster. density scales with size so paths stay crisp.
 function rasterize(svgBuf, size) {
@@ -50,21 +63,12 @@ async function paddedForAdaptive(size) {
   }).composite([{ input: inside, top: pad, left: pad }])
 }
 
-// Tall splash: match rises from the canvas bottom, head top at ~30% from the top.
-// Source SVG (1024 canvas) has the match content occupying y=225..1024.
-// Want on 1080x2400 splash: y=720..2400 — scale = 2.103, ty = 247, center x at 540 → tx = -537.
-function splashSvgBuf() {
-  const inner = svgTransparent.toString().replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '')
-  return Buffer.from(
-    `<svg width="1080" height="2400" viewBox="0 0 1080 2400" xmlns="http://www.w3.org/2000/svg" fill="none">` +
-    `<g transform="translate(-537, 247) scale(2.103)">${inner}</g></svg>`,
-  )
-}
-function rasterizeSplash() {
-  return sharp(splashSvgBuf(), { density: 144 }).resize(1080, 2400, {
-    fit: 'contain',
-    background: { r: 0, g: 0, b: 0, alpha: 0 },
-  })
+// Splash logo: a square, transparent-background icon centered on the
+// splashscreen color (white) by the layer-list in drawable/splashscreen.xml.
+// gravity="center" renders the bitmap at native pixel size centered on screen,
+// so per-density sizes determine the icon's visual dp size (96 dp here).
+function rasterizeSplashIcon(size) {
+  return rasterize(svgTransparent, size)
 }
 
 async function main() {
@@ -72,8 +76,12 @@ async function main() {
   await writePng(flatOnBg(1024),                                  path.join(MOBILE, 'assets/icon.png'))
   await writePng(flatOnBg(96),                                    path.join(MOBILE, 'assets/favicon.png'))
   await writePng(await paddedForAdaptive(1024),                   path.join(MOBILE, 'assets/adaptive-icon.png'))
-  await writePng(rasterizeSplash(),                               path.join(MOBILE, 'assets/splash-icon.png'))
+  // splash-icon.png: square centered icon used by app.json splash config (iOS launch screen).
+  await writePng(flatOnBg(1024),                                  path.join(MOBILE, 'assets/splash-icon.png'))
   await writePng(rasterize(svgTransparent, 512),                  path.join(MOBILE, 'assets/once-512.png'))
+  // Android notification small icon: white silhouette on transparent canvas.
+  // Source for expo-notifications plugin (icon: ./assets/notification-icon.png).
+  await writePng(rasterize(svgNotification, 1024),                path.join(MOBILE, 'assets/notification-icon.png'))
 
   console.log('project assets/:')
   await writePng(rasterize(svgTransparent, 512),                  path.join(ROOT, 'assets/icon-512.png'))
@@ -94,16 +102,18 @@ async function main() {
   }
 
   console.log('android splash logo:')
+  // Square centered icon at 96dp visual size. drawable/splashscreen.xml uses
+  // gravity="center" and a layer-list with splashscreen_background (white).
   const splash = [
-    ['mdpi',   288],
-    ['hdpi',   432],
-    ['xhdpi',  576],
-    ['xxhdpi', 864],
-    ['xxxhdpi',1152],
+    ['mdpi',     96],
+    ['hdpi',    144],
+    ['xhdpi',   192],
+    ['xxhdpi',  288],
+    ['xxxhdpi', 384],
   ]
   for (const [d, sz] of splash) {
     const file = path.join(MOBILE, `android/app/src/main/res/drawable-${d}/splashscreen_logo.png`)
-    await writePng(rasterize(svgSplash, sz), file)
+    await writePng(rasterizeSplashIcon(sz), file)
   }
 
   console.log('\nDone.')

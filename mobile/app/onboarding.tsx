@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
 import { TEXT_PRIMARY, WHITE, DESTRUCTIVE, PRIMARY, GRAY_50 } from '../src/colors'
-import { SINGLE } from '../src/fonts'
+import { SINGLE, RADIUS } from '../src/fonts'
 import { OnceLogo } from '../src/components/OnceLogo'
 
 const IMPERIAL_REGIONS = new Set(['US', 'LR', 'MM'])
@@ -387,19 +387,9 @@ export default function OnboardingPage() {
         await flushPromiseRef.current
         flushPromiseRef.current = null
       }
-      const currentItems = useUserStore.getState().profile?.items ?? []
       const bioValue = bio.trim().replace(/\n{3,}/g, '\n\n')
-      const bioItem = { kind: 'bio' as const, value: bioValue }
-      const withoutBio = currentItems.filter(it => it.kind !== 'bio')
-      const firstPhotoIdx = withoutBio.findIndex(it => it.kind === 'photo')
-      const insertAt = firstPhotoIdx >= 0 ? firstPhotoIdx + 1 : withoutBio.length
-      const items = [
-        ...withoutBio.slice(0, insertAt),
-        bioItem,
-        ...withoutBio.slice(insertAt),
-      ]
-      await invoke('app/items', { items })
-      useUserStore.getState().update({ items })
+      await invoke('app/profile', { bio: bioValue })
+      useUserStore.getState().update({ bio: bioValue })
     } catch {
       bioSubmittingRef.current = false
       setBioSubmitting(false)
@@ -664,7 +654,7 @@ export default function OnboardingPage() {
               alignItems: 'center',
             }}
           >
-            <View style={{ borderRadius: 14, overflow: 'hidden' }}>
+            <View style={{ borderRadius: RADIUS, overflow: 'hidden' }}>
               <OnceLogo size={52} />
             </View>
           </Animated.View>
@@ -714,7 +704,7 @@ const styles = StyleSheet.create({
   },
   card: {
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
   },
@@ -754,7 +744,7 @@ const styles = StyleSheet.create({
   inputWrap: {
     marginTop: 32,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -777,7 +767,7 @@ const styles = StyleSheet.create({
   dateBox: {
     alignSelf: 'stretch',
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingVertical: 16,
     paddingHorizontal: 8,
   },
@@ -810,7 +800,7 @@ const styles = StyleSheet.create({
   bioField: {
     marginTop: 12,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 28,

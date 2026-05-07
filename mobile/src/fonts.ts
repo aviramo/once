@@ -16,6 +16,7 @@ export const SINGLE_WEIGHT = false
 export const SINGLE = 10
 export const DOUBLE = SINGLE * 2
 export const BUTTON = 16            // padding around icon in a button
+export const RADIUS = 12            // unified corner radius for cards/buttons/sheets/bubbles/inputs
 
 export const FONT_SCALE = {
   ui: 1.0,

@@ -16,9 +16,8 @@ export default class User {
   age_to?: number;
   is_for_male?: boolean;
   is_for_female?: boolean;
-  is_for_kids: boolean | null = null;
   name: string | null = null;
-  data: Data = { items: [], units: "km", os: "unknown", lang: "unknown", appearance: "light", push_token: null };
+  data: Data = { images: [], units: "km", os: "unknown", lang: "unknown", appearance: "light", push_token: null };
   relations: Pages = defaultRelations;
   db: { new: Record<string, unknown>; old: Record<string, unknown> } = { new: {}, old: {} };
 

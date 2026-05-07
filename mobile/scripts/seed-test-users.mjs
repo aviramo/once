@@ -140,6 +140,43 @@ function weightedCity() {
 }
 function jitter(v, amt = 0.05) { return v + (Math.random() - 0.5) * amt }
 
+// Randomized FamilyData for test users. Distribution chosen to give the UI
+// a useful spread for testing:
+//   - 25% no family info (data.family undefined → no card)
+//   - 25% no kids, isForKids=true   ("wants kids")
+//   - 15% no kids, isForKids=false  ("doesn't want kids")
+//   - 10% no kids, isForKids=null   (no preference set)
+//   - 25% has kids, with schedule + isForKids randomly true/false/null
+function randomFamily() {
+  const r = Math.random()
+  if (r < 0.25) return undefined
+  if (r < 0.50) return { hasKids: false, isForKids: true }
+  if (r < 0.65) return { hasKids: false, isForKids: false }
+  if (r < 0.75) return { hasKids: false }
+
+  // Has kids: 1-3 kids, weekly schedule of 1-4 weeks with each day
+  // independently 50% chance of being marked. anchor = current Sunday.
+  const kidCount = randInt(1, 3)
+  const kids = Array.from({ length: kidCount }, () => {
+    return Math.random() < 0.85 ? { age: randInt(0, 18) } : {}
+  })
+  const weeksCount = randInt(1, 4)
+  const weeks = Array.from({ length: weeksCount }, () =>
+    Array.from({ length: 7 }, () => Math.random() < 0.5),
+  )
+  const today = new Date()
+  const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay())
+  const anchor = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`
+  const isForKidsRoll = Math.random()
+  const isForKids = isForKidsRoll < 0.4 ? true : isForKidsRoll < 0.8 ? false : null
+  return {
+    hasKids: true,
+    kids,
+    schedule: { weeks, anchor },
+    ...(isForKids !== null ? { isForKids } : {}),
+  }
+}
+
 async function clearStorageFor(userId) {
   for (const folder of ['normal', 'blur']) {
     const { data: files } = await supabase.storage.from('users').list(`${userId}/${folder}`, { limit: 200 })
@@ -152,8 +189,8 @@ async function clearStorageFor(userId) {
 async function cleanupNonAdmin() {
   const { data: toDelete, error } = await supabase
     .from('users')
-    .select('user_id, role')
-    .or('role.neq.ADMIN,role.is.null')
+    .select('user_id, data')
+    .or("data->>role.neq.ADMIN,data->>role.is.null")
   if (error) throw new Error(`select non-admin users: ${error.message}`)
   console.log(`cleanup: ${toDelete.length} non-admin users to delete`)
 
@@ -329,22 +366,22 @@ function randomPastIso(maxDaysAgo) {
   return new Date(Date.now() - ms).toISOString()
 }
 
-function fakeSubscription() {
-  const b64url = (n) => crypto.randomBytes(n).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  const fcmId = `${b64url(8)}:APA91b${b64url(105)}`
-  return {
-    endpoint: `https://fcm.googleapis.com/fcm/send/${fcmId}`,
-    expirationTime: null,
-    keys: {
-      p256dh: b64url(65),
-      auth: b64url(16),
-    },
-  }
-}
-
 async function insertProfile(user, p, filenames) {
   const createdAt = randomPastIso(30)
   const lastSeen = randomPastIso(7)
+  const family = randomFamily()
+  const data = {
+    images: filenames.map(f => ({ normal: f, hash: '' })),
+    bio: p.bioHe,
+    units: 'metric',
+    role: 'TEST',
+    ...(family !== undefined ? { family } : {}),
+  }
+  // Match the server-side default for fresh users (user.ts: defaultRelations).
+  // page1.locked + page2.free passes the `others` findability filter
+  // (page1 != chat, page2 NOT IN locked/pending), so seeded users are
+  // discoverable by `find` immediately.
+  const relations = { page1: { state: 'locked' }, page2: { state: 'free' } }
   const { error } = await supabase.from('users').insert({
     user_id: user.id,
     name: p.name,
@@ -352,20 +389,14 @@ async function insertProfile(user, p, filenames) {
     is_male: p.isMale,
     is_for_male: true,
     is_for_female: true,
-    is_for_kids: false,
     age_from: 18,
     age_to: 99,
     range: 100_000_000,
-    state: 'VISIBLE',
-    message: p.bioHe,
-    images: { normal: filenames, blur: filenames },
     location: `SRID=4326;POINT(${jitter(p.city.lng)} ${jitter(p.city.lat)})`,
-    units: 'metric',
-    watchers: {},
-    role: 'TEST',
+    data,
+    relations,
     created_at: createdAt,
     last_seen: lastSeen,
-    subscription: fakeSubscription(),
   })
   if (error) throw new Error(`users insert: ${error.message}`)
 }

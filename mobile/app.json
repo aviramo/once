@@ -53,15 +53,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#FF7A5C"
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Once needs access to your photos to set a profile picture.",
-          "cameraPermission": "Once needs access to your camera to take a profile picture."
         }
       ],
       "expo-web-browser",
@@ -73,7 +66,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.243101157812-39cu77j7o0ukr8vvnl59mshsdelne3he"
         }
-      ]
+      ],
+      "./plugins/withAdiRegistration.js"
     ],
     "extra": {
       "router": {},

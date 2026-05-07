@@ -3,7 +3,7 @@ import { Text, TextInput, AppState } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import * as SplashScreen from 'expo-splash-screen'
+import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
   NotoSansHebrew_400Regular,
@@ -20,13 +20,13 @@ import {
   NotoSans_800ExtraBold,
 } from '@expo-google-fonts/noto-sans'
 import { supabase } from '../src/lib/supabase'
+import { consumeMagicLinkUrl } from '../src/lib/authRedirect'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
+import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-
-SplashScreen.preventAutoHideAsync().catch(() => {})
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -141,6 +141,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         clear()
         unsubscribeFromUserChanges()
         unregisterPushNotifications()
+        clearSelfAvatar().catch(() => {})
       }
     })
 
@@ -148,6 +149,25 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeout)
       listener.subscription.unsubscribe()
       unsubscribeFromUserChanges()
+    }
+  }, [])
+
+  // Magic-link return handler. The Supabase email link redirects to
+  // `once://login-callback#access_token=...&refresh_token=...`. Both the
+  // cold-start URL and any in-session URL are funnelled through
+  // consumeMagicLinkUrl, which calls supabase.auth.setSession — that fires
+  // onAuthStateChange above, which routes the user past /login.
+  useEffect(() => {
+    let cancelled = false
+    Linking.getInitialURL().then(url => {
+      if (!cancelled && url) consumeMagicLinkUrl(url)
+    })
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      consumeMagicLinkUrl(url)
+    })
+    return () => {
+      cancelled = true
+      sub.remove()
     }
   }, [])
 

@@ -5,29 +5,41 @@ import Constants from 'expo-constants'
 
 export type LocPermission = 'granted' | 'denied' | 'undetermined' | 'services-off'
 
-/** Check current foreground location permission without prompting. */
+/** Check current foreground location permission without prompting.
+ *  Never rejects — falls back to 'undetermined' on native-module errors so
+ *  the caller can still surface the in-app prompt. */
 export async function getLocPermission(): Promise<LocPermission> {
-  // Check device-level location services first
-  const servicesOn = await Location.hasServicesEnabledAsync()
-  if (!servicesOn) return 'services-off'
+  try {
+    // Check device-level location services first
+    const servicesOn = await Location.hasServicesEnabledAsync()
+    if (!servicesOn) return 'services-off'
 
-  const res = await Location.getForegroundPermissionsAsync()
-  if (res.status === 'granted') return 'granted'
-  // Same pattern as notifications: canAskAgain distinguishes "never asked"
-  // from "permanently denied" on Android.
-  if (res.canAskAgain) return 'undetermined'
-  return 'denied'
+    const res = await Location.getForegroundPermissionsAsync()
+    if (res.status === 'granted') return 'granted'
+    // Same pattern as notifications: canAskAgain distinguishes "never asked"
+    // from "permanently denied" on Android.
+    if (res.canAskAgain) return 'undetermined'
+    return 'denied'
+  } catch (e) {
+    console.log('[loc] getForegroundPermissionsAsync failed:', e)
+    return 'undetermined'
+  }
 }
 
 /** Request foreground location permission. Returns the new status. */
 export async function requestLocPermission(): Promise<LocPermission> {
-  const servicesOn = await Location.hasServicesEnabledAsync()
-  if (!servicesOn) return 'services-off'
+  try {
+    const servicesOn = await Location.hasServicesEnabledAsync()
+    if (!servicesOn) return 'services-off'
 
-  const res = await Location.requestForegroundPermissionsAsync()
-  if (res.status === 'granted') return 'granted'
-  if (res.canAskAgain) return 'undetermined'
-  return 'denied'
+    const res = await Location.requestForegroundPermissionsAsync()
+    if (res.status === 'granted') return 'granted'
+    if (res.canAskAgain) return 'undetermined'
+    return 'denied'
+  } catch (e) {
+    console.log('[loc] requestForegroundPermissionsAsync failed:', e)
+    return 'undetermined'
+  }
 }
 
 /** Race getCurrentPositionAsync and watchPositionAsync — whichever delivers

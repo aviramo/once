@@ -18,12 +18,15 @@ import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, r
 import { supabase } from '../src/lib/supabase'
 import { invoke, publicImageUrl } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
-import { t, tg } from '../src/i18n'
+import { t, tg, lang as appLang } from '../src/i18n'
 import { IconPressable } from '../src/components/IconPressable'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
-import { FONT_SCALE, SINGLE } from '../src/fonts'
-import { TEXT_PRIMARY, WHITE, BLACK, DESTRUCTIVE, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_BG } from '../src/colors'
+import { FONT_SCALE, SINGLE, RADIUS } from '../src/fonts'
+import { TEXT_PRIMARY, WHITE, BLACK, DESTRUCTIVE, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_100, GRAY_400, GRAY_BG } from '../src/colors'
+import {
+  defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays,
+} from '../src/lib/family'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -63,6 +66,7 @@ interface Message {
   audio_key?: string | null
   audio_bars?: number[] | null
   audio_duration_ms?: number | null
+  schedule?: { anchor: string; weeks: boolean[][] } | null
   is_event?: boolean
   _pending?: boolean
   _failed?: boolean
@@ -257,6 +261,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
 
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
   const [attachVisible, setAttachVisible] = useState(false)
+  const [attachConfirm, setAttachConfirm] = useState<'location' | 'schedule' | null>(null)
   const [inputWrapWidth, setInputWrapWidth] = useState(0)
   const attachAnim = useSharedValue(0)
   useEffect(() => {
@@ -372,19 +377,17 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   const handlePlayStart = useCallback((key: string) => setActivePlayingKey(key), [])
 
   // Auto-play next voice message after the current one finishes naturally.
-  // Reuses the existing messagesRef (kept in sync with `messages`) declared above.
+  // Only advances when the immediately-next message is also a voice message,
+  // so a broken voice-message run (interrupted by text/image/etc.) stops here.
   const [autoPlayKey, setAutoPlayKey] = useState<string | null>(null)
   const handleAudioFinished = useCallback((finishedKey: string) => {
     const msgs = messagesRef.current
     const idx = msgs.findIndex(m => m.audio_key === finishedKey)
     if (idx === -1) return
-    for (let i = idx + 1; i < msgs.length; i++) {
-      const k = msgs[i].audio_key
-      if (k) {
-        playTransitionTick()
-        setAutoPlayKey(k)
-        return
-      }
+    const next = msgs[idx + 1]
+    if (next && next.audio_key) {
+      playTransitionTick()
+      setAutoPlayKey(next.audio_key)
     }
   }, [playTransitionTick])
   const consumeAutoPlay = useCallback(() => setAutoPlayKey(null), [])
@@ -772,6 +775,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             (m.text ? p.text === m.text
               : m.image_key ? p.image_key === m.image_key
               : m.audio_key ? p.audio_key === m.audio_key
+              : m.schedule ? p.schedule?.anchor === m.schedule?.anchor && p.created_at === m.created_at
               : p.location?.lat === m.location?.lat),
           )
           if (pi !== -1) resolved[pi] = m
@@ -1012,7 +1016,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [userId, otherId])
 
   const handleShareLocation = useCallback(async () => {
-    setAttachMenuOpen(false)
+    setAttachConfirm(null)
     const perm = await Location.requestForegroundPermissionsAsync()
     if (perm.status !== 'granted') { tap(); return }
     // Show spinner bubble immediately while GPS acquires precise fix
@@ -1081,6 +1085,65 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     ))
     try {
       await invoke('app/chat', { chat: { location: failedMsg.location, created_at: failedMsg.created_at } })
+    } catch {
+      setMessages(prev => prev.map(m =>
+        m._pending && m.user_id === userId && m.created_at === failedMsg.created_at
+          ? { ...m, _pending: false, _failed: true } : m
+      ))
+    }
+  }, [userId, otherId])
+
+  const myFamily = profile?.family ?? null
+  const canSendSchedule = !!(
+    myFamily?.hasKids
+    && myFamily.schedule
+    && familyHasAnyDayMarked(myFamily.schedule.weeks)
+  )
+
+  const handleSendSchedule = useCallback(async () => {
+    setAttachConfirm(null)
+    if (!userId || !otherId) return
+    const sched = myFamily?.schedule
+    if (!sched || !familyHasAnyDayMarked(sched.weeks)) return
+    const anchor = sched.anchor
+    if (!anchor) return
+    const cleanWeeks = sched.weeks.filter(w => w.some(d => d))
+    const snapshot = { anchor, weeks: cleanWeeks }
+    const now = new Date().toISOString()
+    const key = userId + now
+    seenSet.current.add(key)
+    newMsgKeysRef.current.add(key)
+    setMessages(prev => [...prev, {
+      user_id: userId, other_id: otherId, created_at: now,
+      schedule: snapshot, _pending: true,
+    }])
+    requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
+    try {
+      await invoke('app/chat', { chat: { schedule: snapshot, created_at: now } })
+      setMessages(prev => prev.map(m =>
+        m._pending && m.user_id === userId && m.created_at === now
+          ? { ...m, _pending: false } : m
+      ))
+    } catch {
+      setMessages(prev => prev.map(m =>
+        m._pending && m.user_id === userId && m.created_at === now
+          ? { ...m, _pending: false, _failed: true } : m
+      ))
+    }
+  }, [userId, otherId, myFamily])
+
+  const handleRetrySchedule = useCallback(async (failedMsg: Message) => {
+    if (!failedMsg.schedule || !userId || !otherId) return
+    setMessages(prev => prev.map(m =>
+      m._failed && m.user_id === userId && m.created_at === failedMsg.created_at
+        ? { ...m, _failed: false, _pending: true } : m
+    ))
+    try {
+      await invoke('app/chat', { chat: { schedule: failedMsg.schedule, created_at: failedMsg.created_at } })
+      setMessages(prev => prev.map(m =>
+        m._pending && m.user_id === userId && m.created_at === failedMsg.created_at
+          ? { ...m, _pending: false } : m
+      ))
     } catch {
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === failedMsg.created_at
@@ -1279,6 +1342,10 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [userId, otherId])
 
   const onInputChange = (value: string) => {
+    // While recording or previewing audio, keep the keyboard open (TextInput
+    // stays mounted+focused) but drop any typed input so it doesn't land in
+    // the field behind the recording overlay.
+    if (recordPhase !== 'idle') return
     // On mobile, multiline TextInput turns the soft-keyboard Enter into a
     // literal '\n' in the value rather than firing onKeyPress/onSubmitEditing.
     // When "Enter sends message" is on, detect the inserted newline here and
@@ -1370,6 +1437,16 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
               time={formatTime(msg.created_at)}
               status={msgStatus}
             />
+          ) : msg.schedule ? (
+            <ScheduleBubble
+              animate={animateIn}
+              isMine={isMine}
+              isLast={isLastInGroup}
+              schedule={msg.schedule}
+              senderIsMale={isMine ? isMale : matchIsMale}
+              time={formatTime(msg.created_at)}
+              status={msgStatus}
+            />
           ) : (
             <AnimatedBubble
               animate={animateIn}
@@ -1401,6 +1478,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
               else if (msg.image_key) handleRetryImage(msg)
               else if (msg.audio_key) handleRetryAudio(msg)
               else if (msg.location) handleRetryLocation(msg)
+              else if (msg.schedule) handleRetrySchedule(msg)
             }}
             style={styles.retryRow}
             hitSlop={6}
@@ -1415,7 +1493,8 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
       </View>
     )
   }, [reversedMessages, messages.length, firstNewIdx, userId, otherLastRead, getChatImageUrl, getChatAudioUrl,
-      handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation,
+      handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation, handleRetrySchedule,
+      isMale, matchIsMale,
       routedToEarpiece, toggleAudioRouting, autoPlayKey, handleAudioFinished, consumeAutoPlay,
       activePlayingKey, handlePlayStart])
 
@@ -1430,6 +1509,14 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
           Android's font metrics. No flex, no absolute overlays — the slot
           widths carry the layout. */}
       <View style={styles.header}>
+        <View pointerEvents="none" style={styles.headerCenter}>
+          <Text
+            style={[styles.status, otherIsOnline && styles.statusOnline]}
+            numberOfLines={1}
+          >
+            {statusText}
+          </Text>
+        </View>
         <IconPressable
           style={styles.backBtn}
           pressedStyle={styles.backBtnPressed}
@@ -1442,14 +1529,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             <View style={styles.headerAvatarPlaceholder} />
           )}
         </IconPressable>
-        <View style={styles.headerCenter}>
-          <Text
-            style={[styles.status, otherIsOnline && styles.statusOnline]}
-            numberOfLines={1}
-          >
-            {statusText}
-          </Text>
-        </View>
+        <View style={{ flex: 1 }} />
         <IconPressable
           style={styles.menuBtn}
           pressedStyle={styles.menuBtnPressed}
@@ -1499,11 +1579,39 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             bar lands just above whatever sits at the bottom of the screen
             via flex layout — no per-platform spacer needed. */}
         <View style={styles.inputBarOuter}>
+          {attachConfirm && (
+            <View style={styles.attachConfirm}>
+              <Text style={styles.attachConfirmText}>
+                {attachConfirm === 'location'
+                  ? tg('chat.confirmSend.location', isMale)
+                  : tg('chat.confirmSend.schedule', isMale)}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  tap()
+                  if (attachConfirm === 'location') handleShareLocation()
+                  else handleSendSchedule()
+                }}
+                style={({ pressed }) => [styles.attachConfirmSend, pressed && styles.attachConfirmSendPressed]}
+              >
+                <Text style={styles.attachConfirmSendLabel}>{t('chat.confirmSend.send')}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { tap(); setAttachConfirm(null) }}
+                hitSlop={8}
+                style={({ pressed }) => [styles.attachConfirmClose, pressed && styles.attachBarItemPressed]}
+              >
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M18 6L6 18M6 6l12 12" />
+                </Svg>
+              </Pressable>
+            </View>
+          )}
           {/* Always render the text input row so the keyboard stays open while
               recording/previewing. The recording and preview UIs overlay on top. */}
           <View style={styles.inputRow}>
             <ReAnimated.View style={[styles.inputWrap, inputWrapBorderStyle]} onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}>
-              <View style={styles.inputAnimWrap} pointerEvents={attachVisible ? 'none' : 'auto'}>
+              <View style={styles.inputAnimWrap}>
                 <TextInput
                   ref={inputRef}
                   style={styles.input}
@@ -1518,7 +1626,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
               </View>
               <Pressable
                 disabled={attachVisible}
-                onPress={() => { tap(); setAttachMenuOpen(true) }}
+                onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
                 style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
               >
                 <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1533,33 +1641,50 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                     <View style={styles.attachBarItems}>
                       <Pressable
                         onPress={handlePickImage}
+                        accessibilityLabel={t('chat.attachMenu.image')}
                         style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
                       >
-                        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                           <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
                           <Circle cx={12} cy={14} r={3.5} />
                         </Svg>
-                        <Text style={styles.attachBarLabel}>{t('chat.attachMenu.image')}</Text>
                       </Pressable>
                       <View style={styles.attachBarDivider} />
                       <Pressable
-                        onPress={handleShareLocation}
+                        onPress={() => { tap(); setAttachMenuOpen(false); setAttachConfirm('location') }}
+                        accessibilityLabel={t('chat.attachMenu.location')}
                         style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
                       >
-                        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                           <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
                           <Circle cx={12} cy={9} r={2.5} />
                         </Svg>
-                        <Text style={styles.attachBarLabel}>{t('chat.attachMenu.location')}</Text>
                       </Pressable>
+                      {canSendSchedule && (
+                        <>
+                          <View style={styles.attachBarDivider} />
+                          <Pressable
+                            onPress={() => { tap(); setAttachMenuOpen(false); setAttachConfirm('schedule') }}
+                            accessibilityLabel={t('chat.attachMenu.schedule')}
+                            style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
+                          >
+                            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                              <Rect x={3} y={4.5} width={18} height={16} rx={2.5} />
+                              <Path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+                            </Svg>
+                          </Pressable>
+                        </>
+                      )}
                       <View style={styles.attachBarDivider} />
                       <Pressable
                         onPress={() => { tap(); setAttachMenuOpen(false) }}
                         style={({ pressed }) => [styles.attachBarClose, pressed && styles.attachBarItemPressed]}
                       >
-                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                          <Path d="M18 6L6 18M6 6l12 12" />
-                        </Svg>
+                        <View style={styles.attachBarCloseCircle}>
+                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                            <Path d="M18 6L6 18M6 6l12 12" />
+                          </Svg>
+                        </View>
                       </Pressable>
                     </View>
                   </View>
@@ -1835,6 +1960,107 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
           {isMine && status !== 'failed' && <CheckMark status={status} isMine />}
         </View>
       )}
+    </AnimatedBubble>
+  )
+}
+
+// Renders a snapshot kid-schedule shared in chat. The snapshot is frozen at
+// send time (sender's `{anchor, weeks}`); this bubble re-renders it through the
+// receiver's lens — their weekStart preference orders the columns, their
+// locale formats the dates, and the rows start at the receiver's current
+// displayed week so all dates shown are this-week-or-later. Each cell looks up
+// kid-day/kid-free against the snapshot's weekly pattern using anchor-aware
+// modular arithmetic, the same approach as the server's schedule_overlap and
+// the client's familyScheduleOverlap.
+//
+// Visual semantics: the storage marks days the kids ARE WITH the sender, but
+// the chat bubble inverts this to highlight FREE (no-kids) days — that's the
+// useful signal for a partner reading the message. The header reads "Days I'm
+// free (no kids)" so the inversion is unambiguous.
+function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time, status }: {
+  animate: boolean
+  isMine: boolean
+  isLast: boolean
+  schedule: { anchor: string; weeks: boolean[][] }
+  senderIsMale: boolean | null | undefined
+  time: string
+  status: 'pending' | 'failed' | 'sent' | 'read'
+}) {
+  const viewerWeekStart = useUserStore(s => s.profile?.weekStart) ?? defaultWeekStart(appLang)
+  const weekendSet = useMemo(() => new Set(weekendDays(appLang)), [])
+  const dateFmt = useMemo(() => {
+    try { return new Intl.DateTimeFormat(isRTL ? 'he' : 'en', { day: 'numeric', month: 'numeric' }) }
+    catch { return null }
+  }, [])
+  const today = useMemo(() => new Date(), [])
+  const todayDisplayedStart = useMemo(
+    () => startOfDisplayedWeek(today, viewerWeekStart),
+    [today, viewerWeekStart],
+  )
+
+  // We deliberately mirror the settings editor's indexing — `weeks[wi][absWeekday]`
+  // where `wi` is the row in the displayed grid and `absWeekday = (weekStart + col) % 7`.
+  // Reading anchor-relative (`floor((date−anchor)/7)` + `date.getDay()`) instead would
+  // disagree with the editor on Sundays whenever `weekStart != Sunday`, because the
+  // editor's "displayed week 1" crosses the storage week boundary (anchor is the
+  // absolute Sunday). Keeping both surfaces on the same `wi` indexing means the
+  // bubble visually matches what the sender saw in the editor at save time.
+  const cycleLen = schedule.weeks.length
+
+  const bubbleStyle = [
+    styles.scheduleBubble,
+    isMine ? styles.bubbleMine : styles.bubbleTheirs,
+    isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
+  ]
+  const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
+
+  return (
+    <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
+      <Text style={[styles.scheduleTitle, isMine && styles.scheduleTitleMine]} numberOfLines={2}>
+        {tg('chat.scheduleTitle', senderIsMale ?? null)}
+      </Text>
+      {schedule.weeks.map((_w, wi) => (
+        <View key={wi} style={styles.scheduleRow}>
+          {[0, 1, 2, 3, 4, 5, 6].map(col => {
+            const absWeekday = (viewerWeekStart + col) % 7
+            const cellDate = new Date(todayDisplayedStart)
+            cellDate.setDate(cellDate.getDate() + wi * 7 + col)
+            const cycleWeek = ((wi % cycleLen) + cycleLen) % cycleLen
+            const free = !schedule.weeks[cycleWeek]?.[absWeekday]
+            const weekend = weekendSet.has(absWeekday)
+            return (
+              <View key={col} style={styles.scheduleCell}>
+                <View style={[
+                  styles.scheduleDayBubble,
+                  isMine && !free && styles.scheduleDayBubbleMine,
+                  weekend && !free && styles.scheduleDayBubbleWeekend,
+                  weekend && !free && isMine && styles.scheduleDayBubbleWeekendMine,
+                  free && styles.scheduleDayBubbleSelected,
+                  free && isMine && styles.scheduleDayBubbleSelectedMine,
+                ]}>
+                  <Text style={[
+                    styles.scheduleDayLetter,
+                    isMine && styles.scheduleDayLetterMine,
+                    weekend && !free && styles.scheduleDayLetterWeekend,
+                    weekend && !free && isMine && styles.scheduleDayLetterWeekendMine,
+                    free && styles.scheduleDayLetterSelected,
+                    free && isMine && styles.scheduleDayLetterSelectedMine,
+                  ]}>{t(`family.dayShort.${absWeekday}` as never)}</Text>
+                </View>
+                <Text style={[styles.scheduleDayDate, isMine && styles.scheduleDayDateMine]}>
+                  {dateFmt ? dateFmt.format(cellDate) : `${cellDate.getMonth() + 1}/${cellDate.getDate()}`}
+                </Text>
+              </View>
+            )
+          })}
+        </View>
+      ))}
+      <View style={styles.scheduleFooter}>
+        <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+          {time}
+        </Text>
+        {isMine && status !== 'failed' && <CheckMark status={status} isMine />}
+      </View>
     </AnimatedBubble>
   )
 }
@@ -2555,7 +2781,7 @@ const styles = StyleSheet.create({
   menuBtn: {
     height: 36,
     width: 36,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2565,7 +2791,7 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     height: 56,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2587,9 +2813,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     backgroundColor: 'rgba(0,0,0,0.08)',
   },
-  // Center slot fills whatever space is left between the two icon boxes.
+  // Title overlay: absolutely positioned across the full header width so the
+  // text centers relative to the screen, not relative to the leftover space
+  // between the (variable-width) back+avatar slot and the (36px) menu button.
+  // pointerEvents="none" on the View lets taps fall through to the icon rows.
   headerCenter: {
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2635,7 +2867,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
     paddingVertical: 8,
     paddingHorizontal: 13,
-    borderRadius: 16,
+    borderRadius: RADIUS,
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
@@ -2675,7 +2907,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     minHeight: 44,
     maxHeight: 174,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.12)',
     backgroundColor: WHITE,
@@ -2700,7 +2932,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   sendBtn: {
-    width: 49, height: 49, borderRadius: 12,
+    width: 49, height: 49, borderRadius: RADIUS,
     backgroundColor: PRIMARY,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -2719,7 +2951,7 @@ const styles = StyleSheet.create({
   },
   menuDropdown: {
     backgroundColor: WHITE,
-    borderRadius: 16,
+    borderRadius: RADIUS,
     shadowColor: BLACK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -2728,7 +2960,7 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     backgroundColor: WHITE,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     overflow: 'hidden',
   },
   menuRow: {
@@ -2804,37 +3036,76 @@ const styles = StyleSheet.create({
     height: 22,
     backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  attachBarLabel: { fontSize: 14, color: WHITE, fontWeight: '500' },
   attachBarClose: {
     alignSelf: 'stretch',
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  attachBarCloseCircle: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Confirm-send popup (above input bar, keyboard stays open)
+  attachConfirm: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: PRIMARY,
+  },
+  attachConfirmText: {
+    flex: 1,
+    fontSize: 14,
+    color: WHITE,
+    fontWeight: '500',
+  },
+  attachConfirmClose: {
+    width: 32, height: 32,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 16,
+  },
+  attachConfirmSend: {
+    paddingHorizontal: 16,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: WHITE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachConfirmSendPressed: { opacity: 0.7 },
+  attachConfirmSendLabel: {
+    fontSize: 14,
+    color: PRIMARY,
+    fontWeight: '700',
+  },
 
   // Image bubble
   imageBubble: {
     width: '80%',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     overflow: 'hidden',
     padding: SINGLE,
   },
   chatImage: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 12,
+    borderRadius: RADIUS,
   },
   chatImagePlaceholder: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.08)',
   },
   chatImageSpinnerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2864,7 +3135,7 @@ const styles = StyleSheet.create({
   },
   audioBubble: {
     width: '80%',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingVertical: 10,
     paddingHorizontal: 10,
   },
@@ -2947,7 +3218,7 @@ const styles = StyleSheet.create({
   // Location bubble
   locationBubble: {
     width: '80%',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingVertical: 10,
     paddingHorizontal: 10,
   },
@@ -2975,6 +3246,48 @@ const styles = StyleSheet.create({
     gap: 2,
     alignSelf: 'flex-end',
     marginTop: 4,
+    marginEnd: -2,
+  },
+
+  // Schedule bubble. Shape mirrors the settings family-schedule grid (M T W T F S S
+  // header with date underneath); kid-day cells are filled, weekend cells are
+  // tinted, kid-free cells are outlined. Bubble adapts to mine vs theirs:
+  // theirs uses the same colors as the settings UI (PRIMARY accents on white);
+  // mine inverts (white accents on PRIMARY) to stay legible against the orange
+  // outgoing-bubble background.
+  scheduleBubble: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS,
+    gap: 8,
+  },
+  scheduleTitle: { fontSize: 13, fontWeight: '600', color: TEXT_PRIMARY, marginBottom: 2 },
+  scheduleTitleMine: { color: WHITE },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: 3 },
+  scheduleDayBubble: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: WHITE, borderWidth: 1.5, borderColor: GRAY_100,
+  },
+  scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.45)' },
+  scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  scheduleDayBubbleSelectedMine: { backgroundColor: WHITE, borderColor: WHITE },
+  scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
+  scheduleDayBubbleWeekendMine: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.18)' },
+  scheduleDayLetter: { fontSize: 12, color: TEXT_PRIMARY },
+  scheduleDayLetterMine: { color: WHITE },
+  scheduleDayLetterSelected: { color: WHITE },
+  scheduleDayLetterSelectedMine: { color: PRIMARY },
+  scheduleDayLetterWeekend: { color: PRIMARY },
+  scheduleDayLetterWeekendMine: { color: WHITE },
+  scheduleDayDate: { fontSize: 10, color: GRAY_400 },
+  scheduleDayDateMine: { color: 'rgba(255,255,255,0.75)' },
+  scheduleFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    alignSelf: 'flex-end',
     marginEnd: -2,
   },
 })

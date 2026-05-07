@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
 import { View, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
-import type { Image as ImageData, ProfileItem } from '../stores/userStore'
+import type { Image as ImageData } from '../stores/userStore'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Path, Line, Circle } from 'react-native-svg'
 import * as DocumentPicker from 'expo-document-picker'
@@ -16,7 +16,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SINGLE } from '../fonts'
+import { SINGLE, RADIUS } from '../fonts'
 import { TEXT_PRIMARY, WHITE, PRIMARY } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -43,14 +43,6 @@ export const localPhotoUriCache = new Map<string, string>()
 // filename that has no corresponding file in storage, preventing empty slots
 // if the app is closed before flush() runs.
 export const pendingDeferred = new Set<string>()
-
-// Replaces the photo items in `currentItems` with `newPhotos`, preserving
-// non-photo items (bio, kids) in their relative order, photos first.
-function mergePhotosIntoItems(newPhotos: ImageData[], currentItems: ProfileItem[]): ProfileItem[] {
-  const nonPhotoItems = currentItems.filter(it => it.kind !== 'photo')
-  const photoItems: ProfileItem[] = newPhotos.map(img => ({ kind: 'photo' as const, ...img }))
-  return [...photoItems, ...nonPhotoItems]
-}
 
 async function uploadFileToStorage(uri: string, filename: string, contentType: string, variant: 'normal' | 'blur', token: string, userId: string) {
   const formData = new FormData()
@@ -136,8 +128,8 @@ export async function processAndUploadPhoto(uri: string, userId: string, token: 
 //
 // Returns the chosen filename and an `uploaded` promise that resolves with
 // the final hash once the upload lands. Callers should also `await` the
-// promise before persisting items to the server so the row references a
-// file that actually exists in storage.
+// promise before persisting the images list to the server so the row
+// references a file that actually exists in storage.
 export function processAndUploadPhotoDeferred(
   uri: string,
   userId: string,
@@ -447,7 +439,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
             if (idx >= 0) {
               const next = [...imgs]
               next[idx] = { ...next[idx], hash: lp.hash }
-              useUserStore.getState().update({ items: mergePhotosIntoItems(next, state.items) })
+              useUserStore.getState().update({ images: next })
             }
           }
         } catch (e) {
@@ -455,7 +447,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
           pendingDeferred.delete(lp.normalFilename)
           const state = useUserStore.getState().profile
           if (state) {
-            useUserStore.getState().update({ items: mergePhotosIntoItems(state.images.filter(img => img.normal !== lp.normalFilename), state.items) })
+            useUserStore.getState().update({ images: state.images.filter(img => img.normal !== lp.normalFilename) })
           }
         }
         pendingUploads.current.delete(lp.normalFilename)
@@ -463,7 +455,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       }
 
       const finalState = useUserStore.getState().profile
-      if (finalState) await invoke('app/items', { items: finalState.items }).catch(console.error)
+      if (finalState) await invoke('app/profile', { images: finalState.images }).catch(console.error)
     }
     const p = run().finally(() => { inFlightFlush.current = null })
     inFlightFlush.current = p
@@ -541,12 +533,11 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       // preventing a dangling DB reference if the app closes before the upload runs.
       const currentState = useUserStore.getState().profile
       const currentImages = currentState?.images ?? []
-      const currentItems = currentState?.items ?? []
       useUserStore.getState().update({
-        items: mergePhotosIntoItems(
-          [...currentImages, ...entries.map(e => ({ normal: e.normalFilename, hash: '' }) satisfies ImageData)],
-          currentItems,
-        ),
+        images: [
+          ...currentImages,
+          ...entries.map(e => ({ normal: e.normalFilename, hash: '' }) satisfies ImageData),
+        ],
       })
       for (const e of entries) {
         localPhotoUriCache.set(e.normalFilename, e.originalUri)
@@ -585,7 +576,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
           sigByFilename.current.set(result.normal!, newUploads[i].sig)
           setUploads(prev => prev.map(u => u.id === newUploads[i].id ? { ...u, filename: result.normal } : u))
           const currentState = useUserStore.getState().profile
-          update({ items: mergePhotosIntoItems([...(currentState?.images ?? []), result], currentState?.items ?? []) })
+          update({ images: [...(currentState?.images ?? []), result] })
         } else {
           setUploads(prev => prev.filter(u => u.id !== newUploads[i].id))
         }
@@ -604,14 +595,14 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     localPhotoUriCache.delete(filename)
     pendingUploads.current.delete(filename)
     pendingDeferred.delete(filename)
-    update({ items: mergePhotosIntoItems(storeImages.filter((_, i) => i !== idx), profile?.items ?? []) })
+    update({ images: storeImages.filter((_, i) => i !== idx) })
   }
 
   const reorderPhotos = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return
     const next = [...storeImages]
     ;[next[from], next[to]] = [next[to], next[from]]
-    update({ items: mergePhotosIntoItems(next, profile?.items ?? []) })
+    update({ images: next })
   }
 
   const onPhotoLoaded = (filename: string) => {
@@ -671,7 +662,7 @@ const photoStyles = StyleSheet.create({
     marginTop: 12,
     overflow: 'visible',
   },
-  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: 16, overflow: 'hidden' },
+  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS, overflow: 'hidden' },
   filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
   img: { width: '100%', height: '100%' },
   placeholderBg: {
@@ -693,7 +684,7 @@ const photoStyles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
   add: {
-    width: '31.5%', aspectRatio: 3 / 4, borderRadius: 16,
+    width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', borderStyle: 'dashed',
@@ -701,13 +692,13 @@ const photoStyles = StyleSheet.create({
   dropTarget: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.45)',
-    borderRadius: 16,
+    borderRadius: RADIUS,
   },
   spinnerBadge: {
     position: 'absolute',
     top: '50%', start: '50%',
     width: 36, height: 36, marginStart: -18, marginTop: -18,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center', justifyContent: 'center',
   },

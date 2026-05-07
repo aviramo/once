@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
-import { FONT_SCALE, SINGLE, DOUBLE, BUTTON } from '../fonts'
-import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50, GRAY_100, GRAY_400, GRAY_800, DESTRUCTIVE, DESTRUCTIVE_PRESS } from '../colors'
+import { FONT_SCALE, SINGLE, DOUBLE, BUTTON, RADIUS } from '../fonts'
+import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50, GRAY_100, GRAY_400, GRAY_800, DESTRUCTIVE, DESTRUCTIVE_PRESS, PREMIUM, PREMIUM_PRESS } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -21,7 +21,7 @@ import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50, GRAY_100, GRAY_40
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'destructive' | 'softDestructive' | 'soft' | 'dark'
+type Variant = 'primary' | 'secondary' | 'destructive' | 'softDestructive' | 'soft' | 'dark' | 'premium'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -107,7 +107,14 @@ export function Button({
   return (
     <Animated.View
       collapsable={false}
-      style={[styles.wrap, { transform: [{ scale }], opacity: heartbeat }]}
+      // Only bind opacity to the heartbeat Animated.Value while the button is
+      // actually pulsing. With useNativeDriver:true, calling setValue(1) on
+      // transition back to non-loading does not always propagate to the JS
+      // render path on the same frame — so the View kept rendering at the
+      // last animated value (e.g. 0.6) even after loading became false. The
+      // visual symptom: a freshly transitioned button (notif popup → location
+      // popup) looked dimmed/disabled despite being clickable.
+      style={[styles.wrap, { transform: [{ scale }] }, loading && { opacity: heartbeat }]}
     >
       <View
         style={[
@@ -198,11 +205,11 @@ const styles = StyleSheet.create({
 
 const SIZE: Record<Size, { btn: object; text: object }> = {
   lg: {
-    btn: { borderRadius: 12, paddingVertical: DOUBLE },
+    btn: { borderRadius: RADIUS, paddingVertical: DOUBLE },
     text: { fontSize: 16, fontWeight: '700' },
   },
   md: {
-    btn: { borderRadius: 12, paddingVertical: SINGLE },
+    btn: { borderRadius: RADIUS, paddingVertical: SINGLE },
     text: { fontSize: 15, fontWeight: '700' },
   },
 }
@@ -243,6 +250,11 @@ const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> =
   dark: {
     btn: { backgroundColor: '#000' },
     pressed: { backgroundColor: '#222' },
+    text: { color: WHITE },
+  },
+  premium: {
+    btn: { backgroundColor: PREMIUM },
+    pressed: { backgroundColor: PREMIUM_PRESS },
     text: { color: WHITE },
   },
 }

@@ -6,10 +6,12 @@ import { PullScrollView } from './HomeCard'
 import { Text } from './AppText'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
-import type { Profile, ProfileItem } from '../stores/userStore'
-import { Chip, PinIcon, ClockIcon } from './Chip'
-import { SINGLE, DOUBLE } from '../fonts'
-import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_BG, DESTRUCTIVE, GRAY_400 } from '../colors'
+import type { Profile } from '../stores/userStore'
+import { type FamilyData, familyScheduleOverlap } from '../lib/family'
+import { FamilyCard, familyHeaderTitle } from './FamilyCard'
+import { Chip, PinIcon, ClockIcon, KidsIcon } from './Chip'
+import { SINGLE, DOUBLE, RADIUS } from '../fonts'
+import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_BG, DESTRUCTIVE } from '../colors'
 
 // Display-only card for non-resting states. Action buttons live in the
 // home screen's pinned bottom bar so they share spacing + positioning with
@@ -64,16 +66,6 @@ const isOnlineNow = (iso: string | null | undefined) =>
   !!iso && (Date.now() - new Date(iso).getTime()) / 1000 < 60
 
 // ── Icons ──────────────────────────────────────────────────────────────────
-
-function BabyIcon({ color }: { color: string }) {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path d="M3 6h3l3 9h8l2-6H8" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx={9} cy={19} r={1.5} stroke={color} strokeWidth={1.5} />
-      <Circle cx={17} cy={19} r={1.5} stroke={color} strokeWidth={1.5} />
-    </Svg>
-  )
-}
 
 function KidsCheckIcon({ color }: { color: string }) {
   return (
@@ -188,6 +180,11 @@ export function MatchCard({
   onReady,
   topBlock,
   onPhotoTap,
+  onFamilyTap,
+  onBioTap,
+  isForKids,
+  viewerFamily,
+  self = false,
 }: {
   match: Profile
   userIsMale: boolean | null
@@ -197,8 +194,24 @@ export function MatchCard({
   onReady?: () => void
   topBlock?: React.ReactNode
   /** When provided, each photo becomes tappable and the callback receives the
-   * photo's index in `match.items` (own-profile preview / edit mode). */
-  onPhotoTap?: (itemIndex: number) => void
+   * photo's index in `match.images` (own-profile preview / edit mode). */
+  onPhotoTap?: (imageIndex: number) => void
+  /** When provided, the family/kids card becomes tappable (own-profile preview). */
+  onFamilyTap?: () => void
+  /** When provided, the bio bubble becomes tappable (own-profile preview). */
+  onBioTap?: () => void
+  /** "Wants own (more) kids" preference (`data.family.isForKids`) — only
+   * set for the user's own profile preview; remote match snapshots don't
+   * carry this. Used by the family card to extend the "No kids" header
+   * with the user's intent. */
+  isForKids?: boolean | null
+  /** Viewer's own family data (from userStore). Passed by remote-render call
+   * sites so the family card can show the kid-free schedule overlap. Own
+   * profile preview omits this — no overlap shown there. */
+  viewerFamily?: FamilyData | null
+  /** First-person rendering for the own-profile preview ("I have 3 kids"
+   * vs. the default third-person "Has 3 kids" used on remote match cards). */
+  self?: boolean
 }) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -210,34 +223,34 @@ export function MatchCard({
   )
   const imageUrls = useMemo(() => resolveImages(match), [match.user_id, imageKey])
 
-  // Build ordered sections from items (own-profile preview) or flat fields (remote snapshots).
-  // `itemIndex` is the index into match.items for sections that came from there
-  // (so callers like the profile preview can map a tap back to the source item);
-  // -1 for sections built from the flat-fields fallback.
+  // Fixed display order:
+  //   1. Hero photo (images[0])
+  //   2. Bio (if present), with family card attached underneath when present
+  //   3. Family card (if present, but no bio)
+  //   4. Remaining photos (images[1..])
+  // `imageIndex` is the index into match.images (or -1 for non-photo sections).
   type CardSection =
-    | { type: 'photo'; url: string; hash?: string; itemIndex: number; key: string }
-    | { type: 'bio'; value: string; itemIndex: number; key: string }
-    | { type: 'kids'; value: boolean; itemIndex: number; key: string }
+    | { type: 'photo'; url: string; hash?: string; imageIndex: number; key: string }
+    | { type: 'bio'; value: string; key: string }
+    | { type: 'family'; data: FamilyData; key: string }
   const sections = useMemo((): CardSection[] => {
-    if (match.items && match.items.length > 0) {
-      return match.items.flatMap((item, itemIndex): CardSection[] => {
-        if (item.kind === 'photo' && item.normal) {
-          const url = item.normal.includes('://') ? item.normal : toStorageUrl(match.user_id, item.normal)
-          return [{ type: 'photo', url, hash: item.hash || undefined, itemIndex, key: `photo-${item.normal}` }]
-        }
-        if (item.kind === 'bio' && item.value) return [{ type: 'bio', value: item.value, itemIndex, key: `bio-${itemIndex}` }]
-        if (item.kind === 'kids') return [{ type: 'kids', value: item.value, itemIndex, key: `kids-${itemIndex}` }]
-        return []
-      })
-    }
-    const photoSections: CardSection[] = (match.images ?? [])
+    const images = match.images ?? []
+    const photos: CardSection[] = images
       .filter(img => img.normal)
-      .map((img, i) => ({ type: 'photo' as const, url: imageUrls[i], hash: img.hash || undefined, itemIndex: -1, key: `photo-${img.normal}` }))
-    const result: CardSection[] = [...photoSections]
-    if (match.bio) result.push({ type: 'bio', value: match.bio, itemIndex: -1, key: 'bio' })
-    if (match.is_for_kids != null) result.push({ type: 'kids', value: match.is_for_kids, itemIndex: -1, key: 'kids' })
-    return result
-  }, [match.items, match.user_id, match.images, imageUrls, match.bio, match.is_for_kids])
+      .map((img, i) => ({
+        type: 'photo' as const,
+        url: imageUrls[i],
+        hash: img.hash || undefined,
+        imageIndex: i,
+        key: `photo-${img.normal}`,
+      }))
+    const built: CardSection[] = []
+    if (photos.length > 0) built.push(photos[0])
+    if (match.bio) built.push({ type: 'bio', value: match.bio, key: 'bio' })
+    if (match.family) built.push({ type: 'family', data: match.family, key: 'family' })
+    for (let i = 1; i < photos.length; i++) built.push(photos[i])
+    return built
+  }, [match.user_id, match.images, imageUrls, match.bio, match.family])
 
   const photoCount = sections.filter(s => s.type === 'photo').length
   const loadedCount = useRef(0)
@@ -255,9 +268,28 @@ export function MatchCard({
   const distStr = formatDistance(match.distance, units)
   const displayTitle = match.title
 
+  // Build the kids chip text from match.family. Same phrasing as the old
+  // FamilyCard title chip: "Has N kids (ages)" (+ "and wants more"). The
+  // explicit isForKids prop overrides — used by the self-preview where
+  // settings drives the value while editing. Remote snapshots fall back to
+  // fam.isForKids, which make_profile includes in every snapshot.
+  const familyChipText = useMemo(() => {
+    const fam = match.family
+    if (!fam) return ''
+    const kids = fam.kids ?? []
+    const count = fam.kids?.length
+    const anyAgeSet = kids.some(k => k.age != null)
+    const ageStr = anyAgeSet
+      ? kids.map(k => (k.age != null ? String(k.age) : '-')).join(', ')
+      : null
+    const effIsForKids = isForKids !== undefined ? isForKids : (fam.isForKids ?? null)
+    return familyHeaderTitle(fam, count, ageStr, effIsForKids, self)
+  }, [match.family, isForKids, self])
+
   const distGreen = isDistanceNear(match.distance)
   const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'
-  const hasTopBlock = !!topBlock
+  const effectiveTopBlock = topBlock
+  const hasTopBlock = !!effectiveTopBlock
   const [topBlockHeight, setTopBlockHeight] = useState(0)
   // If the card mounts already with a topBlock (cold start), start expanded
   // so it shows in place without animation. Otherwise start collapsed so the
@@ -281,12 +313,14 @@ export function MatchCard({
       slideAnim.value = 1
       return
     }
-    // watching → waiting transition: only scroll if not already at top —
-    // an animated scrollTo when contentOffset is already 0 nudges the layout
-    // mid-transition and surfaces the absolute→flow flip as a flicker.
-    if (scrollYRef.current > 0) scrollRef.current?.scrollTo({ y: 0, animated: true })
+    // watching → waiting transition: wait until the timer block has measured
+    // before we move anything. Then snap scroll to 0 *instantly* (an animated
+    // scrollTo races the slide-in below and looks like the card is reloading)
+    // and start the timer's slide-in. One coherent motion: scroll first, then
+    // the timer descends.
     if (animatedRef.current || topBlockHeight === 0) return
     animatedRef.current = true
+    if (scrollYRef.current > 0) scrollRef.current?.scrollTo({ y: 0, animated: false })
     slideAnim.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) })
   }, [hasTopBlock, topBlockHeight])
 
@@ -316,7 +350,7 @@ export function MatchCard({
         keyboardShouldPersistTaps="handled"
         onScroll={e => { scrollYRef.current = e.nativeEvent.contentOffset.y }}
       >
-        {topBlock && (
+        {effectiveTopBlock && (
           <>
             {/* Absolute timer slides in via `top`; spacer below grows in sync. */}
             <Animated.View
@@ -327,7 +361,7 @@ export function MatchCard({
                 if (h > 0 && topBlockHeight === 0) setTopBlockHeight(h)
               }}
             >
-              {topBlock}
+              {effectiveTopBlock}
             </Animated.View>
             <Animated.View key="top-spacer" style={animatedSpacerStyle} />
           </>
@@ -352,7 +386,7 @@ export function MatchCard({
               {onPhotoTap && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => onPhotoTap(sections[0].type === 'photo' ? sections[0].itemIndex : -1)}
+                  onPress={() => onPhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
                 />
               )}
             </>
@@ -363,27 +397,48 @@ export function MatchCard({
               <Text style={styles.name}>{displayTitle}</Text>
             </View>
 
-            <View style={styles.chipsRow}>
-              <View style={styles.chipsLeft}>
-                {distStr ? (
-                  <Chip
-                    renderIcon={c => <PinIcon color={c} />}
-                    text={distStr}
-                    tone="neutral"
-                    onPhoto
-                  />
-                ) : null}
-                {timeStr ? (
-                  <Chip
-                    renderIcon={c => <ClockIcon color={c} />}
-                    text={timeStr}
-                    tone="neutral"
-                    onPhoto
-                  />
-                ) : null}
-              </View>
-
-              <View style={styles.chipsRight} />
+            <View style={styles.chipsStack}>
+              {familyChipText ? (
+                <View style={styles.chipsLine}>
+                  {onFamilyTap ? (
+                    <Pressable onPress={onFamilyTap}>
+                      <Chip
+                        renderIcon={c => <KidsIcon color={c} />}
+                        text={familyChipText}
+                        tone="neutral"
+                        onPhoto
+                      />
+                    </Pressable>
+                  ) : (
+                    <Chip
+                      renderIcon={c => <KidsIcon color={c} />}
+                      text={familyChipText}
+                      tone="neutral"
+                      onPhoto
+                    />
+                  )}
+                </View>
+              ) : null}
+              {(distStr || timeStr) ? (
+                <View style={styles.chipsLine}>
+                  {timeStr ? (
+                    <Chip
+                      renderIcon={c => <ClockIcon color={c} />}
+                      text={timeStr}
+                      tone="neutral"
+                      onPhoto
+                    />
+                  ) : null}
+                  {distStr ? (
+                    <Chip
+                      renderIcon={c => <PinIcon color={c} />}
+                      text={distStr}
+                      tone="neutral"
+                      onPhoto
+                    />
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </View>
         </Animated.View>
@@ -407,37 +462,45 @@ export function MatchCard({
               {onPhotoTap && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => onPhotoTap(section.itemIndex)}
+                  onPress={() => onPhotoTap(section.imageIndex)}
                 />
               )}
             </Animated.View>
           )
-          if (section.type === 'bio') return (
-            <View key={section.key} style={styles.aboutSection}>
+          if (section.type === 'bio') {
+            const bubble = (
               <View style={styles.aboutBubble}>
                 <Text style={[styles.aboutQuote, styles.aboutQuoteOpen]}>"</Text>
                 <Text style={styles.aboutText}>{section.value}</Text>
                 <Text style={[styles.aboutQuote, styles.aboutQuoteClose]}>"</Text>
               </View>
-            </View>
-          )
-          if (section.type === 'kids') return (
-            <View key={section.key} style={styles.kidsRow}>
-              <View style={styles.kidsLabel}>
-                <BabyIcon color={TEXT_PRIMARY} />
-                <Text style={styles.kidsLabelText}>{tg('settings.kidsLabel', match.is_male)}</Text>
+            )
+            return (
+              <View key={section.key} style={styles.aboutSection}>
+                {onBioTap ? <Pressable onPress={onBioTap} style={{ alignSelf: 'stretch' }}>{bubble}</Pressable> : bubble}
               </View>
-              <Text style={[styles.kidsValue, { color: section.value ? PRIMARY : DESTRUCTIVE }]}>
-                {section.value ? t('settings.kidsYes') : t('settings.kidsNo')}
-              </Text>
-            </View>
-          )
+            )
+          }
+          if (section.type === 'family') {
+            // The kids title chip moved to the photo overlay. The only thing
+            // FamilyCard still renders is the schedule-overlap chip — and that
+            // only when the viewer passed their own family (remote render, not
+            // the own-profile preview) and both sides have hasKids + a usable
+            // schedule. No overlap → render nothing here.
+            const overlap =
+              viewerFamily?.hasKids && section.data.hasKids
+                ? familyScheduleOverlap(viewerFamily.schedule, section.data.schedule)
+                : null
+            if (overlap == null) return null
+            return <FamilyCard key={section.key} overlap={overlap} />
+          }
           return null
         })}
       </PullScrollView>
     </View>
   )
 }
+
 
 const styles = StyleSheet.create({
   wrap: {
@@ -457,7 +520,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     overflow: 'hidden',
   },
   infoOverlay: {
@@ -468,22 +531,16 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     padding: 16,
   },
-  chipsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginTop: 8,
-  },
-  chipsLeft: {
-    width: '50%',
+  chipsStack: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+    marginTop: 8,
     gap: 8,
   },
-  chipsRight: {
-    width: '50%',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
+  chipsLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
   },
   name: {
@@ -506,7 +563,7 @@ const styles = StyleSheet.create({
   aboutBubble: {
     alignSelf: 'stretch',
     backgroundColor: PRIMARY_BG,
-    borderRadius: 16,
+    borderRadius: RADIUS,
     paddingVertical: 16,
     paddingHorizontal: 16,
     position: 'relative',
@@ -522,8 +579,12 @@ const styles = StyleSheet.create({
     top: 4,
     start: 10,
   },
+  // The `"` glyph sits at the top of its lineHeight, so a literal `bottom: 4`
+  // would leave a tall empty band beneath the glyph. Pull the line container
+  // a bit below the bubble's bottom so the glyph itself mirrors the open
+  // quote's 4 px distance from the top.
   aboutQuoteClose: {
-    bottom: 4,
+    bottom: -8,
     end: 10,
   },
   aboutText: {
@@ -536,7 +597,7 @@ const styles = StyleSheet.create({
   extraPhoto: {
     width: '100%',
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     overflow: 'hidden',
   },
   kidsRow: {
@@ -547,7 +608,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   kidsLabel: {

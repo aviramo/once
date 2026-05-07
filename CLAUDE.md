@@ -6,15 +6,17 @@ Claude owns the server side end-to-end: edge functions, RPCs, migrations, schema
 
 ### Autonomy
 
-Claude may deploy edge functions and apply DB migrations (DDL/DML, RPCs, indexes, triggers, data backfills) without asking, **except** for the items in the approval list below. No confirmation needed to ship a change that falls inside the autonomous zone.
+Claude owns the server end-to-end and may ship any server-side change without asking. This includes:
 
-### Approval rules (strict)
+- Deploying edge functions and creating new `.ts` files under `supabase/functions/`.
+- Applying DB migrations: DDL/DML, new tables/columns/indexes/triggers/cron jobs, new RPCs (any signature), modifying existing RPCs, dropping schema objects, data backfills.
 
-- **Never create a new `.ts` file** in `supabase/functions/` without explicit user approval.
-- **Never add a new table, column, index, trigger, RPC signature, or cron job** without explicit user approval. Every approved addition must be reflected in the "Database schema" section of this file before (or alongside) the migration.
-- Modifying the body of an existing RPC (without changing its signature) is autonomous. Adding a new one is not.
-- Dropping columns/tables that have been explicitly approved for removal in this file is autonomous.
-- `CLAUDE.md` is the source of truth for the data model. If code and this file disagree, treat this file as correct and update the code.
+No confirmation is required for any of the above — proceed and report what was done.
+
+### Required discipline (still enforced)
+
+- `CLAUDE.md` is the source of truth for the data model. Every schema change (new or removed table/column/index/trigger/RPC/cron) must be reflected in the "Database schema" section of this file in the same change. If code and this file disagree, treat this file as correct and update the code.
+- Do not ship destructive operations on production data (truncating live tables, dropping columns with user data) without first surfacing what will be lost. Autonomy covers schema/code work; data destruction still warrants a heads-up.
 
 ## UI layout iron rules (mobile/app/home.tsx)
 
@@ -180,6 +182,7 @@ All live under `POST /app/<action>`. Each executes as a single Postgres transact
 | `clear1` (from chat) | `A.page1.state = 'chat'` | A, B | `A.page1 = {state: null, event: 'block'}`; `B.page1 = {state: 'missed', event: 'leave', profile: A}` | — | `block` A→B (permanent) |
 | `clear1` (from fail/missed) | `A.page1.state ∈ {fail, missed}` | A only | `A.page1 = {state: null, event: 'ok'}` | — | — |
 | `remove` | `X ∈ B.page2[]` | B, X | remove X from `B.page2[]`; `X.page1 = {state: 'missed', event: 'remove', profile: B}` | — | `remove` B→X |
+| `add` | `A.page1.state ≠ 'chat'` AND `A.page2.profile` is missing AND `A.page2.profiles` is empty/missing AND `A.relations.last_add_at` is missing or > 1h old | A + up to 3 candidates | reset `A.page2 = {state: 'free', profiles: []}` (transitions a `locked`-resting user to discoverable); set `A.relations.last_add_at = now()` (also written when no candidates found, so the cooldown engages either way); for each candidate C (top 3 by relevance, eligible: `C.page1.state ∈ {free, locked}` AND `C.page2.state ∉ {locked, pending}` AND not already watching A): `C.page1 = {state: 'watching', profile: A}`; append C's profile to `A.page2.profiles[]`; fire `candidate` push to C | rate-limited: `error: 'rate_limited'`, A unchanged | — |
 | `clear2` | `A.page2.state ∈ {missed, fail}` | A only | `A.page2 = []` | — | — |
 | `logout` | any | A + all affected users | `A.page1 = {state: null, event: 'logout'}`; `A.page2 = []`; push_token = null; location = null; every B where `B.page1.profile = A`: `B.page1 = {state: 'missed', event: 'logout', profile: A}`; every B where `B.page2.profile = A`: `B.page2 = {state: 'missed', event: 'logout', profile: A}`; remove A from any `B.page2[]` | — | — |
 | `delete` | any | A + all affected users | same writes as logout, then deletes A's row | — | — |
@@ -235,21 +238,29 @@ All pushes are fire-and-forget (`waitUntil`, never on the critical path). Each p
 
 **Default: every transition fires a push, except the two mass-notification ones (`kick-invitee`, `kick-match`)** which stay Realtime-only to avoid spam when many users are affected by a single transition.
 
-| Code | Push | Trigger | Receiver state |
-|---|---|---|---|
-| `invite-in` | ✅ | someone invited me | `page2` becomes object, timer running |
-| `match` | ✅ | I matched (my approve or my invitation accepted) | `page1 = {state: 'chat', event: 'invite'}` |
-| `declined` | ✅ | my outgoing invitation was declined | `page1 = {state: 'missed', event: 'event'}` |
-| `expired-out` | ✅ | my outgoing invitation timed out | `page1 = {state: 'missed', event: 'expire'}` |
-| `expired-in` | ✅ | my incoming invitation timed out | `page2 = []` |
-| `cancelled-in` | ✅ | the inviter cancelled before I responded | `page2 = []` |
-| `removed` | ✅ | I was removed from someone's viewer list | `page1 = {state: 'missed', event: 'event'}` |
-| `left` | ✅ | my chat partner left (or blocked) me | `page1 = {state: 'missed', event: 'leave'}` |
-| `extended` | ✅ | inviter extended my incoming-invite timer | `page2.expires_at` updated |
-| `invite-fail` | ✅ | my own invite attempt failed | `page1 = {state: 'fail', event: 'invite'}` |
-| `approve-fail` | ✅ | my own approve attempt failed | `page1 = {state: 'fail', event: 'approve'}` |
-| `kick-invitee` | ❌ | mass: target got invited by someone else | `page1 = {state: 'missed', event: 'invite'}` |
-| `kick-match` | ❌ | mass: target matched with someone else | `page1 = {state: 'missed', event: 'matched'}` |
+#### Title, body, and tap-routing rule
+
+Every push has the same uniform layout: **title = actor's name** (the other user, or `"Once"` fallback) and **body = state text** describing what happened. The state text is sourced from `PUSH_TITLE[lang][code]` in [global.ts](supabase/functions/global.ts) for lifecycle pushes (declined / expired-* / cancelled-in / removed / left / invite-fail / approve-fail) and from `PUSH_BODY[lang][code]` for active-interaction pushes (invite-in / candidate / match / extended / chat). For lifecycle pushes the state text reads identically to the in-app page header for that message — a user who sees "ההזמנה נדחתה" in the body lands on a page whose header is the same.
+
+Tap-routing: lifecycle pushes open the app to the **pageX** that owns the message. Active-interaction pushes open to the page that hosts the live interaction (page2 for `invite-in`/`extended`, page1/chat pane for `match`/`chat`).
+
+| Code | Push | Trigger | Receiver state (v3) | Body source | Tap → |
+|---|---|---|---|---|---|
+| `invite-in` | ✅ | someone invited me | `page2.state = pending` | `PUSH_BODY.invite-in` | page2 |
+| `candidate` | ✅ | someone's `find` pulled me in as a candidate (their search assigned A to my page1) | `page1.state = watching, profile = sender` | `PUSH_BODY.candidate` | page1 |
+| `match` | ✅ | I matched (my approve or my invitation accepted) | `page1.state = chat` | `PUSH_BODY.match` | page1 (chat) |
+| `extended` | ✅ | inviter extended my incoming-invite timer | `page2.expires_at` updated | `PUSH_BODY.extended` | page2 |
+| `chat` | ✅ | new chat message from partner | `page1.state = chat` | `PUSH_BODY.chat` | page1 (chat) |
+| `declined` | ✅ | my outgoing invitation was declined | `page1 = {state: locked, message: decline}` | `PUSH_TITLE.declined` (= `home.ended.missed.declined`) | page1 |
+| `expired-out` | ✅ | my outgoing invitation timed out | `page1 = {state: locked, message: expire}` | `PUSH_TITLE.expired-out` (= `home.ended.missed.expire`) | page1 |
+| `expired-in` | ✅ | my incoming invitation timed out | `page2 = {state: locked, message: expire}` | `PUSH_TITLE.expired-in` (= `home.page2.expire`) | page2 |
+| `cancelled-in` | ✅ | the inviter cancelled before I responded | `page2 = {state: locked, message: cancel}` | `PUSH_TITLE.cancelled-in` (= `home.page2.cancel`) | page2 |
+| `removed` | ✅ | I was removed from someone's viewer list | `page1 = {state: locked, message: remove}` | `PUSH_TITLE.removed` (= `home.ended.missed.removed`) | page1 |
+| `left` | ✅ | my chat partner left (or blocked) me | `page1 = {state: locked, message: leave}` (`block` lands the same way) | `PUSH_TITLE.left` (= `home.ended.missed.leave`) | page1 |
+| `invite-fail` | ✅ | my own invite attempt failed | `page1 = {state: locked, message: invite}` | `PUSH_TITLE.invite-fail` (= `home.ended.fail.invite`) | page1 |
+| `approve-fail` | ✅ | my own approve attempt failed | `page1 = {state: locked, message: approve}` | `PUSH_TITLE.approve-fail` (= `home.ended.fail.approve`) | page1 |
+| `kick-invitee` | ❌ | mass: target got invited by someone else | `page1 = {state: locked, message: invite}` | — | — |
+| `kick-match` | ❌ | mass: target matched with someone else | `page1 = {state: locked, message: matched}` | — | — |
 
 Push codes are lowercase kebab-case and are sent as `data.type` inside the push payload. The `collapseId` field uses the relevant other-user id where applicable, so an older push is superseded by a newer one for the same pair.
 
@@ -273,7 +284,7 @@ All other null-state events (`cancel`, `leave`, `block`, `ok`, `logout`) require
 
 - **Invite timer UI:** countdown driven by `page1.expires_at` is implemented. Extend UI deliberately omitted — extend is server-only. Cancel button is full-width.
 - **Incoming invitation UI (page2 object form):** accept/decline buttons when `page2` is an object. Not yet implemented.
-- **Push notification handler:** `data.type` codes need routing to the correct screen. Only token registration exists currently.
+- **Push notification handler:** routing complete — `data.type` codes are split into `CHAT_CODES` (chat/match → CHAT_PANE), `PAGE2_CODES` (invite-in/extended/expired-in/cancelled-in → PAGE2_PANE), everything else → HOME_PANE. Cold-start (initial-pane) and warm-tap paths share the same maps.
 - **Dead code cleanup:** `setVisibility`, `app/visibility`, OFF mode, reveal/hide confirm dialogs, `showOffScreen`, `offButton` are still in `home.tsx` but unreachable at runtime. Can be removed when convenient.
 
 ### `report` (pending decision)
@@ -302,15 +313,14 @@ Identity, matching preferences, and the JSONB `relations` column that drives the
 | `name` | text | |
 | `is_male` | boolean | |
 | `is_for_male` / `is_for_female` | boolean | gender preference |
-| `is_for_kids` | boolean | |
 | `birth_date` | date | |
 | `age_from` / `age_to` | smallint | preferred age range |
 | `range` | integer | preferred max distance (meters) |
 | `location` | geography (PostGIS) | `SRID=4326;POINT(lng lat)` |
-| `data` | jsonb, default `{}` | `items` (ordered `ProfileItem[]`), units, os, lang, push_token, role. `bio` and `images` are legacy keys — migrated into `items`. |
-| `relations` | jsonb | `Pages` (see Game Logic). Source of truth for page1/page2. |
+| `data` | jsonb, default `{}` | Flat profile fields: `images: Image[]`, `bio?: string`, `family?: FamilyData` (`{hasKids, kids?, schedule?, isForKids?}`). Plus `units`, `weekStart`, `os`, `lang`, `appearance`, `push_token`, `role`. |
+| `relations` | jsonb | `Pages` (see Game Logic) plus a top-level `last_add_at` (ISO timestamp; 1h cooldown for the page2 "Show me to people" button — see `app_add`). Source of truth for page1/page2. |
 
-**Removed columns (migration applied):** `state`, `other_id`, `is_visible`, `is_avaliable` are gone. `users.name` is a regular text column (was generated). `data->>'name'` removed.
+**Removed columns (migration applied):** `state`, `other_id`, `is_visible`, `is_avaliable`, `is_for_kids` are gone. The "wants own (more) kids" preference now lives inside `data.family.isForKids` so all kids-related state is captured in one blob. `users.name` is a regular text column (was generated). `data->>'name'` removed. `data.items` (the previous unified ProfileItem array model) was flattened back into `data.images`, `data.bio`, `data.family` and removed.
 
 ### `log` (server call log; source of truth for telemetry)
 
@@ -364,6 +374,7 @@ One row per message. Either `text` or `image_key` must be non-null (enforced in 
 | `audio_key` | text, nullable | Storage object key: `{user_id}/{timestamp}.m4a` |
 | `audio_bars` | jsonb, nullable | Array of 60 amplitude samples (0..1) captured during recording. Receiver renders a real waveform from this; null falls back to a deterministic hash-based decorative waveform. |
 | `audio_duration_ms` | integer, nullable | Recording duration in ms, captured at record time. Lets the bubble show duration before the player loads (since playback is lazy on first tap). Null falls back to `–:––` until player loads. |
+| `schedule` | jsonb, nullable | Snapshot of the sender's kid schedule at send time: `{anchor: "YYYY-MM-DD" (Sunday), weeks: boolean[w][7]}`. Same shape as `data.family.schedule`. Frozen — later edits to the sender's profile schedule do not change historical chat messages. Server only accepts schedule messages from senders whose `data.family.hasKids === true` and whose schedule has at least one week with at least one marked day. |
 | `is_event` | boolean, nullable | true for system event rows |
 
 Storage bucket: `chat-images` (images). Storage bucket: `chat-audio` (voice messages, 10 MB limit, m4a/mp4/aac/mpeg). Both private; same upload/read policy pattern as chat-images. (private, 5 MB limit, jpeg/png/webp). Upload policy: authenticated users may only write to their own folder (`storage.foldername(name)[1] = auth.uid()`). Read policy: uploader or any user referenced in `chat.user_id`/`chat.other_id` for that key.
@@ -418,24 +429,62 @@ The following server files have been fully rewritten and are clean:
 - `supabase/functions/tools.ts` — `invoke()`, `rpc()`, `notify()`
 
 The following RPCs exist in the DB and match the endpoint table above:
-`app_find`, `app_ignore`, `app_clear1`, `app_clear2`, `app_invite`, `app_extend`, `app_cancel`, `app_approve`, `app_decline`, `app_leave`, `app_block`, `app_remove`, `app_expire_sweep` (called by pg_cron every minute), `app_delete_cleanup` (called by the `delete` endpoint before row deletion), `app_logout_cleanup` (called by the `logout` endpoint: kicks page2 viewers to `logout`, clears page2), `app_refresh_snapshots` (see below), `app_save_items` (called by the `items`/`profile` endpoints: saves `data.items`, syncs `is_for_kids`).
+`app_find`, `app_add` (page2 "Show me to people" button: pulls up to 3 most-relevant candidates into `A.page2.profiles[]` and sets each candidate's `page1` to watching A. Preconditions: `A.page1.state ≠ 'chat'` AND `A.page2.profile` is missing AND `A.page2.profiles` is empty/missing AND last call > 1h ago. Auto-resets `A.page2 = {state: 'free', profiles: []}` (so a `locked` resting state becomes discoverable in the same call) and writes `A.relations.last_add_at = now()` even when zero candidates are returned, so an empty-pool press still consumes the cooldown), `app_ignore`, `app_clear1`, `app_clear2`, `app_invite`, `app_extend`, `app_cancel`, `app_approve`, `app_decline`, `app_leave`, `app_block`, `app_remove`, `app_free2` (transitions `A.page2.state` from `locked` → `free`; called by the page2 premium "show my profile again" tile), `app_lock2` (premium "hide me" action; transitions `A.page2.state` from `free` → `locked` with no profile/profiles, AND in the same transaction kicks every watcher in `A.page2.profiles[]`: each watcher's `page1` → locked + `message='remove'` (only if still pointing at A in 'watching'), per-pair `remove` restriction inserted, `removed` push queued. Equivalent to N `app_remove` calls + a final state flip, collapsed into one round trip. Mobile UI confirms with the user before calling since the action is destructive. No cooldown), `app_expire_sweep` (called by pg_cron every minute), `app_delete_cleanup` (called by the `delete` endpoint before row deletion), `app_logout_cleanup` (called by the `logout` endpoint: kicks page2 viewers to `logout`, clears page2), `app_refresh_snapshots` (see below), `app_save_profile` (called by the `profile` endpoint: accepts `{images?, bio?, family?, is_for_kids?}` payload. Only the keys present are written; passing `null` on `bio`/`family` clears that field).
 
-Helper functions: `make_profile`, `_remove_from_page2`, `_kick_pointing_at`, `_add_restriction`.
+Helper functions: `make_profile`, `_remove_from_page2`, `_kick_pointing_at`, `_add_restriction`, `schedule_overlap` (see "Schedule overlap" below), `kids_preference_match` (see "Kids preference match" below).
+
+**Auto-return-to-free policy.** Users return to `page2.state = 'free'` at the end of every page2 process unless they explicitly hid via `app_lock2`. Concretely:
+- `app_decline` — decliner's `page2` → `{state: 'free', profiles: []}` (the inviter's profile is dropped immediately; no "you declined" card surfaces on the decliner).
+- `app_leave` / `app_block` — both leaver and partner end up at `page2 = {state: 'free', profiles: []}`. Previously only the leaver was reset; the partner stayed locked-no-message.
+- `app_clear2` — when there's a `message` to acknowledge (cancel / expire / approve-fail / etc.), this endpoint now flips `page2` all the way back to `{state: 'free', profiles: []}` instead of merely stripping the message. Effectively merges with `free2` for the message-ack path. The explicit-hide case (locked + no message) is intentionally not touched.
+
+The "Back to the game" button on the dead-invite card calls `app/free2` directly. Net effect: every page2 ending — declined, expired, cancelled, approve-fail, chat-ended — returns the user to the discoverable pool without an extra step. Only `app_lock2` (the explicit "Hide my profile" tile in the visibility popup) keeps the user out of the pool.
 
 ### `app_refresh_snapshots(me_id)` — keeping snapshots fresh
 
-The `Profile` snapshot stored inside `relations` (via `make_profile`) freezes `last_seen` and `distance` at write time. Without active refresh, a chat partner or watcher would always show the value captured at match/view-start time, not the current value.
+The `Profile` snapshot stored inside `relations` (via `make_profile`) freezes the entire profile — `name`, `title`, `images`, `bio`, `family`, `is_male`, `last_seen`, `distance` — at write time. Without active refresh, a chat partner or watcher would keep showing whatever values were captured at match/view-start time, not the current ones.
 
-`app_refresh_snapshots(me_id)` is called from the handler (behind `EdgeRuntime.waitUntil`) on every endpoint **except** `delete` and `reset`. It propagates A's current `last_seen` + `location` into every snapshot of A that lives in other users' relations, and recomputes distances inside A's own relations. The chat-state rule:
+`app_refresh_snapshots(me_id)` is called from the handler (behind `EdgeRuntime.waitUntil`) on every endpoint **except** `delete` and `reset`. It rebuilds every snapshot using a fresh `make_profile(...)` so all observable Profile fields stay live over Realtime — not just `last_seen` and `distance`, but also `name`, `images`, `bio`, `family`, `is_male`, `title`. So a user editing their bio, swapping a photo, or updating family/schedule propagates immediately to anyone holding their profile inside `relations`. The chat-state rule:
 
-- **state ≠ chat** → snapshot has live `last_seen` + `distance`
-- **state = chat** → snapshot has live `last_seen`; `distance` is stripped (and never re-added)
+- **state ≠ chat** → snapshot has full live profile, including `distance`
+- **state = chat** → snapshot has full live profile; `distance` is stripped (and never re-added)
 
 Specifically:
-- Outward: for every B referencing A in `B.page1.profile`, `B.page2[]` array, or `B.page2` object, update `last_seen` (always) and `distance` (unless that reference is in chat state).
-- Inward: in A's own relations, recompute distances against the latest `me.location`. In `A.page1.profile` chat state, ensure `distance` is absent.
+- Outward: for every B referencing A in `B.page1.profile`, `B.page2.profile`, or `B.page2.profiles[]`, replace A's snapshot with a fresh `make_profile(A, dist_AB)` (distance stripped if that cell is in chat state).
+- Inward: inside A's own relations, rebuild each referenced user B's snapshot from B's current row via `make_profile(B, dist_AB)`. If B no longer exists, the previous snapshot is preserved as-is.
 
-Realtime delivers the resulting `users.relations` change to the affected client. Mobile keeps reading `match.last_seen`, `watcher.last_seen`, `watcher.distance` from the snapshot — the snapshot is now kept fresh for it.
+Realtime delivers the resulting `users.relations` change to the affected client. Mobile keeps reading every Profile field from the snapshot — name, photos, bio, family, last_seen, distance — and the snapshot is now kept fresh for it on every server call.
+
+### `schedule_overlap(me_data jsonb, other_data jsonb) → double precision`
+
+Anchor-aware kid-free overlap multiplier used in `others.relevance_schedule` and folded into the final `relevance` product. Output cases:
+
+| Case | Returns | Meaning |
+|---|---|---|
+| Either side has `family.hasKids != true` | `1.0` | Fallback. Neutral — unknown compatibility neither boosts nor penalizes. |
+| Both have kids but at least one is missing a non-empty `family.schedule.weeks` array | `1.0` | Fallback. Nothing to compare. |
+| Both have kids + schedule, **0 common kid-free days** | `0.0` | Hard exclude. Multiplies `relevance` by 0 → candidate never appears. If they're never simultaneously free there's no point matching them. |
+| Both have kids + schedule, half overlap | `1.0` | Equal to fallback. |
+| Both have kids + schedule, full overlap | `2.0` | Maximum boost. |
+| General formula (both have kids + schedule) | `2.0 * (both_free_days / cycle)` | Linear in `[0.0, 2.0]`. |
+
+Semantics: "we don't know" = neutral (1.0). "we know they never align" = excluded (0.0). "we know they always align" = doubled (2.0).
+
+Algorithm: flatten each user's `data.family.schedule.weeks` (jsonb array of 7-bool arrays, 0=Sun..6=Sat) into a flat `bool[]`. Compute `cycle = LCM(len_a, len_b)` days (≤ 84 with `FAMILY_MAX_WEEKS=4`). For each day `i ∈ [0, cycle)`, map to each side's schedule index using `(current_date - anchor) mod cycle_X` so two schedules saved with different `anchor` Sundays are compared on the real calendar (not naively week-0-vs-week-0). Count days where both sides are kid-free, divide by `cycle`, multiply by `2.0`.
+
+The function is `LANGUAGE plpgsql STABLE PARALLEL SAFE`. The jsonb→bool[] conversion runs once per side; the cycle loop is plain integer/array indexing.
+
+### `kids_preference_match(me_data jsonb, other_data jsonb) → double precision`
+
+Compatibility multiplier (0/0.5/1) for `data.family.isForKids` between two users. Used in `others.relevance_kids` and folded into final `relevance`. Server-side ranking only — not displayed in the UI.
+
+Truth table:
+- both explicitly set + same value (`true=true` or `false=false`) → **1.0**
+- both explicitly set + different values → **0.0**
+- one explicitly set, the other not → **0.5**
+- neither set (no `family`, or `family` without `isForKids`) → **1.0**
+
+`LANGUAGE sql IMMUTABLE PARALLEL SAFE` — single CASE expression, fully inlinable by the planner.
 
 ---
 
@@ -491,7 +540,7 @@ So a fully-locked-with-message page exits in two taps: gray (clear message) → 
   - **`/`** = alternative outcomes (success vs. failure vs. mutual case).
   - **Empty cell** = the page's `state` is not written by this transaction. `profile` / `profiles` populations are managed separately and don't appear in this table (the only exception is `page2.state = locked`, which by convention also clears the `profiles` array — see below).
 - **`locked` semantics**: end-of-interaction marker for that page. May be a successful terminal write (e.g., `cancel` writes A.page1=locked with no message) or a failure landing (e.g., `invite` failure writes A.page1=locked with `message=invite`).
-- **`page2.state = locked`** also implies the watcher array on that page is cleared as part of the same write (locked = "no incoming interaction; array deleted"). The array can re-populate after `free2` returns it to `free`.
+- **`page2.state = locked`** also implies that both `profile` (singular) and `profiles` (watcher array) on that page are cleared as part of the same write (locked = "no incoming interaction; populations deleted"). They can re-populate after `free2` returns the page to `free`.
 - **`page2.state = free`** (written by `leave/block` and `free2`) clears `profile` and `profiles` as part of the same write — the page returns to a fully empty state.
 
 ### State transition table
@@ -501,12 +550,13 @@ So a fully-locked-with-message page exits in two taps: gray (clear message) → 
 | | start/location/focus | free/watching (A) | |
 | 1 | find/ignore | free/watching (A) | |
 | 1 | cancel | locked (A) | locked (B*) |
-| 1 | invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B) + locked (A) |
+| 1 | invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B) |
 | 1 | extend | locked (A*) | |
 | 2 | remove | locked (B*) | |
-| 2 | approve | chat (A+B) + locked (C*) | locked (A*+B) |
+| 2 | add | watching (C) | |
+| 2 | approve | chat (A+B) + locked (C*) | locked (A+B) |
 | 2 | decline | locked (B*) | locked (A) |
-| 1 | leave/block | locked (A) + locked (B*) | free (A) |
+| 1 | leave/block | locked (A) + locked (B*) | free (A) + locked (B) |
 | | logout/delete | locked (A+B*) | locked (A+B*) |
 | | cron | locked (A*/B*) | locked (A*/B*) |
 | 1 | clear1 | | |
@@ -515,15 +565,15 @@ So a fully-locked-with-message page exits in two taps: gray (clear message) → 
 
 `clear1` and `clear2` write only `message = null` on their respective page (state untouched). `free2` writes only `page2.state = free` (no message).
 
-### Event list (19 events)
+### Event list (20 events)
 
-`start`, `location`, `focus`, `find`, `ignore`, `cancel`, `invite`, `extend`, `remove`, `approve`, `decline`, `leave`, `block`, `logout`, `delete`, `cron`, `clear1`, `clear2`, `free2`.
+`start`, `location`, `focus`, `find`, `ignore`, `cancel`, `invite`, `extend`, `remove`, `add`, `approve`, `decline`, `leave`, `block`, `logout`, `delete`, `cron`, `clear1`, `clear2`, `free2`.
 
 ### Worked examples
 
 - **`logout/delete | locked (A+B*) | locked (A+B*)`**: A's page1 → locked (no message — A initiated). Every B referencing A (in `B.page1.profile`, `B.page2.profile`, or `B.page2.profiles[]`) gets their corresponding page → locked + `message = logout` (or `delete`).
-- **`invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B) + locked (A)`**: A in watching invites B. Three branches for A.page1: `waiting` (success), `chat` (mutual case where B was already inviting A), or `locked` + `message=invite` (failure). On the mutual branch, B.page1 also goes to `chat`. B.page2 → `pending` with A's profile (no message, B is the recipient and the UI shows pending). A.page2 → `locked` (no message — A's own previous viewer array is cleared as A goes off-market). Every C with B as their watching target → C.page1 = `locked` + `message=invite` ("kicked because target was invited").
-- **`approve | chat (A+B) + locked (C*) | locked (A*+B)`**: A approves B's pending invite. Both A.page1 and B.page1 → `chat`. A.page2 → `locked` + `message=approve` (A sees a "you accepted" lock that clears via `clear2`). B.page2 → `locked` (no message — B was just an invitee; their view is now the chat). Every C watching A or B → C.page1 = `locked` + `message=approve`.
+- **`invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B)`**: A in watching invites B. Three branches for A.page1: `waiting` (success), `chat` (mutual case where B was already inviting A), or `locked` + `message=invite` (failure). On the mutual branch, B.page1 also goes to `chat`. B.page2 → `pending` with A's profile (no message, B is the recipient and the UI shows pending). A.page2 is **not touched** — page1 buttons must not modify the actor's own page2, so A's viewer array stays intact (and harmless: in `chat` state A is unfindable, in `waiting` state new viewers can still arrive but A is no longer invitable since B owns the slot). Every C with B as their watching target → C.page1 = `locked` + `message=invite` ("kicked because target was invited").
+- **`approve | chat (A+B) + locked (C*) | locked (A+B)`**: A approves B's pending invite. Both A.page1 and B.page1 → `chat`. Both A.page2 and B.page2 → `locked` with no message and `profile`/`profiles` cleared — once the pair is in chat, page2 has nothing to communicate; the chat itself is the result. Every C watching A or B → C.page1 = `locked` + `message=approve`.
 
 ### Implementation scope (when greenlit)
 

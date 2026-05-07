@@ -127,7 +127,7 @@ export function ConfirmDialog({
           onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
         >
           <View style={styles.shadowGradient} pointerEvents="none">
-            {[0.01,0.02,0.025,0.03,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15].map((o, i) => (
+            {[0.005,0.01,0.012,0.015,0.018,0.02,0.022,0.025,0.028,0.03,0.032,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.075].map((o, i) => (
               <View key={i} style={[styles.shadowLayer, { opacity: o }]} />
             ))}
           </View>

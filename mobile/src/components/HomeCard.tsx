@@ -7,7 +7,7 @@ import Animated, {
   withTiming, Easing, runOnJS,
 } from 'react-native-reanimated'
 import { HomeButtons } from './HomeButtons'
-import { SINGLE } from '../fonts'
+import { SINGLE, RADIUS } from '../fonts'
 import { WHITE } from '../colors'
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
@@ -16,21 +16,25 @@ export type PullCtx = {
   panRef: React.MutableRefObject<GestureType | undefined>
   extraRefs: React.MutableRefObject<GestureType | undefined>[]
   setScrollAtTop: (v: boolean) => void
+  pulling: boolean
 }
 export const PullContext = createContext<PullCtx | null>(null)
 
 /** ScrollView that negotiates with the card's pull gesture.
- *  - simultaneousHandlers: lets scroll and pan coexist; pan's failOffsetY(-5)
- *    ensures it fails fast on upward scroll, resolving the iOS conflict.
+ *  - simultaneousHandlers: lets scroll and pan coexist while idle.
+ *  - scrollEnabled is dropped while the pan is engaged in a pull, so a finger
+ *    that reverses upward mid-pull brings the card back instead of leaving it
+ *    stuck while the inner content scrolls.
  *  - updates scrollAtTop state so Pan enables/disables accordingly */
 export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestureHandlerProps>(
   (props, ref) => {
     const ctx = useContext(PullContext)
-    const { onScroll, ...rest } = props
+    const { onScroll, scrollEnabled, ...rest } = props
     const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       ctx?.setScrollAtTop(e.nativeEvent.contentOffset.y < 8)
       onScroll?.(e)
     }
+    const effectiveScrollEnabled = ctx?.pulling ? false : scrollEnabled
     return (
       <ScrollView
         {...rest}
@@ -40,6 +44,7 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
         simultaneousHandlers={ctx ? [ctx.panRef, ...ctx.extraRefs].filter(r => r.current) : undefined}
         bounces={false}
         overScrollMode="never"
+        scrollEnabled={effectiveScrollEnabled}
       />
     )
   }
@@ -48,7 +53,6 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
 
 const PULL_THRESHOLD = 90
 const PULL_DAMP = 0.35
-const PULL_HOLD_Y = PULL_THRESHOLD * PULL_DAMP
 
 // ── HomeCard ─────────────────────────────────────────────────────────────────
 
@@ -58,12 +62,18 @@ export type HomeCardProps = {
   description?: React.ReactNode
   /** Buttons rendered at the card bottom. */
   buttons?: React.ReactNode
-  /** Pull-to-action callback. When provided, enables the pull-down gesture. */
-  onPull?: () => Promise<void>
+  /** Pull-to-action callback. When provided, enables the pull-down gesture.
+   *  Receives the card's translateY at the moment of release so the caller can
+   *  hand off the motion to its own animation without a visual hop. */
+  onPull?: (startOffset: number) => Promise<void> | void
   /** Ref for programmatic pull trigger (e.g. from a header arrow button). */
   pullRef?: React.MutableRefObject<(() => void) | null>
   /** Extra gesture refs that inner ScrollViews should coexist with. */
   extraSimultaneousRefs?: React.MutableRefObject<GestureType | undefined>[]
+  /** Make the inner card area transparent so siblings rendered behind show
+   *  through (e.g., the home pane reveals the empty/searching UI when the
+   *  match card slides off-screen via translateY). */
+  transparentInner?: boolean
 }
 
 export function HomeCard({
@@ -73,6 +83,7 @@ export function HomeCard({
   onPull,
   pullRef,
   extraSimultaneousRefs,
+  transparentInner,
 }: HomeCardProps) {
   const pullY = useSharedValue(0)
   const pullProgress = useSharedValue(0)
@@ -82,11 +93,12 @@ export function HomeCard({
 
   const doLoad = useCallback(() => {
     spinning.value = true
-    // Card returns to its original position immediately — it swings
-    // there while the confirm dialog is open.
+    // Hand off the released offset to the caller so the slot's slide-down can
+    // start from this position — no upward rebound between release and slide.
+    const startOffset = pullY.value
     pullProgress.value = 0
-    pullY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
-    Promise.resolve(onPull?.()).finally(() => {
+    pullY.value = 0
+    Promise.resolve(onPull?.(startOffset)).finally(() => {
       isLoading.value = false
       requestAnimationFrame(() => { spinning.value = false })
     })
@@ -109,16 +121,22 @@ export function HomeCard({
   // ── Gesture ────────────────────────────────────────────────────────────────
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollAtTopSV = useSharedValue(true)
+  const [pulling, setPulling] = useState(false)
   const hasPull = !!onPull
   const panRef = useRef<GestureType>(undefined as unknown as GestureType)
 
+  // Drop the `failOffsetY(-8)` we used to have: failing on upward reversal
+  // left pullY stuck at its last value (since onEnd doesn't fire on fail) and
+  // handed the touch to the inner ScrollView, which then scrolled content up
+  // while the card stayed pulled down. Keeping the pan engaged lets pullY
+  // track the finger smoothly back to 0; `pulling` (set on JS via runOnJS)
+  // disables inner scroll for the duration so it can't consume the reversal.
   const pan = useMemo(() =>
     Gesture.Pan()
       .withRef(panRef)
       .enabled(hasPull)
       .activeOffsetY(8)
       .failOffsetX([-12, 12])
-      .failOffsetY(-8)
       .onStart(() => {
         'worklet'
         if (!scrollAtTopSV.value) return
@@ -126,6 +144,7 @@ export function HomeCard({
         pullProgress.value = 0
         triggered.value = false
         isLoading.value = false
+        runOnJS(setPulling)(true)
       })
       .onUpdate(e => {
         'worklet'
@@ -145,8 +164,11 @@ export function HomeCard({
         }
         triggered.value = false
         isLoading.value = true
-        pullY.value = withTiming(PULL_HOLD_Y, { duration: 200, easing: Easing.out(Easing.cubic) })
         runOnJS(doLoad)()
+      })
+      .onFinalize(() => {
+        'worklet'
+        runOnJS(setPulling)(false)
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   , [hasPull, doLoad])
@@ -162,29 +184,36 @@ export function HomeCard({
       scrollAtTopSV.value = v
       setScrollAtTop(v)
     },
-  }), [extraSimultaneousRefs])
+    pulling,
+  }), [extraSimultaneousRefs, pulling])
 
   const inner = (
-    <Animated.View style={[styles.cardWrapper, cardStyle]}>
-      <View style={styles.cardOuter}>
-        <View style={styles.cardInner}>
+    <View style={styles.cardWrapper}>
+      <Animated.View style={[styles.cardOuter, cardStyle]}>
+        <View style={[styles.cardInner, transparentInner && { backgroundColor: 'transparent' }]}>
           <View style={{ flex: 1 }}>
             {children}
           </View>
           {description}
         </View>
-      </View>
+      </Animated.View>
       {buttons && (
         <HomeButtons>
           {buttons}
         </HomeButtons>
       )}
-    </Animated.View>
+    </View>
   )
 
+  // Always wrap with GestureDetector — even when hasPull is false. Toggling
+  // the wrapper changes `inner`'s position in the React tree and forces a
+  // full unmount/remount of the card (and its MatchCard subtree), which read
+  // as a white-flash-then-rise when the state transitioned watching →
+  // waiting. The pan itself is gated by `.enabled(hasPull)`, so it costs
+  // nothing to leave the detector mounted while disabled.
   return (
     <PullContext.Provider value={ctxValue}>
-      {hasPull ? <GestureDetector gesture={pan}>{inner}</GestureDetector> : inner}
+      <GestureDetector gesture={pan}>{inner}</GestureDetector>
     </PullContext.Provider>
   )
 }
@@ -194,16 +223,16 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: SINGLE,
     marginTop: 0,
-    marginBottom: 24,
+    marginBottom: 0,
   },
   cardOuter: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: RADIUS,
   },
   cardInner: {
     flex: 1,
     backgroundColor: WHITE,
-    borderRadius: 16,
+    borderRadius: RADIUS,
     overflow: 'hidden',
   },
 })

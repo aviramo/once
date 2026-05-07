@@ -11,14 +11,21 @@ export type Image = {
   hash: string;
 };
 
-export type ProfileItem =
-  | { kind: "photo"; normal?: string; hash: string }
-  | { kind: "bio"; value: string }
-  | { kind: "kids"; value: boolean };
+export type FamilyData = {
+  hasKids: boolean;
+  kids?: { age?: number }[];
+  schedule?: { weeks: boolean[][]; anchor?: string };
+  /** Whether the user wants their own (more) kids. Lives inside family
+   * because everything kids-related is captured in one blob. */
+  isForKids?: boolean;
+};
 
 export type Data = {
-  items: ProfileItem[];
+  images: Image[];
+  bio?: string | null;
+  family?: FamilyData | null;
   units: string;
+  weekStart?: number;
   os: string;
   lang: string;
   appearance: string;
@@ -32,9 +39,9 @@ export type Profile = {
   title: string;
   name: string;
   images: Image[];
-  bio: string;
+  bio?: string;
+  family?: FamilyData;
   is_male: boolean;
-  is_for_kids: boolean | null;
   last_seen?: string;
   push_enabled?: boolean;
   distance?: number;
@@ -69,9 +76,47 @@ export type Pages = {
 
 export type Notify = { user_id: string; code: string; actor_id?: string };
 
+// Push title source. Two regimes:
+//   1. Active-interaction codes (invite-in, match, extended, chat) are NOT in this
+//      table — firePush falls back to the actor's name as the title.
+//   2. pageX.message codes ARE in this table — the title must read identically to
+//      the in-app page header for that message (mobile i18n keys home.ended.* /
+//      home.page2.*). Tapping deep-links to that pageX.
+// Gender suffixes (_m / _f) are picked when the actor's is_male is known; the
+// base key is the masculine form (matches the page's tg() default).
+export const PUSH_TITLE: Record<string, Record<string, string>> = {
+  he: {
+    'declined': 'ההזמנה נדחתה',
+    'expired-out': 'פג תוקף ההזמנה',
+    'expired-in': 'פג תוקף ההזמנה',
+    'cancelled-in': 'ההזמנה בוטלה',
+    'removed_m': 'לא זמין',
+    'removed_f': 'לא זמינה',
+    'removed': 'לא זמין',
+    'left_m': 'סיים את השיחה',
+    'left_f': 'סיימה את השיחה',
+    'left': 'סיים את השיחה',
+    'invite-fail': 'מישהו הקדים אותך',
+    'approve-fail': 'איחרת לאישור',
+  },
+  en: {
+    'declined': 'Invitation declined',
+    'expired-out': 'Invitation expired',
+    'expired-in': 'Invitation expired',
+    'cancelled-in': 'Invitation canceled',
+    'removed': 'Unavailable',
+    'left': 'Ended chat',
+    'invite-fail': 'Already invited',
+    'approve-fail': 'You missed the approval',
+  },
+};
+
 export const PUSH_BODY: Record<string, Record<string, string>> = {
   he: {
     'invite-in': "הזמנה לצ'אט",
+    'candidate_m': 'מישהו חדש בקרבתך',
+    'candidate_f': 'מישהי חדשה בקרבתך',
+    'candidate': 'מישהו חדש בקרבתך',
     'match': 'אתם אחד על אחד',
     'declined': 'ההזמנה נדחתה',
     'expired-out': 'ההזמנה פגה',
@@ -86,6 +131,7 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
   },
   en: {
     'invite-in': 'Chat invitation',
+    'candidate': 'Someone new nearby',
     'match': 'One on one',
     'declined': 'Invitation declined',
     'expired-out': 'Invitation expired',

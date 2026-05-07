@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useRouter, useRootNavigationState } from 'expo-router'
 import { useAuthStore } from '../src/stores/authStore'
 
-// Boot route — shown while the auth session resolves. The native splash screen
-// stays visible (SplashScreen.hideAsync is deferred to the destination screen).
+// Boot route — shown while the auth session resolves, then redirects to /home or /login.
 
 export default function Index() {
   const { user, loading } = useAuthStore()

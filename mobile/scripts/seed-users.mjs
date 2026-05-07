@@ -131,7 +131,6 @@ async function insertProfile(user, profile) {
     is_male: profile.is_male,
     is_for_male: true,
     is_for_female: true,
-    is_for_kids: false,
     age_from: 18,
     age_to: 99,
     range: 100_000_000,

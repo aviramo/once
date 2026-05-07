@@ -6,6 +6,7 @@ import { Text } from './AppText'
 import { t, tg } from '../i18n'
 import type { Profile } from '../stores/userStore'
 import { Chip, PinIcon, ClockIcon } from './Chip'
+import { FONT_SCALE, RADIUS } from '../fonts'
 import { TEXT_PRIMARY, WHITE, BLACK, PRIMARY } from '../colors'
 
 // ── Format helpers ────────────────────────────────────────────────────────
@@ -25,13 +26,20 @@ function formatDistance(m: number | null | undefined, units?: string | null): st
   return `${km.toFixed(1)} ${t('settings.km')}`
 }
 
-function formatLastSeen(iso: string | null | undefined): string {
+function formatLastSeen(iso: string | null | undefined, isMale: boolean | null | undefined): string {
   if (!iso) return ''
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return t('match.justNow')
-  if (diff < 3600) return t('match.minsAgo').replace('{n}', String(Math.floor(diff / 60)))
-  if (diff < 86400) return t('match.hrsAgo').replace('{n}', String(Math.floor(diff / 3600)))
-  return t('match.daysAgo').replace('{n}', String(Math.floor(diff / 86400)))
+  if (diff < 60) return tg('match.justNow', isMale)
+  if (diff < 3600) {
+    const n = Math.floor(diff / 60)
+    return tg(n === 1 ? 'match.minAgo' : 'match.minsAgo', isMale).replace('{n}', String(n))
+  }
+  if (diff < 86400) {
+    const n = Math.floor(diff / 3600)
+    return tg(n === 1 ? 'match.hrAgo' : 'match.hrsAgo', isMale).replace('{n}', String(n))
+  }
+  const n = Math.floor(diff / 86400)
+  return tg(n === 1 ? 'match.dayAgo' : 'match.daysAgo', isMale).replace('{n}', String(n))
 }
 
 const ONLINE_SECONDS = 60
@@ -70,7 +78,7 @@ type Props = {
 
 export function WatcherCard({ watcher, units, exiting, onExited, onPress }: Props) {
   const distance = formatDistance(watcher.distance ?? undefined, units)
-  const lastSeen = formatLastSeen(watcher.last_seen)
+  const lastSeen = formatLastSeen(watcher.last_seen, watcher.is_male)
   const online = isOnlineNow(watcher.last_seen)
   const isNew = isRecentlyCreated(watcher.created_at)
   const hash = watcher.images?.[0]?.hash
@@ -164,7 +172,11 @@ export function WatcherCard({ watcher, units, exiting, onExited, onPress }: Prop
             {lastSeen ? (
               <View style={styles.onlineChip}>
                 <ClockIcon color="rgba(0,0,0,0.6)" />
-                <Text style={styles.onlineChipText} numberOfLines={1}>{lastSeen}</Text>
+                <Text
+                  style={styles.onlineChipText}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={FONT_SCALE.heading}
+                >{lastSeen}</Text>
                 {online ? <View style={styles.onlineDot} /> : null}
               </View>
             ) : null}
@@ -181,7 +193,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     padding: 12,
-    borderRadius: 16,
+    borderRadius: RADIUS,
     backgroundColor: '#FFF0EB',
     shadowColor: BLACK,
     shadowOffset: { width: 0, height: 2 },
@@ -192,7 +204,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 84,
     height: 108,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
     position: 'relative',
@@ -208,7 +220,7 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: RADIUS,
   },
   newBadgeText: {
     color: WHITE,
@@ -250,7 +262,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(0,0,0,0.06)',
   },
   onlineChipText: {
