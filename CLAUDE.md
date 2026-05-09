@@ -1,12 +1,30 @@
 # Project Instructions
 
+## Operational autonomy (whole project)
+
+Claude has blanket upfront permission for every action it can perform locally or via available tooling. Don't pause to ask "should I run X?" — run it. Reserve questions for steps that are genuinely impossible without the user.
+
+**Examples of what to do without asking:**
+
+- Edit/write any file in the repo, including config (`app.json`, `eas.json`, `package.json`, `CLAUDE.md`, `TODO.md`).
+- Run `npm install` / `npm uninstall` / dependency upgrades.
+- Run `eas build` / `eas submit` / `eas env:*` / `eas credentials` (interactive prompts, route via terminal as last resort).
+- Run any git operation except destructive ones called out below.
+- Apply Supabase migrations and deploy edge functions (see "Server-side autonomy" below for the full list).
+- Hit any REST API with credentials Claude already has access to.
+- Long-running commands (EAS builds, deploys) → run in background (`run_in_background: true`) and continue working; only flag the user when their input is needed.
+
+**When to ask:** the action is impossible without the user — browser-only portal flows (Apple Developer Center, App Store Connect web UI, Google Play Console web UI, Firebase Console, GCP Console enabling APIs), 2FA codes coming to the user's phone, physical-device interaction, or destructive actions on shared/production data (truncating live tables, force-pushing main, dropping columns with user data). For these, hand the user the exact link/step and continue with anything else that's parallelizable.
+
+**Don't ask for confirmation as a courtesy.** "Ready to proceed?" / "Should I run X?" / "Do you want me to also do Y?" are time-tax on the user. Just do it and report.
+
 ## Server-side code (supabase/functions/ and database)
 
 Claude owns the server side end-to-end: edge functions, RPCs, migrations, schema. The two-board rewrite is complete (server + client). Further work is incremental features, not a rewrite.
 
-### Autonomy
+### Server-side autonomy
 
-Claude owns the server end-to-end and may ship any server-side change without asking. This includes:
+Specific instances of the general autonomy rule above:
 
 - Deploying edge functions and creating new `.ts` files under `supabase/functions/`.
 - Applying DB migrations: DDL/DML, new tables/columns/indexes/triggers/cron jobs, new RPCs (any signature), modifying existing RPCs, dropping schema objects, data backfills.
@@ -17,6 +35,41 @@ No confirmation is required for any of the above — proceed and report what was
 
 - `CLAUDE.md` is the source of truth for the data model. Every schema change (new or removed table/column/index/trigger/RPC/cron) must be reflected in the "Database schema" section of this file in the same change. If code and this file disagree, treat this file as correct and update the code.
 - Do not ship destructive operations on production data (truncating live tables, dropping columns with user data) without first surfacing what will be lost. Autonomy covers schema/code work; data destruction still warrants a heads-up.
+- `BACKWARD_COMPAT.md` is the cleanup queue for shims kept alive to support older published mobile builds. Every breaking server change shipped via Expand → Migrate → Contract must add an entry there in the same change, and entries must be removed once their mobile-version floor falls below the live distribution. See the "Backward compatibility with the deployed mobile app" section below for the full rules.
+
+### Backward compatibility with the deployed mobile app (production)
+
+The app is in production on the stores. Mobile updates take days-to-weeks to roll out (users update at their own pace; some never do). The server, by contrast, deploys instantly to 100% of users. **Every server change must assume the currently-published mobile build is still running on most devices.**
+
+Before shipping any server change, ask: *"Will the currently-published app still function correctly after this deploy?"* If no, the change is breaking and must be staged.
+
+**Safe by default (ship freely):**
+- Adding a new field to `users.relations`, `users.data`, or any JSONB blob — old clients ignore unknown keys.
+- Adding a new endpoint or new RPC — old clients don't call it.
+- Adding a new column to a table that the client doesn't read.
+- Adding a new push code — old clients fall through to a default route.
+- Internal refactors to RPC bodies that preserve the input/output contract.
+
+**Breaking (must be staged):**
+- Removing or renaming a field the app reads (e.g., `page1.state`, `page1.profile`, anything inside `Profile`).
+- Changing the type or semantics of an existing field (e.g., string → object, enum value rename).
+- Removing or renaming an endpoint, RPC, or push code the app calls / handles.
+- Changing the response shape of an existing endpoint.
+- Tightening a precondition so a call the app currently makes starts failing.
+- Schema-level changes that ripple into Realtime payloads the app subscribes to.
+
+**Staging pattern for breaking changes:**
+1. **Expand:** ship the new shape *alongside* the old one. Server writes both; reads accept either. Old app keeps working on the old shape; new app uses the new shape.
+2. **Migrate the app:** publish a mobile build that consumes the new shape. Wait for adoption (typically weeks; check version distribution before proceeding).
+3. **Contract:** once the old shape has no live readers, remove it.
+
+**Every Expand step must add a matching entry to `BACKWARD_COMPAT.md`** (the cleanup queue) in the same change. The entry records what shim was kept alive, why, and the mobile-version floor at which the Contract step becomes safe. If you ship an Expand without writing the entry, the cleanup will never happen and dead-code rot accumulates.
+
+Before shipping any server change, also scan `BACKWARD_COMPAT.md`: any entry whose mobile-version floor is now below the live distribution can (and should) be removed in the same session.
+
+If a breaking change cannot reasonably be staged, surface that explicitly and discuss with the user before shipping — options include a force-update gate (return `426 Upgrade Required` from `/app/start` for versions below `min_supported_version`) or accepting that old-version users will see degraded behavior for a window.
+
+When in doubt about whether a change is breaking, default to treating it as breaking and staging it. Cheap to be cautious; expensive to brick the field.
 
 ## UI layout iron rules (mobile/app/home.tsx)
 
@@ -85,7 +138,7 @@ Latency of the user-facing response is the top priority. Anything that does not 
 
 ## Game Logic: Two-Board Model
 
-Replaces the old single-board model (one board that toggled between "visible/being-viewed" and "hidden/searching"). The new model has **two boards always available simultaneously**, so a user can be waiting on an invitation they sent (page1) while also receiving a competing invitation from someone else (page2).
+The model has **two boards always available simultaneously**, so a user can be waiting on an invitation they sent (page1) while also receiving a competing invitation from someone else (page2).
 
 ### Data model
 
@@ -93,99 +146,121 @@ Everything lives inside `users.relations` (JSONB column) for atomicity and perfo
 
 ```ts
 type Pages = {
-  page1?: Page1;               // undefined = brand new user, never searched
-  page2: Profile[] | Page2Invite;  // array = list of viewers; object = incoming invitation
+  page1: Page1;
+  page2: Page2;
 };
 
 type Page1 = {
-  profile?: Profile;           // present when state is non-null
-  state: string | null;        // null = no active profile (see state/event table)
-  event: string;               // always present; reason for current state
-  invited_at?: string;         // ISO timestamp, sent time (present when state = 'waiting')
-  expires_at?: string;         // ISO timestamp, absolute expiry (present when state = 'waiting')
+  state: 'free' | 'watching' | 'waiting' | 'chat' | 'locked';
+  profile?: Profile;           // present when state ∈ {watching, waiting, chat}, and on locked when carrying a "what happened" message
+  message?: string;            // event code (cancel/decline/expire/...) — set only on locked transitions that need UI feedback
+  invited_at?: string;         // ISO, set when state = 'waiting'
+  expires_at?: string;         // ISO, set when state = 'waiting'
   extended?: boolean;          // true after the one allowed extend; blocks further extends
 };
 
-type Page2Invite = Profile & {
-  state: 'pending' | 'cancelled' | 'expired';  // pending = active; cancelled = inviter cancelled; expired = timed out
-  invited_at?: string;         // ISO timestamp of when the invitation was sent
-  expires_at?: string;         // ISO timestamp, absolute expiry
+type Page2 = {
+  state: 'free' | 'pending' | 'chat' | 'locked';
+  profile?: Profile;           // pending: the inviter; locked-with-message: the dead-invite originator
+  profiles?: Profile[];        // free: viewer list (users currently watching me)
+  message?: string;            // event code — set only on locked transitions that need UI feedback
+  invited_at?: string;         // ISO, set when state = 'pending'
+  expires_at?: string;         // ISO, set when state = 'pending'
   extended?: boolean;          // mirrored from inviter's page1.extended
 };
 ```
 
-Both timestamps are written atomically on both sides. `invited_at` is stable for the life of the invitation (used for "X minutes ago" UI). `expires_at` moves forward on each `extend` call. The client-side countdown is driven by `expires_at`.
+`state` and `message` are independent: `state` describes whether the page is empty (`free`), in an active interaction (`watching`/`waiting`/`pending`/`chat`), or terminal (`locked`); `message` is the optional event code that triggered the most recent lock and tells the UI which "what happened" card to render. Both `invited_at` and `expires_at` are written atomically on both sides of an invitation. `invited_at` is stable for the life of the invitation. `expires_at` moves forward on each `extend` call. The client-side countdown is driven by `expires_at`.
+
+A brand-new user starts at `page1.state = locked, page2.state = locked` with no `message` on either side. The user exits via the green-button paths described under "UI button mapping" below.
+
+### State vocabulary
+
+- `page1.state ∈ {free, watching, waiting, chat, locked}`
+- `page2.state ∈ {free, pending, chat, locked}`
+- `message`: optional event code (e.g., `cancel`, `decline`, `expire`). Auto-find triggers (`start`/`location`/`focus`) are never propagated as `message`.
+- `profile` (singular) and `profiles` (array of watchers) populations are managed independently of `state` and are not in the transition table below.
+
+### Findability
+
+For `find` to pick candidate P for actor A, P is findable iff:
+- `P.page1.state ≠ chat`
+- `P.page2.state ∉ {locked, pending}`
+
+### Auto-find behavior
+
+`start`, `location`, `focus` always run on app open / location change / focus to refresh `relations` snapshots (analog of `app_refresh_snapshots`). They additionally trigger auto-find **iff** `A.page1.state === 'free'`. Any other state (`locked`, `watching`, `waiting`, `chat`) → snapshot refresh only, no auto-find.
+
+### UI button mapping (per page, when `state === 'locked'`)
+
+- **`message` present** → page renders the "what happened" card with a **gray "Continue" button**. Tap fires `clear1` / `clear2` to the server, which clears `message` only — `state` stays `locked`.
+- **`message` absent** → page renders its default UI with a **green action button**:
+  - page1 green button → `find` (transitions `page1.state` from `locked` to `watching` or `free` and runs candidate selection).
+  - page2 green button → `free2` (transitions `page2.state` from `locked` to `free`).
+
+A fully-locked-with-message page exits in two taps: gray (clear message) → green (find / free2). page1 has no separate `free1`; `find` covers it.
+
+### How to read the state transition table
+
+- **page**: which UI page the actor (A) initiated the action from. Informational, not a precondition by itself.
+- **A.event**: the event code A fired. `a/b` means either action shares the row but writes its own event code as `message` when applicable.
+- **page1.state / page2.state**: how the named pages of the involved users are written by the transaction.
+  - **Letter in parens** = which user the write applies to. `A` = actor; `B` = the direct counterparty (e.g., the inviter, the chat partner, the user being removed); `C` = any third party affected (e.g., A's or B's other watchers).
+  - **`*` next to a letter** = on top of writing `state`, also write `message` for that user, with value = the event code from column 2.
+  - **`+`** = both apply (multiple writes in one transaction, possibly to different users).
+  - **`/`** = alternative outcomes (success vs. failure vs. mutual case).
+  - **Empty cell** = the page's `state` is not written by this transaction. `profile` / `profiles` populations are managed separately and don't appear in this table (the only exception is `page2.state = locked`, which by convention also clears the `profiles` array — see below).
+- **`locked` semantics**: end-of-interaction marker for that page. May be a successful terminal write (e.g., `cancel` writes A.page1=locked with no message) or a failure landing (e.g., `invite` failure writes A.page1=locked with `message=invite`).
+- **`page2.state = locked`** also implies that both `profile` (singular) and `profiles` (watcher array) on that page are cleared as part of the same write. They can re-populate after `free2` returns the page to `free`.
+- **`page2.state = free`** (written by `leave/block` and `free2`) clears `profile` and `profiles` as part of the same write.
 
 ### State transition table
 
-Every action is only honoured when its precondition (A page + State) matches. All other combinations are rejected by the server.
+| page | A.event | page1.state | page2.state |
+|------|---------|-------------|-------------|
+| | start/location/focus | free/watching (A) | |
+| 1 | find/ignore | free/watching (A) | |
+| 1 | cancel | locked (A) | locked (B*) |
+| 1 | invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B) |
+| 1 | extend | locked (A*) | |
+| 2 | remove | locked (B*) | |
+| 2 | add | watching (C) | |
+| 2 | approve | chat (A+B) + locked (C*) | locked (A+B) |
+| 2 | decline | locked (B*) | locked (A) |
+| 1 | leave/block | locked (A) + locked (B*) | free (A) + locked (B) |
+| | logout/delete | locked (A+B*) | locked (A+B*) |
+| | cron | locked (A*/B*) | locked (A*/B*) |
+| 1 | clear1 | | |
+| 2 | clear2 | | |
+| 2 | free2 | | free (A) |
 
-| A page | State | Event | Result | Todo |
-|---|---|---|---|---|
-| 1 | null | find/start/location/focus | no candidate | A.page1.state = null |
-| 1 | null | find/start/location/focus | candidate B | A.page1.state = watching, B.page2[].add(A) |
-| 1 | watching | ignore | no candidate | A.page1.state = null, B.page2[].remove(A) |
-| 1 | watching | ignore | candidate C | A.page1.state = watching, B.page2[].remove(A), C.page2[].add(A) |
-| 1 | watching | invite | B available | A.page1.state = waiting, B.page2.state = pending, B.page2.profile = A |
-| 1 | watching | invite | B unavailable | A.page1.state = fail |
-| 1 | waiting | cancel | | A.page1.state = null, B.page2.state = missed |
-| 1 | waiting | extend | ok | A.page1.expires_at += minutes, B.page2.expires_at += minutes |
-| 1 | waiting | extend | expired | A.page1.state = fail |
-| 1 | waiting | expire (cron) | | A.page1.state = missed, B.page2.state = missed |
-| 2 | pending | approve | not expired | A.page1.state = chat, B.page1.state = chat, A.page2 = [], B.page2 = [] |
-| 2 | pending | approve | expired | A.page1.state = fail, B.page2.state = fail |
-| 2 | pending | decline | | A.page2 = [], B.page1.state = missed |
-| 2 | pending | expire (cron) | | A.page2.state = missed, B.page1.state = missed |
-| 1 | chat | leave | | A.page1.state = null, B.page1.state = missed |
-| 1 | chat | block | | A.page1.state = null, B.page1.state = missed |
-| 1 | fail/missed | clear1 | | A.page1.state = null |
-| 2 | fail/missed | clear2 | | A.page2 = [] |
-| any | any | logout | | A.page1.state = null, A.page2 = [], B.page1.state = missed (where B.page1.profile = A), B.page2.state = missed (where B.page2.profile = A), B.page2[].remove(A) |
-| any | any | delete | | A.page1.state = null, A.page2 = [], B.page1.state = missed (where B.page1.profile = A), B.page2.state = missed (where B.page2.profile = A), B.page2[].remove(A) |
+`clear1` and `clear2` write only `message = null` on their respective page (state untouched). `free2` writes only `page2.state = free` (no message).
 
-### `page2` semantics
+### Event list
 
-`page2` is either an array (viewers list) or a single object (invitation). The object form carries a `state` field:
+`start`, `location`, `focus`, `find`, `ignore`, `cancel`, `invite`, `extend`, `remove`, `add`, `approve`, `decline`, `leave`, `block`, `logout`, `delete`, `cron`, `clear1`, `clear2`, `free2`.
 
-| `page2` value | Meaning | Available action |
-|---|---|---|
-| `Profile[]` (array) | Users currently viewing me. Each has `page1.profile = me`, `page1.state = 'watching'`. | — (passive) |
-| `{state: 'pending', ...Profile}` | Active incoming invitation — timer running. | `approve`, `decline` |
-| `{state: 'missed', ...Profile}` | Inviter cancelled before I responded, or invitation timed out. | `clear2` |
-| `{state: 'fail', ...Profile}` | Approve failed — invitation expired during my approve attempt. | `clear2` |
+### Worked examples
 
-`clear2` acknowledges the dead invitation and returns `page2` to `[]`.
-
-### Invariants the server must enforce after every transaction
-
-1. `A.page1.state ∈ {watching, waiting}` ⇒ `A.page1.profile.user_id` names a real other user B.
-2. `A.page1.state = 'waiting'` ⇔ `B.page2` is an object with `state = 'pending'` and `B.page2.profile.user_id = A.user_id`. A `page2` object with `state ∈ {missed, fail}` has no corresponding active page1 — it awaits `clear2`.
-3. `A.page1.state = 'chat'` ⇔ `B.page1.state = 'chat'` and each `page1.profile` points at the other.
-4. `A ∈ B.page2[]` (array form) ⇔ `A.page1.profile.user_id = B.user_id` and `A.page1.state = 'watching'`.
-5. `B.page2` is an object ⇒ the array form is empty: all previous viewers were kicked to `missed/event` at the moment of invitation.
-6. **Every write of `state` must include `event` in the same write.** `state` and `event` are always set together atomically — never one without the other.
+- **`logout/delete | locked (A+B*) | locked (A+B*)`**: A's page1 → locked (no message — A initiated). Every B referencing A (in `B.page1.profile`, `B.page2.profile`, or `B.page2.profiles[]`) gets their corresponding page → locked + `message = logout` (or `delete`).
+- **`invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B)`**: A in watching invites B. Three branches for A.page1: `waiting` (success), `chat` (mutual case where B was already inviting A), or `locked` + `message=invite` (failure). On the mutual branch, B.page1 also goes to `chat`. B.page2 → `pending` with A's profile (no message; the UI shows pending). A.page2 is **not touched** — page1 buttons must not modify the actor's own page2. Every C with B as their watching target → C.page1 = `locked` + `message=invite` ("kicked because target was invited").
+- **`approve | chat (A+B) + locked (C*) | locked (A+B)`**: A approves B's pending invite. Both A.page1 and B.page1 → `chat`. Both A.page2 and B.page2 → `locked` with no message and `profile`/`profiles` cleared — once the pair is in chat, page2 has nothing to communicate; the chat itself is the result. Every C watching A or B → C.page1 = `locked` + `message=approve`.
 
 ### Endpoints
 
-All live under `POST /app/<action>`. Each executes as a single Postgres transaction: `BEGIN; SELECT ... FOR UPDATE ordered by user_id ascending; UPDATE ...; COMMIT`. The user_id ordering prevents deadlocks when multiple rows are locked.
+All live under `POST /app/<action>`. Each executes as a single Postgres transaction: `BEGIN; SELECT ... FOR UPDATE ordered by user_id ascending; UPDATE ...; COMMIT`. The user_id ordering prevents deadlocks when multiple rows are locked. Each endpoint maps 1:1 to a row in the transition table; the underlying RPC names (`app_find`, `app_invite`, ...) are listed in the "Approved removals (already migrated)" section.
 
-| Action | Precondition | Rows locked | Writes | On failure | Restriction |
-|---|---|---|---|---|---|
-| `find` | `A.page1.state = null` | A, old target B (if any) | candidate P found: `A.page1 = {state: 'watching', event: event_key, profile: P}`; `P.page2[].add(A)` | no candidate: `A.page1 = {state: null, event: event_key}` | — |
-| `ignore` | `A.page1.state = 'watching'` | A, B | candidate C found: `A.page1 = {state: 'watching', event: 'ignore', profile: C}`; `B.page2[].remove(A)`; `C.page2[].add(A)` | no candidate: `A.page1 = {state: null, event: 'ignore'}`; `B.page2[].remove(A)` | `ignore` A→B |
-| `invite` | `A.page1.state = 'watching'` and `B.page2` is array | A, B, every C with `C.page1.profile = B` | `A.page1 = {state: 'waiting', event: 'invite', profile: B, invited_at, expires_at}`; `B.page2 = {state: 'pending', event: 'invite', profile: A, invited_at, expires_at}`; every C: `C.page1 = {state: 'missed', event: 'invite', profile: B}` | B unavailable: `A.page1 = {state: 'fail', event: 'invite', profile: B}` | — |
-| `extend` | `A.page1.state = 'waiting'` and not expired; `body.minutes ∈ {10,30,60,120,240,480,1440}` | A, B | `A.page1.expires_at += minutes`; `B.page2.expires_at += minutes`; `extended = true` on both sides; if already extended: no-op | expired: `A.page1 = {state: 'fail', event: 'extend', profile: B}` | — |
-| `cancel` | `A.page1.state = 'waiting'` | A, B | `A.page1 = {state: null, event: 'cancel'}`; `B.page2 = {state: 'missed', event: 'cancel', profile: A}` | — | `cancel` A→B |
-| `approve` | `A.page2.state = 'pending'` and not expired | A, B | `A.page1 = {state: 'chat', event: 'invite', profile: B}`; `B.page1 = {state: 'chat', event: 'invite', profile: A}`; `A.page2 = []`; `B.page2 = []` | expired: `A.page1 = {state: 'fail', event: 'approve', profile: B}`; `B.page2 = {state: 'fail', event: 'approve', profile: A}` | — |
-| `decline` | `A.page2.state = 'pending'` | A, B | `A.page2 = []`; `B.page1 = {state: 'missed', event: 'decline', profile: A}` | — | `decline` A→B |
-| `leave` | `A.page1.state = 'chat'` | A, B | `A.page1 = {state: null, event: 'leave'}`; `B.page1 = {state: 'missed', event: 'leave', profile: A}` | — | `leave` A→B |
-| `clear1` (from chat) | `A.page1.state = 'chat'` | A, B | `A.page1 = {state: null, event: 'block'}`; `B.page1 = {state: 'missed', event: 'leave', profile: A}` | — | `block` A→B (permanent) |
-| `clear1` (from fail/missed) | `A.page1.state ∈ {fail, missed}` | A only | `A.page1 = {state: null, event: 'ok'}` | — | — |
-| `remove` | `X ∈ B.page2[]` | B, X | remove X from `B.page2[]`; `X.page1 = {state: 'missed', event: 'remove', profile: B}` | — | `remove` B→X |
-| `add` | `A.page1.state ≠ 'chat'` AND `A.page2.profile` is missing AND `A.page2.profiles` is empty/missing AND `A.relations.last_add_at` is missing or > 1h old | A + up to 3 candidates | reset `A.page2 = {state: 'free', profiles: []}` (transitions a `locked`-resting user to discoverable); set `A.relations.last_add_at = now()` (also written when no candidates found, so the cooldown engages either way); for each candidate C (top 3 by relevance, eligible: `C.page1.state ∈ {free, locked}` AND `C.page2.state ∉ {locked, pending}` AND not already watching A): `C.page1 = {state: 'watching', profile: A}`; append C's profile to `A.page2.profiles[]`; fire `candidate` push to C | rate-limited: `error: 'rate_limited'`, A unchanged | — |
-| `clear2` | `A.page2.state ∈ {missed, fail}` | A only | `A.page2 = []` | — | — |
-| `logout` | any | A + all affected users | `A.page1 = {state: null, event: 'logout'}`; `A.page2 = []`; push_token = null; location = null; every B where `B.page1.profile = A`: `B.page1 = {state: 'missed', event: 'logout', profile: A}`; every B where `B.page2.profile = A`: `B.page2 = {state: 'missed', event: 'logout', profile: A}`; remove A from any `B.page2[]` | — | — |
-| `delete` | any | A + all affected users | same writes as logout, then deletes A's row | — | — |
+Per-endpoint restrictions (rows inserted into `restrictions` behind `waitUntil`, see "Database schema → restrictions" for cooldown durations):
+- `ignore` A→B
+- `cancel` A→B
+- `remove` B→X
+- `decline` B→A
+- `leave` A→B
+- `block` A→B (permanent — `clear1` from chat triggers this)
+
+`invite` precondition: `A.page1.state = 'watching'` AND `B.page2.state = 'free'`. Writes a 30-minute `expires_at` (= `invited_at + 30m`). `extend` is server-only, additive, one-shot per invitation, callable only by A while live (`expires_at > now()`) and not previously extended.
+
+`add` (page2 "Show me to people" button) is rate-limited via `relations.last_add_at` (1h cooldown, also consumed when zero candidates found). See `app_add` in the "Approved removals" section.
 
 **Restrictions note:** rows are inserted behind `waitUntil` (off the critical path). The `others` RPC reads them during `find`, but since restrictions only affect the inserting user's future `find` calls, a sub-100ms race is harmless — the restriction will be in place well before the user calls `find` again.
 
@@ -195,34 +270,33 @@ All live under `POST /app/<action>`. Each executes as a single Postgres transact
 - **`extend` is additive and one-shot per invitation.** Server-side functionality only. Mobile UI does not surface an extend button; the waiting state shows a full-width cancel. Server adds the requested minutes to `expires_at` on both sides and marks the invitation as extended.
 - Only the inviter (A) can extend. Only while the invite is still live (`expires_at > now()`). Only if it has not been extended before (`!page1.extended`).
 - Expiration is enforced two ways:
-  - **Lazy:** `approve` / `extend` / `decline` check `expires_at > now()` inside the transaction. If expired, they fail with the appropriate state.
-  - **Eager (pg_cron, every minute):** sweeper RPC scans for `waiting` page1 entries with `expires_at <= now()`, and per pair atomically sets `A.page1 = {state: 'missed', event: 'expire'}`, `B.page2 = {...B.page2, state: 'expired'}` (preserves profile for `clear2`). Also fires the `expired-out` / `expired-in` pushes.
+  - **Lazy:** `approve` / `extend` / `decline` check `expires_at > now()` inside the transaction. If expired, they fail with the appropriate `locked` + `message` landing.
+  - **Eager (pg_cron, every minute):** sweeper RPC scans for `waiting` page1 entries with `expires_at <= now()`, and per pair atomically sets both sides to `locked` with `message = 'expire'` (preserves profiles so the message card has data and `clear2` still works). Also fires the `expired-out` / `expired-in` pushes.
 
 Client drives countdown off `expires_at`. If the sweeper runs late (up to 60s slack), the lazy path catches any early access and realtime corrects the UI.
 
 ### Skip = `find`
 
-No separate `unview` / `skip` endpoint. Skipping is `find`: the same transaction removes A from the old target's `page2[]` and picks a new profile. `ignore` is the variant of skip that also records a 24h restriction.
+No separate `unview` / `skip` endpoint. Skipping is `find`: the same transaction removes A from the old target's `page2.profiles[]` and picks a new profile. `ignore` is the variant of skip that also records a 24h restriction.
 
 ### Match resolution (full `approve` flow)
 
 The inviter's viewers are **not** kicked at invite time — they stay pointed at A in `watching`. They get kicked at **match time**. Similarly, if A has a pending incoming invitation from some X (parallel-state scenario: A invited B while X was inviting A), X's invitation becomes invalid at match time.
 
 The full `approve(B, A)` transaction:
-1. `A.page1 = {profile: B, state: 'chat', event: 'invite'}`
-2. `B.page1 = {profile: A, state: 'chat', event: 'invite'}`
-3. `A.page2 = []`
-4. `B.page2 = []`
-5. For every C where `C.page1.profile.user_id = A.user_id` and `C.page1.state ≠ 'chat'`: set `C.page1 = {profile: A, state: 'missed', event: 'matched'}`. This covers both A's watching viewers and any X who had a pending invitation to A.
-6. B's side needs no sweep — B's viewers were kicked to `missed/invite` at invite time, and no one could have added themselves while `B.page2` was an object.
+1. `A.page1 = {state: 'chat', profile: B}`
+2. `B.page1 = {state: 'chat', profile: A}`
+3. `A.page2 = {state: 'locked'}` (no message; `profile`/`profiles` cleared)
+4. `B.page2 = {state: 'locked'}` (no message; `profile`/`profiles` cleared)
+5. For every C where `C.page1.profile.user_id ∈ {A, B}` and `C.page1.state ≠ 'chat'`: set `C.page1 = {state: 'locked', message: 'approve', profile: <whoever C was watching>}`. This covers A's watching viewers, B's watching viewers, and any X who had a pending invitation to either side.
 
 Rows locked: A, B, and all C matching step 5 (query via index on `relations->'page1'->'profile'->>'user_id'`).
 
 ### Cancel / leave / block policy
 
-- `cancel`: `A.page1 = {state: null, event: 'cancel'}`, `B.page2 = {...B.page2, state: 'cancelled'}` — profile preserved so B sees who cancelled. B calls `clear2` to return to `[]`. Viewers kicked at invite time stay kicked.
-- `leave`: initiated from chat. Leaver's `page1 = {state: null, event: 'leave'}`; partner's `page1 = {state: 'missed', event: 'leave'}` (distinct screen).
-- `block`: identical to `leave` from the partner's perspective, but inserts a permanent `block` restriction so the pair will never match again. Leaver's `page1 = {state: null, event: 'block'}`.
+- `cancel`: `A.page1` → `locked` (no message — A initiated). `B.page2` → `locked` + `message = 'cancel'`, profile preserved so B sees who cancelled. B clears via `clear2`.
+- `leave`: initiated from chat. `A.page1` → `locked` (no message). `B.page1` → `locked` + `message = 'leave'`. Both `page2`s → `free` (auto-return-to-free).
+- `block`: identical to `leave` from B's perspective, but inserts a permanent `block` restriction so the pair will never match again. `A.page1` → `locked` (no message). Triggered by `clear1` from chat.
 
 ### Navigating out of the feed
 
@@ -266,26 +340,19 @@ Push codes are lowercase kebab-case and are sent as `data.type` inside the push 
 
 ### `start` endpoint — auto-find
 
-`POST /app/start` is called on every app launch (after permissions are granted). In addition to persisting location + push token, it calls `app_find` automatically in two cases:
-- `page1 = undefined` (brand new user, never searched) — always auto-finds.
-- `page1.state = null` and `page1.event ∈ {find, start, ignore, location}` — auto-finds (e.g. after a failed find the user re-opens the app).
-
-All other null-state events (`cancel`, `leave`, `block`, `ok`, `logout`) require a manual `find` tap — the user sees an empty home screen.
+`POST /app/start` is called on every app launch (after permissions are granted). In addition to persisting location + push token, it triggers auto-find iff `A.page1.state === 'free'` (see "Auto-find behavior" above). Any other state — `locked` (with or without message), `watching`, `waiting`, `chat` — triggers a snapshot refresh only; the user sees whatever screen their current state owns until they tap an action button.
 
 ### Client / mobile assumptions
 
 - Realtime is wired: the mobile app subscribes to its own `users` row and re-renders when `relations` changes. Server endpoints should not echo state into the HTTP response as a synchronization mechanism — Realtime is the channel. (Echoing for convenience is fine, but the client treats Realtime as truth.)
-- The PagerView has 4 panes: `[chat (conditional), page2, home/page1, settings]`. Chat pane is only mounted when `state === 'CHAT'`; the `paneToPage`/`pageToPane` helpers account for it.
-- `userStore.ts` runs `deriveCompat()` on every server update, synthesizing legacy `state` string (HIDDEN/WATCHING/WAITING/REPLYING/CHAT/OTHER_LEFT/OTHER_CANCELLED) and `match`/`watchers` fields off the new `relations.page1/page2` so existing UI branches keep working.
-- **Page2 pane** is implemented: shows viewers list (`page2` array form) with the same watcher cards. Incoming invitation UI (`page2` object form) is not yet implemented in mobile.
-- **Home/page1 pane HIDDEN state**: shows magnifying glass icon + "search preferences" button. No visible/hidden mode toggle exists anymore.
+- The server writes the canonical v2 shape (`state` ∈ the enums above + optional `message`), but `userStore.ts` still runs a `deriveCompat()` shim on every server update to synthesize the legacy UI state strings (`'watching'` / `'waiting'` / `'chat'` / `'missed'` / `'fail'` / `null`) plus `match` / `watchers` / a legacy `page2` shape (array when free, `Page2Invite` object when pending or locked-with-message). The shim maps `page1.state = 'locked'` + `message ∈ {invite, approve, extend}` to `'fail'` (A's own action failed) and any other locked-with-message to `'missed'`. Locked without message → `null`. The home/page1 and page2 panes branch on these synthesized values.
+- The PagerView has 2 slots `[home, side]`; slot 1 renders chat when `state === 'chat'`, page2 content otherwise. See "UI layout iron rules" above.
 
 ### Pending mobile work
 
-- **Invite timer UI:** countdown driven by `page1.expires_at` is implemented. Extend UI deliberately omitted — extend is server-only. Cancel button is full-width.
-- **Incoming invitation UI (page2 object form):** accept/decline buttons when `page2` is an object. Not yet implemented.
-- **Push notification handler:** routing complete — `data.type` codes are split into `CHAT_CODES` (chat/match → CHAT_PANE), `PAGE2_CODES` (invite-in/extended/expired-in/cancelled-in → PAGE2_PANE), everything else → HOME_PANE. Cold-start (initial-pane) and warm-tap paths share the same maps.
+- **Mobile shim removal:** drop `deriveCompat` from `userStore.ts`; rewrite the home/page1 + page2 UI to consume v2 `state` + `message` directly, using the gray-vs-green button rule from "UI button mapping". This is the last meaningful gap between the deployed server and the mobile codebase.
 - **Dead code cleanup:** `setVisibility`, `app/visibility`, OFF mode, reveal/hide confirm dialogs, `showOffScreen`, `offButton` are still in `home.tsx` but unreachable at runtime. Can be removed when convenient.
+- **EAS environment variables:** `mobile/.env` is local-only. EAS builds read from the `production` (and `preview` / `development`) environment on EAS, not from `.env`. Pushing the local file: `cd mobile && cp .env .env.local && eas env:push production && rm .env.local`. If `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` are missing in EAS, the production build crashes on launch with `[Error: supabaseUrl is required.]` followed by an expo-router `TypeError: Cannot read property 'ErrorBoundary' of undefined` (the supabase module fails at import time, returns undefined, expo-router then chokes loading the layout). This was the May 2026 launch-crash incident on both iOS Beta Review and Play Internal Testing.
 
 ### `report` (pending decision)
 
@@ -485,100 +552,3 @@ Truth table:
 - neither set (no `family`, or `family` without `isForKids`) → **1.0**
 
 `LANGUAGE sql IMMUTABLE PARALLEL SAFE` — single CASE expression, fully inlinable by the planner.
-
----
-
-## Proposed state machine v2 (pending implementation)
-
-Forward-looking spec for the next refactor. The currently deployed model is "Game Logic: Two-Board Model" above; this section supersedes it once implemented. **Do not implement until the user gives the go-ahead.** This section exists so the table is easy to pull up later when we start the work.
-
-### What changes vs. today
-
-- The `event` field on `page1` and `page2` is removed entirely.
-- `state` becomes a small fixed enum on each page; `message` (optional) replaces `event` and is set only on transitions where the affected user needs UI feedback.
-- `page2` is no longer "array OR object". It always has a `state` field, and the watcher list (`profiles`) and singular invitee/partner snapshot (`profile`) live as separate populations beside it.
-- Findability rule changes (see below).
-
-### State vocabulary
-
-- `page1.state ∈ {free, watching, waiting, chat, locked}`
-- `page2.state ∈ {free, pending, chat, locked}`
-- `message`: optional string, per page. Set only on writes marked `*` in the transition table. Value = the actor's event code (e.g., `cancel`, `decline`, `expire`). Auto-find triggers (`start`/`location`/`focus`) are never propagated as `message`.
-- `profile` (singular) and `profiles` (array of watchers) populations are managed independently of `state` and are not in the transition table.
-
-### Initial state (brand-new user)
-
-`page1.state = locked`, `page2.state = locked`, both with no `message`. The user exits via the green-button paths described under "UI button mapping".
-
-### Findability (used by `find` to pick a candidate P for actor A)
-
-P is findable iff:
-- `P.page1.state ≠ chat`
-- `P.page2.state ∉ {locked, pending}`
-
-### Auto-find behavior
-
-`start`, `location`, `focus` always run on app open / location change / focus to refresh `relations` snapshots (analog of `app_refresh_snapshots`). They additionally trigger auto-find **iff** `A.page1.state === 'free'`. Any other state (`locked`, `watching`, `waiting`, `chat`) → snapshot refresh only, no auto-find.
-
-### UI button mapping (per page, when `state === 'locked'`)
-
-- **`message` present** → page renders the "what happened" card (the screen today's `event` value would render) with a **gray "Continue" button**. Tap fires `clear1` / `clear2` to the server, which clears `message` only — `state` stays `locked`.
-- **`message` absent** → page renders its default UI with a **green action button**:
-  - page1 green button → `find` (transitions `page1.state` from `locked` to `watching` or `free` and runs candidate selection).
-  - page2 green button → `free2` (transitions `page2.state` from `locked` to `free`).
-
-So a fully-locked-with-message page exits in two taps: gray (clear message) → green (find / free2). page1 has no separate `free1`; `find` covers it.
-
-### How to read the state transition table
-
-- **page**: which UI page the actor (A) initiated the action from. Informational, not a precondition by itself.
-- **A.event**: the event code A fired. `a/b` means either action shares the row but writes its own event code as `message` when applicable.
-- **page1.state / page2.state**: how the named pages of the involved users are written by the transaction.
-  - **Letter in parens** = which user the write applies to. `A` = actor; `B` = the direct counterparty (e.g., the inviter, the chat partner, the user being removed); `C` = any third party affected (e.g., A's or B's other watchers).
-  - **`*` next to a letter** = on top of writing `state`, also write `message` for that user, with value = the event code from column 2.
-  - **`+`** = both apply (multiple writes in one transaction, possibly to different users).
-  - **`/`** = alternative outcomes (success vs. failure vs. mutual case).
-  - **Empty cell** = the page's `state` is not written by this transaction. `profile` / `profiles` populations are managed separately and don't appear in this table (the only exception is `page2.state = locked`, which by convention also clears the `profiles` array — see below).
-- **`locked` semantics**: end-of-interaction marker for that page. May be a successful terminal write (e.g., `cancel` writes A.page1=locked with no message) or a failure landing (e.g., `invite` failure writes A.page1=locked with `message=invite`).
-- **`page2.state = locked`** also implies that both `profile` (singular) and `profiles` (watcher array) on that page are cleared as part of the same write (locked = "no incoming interaction; populations deleted"). They can re-populate after `free2` returns the page to `free`.
-- **`page2.state = free`** (written by `leave/block` and `free2`) clears `profile` and `profiles` as part of the same write — the page returns to a fully empty state.
-
-### State transition table
-
-| page | A.event | page1.state | page2.state |
-|------|---------|-------------|-------------|
-| | start/location/focus | free/watching (A) | |
-| 1 | find/ignore | free/watching (A) | |
-| 1 | cancel | locked (A) | locked (B*) |
-| 1 | invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B) |
-| 1 | extend | locked (A*) | |
-| 2 | remove | locked (B*) | |
-| 2 | add | watching (C) | |
-| 2 | approve | chat (A+B) + locked (C*) | locked (A+B) |
-| 2 | decline | locked (B*) | locked (A) |
-| 1 | leave/block | locked (A) + locked (B*) | free (A) + locked (B) |
-| | logout/delete | locked (A+B*) | locked (A+B*) |
-| | cron | locked (A*/B*) | locked (A*/B*) |
-| 1 | clear1 | | |
-| 2 | clear2 | | |
-| 2 | free2 | | free (A) |
-
-`clear1` and `clear2` write only `message = null` on their respective page (state untouched). `free2` writes only `page2.state = free` (no message).
-
-### Event list (20 events)
-
-`start`, `location`, `focus`, `find`, `ignore`, `cancel`, `invite`, `extend`, `remove`, `add`, `approve`, `decline`, `leave`, `block`, `logout`, `delete`, `cron`, `clear1`, `clear2`, `free2`.
-
-### Worked examples
-
-- **`logout/delete | locked (A+B*) | locked (A+B*)`**: A's page1 → locked (no message — A initiated). Every B referencing A (in `B.page1.profile`, `B.page2.profile`, or `B.page2.profiles[]`) gets their corresponding page → locked + `message = logout` (or `delete`).
-- **`invite | (waiting/chat/locked (A*) / chat (B)) + locked (C*) | pending (B)`**: A in watching invites B. Three branches for A.page1: `waiting` (success), `chat` (mutual case where B was already inviting A), or `locked` + `message=invite` (failure). On the mutual branch, B.page1 also goes to `chat`. B.page2 → `pending` with A's profile (no message, B is the recipient and the UI shows pending). A.page2 is **not touched** — page1 buttons must not modify the actor's own page2, so A's viewer array stays intact (and harmless: in `chat` state A is unfindable, in `waiting` state new viewers can still arrive but A is no longer invitable since B owns the slot). Every C with B as their watching target → C.page1 = `locked` + `message=invite` ("kicked because target was invited").
-- **`approve | chat (A+B) + locked (C*) | locked (A+B)`**: A approves B's pending invite. Both A.page1 and B.page1 → `chat`. Both A.page2 and B.page2 → `locked` with no message and `profile`/`profiles` cleared — once the pair is in chat, page2 has nothing to communicate; the chat itself is the result. Every C watching A or B → C.page1 = `locked` + `message=approve`.
-
-### Implementation scope (when greenlit)
-
-In order:
-1. **Schema migration** on `users.relations`: add `message` to page1/page2; remove `event`; convert page2 to unified `{state, profile?, profiles?, message?, invited_at?, expires_at?, extended?}`.
-2. **Backfill** existing rows.
-3. **RPCs**: rewrite to match the table. Keep names where the action is unchanged (`app_find`, `app_invite`, ...). Add `app_free2` (no `app_free1` — `find` covers page1's exit). `app_clear1` / `app_clear2` change semantics from "transition out of fail/missed → null" to "clear message only, leave state=locked".
-4. **Client**: drop `deriveCompat` shim from `userStore.ts`; consume `state` and `message` directly. UI: gray-vs-green button per the rule above.
