@@ -29,19 +29,19 @@ Companion to:
 
 ## Open
 
-### iOS available on TestFlight (external testers can install)
+### Verify Sign in with Apple works end-to-end in production
 
-- **Status:** In progress
-- **Added:** 2026-05-08
-- **Why:** Friends and family on iOS need to actually be able to install Once and try it.
-- **Notes:** Builds 1.0.0 (2) and 1.0.0 (3) crashed on launch — root cause was missing `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` in EAS production environment, not TurboModules as initially suspected. Env vars pushed via `eas env:push production` on 2026-05-09. Build 1.0.0 (5) submitted to TestFlight via `eas submit` on 2026-05-09 (required adding `submit.production.ios.ascAppId = "6765470965"` to `mobile/eas.json`). Currently being processed by Apple, then Beta Review (24-48h). External group is "Beta Testers" with `ofir.aviram@gmail.com` and `asafd7777@icloud.com`.
+- **Status:** Open
+- **Added:** 2026-05-10
+- **Why:** Apple Beta Review (and later App Review) requires either (a) a demo account or (b) Sign in with Apple working reliably so the reviewer can use their own Apple ID. Sign in with Apple has never been tested on a production/TestFlight build — only Sign in with Google has been verified end-to-end. If SIWA is broken on production, Beta Review will reject the build and we have no Google demo account to fall back to (phone-number cap on creating new Gmail accounts).
+- **Notes:** Install Build 1.0.0 (5) via internal TestFlight (Team Expo group, no review needed) on a real iPhone. Sign in with Apple on the welcome screen → finish onboarding → verify home screen renders + a `users` row exists in Supabase with the Apple-issued identity. If broken, fix before next external review submission. Once verified, Test Information can omit demo credentials and Review Notes can simply say "use your own Apple ID for Sign in with Apple."
 
 ### Google Play store listing complete (no more "unreviewed" suffix)
 
-- **Status:** Open
+- **Status:** In progress
 - **Added:** 2026-05-08
 - **Why:** Internal testers see "com.aviramo.once (unreviewed)" instead of "Once" because the Main Store Listing is empty. Required for any track wider than Internal Testing, looks unprofessional even for friends/family.
-- **Notes:** Play Console → Grow users → Main store listing. Need: app name "Once", short description (≤80 chars), full description (≤4000 chars), app icon, feature graphic 1024×500, ≥2 phone screenshots.
+- **Notes:** Asset pack prepared in `store-listing/` on 2026-05-09: Hebrew + English copy, `feature-graphic-he.png` (1024×500), 5 phone screenshot mockups (1080×1920) generated from i18n strings via `store-listing/make-screenshots.ps1`. Icon already at `mobile/assets/once-512.png`. Step-by-step Play Console upload flow in `store-listing/README.md`. Remaining: user uploads to Play Console → Grow users → Main store listing (browser-only).
 
 ### Google Play App Content declarations complete (Data Safety, content rating, etc.)
 
@@ -81,6 +81,20 @@ Companion to:
 - **Added:** 2026-05-07
 - **Why:** First step toward iOS testers being able to install.
 - **Notes:** Built and submitted via `eas build --platform ios --profile production` + `eas submit`. ASC API key already on EAS (`[Expo] EAS Submit r37sx8E6Jw`). The build itself was later rejected by Beta Review (launch crash on iOS 26.4.2) — see the open "iOS available on TestFlight" task for the rebuild.
+
+### Android available on Play Closed Testing (no "unsafe" banner)
+
+- **Status:** Done (2026-05-09)
+- **Added:** 2026-05-09
+- **Why:** Internal Testing displayed a permanent "את/ה בודק/ת פנימי/ת. ייתכן שהאפליקציה הזו לא מאובטחת או לא יציבה" banner — non-removable on that track. Closed Testing shows no such banner while keeping access restricted to a defined email list, which is what we want for friends-and-family distribution.
+- **Notes:** Release 1.0.0 (7) promoted from Internal Testing → Closed Testing on 2026-05-09. Google review came back same-day. Closed Testing track is now live and the install is clean (no warning banner).
+
+### iOS available on TestFlight (build 1.0.0 (5))
+
+- **Status:** Done (2026-05-09)
+- **Added:** 2026-05-08
+- **Why:** Friends and family on iOS need to actually be able to install Once and try it.
+- **Notes:** Builds 1.0.0 (2) and (3) crashed on launch (missing EAS env vars — same root cause as Android). Build 1.0.0 (5) submitted via `eas submit` on 2026-05-09 (required adding `submit.production.ios.ascAppId = "6765470965"` to `mobile/eas.json`). Apple Beta Review approved same-day. External group "Beta Testers" with `ofir.aviram@gmail.com` and `asafd7777@icloud.com` got TestFlight invite emails. Internal "Team (Expo)" can install without review.
 
 ### Android available on Play Internal Testing (build 1.0.0 (7))
 
