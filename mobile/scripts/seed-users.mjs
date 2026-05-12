@@ -138,7 +138,6 @@ async function insertProfile(user, profile) {
     message: profile.bio,
     images: { normal: [profile.storedName], blur: [profile.storedName] },
     location: `SRID=4326;POINT(${profile.lng} ${profile.lat})`,
-    units: 'metric',
     watchers: {},
     subscription: {
       endpoint: `https://fcm.googleapis.com/fcm/send/seed-${user.id}`,

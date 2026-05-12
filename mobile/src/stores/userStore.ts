@@ -22,10 +22,10 @@ export interface Profile {
 }
 
 // Server-side v3 page shapes. page2 is always an object (never an array).
-export type ServerPage1State = 'free' | 'watching' | 'waiting' | 'chat' | 'locked'
-export type ServerPage2State = 'free' | 'pending' | 'chat' | 'locked'
+type ServerPage1State = 'free' | 'watching' | 'waiting' | 'chat' | 'locked'
+type ServerPage2State = 'free' | 'pending' | 'chat' | 'locked'
 
-export interface Page1 {
+interface Page1 {
   state: ServerPage1State
   profile?: Profile
   message?: string
@@ -36,7 +36,7 @@ export interface Page1 {
   event?: string
 }
 
-export interface Page2 {
+interface Page2 {
   state: ServerPage2State
   profile?: Profile
   profiles?: Profile[]
@@ -46,7 +46,7 @@ export interface Page2 {
   extended?: boolean
 }
 
-export interface Pages {
+interface Pages {
   page1: Page1
   page2: Page2
 }
@@ -67,7 +67,7 @@ export type Page2Invite = Profile & {
  * synthetic `match`, `watchers`, and a legacy-shaped `page2` (Profile[] |
  * Page2Invite) for back-compat with UI code that predates v3.
  */
-export interface PagesCompat {
+interface PagesCompat {
   page1?: Page1
   page2: Profile[] | Page2Invite
   match?: Profile | null
@@ -82,7 +82,7 @@ export interface PagesCompat {
   last_add_at?: string
 }
 
-export interface UserProfile {
+interface UserProfile {
   user_id: string
   name: string | null
   birth_date: string | null
@@ -95,7 +95,6 @@ export interface UserProfile {
   images: Image[]
   bio: string | null
   family: FamilyData | null
-  units: string | null
   /** First day of the displayed week (0 = Sunday, 1 = Monday). Used by the
    * family/kids schedule UI to know which day to show in the leftmost column. */
   weekStart: number | null
@@ -121,7 +120,7 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'images', 'bio', 'family',
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
-  'units', 'weekStart',
+  'weekStart',
   'appearance',
 ]
 
@@ -134,16 +133,6 @@ const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b
 // Messages whose page1 lock represents a failed action the user themselves
 // initiated (so the UI shows it as 'fail' rather than 'missed').
 const FAIL_MESSAGES = new Set(['invite', 'approve', 'extend'])
-
-// Maps v3 server `message` codes to the legacy event keys the UI's i18n keys
-// use (`home.ended.<state>.<event>`). Pairs that match identically are omitted.
-const MESSAGE_TO_LEGACY_EVENT: Record<string, string> = {
-  decline: 'declined',
-  delete: 'deleted',
-  remove: 'removed',
-  block: 'leave',
-  approve: 'matched',
-}
 
 /**
  * Translates the server's v3 relations (page1.state + message, page2 with
@@ -166,12 +155,6 @@ function deriveCompat(relations: Pages | null | undefined) {
     if (!page1.message) state = null
     else state = FAIL_MESSAGES.has(page1.message) ? 'fail' : 'missed'
   } else if (page1?.state) state = page1.state
-
-  // Translate the server `message` into the legacy event key the i18n table
-  // is keyed by, so `home.ended.<state>.<legacyEvent>` lookups keep resolving.
-  const legacyEvent = page1?.message
-    ? (MESSAGE_TO_LEGACY_EVENT[page1.message] ?? page1.message)
-    : undefined
 
   const watchers: Profile[] = page2?.state === 'free' && Array.isArray(page2.profiles)
     ? (page2.profiles as Profile[])
@@ -209,7 +192,7 @@ function deriveCompat(relations: Pages | null | undefined) {
   }
 
   return {
-    state, watchers, match, legacyPage2, legacyEvent,
+    state, watchers, match, legacyPage2,
     page2State: (page2?.state ?? 'free') as ServerPage2State,
     page2Message: page2?.message,
   }
@@ -254,12 +237,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
     // ahead of DB.last_seen and would otherwise reject the fresh row.
     if (source !== 'fetch' && ts && ts < lastAppliedLastSeen) return
     if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
-    // Promote flat profile fields + units/weekStart from data JSONB so they
+    // Promote flat profile fields + weekStart from data JSONB so they
     // sit at the top level of UserProfile (and CLIENT_AUTHORED protection
     // applies). name lives top-level on the server already.
     if (d.data && typeof d.data === 'object') {
       const dd = d.data as Record<string, unknown>
-      if ('units' in dd) (d as Record<string, unknown>).units = dd.units
       if ('weekStart' in dd) (d as Record<string, unknown>).weekStart = dd.weekStart
       ;(d as Record<string, unknown>).images = Array.isArray(dd.images) ? dd.images as Image[] : []
       ;(d as Record<string, unknown>).bio = typeof dd.bio === 'string' ? dd.bio : null
@@ -299,13 +281,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
         ;(relationsWithCompat as Record<string, unknown>).page2Message = compat.page2Message
       } else {
         delete (relationsWithCompat as Record<string, unknown>).page2Message
-      }
-      // Mirror the v3 message into a legacy `event` field on page1 so the
-      // home.tsx i18n lookup `home.ended.<state>.<page1.event>` keeps working.
-      const p1 = relationsWithCompat.page1 as Record<string, unknown> | undefined
-      if (p1) {
-        if (compat.legacyEvent !== undefined) p1.event = compat.legacyEvent
-        else delete p1.event
       }
       ;(d as Record<string, unknown>).relations = relationsWithCompat
     }

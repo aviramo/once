@@ -16,8 +16,8 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SINGLE, RADIUS } from '../fonts'
-import { TEXT_PRIMARY, WHITE, PRIMARY } from '../colors'
+import { RADIUS } from '../tokens'
+import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -103,7 +103,7 @@ async function computeBlurhash(uri: string): Promise<string> {
 // (typically from DocumentPicker) and gets back the committed filename + hash.
 // Also primes localPhotoUriCache so renderers can show the image from the
 // device cache while subsequent storage fetches warm the ExpoImage cache.
-export async function processAndUploadPhoto(uri: string, userId: string, token: string): Promise<ImageData> {
+async function processAndUploadPhoto(uri: string, userId: string, token: string): Promise<ImageData> {
   const normalFilename = `${uuidv4()}.webp`
   const [normalUri, hash] = await Promise.all([
     compressPhoto(uri),
@@ -196,7 +196,7 @@ function PhotoCell({
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
       {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={3} strokeLinecap="round">
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={BLACK} strokeWidth={3} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
@@ -329,8 +329,8 @@ function PhotoGrid({
           ) : (
             <View style={photoStyles.placeholderBg}>
               <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="8" r="4" fill="rgba(0,0,0,0.10)" />
-                <Path d="M4 21c0-4 3.5-7 8-7s8 3 8 7" fill="rgba(0,0,0,0.10)" />
+                <Circle cx="12" cy="8" r="4" fill={BLACK_SOFT} />
+                <Path d="M4 21c0-4 3.5-7 8-7s8 3 8 7" fill={BLACK_SOFT} />
               </Svg>
             </View>
           )}
@@ -631,7 +631,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
                 style={photoStyles.add}
                 onPress={() => { tap(); pickPhoto() }}
               >
-                <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} strokeLinecap="round">
+                <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={1.5} strokeLinecap="round">
                   <Path d="M12 5v14M5 12h14" />
                 </Svg>
               </Pressable>
@@ -679,19 +679,19 @@ const photoStyles = StyleSheet.create({
   remove: {
     position: 'absolute', top: 6, end: 6,
     width: 24, height: 24, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: WHITE_STRONG,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
   add: {
     width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: BLACK_SOFT,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.12)', borderStyle: 'dashed',
+    borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: WHITE_MID,
     borderRadius: RADIUS,
   },
   spinnerBadge: {
@@ -699,7 +699,7 @@ const photoStyles = StyleSheet.create({
     top: '50%', start: '50%',
     width: 36, height: 36, marginStart: -18, marginTop: -18,
     borderRadius: RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: BLACK_STRONG,
     alignItems: 'center', justifyContent: 'center',
   },
 })

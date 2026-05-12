@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Animated, StyleSheet, View } from 'react-native'
+import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
-import { FONT_SCALE, SINGLE, DOUBLE, BUTTON, RADIUS } from '../fonts'
-import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50, GRAY_100, GRAY_400, GRAY_800, DESTRUCTIVE, DESTRUCTIVE_PRESS, PREMIUM, PREMIUM_PRESS } from '../colors'
+import { FONT_SCALE } from '../fonts'
+import { SINGLE, RADIUS, BUTTON_MIN_HEIGHT } from '../tokens'
+import { WHITE, BLACK, PRIMARY, PRIMARY_PRESS, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM, PREMIUM_PRESS } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the press feedback and disabled state stay
@@ -17,11 +18,11 @@ import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_PRESS, GRAY_50, GRAY_100, GRAY_40
 // Tap target is built on raw View responder callbacks rather than Pressable:
 // RN 0.81's Pressability has an aggressive cancel-on-movement threshold that
 // drops single taps as "pressIn + pressOut without onPress" on buttons inside
-// ScrollViews (settings reset, units toggle) — the bare responder flow below
+// ScrollViews (settings reset, week-start toggle) — the bare responder flow below
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'destructive' | 'softDestructive' | 'soft' | 'dark' | 'premium'
+type Variant = 'primary' | 'secondary' | 'destructive' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -38,6 +39,8 @@ export function Button({
   silentDisabled,
   iconStart,
   iconEnd,
+  multiline,
+  style,
 }: {
   label: string
   onPress: () => void
@@ -56,6 +59,11 @@ export function Button({
   silentDisabled?: boolean
   iconStart?: ReactNode
   iconEnd?: ReactNode
+  // Allow the label to wrap to two lines. Strings should embed `\n` at the
+  // split point. Disables auto-shrink so both lines render at full size.
+  multiline?: boolean
+  // Per-call container overrides (e.g. a larger borderRadius for hero buttons).
+  style?: StyleProp<ViewStyle>
 }) {
   const scale = useRef(new Animated.Value(1)).current
   const heartbeat = useRef(new Animated.Value(1)).current
@@ -124,6 +132,7 @@ export function Button({
           toneSkin?.btn,
           (pressed || loading) && (toneSkin?.pressed ?? skin.pressed),
           disabled && !loading && !silentDisabled && styles.disabled,
+          style,
         ]}
         onStartShouldSetResponder={() => !blocked}
         onResponderGrant={pressIn}
@@ -142,8 +151,8 @@ export function Button({
           <View style={styles.labelRow} pointerEvents="none">
             <Text
               style={[styles.text, base.text, skin.text]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
+              numberOfLines={multiline ? 2 : 1}
+              adjustsFontSizeToFit={!multiline}
               minimumFontScale={0.85}
               maxFontSizeMultiplier={FONT_SCALE.ui}
             >
@@ -154,8 +163,8 @@ export function Button({
         ) : (
           <Text
             style={[styles.text, base.text, skin.text]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
+            numberOfLines={multiline ? 2 : 1}
+            adjustsFontSizeToFit={!multiline}
             minimumFontScale={0.85}
             maxFontSizeMultiplier={FONT_SCALE.ui}
           >
@@ -165,12 +174,6 @@ export function Button({
       </View>
     </Animated.View>
   )
-}
-
-// Legacy alias — still imported by home.tsx and login.tsx. New code should
-// use `<Button variant="primary" size="lg" />`.
-export function PrimaryButton(props: Omit<Parameters<typeof Button>[0], 'variant' | 'size'>) {
-  return <Button {...props} variant="primary" size="lg" />
 }
 
 const styles = StyleSheet.create({
@@ -205,7 +208,7 @@ const styles = StyleSheet.create({
 
 const SIZE: Record<Size, { btn: object; text: object }> = {
   lg: {
-    btn: { borderRadius: RADIUS, paddingVertical: DOUBLE },
+    btn: { borderRadius: RADIUS, minHeight: BUTTON_MIN_HEIGHT, paddingVertical: SINGLE },
     text: { fontSize: 16, fontWeight: '700' },
   },
   md: {
@@ -221,40 +224,45 @@ const TONE: Record<Tone, { btn: object; pressed: object }> = {
   },
 }
 
-const VARIANT: Record<Variant, { btn: object; pressed: object; text: object }> = {
+const VARIANT: Record<Variant, { btn: object; pressed?: object; text: object }> = {
   primary: {
     btn: { backgroundColor: PRIMARY },
     pressed: { backgroundColor: PRIMARY_PRESS },
     text: { color: WHITE },
   },
   secondary: {
-    btn: { backgroundColor: GRAY_50 },
-    pressed: { backgroundColor: GRAY_100 },
-    text: { color: GRAY_800, fontWeight: '600' },
+    btn: { backgroundColor: BLACK_SOFT },
+    pressed: { backgroundColor: BLACK_SOFT },
+    text: { color: BLACK_STRONG, fontWeight: '600' },
   },
   destructive: {
-    btn: { backgroundColor: DESTRUCTIVE },
-    pressed: { backgroundColor: DESTRUCTIVE_PRESS },
+    btn: { backgroundColor: BLACK },
     text: { color: WHITE },
   },
   softDestructive: {
-    btn: { backgroundColor: GRAY_50 },
-    pressed: { backgroundColor: GRAY_100 },
+    btn: { backgroundColor: BLACK_SOFT },
+    pressed: { backgroundColor: BLACK_SOFT },
     text: { color: DESTRUCTIVE },
   },
   soft: {
-    btn: { backgroundColor: GRAY_400 },
-    pressed: { backgroundColor: GRAY_800 },
+    btn: { backgroundColor: BLACK_STRONG },
+    pressed: { backgroundColor: BLACK_STRONG },
     text: { color: WHITE },
   },
   dark: {
-    btn: { backgroundColor: '#000' },
-    pressed: { backgroundColor: '#222' },
+    btn: { backgroundColor: BLACK },
     text: { color: WHITE },
   },
   premium: {
     btn: { backgroundColor: PREMIUM },
     pressed: { backgroundColor: PREMIUM_PRESS },
     text: { color: WHITE },
+  },
+  // White button sized for placement on top of a PRIMARY-colored surface.
+  // The white fill keeps the CTA legible against the coral background.
+  onPrimary: {
+    btn: { backgroundColor: WHITE },
+    pressed: { backgroundColor: BLACK_SOFT },
+    text: { color: PRIMARY },
   },
 }

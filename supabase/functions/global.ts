@@ -24,7 +24,6 @@ export type Data = {
   images: Image[];
   bio?: string | null;
   family?: FamilyData | null;
-  units: string;
   weekStart?: number;
   os: string;
   lang: string;

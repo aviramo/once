@@ -1,6 +1,6 @@
 import { View, StyleSheet } from 'react-native'
 
-export type RevealPhase = 'idle' | 'reveal' | 'done'
+type RevealPhase = 'idle' | 'reveal' | 'done'
 
 type DiscoveryRevealProps = {
   enabled?: boolean

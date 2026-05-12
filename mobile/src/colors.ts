@@ -1,28 +1,35 @@
-export const TEXT_PRIMARY = '#111111'
+export const BLACK = '#111111'
 export const WHITE        = '#FFFFFF'
-export const BLACK        = '#000000'
+
+// ── Black-alpha overlay scale ──────────────────────────────────────────────
+// Three tiers. Don't add intermediate values — "almost SOFT" reads identically
+// to SOFT and creates drift across components. Each tier owns a clear role.
+export const BLACK_SOFT   = 'rgba(0,0,0,0.08)'   // scrims, dividers, soft borders, slider track, inactive chip bg, illustration fill
+export const BLACK_MID    = 'rgba(0,0,0,0.30)'   // inactive bar/pill, spinner track, input placeholder, checkbox border, Terms link
+export const BLACK_STRONG = 'rgba(0,0,0,0.60)'   // muted icon, secondary label, body text on chips, sign-out icon, menu emphasis
+
+// ── White-alpha overlay scale ──────────────────────────────────────────────
+// Used inside dark surfaces (chat bubbles for me, dark dialogs) where text
+// or controls sit on a tinted color. Three tiers matching BLACK_*.
+export const WHITE_SOFT   = 'rgba(255,255,255,0.20)' // subtle fills (audio play btn on my bubble, schedule cells, attach-bar pressed)
+export const WHITE_MID    = 'rgba(255,255,255,0.40)' // borders, spinner track on PRIMARY, light scrims
+export const WHITE_STRONG = 'rgba(255,255,255,0.85)' // strong text/active state on my bubble, replace-floating btn bg
 
 // ── Primary brand color ──────────────────────────────────────────────────
 export const PRIMARY      = '#FF7A5C'
 export const PRIMARY_PRESS = '#E8644A'
 export const PRIMARY_BG   = 'rgba(255,122,92,0.10)'
-
-// ── Brand gray ───────────────────────────────────────────────────────────
-// Scale derived from the icon's gray (#767676):
-//   50   soft surfaces (card, screen, field background)
-//   100  pressed / divider on light surfaces
-//   400  secondary text, icons, soft button base
-//   800  pressed state for soft button
-//   BG   translucent overlay (chat bubble for partner)
-export const GRAY_50      = '#F4F4F4'
-export const GRAY_100     = '#E8E8E8'
-export const GRAY_400     = '#767676'
-export const GRAY_800     = '#5F5F5F'
-export const GRAY_BG      = 'rgba(118,118,118,0.10)'
-
 // ── Destructive ──────────────────────────────────────────────────────────
-export const DESTRUCTIVE       = '#D96B6B'
-export const DESTRUCTIVE_PRESS = '#C85A5A'
+// Three tiers matching the BLACK_/WHITE_ philosophy.
+export const DESTRUCTIVE        = '#D96B6B'                 // opaque — text, icon, button fill
+export const DESTRUCTIVE_BG     = 'rgba(217,107,107,0.10)'  // 10% bg tint — pill, banner, accent surface
+export const DESTRUCTIVE_MUTED  = 'rgba(180,60,60,0.60)'    // muted fg — icon/text/border at lower visual weight
+
+// ── Misc surface colors ──────────────────────────────────────────────────
+// Soft border used on white pills/inputs.
+export const BORDER_SOFT = '#E2DADA'
+// Online dot / success indicator.
+export const ONLINE_GREEN = '#2BB673'
 
 // ── Premium ──────────────────────────────────────────────────────────────
 // Purple band reserved for paid / premium affordances. Distinct hue from
@@ -30,4 +37,3 @@ export const DESTRUCTIVE_PRESS = '#C85A5A'
 // glance, not just "another orange button".
 export const PREMIUM       = '#8B5CF6'
 export const PREMIUM_PRESS = '#7244D9'
-export const PREMIUM_BG    = 'rgba(139,92,246,0.10)'

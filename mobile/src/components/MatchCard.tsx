@@ -1,21 +1,63 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View, ActivityIndicator, Pressable } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut } from 'react-native-reanimated'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation } from 'react-native-reanimated'
 import { Image } from 'expo-image'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { PullScrollView } from './HomeCard'
+
+const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text } from './AppText'
-import Svg, { Path, Circle } from 'react-native-svg'
 import { t, tg } from '../i18n'
 import type { Profile } from '../stores/userStore'
 import { type FamilyData, familyScheduleOverlap } from '../lib/family'
-import { FamilyCard, familyHeaderTitle } from './FamilyCard'
+import { familyHeaderTitle } from './FamilyCard'
 import { Chip, PinIcon, ClockIcon, KidsIcon } from './Chip'
-import { SINGLE, DOUBLE, RADIUS } from '../fonts'
-import { TEXT_PRIMARY, WHITE, PRIMARY, PRIMARY_BG, DESTRUCTIVE } from '../colors'
+import { HeartIcon } from './icons'
+import { SINGLE, DOUBLE, BUTTON, RADIUS } from '../tokens'
+import { BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
+import { formatDistance } from '../lib/units'
 
 // Display-only card for non-resting states. Action buttons live in the
 // home screen's pinned bottom bar so they share spacing + positioning with
 // the HIDDEN/VISIBLE toggle.
+
+const ACTION_BTN = 76
+const SCROLL_TO_END_MS = 1400
+
+// One round icon-button overlaid on the hero photo. CardActionStack stacks
+// these vertically growing upward from the heart's anchor. Default usage is
+// a single heart button (invite affordance); the self-profile preview passes
+// multiple actions (add-photo, add-family) instead.
+export type CardAction = {
+  key: string
+  icon: React.ReactNode
+  onPress: () => void
+  /** Optional override for the circular button's background color. Defaults
+   * to BLACK_STRONG (translucent black). Used by chat-state dots to differentiate
+   * from the default heart-on-photo affordance. */
+  bg?: string
+}
+
+function CardActionStack({ actions, bottom }: { actions: CardAction[]; bottom: number }) {
+  return (
+    <View style={[styles.actionStack, { bottom }]}>
+      {actions.map(a => (
+        <Pressable
+          key={a.key}
+          style={({ pressed }) => [
+            styles.actionButton,
+            a.bg ? { backgroundColor: a.bg } : null,
+            pressed && styles.actionButtonPressed,
+          ]}
+          hitSlop={12}
+          onPress={a.onPress}
+        >
+          {a.icon}
+        </Pressable>
+      ))}
+    </View>
+  )
+}
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
@@ -33,54 +75,20 @@ function resolveImages(m: Profile): string[] {
 }
 
 
-function formatDistance(m: number | null | undefined, units?: string | null): string {
-  if (m == null || isNaN(m)) return ''
-  if (m < 250) return t('home.distanceHere')
-  if (units === 'imperial') {
-    const miles = m / 1609.344
-    if (miles < 0.1) return t('home.distanceHere')
-    if (miles < 10) return `${miles.toFixed(1)} ${t('settings.miles')}`
-    return `${Math.round(miles).toLocaleString()} ${t('settings.miles')}`
-  }
-  if (m < 1000) return `${Math.round(m)} ${t('settings.meter')}`
-  const km = m / 1000
-  if (km > 10) return `${Math.round(km).toLocaleString()} ${t('settings.km')}`
-  return `${km.toFixed(1)} ${t('settings.km')}`
-}
-
-// units not available on Profile — callers may pass from user profile
-
-function formatLocatedAt(iso: string | null | undefined): string {
+function formatLocatedAt(iso: string | null | undefined, isMale: boolean | null | undefined): string {
   if (!iso) return ''
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return t('match.justNow')
-  if (diff < 3600) return t('match.minsAgo').replace('{n}', String(Math.floor(diff / 60)))
-  if (diff < 86400) return t('match.hrsAgo').replace('{n}', String(Math.floor(diff / 3600)))
-  return t('match.daysAgo').replace('{n}', String(Math.floor(diff / 86400)))
-}
-
-const isDistanceNear = (m: number | null | undefined) =>
-  m != null && !isNaN(m) && m < 1000
-
-const isOnlineNow = (iso: string | null | undefined) =>
-  !!iso && (Date.now() - new Date(iso).getTime()) / 1000 < 60
-
-// ── Icons ──────────────────────────────────────────────────────────────────
-
-function KidsCheckIcon({ color }: { color: string }) {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path d="M20 6L9 17l-5-5" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  )
-}
-
-function KidsXIcon({ color }: { color: string }) {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path d="M18 6L6 18M6 6l12 12" stroke={color} strokeWidth={2.4} strokeLinecap="round" />
-    </Svg>
-  )
+  if (diff < 60) return tg('match.justNow', isMale)
+  if (diff < 3600) {
+    const n = Math.floor(diff / 60)
+    return tg(n === 1 ? 'match.minAgo' : 'match.minsAgo', isMale).replace('{n}', String(n))
+  }
+  if (diff < 86400) {
+    const n = Math.floor(diff / 3600)
+    return tg(n === 1 ? 'match.hrAgo' : 'match.hrsAgo', isMale).replace('{n}', String(n))
+  }
+  const n = Math.floor(diff / 86400)
+  return tg(n === 1 ? 'match.dayAgo' : 'match.daysAgo', isMale).replace('{n}', String(n))
 }
 
 // ── LoadingImage ───────────────────────────────────────────────────────────
@@ -158,7 +166,7 @@ function LoadingImage({
         onError={handleError}
       />
       {loading && isLightHash && (
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: BLACK_MID }]} />
       )}
       {loading && (
         <View style={spinnerOverlay}>
@@ -173,26 +181,34 @@ function LoadingImage({
 
 export function MatchCard({
   match,
-  userIsMale,
-  units,
   bottomInset = 0,
   hideTime = false,
   onReady,
   topBlock,
+  footerBlock,
+  footerBg,
   onPhotoTap,
   onFamilyTap,
   onBioTap,
+  actions,
   isForKids,
   viewerFamily,
   self = false,
 }: {
   match: Profile
-  userIsMale: boolean | null
-  units?: string | null
   bottomInset?: number
   hideTime?: boolean
   onReady?: () => void
   topBlock?: React.ReactNode
+  /** Rendered as the last child of the scroll content, after all sections.
+   * Use for an action button that should scroll with the card (not pinned
+   * to the bottom of the screen). */
+  footerBlock?: React.ReactNode
+  /** Background color the caller wants painted behind the footerBlock area
+   * (and any space below it — bottomInset, scroll bounce). Pass the same
+   * color as the footerBlock's own background so the page ends in one
+   * continuous tone instead of revealing the parent's white. */
+  footerBg?: string
   /** When provided, each photo becomes tappable and the callback receives the
    * photo's index in `match.images` (own-profile preview / edit mode). */
   onPhotoTap?: (imageIndex: number) => void
@@ -200,6 +216,11 @@ export function MatchCard({
   onFamilyTap?: () => void
   /** When provided, the bio bubble becomes tappable (own-profile preview). */
   onBioTap?: () => void
+  /** Overlay action buttons stacked at the bottom-right of the hero photo,
+   * starting at the heart's anchor and growing upward. When omitted, a
+   * single heart button is rendered (tapping scrolls to the end of the
+   * card). The self-profile preview passes [add-photo, add-family]. */
+  actions?: CardAction[]
   /** "Wants own (more) kids" preference (`data.family.isForKids`) — only
    * set for the user's own profile preview; remote match snapshots don't
    * carry this. Used by the family card to extend the "No kids" header
@@ -232,7 +253,6 @@ export function MatchCard({
   type CardSection =
     | { type: 'photo'; url: string; hash?: string; imageIndex: number; key: string }
     | { type: 'bio'; value: string; key: string }
-    | { type: 'family'; data: FamilyData; key: string }
   const sections = useMemo((): CardSection[] => {
     const images = match.images ?? []
     const photos: CardSection[] = images
@@ -247,10 +267,9 @@ export function MatchCard({
     const built: CardSection[] = []
     if (photos.length > 0) built.push(photos[0])
     if (match.bio) built.push({ type: 'bio', value: match.bio, key: 'bio' })
-    if (match.family) built.push({ type: 'family', data: match.family, key: 'family' })
     for (let i = 1; i < photos.length; i++) built.push(photos[i])
     return built
-  }, [match.user_id, match.images, imageUrls, match.bio, match.family])
+  }, [match.user_id, match.images, imageUrls, match.bio])
 
   const photoCount = sections.filter(s => s.type === 'photo').length
   const loadedCount = useRef(0)
@@ -262,10 +281,15 @@ export function MatchCard({
   }, [photoCount, onReady])
   const [cardH, setCardH] = useState(0)
   const photoHeight = Math.max(280, cardH - bottomInset)
+  const { bottom: safeBottomInset } = useSafeAreaInsets()
+  // The first photo runs to the bottom of the card (callers pass bottomInset=0
+  // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
+  // must clear the home indicator on its own.
+  const overlayBottomOffset = Math.max(safeBottomInset, BUTTON)
   const ready = cardH > 0
   const timeIso = match.last_seen
-  const timeStr = hideTime ? '' : formatLocatedAt(timeIso)
-  const distStr = formatDistance(match.distance, units)
+  const timeStr = hideTime ? '' : formatLocatedAt(timeIso, match.is_male)
+  const distStr = formatDistance(match.distance, match.is_male)
   const displayTitle = match.title
 
   // Build the kids chip text from match.family. Same phrasing as the old
@@ -283,11 +307,18 @@ export function MatchCard({
       ? kids.map(k => (k.age != null ? String(k.age) : '-')).join(', ')
       : null
     const effIsForKids = isForKids !== undefined ? isForKids : (fam.isForKids ?? null)
-    return familyHeaderTitle(fam, count, ageStr, effIsForKids, self)
-  }, [match.family, isForKids, self])
+    const base = familyHeaderTitle(fam, count, ageStr, effIsForKids, self)
+    const overlap =
+      viewerFamily?.hasKids && fam.hasKids
+        ? familyScheduleOverlap(viewerFamily.schedule, fam.schedule)
+        : null
+    if (overlap == null) return base
+    const pct = Math.round(overlap * 100)
+    return base + t('family.overlapChipSuffix').replace('{pct}', String(pct))
+  }, [match.family, isForKids, self, viewerFamily])
 
-  const distGreen = isDistanceNear(match.distance)
   const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'
+  const endsWithBio = sections.length > 0 && sections[sections.length - 1].type === 'bio'
   const effectiveTopBlock = topBlock
   const hasTopBlock = !!effectiveTopBlock
   const [topBlockHeight, setTopBlockHeight] = useState(0)
@@ -297,8 +328,47 @@ export function MatchCard({
   const slideAnim = useSharedValue(hasTopBlock ? 1 : 0)
   const animatedRef = useRef(false)
   const wasAbsentRef = useRef(false)
-  const scrollRef = useRef<any>(null)
+  const scrollRef = useAnimatedRef<any>()
   const scrollYRef = useRef(0)
+  // Snap the scroll back to the top whenever a new profile is shown. The
+  // ScrollView is the same instance across profile swaps, so a previously
+  // scrolled position from card A would otherwise carry over into card B and
+  // (a) show the user a mid-page slice of the new content, and (b) leave the
+  // parent's pull-to-skip gate stuck at "not at top". The parent also resets
+  // its cached gate on user_id change; this keeps the two states aligned.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false })
+    scrollYRef.current = 0
+  }, [match.user_id])
+  const contentHRef = useRef(0)
+  const viewportHRef = useRef(0)
+  // UI-thread driver for slow programmatic scroll. The previous rAF-based
+  // approach drove `scrollTo({animated:false})` from JS every frame and
+  // stuttered near the end of the scroll, where laying in the bio + family
+  // chip + lower photos competed with the rAF tick on the JS thread.
+  // `scrollAnimActive` gates the worklet so this only writes during the
+  // animation; once it ends, the user scrolls freely.
+  const scrollAnimY = useSharedValue(0)
+  const scrollAnimActive = useSharedValue(false)
+  useDerivedValue(() => {
+    if (scrollAnimActive.value) scrollTo(scrollRef, 0, scrollAnimY.value, false)
+  })
+  const slowScrollToEnd = useCallback(() => {
+    const target = Math.max(0, contentHRef.current - viewportHRef.current)
+    const start = scrollYRef.current
+    if (Math.abs(target - start) < 0.5) return
+    scrollAnimY.value = start
+    scrollAnimActive.value = true
+    scrollAnimY.value = withTiming(
+      target,
+      { duration: SCROLL_TO_END_MS, easing: Easing.out(Easing.cubic) },
+      (finished) => { if (finished) scrollAnimActive.value = false }
+    )
+  }, [])
+  useEffect(() => () => {
+    cancelAnimation(scrollAnimY)
+    scrollAnimActive.value = false
+  }, [])
   useEffect(() => {
     if (!hasTopBlock) {
       wasAbsentRef.current = true
@@ -314,14 +384,28 @@ export function MatchCard({
       return
     }
     // watching → waiting transition: wait until the timer block has measured
-    // before we move anything. Then snap scroll to 0 *instantly* (an animated
-    // scrollTo races the slide-in below and looks like the card is reloading)
-    // and start the timer's slide-in. One coherent motion: scroll first, then
-    // the timer descends.
+    // before we move anything. If the user scrolled down (e.g. tapped the
+    // heart or the invite block sat at the bottom), scroll back to the top
+    // first, then start the timer's slide-in from above. Two coherent
+    // motions back-to-back: scroll up, then timer descends.
+    //
+    // The scroll uses the native ScrollView animation (UI thread). The
+    // earlier rAF-based easing competed with the JS thread for cycles
+    // during the post-press React commit and looked stuttery.
     if (animatedRef.current || topBlockHeight === 0) return
     animatedRef.current = true
-    if (scrollYRef.current > 0) scrollRef.current?.scrollTo({ y: 0, animated: false })
-    slideAnim.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) })
+    const startSlide = () => {
+      slideAnim.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) })
+    }
+    if (scrollYRef.current > 0) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true })
+      // Native animated scroll completes in ~300ms on both platforms.
+      // Kick the timer slide-in just after so the two motions read as
+      // sequential rather than overlapping.
+      setTimeout(startSlide, 320)
+    } else {
+      startSlide()
+    }
   }, [hasTopBlock, topBlockHeight])
 
   // Timer is absolute-positioned over the scroll content (no flow contribution),
@@ -338,17 +422,36 @@ export function MatchCard({
   }), [topBlockHeight])
 
 
+  // Trailing background.
+  //   - footerBlock case: paint *only* the area below the footer via a
+  //     flexGrow filler — DO NOT tint the wrap, because the bio bubble
+  //     (PRIMARY_BG = translucent coral) would composite over a coral wrap
+  //     and read as full coral instead of cream.
+  //   - bio-end case (no footerBlock): wrap = PRIMARY_BG. Both layers are
+  //     translucent so they don't visually conflict.
+  const wrapBg = !footerBlock && endsWithBio ? PRIMARY_BG : undefined
+  // contentContainer must flexGrow to viewport so the filler under
+  // footerBlock can claim the leftover vertical space when content < viewport.
+  // When footerBlock owns the bottom we skip the container's paddingBottom —
+  // the footer block already includes its own safe-area padding.
+  const contentPaddingBottom = footerBlock ? 0 : bottomInset + (endsWithPhoto ? 0 : DOUBLE)
+
   return (
-    <View style={[styles.wrap, !ready && styles.hidden]} onLayout={e => setCardH(e.nativeEvent.layout.height)}>
-      <PullScrollView
+    <View
+      style={[styles.wrap, wrapBg ? { backgroundColor: wrapBg } : null, !ready && styles.hidden]}
+      onLayout={e => setCardH(e.nativeEvent.layout.height)}
+    >
+      <AnimatedPullScrollView
         ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + (endsWithPhoto ? 0 : DOUBLE) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentPaddingBottom, flexGrow: 1 }]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
-        onScroll={e => { scrollYRef.current = e.nativeEvent.contentOffset.y }}
+        onScroll={(e: any) => { scrollYRef.current = e.nativeEvent.contentOffset.y }}
+        onContentSizeChange={(_: number, h: number) => { contentHRef.current = h }}
+        onLayout={(e: any) => { viewportHRef.current = e.nativeEvent.layout.height }}
       >
         {effectiveTopBlock && (
           <>
@@ -358,12 +461,15 @@ export function MatchCard({
               style={[styles.topBlockAbsolute, animatedTopBlockStyle]}
               onLayout={e => {
                 const h = e.nativeEvent.layout.height
-                if (h > 0 && topBlockHeight === 0) setTopBlockHeight(h)
+                // Track current height so swapping topBlock content (e.g.
+                // waiting InfoBlock → ended MessageBlock on the same card)
+                // resizes the hero spacer instead of leaving a stale gap.
+                if (h > 0 && h !== topBlockHeight) setTopBlockHeight(h)
               }}
             >
               {effectiveTopBlock}
             </Animated.View>
-            <Animated.View key="top-spacer" style={animatedSpacerStyle} />
+            <Animated.View key="top-spacer" pointerEvents="none" style={animatedSpacerStyle} />
           </>
         )}
         {/* Hero: always the first section (expected to be a photo) */}
@@ -392,12 +498,50 @@ export function MatchCard({
             </>
           )}
 
-          <View style={styles.infoOverlay}>
-            <View>
+          {sections[0]?.type === 'photo' && (() => {
+            // When `actions` is omitted, fall back to a single heart that
+            // scrolls the card to its end. When it's an empty array, render
+            // nothing — callers use that to suppress the affordance entirely
+            // (e.g. waiting/ended page1 states where no overlay button fits).
+            const resolved = actions ?? [{
+              key: 'like',
+              icon: <HeartIcon color={PRIMARY} stroke={WHITE} size={48} />,
+              onPress: slowScrollToEnd,
+            }]
+            return resolved.length > 0
+              ? <CardActionStack bottom={overlayBottomOffset} actions={resolved} />
+              : null
+          })()}
+
+          {/* pointerEvents="box-none" so taps on empty regions of this full-
+              width overlay fall through to the action stack underneath (the
+              dots / heart button lives at the same bottom strip). */}
+          <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
+            <View pointerEvents="box-none">
               <Text style={styles.name}>{displayTitle}</Text>
             </View>
 
-            <View style={styles.chipsStack}>
+            <View pointerEvents="box-none" style={styles.chipsStack}>
+              {timeStr ? (
+                <View style={styles.chipsLine}>
+                  <Chip
+                    renderIcon={c => <ClockIcon color={c} />}
+                    text={timeStr}
+                    tone="neutral"
+                    onPhoto
+                  />
+                </View>
+              ) : null}
+              {distStr ? (
+                <View style={styles.chipsLine}>
+                  <Chip
+                    renderIcon={c => <PinIcon color={c} />}
+                    text={distStr}
+                    tone="neutral"
+                    onPhoto
+                  />
+                </View>
+              ) : null}
               {familyChipText ? (
                 <View style={styles.chipsLine}>
                   {onFamilyTap ? (
@@ -419,26 +563,6 @@ export function MatchCard({
                   )}
                 </View>
               ) : null}
-              {(distStr || timeStr) ? (
-                <View style={styles.chipsLine}>
-                  {timeStr ? (
-                    <Chip
-                      renderIcon={c => <ClockIcon color={c} />}
-                      text={timeStr}
-                      tone="neutral"
-                      onPhoto
-                    />
-                  ) : null}
-                  {distStr ? (
-                    <Chip
-                      renderIcon={c => <PinIcon color={c} />}
-                      text={distStr}
-                      tone="neutral"
-                      onPhoto
-                    />
-                  ) : null}
-                </View>
-              ) : null}
             </View>
           </View>
         </Animated.View>
@@ -448,7 +572,6 @@ export function MatchCard({
           if (section.type === 'photo') return (
             <Animated.View
               key={section.key}
-              style={{ marginTop: SINGLE }}
               exiting={onPhotoTap ? FadeOut.duration(220) : undefined}
             >
               <LoadingImage
@@ -468,11 +591,15 @@ export function MatchCard({
             </Animated.View>
           )
           if (section.type === 'bio') {
+            // When the bio is the final section the wrap behind it is painted
+            // PRIMARY_BG; stacking another PRIMARY_BG layer on the bubble
+            // doubles the translucent tint and makes the bubble read darker
+            // than the area below. Drop the bubble's own bg in that case so
+            // the page ends in one continuous tone.
+            const transparentBubble = !footerBlock && endsWithBio
             const bubble = (
-              <View style={styles.aboutBubble}>
-                <Text style={[styles.aboutQuote, styles.aboutQuoteOpen]}>"</Text>
+              <View style={[styles.aboutBubble, transparentBubble && styles.aboutBubbleTransparent]}>
                 <Text style={styles.aboutText}>{section.value}</Text>
-                <Text style={[styles.aboutQuote, styles.aboutQuoteClose]}>"</Text>
               </View>
             )
             return (
@@ -481,22 +608,19 @@ export function MatchCard({
               </View>
             )
           }
-          if (section.type === 'family') {
-            // The kids title chip moved to the photo overlay. The only thing
-            // FamilyCard still renders is the schedule-overlap chip — and that
-            // only when the viewer passed their own family (remote render, not
-            // the own-profile preview) and both sides have hasKids + a usable
-            // schedule. No overlap → render nothing here.
-            const overlap =
-              viewerFamily?.hasKids && section.data.hasKids
-                ? familyScheduleOverlap(viewerFamily.schedule, section.data.schedule)
-                : null
-            if (overlap == null) return null
-            return <FamilyCard key={section.key} overlap={overlap} />
-          }
           return null
         })}
-      </PullScrollView>
+        {footerBlock ? (
+          <View style={styles.footerBlock}>{footerBlock}</View>
+        ) : null}
+        {/* Coral (or whatever footerBg) tile that grows to fill the gap
+            between the footerBlock and the bottom of the viewport when the
+            card content is shorter than the viewport. Stays at 0 height
+            otherwise — long content just scrolls normally. */}
+        {footerBlock && footerBg ? (
+          <View style={{ flexGrow: 1, backgroundColor: footerBg }} />
+        ) : null}
+      </AnimatedPullScrollView>
     </View>
   )
 }
@@ -519,8 +643,7 @@ const styles = StyleSheet.create({
     end: 0,
   },
   photo: {
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: RADIUS,
+    backgroundColor: BLACK_SOFT,
     overflow: 'hidden',
   },
   infoOverlay: {
@@ -529,7 +652,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'column',
-    padding: 16,
+    padding: BUTTON,
+  },
+  actionStack: {
+    position: 'absolute',
+    right: BUTTON,
+    flexDirection: 'column-reverse',
+    alignItems: 'center',
+    gap: SINGLE,
+  },
+  actionButton: {
+    width: ACTION_BTN,
+    height: ACTION_BTN,
+    borderRadius: ACTION_BTN / 2,
+    backgroundColor: BLACK_STRONG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: BLACK,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  actionButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.92 }],
   },
   chipsStack: {
     flexDirection: 'column',
@@ -549,7 +696,7 @@ const styles = StyleSheet.create({
     color: WHITE,
     textAlign: 'left',
     letterSpacing: -0.4,
-    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowColor: BLACK_STRONG,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
@@ -557,48 +704,29 @@ const styles = StyleSheet.create({
     marginBottom: SINGLE,
   },
   aboutSection: {
-    marginTop: SINGLE,
     alignItems: 'center',
   },
   aboutBubble: {
     alignSelf: 'stretch',
     backgroundColor: PRIMARY_BG,
-    borderRadius: RADIUS,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    position: 'relative',
+    paddingVertical: BUTTON * 2,
+    paddingHorizontal: BUTTON,
   },
-  aboutQuote: {
-    position: 'absolute',
-    fontSize: 32,
-    color: PRIMARY,
-    fontWeight: '700',
-    lineHeight: 32,
-  },
-  aboutQuoteOpen: {
-    top: 4,
-    start: 10,
-  },
-  // The `"` glyph sits at the top of its lineHeight, so a literal `bottom: 4`
-  // would leave a tall empty band beneath the glyph. Pull the line container
-  // a bit below the bubble's bottom so the glyph itself mirrors the open
-  // quote's 4 px distance from the top.
-  aboutQuoteClose: {
-    bottom: -8,
-    end: 10,
+  aboutBubbleTransparent: {
+    backgroundColor: 'transparent',
   },
   aboutText: {
     fontSize: 15,
     lineHeight: 22,
-    color: TEXT_PRIMARY,
+    color: BLACK,
     textAlign: 'center',
-    paddingHorizontal: 12,
   },
   extraPhoto: {
     width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: RADIUS,
+    backgroundColor: BLACK_SOFT,
     overflow: 'hidden',
+  },
+  footerBlock: {
   },
   kidsRow: {
     flexDirection: 'row',
@@ -609,7 +737,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: BLACK_SOFT,
   },
   kidsLabel: {
     flexDirection: 'row',
@@ -619,7 +747,7 @@ const styles = StyleSheet.create({
   kidsLabelText: {
     fontSize: 14,
     fontWeight: '600',
-    color: TEXT_PRIMARY,
+    color: BLACK,
   },
   kidsValue: {
     fontSize: 14,

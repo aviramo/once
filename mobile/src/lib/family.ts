@@ -10,7 +10,7 @@
 //     start of week 0. Captured at save time so the multi-week rotation
 //     stays anchored to the calendar across days.
 
-export type FamilySchedule = {
+type FamilySchedule = {
   weeks: boolean[][]
   anchor?: string
 }
@@ -64,7 +64,7 @@ export function familyHasAnyDayMarked(weeks: boolean[][] | undefined | null): bo
 // Everywhere else: Saturday + Sunday. Returned as absolute weekday indices
 // (0=Sun..6=Sat). The "anchor" day is the later of the two — used to locate
 // "this weekend" in the calendar.
-export function weekendAnchor(lang: string): number {
+function weekendAnchor(lang: string): number {
   if (lang === 'he' || lang === 'ar') return 6 // Saturday
   return 0 // Sunday
 }
@@ -96,44 +96,6 @@ export function startOfDisplayedWeek(today: Date, weekStart: number): Date {
   const dow = today.getDay() // 0..6 (Sunday..Saturday)
   const offset = ((dow - weekStart) % 7 + 7) % 7
   return new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)
-}
-
-// Returns whether the user is free on the upcoming weekend. The schedule
-// stores days the kids are *with* the user, so a marked cell means NOT free.
-// "Upcoming weekend" is anchored on the locale's weekend anchor day (Sat for
-// he/ar, Sun otherwise): the next occurrence of that day, plus the day
-// before it. If today is the anchor day, this returns the current weekend
-// (today + yesterday). Lenient definition of "free": at least one of the
-// two weekend days is not marked. Returns null when the schedule is empty.
-export function familyFreeUpcomingWeekend(
-  schedule: FamilySchedule | undefined | null,
-  lang: string,
-): boolean | null {
-  if (!schedule || !schedule.weeks || schedule.weeks.length === 0) return null
-  const today = new Date()
-  const w2 = weekendAnchor(lang)
-  const offsetToW2 = ((w2 - today.getDay()) % 7 + 7) % 7
-  const w2Date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetToW2)
-  const w1Date = new Date(w2Date.getFullYear(), w2Date.getMonth(), w2Date.getDate() - 1)
-
-  const anchorMs = schedule.anchor
-    ? parseISODate(schedule.anchor).getTime()
-    : sundayOfWeek(today).getTime()
-  const total = 7 * schedule.weeks.length
-
-  const isWithKids = (d: Date): boolean | null => {
-    const dayMs = d.getTime()
-    const daysFromAnchor = Math.floor((dayMs - anchorMs) / 86400000)
-    const r = ((daysFromAnchor % total) + total) % total
-    const week = schedule.weeks[Math.floor(r / 7)]
-    if (!week) return null
-    return !!week[d.getDay()]
-  }
-
-  const a = isWithKids(w1Date)
-  const b = isWithKids(w2Date)
-  if (a === null || b === null) return null
-  return !a || !b
 }
 
 // Anchor-aware kid-free overlap between two schedules, returned as 0..1.

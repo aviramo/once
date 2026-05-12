@@ -1,14 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Modal, Pressable, StyleSheet, View, TouchableOpacity } from 'react-native'
-import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text } from './AppText'
 import { Button } from './Button'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { SINGLE, DOUBLE } from '../fonts'
-import { TEXT_PRIMARY, WHITE, BLACK, GRAY_100, GRAY_400, PRIMARY, PRIMARY_BG } from '../colors'
-
-const SWIPE_DISMISS_THRESHOLD = 80
+import { BottomSheet } from './BottomSheet'
+import { SINGLE, DOUBLE, RADII, TEXT as FSIZE, WEIGHT } from '../tokens'
+import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
 export function ConfirmDialog({
   visible,
@@ -18,6 +14,7 @@ export function ConfirmDialog({
   confirmLabel,
   destructive,
   soft,
+  premium,
   tone,
   icon,
   onCancel,
@@ -35,6 +32,7 @@ export function ConfirmDialog({
   confirmLabel: string
   destructive?: boolean
   soft?: boolean
+  premium?: boolean
   tone?: 'positive'
   /** Optional icon rendered in a tinted circle above the title. */
   icon?: ReactNode
@@ -46,183 +44,81 @@ export function ConfirmDialog({
   confirmFlex?: number
   draggable?: boolean
 }) {
-  const translateY = useSharedValue(400)
-  const dragY = useSharedValue(0)
-  const [modalVisible, setModalVisible] = useState(false)
-  const cardHeight = useSharedValue(400)
-
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
-  useEffect(() => {
-    if (!busy) setPressed(null)
-  }, [busy])
-  useEffect(() => {
-    if (!visible) setPressed(null)
-  }, [visible])
-
-  useEffect(() => {
-    if (visible) {
-      dragY.value = 0
-      translateY.value = cardHeight.value
-      setModalVisible(true)
-      requestAnimationFrame(() => {
-        translateY.value = withTiming(0, {
-          duration: 350,
-          easing: Easing.out(Easing.cubic),
-        })
-      })
-    } else {
-      translateY.value = withTiming(cardHeight.value, {
-        duration: 250,
-        easing: Easing.in(Easing.cubic),
-      }, () => {
-        runOnJS(setModalVisible)(false)
-      })
-    }
-  }, [visible])
+  useEffect(() => { if (!busy) setPressed(null) }, [busy])
+  useEffect(() => { if (!visible) setPressed(null) }, [visible])
 
   const dismiss = () => {
     if (busy) return
     onCancel?.()
   }
 
-  const pan = Gesture.Pan()
-    .enabled(!!draggable)
-    .activeOffsetY(8)
-    .failOffsetY(-8)
-    .onUpdate(e => {
-      'worklet'
-      dragY.value = Math.max(0, e.translationY)
-    })
-    .onEnd(e => {
-      'worklet'
-      if (e.translationY > SWIPE_DISMISS_THRESHOLD || e.velocityY > 800) {
-        dragY.value = withTiming(cardHeight.value, { duration: 250, easing: Easing.in(Easing.cubic) })
-        runOnJS(dismiss)()
-      } else {
-        dragY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
-      }
-    })
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value + dragY.value }],
-  }))
-
   return (
-    <Modal
-      visible={modalVisible}
-      transparent
-      animationType="none"
-      onRequestClose={onCancel ?? onConfirm}
-      statusBarTranslucent
+    <BottomSheet
+      visible={visible}
+      onDismiss={onCancel ? dismiss : onConfirm}
+      disableBackdropDismiss={busy}
+      swipeToDismiss={!!draggable}
+      dragHandle={!!draggable}
+      contentStyle={styles.card}
     >
-      <GestureHandlerRootView style={styles.rootView}>
-      <View style={styles.overlay}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={busy ? undefined : (onCancel ?? onConfirm)}
-        />
-        <GestureDetector gesture={pan}>
-        <Animated.View
-          style={[styles.cardWrap, animStyle]}
-          onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
+      {icon ? (
+        <View style={styles.iconWrap}>
+          <View style={styles.iconCircle}>{icon}</View>
+        </View>
+      ) : null}
+      <Text style={styles.title}>{title}</Text>
+      {description ? <Text style={styles.desc}>{description}</Text> : null}
+
+      {skipToggle && (
+        <TouchableOpacity
+          style={styles.skipRow}
+          onPress={skipToggle.onToggle}
+          activeOpacity={0.7}
+          disabled={busy}
         >
-          <View style={styles.shadowGradient} pointerEvents="none">
-            {[0.005,0.01,0.012,0.015,0.018,0.02,0.022,0.025,0.028,0.03,0.032,0.035,0.04,0.045,0.05,0.055,0.06,0.065,0.07,0.075].map((o, i) => (
-              <View key={i} style={[styles.shadowLayer, { opacity: o }]} />
-            ))}
+          <View style={[styles.checkbox, skipToggle.checked && styles.checkboxChecked]}>
+            {skipToggle.checked && <Text style={styles.checkboxTick}>✓</Text>}
           </View>
-          <View style={styles.card}>
-          {draggable ? <View style={styles.dragHandle} /> : null}
-          {icon ? (
-            <View style={styles.iconWrap}>
-              <View style={styles.iconCircle}>{icon}</View>
-            </View>
-          ) : null}
-          <Text style={styles.title}>{title}</Text>
-          {description ? <Text style={styles.desc}>{description}</Text> : null}
+          <Text style={styles.skipLabel}>{skipToggle.label}</Text>
+        </TouchableOpacity>
+      )}
 
-          {skipToggle && (
-            <TouchableOpacity
-              style={styles.skipRow}
-              onPress={skipToggle.onToggle}
-              activeOpacity={0.7}
+      <View style={styles.row}>
+        {cancelLabel ? (
+          <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
+            <Button
+              label={cancelLabel}
+              onPress={() => { setPressed('cancel'); onCancel?.() }}
+              variant="secondary"
+              size="lg"
               disabled={busy}
-            >
-              <View style={[styles.checkbox, skipToggle.checked && styles.checkboxChecked]}>
-                {skipToggle.checked && <Text style={styles.checkboxTick}>✓</Text>}
-              </View>
-              <Text style={styles.skipLabel}>{skipToggle.label}</Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.row}>
-            {cancelLabel ? (
-              <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
-                <Button
-                  label={cancelLabel}
-                  onPress={() => { setPressed('cancel'); onCancel?.() }}
-                  variant="secondary"
-                  size="lg"
-                  disabled={busy}
-                  loading={busy && pressed === 'cancel'}
-                  silentDisabled={pressed !== 'cancel'}
-                />
-              </View>
-            ) : null}
-            <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
-              <Button
-                label={confirmLabel}
-                onPress={() => { setPressed('confirm'); onConfirm() }}
-                variant={destructive ? 'destructive' : soft ? 'soft' : 'primary'}
-                tone={!destructive && !soft ? tone : undefined}
-                size="lg"
-                disabled={busy}
-                loading={busy && pressed === 'confirm'}
-                silentDisabled={pressed !== 'confirm'}
-              />
-            </View>
+              loading={busy && pressed === 'cancel'}
+              silentDisabled={pressed !== 'cancel'}
+            />
           </View>
-          </View>
-        </Animated.View>
-        </GestureDetector>
+        ) : null}
+        <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
+          <Button
+            label={confirmLabel}
+            onPress={() => { setPressed('confirm'); onConfirm() }}
+            variant={destructive ? 'destructive' : soft ? 'dark' : premium ? 'premium' : 'primary'}
+            tone={!destructive && !soft && !premium ? tone : undefined}
+            size="lg"
+            disabled={busy}
+            loading={busy && pressed === 'confirm'}
+            silentDisabled={pressed !== 'confirm'}
+          />
+        </View>
       </View>
-      </GestureHandlerRootView>
-    </Modal>
+    </BottomSheet>
   )
 }
 
 const styles = StyleSheet.create({
-  rootView: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  cardWrap: {
-  },
-  shadowGradient: {
-    height: 60,
-    marginBottom: -1,
-  },
-  shadowLayer: {
-    flex: 1,
-    backgroundColor: BLACK,
-  },
   card: {
-    backgroundColor: WHITE,
     padding: 24,
     paddingTop: 12,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  dragHandle: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: GRAY_100,
-    marginBottom: 16,
   },
   iconWrap: {
     alignItems: 'center',
@@ -237,31 +133,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: TEXT_PRIMARY,
+    fontSize: FSIZE.h2,
+    fontWeight: WEIGHT.bold,
+    color: BLACK,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   desc: {
     marginTop: 8,
-    fontSize: 15,
+    fontSize: FSIZE.body,
     lineHeight: 22,
-    color: GRAY_400,
+    color: BLACK_STRONG,
     textAlign: 'center',
   },
   skipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SINGLE,
     marginTop: DOUBLE,
   },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 5,
+    borderRadius: RADII.sm,
     borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.25)',
+    borderColor: BLACK_MID,
     backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
@@ -271,15 +167,15 @@ const styles = StyleSheet.create({
     borderColor: PRIMARY,
   },
   checkboxTick: {
-    fontSize: 13,
+    fontSize: FSIZE.small,
     lineHeight: 14,
     color: WHITE,
-    fontWeight: '700',
+    fontWeight: WEIGHT.bold,
     includeFontPadding: false,
   },
   skipLabel: {
-    fontSize: 14,
-    color: 'rgba(0,0,0,0.55)',
+    fontSize: FSIZE.base,
+    color: BLACK_STRONG,
   },
   row: {
     flexDirection: 'row',

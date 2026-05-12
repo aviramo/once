@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Text, TextInput, AppState } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Stack, useRouter, useSegments } from 'expo-router'
@@ -27,6 +27,7 @@ import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/r
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
+import { PRIMARY } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -210,7 +211,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#FF7A5C' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: PRIMARY }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'none' }} />

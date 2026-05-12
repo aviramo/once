@@ -7,7 +7,7 @@ import Animated, {
   withTiming, Easing, runOnJS,
 } from 'react-native-reanimated'
 import { HomeButtons } from './HomeButtons'
-import { SINGLE, RADIUS } from '../fonts'
+import { SINGLE, RADIUS } from '../tokens'
 import { WHITE } from '../colors'
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
@@ -56,7 +56,7 @@ const PULL_DAMP = 0.35
 
 // ── HomeCard ─────────────────────────────────────────────────────────────────
 
-export type HomeCardProps = {
+type HomeCardProps = {
   children: React.ReactNode
   /** Content rendered between the main area and buttons. */
   description?: React.ReactNode
@@ -119,7 +119,6 @@ export function HomeCard({
   })
 
   // ── Gesture ────────────────────────────────────────────────────────────────
-  const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollAtTopSV = useSharedValue(true)
   const [pulling, setPulling] = useState(false)
   const hasPull = !!onPull
@@ -182,7 +181,6 @@ export function HomeCard({
     extraRefs: extraSimultaneousRefs ?? [],
     setScrollAtTop: (v: boolean) => {
       scrollAtTopSV.value = v
-      setScrollAtTop(v)
     },
     pulling,
   }), [extraSimultaneousRefs, pulling])

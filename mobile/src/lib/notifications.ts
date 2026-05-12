@@ -3,6 +3,7 @@ import Constants from 'expo-constants'
 import { Platform, Linking } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as IntentLauncher from 'expo-intent-launcher'
+import { STORAGE } from '../keys'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -13,7 +14,7 @@ Notifications.setNotificationHandler({
   }),
 })
 
-const PUSH_TOKEN_KEY = 'once_push_token'
+const PUSH_TOKEN_KEY = STORAGE.pushToken
 
 export type NotifPermission = 'granted' | 'denied' | 'undetermined'
 
@@ -82,11 +83,6 @@ export async function ensurePushToken(): Promise<string | null> {
   }
 
   return token
-}
-
-/** Get the locally-saved push token, if any. */
-export async function getSavedPushToken(): Promise<string | null> {
-  return AsyncStorage.getItem(PUSH_TOKEN_KEY)
 }
 
 export function unregisterPushNotifications() {

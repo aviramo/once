@@ -77,7 +77,10 @@ async function main() {
   await writePng(flatOnBg(96),                                    path.join(MOBILE, 'assets/favicon.png'))
   await writePng(await paddedForAdaptive(1024),                   path.join(MOBILE, 'assets/adaptive-icon.png'))
   // splash-icon.png: square centered icon used by app.json splash config (iOS launch screen).
-  await writePng(flatOnBg(1024),                                  path.join(MOBILE, 'assets/splash-icon.png'))
+  // Transparent canvas — splash.backgroundColor in app.json fills the area behind
+  // the logo, so the splash and the login screen share an identical background
+  // (#FAF4EE) and the logo doesn't visually "jump" between the two.
+  await writePng(rasterize(svgTransparent, 1024),                 path.join(MOBILE, 'assets/splash-icon.png'))
   await writePng(rasterize(svgTransparent, 512),                  path.join(MOBILE, 'assets/once-512.png'))
   // Android notification small icon: white silhouette on transparent canvas.
   // Source for expo-notifications plugin (icon: ./assets/notification-icon.png).

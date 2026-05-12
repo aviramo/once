@@ -1,39 +1,45 @@
 import { StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
-import Svg, { Path, Circle, Line } from 'react-native-svg'
-import { FONT_SCALE, RADIUS } from '../fonts'
-import { PRIMARY, PRIMARY_BG, DESTRUCTIVE } from '../colors'
+import Svg, { Path, Circle } from 'react-native-svg'
+import { FONT_SCALE } from '../fonts'
+import { RADIUS } from '../tokens'
+import { PRIMARY, PRIMARY_BG, DESTRUCTIVE, WHITE, BLACK_SOFT, BLACK_STRONG } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
-// lightweight fabric swatches instead of bordered stickers.
+// lightweight fabric swatches instead of bordered stickers. When `onPhoto`
+// is set, the chip switches to a dark translucent scrim + white text so it
+// stays readable over a color photo.
 
 const TONES = {
-  neutral:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(0,0,0,0.45)'        },
-  positive: { fg: PRIMARY,             bg: PRIMARY_BG,             photoBg: 'rgba(26,179,61,0.55)'    },
-  negative: { fg: DESTRUCTIVE,               bg: 'rgba(0,0,0,0.06)',  photoBg: 'rgba(160,15,35,0.50)'    },
+  neutral:  { fg: BLACK_STRONG, bg: BLACK_SOFT  },
+  positive: { fg: PRIMARY,      bg: PRIMARY_BG  },
+  negative: { fg: DESTRUCTIVE,  bg: BLACK_SOFT  },
 } as const
 
-export type ChipTone = keyof typeof TONES
+type ChipTone = keyof typeof TONES
 
 export function Chip({
   renderIcon,
   text,
   tone = 'neutral',
   onPhoto = false,
+  renderTrailing,
 }: {
   renderIcon?: (color: string) => React.ReactNode
   text: string
   tone?: ChipTone
   onPhoto?: boolean
+  renderTrailing?: (color: string) => React.ReactNode
 }) {
-  const { fg, bg, photoBg } = TONES[tone]
-  const bgColor = onPhoto ? photoBg : bg
-  const fgColor = onPhoto ? '#ffffff' : fg
+  const { fg, bg } = TONES[tone]
+  const bgColor = onPhoto ? BLACK_STRONG : bg
+  const fgColor = onPhoto ? WHITE : fg
   return (
     <View style={[styles.chip, { backgroundColor: bgColor }]}>
       {renderIcon?.(fgColor)}
       <Text style={[styles.chipText, { color: fgColor }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.heading}>{text}</Text>
+      {renderTrailing?.(fgColor)}
     </View>
   )
 }
@@ -57,25 +63,6 @@ export function ClockIcon({ color }: { color: string }) {
     <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
       <Path d="M12 7v5l3 3" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  )
-}
-
-export function BellOnIcon({ color }: { color: string }) {
-  return (
-    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none">
-      <Path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M13.73 21a2 2 0 0 1-3.46 0" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  )
-}
-
-export function BellOffIcon({ color }: { color: string }) {
-  return (
-    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none">
-      <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M13.73 21a2 2 0 01-3.46 0" stroke={color} strokeWidth={2} strokeLinecap="round" />
-      <Line x1={2} y1={2} x2={22} y2={22} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
     </Svg>
   )
 }

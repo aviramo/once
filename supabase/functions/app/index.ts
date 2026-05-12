@@ -4,7 +4,7 @@ import User from "../user.ts";
 import { Notify, PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
-const updatable = ["units", "weekStart", "os", "lang", "appearance", "push_token"];
+const updatable = ["weekStart", "os", "lang", "appearance", "push_token"];
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
@@ -196,12 +196,32 @@ Deno.serve(async (req) => {
       case "clear2":
       case "free2":
       case "lock2":
+      case "pause":
       case "add": {
         const result = await Tools.rpc(log, `app_${key}`, { me_id: user.user_id });
         await user.persist(log);
         if (result?.error) return log.error(key, result.error, 400);
         rpcUser = result?.user;
         notifyList = result?.notify ?? [];
+        break;
+      }
+
+      case "resume": {
+        const resumeResult = await Tools.rpc(log, "app_resume", { me_id: user.user_id });
+        await user.persist(log);
+        if (resumeResult?.error) return log.error(key, resumeResult.error, 400);
+        rpcUser = resumeResult?.user;
+        notifyList = resumeResult?.notify ?? [];
+        // Resume flips both pages to free. Mirror start/focus auto-find so
+        // the user lands on a candidate instead of an empty home pane.
+        const relationsAfter = (resumeResult?.user as { relations?: { page1?: { state?: string; profile?: unknown } } } | undefined)?.relations;
+        if (relationsAfter?.page1?.state === "free" && !relationsAfter?.page1?.profile) {
+          const findResult = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: "find" });
+          if (findResult && !findResult.error) {
+            rpcUser = findResult.user;
+            notifyList = [...notifyList, ...(findResult.notify ?? [])];
+          }
+        }
         break;
       }
 

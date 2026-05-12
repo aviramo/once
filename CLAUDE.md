@@ -4,9 +4,11 @@
 
 Claude has blanket upfront permission for every action it can perform locally or via available tooling. Don't pause to ask "should I run X?" — run it. Reserve questions for steps that are genuinely impossible without the user.
 
+**Default rule: anything Claude can do alone, Claude does alone.** If the action is technically executable with the tools and credentials Claude already has, execute it. Do not narrate intent, do not request confirmation, do not hand back instructions for the user to run. Asking the user to do something Claude could have done is the failure mode — preferable to act and report than to defer and wait.
+
 **Examples of what to do without asking:**
 
-- Edit/write any file in the repo, including config (`app.json`, `eas.json`, `package.json`, `CLAUDE.md`, `TODO.md`).
+- Edit/write any file in the repo, including config (`app.json`, `eas.json`, `package.json`, `CLAUDE.md`).
 - Run `npm install` / `npm uninstall` / dependency upgrades.
 - Run `eas build` / `eas submit` / `eas env:*` / `eas credentials` (interactive prompts, route via terminal as last resort).
 - Run any git operation except destructive ones called out below.
@@ -17,6 +19,47 @@ Claude has blanket upfront permission for every action it can perform locally or
 **When to ask:** the action is impossible without the user — browser-only portal flows (Apple Developer Center, App Store Connect web UI, Google Play Console web UI, Firebase Console, GCP Console enabling APIs), 2FA codes coming to the user's phone, physical-device interaction, or destructive actions on shared/production data (truncating live tables, force-pushing main, dropping columns with user data). For these, hand the user the exact link/step and continue with anything else that's parallelizable.
 
 **Don't ask for confirmation as a courtesy.** "Ready to proceed?" / "Should I run X?" / "Do you want me to also do Y?" are time-tax on the user. Just do it and report.
+
+## Project task queue (Trello)
+
+The canonical queue of every actionable request from the user lives on the Trello board **Once Dev** (`https://trello.com/b/3PkwSFiR/once-dev`). `TODO.md` has been retired — Trello is now the only source of truth. **All card content, list names, and labels are in Hebrew.** Proper product/service names (Apple, Sign in with Apple, Google Play, Supabase, TestFlight, etc.) stay in their original Latin form inside Hebrew sentences.
+
+- **Order of operations: Trello first, work second.** When the user gives an actionable request, the very first thing Claude does is create the Trello card (in `לעשות`, or `בתהליך` once work begins) — *before* reading files, planning, editing code, or running tools to solve the task. This guarantees the queue captures the request even if the session is interrupted mid-solve, and gives the user a visible record of what Claude is about to work on. Only after the card exists does Claude start on the solution. The single exception is the "work already complete inline" path below: trivial fixes that resolve in one or two tool calls may be solved first and then logged to `בדיקות` in the same response — but the moment a request looks like it needs more than that, create the card first.
+- **Every actionable request the user makes becomes a new Trello card** — large features, small chores, bugs, deployment milestones. Do this automatically, without being asked. The list the card lands in depends on whether the work is already done by the time the card is created:
+  - **If the work is still pending** (not yet started, or in progress) → create in `לעשות`.
+  - **If the work is already complete in the same response** (typical for small fixes Claude resolves inline) → create directly in `בדיקות` so the user knows it's ready for manual verification, not still on the queue. Pass `-List 'בדיקות'` to `create-card`.
+  Pure questions and information lookups ("what files do we have?") don't count. The `בתכנון` list is a user-managed parking lot for ideas not yet promoted to active work; do **not** drop new tasks there unless the user explicitly asks.
+- **New cards land at the top of the list** (`pos = 'top'`). Most-recent request appears first when the user opens the board, so the queue reads newest-first. The `trello.ps1 create-card` helper applies this automatically — do not override.
+- **Every card MUST carry all three labels, chosen by Claude.** Never create a card without labels. The `trello.ps1 create-card` helper enforces this and refuses to create an untagged card; if you ever see a card on the board with zero labels, that's a bug to fix immediately by attaching the right three (Claude's responsibility, not the user's). One label per axis. Label names are in Hebrew with a Hebrew prefix:
+  - `טכני:<תחום>` — the technical area touched. Examples: `שרת`, `מסד-נתונים`, `מובייל`, `אימות`, `הפצה`, `תשתית`, `נוטיפיקציות`, `צ'אט`, `i18n`, `קונפיג`. Blue.
+  - `חוויה:<משטח>` — the product surface the user encounters. Examples: `התחברות`, `אונבורדינג`, `התאמות`, `צ'אט`, `פרופיל`, `בטיחות`, `זמינות`, `גילוי`, `רגולציה`, `נוטיפיקציות`. Green.
+  - `עסקי:<ערך>` — the user value the task delivers. Examples: `אמון` (user confidence in safety/integrity), `מעורבות` (gets users using the app more), `איכות-התאמה` (improves who-meets-who outcomes), `בטיחות` (protects users from harm/abuse), `שימור` (keeps existing users coming back), `רכישה` (lets new users find/install), `הכנסות` (revenue). Orange.
+
+  The lists are seeds — add new labels when none fit. The helper auto-creates missing labels (blue for `טכני:*`, green for `חוויה:*`, orange for `עסקי:*`).
+- **Card description format (Hebrew):** lead with `**נוסף:** YYYY-MM-DD`, then `**למה:** <user value or trigger>`, then `**הערות:** <links, file paths, blocked-by, follow-ups>`.
+- **Attach user-sent images to the card.** Any image the user pastes or sends in the same message that produces a card must be attached to that card. Do this automatically right after `create-card`, without asking. Images are usually the bug evidence or the design reference — losing them defeats the point of the card.
+
+  **Pasted images (Ctrl+V in the chat) are NOT files on disk.** Claude Code embeds them as base64 inside the current session log at `~\.claude\projects\<project-key>\<sessionId>.jsonl`. The `attach-file -Path` form will not work for them — Claude has no path to pass. Use the dedicated verb that reads the most-recent user message from the session log, decodes every base64 image found there, and uploads each one to the card:
+
+  `& .\.claude\scripts\trello.ps1 attach-pasted -Id <cardId>`
+
+  Run it **once per card**, immediately after `create-card`. It handles multi-image messages automatically (one upload per image). Decoded files land in `%TEMP%\trello-pasted\` so they're inspectable if the upload fails.
+
+  For images the user provided as a literal file path (e.g., a screenshot they saved to `c:\tmp\foo.png` and named in the message), keep using the path-based form, once per image:
+
+  `& .\.claude\scripts\trello.ps1 attach-file -Id <cardId> -Path <imagePath>`
+- **Status = list:** `בתכנון` = parking lot (user-managed), `לעשות` = open, `בתהליך` = in progress, `בדיקות` = manual testing/review state. Move cards between lists with `trello.ps1 move-card -Id <id> -List <name>`. **Two archive triggers:**
+  1. **Explicit close** — the user says "סגור" / "נסגר" / "מאשר" / "close it" / "done" / "approved". Archive immediately via `trello.ps1 archive-card -Id <id>`.
+  2. **Due-complete checkmark** — the user marks the card's due-date checkbox (green ✓ on the board). This is their own explicit "I'm done with this" signal. Archive it on sight.
+  Do not auto-archive on your own judgement that the work looks finished; only the two signals above qualify. Archived cards stay in Trello's archive (recoverable), no separate "Done" list.
+- **Ongoing sweep:** every time you touch Trello (any verb other than `ping`/`lists`/`labels`), first run `& .\.claude\scripts\trello.ps1 sweep-complete` so any due-complete card the user ticked since the last interaction gets archived. The sweep is idempotent and cheap — one board-cards GET plus one PUT per complete card. Don't skip it.
+- **Session start:** no auto-listing of open tasks at session start. The user does not want a status dump on every conversation; Claude only fetches tasks via `trello.ps1 list-open` when the user explicitly asks ("מה במשימות", "show me the queue", etc.) or when context requires it.
+- **Helper CLI:** `.claude/scripts/trello.ps1` with verbs `list-open`, `create-card`, `move-card`, `archive-card`, `lists`, `labels`, `ping`. Examples:
+  - Create a new task: `& .\.claude\scripts\trello.ps1 create-card -Name "<כותרת>" -Desc "<גוף>" -Labels @('טכני:שרת','חוויה:פרופיל','עסקי:איכות-התאמה')`
+  - Move to In progress: `& .\.claude\scripts\trello.ps1 move-card -Id <cardId> -List 'בתהליך'`
+  - Close: `& .\.claude\scripts\trello.ps1 archive-card -Id <cardId>`
+- **PowerShell 5.1 + Hebrew gotcha:** PS 5.1 reads `.ps1` files without a UTF-8 BOM as Windows-1252, so Hebrew string literals embedded directly in script source get mangled. When new Hebrew content is needed at script time (e.g., bulk card create/update), write the Hebrew strings to a JSON data file and have the PS script read it via `[System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))` and `ConvertFrom-Json`. The `trello.ps1` helper itself uses Unicode escape sequences (`[char]0x05D8`...) for the Hebrew prefixes so it stays ASCII-safe in source.
+- **Credentials:** API key + token live in `.claude/secrets/trello.json` (gitignored via `.claude/` blanket rule). Template at `.claude/secrets/trello.json.example`.
 
 ## Server-side code (supabase/functions/ and database)
 
@@ -76,6 +119,7 @@ When in doubt about whether a change is breaking, default to treating it as brea
 These rules are absolute and must be applied any time the PagerView layout or pane navigation is touched.
 
 ### Pane mapping
+- **Settings (Menu pane)** is a full PagerView slot — embedded `SettingsPage` with no internal `ScreenHeader`.
 - **Page 1 (Home pane)** always maps to `page1` data.
 - **Page 2 (Viewers pane)** always maps to `page2` data.
 
@@ -84,44 +128,90 @@ These rules are absolute and must be applied any time the PagerView layout or pa
 - `page2` is an **object** → show incoming invitation card (with timer + approve/decline buttons).
 
 ### Visual order (immutable)
-RTL right→left: **Home | Side(page2/chat)** — Settings overlays from the right as a layer over the current page.
-Logical pane constants (never change): `HOME=0, PAGE2=1, CHAT=1`
+RTL right→left: **Menu | Home | Side(page2/chat)**.
+Logical pane constants (never change): `SETTINGS=0, HOME=1, PAGE2=2, CHAT=2`
 
-`PAGE2_PANE === CHAT_PANE === 1` — they share the same physical slot.
+`PAGE2_PANE === CHAT_PANE === 2` — they share the same physical slot.
 
 ### PagerView layout
-Fixed 2-page layout:
-`[home(slot 0), side(slot 1)]`
+Fixed 3-page layout:
+`[settings(slot 0), home(slot 1), side(slot 2)]`
 
-Settings is **not a PagerView slot**. It opens/closes as an `Animated.View` overlay that slides in from the right (RTL) on top of the current page. The overlay is always mounted; `settingsIsOpen` controls pointer events and the `focused` prop.
+There is no separate Settings overlay any more — Menu is just slot 0 of the same PagerView. No directional swipe-to-open / swipe-to-close gestures. The user reaches Menu by tapping its tab or swiping from Home toward the Menu side.
 
-Slot 1 renders `ChatPage` when `chatAvailable` (`state === 'chat'`), page2 content otherwise.
-No slot is added or removed — only the content of slot 1 changes.
+Slot 2 renders `ChatPage` when `chatAvailable` (`state === 'chat'`), page2 content otherwise.
+No slot is added or removed — only the content of slot 2 changes.
 
-### Settings overlay
-- Opens via `openSettings()` → `settingsSlide` animates 0→1 (slides in from right in RTL).
-- Closes via `closeSettings()` (button/BackHandler) or swipe-to-dismiss gesture.
-- When a sub-page opens on top of settings, `settingsPushStyle` slides the settings content out (same push navigation feel as before).
-- BackHandler priority: inner sub-page → sub-page → settings → pager side pane → false.
+### Global TabStrip
+- A single `<TabStrip>` lives at the top of the home shell, inside the safe area, **above** the PagerView.
+- It is the only chrome with a title; `HomeHeader` / top-level `ScreenHeader` are no longer rendered inside page1, page2, or `SettingsPage` (when embedded).
+- Three tabs in pager-slot order: `home.tabs.menu`, `home.tabs.home` (always "Once"), `home.tabs.viewers` / `home.tabs.chat` (switches by `chatAvailable`).
+- Inline chips/indicators beside the side-tab label only. Chips sit on a coral strip so default chip colors invert: WHITE background, PRIMARY foreground.
+  - `chatAvailable && chatUnread > 0` → WHITE chip with PRIMARY unread count (alerts on transition). Side-tab label = `home.tabs.chat`.
+  - `page2PendingInvite` → WHITE `InboxIcon` indicator (no chip), and the side-tab label swaps to `home.tabs.invite` ("הזמנה") instead of `home.tabs.viewers`. Alerts on arrival via the tab-level pulse. The single "1" chip was replaced by the inbox glyph + dedicated label so the slot reads as an incoming-mail signifier rather than a count of one.
+  - `page2DeadInvite` → WHITE `PauseIcon` indicator (no chip). Same glyph the menu tab uses for `gameModeOff`: a dead invite means page2 is on hold waiting for the user to acknowledge the "what happened" card, which is a paused-ish state — not a destructive/error state, so it gets the pause glyph in WHITE rather than a "!" in DESTRUCTIVE.
+  - else `watchers.length > 0` → WHITE chip with PRIMARY viewer count. Side-tab label = `home.tabs.viewers`.
+- Container background is `PRIMARY` (coral) and so is the status bar (`StatusBar style="light" backgroundColor={PRIMARY}`). No pill, no underline, no halo: the "selected" indicator is pure typography. Each label reads `t = max(0, 1 - |pagerProgress - index|)` (its own selectedness) inside `useAnimatedStyle` and renders two stacked layers that cross-fade with `t`: an **active** layer (`fontWeight: WEIGHT.extrabold`, `color: WHITE`, `opacity = t`) drives the natural width, and a **muted** layer (`fontWeight: WEIGHT.semibold`, `color: WHITE_45`, `opacity = 1 - t`) overlays it via `position: absolute` with `left/right: 0` + `textAlign: center`. The container also lifts with `transform: scale 1.0 → 1.04`. `fontWeight` can't be animated continuously (it swaps the font face), so the cross-fade is the only way to morph weight 1:1 with the swipe without width thrash. `letterSpacing` was deliberately dropped earlier for the same reason. `pagerProgress` is driven by PagerView `onPageScroll(position + offset)`. Chips and the menu-tab pause indicator stay un-animated — they carry semantic state and should be equally readable whether or not their tab is selected.
+- Tab labels use `TEXT.base` + `maxFontSizeMultiplier={FONT_SCALE.ui}` so all three fit on accessibility large-text devices.
 
 ### Chat transition animation
 When `state` transitions to `'chat'`:
-1. `chatAvailable` becomes true → slot 1 flips from page2 to `ChatPage` automatically.
-2. `setPage(1)` via `requestAnimationFrame` — navigates to slot 1 if not already there.
-3. If already on slot 1 (user just approved from page2), `setPage(1)` is a no-op; content flips in place.
+1. `chatAvailable` becomes true → slot 2 flips from page2 to `ChatPage` automatically.
+2. `setPage(2)` via `requestAnimationFrame` — navigates to slot 2 if not already there.
+3. If already on slot 2 (user just approved from page2), `setPage(2)` is a no-op; content flips in place.
 
 When `state` transitions away from `'chat'`:
-1. `setPageWithoutAnimation(HOME_PANE=0)` — instant snap to home.
-2. Slot 1 flips back to page2 content automatically.
+1. `setPageWithoutAnimation(HOME_PANE=1)` — instant snap to home.
+2. Slot 2 flips back to page2 content automatically.
 
-### No guards or `paneToPage`/`pageToPane` helpers needed
-Slot 1 always has content (either chat or page2) — no guard needed in `onPageSelected`.
+### BackHandler priority
+inner sub-page → shell sub-page → profile sheet → non-home pane (pager → `HOME_PANE`) → false.
 
 ---
 
 ## i18n text style
 
 Do NOT use em dashes (—) in any i18n string in `mobile/src/i18n/he.ts` or `mobile/src/i18n/en.ts`. Replace with period, comma, or colon depending on context.
+
+## DRY (single source of truth)
+
+Every value and every UI element is defined **exactly once** and referenced everywhere else. No copies, no parallel definitions, no "almost the same" duplicates.
+
+### Values (tokens)
+
+Any literal that has meaning — sizes, colors, spacing, radii, durations, easings, font sizes/weights, z-indexes, opacities, breakpoints, gesture thresholds, velocity cutoffs, animation curves, storage/cache keys, route names, event/push codes, restriction keys, query keys, env var names, magic strings/numbers — lives in **one** named constant and is imported from there. No inline literals at call sites for any of the above.
+
+- Design tokens (colors, spacing, radii, typography) live in the central theme module and are consumed via the theme — never hard-coded in component files.
+- Motion tokens (durations, easings, spring configs, gesture thresholds, velocity cutoffs) live alongside the design tokens. Two pieces of UI that should "feel the same" must reference the same motion token, not redefine `withTiming(..., { duration: 350, easing: Easing.out(Easing.cubic) })` inline.
+- Keys (storage, query, event codes, push codes, restriction keys, route names) live in a single constants module and are referenced by symbol, never as bare strings.
+- If the "same value" appears in two places and could drift, it must be extracted. "It's only used twice" is not an exception.
+
+### Elements (components)
+
+Every UI element exists **once** as a reusable, parameterized component. No element is rewritten, copy-pasted with tweaks, or re-styled inline in a second place.
+
+- If two screens render the "same thing with small differences," that thing is one component with props for the differences — not two near-duplicates.
+- A component owns its appearance, layout, **and behavior** (animations, gestures, transitions, focus/press feedback, mount/unmount choreography). Callers pass data and callbacks, not style overrides or re-implementations of the same animation.
+- New screens compose existing components. If a needed component doesn't exist yet, create it once and use it everywhere it applies (including refactoring existing callers to use it).
+- Variants (size, tone, state) are props on the single component — never a forked second component.
+
+### Behaviors (animations, gestures, transitions)
+
+Behavior is DRY too. If a popup slides up from the bottom with a certain easing and a swipe-to-dismiss threshold, that **entire behavior** — the animation timing, the gesture handler, the dismiss velocity cutoff, the shadow stack — is implemented in one base component (e.g., `BottomSheet`) and every popup composes it. The same applies to:
+
+- Sheet/dialog mount-in and dismiss animations.
+- Card slide-down / hero-mount sequences.
+- Press feedback (scale, opacity, color fade).
+- Swipe-to-dismiss / pull-to-refresh gestures.
+- Slider thumb pan logic.
+- Tab/pill transition animations.
+- Realtime list-insert animations.
+
+No screen reimplements `useSharedValue(...) + withTiming(...) + Gesture.Pan()` for a behavior that already exists. If the behavior doesn't exist yet, build it as a primitive (hook or component) once, then compose it.
+
+### How to apply
+
+Before writing a literal or a JSX block: search the codebase for an existing constant/component that already represents it. If one exists, use it. If one doesn't but the value/element will plausibly be reused (or already appears elsewhere), create the single definition first, then reference it. Treat any duplication you encounter while working as a bug to fix in the same change.
 
 ## Performance principles (server)
 
@@ -384,7 +474,7 @@ Identity, matching preferences, and the JSONB `relations` column that drives the
 | `age_from` / `age_to` | smallint | preferred age range |
 | `range` | integer | preferred max distance (meters) |
 | `location` | geography (PostGIS) | `SRID=4326;POINT(lng lat)` |
-| `data` | jsonb, default `{}` | Flat profile fields: `images: Image[]`, `bio?: string`, `family?: FamilyData` (`{hasKids, kids?, schedule?, isForKids?}`). Plus `units`, `weekStart`, `os`, `lang`, `appearance`, `push_token`, `role`. |
+| `data` | jsonb, default `{}` | Flat profile fields: `images: Image[]`, `bio?: string`, `family?: FamilyData` (`{hasKids, kids?, schedule?, isForKids?}`). Plus `weekStart`, `os`, `lang`, `appearance`, `push_token`, `role`. Distance unit is no longer stored: the client derives it from device locale (`getLocales().regionCode`); see `mobile/src/lib/units.ts`. Legacy `data.units` may exist on rows written by older builds and is ignored. |
 | `relations` | jsonb | `Pages` (see Game Logic) plus a top-level `last_add_at` (ISO timestamp; 1h cooldown for the page2 "Show me to people" button — see `app_add`). Source of truth for page1/page2. |
 
 **Removed columns (migration applied):** `state`, `other_id`, `is_visible`, `is_avaliable`, `is_for_kids` are gone. The "wants own (more) kids" preference now lives inside `data.family.isForKids` so all kids-related state is captured in one blob. `users.name` is a regular text column (was generated). `data->>'name'` removed. `data.items` (the previous unified ProfileItem array model) was flattened back into `data.images`, `data.bio`, `data.family` and removed.
@@ -496,7 +586,7 @@ The following server files have been fully rewritten and are clean:
 - `supabase/functions/tools.ts` — `invoke()`, `rpc()`, `notify()`
 
 The following RPCs exist in the DB and match the endpoint table above:
-`app_find`, `app_add` (page2 "Show me to people" button: pulls up to 3 most-relevant candidates into `A.page2.profiles[]` and sets each candidate's `page1` to watching A. Preconditions: `A.page1.state ≠ 'chat'` AND `A.page2.profile` is missing AND `A.page2.profiles` is empty/missing AND last call > 1h ago. Auto-resets `A.page2 = {state: 'free', profiles: []}` (so a `locked` resting state becomes discoverable in the same call) and writes `A.relations.last_add_at = now()` even when zero candidates are returned, so an empty-pool press still consumes the cooldown), `app_ignore`, `app_clear1`, `app_clear2`, `app_invite`, `app_extend`, `app_cancel`, `app_approve`, `app_decline`, `app_leave`, `app_block`, `app_remove`, `app_free2` (transitions `A.page2.state` from `locked` → `free`; called by the page2 premium "show my profile again" tile), `app_lock2` (premium "hide me" action; transitions `A.page2.state` from `free` → `locked` with no profile/profiles, AND in the same transaction kicks every watcher in `A.page2.profiles[]`: each watcher's `page1` → locked + `message='remove'` (only if still pointing at A in 'watching'), per-pair `remove` restriction inserted, `removed` push queued. Equivalent to N `app_remove` calls + a final state flip, collapsed into one round trip. Mobile UI confirms with the user before calling since the action is destructive. No cooldown), `app_expire_sweep` (called by pg_cron every minute), `app_delete_cleanup` (called by the `delete` endpoint before row deletion), `app_logout_cleanup` (called by the `logout` endpoint: kicks page2 viewers to `logout`, clears page2), `app_refresh_snapshots` (see below), `app_save_profile` (called by the `profile` endpoint: accepts `{images?, bio?, family?, is_for_kids?}` payload. Only the keys present are written; passing `null` on `bio`/`family` clears that field).
+`app_find`, `app_add` (page2 "Show me to people" button: pulls up to 3 most-relevant candidates into `A.page2.profiles[]` and sets each candidate's `page1` to watching A. Preconditions: `A.page1.state ≠ 'chat'` AND `A.page2.profile` is missing AND `A.page2.profiles` is empty/missing AND last call > 1h ago. Auto-resets `A.page2 = {state: 'free', profiles: []}` (so a `locked` resting state becomes discoverable in the same call) and writes `A.relations.last_add_at = now()` even when zero candidates are returned, so an empty-pool press still consumes the cooldown), `app_ignore`, `app_clear1`, `app_clear2`, `app_invite`, `app_extend`, `app_cancel`, `app_approve`, `app_decline`, `app_leave`, `app_block`, `app_remove`, `app_free2` (transitions `A.page2.state` from `locked` → `free`; called by the page2 premium "show my profile again" tile), `app_lock2` (premium "hide me" action; transitions `A.page2.state` from `free` → `locked` with no profile/profiles, AND in the same transaction kicks every watcher in `A.page2.profiles[]`: each watcher's `page1` → locked + `message='remove'` (only if still pointing at A in 'watching'), per-pair `remove` restriction inserted, `removed` push queued. Equivalent to N `app_remove` calls + a final state flip, collapsed into one round trip. Mobile UI confirms with the user before calling since the action is destructive. No cooldown), `app_pause` (settings "Game mode → Off" toggle: atomically locks BOTH pages. Combines `app_lock2`'s watcher-kick with a full page1 cleanup that handles in-flight interactions: `page1.state='waiting'` → cancel-equivalent (B.page2 → locked+`cancel`, `cancelled-in` push, 24h cooldown); `page1.state='chat'` → leave-equivalent (B.page1 → locked+`leave`, B.page2 → free, `left` push, 14d cooldown); `page2.state='pending'` → decline-equivalent (inviter.page1 → locked+`decline`, `declined` push, 7d cooldown). Also removes self from any other user's `page2.profiles[]`. Final state: `A.page1 = {state:'locked'}`, `A.page2 = {state:'locked'}`, no profile/message on either side. Mobile prompts for confirmation only when side effects exist), `app_resume` (settings "Game mode → Active" toggle: inverse of `app_pause`. Sets both pages to free. Guarded on both pages currently being `locked` so an in-flight chat/waiting can't be wiped by a stray call), `app_expire_sweep` (called by pg_cron every minute), `app_delete_cleanup` (called by the `delete` endpoint before row deletion), `app_logout_cleanup` (called by the `logout` endpoint: kicks page2 viewers to `logout`, clears page2), `app_refresh_snapshots` (see below), `app_save_profile` (called by the `profile` endpoint: accepts `{images?, bio?, family?, is_for_kids?}` payload. Only the keys present are written; passing `null` on `bio`/`family` clears that field).
 
 Helper functions: `make_profile`, `_remove_from_page2`, `_kick_pointing_at`, `_add_restriction`, `schedule_overlap` (see "Schedule overlap" below), `kids_preference_match` (see "Kids preference match" below).
 
@@ -511,14 +601,16 @@ The "Back to the game" button on the dead-invite card calls `app/free2` directly
 
 The `Profile` snapshot stored inside `relations` (via `make_profile`) freezes the entire profile — `name`, `title`, `images`, `bio`, `family`, `is_male`, `last_seen`, `distance` — at write time. Without active refresh, a chat partner or watcher would keep showing whatever values were captured at match/view-start time, not the current ones.
 
-`app_refresh_snapshots(me_id)` is called from the handler (behind `EdgeRuntime.waitUntil`) on every endpoint **except** `delete` and `reset`. It rebuilds every snapshot using a fresh `make_profile(...)` so all observable Profile fields stay live over Realtime — not just `last_seen` and `distance`, but also `name`, `images`, `bio`, `family`, `is_male`, `title`. So a user editing their bio, swapping a photo, or updating family/schedule propagates immediately to anyone holding their profile inside `relations`. The chat-state rule:
+`app_refresh_snapshots(me_id)` is called from the handler (behind `EdgeRuntime.waitUntil`) on every endpoint **except** `delete` and `reset`. It rebuilds every snapshot using a fresh `make_profile(...)` so all observable Profile fields stay live over Realtime — not just `last_seen` and `distance`, but also `name`, `images`, `bio`, `family`, `is_male`, `title`. So a user editing their bio, swapping a photo, or updating family/schedule propagates immediately to anyone holding their profile inside `relations`. Stripping rules:
 
-- **state ≠ chat** → snapshot has full live profile, including `distance`
-- **state = chat** → snapshot has full live profile; `distance` is stripped (and never re-added)
+- **state ≠ chat AND message is null** → snapshot has full live profile, including `distance` and `last_seen`.
+- **state = 'chat'** → strip `distance` (kept stripped, never re-added). Two users in chat shouldn't surface live distance to each other.
+- **message IS NOT NULL** (locked-with-message state) → strip BOTH `distance` AND `last_seen`. The "what happened" card has no use for those volatile fields, and surfacing them after the interaction ended is misleading (e.g. a partner's `last_seen` ticking forward after they left chat).
+- Rules apply additively to all four snapshot slots that can carry a message: outward `B.page1.profile`, outward `B.page2.profile`, inward `A.page1.profile`, inward `A.page2.profile`. `page2.profiles[]` (watcher list) is only populated when `state='free'` with no message, so neither rule applies and the full snapshot is kept fresh there.
 
 Specifically:
-- Outward: for every B referencing A in `B.page1.profile`, `B.page2.profile`, or `B.page2.profiles[]`, replace A's snapshot with a fresh `make_profile(A, dist_AB)` (distance stripped if that cell is in chat state).
-- Inward: inside A's own relations, rebuild each referenced user B's snapshot from B's current row via `make_profile(B, dist_AB)`. If B no longer exists, the previous snapshot is preserved as-is.
+- Outward: for every B referencing A in `B.page1.profile`, `B.page2.profile`, or `B.page2.profiles[]`, replace A's snapshot with a fresh `make_profile(A, dist_AB)` then apply the stripping rules above.
+- Inward: inside A's own relations, rebuild each referenced user B's snapshot from B's current row via `make_profile(B, dist_AB)` and apply the same stripping rules. If B no longer exists, the previous snapshot is preserved as-is.
 
 Realtime delivers the resulting `users.relations` change to the affected client. Mobile keeps reading every Profile field from the snapshot — name, photos, bio, family, last_seen, distance — and the snapshot is now kept fresh for it on every server call.
 

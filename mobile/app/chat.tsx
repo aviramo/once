@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Keyboard,
-  Linking, Modal, Platform, Pressable, StyleSheet, View,
-} from 'react-native'
+import { ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Keyboard, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, requestRecordingPermissionsAsync, setAudioModeAsync, RecordingPresets } from 'expo-audio'
 import { Text, TextInput } from '../src/components/AppText'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Circle, Path, Polyline, Rect } from 'react-native-svg'
 import * as DocumentPicker from 'expo-document-picker'
@@ -16,20 +12,18 @@ import * as Location from 'expo-location'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, Easing as REasing, interpolateColor } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
-import { invoke, publicImageUrl } from '../src/lib/api'
+import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
-import { IconPressable } from '../src/components/IconPressable'
-import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { useUserStore } from '../src/stores/userStore'
-import { FONT_SCALE, SINGLE, RADIUS } from '../src/fonts'
-import { TEXT_PRIMARY, WHITE, BLACK, DESTRUCTIVE, PRIMARY, PRIMARY_BG, GRAY_50, GRAY_100, GRAY_400, GRAY_BG } from '../src/colors'
-import {
-  defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays,
-} from '../src/lib/family'
+import { FONT_SCALE } from '../src/fonts'
+import { SINGLE, RADIUS } from '../src/tokens'
+import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { SendIcon, MicIcon } from '../src/components/icons'
+import { chatCacheKey, chatLastReadKey } from '../src/keys'
+import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
 
 const isRTL = I18nManager.isRTL
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 const N_REC_BARS = 34
 
 function buildRecWavePath(bars: number[], W: number, H: number): string {
@@ -111,43 +105,10 @@ function formatLastSeen(iso: string | null | undefined, isMale: boolean | null |
   return n === 1 ? tg('match.dayAgo', isMale) : tg('match.daysAgo', isMale).replace('{n}', String(n))
 }
 
-// ── Icons ──────────────────────────────────────────────────────────────────
+// ── Icons (chat-specific only; shared icons live in src/components/icons.tsx) ─
 
-function BackIcon() {
-  return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={TEXT_PRIMARY} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
-    </Svg>
-  )
-}
-function DotsIcon() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill={TEXT_PRIMARY}>
-      <Circle cx={12} cy={5} r={1.6} />
-      <Circle cx={12} cy={12} r={1.6} />
-      <Circle cx={12} cy={19} r={1.6} />
-    </Svg>
-  )
-}
-function SendIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill={WHITE}>
-      <Path d={isRTL ? 'M22 21L1 12 22 3v7l-15 2 15 2z' : 'M2 21l21-9L2 3v7l15 2-15 2z'} />
-    </Svg>
-  )
-}
-function MicIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M12 1c-2.2 0-4 1.8-4 4v6c0 2.2 1.8 4 4 4s4-1.8 4-4V5c0-2.2-1.8-4-4-4z" />
-      <Path d="M19 10a7 7 0 0 1-14 0" />
-      <Path d="M12 19v3" />
-      <Path d="M8 22h8" />
-    </Svg>
-  )
-}
 function CheckMark({ status, isMine }: { status: 'pending' | 'sent' | 'read'; isMine: boolean }) {
-  const c = isMine ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.4)'
+  const c = isMine ? WHITE_STRONG : BLACK_MID
   if (status === 'pending') {
     return (
       <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -172,7 +133,6 @@ function CheckMark({ status, isMine }: { status: 'pending' | 'sent' | 'read'; is
 
 type ChatPageProps = {
   topInset?: number
-  onBack?: () => void
   // True while the chat pane is the visible pane in the home shell. Incoming
   // messages only count toward the unread badge when this is false.
   isActive?: boolean
@@ -180,7 +140,7 @@ type ChatPageProps = {
   autoFocusInput?: boolean
 }
 
-export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnreadChange, autoFocusInput }: ChatPageProps = {}) {
+export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange, autoFocusInput }: ChatPageProps = {}) {
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const userId = profile?.user_id ?? ''
@@ -189,19 +149,9 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   const matchLastSeen = match?.last_seen ?? null
   const isMale = profile?.is_male ?? null
   const matchIsMale = match?.is_male ?? null
-  const myImage = profile?.images?.[0]?.normal
-    ? publicImageUrl(userId, 'normal', profile.images[0].normal)
-    : undefined
-  const matchImage = match?.images?.[0]?.normal
-    ? publicImageUrl(match.user_id, 'normal', match.images[0].normal)
-    : undefined
-
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [enterSends, setEnterSends] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'block' | 'leave' | null>(null)
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   const [otherIsTyping, setOtherIsTyping] = useState(false)
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null)
@@ -210,8 +160,8 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   const [, setTick] = useState(0)
 
   // ── Cache helpers ──────────────────────────────────────────────────────
-  const cacheKey = otherId ? `chatCache_${otherId}` : ''
-  const readReceiptKey = otherId ? `chatLastRead_${otherId}` : ''
+  const cacheKey = otherId ? chatCacheKey(otherId) : ''
+  const readReceiptKey = otherId ? chatLastReadKey(otherId) : ''
   const setMessages = useCallback((update: Message[] | ((prev: Message[]) => Message[])) => {
     setMessagesRaw(update)
   }, [])
@@ -278,7 +228,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
   }))
   const inputWrapBorderStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(attachAnim.value, [0, 1], ['rgba(0,0,0,0.12)', PRIMARY]),
+    borderColor: interpolateColor(attachAnim.value, [0, 1], [BLACK_SOFT, PRIMARY]),
   }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
@@ -468,21 +418,6 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
   }, [])
   useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
   useEffect(() => { loadingMoreRef.current = loadingMore }, [loadingMore])
-
-  // ── Enter-sends-message preference ───────────────────────────────────────
-  useEffect(() => {
-    AsyncStorage.getItem('chatEnterSends').then(v => {
-      if (v === '1') setEnterSends(true)
-    })
-  }, [])
-
-  const toggleEnterSends = () => {
-    setEnterSends(prev => {
-      const next = !prev
-      AsyncStorage.setItem('chatEnterSends', next ? '1' : '0').catch(() => {})
-      return next
-    })
-  }
 
   // ── Unread counter ───────────────────────────────────────────────────────
   // Incremented inside the realtime INSERT handler when the chat pane is not
@@ -1346,16 +1281,6 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
     // stays mounted+focused) but drop any typed input so it doesn't land in
     // the field behind the recording overlay.
     if (recordPhase !== 'idle') return
-    // On mobile, multiline TextInput turns the soft-keyboard Enter into a
-    // literal '\n' in the value rather than firing onKeyPress/onSubmitEditing.
-    // When "Enter sends message" is on, detect the inserted newline here and
-    // dispatch send instead of letting it land in the input.
-    if (enterSends && value.includes('\n')) {
-      const msg = value.replace(/\n+/g, ' ').trim()
-      if (msg) handleSend(msg)
-      else { setText(''); hasTextShared.value = 0 }
-      return
-    }
     setText(value)
     hasTextShared.value = value.trim().length > 0 ? 1 : 0
     const now = Date.now()
@@ -1500,43 +1425,13 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
 
   return (
     <View style={[styles.root, { paddingTop: topInset, paddingBottom: Math.max(safeBottom, kbHeight > 0 ? kbHeight + 8 : 0) }]}>
-      <StatusBar style="dark" />
-
-      {/* ── Header ──
-          Simple 3-slot row, fixed 56px tall. Each slot is a 56×56 box with
-          its own alignItems/justifyContent centering, so icons and the
-          status text all land on the exact same centerline regardless of
-          Android's font metrics. No flex, no absolute overlays — the slot
-          widths carry the layout. */}
       <View style={styles.header}>
-        <View pointerEvents="none" style={styles.headerCenter}>
-          <Text
-            style={[styles.status, otherIsOnline && styles.statusOnline]}
-            numberOfLines={1}
-          >
-            {statusText}
-          </Text>
-        </View>
-        <IconPressable
-          style={styles.backBtn}
-          pressedStyle={styles.backBtnPressed}
-          onPress={() => { tap(); onBack?.() }}
+        <Text
+          style={[styles.status, otherIsOnline && styles.statusOnline]}
+          numberOfLines={1}
         >
-          <BackIcon />
-          {matchImage ? (
-            <Image source={{ uri: matchImage }} style={styles.headerAvatar} />
-          ) : (
-            <View style={styles.headerAvatarPlaceholder} />
-          )}
-        </IconPressable>
-        <View style={{ flex: 1 }} />
-        <IconPressable
-          style={styles.menuBtn}
-          pressedStyle={styles.menuBtnPressed}
-          onPress={() => { tap(); setMenuOpen(true) }}
-        >
-          <DotsIcon />
-        </IconPressable>
+          {statusText}
+        </Text>
       </View>
 
       {/* ── Messages ──
@@ -1562,7 +1457,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
           ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: 12, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={GRAY_50} />
+              <ActivityIndicator size="small" color={BLACK_SOFT} />
             </View>
           ) : null}
           ListEmptyComponent={!otherIsTyping ? (
@@ -1618,7 +1513,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                   value={text}
                   onChangeText={onInputChange}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
-                  placeholderTextColor="rgba(0,0,0,0.35)"
+                  placeholderTextColor={BLACK_MID}
                   multiline
                   blurOnSubmit={false}
                   autoFocus={false}
@@ -1629,7 +1524,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                 onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
                 style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
               >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </Svg>
               </Pressable>
@@ -1707,7 +1602,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             {recordPhase === 'recording' && (
               <View style={[styles.inputRow, styles.recordOverlay]}>
                 <Pressable onPress={handleCancelRecording} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth={2.5} strokeLinecap="round">
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={BLACK_STRONG} strokeWidth={2.5} strokeLinecap="round">
                     <Path d="M18 6L6 18M6 6l12 12" />
                   </Svg>
                 </Pressable>
@@ -1735,12 +1630,12 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
             {recordPhase === 'preview' && (
               <View style={[styles.inputRow, styles.recordOverlay]}>
                 <Pressable onPress={handleCancelRecording} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={BLACK_STRONG} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <Path d="M3 6h18M19 6l-1 14H6L5 6M8 6V4h8v2" />
                   </Svg>
                 </Pressable>
                 <Pressable onPress={handlePreviewPlayPause} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={TEXT_PRIMARY}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={BLACK}>
                     {previewPlaying
                       ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" />
                       : <Path d="M8 5v14l11-7z" />}
@@ -1750,7 +1645,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
                   <Waveform
                     bars={previewBars}
                     height={28}
-                    inactiveColor="rgba(0,0,0,0.18)"
+                    inactiveColor={BLACK_MID}
                     activeColor={PRIMARY}
                     thumbColor={PRIMARY}
                     progressAnim={previewProgressAnim}
@@ -1776,74 +1671,7 @@ export default function ChatPage({ topInset = 0, onBack, isActive = true, onUnre
         </View>
       </View>
 
-      {/* ── Menu dropdown ── */}
-      {menuOpen && (
-        <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
-          <View style={[styles.menuAnchor, { top: topInset + 56 }]}>
-            <Pressable style={styles.menuDropdown} onPress={e => e.stopPropagation()}>
-              <View style={styles.menuCard}>
-
-                <Pressable
-                  onPress={toggleEnterSends}
-                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
-                >
-                  <Text style={styles.menuLabel}>{t('chat.enterSends')}</Text>
-                  <View style={[styles.menuCheckbox, enterSends && styles.menuCheckboxOn]}>
-                    {enterSends && (
-                      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                        <Polyline points="20 6 9 17 4 12" stroke={WHITE} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-                      </Svg>
-                    )}
-                  </View>
-                </Pressable>
-
-                <View style={styles.menuDivider} />
-
-                <Pressable
-                  onPress={() => { setMenuOpen(false); setConfirmAction('block') }}
-                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
-                >
-                  <Text style={[styles.menuLabel, styles.menuLabelDestructive]}>{t('chat.block')}</Text>
-                </Pressable>
-
-                <View style={styles.menuDivider} />
-
-                <Pressable
-                  onPress={() => { setMenuOpen(false); setConfirmAction('leave') }}
-                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
-                >
-                  <Text style={[styles.menuLabel, styles.menuLabelDestructive, styles.menuLabelEmphasis]}>{t('chat.leave')}</Text>
-                </Pressable>
-
-              </View>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
       {lightboxUri && <LightboxModal uri={lightboxUri} onClose={() => setLightboxUri(null)} />}
-
-      <ConfirmDialog
-        visible={confirmAction === 'block'}
-        title={t('chat.blockTitle')}
-        description={t('chat.blockDesc')}
-        confirmLabel={t('chat.blockConfirm')}
-        destructive
-        onCancel={() => setConfirmAction(null)}
-        onConfirm={async () => { await invoke('app/block'); setConfirmAction(null) }}
-        draggable
-      />
-      <ConfirmDialog
-        visible={confirmAction === 'leave'}
-        title={t('home.leaveTitle')}
-        description={t('home.leaveDesc')}
-        confirmLabel={t('home.leaveConfirm')}
-        destructive
-        onCancel={() => setConfirmAction(null)}
-        onConfirm={async () => { setConfirmAction(null); await invoke('app/leave') }}
-        draggable
-      />
     </View>
   )
 }
@@ -1887,7 +1715,7 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
         </Pressable>
       ) : (
         <View style={styles.chatImagePlaceholder}>
-          <ActivityIndicator color={isMine ? WHITE : TEXT_PRIMARY} />
+          <ActivityIndicator color={isMine ? WHITE : BLACK} />
         </View>
       )}
       <View style={[styles.imageTimeRow, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
@@ -1924,10 +1752,10 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
 
-  const textColor = isMine ? WHITE : TEXT_PRIMARY
-  const subColor = isMine ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)'
-  const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
-  const iconBg = isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)'
+  const textColor = isMine ? WHITE : BLACK
+  const subColor = isMine ? WHITE_STRONG : BLACK_STRONG
+  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
+  const iconBg = isMine ? WHITE_SOFT : BLACK_SOFT
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -2012,7 +1840,7 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
+  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -2171,21 +1999,6 @@ function TypingDots() {
   )
 }
 
-function RecordingDot() {
-  const blink = useRef(new Animated.Value(1)).current
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(blink, { toValue: 0.15, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(blink, { toValue: 1, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [])
-  return <Animated.View style={[styles.recDot, { opacity: blink }]} />
-}
-
 function buildWavePath(bars: number[], width: number, height: number): string {
   if (bars.length < 2 || width <= 0) return ''
   const cy = height / 2
@@ -2203,7 +2016,7 @@ function buildWavePath(bars: number[], width: number, height: number): string {
     return d
   }
   const top: [number, number][] = bars.map((h, i) => [i * step, cy - h * maxH])
-  const bot: [number, number][] = bars.map((h, i) => [(bars.length - 1 - i) * step, cy + bars[bars.length - 1 - i] * maxH])
+  const bot: [number, number][] = bars.map((_h, i) => [(bars.length - 1 - i) * step, cy + bars[bars.length - 1 - i] * maxH])
   return seg(top, 'M') + ' ' + seg(bot, 'L') + ' Z'
 }
 
@@ -2496,10 +2309,10 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const iconColor = isMine ? WHITE : TEXT_PRIMARY
-  const barActive = isMine ? 'rgba(255,255,255,0.9)' : PRIMARY
-  const barInactive = isMine ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)'
-  const timeColor = isMine ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'
+  const iconColor = isMine ? WHITE : BLACK
+  const barActive = isMine ? WHITE_STRONG : PRIMARY
+  const barInactive = isMine ? WHITE_MID : BLACK_MID
+  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
   const routeBtn = playing ? (
@@ -2513,7 +2326,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           <Path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.05-.24c1.16.39 2.41.6 3.7.6a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A18 18 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.29.21 2.54.6 3.7a1 1 0 0 1-.24 1.05l-2.2 2.04z" />
         </Svg>
       ) : (
-        <Svg width={16} height={16} viewBox="0 0 24 24" fill={TEXT_PRIMARY}>
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill={BLACK}>
           <Path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05a4.5 4.5 0 0 0 2.5-4.02zM14 3.23v2.06a8 8 0 0 1 0 14.66v2.06a10 10 0 0 0 0-18.78z" />
         </Svg>
       )}
@@ -2528,7 +2341,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           <Pressable
             onPress={handlePlayPause}
             disabled={!ready}
-            style={[styles.audioPlayBtn, { backgroundColor: isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)' }]}
+            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : BLACK_SOFT }]}
             hitSlop={8}
           >
             {ready ? (
@@ -2580,82 +2393,6 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
 }
 
 // ── Event strip ──────────────────────────────────────────────────────────
-// Renders a visual status change row: [actor avatar] ── chip ── [target avatar]
-// Explicitly handles RTL so the actor (inviter) is always on the reading-
-// start side and the target (invited) on the reading-end side.
-
-const EVENT_COLORS = {
-  invite:  { fg: 'rgba(0,0,0,0.6)', bg: 'rgba(0,0,0,0.06)' },
-  approve: { fg: PRIMARY, bg: PRIMARY_BG },
-} as const
-
-function EventStrip({
-  actorImage,
-  targetImage,
-  label,
-  eventType,
-  time,
-}: {
-  actorImage: string | undefined
-  targetImage: string | undefined
-  label: string
-  eventType: string
-  time: string
-}) {
-  const colors = EVENT_COLORS[eventType as keyof typeof EVENT_COLORS] ?? EVENT_COLORS.invite
-  const startImage = isRTL ? targetImage : actorImage
-  const endImage = isRTL ? actorImage : targetImage
-  // Single row: [actor] [chip →] [target]
-  return (
-    <View style={evStyles.row}>
-      <Image source={{ uri: startImage }} style={evStyles.avatar} />
-      <View style={[evStyles.chip, { backgroundColor: colors.bg }]}>
-        <Text style={[evStyles.chipLabel, { color: colors.fg }]}>{label}</Text>
-        <Text style={[evStyles.chipTime, { color: colors.fg }]}>{time}</Text>
-        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none"
-          stroke={colors.fg} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-          <Path d={isRTL ? 'M19 12H5M11 5l-6 7 6 7' : 'M5 12h14M13 5l6 7-6 7'} />
-        </Svg>
-      </View>
-      <Image source={{ uri: endImage }} style={evStyles.avatar} />
-    </View>
-  )
-}
-
-const EV_AVATAR = 72
-const evStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
-  },
-  avatar: {
-    width: EV_AVATAR,
-    height: EV_AVATAR,
-    borderRadius: EV_AVATAR / 2,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingStart: 12,
-    paddingEnd: 8,
-    paddingVertical: 6,
-    borderRadius: 999,
-    gap: 5,
-  },
-  chipLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  chipTime: {
-    fontSize: 11,
-    opacity: 0.7,
-  },
-})
-
 // ── Lightbox ──────────────────────────────────────────────────────────────
 
 function LightboxModal({ uri, onClose }: { uri: string; onClose: () => void }) {
@@ -2737,7 +2474,7 @@ function LightboxModal({ uri, onClose }: { uri: string; onClose: () => void }) {
 const lbStyles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
+    backgroundColor: BLACK,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2752,7 +2489,7 @@ const lbStyles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: WHITE_SOFT,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2763,73 +2500,17 @@ const lbStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: WHITE },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     height: 56,
     paddingHorizontal: SINGLE,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: WHITE,
     zIndex: 2,
-  },
-  // Icon slot: square 56×56 box. alignItems/justifyContent center the icon
-  // on the exact same centerline as the header's own 56px height, so icons
-  // and the middle status text all share one baseline.
-  headerSlot: {
-    width: 56, height: 56,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  iconBtnPressed: { opacity: 0.5 },
-  menuBtn: {
-    height: 36,
-    width: 36,
-    borderRadius: RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuBtnPressed: {
-    backgroundColor: 'rgba(0,0,0,0.08)',
-  },
-  backBtn: {
-    height: 56,
-    borderRadius: RADIUS,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  backBtnPressed: {
-    opacity: 0.5,
-  },
-  headerAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    marginHorizontal: 4,
-  },
-  headerAvatarPlaceholder: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    marginHorizontal: 4,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-  },
-  // Title overlay: absolutely positioned across the full header width so the
-  // text centers relative to the screen, not relative to the leftover space
-  // between the (variable-width) back+avatar slot and the (36px) menu button.
-  // pointerEvents="none" on the View lets taps fall through to the icon rows.
-  headerCenter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   status: {
     fontSize: 17,
     fontWeight: '700',
-    color: 'rgba(0,0,0,0.6)',
+    color: BLACK_STRONG,
     textAlign: 'center',
     // Android adds ~4px of invisible padding above text metrics that pushes
     // the visible glyphs below the geometric center of their bounding box.
@@ -2843,7 +2524,7 @@ const styles = StyleSheet.create({
   messagesContent: { padding: 10, flexGrow: 1 },
   emptyLabel: {
     marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
-    color: 'rgba(0,0,0,0.35)', fontSize: 15, letterSpacing: 0.4,
+    color: BLACK_MID, fontSize: 15, letterSpacing: 0.4,
   },
 
   msgWrap: { marginTop: 2 },
@@ -2860,8 +2541,8 @@ const styles = StyleSheet.create({
   retryLabel: { fontSize: 11, color: DESTRUCTIVE },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.12)' },
-  daySepLabel: { fontSize: 11, color: 'rgba(0,0,0,0.5)' },
+  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT },
+  daySepLabel: { fontSize: 11, color: BLACK_STRONG },
 
   bubble: {
     maxWidth: '80%',
@@ -2871,20 +2552,20 @@ const styles = StyleSheet.create({
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: GRAY_BG },
+  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: BLACK_SOFT },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
   bubbleTextMine: { color: WHITE },
-  bubbleTextTheirs: { color: TEXT_PRIMARY },
+  bubbleTextTheirs: { color: BLACK },
 
   inlineTime: { fontSize: 11, lineHeight: 16, letterSpacing: 0.3 },
-  inlineTimeMine: { color: 'rgba(255,255,255,0.75)' },
-  inlineTimeTheirs: { color: 'rgba(0,0,0,0.35)' },
+  inlineTimeMine: { color: WHITE_STRONG },
+  inlineTimeTheirs: { color: BLACK_MID },
   bubbleTextRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' },
   textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: 2, marginStart: 'auto' as any, paddingStart: 4, marginEnd: -6 },
 
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 13, paddingHorizontal: 16 },
-  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.5)' },
+  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: BLACK_STRONG },
 
   // Outer wrapper: holds the single-row input + send button plus the
   // dynamic bottom spacer that clears the nav bar / keyboard.
@@ -2909,7 +2590,7 @@ const styles = StyleSheet.create({
     maxHeight: 174,
     borderRadius: RADIUS,
     borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.12)',
+    borderColor: BLACK_SOFT,
     backgroundColor: WHITE,
     paddingEnd: 4,
     overflow: 'hidden',
@@ -2926,7 +2607,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     lineHeight: 22,
-    color: TEXT_PRIMARY,
+    color: BLACK,
     textAlign: isRTL ? 'right' : 'left',
     textAlignVertical: 'center',
     includeFontPadding: false,
@@ -2938,65 +2619,6 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.3 },
   sendBtnPressed: { opacity: 0.85 },
-
-  menuBackdrop: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  menuAnchor: {
-    position: 'absolute',
-    end: SINGLE,
-    width: 280,
-    maxWidth: '92%',
-  },
-  menuDropdown: {
-    backgroundColor: WHITE,
-    borderRadius: RADIUS,
-    shadowColor: BLACK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  menuCard: {
-    backgroundColor: WHITE,
-    borderRadius: RADIUS,
-    overflow: 'hidden',
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 50,
-  },
-  menuRowPressed: { backgroundColor: 'rgba(0,0,0,0.06)' },
-  menuLabel: {
-    fontSize: 15,
-    color: 'rgba(0,0,0,0.5)',
-    flex: 1,
-  },
-  menuLabelDestructive: { color: 'rgba(180,60,60,0.6)' },
-  menuLabelEmphasis: { color: 'rgba(200,40,40,1)', fontWeight: '600' },
-  menuCheckbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: WHITE,
-  },
-  menuCheckboxOn: {
-    backgroundColor: PRIMARY,
-    borderColor: PRIMARY,
-  },
-  menuDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    marginStart: 16,
-  },
 
   // Attach popup (inline, above input bar)
   attachBtn: {
@@ -3030,11 +2652,11 @@ const styles = StyleSheet.create({
     gap: 8,
     alignSelf: 'stretch',
   },
-  attachBarItemPressed: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  attachBarItemPressed: { backgroundColor: WHITE_SOFT },
   attachBarDivider: {
     width: StyleSheet.hairlineWidth,
     height: 22,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: WHITE_MID,
   },
   attachBarClose: {
     alignSelf: 'stretch',
@@ -3044,7 +2666,7 @@ const styles = StyleSheet.create({
   },
   attachBarCloseCircle: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
 
@@ -3101,12 +2723,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: BLACK_SOFT,
   },
   chatImageSpinnerOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: BLACK_MID,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3114,7 +2736,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: SINGLE + 8,
     end: SINGLE + 8,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: BLACK_MID,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -3123,7 +2745,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     letterSpacing: 0.3,
-    color: 'rgba(255,255,255,0.9)',
+    color: WHITE_STRONG,
   },
 
   // Audio bubble
@@ -3143,7 +2765,7 @@ const styles = StyleSheet.create({
     width: 32, height: 32,
     borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: BLACK_SOFT,
   },
   audioRouteBtnActive: {
     backgroundColor: PRIMARY,
@@ -3194,7 +2816,7 @@ const styles = StyleSheet.create({
   recTime: {
     fontSize: 15,
     fontWeight: '500',
-    color: TEXT_PRIMARY,
+    color: BLACK,
     fontVariant: ['tabular-nums'],
   },
   recWaveWrap: {
@@ -3208,7 +2830,7 @@ const styles = StyleSheet.create({
   },
   previewDuration: {
     fontSize: 13,
-    color: 'rgba(0,0,0,0.5)',
+    color: BLACK_STRONG,
     fontVariant: ['tabular-nums'],
     minWidth: 34,
     textAlign: 'right',
@@ -3261,28 +2883,28 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     gap: 8,
   },
-  scheduleTitle: { fontSize: 13, fontWeight: '600', color: TEXT_PRIMARY, marginBottom: 2 },
+  scheduleTitle: { fontSize: 13, fontWeight: '600', color: BLACK, marginBottom: 2 },
   scheduleTitleMine: { color: WHITE },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: 3 },
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: 1.5, borderColor: GRAY_100,
+    backgroundColor: WHITE, borderWidth: 1.5, borderColor: BLACK_SOFT,
   },
-  scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.45)' },
+  scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
   scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   scheduleDayBubbleSelectedMine: { backgroundColor: WHITE, borderColor: WHITE },
   scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
-  scheduleDayBubbleWeekendMine: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.18)' },
-  scheduleDayLetter: { fontSize: 12, color: TEXT_PRIMARY },
+  scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
+  scheduleDayLetter: { fontSize: 12, color: BLACK },
   scheduleDayLetterMine: { color: WHITE },
   scheduleDayLetterSelected: { color: WHITE },
   scheduleDayLetterSelectedMine: { color: PRIMARY },
   scheduleDayLetterWeekend: { color: PRIMARY },
   scheduleDayLetterWeekendMine: { color: WHITE },
-  scheduleDayDate: { fontSize: 10, color: GRAY_400 },
-  scheduleDayDateMine: { color: 'rgba(255,255,255,0.75)' },
+  scheduleDayDate: { fontSize: 10, color: BLACK_STRONG },
+  scheduleDayDateMine: { color: WHITE_STRONG },
   scheduleFooter: {
     flexDirection: 'row',
     alignItems: 'center',

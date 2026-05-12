@@ -373,7 +373,6 @@ async function insertProfile(user, p, filenames) {
   const data = {
     images: filenames.map(f => ({ normal: f, hash: '' })),
     bio: p.bioHe,
-    units: 'metric',
     role: 'TEST',
     ...(family !== undefined ? { family } : {}),
   }

@@ -5,7 +5,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
-import { getLocales } from 'expo-localization'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
@@ -14,12 +13,8 @@ import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
-import { TEXT_PRIMARY, WHITE, DESTRUCTIVE, PRIMARY, GRAY_50 } from '../src/colors'
-import { SINGLE, RADIUS } from '../src/fonts'
-import { OnceLogo } from '../src/components/OnceLogo'
-
-const IMPERIAL_REGIONS = new Set(['US', 'LR', 'MM'])
-const autoUnits = IMPERIAL_REGIONS.has(getLocales()[0]?.regionCode ?? '') ? 'imperial' : 'metric'
+import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../src/colors'
+import { RADIUS } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 type DateUnit = 'dd' | 'mm' | 'yyyy'
@@ -89,7 +84,7 @@ function GenderCard({
         onResponderRelease={handlePress}
       >
         <View style={styles.cardInner}>
-          {icon(TEXT_PRIMARY)}
+          {icon(BLACK)}
           <Text style={styles.cardLabel}>{label}</Text>
         </View>
         <Animated.View
@@ -362,7 +357,7 @@ export default function OnboardingPage() {
     setDateError(null)
     try {
       seededFromProfileRef.current = true
-      await invoke('app/account', { birth_date: birthdate, name: name.trim(), is_male: isMale, units: autoUnits })
+      await invoke('app/account', { birth_date: birthdate, name: name.trim(), is_male: isMale })
       setStep(s => Math.min(TOTAL_STEPS, s + 1))
     } catch (e: any) {
       setDateError(e?.message ?? 'error')
@@ -501,7 +496,7 @@ export default function OnboardingPage() {
                     keyboardType="number-pad"
                     maxLength={unit === 'yyyy' ? 4 : 2}
                     placeholder={unitPlaceholder[unit]}
-                    placeholderTextColor="rgba(0,0,0,0.35)"
+                    placeholderTextColor={BLACK_MID}
                     selectTextOnFocus
                   />
                 </View>
@@ -573,7 +568,7 @@ export default function OnboardingPage() {
               multiline
               textAlignVertical="top"
               placeholder={t('bio.placeholder')}
-              placeholderTextColor="rgba(0,0,0,0.3)"
+              placeholderTextColor={BLACK_MID}
               editable={!bioSubmitting}
             />
             <Text style={[styles.bioCounter, !belowMin && bioRemaining < 20 && styles.bioCounterWarn]}>
@@ -633,7 +628,7 @@ export default function OnboardingPage() {
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: GRAY_50, transform: [{ translateY: overlayY }] },
+                { backgroundColor: BLACK_SOFT, transform: [{ translateY: overlayY }] },
               ]}
               pointerEvents={step === 5 ? 'auto' : 'none'}
             >
@@ -641,24 +636,6 @@ export default function OnboardingPage() {
             </Animated.View>
           )}
         </View>
-        {bioSubmitting && (
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: keyboardOffset,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <View style={{ borderRadius: RADIUS, overflow: 'hidden' }}>
-              <OnceLogo size={52} />
-            </View>
-          </Animated.View>
-        )}
       </Animated.View>
     </SafeAreaView>
   )
@@ -667,7 +644,7 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: GRAY_50 },
+  root: { flex: 1, backgroundColor: BLACK_SOFT },
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
   page: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
@@ -677,14 +654,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: TEXT_PRIMARY,
+    color: BLACK,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   subtitle: {
     marginTop: 10,
     fontSize: 15,
-    color: 'rgba(0,0,0,0.5)',
+    color: BLACK_STRONG,
     textAlign: 'center',
   },
   subtitleRow: {
@@ -705,7 +682,7 @@ const styles = StyleSheet.create({
   card: {
     aspectRatio: 1,
     borderRadius: RADIUS,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: BLACK_SOFT,
     overflow: 'hidden',
   },
   cardInner: {
@@ -724,7 +701,7 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
+    color: BLACK,
   },
   cardLabelActive: { color: WHITE },
 
@@ -732,7 +709,7 @@ const styles = StyleSheet.create({
   almostDone: {
     marginTop: 12,
     fontSize: 13,
-    color: 'rgba(0,0,0,0.45)',
+    color: BLACK_STRONG,
     textAlign: 'center',
   },
 
@@ -743,14 +720,14 @@ const styles = StyleSheet.create({
 
   inputWrap: {
     marginTop: 32,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
   input: {
     fontSize: 16,
-    color: TEXT_PRIMARY,
+    color: BLACK,
     textAlign: 'center',
     padding: 0,
   },
@@ -766,7 +743,7 @@ const styles = StyleSheet.create({
   dateSegmentGap: { marginLeft: 10 },
   dateBox: {
     alignSelf: 'stretch',
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
     paddingVertical: 16,
     paddingHorizontal: 8,
@@ -774,14 +751,14 @@ const styles = StyleSheet.create({
   dateInput: {
     fontSize: 20,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
+    color: BLACK,
     textAlign: 'center',
     padding: 0,
   },
   dateUnit: {
     marginTop: 8,
     fontSize: 13,
-    color: 'rgba(0,0,0,0.5)',
+    color: BLACK_STRONG,
   },
   errorText: {
     marginTop: 12,
@@ -793,13 +770,13 @@ const styles = StyleSheet.create({
   bioEmphasis: {
     marginTop: 14,
     fontSize: 15,
-    color: TEXT_PRIMARY,
+    color: BLACK,
     fontWeight: '700',
     textAlign: 'center',
   },
   bioField: {
     marginTop: 12,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -808,7 +785,7 @@ const styles = StyleSheet.create({
   },
   bioInput: {
     fontSize: 16,
-    color: TEXT_PRIMARY,
+    color: BLACK,
     padding: 0,
     minHeight: 96,
     textAlign: 'center',
@@ -818,13 +795,13 @@ const styles = StyleSheet.create({
     end: 12,
     bottom: 8,
     fontSize: 12,
-    color: 'rgba(0,0,0,0.5)',
+    color: BLACK_STRONG,
   },
   bioCounterWarn: { color: DESTRUCTIVE },
   bioTip: {
     marginTop: 14,
     fontSize: 13,
-    color: 'rgba(0,0,0,0.6)',
+    color: BLACK_STRONG,
     textAlign: 'center',
   },
 })

@@ -17,7 +17,7 @@ export default class User {
   is_for_male?: boolean;
   is_for_female?: boolean;
   name: string | null = null;
-  data: Data = { images: [], units: "km", os: "unknown", lang: "unknown", appearance: "light", push_token: null };
+  data: Data = { images: [], os: "unknown", lang: "unknown", appearance: "light", push_token: null };
   relations: Pages = defaultRelations;
   db: { new: Record<string, unknown>; old: Record<string, unknown> } = { new: {}, old: {} };
 
@@ -62,7 +62,7 @@ export default class User {
     this.is_for_female = is_male;
     this.age_from = Math.max(is_male ? age - 10 : age - 5, User.LEGAL);
     this.age_to = is_male ? age + 5 : age + 10;
-    this.range = this.data.units === "imperial" ? 16093 : 20000;
+    this.range = 20000;
     this.relations = defaultRelations;
     const { db: _db, ...rest } = this;
     const data = await Tools.invoke(log, "insert", Tools.supabase.from("users").insert(rest).select());

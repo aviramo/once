@@ -29,7 +29,17 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 
 ## Open entries
 
-_(none yet)_
+### `app/units` endpoint and `data.units` field
+
+- **Added:** 2026-05-11
+- **Reason:** Distance units used to be a user preference (`data.units` ∈ `{"metric","imperial"}`) togglable in Settings. New build derives the unit from device locale (`getLocales().regionCode`) and no longer writes the field. Older builds still POST `/app/units` and pass `units` inside `/app/account`.
+- **Old shape (kept alive):** Dispatcher silently 200-OKs `/app/units` calls (no `case "units"` → default branch persists `last_seen` and returns success). Both endpoints accept `units` in the body but the field is no longer in `updatable`, so it is dropped on the floor.
+- **New shape (preferred):** Client derives units from device locale; server never reads or writes `data.units`.
+- **Safe to remove after:** mobile version where the new locale-derived units lib (`src/lib/units.ts`) ships is the floor across live users.
+- **How to remove:**
+  - Optional: add `case "units": break;` to the dispatcher to short-circuit legacy calls without persisting.
+  - Optional: backfill to strip stale `data.units` from existing rows (`UPDATE users SET data = data - 'units' WHERE data ? 'units'`). Pure cleanup, no behavior impact.
+- **Verify before removing:** grep the `log` table for recent `key='units'` rows; if zero, the cleanup is safe.
 
 ## Removed (changelog)
 

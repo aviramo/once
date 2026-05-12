@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useEffect, useState } from 'react'
 import { publicImageUrl } from './api'
+import { STORAGE } from '../keys'
 
 // Persists the user's first profile photo to a stable local file so the home
 // avatar renders instantly on every cold start, instead of waiting on a
@@ -12,7 +13,7 @@ import { publicImageUrl } from './api'
 // the user swaps their primary photo.
 
 const FILE_PATH = FileSystem.documentDirectory + 'self-avatar.webp'
-const STORAGE_KEY = 'self-avatar-filename'
+const STORAGE_KEY = STORAGE.selfAvatar
 
 type Cache = { filename: string; uri: string } | null
 
@@ -50,10 +51,6 @@ async function commit(filename: string): Promise<void> {
   cache = { filename, uri: FILE_PATH }
   loaded = true
   notify()
-}
-
-export function getSelfAvatar(): Cache {
-  return cache
 }
 
 export function useSelfAvatar(): Cache {

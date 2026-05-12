@@ -1,8 +1,8 @@
 import { View, StyleSheet } from 'react-native'
-import { SINGLE, DOUBLE } from '../fonts'
+import { SINGLE } from '../tokens'
 import { WHITE } from '../colors'
 
-export type HomeButtonsProps = {
+type HomeButtonsProps = {
   children: React.ReactNode
 }
 
