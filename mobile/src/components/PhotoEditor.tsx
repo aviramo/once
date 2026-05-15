@@ -4,7 +4,8 @@ import { Image as ExpoImage } from 'expo-image'
 import type { Image as ImageData } from '../stores/userStore'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Path, Line, Circle } from 'react-native-svg'
-import * as DocumentPicker from 'expo-document-picker'
+import * as ImagePicker from 'expo-image-picker'
+import type { ImagePickerAsset } from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as FileSystem from 'expo-file-system/legacy'
 import { encode as encodeBlurhash } from 'blurhash'
@@ -16,7 +17,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { RADIUS } from '../tokens'
+import { SM, MD, RADIUS } from '../tokens'
 import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -100,7 +101,7 @@ async function computeBlurhash(uri: string): Promise<string> {
 
 // Public helper: pick the same compress + blurhash + upload pipeline used
 // by PhotoEditor, but for a single asset URI. Caller passes the source URI
-// (typically from DocumentPicker) and gets back the committed filename + hash.
+// (typically from ImagePicker) and gets back the committed filename + hash.
 // Also primes localPhotoUriCache so renderers can show the image from the
 // device cache while subsequent storage fetches warm the ExpoImage cache.
 async function processAndUploadPhoto(uri: string, userId: string, token: string): Promise<ImageData> {
@@ -147,7 +148,7 @@ export function processAndUploadPhotoDeferred(
         computeBlurhash(uri),
       ])
       // Swap the cache entry to the compressed copy so memory pressure
-      // pruning the original (DocumentPicker tmp file) doesn't break the
+      // pruning the original (ImagePicker tmp file) doesn't break the
       // local placeholder.
       localPhotoUriCache.set(normalFilename, normalUri)
       await uploadFileToStorage(normalUri, normalFilename, 'image/webp', 'normal', token, userId)
@@ -167,12 +168,13 @@ export interface PhotoEditorRef {
 }
 
 function PhotoCell({
-  uri, localUri, hash, onRemove, onLoaded, canRemove, dragging, highlighted, onLayout,
+  uri, localUri, hash, onRemove, onReplace, onLoaded, canRemove, dragging, highlighted, onLayout,
 }: {
   uri: string
   localUri?: string
   hash?: string
   onRemove: () => void
+  onReplace?: () => void
   onLoaded?: () => void
   canRemove: boolean
   dragging?: boolean
@@ -180,9 +182,10 @@ function PhotoCell({
   onLayout?: (e: any) => void
 }) {
   return (
-    <View
+    <Pressable
       style={photoStyles.cell}
       onLayout={onLayout}
+      onPress={onReplace ? () => { tap(); onReplace() } : undefined}
     >
       <ExpoImage
         source={uri}
@@ -202,19 +205,20 @@ function PhotoCell({
           </Svg>
         </Pressable>
       )}
-    </View>
+    </Pressable>
   )
 }
 
 // Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
-  photos, urlFor, hashFor, onRemove, onLoaded, onReorder, canRemove, uploads,
+  photos, urlFor, hashFor, onRemove, onReplace, onLoaded, onReorder, canRemove, uploads,
   additionalChildren, onDragStateChange,
 }: {
   photos: string[]
   urlFor: (f: string) => string
   hashFor?: (f: string) => string | undefined
   onRemove: (f: string) => void
+  onReplace?: (f: string) => void
   onLoaded: (f: string) => void
   onReorder: (from: number, to: number) => void
   canRemove: boolean
@@ -314,6 +318,7 @@ function PhotoGrid({
             localUri={matchingUpload?.uri ?? localPhotoUriCache.get(filename)}
             hash={hashFor?.(filename)}
             onRemove={() => onRemove(filename)}
+            onReplace={onReplace ? () => onReplace(filename) : undefined}
             onLoaded={() => onLoaded(filename)}
             canRemove={canRemove}
             dragging={dragIdx === i}
@@ -474,7 +479,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     }
   }, [])
 
-  const uploadOne = async (asset: DocumentPicker.DocumentPickerAsset): Promise<ImageData | null> => {
+  const uploadOne = async (asset: ImagePickerAsset): Promise<ImageData | null> => {
     if (!user) return null
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token ?? ''
@@ -484,19 +489,24 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   const pickPhoto = async () => {
     if (!user || photos.length >= 6) return
     const maxPick = 6 - photos.length
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'image/*',
-      copyToCacheDirectory: true,
-      multiple: true,
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: maxPick,
     })
     if (result.canceled || !result.assets?.length) return
 
     const sigs = await Promise.all(result.assets.map(async a => {
+      // Prefer the system asset ID: stable across separate picker calls,
+      // so re-picking the same photo dedupes against the existing copy.
+      if (a.assetId) return `id:${a.assetId}`
       try {
         const info = await FileSystem.getInfoAsync(a.uri, { md5: true })
         if (info.exists && info.md5) return info.md5
       } catch {}
-      return `${a.name ?? ''}|${a.size ?? 0}`
+      // Last resort: the picker tmp URI itself is unique per asset within
+      // a single call, so dedup still works inside the batch.
+      return `uri:${a.uri}`
     }))
 
     const existingSigs = new Set<string>([
@@ -588,7 +598,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const removePhoto = (filename: string) => {
-    if (photos.length <= 1) return
+    if (photos.length <= 2) return
     const idx = storeImages.findIndex(e => e.normal === filename)
     if (idx < 0) return
     sigByFilename.current.delete(filename)
@@ -596,6 +606,69 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     pendingUploads.current.delete(filename)
     pendingDeferred.delete(filename)
     update({ images: storeImages.filter((_, i) => i !== idx) })
+  }
+
+  const replacePhoto = async (oldFilename: string) => {
+    if (!user) return
+    const idx = storeImages.findIndex(e => e.normal === oldFilename)
+    if (idx < 0) return
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: false,
+    })
+    if (result.canceled || !result.assets?.[0]) return
+    const asset = result.assets[0]
+
+    if (deferUpload) {
+      const normalFilename = `${uuidv4()}.webp`
+      const latest = useUserStore.getState().profile
+      if (!latest) return
+      const targetIdx = latest.images.findIndex(e => e.normal === oldFilename)
+      if (targetIdx < 0) return
+      const next = [...latest.images]
+      next[targetIdx] = { normal: normalFilename, hash: '' }
+
+      sigByFilename.current.delete(oldFilename)
+      localPhotoUriCache.delete(oldFilename)
+      pendingUploads.current.delete(oldFilename)
+      pendingDeferred.delete(oldFilename)
+
+      localPhotoUriCache.set(normalFilename, asset.uri)
+      pendingUploads.current.set(normalFilename, { normalFilename, normalUri: asset.uri, hash: '' })
+      pendingDeferred.add(normalFilename)
+      useUserStore.getState().update({ images: next })
+
+      try {
+        const [normalUri, hash] = await Promise.all([
+          compressPhoto(asset.uri),
+          computeBlurhash(asset.uri),
+        ])
+        const pending = pendingUploads.current.get(normalFilename)
+        if (pending) { pending.normalUri = normalUri; if (hash) pending.hash = hash }
+      } catch (err) {
+        console.error('Photo compress error:', err)
+      }
+      return
+    }
+
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token ?? ''
+    try {
+      const newImage = await processAndUploadPhoto(asset.uri, user.id, token)
+      if (!newImage) return
+      const latest = useUserStore.getState().profile
+      if (!latest) return
+      const targetIdx = latest.images.findIndex(e => e.normal === oldFilename)
+      if (targetIdx < 0) return
+      const next = [...latest.images]
+      next[targetIdx] = newImage
+      sigByFilename.current.delete(oldFilename)
+      localPhotoUriCache.delete(oldFilename)
+      update({ images: next })
+    } catch (e) {
+      console.error('Photo replace error:', e)
+    }
   }
 
   const reorderPhotos = (from: number, to: number) => {
@@ -616,9 +689,10 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         urlFor={(f) => localPhotoUriCache.get(f) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user!.id}/normal/${f}`}
         hashFor={(f) => storeImages.find(e => e.normal === f)?.hash || undefined}
         onRemove={removePhoto}
+        onReplace={replacePhoto}
         onLoaded={onPhotoLoaded}
         onReorder={reorderPhotos}
-        canRemove={photos.length > 1}
+        canRemove={photos.length > 2}
         uploads={uploads}
         onDragStateChange={onDragStateChange}
         additionalChildren={
@@ -658,8 +732,8 @@ const photoStyles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    rowGap: 8,
-    marginTop: 12,
+    rowGap: SM,
+    marginTop: MD,
     overflow: 'visible',
   },
   cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS, overflow: 'hidden' },
@@ -685,7 +759,7 @@ const photoStyles = StyleSheet.create({
   },
   add: {
     width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },

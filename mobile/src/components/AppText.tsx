@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps } from 'react-native'
 import { DEFAULT_FAMILY, SINGLE_WEIGHT, WEIGHT_TO_FAMILY } from '../fonts'
+import { BLACK } from '../colors'
 
 // Drop-in replacement for react-native's Text that applies Heebo as the
 // default font family and picks the correct weighted face (real bold, not
@@ -43,6 +44,8 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function AppTex
   return (
     <RNTextInput
       ref={ref}
+      selectionColor={BLACK}
+      cursorColor={BLACK}
       {...props}
       style={[props.style, { fontFamily: family, ...weightOverride }]}
     />

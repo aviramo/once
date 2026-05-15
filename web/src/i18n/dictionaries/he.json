@@ -1,0 +1,100 @@
+{
+  "brand": "Once",
+  "tagline": "פגישה אחת כל פעם.",
+  "hero": {
+    "title": "אפליקציית ההיכרויות שבה רואים אחד בכל פעם.",
+    "subtitle": "במקום אינסוף סוויפים, רואים פרופיל אחד. נכנסים לשיחה, או ממשיכים הלאה.",
+    "ctaPrimary": "להוריד את האפליקציה",
+    "ctaSecondary": "לקרוא עוד"
+  },
+  "features": {
+    "title": "איך זה עובד",
+    "items": [
+      {
+        "title": "אחד בכל פעם",
+        "body": "פרופיל יחיד מולך, לא רשימה אינסופית. נוכחות אמיתית."
+      },
+      {
+        "title": "תזמון מתאים לחיים",
+        "body": "מנגנון לוח-זמנים גמיש שמתאים בין אנשים שיש להם זמן באמת באותם ימים."
+      },
+      {
+        "title": "צ׳אט בלי הסחות",
+        "body": "כשיש התאמה, יש שיחה. רק שניים, בלי הזמנות בו זמנית."
+      }
+    ]
+  },
+  "footer": {
+    "rights": "כל הזכויות שמורות",
+    "privacy": "מדיניות פרטיות",
+    "terms": "תנאי שימוש"
+  },
+  "nav": {
+    "admin": "פאנל ניהול",
+    "switchLang": "English"
+  },
+  "admin": {
+    "loginTitle": "כניסה לפאנל ניהול",
+    "loginSubtitle": "כניסה למשתמשים בעלי הרשאת admin בלבד.",
+    "signInWithGoogle": "כניסה עם Google",
+    "signingIn": "מתחבר…",
+    "signOut": "התנתקות",
+    "signInError": "ההתחברות נכשלה. נסו שוב.",
+    "errorNotAdmin": "אין הרשאות admin לחשבון הזה.",
+    "errorGeneric": "אירעה שגיאה בכניסה. נסו שוב.",
+    "dashboardTitle": "לוח ניהול",
+    "loggedInAs": "מחובר/ת בתור",
+    "users": "משתמשים",
+    "search": "חיפוש לפי שם",
+    "noResults": "אין תוצאות.",
+    "userCreated": "הצטרף",
+    "userLastSeen": "נצפה",
+    "filterP1": "דף 1",
+    "filterP2": "דף 2",
+    "filterAny": "הכל",
+    "page1States": {
+      "free": "פנוי",
+      "watching": "צופה",
+      "waiting": "מחכה לתשובה",
+      "chat": "בצ׳אט",
+      "locked": "נעול"
+    },
+    "page2States": {
+      "free": "פנוי",
+      "pending": "הזמנה ממתינה",
+      "chat": "בצ׳אט",
+      "locked": "נעול"
+    },
+    "back": "← חזרה",
+    "userDetail": {
+      "profile": "פרופיל",
+      "currentState": "מצב נוכחי",
+      "interactions": "אינטראקציות",
+      "noInteractions": "אין אינטראקציות מתועדות.",
+      "interactionEvents": "אירועים",
+      "viewHistory": "צפה בהיסטוריה →",
+      "interactionWith": "אינטראקציה עם",
+      "you": "המשתמש",
+      "other": "המשתמש האחר",
+      "chatMessage": "הודעת צ׳אט",
+      "restrictionOut": "הגביל",
+      "restrictionIn": "הוגבל עי",
+      "rpcAction": "פעולת שרת",
+      "activity": "פעילות אחרונה (כללי)",
+      "noActivity": "אין פעילות מתועדת.",
+      "email": "אימייל",
+      "userId": "מזהה",
+      "joinedFull": "תאריך הרשמה",
+      "lastSeenFull": "פעילות אחרונה",
+      "bio": "ביו",
+      "age": "גיל",
+      "gender": "מין",
+      "male": "גבר",
+      "female": "אישה",
+      "location": "מיקום",
+      "watchers": "צופים בו עכשיו",
+      "page1Profile": "צופה ב",
+      "page2Profile": "מוזמן מ"
+    }
+  }
+}

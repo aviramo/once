@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Modal, Pressable, StyleSheet, View, Platform, Keyboard, KeyboardAvoidingView } from 'react-native'
 import { GestureHandlerRootView, Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
@@ -6,12 +6,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 import { BLACK, WHITE, BLACK_SOFT } from '../colors'
-import {
-  DURATION, EASE,
-  SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y,
-  SHADOW_GRADIENT_STOPS, SHADOW_GRADIENT_HEIGHT,
-  DRAG_HANDLE,
-} from '../tokens'
+import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHADOW_GRADIENT_STOPS, SHADOW_GRADIENT_HEIGHT, DRAG_HANDLE } from '../tokens'
 
 // Single source of truth for the bottom-sheet behavior used by every popup
 // in the app: slide-up mount, slide-down dismiss, swipe-to-dismiss gesture,
@@ -25,6 +20,11 @@ import {
 type BottomSheetProps = {
   visible: boolean
   onDismiss: () => void
+  // Fires after the slide-out animation completes and the underlying Modal
+  // has unmounted. Use this to chain a follow-up that opens another
+  // Modal-based component — two iOS Modals racing on the same parent stack
+  // causes the new one to silently fail to present.
+  onClosed?: () => void
   children: ReactNode
   // True → render the small gray drag handle at the top of the sheet body.
   // Default true since every sheet currently shows it.
@@ -56,6 +56,7 @@ type BottomSheetProps = {
 export function BottomSheet({
   visible,
   onDismiss,
+  onClosed,
   children,
   dragHandle = true,
   swipeToDismiss = true,
@@ -76,6 +77,7 @@ export function BottomSheet({
   // Track mount/unmount separately so the slide-out animation runs to
   // completion before the Modal disappears.
   const [modalVisible, setModalVisible] = useState(false)
+  const wasMountedRef = useRef(false)
 
   useEffect(() => {
     if (visible) {
@@ -83,15 +85,30 @@ export function BottomSheet({
       translateY.value = cardHeight.value
       setModalVisible(true)
       requestAnimationFrame(() => {
-        translateY.value = withTiming(0, { duration: DURATION.sheetIn, easing: EASE.out })
+        translateY.value = withTiming(0)
       })
     } else if (modalVisible) {
       if (keyboardAvoiding) Keyboard.dismiss()
-      translateY.value = withTiming(cardHeight.value, { duration: DURATION.sheetOut, easing: EASE.in }, () => {
+      translateY.value = withTiming(cardHeight.value, undefined, () => {
         runOnJS(setModalVisible)(false)
       })
     }
   }, [visible])
+
+  useEffect(() => {
+    if (modalVisible) {
+      wasMountedRef.current = true
+      return
+    }
+    if (!wasMountedRef.current) return
+    wasMountedRef.current = false
+    if (!onClosed) return
+    // Wait one frame after the Modal unmounts so iOS finishes
+    // dismissViewController before any chained action (e.g. opening another
+    // Modal-based dialog) tries to present a new view controller.
+    const raf = requestAnimationFrame(() => onClosed())
+    return () => cancelAnimationFrame(raf)
+  }, [modalVisible, onClosed])
 
   const panBase = Gesture.Pan()
     .enabled(swipeToDismiss)
@@ -115,10 +132,10 @@ export function BottomSheet({
       'worklet'
       const eligible = wasAtTop.value
       if (eligible && (e.translationY > SWIPE_DISMISS_PX || e.velocityY > SWIPE_DISMISS_VELOCITY)) {
-        dragY.value = withTiming(cardHeight.value, { duration: DURATION.med, easing: EASE.in })
+        dragY.value = withTiming(cardHeight.value)
         runOnJS(onDismiss)()
       } else {
-        dragY.value = withTiming(0, { duration: DURATION.slow, easing: EASE.out })
+        dragY.value = withTiming(0)
       }
     })
 
@@ -192,7 +209,7 @@ const styles = StyleSheet.create({
     height: DRAG_HANDLE.height,
     borderRadius: DRAG_HANDLE.radius,
     backgroundColor: BLACK_SOFT,
-    marginTop: 12,
-    marginBottom: 16,
+    marginTop: MD,
+    marginBottom: MD,
   },
 })

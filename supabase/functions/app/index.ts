@@ -4,7 +4,7 @@ import User from "../user.ts";
 import { Notify, PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
-const updatable = ["weekStart", "os", "lang", "appearance", "push_token"];
+const updatable = ["weekStart", "os", "lang", "appearance", "push_token", "location_custom", "location_label"];
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
@@ -197,7 +197,8 @@ Deno.serve(async (req) => {
       case "free2":
       case "lock2":
       case "pause":
-      case "add": {
+      case "add":
+      case "cancel_add": {
         const result = await Tools.rpc(log, `app_${key}`, { me_id: user.user_id });
         await user.persist(log);
         if (result?.error) return log.error(key, result.error, 400);

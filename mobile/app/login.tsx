@@ -8,8 +8,8 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
-import { BLACK, BLACK_MID, BLACK_STRONG, WHITE } from '../src/colors'
-import { SINGLE } from '../src/tokens'
+import { BLACK, BLACK_MID, BLACK_STRONG, PRIMARY, PRIMARY_LIGHT } from '../src/colors'
+import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 
 // ── Auth setup (unchanged) ─────────────────────────────────────────────────
@@ -94,8 +94,10 @@ export default function LoginPage() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="dark" />
-
+      {/* Match the onboarding surface: light-coral background with a dark
+          status bar so the OS chrome blends into the screen rather than
+          contrasting against it. */}
+      <StatusBar style="dark" backgroundColor={PRIMARY_LIGHT} translucent={false} />
       <SafeAreaView style={styles.content} edges={['top', 'left', 'right']}>
         <View style={[styles.flex, { paddingBottom: kbHeight }]}>
           <ScrollView
@@ -140,7 +142,7 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY_LIGHT,
   },
   content: {
     flex: 1,
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
   },
   scrollBody: {
     flexGrow: 1,
-    paddingHorizontal: SINGLE + 4,
+    paddingHorizontal: SM + 4,
   },
 
   // ── Brand ──────────────────────────────────────────────────────────────
@@ -160,35 +162,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandName: {
-    fontSize: 56,
-    fontWeight: '800',
-    color: BLACK,
+    fontSize: TEXT.xxxl,
+    fontWeight: WEIGHT.extrabold,
+    color: PRIMARY,
     letterSpacing: -1.4,
   },
   brandSlogan: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: BLACK_STRONG,
+    fontSize: TEXT.lg,
+    fontWeight: WEIGHT.semibold,
+    color: BLACK,
     letterSpacing: -0.2,
-    marginTop: 4,
+    marginTop: XS,
   },
 
   // ── Form ───────────────────────────────────────────────────────────────
   form: {
-    paddingBottom: 16,
+    paddingBottom: MD,
   },
 
   // ── Bottom ─────────────────────────────────────────────────────────────
   bottom: {
-    paddingHorizontal: SINGLE + 4,
-    paddingTop: 12,
-    gap: 10,
+    paddingHorizontal: SM + XS,
+    paddingTop: MD,
+    gap: SM,
   },
   legalText: {
-    fontSize: 12,
+    fontSize: TEXT.sm,
     color: BLACK_MID,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: lh(TEXT.sm),
   },
   legalLink: {
     textDecorationLine: 'underline',

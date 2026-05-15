@@ -36,6 +36,12 @@ supabase/.branches/
 supabase/.temp/
 supabase/test/
 
+# ── Build artifacts / logs ─────────────────────────────────────────────────
+*.apk
+*.aab
+*.ipa
+*.log
+
 # ── Editor / OS ────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

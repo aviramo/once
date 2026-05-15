@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { Text, TextInput, AppState } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { StatusBar } from 'expo-status-bar'
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
@@ -212,9 +214,20 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: PRIMARY }}>
+      {/* Global status bar: white text whenever the app is in the foreground.
+          The OS automatically restores the system default when the app is
+          backgrounded or closed — every app owns its own status bar style. */}
+      <StatusBar style="light" backgroundColor={PRIMARY} translucent={false} />
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+          {/* Reanimated layout-animations (entering/exiting) race with Fabric's
+              initial mount on Android — "Failed to insert view ... must call
+              removeView() on child's parent first". Skipping entering on the
+              first paint side-steps the race; subsequent mounts animate as
+              normal. Keep this wrapper at the root so it covers every screen. */}
+          <LayoutAnimationConfig skipEntering>
+            <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+          </LayoutAnimationConfig>
         </AuthProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

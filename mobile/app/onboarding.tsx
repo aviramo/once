@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, Platform, PanResponder, BackHandler, Dimensions } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
@@ -12,9 +12,10 @@ import { tap } from '../src/lib/haptics'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
+import { CheckIcon } from '../src/components/icons'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
-import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../src/colors'
-import { RADIUS } from '../src/tokens'
+import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_LIGHT, BLACK_MID, BLACK_STRONG } from '../src/colors'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 type DateUnit = 'dd' | 'mm' | 'yyyy'
@@ -109,7 +110,7 @@ export default function OnboardingPage() {
 
   const initialStep =
     profile?.name && profile?.birth_date && !profile.bio
-      ? ((profile.images?.length ?? 0) >= 1 ? 5 : 4)
+      ? ((profile.images?.length ?? 0) >= 2 ? 5 : 4)
       : 1
   const [step, setStep] = useState(initialStep)
   const [renderedSteps, setRenderedSteps] = useState(() => new Set([initialStep]))
@@ -133,6 +134,7 @@ export default function OnboardingPage() {
   const slideY = useRef(new Animated.Value(-(initialStep - 1) * initialPagerH)).current
   const keyboardOffset = useRef(new Animated.Value(0)).current
   const keyboardShift = useRef(new Animated.Value(0)).current
+  const [keyboardH, setKeyboardH] = useState(0)
   const totalY = useRef(Animated.add(slideY, keyboardShift)).current
   const stepRef = useRef(step)
   const containerHRef = useRef(containerH)
@@ -207,6 +209,7 @@ export default function OnboardingPage() {
       // Subtract bottom safe-area inset: SafeAreaView already reserves it,
       // and the keyboard frame on iOS extends through the home-indicator area.
       const h = Math.max(0, e.endCoordinates.height - insets.bottom)
+      setKeyboardH(h)
       Animated.parallel([
         Animated.timing(keyboardOffset, { toValue: h, duration, useNativeDriver: false }),
         Animated.timing(keyboardShift, { toValue: -h / 2, duration, useNativeDriver: true }),
@@ -215,6 +218,7 @@ export default function OnboardingPage() {
     const hide = Keyboard.addListener(hideEvent, (e) => {
       if (bioSubmittingRef.current) return
       const duration = (e as any).duration ?? 250
+      setKeyboardH(0)
       Animated.parallel([
         Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }),
         Animated.timing(keyboardShift, { toValue: 0, duration, useNativeDriver: true }),
@@ -304,7 +308,7 @@ export default function OnboardingPage() {
     setIsMale(profile.is_male ?? null)
     setName(profile.name ?? '')
     setBio(profile.bio ?? '')
-    setStep((profile.images?.length ?? 0) >= 1 ? 5 : 4)
+    setStep((profile.images?.length ?? 0) >= 2 ? 5 : 4)
   }, [profile])
 
   useEffect(() => {
@@ -347,7 +351,7 @@ export default function OnboardingPage() {
     step === 1 ? isMale !== null :
     step === 2 ? nameValid :
     step === 3 ? dateValid && !submitting :
-    step === 4 ? totalPhotoCount >= 1 :
+    step === 4 ? totalPhotoCount >= 2 :
     step === 5 ? bioValid && !bioSubmitting :
     false
 
@@ -442,6 +446,8 @@ export default function OnboardingPage() {
             maxLength={30}
             returnKeyType="done"
             onSubmitEditing={onContinue}
+            placeholder={t('ob.nicknameField')}
+            placeholderTextColor={BLACK_MID}
           />
         </View>
 
@@ -453,6 +459,7 @@ export default function OnboardingPage() {
             variant="primary"
             tone="positive"
             size="lg"
+            iconStart={<CheckIcon color={WHITE} size={22} />}
           />
         </View>
       </View>
@@ -517,6 +524,7 @@ export default function OnboardingPage() {
               variant="primary"
               tone="positive"
               size="lg"
+              iconStart={<CheckIcon color={WHITE} size={22} />}
             />
           </View>
         </View>
@@ -540,10 +548,11 @@ export default function OnboardingPage() {
           <Button
             label={t('photo.confirm')}
             onPress={onContinue}
-            disabled={totalPhotoCount < 1}
+            disabled={totalPhotoCount < 2}
             variant="primary"
             tone="positive"
             size="lg"
+            iconStart={<CheckIcon color={WHITE} size={22} />}
           />
           <Text style={styles.almostDone}>{t('photo.almostDone')}</Text>
         </View>
@@ -553,10 +562,14 @@ export default function OnboardingPage() {
     if (s === 5) {
       const bioLen = bio.trim().length
       const belowMin = bioLen < BIO_MIN
+      // On short screens (or any device whose remaining content height after
+      // the keyboard pops up is below ~500dp) the bio textbox gets squeezed by
+      // the subtitle. Drop the subtitle in that case so the field stays usable.
+      const tightSpace = keyboardH > 0 && (containerH - keyboardH) < 500
       return (
         <View style={styles.pageStretched}>
           <Text style={styles.title}>{t('bio.title')}</Text>
-          <Text style={styles.subtitle}>{t('bio.emphasis')}</Text>
+          {!tightSpace && <Text style={styles.subtitle}>{t('bio.emphasis')}</Text>}
 
           <View style={[styles.bioField, { flex: 1, minHeight: 0 }]}>
             <TextInput
@@ -578,7 +591,7 @@ export default function OnboardingPage() {
 
           <Text style={styles.bioTip}>{t('bio.tip')}</Text>
 
-          <View style={[styles.ctaWrap, { marginBottom: 16 }]}>
+          <View style={[styles.ctaWrap, { marginBottom: MD }]}>
             <Button
               label={t('bio.submit')}
               onPress={onContinue}
@@ -587,6 +600,7 @@ export default function OnboardingPage() {
               variant="primary"
               tone="positive"
               size="lg"
+              iconStart={<CheckIcon color={WHITE} size={22} />}
             />
           </View>
         </View>
@@ -598,8 +612,11 @@ export default function OnboardingPage() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
-
+      {/* Status bar matches the onboarding surface so it blends with the
+          screen instead of contrasting against it. Dark icons because the
+          background is light coral, not the saturated PRIMARY used inside
+          the home shell (where the status bar is light-on-coral). */}
+      <StatusBar style="dark" backgroundColor={PRIMARY_LIGHT} translucent={false} />
       <Animated.View style={{ flex: 1, paddingBottom: keyboardOffset }}>
         <View
           {...panResponder.panHandlers}
@@ -628,7 +645,7 @@ export default function OnboardingPage() {
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: BLACK_SOFT, transform: [{ translateY: overlayY }] },
+                { backgroundColor: PRIMARY_LIGHT, transform: [{ translateY: overlayY }] },
               ]}
               pointerEvents={step === 5 ? 'auto' : 'none'}
             >
@@ -644,89 +661,89 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BLACK_SOFT },
+  root: { flex: 1, backgroundColor: PRIMARY_LIGHT },
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
-  page: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
-  pageCentered: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
-  pageStretched: { flex: 1, paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 },
+  page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },
+  pageCentered: { flex: 1, paddingHorizontal: LG, justifyContent: 'center' },
+  pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: XL, paddingBottom: LG },
 
   title: {
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: TEXT.xxl,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   subtitle: {
-    marginTop: 10,
-    fontSize: 15,
+    marginTop: SM,
+    fontSize: TEXT.md,
     color: BLACK_STRONG,
     textAlign: 'center',
   },
   subtitleRow: {
-    marginTop: 10,
+    marginTop: SM,
     alignItems: 'center',
   },
   subtitleAnchor: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SM,
   },
 
   cardRow: {
     flexDirection: 'row',
-    gap: 14,
-    marginTop: 32,
+    gap: MD,
+    marginTop: XL,
   },
   card: {
     aspectRatio: 1,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE,
     overflow: 'hidden',
   },
   cardInner: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
+    gap: MD,
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
+    gap: MD,
   },
   cardLabel: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: TEXT.md,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK,
   },
   cardLabelActive: { color: WHITE },
 
-  ctaWrap: { marginTop: 32 },
+  ctaWrap: { marginTop: XL },
   almostDone: {
-    marginTop: 12,
-    fontSize: 13,
+    marginTop: MD,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
     textAlign: 'center',
   },
 
   photoWrap: {
-    marginTop: 24,
+    marginTop: LG,
     zIndex: 2, elevation: 2,
   },
 
   inputWrap: {
-    marginTop: 32,
-    backgroundColor: BLACK_SOFT,
+    marginTop: XL,
+    backgroundColor: WHITE,
     borderRadius: RADIUS,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: MD,
+    paddingVertical: MD,
   },
   input: {
-    fontSize: 16,
+    fontSize: TEXT.md,
     color: BLACK,
     textAlign: 'center',
     padding: 0,
@@ -735,56 +752,56 @@ const styles = StyleSheet.create({
   dateRow: {
     flexDirection: 'row',
     direction: 'ltr',
-    marginTop: 32,
+    marginTop: XL,
     alignItems: 'flex-start',
   },
   dateSegment: { flex: 1, alignItems: 'center' },
   dateSegmentYear: { flex: 1.6 },
-  dateSegmentGap: { marginLeft: 10 },
+  dateSegmentGap: { marginLeft: SM },
   dateBox: {
     alignSelf: 'stretch',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE,
     borderRadius: RADIUS,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    paddingVertical: MD,
+    paddingHorizontal: SM,
   },
   dateInput: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK,
     textAlign: 'center',
     padding: 0,
   },
   dateUnit: {
-    marginTop: 8,
-    fontSize: 13,
+    marginTop: SM,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
   },
   errorText: {
-    marginTop: 12,
-    fontSize: 13,
+    marginTop: MD,
+    fontSize: TEXT.sm,
     color: DESTRUCTIVE,
     textAlign: 'center',
   },
 
   bioEmphasis: {
-    marginTop: 14,
-    fontSize: 15,
+    marginTop: MD,
+    fontSize: TEXT.md,
     color: BLACK,
-    fontWeight: '700',
+    fontWeight: WEIGHT.extrabold,
     textAlign: 'center',
   },
   bioField: {
-    marginTop: 12,
-    backgroundColor: BLACK_SOFT,
+    marginTop: MD,
+    backgroundColor: WHITE,
     borderRadius: RADIUS,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 28,
+    paddingHorizontal: MD,
+    paddingTop: MD,
+    paddingBottom: LG,
     minHeight: 140,
   },
   bioInput: {
-    fontSize: 16,
+    fontSize: TEXT.md,
     color: BLACK,
     padding: 0,
     minHeight: 96,
@@ -794,13 +811,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     end: 12,
     bottom: 8,
-    fontSize: 12,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
   },
   bioCounterWarn: { color: DESTRUCTIVE },
   bioTip: {
-    marginTop: 14,
-    fontSize: 13,
+    marginTop: MD,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
     textAlign: 'center',
   },

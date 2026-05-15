@@ -72,16 +72,6 @@ export function CloseBoldIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}
   )
 }
 
-export function DotsIcon({ color = BLACK, size = ICON.lg }: IconProps = {}) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <Circle cx={12} cy={5} r={1.6} />
-      <Circle cx={12} cy={12} r={1.6} />
-      <Circle cx={12} cy={19} r={1.6} />
-    </Svg>
-  )
-}
-
 // ── Field / list-row icons (gray stroke by default) ────────────────────────
 
 export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
@@ -105,6 +95,39 @@ export function MapPinIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps =
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
       <Circle cx="12" cy="10" r="3" />
+    </Svg>
+  )
+}
+
+export function BellIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z" />
+      <Path d="M10 21a2 2 0 0 0 4 0" />
+    </Svg>
+  )
+}
+
+export function WifiOffIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="2" y1="2" x2="22" y2="22" />
+      <Path d="M8.5 16.5a5 5 0 0 1 7 0" />
+      <Path d="M2 8.82a15 15 0 0 1 4.17-2.65" />
+      <Path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76" />
+      <Path d="M16.85 11.25a10 10 0 0 1 2.22 1.68" />
+      <Path d="M5 12.55a10 10 0 0 1 5.17-2.39" />
+      <Line x1="12" y1="20" x2="12.01" y2="20" />
+    </Svg>
+  )
+}
+
+export function RadiusIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="9" />
+      <Circle cx="12" cy="12" r="1.25" fill={color} stroke="none" />
+      <Line x1="12" y1="12" x2="18.36" y2="5.64" />
     </Svg>
   )
 }
@@ -184,11 +207,22 @@ export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+export function MailIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="3" y="5" width="18" height="14" rx="2" />
+      <Path d="M3 7l9 7 9-7" />
+    </Svg>
+  )
+}
+
 // ── Add-options tile icons ─────────────────────────────────────────────────
 
-export function AddPhotoIcon({ color, size = ICON.xxxl }: IconProps & { color: string }) {
+// Filled silhouette + white outline, matching HeartIcon's overlay-on-photo
+// visual. Default usage: `color={PRIMARY} stroke={WHITE}` inside a RoundButton.
+export function AddPhotoIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thin + 0.3} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="3" y="5" width="18" height="14" rx="2" />
       <Circle cx="12" cy="12" r="3" />
       <Line x1="17.5" y1="3" x2="17.5" y2="7" />
@@ -197,13 +231,15 @@ export function AddPhotoIcon({ color, size = ICON.xxxl }: IconProps & { color: s
   )
 }
 
-export function FamilyKidsIcon({ color, size = ICON.xxxl }: IconProps & { color: string }) {
+// Filled silhouette + white outline, matching HeartIcon. Body paths are closed
+// (trailing `z`) so the fill produces a person silhouette, not an open arc.
+export function FamilyKidsIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thin + 0.3} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="8" cy="6" r="2.5" />
-      <Path d="M4 21v-7a4 4 0 0 1 8 0v7" />
+      <Path d="M4 21v-7a4 4 0 0 1 8 0v7z" />
       <Circle cx="17" cy="9" r="2" />
-      <Path d="M14 21v-5a3 3 0 0 1 6 0v5" />
+      <Path d="M14 21v-5a3 3 0 0 1 6 0v5z" />
     </Svg>
   )
 }
@@ -245,6 +281,23 @@ export function HeartIcon({
   )
 }
 
+// Question-mark glyph used in place of the heart on the page2 pending-invite
+// hero overlay button: same RoundButton shape and PRIMARY fill, signalling
+// "what is this?" rather than a chat or like affordance.
+export function QuestionIcon({
+  color = PRIMARY,
+  stroke = WHITE,
+  size = ICON.xxxl,
+}: IconProps & { stroke?: string } = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" fill="none" />
+      <Path d="M12 17h.01" fill="none" />
+    </Svg>
+  )
+}
+
 // ── Chat-specific icons ────────────────────────────────────────────────────
 
 export function SendIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
@@ -268,19 +321,76 @@ export function MicIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
 
 // ── Media transport ────────────────────────────────────────────────────────
 
-export function PlayIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
+export function PlayIcon({ color = WHITE, stroke, size = ICON.xl }: IconProps & { stroke?: string } = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={stroke ? STROKE.thick : 0} strokeLinejoin="round">
       <Path d="M8 5v14l11-7z" />
     </Svg>
   )
 }
 
-export function PauseIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
+export function PauseIcon({ color = WHITE, stroke, size = ICON.xl }: IconProps & { stroke?: string } = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={stroke ? STROKE.thick : 0} strokeLinejoin="round">
       <Rect x="6" y="5" width="4" height="14" rx="1" />
       <Rect x="14" y="5" width="4" height="14" rx="1" />
+    </Svg>
+  )
+}
+
+export function SettingsIcon({ color = WHITE, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="3" />
+      <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </Svg>
+  )
+}
+
+// Megaphone-style icon used as the broadcast affordance (premium "show me to
+// people" tile, broadcast-confirm popup icon). Single-stroke, currentColor so
+// it reads on both PREMIUM and disabled backgrounds.
+export function MegaphoneIcon({ color = WHITE, size = 28 }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
+      <Path d="M14 7a5 5 0 0 1 0 10" />
+      <Path d="M18 5a8 8 0 0 1 0 14" />
+    </Svg>
+  )
+}
+
+// Megaphone with a diagonal cancel slash — "stop broadcasting" affordance.
+// Same body paths as MegaphoneIcon (kept in lockstep with it on purpose:
+// the off variant must read as the same glyph crossed out, not a
+// different megaphone).
+export function MegaphoneOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
+      <Path d="M14 7a5 5 0 0 1 0 10" />
+      <Path d="M18 5a8 8 0 0 1 0 14" />
+      <Path d="M2 2l20 20" />
+    </Svg>
+  )
+}
+
+export function EyeOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <Path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-1.67 2.68" />
+      <Path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s4 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <Path d="M2 2l20 20" />
+    </Svg>
+  )
+}
+
+export function EyeOpenIcon({ color = WHITE, size = 28 }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+      <Circle cx={12} cy={12} r={3} />
     </Svg>
   )
 }
@@ -290,6 +400,23 @@ export function InboxIcon({ color = WHITE, size = ICON.sm }: IconProps = {}) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
       <Path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </Svg>
+  )
+}
+
+// ── Typography ornaments ───────────────────────────────────────────────────
+
+// Paired block-quote indicator. Square viewBox with tight glyph bounds — when
+// laid out at size N the rendered footprint is NxN with no baseline / line-height
+// dead space (unlike a literal `"` text character whose line-box leaves empty
+// space above/below the visible glyph). Used by the bio bubble for the
+// top/bottom quotation marks, so the bubble can stack quote/text/quote with
+// uniform gaps.
+export function QuoteIcon({ color = PRIMARY, size = ICON.xxxl }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M2 3 H11 V12 L8 21 H5 V13 H2 Z" />
+      <Path d="M13 3 H22 V12 L19 21 H16 V13 H13 Z" />
     </Svg>
   )
 }

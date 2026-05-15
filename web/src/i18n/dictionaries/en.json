@@ -1,0 +1,100 @@
+{
+  "brand": "Once",
+  "tagline": "One date at a time.",
+  "hero": {
+    "title": "The dating app where you see one person at a time.",
+    "subtitle": "Instead of endless swipes, you see one profile. Start a conversation, or move on.",
+    "ctaPrimary": "Get the app",
+    "ctaSecondary": "Learn more"
+  },
+  "features": {
+    "title": "How it works",
+    "items": [
+      {
+        "title": "One at a time",
+        "body": "A single profile in front of you, not an endless list. Real presence."
+      },
+      {
+        "title": "Schedules that fit life",
+        "body": "A flexible schedule mechanism that matches people who actually have time on the same days."
+      },
+      {
+        "title": "Chat without distraction",
+        "body": "When there's a match, there's a conversation. Just two people, no parallel invitations."
+      }
+    ]
+  },
+  "footer": {
+    "rights": "All rights reserved",
+    "privacy": "Privacy",
+    "terms": "Terms"
+  },
+  "nav": {
+    "admin": "Admin",
+    "switchLang": "עברית"
+  },
+  "admin": {
+    "loginTitle": "Admin sign in",
+    "loginSubtitle": "Restricted to accounts with admin role.",
+    "signInWithGoogle": "Sign in with Google",
+    "signingIn": "Signing in…",
+    "signOut": "Sign out",
+    "signInError": "Sign-in failed. Please try again.",
+    "errorNotAdmin": "This account does not have admin permissions.",
+    "errorGeneric": "Sign-in failed. Please try again.",
+    "dashboardTitle": "Admin dashboard",
+    "loggedInAs": "Signed in as",
+    "users": "Users",
+    "search": "Search by name",
+    "noResults": "No results.",
+    "userCreated": "Joined",
+    "userLastSeen": "Seen",
+    "filterP1": "Page 1",
+    "filterP2": "Page 2",
+    "filterAny": "All",
+    "page1States": {
+      "free": "Free",
+      "watching": "Watching",
+      "waiting": "Waiting",
+      "chat": "In chat",
+      "locked": "Locked"
+    },
+    "page2States": {
+      "free": "Free",
+      "pending": "Pending invite",
+      "chat": "In chat",
+      "locked": "Locked"
+    },
+    "back": "← Back",
+    "userDetail": {
+      "profile": "Profile",
+      "currentState": "Current state",
+      "interactions": "Interactions",
+      "noInteractions": "No recorded interactions.",
+      "interactionEvents": "events",
+      "viewHistory": "View history →",
+      "interactionWith": "Interaction with",
+      "you": "User",
+      "other": "Other user",
+      "chatMessage": "Chat message",
+      "restrictionOut": "Restricted",
+      "restrictionIn": "Restricted by",
+      "rpcAction": "Server action",
+      "activity": "Recent activity (general)",
+      "noActivity": "No recorded activity.",
+      "email": "Email",
+      "userId": "ID",
+      "joinedFull": "Joined",
+      "lastSeenFull": "Last seen",
+      "bio": "Bio",
+      "age": "Age",
+      "gender": "Gender",
+      "male": "Male",
+      "female": "Female",
+      "location": "Location",
+      "watchers": "Currently watching",
+      "page1Profile": "Watching",
+      "page2Profile": "Invited by"
+    }
+  }
+}

@@ -3,7 +3,6 @@ import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18n
 import Animated, { SharedValue, useSharedValue, FadeIn, FadeOut } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -15,22 +14,22 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
-import { IconPressable } from '../src/components/IconPressable'
+import { RoundButton } from '../src/components/RoundButton'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
 import { PullContext, type PullCtx } from '../src/components/HomeCard'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from '../src/components/PhotoEditor'
-import * as DocumentPicker from 'expo-document-picker'
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { SINGLE, DOUBLE, QUAD, BUTTON, BUTTON_MIN_HEIGHT, RADIUS, TEXT, WEIGHT, ICON, DURATION } from '../src/tokens'
+import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, lh } from '../src/tokens'
 import { BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_MUTED, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
-import { CloseIcon, SlidersIcon, MapPinIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon, AppCalendarIcon, MailIcon } from '../src/components/icons'
+import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { Chip } from '../src/components/Chip'
-import { ScreenHeader } from '../src/components/ScreenHeader'
 import { units, M_PER_MI } from '../src/lib/units'
+import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
@@ -341,6 +340,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const [agePopupVisible, setAgePopupVisible] = useState(false)
   const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
   const [genderPopupVisible, setGenderPopupVisible] = useState(false)
+  const [locationPopupVisible, setLocationPopupVisible] = useState(false)
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
   const ageSliderMin = Math.max(18, age - 20)
@@ -356,6 +356,10 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
+  const isCustomLocation = profile.location_custom === true
+  const locationDisplayValue = isCustomLocation && profile.location_label
+    ? profile.location_label
+    : t('settings.locationDevice')
 
   return (
     <View style={styles.section}>
@@ -365,6 +369,14 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.range')}
           displayValue={formatRadius(radius)}
           onPress={() => setRadiusPopupVisible(true)}
+          icon={<RadiusIcon />}
+        />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={t('settings.location')}
+          displayValue={locationDisplayValue}
+          onPress={() => setLocationPopupVisible(true)}
           icon={<MapPinIcon />}
         />
         <View style={styles.accountActionDivider} />
@@ -416,6 +428,27 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         }}
         onDismiss={() => setGenderPopupVisible(false)}
       />
+      <LocationPopup
+        visible={locationPopupVisible}
+        isCustom={isCustomLocation}
+        onSelectDevice={(lat, lng) => {
+          update({ location_custom: false, location_label: null })
+          invoke('app/location', {
+            location: { latitude: lat, longitude: lng },
+            location_custom: false,
+            location_label: null,
+          }).catch(console.error)
+        }}
+        onSelectCustom={(label, lat, lng) => {
+          update({ location_custom: true, location_label: label })
+          invoke('app/location', {
+            location: { latitude: lat, longitude: lng },
+            location_custom: true,
+            location_label: label,
+          }).catch(console.error)
+        }}
+        onDismiss={() => setLocationPopupVisible(false)}
+      />
     </View>
   )
 }
@@ -446,10 +479,17 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
 
   // Two iOS Modals cannot be presented at the same parent level at once —
   // stacking a ConfirmDialog over this Modal makes the dialog never appear.
-  // Defer the parent action until after this sheet's dismiss animation runs.
+  // Stash the follow-up action and fire it from BottomSheet.onClosed, which
+  // runs only after the sheet's Modal has fully unmounted.
+  const pendingAfter = useRef<(() => void) | null>(null)
+  const handleClosed = useCallback(() => {
+    const after = pendingAfter.current
+    pendingAfter.current = null
+    if (after) after()
+  }, [])
   const dismissThen = useCallback((after: () => void) => {
+    pendingAfter.current = after
     onDismiss()
-    setTimeout(after, 280)
   }, [onDismiss])
 
   const signOutTap = useTapResponder(() => { tap(); dismissThen(onSignOutPress) })
@@ -464,32 +504,39 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     : '—'
 
   const nameAndGender = [profile.name, gender !== '—' ? gender : null].filter(Boolean).join(', ') || '—'
-  const detailRows: Array<{ label: string; value: string }> = [
-    { label: 'nameGender',            value: nameAndGender },
-    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
-    { label: t('settings.email'),     value: user.email ?? '—' },
+  const detailRows: Array<{ label: string; value: string; renderIcon: (color: string) => React.ReactNode }> = [
+    { label: 'nameGender',            value: nameAndGender, renderIcon: color => <UserIcon color={color} size={16} /> },
+    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—', renderIcon: color => <AppCalendarIcon color={color} size={16} /> },
+    { label: t('settings.email'),     value: user.email ?? '—', renderIcon: color => <MailIcon color={color} size={16} /> },
   ]
 
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={{ paddingBottom: Math.max(insets.bottom, SINGLE) }}
+      onClosed={handleClosed}
+      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) }}
     >
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SINGLE, paddingHorizontal: DOUBLE, paddingBottom: DOUBLE }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, paddingBottom: MD }}>
         {detailRows.map(r => (
-          <Chip key={r.label} text={r.value} />
+          <Chip key={r.label} text={r.value} renderIcon={r.renderIcon} />
         ))}
       </View>
       <View style={styles.accountActionsCard}>
         <View style={styles.accountActionRow} {...signOutTap}>
           <SignOutIcon color={BLACK_STRONG} />
-          <Text style={[styles.accountActionText, { flex: 1 }]} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
+          {/* Wrap label in flex:1 row so the Text auto-flips to the logical
+              start side on iOS RTL. See the note above GameModeCard. */}
+          <View style={styles.accountActionTextWrap}>
+            <Text style={styles.accountActionText} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
+          </View>
         </View>
         <View style={styles.accountActionDivider} />
         <View style={styles.accountActionRow} {...deleteTap}>
           <TrashIcon color={DESTRUCTIVE_MUTED} />
-          <Text style={[styles.accountActionText, styles.accountActionTextDestructive, { flex: 1 }]} numberOfLines={1} ellipsizeMode="clip">{t('settings.deleteAccount')}</Text>
+          <View style={styles.accountActionTextWrap}>
+            <Text style={[styles.accountActionText, styles.accountActionTextDestructive]} numberOfLines={1} ellipsizeMode="clip">{t('settings.deleteAccount')}</Text>
+          </View>
         </View>
       </View>
     </BottomSheet>
@@ -548,7 +595,7 @@ function AgeRangePopup({
       onDismiss={handleDismiss}
       keyboardAvoiding
       cardWrapStyle={Platform.OS !== 'ios' && kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={[agePopupStyles.card, { paddingBottom: Math.max(insets.bottom, SINGLE) + SINGLE }]}
+      contentStyle={[agePopupStyles.card, { paddingBottom: Math.max(insets.bottom, SM) + SM }]}
     >
       <View style={agePopupStyles.row}>
         <View style={agePopupStyles.field}>
@@ -587,33 +634,33 @@ function AgeRangePopup({
 
 const agePopupStyles = StyleSheet.create({
   card: {
-    paddingHorizontal: DOUBLE,
+    paddingHorizontal: MD,
     paddingTop: 0,
   },
   title: {
-    fontSize: TEXT.subhead, fontWeight: WEIGHT.semibold, color: BLACK,
-    textAlign: 'center', marginBottom: DOUBLE,
+    fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: BLACK,
+    textAlign: 'center', marginBottom: MD,
   },
   row: {
-    flexDirection: 'row', gap: SINGLE,
-    marginTop: SINGLE,
-    marginBottom: SINGLE,
+    flexDirection: 'row', gap: SM,
+    marginTop: SM,
+    marginBottom: SM,
   },
   field: {
     flex: 1,
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
-    paddingVertical: SINGLE,
-    paddingHorizontal: SINGLE,
+    paddingVertical: SM,
+    paddingHorizontal: SM,
     alignItems: 'center',
   },
   fieldLabel: {
-    fontSize: TEXT.small,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
   },
   input: {
-    fontSize: TEXT.display,
-    fontWeight: WEIGHT.bold,
+    fontSize: TEXT.xxl,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK,
     textAlign: 'center',
     padding: 0,
@@ -686,7 +733,12 @@ function SelectListRow({ label, selected, isLast, onPress }: {
   return (
     <View {...tapProps}>
       <View style={[selectListStyles.row, pressed && { backgroundColor: BLACK_SOFT }]}>
-        <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
+        {/* labelWrap is flexDirection:'row' so the Text child auto-flips to
+            the logical start side (right in RTL). See the wrap-in-row note
+            above GameModeCard — more reliable on iOS than textAlign alone. */}
+        <View style={selectListStyles.labelWrap}>
+          <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
+        </View>
         <View style={selectListStyles.checkSlot}>
           {selected ? <CheckIcon color={PRIMARY} /> : null}
         </View>
@@ -697,15 +749,16 @@ function SelectListRow({ label, selected, isLast, onPress }: {
 }
 
 const selectListStyles = StyleSheet.create({
-  card: { padding: 0, paddingTop: 0, paddingBottom: QUAD },
+  card: { padding: 0, paddingTop: 0, paddingBottom: XL },
   row: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: BUTTON, paddingHorizontal: DOUBLE,
+    paddingVertical: MD, paddingHorizontal: MD,
   },
-  label: { flex: 1, fontSize: TEXT.input, color: BLACK },
+  labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  label: { fontSize: TEXT.md, color: BLACK },
   labelSelected: { color: PRIMARY, fontWeight: WEIGHT.semibold },
   checkSlot: { width: ICON.xl, height: ICON.xl, alignItems: 'center', justifyContent: 'center' },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: DOUBLE },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
 })
 
 // ── Gender Popup ───────────────────────────────────────────────────────────
@@ -743,6 +796,346 @@ function GenderPopup({
     </BottomSheet>
   )
 }
+
+// ── Location Popup ─────────────────────────────────────────────────────────
+// Two-step bottom sheet. Step 1 lets the user pick between "My location"
+// (device GPS) and "Custom address". Picking "My location" prompts for
+// permission (if needed), fetches a GPS fix, and saves. Picking "Custom
+// address" advances to step 2: a near-full-screen sheet with a sticky text
+// input at the top and a debounced Google Places Autocomplete list below.
+// Tapping a suggestion fetches its place details (lat/lng + formatted
+// address), saves, and dismisses — no search button.
+//
+// While `location_custom` is true the home shell skips the GPS permission
+// overlay and the periodic /app/location updates, so the popup is the only
+// thing that ever writes a new location for that user.
+//
+// Requires `EXPO_PUBLIC_GOOGLE_PLACES_KEY` in env, and the Places API
+// enabled on the same GCP project. See CLAUDE.md for the one-time setup.
+
+const GOOGLE_PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY ?? ''
+
+type Prediction = { place_id: string; description: string }
+type PlaceLocation = { lat: number; lng: number; label: string }
+
+// Cheap UUID-ish session token; only needs to be unique-per-session for
+// Google's billing grouping (autocomplete keystrokes + the closing details
+// call counted as one billable session).
+function genSessionToken(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+async function placesAutocomplete(
+  input: string, sessionToken: string, language: string, signal: AbortSignal,
+): Promise<Prediction[]> {
+  if (!input.trim() || !GOOGLE_PLACES_KEY) return []
+  const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json')
+  url.searchParams.set('input', input)
+  url.searchParams.set('key', GOOGLE_PLACES_KEY)
+  url.searchParams.set('sessiontoken', sessionToken)
+  url.searchParams.set('language', language)
+  const res = await fetch(url.toString(), { signal })
+  const json = await res.json()
+  if (json.status !== 'OK' && json.status !== 'ZERO_RESULTS') {
+    console.warn('places_autocomplete', json.status, json.error_message)
+    return []
+  }
+  return (json.predictions ?? []).map((p: { place_id: string; description: string }) => ({
+    place_id: p.place_id, description: p.description,
+  }))
+}
+
+async function placeDetails(placeId: string, sessionToken: string, language: string): Promise<PlaceLocation | null> {
+  if (!GOOGLE_PLACES_KEY) return null
+  const url = new URL('https://maps.googleapis.com/maps/api/place/details/json')
+  url.searchParams.set('place_id', placeId)
+  url.searchParams.set('key', GOOGLE_PLACES_KEY)
+  url.searchParams.set('sessiontoken', sessionToken)
+  url.searchParams.set('language', language)
+  url.searchParams.set('fields', 'geometry,formatted_address')
+  const res = await fetch(url.toString())
+  const json = await res.json()
+  if (json.status !== 'OK' || !json.result?.geometry?.location) {
+    console.warn('place_details', json.status, json.error_message)
+    return null
+  }
+  return {
+    lat: json.result.geometry.location.lat,
+    lng: json.result.geometry.location.lng,
+    label: json.result.formatted_address || '',
+  }
+}
+
+function LocationPopup({
+  visible, isCustom, onSelectDevice, onSelectCustom, onDismiss,
+}: {
+  visible: boolean
+  isCustom: boolean
+  onSelectDevice: (lat: number, lng: number) => void
+  onSelectCustom: (label: string, lat: number, lng: number) => void
+  onDismiss: () => void
+}) {
+  const insets = useSafeAreaInsets()
+  const screenH = useRef(Dimensions.get('window').height).current
+  // Address-step sheet height: full screen minus the home shell's TabStrip
+  // area at the top (status bar + ~56 px for the tabs row + a little extra
+  // breathing room). Without subtracting that the sheet would cover the tabs
+  // and lose the visual anchor.
+  const tabStripGap = insets.top + 64
+  const addressSheetH = screenH - tabStripGap
+
+  const [step, setStep] = useState<'menu' | 'address'>('menu')
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [predictions, setPredictions] = useState<Prediction[]>([])
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [deviceBusy, setDeviceBusy] = useState(false)
+  const [deviceError, setDeviceError] = useState<string | null>(null)
+  const [selecting, setSelecting] = useState(false)
+  const sessionTokenRef = useRef<string>('')
+  const abortRef = useRef<AbortController | null>(null)
+  // Android keyboard tracking — Modal + statusBarTranslucent prevents the
+  // window-resize-based avoidance from working, so we shrink the sheet height
+  // and add marginBottom to lift it above the keyboard.
+  const [kbHeight, setKbHeight] = useState(0)
+
+  // Reset every time the sheet opens.
+  useEffect(() => {
+    if (!visible) return
+    setStep('menu')
+    setQuery('')
+    setPredictions([])
+    setSearchError(null)
+    setDeviceError(null)
+    setSearching(false)
+    setDeviceBusy(false)
+    setSelecting(false)
+    sessionTokenRef.current = ''
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
+  }, [visible])
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showSub = Keyboard.addListener(showEvent, e => setKbHeight(e.endCoordinates?.height ?? 0))
+    const hideSub = Keyboard.addListener(hideEvent, () => setKbHeight(0))
+    return () => { showSub.remove(); hideSub.remove() }
+  }, [])
+
+  // Mint a session token on first entry to the address step. The same token
+  // covers every keystroke in that session and the final placeDetails call,
+  // so Google bills it as one session.
+  useEffect(() => {
+    if (step === 'address' && !sessionTokenRef.current) {
+      sessionTokenRef.current = genSessionToken()
+    }
+  }, [step])
+
+  // Debounced autocomplete on every keystroke. AbortController cancels the
+  // in-flight request when the user keeps typing so we never race a slow
+  // response over a faster one.
+  useEffect(() => {
+    if (step !== 'address') return
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
+    const trimmed = query.trim()
+    if (trimmed.length < 2) {
+      setPredictions([])
+      setSearching(false)
+      setSearchError(null)
+      return
+    }
+    setSearching(true)
+    setSearchError(null)
+    const timer = setTimeout(async () => {
+      const controller = new AbortController()
+      abortRef.current = controller
+      try {
+        const results = await placesAutocomplete(trimmed, sessionTokenRef.current, lang, controller.signal)
+        if (controller.signal.aborted) return
+        setPredictions(results)
+        if (results.length === 0) setSearchError(t('settings.locationNoResults'))
+      } catch (err: unknown) {
+        if ((err as { name?: string })?.name === 'AbortError') return
+        setSearchError(t('settings.locationNoResults'))
+      } finally {
+        if (!controller.signal.aborted) setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [query, step])
+
+  const handleMyLocation = async () => {
+    if (deviceBusy) return
+    setDeviceBusy(true)
+    setDeviceError(null)
+    try {
+      let perm = await getLocPermission()
+      if (perm === 'services-off') {
+        try { await enableLocationServices(); perm = await getLocPermission() }
+        catch { openLocationSettings(); setDeviceError(t('settings.locationServicesOffDesc')); return }
+      }
+      if (perm === 'undetermined') perm = await requestLocPermission()
+      if (perm !== 'granted') {
+        setDeviceError(t('settings.locationPermissionDesc'))
+        if (perm === 'denied') openLocPermSettings()
+        return
+      }
+      const coords = await getLocation()
+      if (!coords) {
+        setDeviceError(t('settings.locationDeviceFailedDesc'))
+        return
+      }
+      onSelectDevice(coords.lat, coords.lng)
+      onDismiss()
+    } finally {
+      setDeviceBusy(false)
+    }
+  }
+
+  const handleSelectPrediction = async (p: Prediction) => {
+    if (selecting) return
+    setSelecting(true)
+    Keyboard.dismiss()
+    try {
+      const details = await placeDetails(p.place_id, sessionTokenRef.current, lang)
+      // A details call closes the billing session; mint a new token the next
+      // time the user re-enters this step.
+      sessionTokenRef.current = ''
+      if (!details) {
+        setSearchError(t('settings.locationNoResults'))
+        return
+      }
+      const label = details.label || p.description
+      onSelectCustom(label, details.lat, details.lng)
+      onDismiss()
+    } finally {
+      setSelecting(false)
+    }
+  }
+
+  // Compute the effective sheet height. While the keyboard is up on Android
+  // we have to shrink the sheet AND lift it via marginBottom; on iOS the
+  // BottomSheet's KeyboardAvoidingView padding handles the lift, so we just
+  // shrink the height.
+  const isAndroidKb = Platform.OS !== 'ios' && kbHeight > 0
+  const addressEffectiveH = kbHeight > 0
+    ? Math.max(240, addressSheetH - kbHeight)
+    : addressSheetH
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      keyboardAvoiding={step === 'address'}
+      cardWrapStyle={step === 'address' ? {
+        height: addressEffectiveH,
+        ...(isAndroidKb ? { marginBottom: kbHeight } : {}),
+      } : undefined}
+      contentStyle={step === 'address' ? locationPopupStyles.addressCard : selectListStyles.card}
+    >
+      {step === 'menu' ? (
+        <>
+          <SelectListRow
+            label={t('settings.locationDevice')}
+            selected={!isCustom}
+            isLast={false}
+            onPress={handleMyLocation}
+          />
+          <SelectListRow
+            label={t('settings.locationCustom')}
+            selected={isCustom}
+            isLast={true}
+            onPress={() => setStep('address')}
+          />
+          {deviceBusy ? (
+            <View style={locationPopupStyles.statusRow}>
+              <ActivityIndicator color={PRIMARY} />
+              <Text style={locationPopupStyles.statusText}>{t('settings.locationFetchingDevice')}</Text>
+            </View>
+          ) : deviceError ? (
+            <Text style={locationPopupStyles.errorText}>{deviceError}</Text>
+          ) : null}
+        </>
+      ) : (
+        <View style={locationPopupStyles.addressBody}>
+          <View style={locationPopupStyles.searchRow}>
+            <TextInput
+              style={locationPopupStyles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder={t('settings.locationAddressPrompt')}
+              placeholderTextColor={BLACK_MID}
+              autoFocus
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {searching || selecting ? (
+              <View style={locationPopupStyles.searchSpinner}>
+                <ActivityIndicator color={PRIMARY} />
+              </View>
+            ) : null}
+          </View>
+          {searchError && predictions.length === 0 && !searching ? (
+            <Text style={locationPopupStyles.errorText}>{searchError}</Text>
+          ) : null}
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
+          >
+            {predictions.map((p, i) => (
+              <SelectListRow
+                key={p.place_id}
+                label={p.description}
+                selected={false}
+                isLast={i === predictions.length - 1}
+                onPress={() => handleSelectPrediction(p)}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </BottomSheet>
+  )
+}
+
+const locationPopupStyles = StyleSheet.create({
+  statusRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SM,
+    paddingHorizontal: MD, paddingTop: MD,
+  },
+  statusText: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  errorText: {
+    paddingHorizontal: MD, paddingTop: MD,
+    fontSize: TEXT.sm, color: DESTRUCTIVE_MUTED,
+    lineHeight: lh(TEXT.sm),
+  },
+  // Address-step content fills the (now tall) cardWrap.
+  addressCard: {
+    flex: 1,
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  addressBody: { flex: 1, paddingHorizontal: MD, paddingTop: SM },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM,
+  },
+  searchInput: {
+    flex: 1, fontSize: TEXT.md, color: BLACK,
+    backgroundColor: BLACK_SOFT, borderRadius: RADIUS,
+    paddingHorizontal: MD, paddingVertical: SM,
+    textAlign: isRTL ? 'right' : 'left',
+  },
+  searchSpinner: {
+    width: ICON.xl, height: ICON.xl,
+    alignItems: 'center', justifyContent: 'center',
+  },
+})
 
 // ── Option Popup (single-select) ───────────────────────────────────────────
 // Generic single-select bottom sheet for one-of-N pickers.
@@ -789,8 +1182,8 @@ function FamilyTriOptionRow({
     { v: false, key: 'family.isForKidsNo' },
   ]
   return (
-    <View style={familyStyles.toggleRow}>
-      <Text style={familyStyles.toggleLabel}>{label}</Text>
+    <View style={[familyStyles.toggleRow, familyStyles.triOptionRow]}>
+      <Text style={[familyStyles.toggleLabel, familyStyles.triOptionLabel]}>{label}</Text>
       <View style={familyStyles.triOptionPills}>
         {options.map(opt => {
           const selected = value === opt.v
@@ -866,7 +1259,7 @@ function FamilyValuePopup({
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: Math.max(insets.bottom, SINGLE) }]}
+      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: Math.max(insets.bottom, SM) }]}
     >
       <Text style={familyStyles.valuePopupTitle}>{title}</Text>
       <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
@@ -1031,9 +1424,12 @@ export function FamilyKidsPopup({
   }, [hasKids, kids, weeks, todaySundayStart])
 
   const dirty = !familyEqual(current, initial) || isForKids !== (initialIsForKids ?? null)
-  const canSave = dirty && !saving
 
-  const handleSavePress = () => { if (canSave) onSave(current, isForKids) }
+  const handleDismiss = () => {
+    if (saving) return
+    if (dirty) onSave(current, isForKids)
+    else onDismiss()
+  }
   const onPickerDismiss = () => setPickerTarget(null)
   const onPickerPick = (value: number) => {
     if (!pickerTarget) return
@@ -1052,7 +1448,7 @@ export function FamilyKidsPopup({
   return (
     <BottomSheet
       visible={visible}
-      onDismiss={onDismiss}
+      onDismiss={handleDismiss}
       disableBackdropDismiss={saving}
       cardWrapStyle={{ maxHeight: sheetMaxH }}
       contentStyle={familyStyles.sheet}
@@ -1170,17 +1566,7 @@ export function FamilyKidsPopup({
                 />
               </View>
 
-              <View style={[familyStyles.saveBar, { paddingBottom: Math.max(insets.bottom, SINGLE) }]}>
-                <Button
-                  label={t('settings.save')}
-                  onPress={handleSavePress}
-                  disabled={!canSave}
-                  loading={saving}
-                  variant="primary"
-                  tone="positive"
-                  size="lg"
-                />
-              </View>
+              <View style={{ paddingBottom: Math.max(insets.bottom, SM) }} />
 
       <FamilyValuePopup
         visible={pickerTarget != null}
@@ -1202,51 +1588,51 @@ const familyStyles = StyleSheet.create({
   sheet: {
     backgroundColor: WHITE,
     paddingTop: RADIUS,
-    paddingHorizontal: SINGLE,
+    paddingHorizontal: SM,
     flexShrink: 1,
   },
   dragHandle: {
     alignSelf: 'center',
-    width: 36, height: 4, borderRadius: 2,
+    width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
     backgroundColor: BLACK_SOFT,
-    marginBottom: 12,
+    marginBottom: MD,
   },
-  scrollContent: { paddingTop: SINGLE, paddingBottom: SINGLE },
+  scrollContent: { paddingTop: SM, paddingBottom: SM },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingVertical: SM,
+    paddingHorizontal: MD,
   },
-  toggleLabel: { fontSize: 16, color: BLACK },
+  toggleLabel: { fontSize: TEXT.md, color: BLACK },
   toggleTrack: {
-    width: 48, height: 28, borderRadius: 14,
-    padding: 2, justifyContent: 'center',
+    width: 48, height: 28, borderRadius: 999,
+    padding: XS, justifyContent: 'center',
   },
   toggleKnob: {
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: WHITE,
     shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
-  section: { marginBottom: DOUBLE },
+  section: { marginBottom: MD },
   subSection: {},
-  sectionTitle: { fontSize: 15, color: BLACK, marginBottom: 10 },
-  subSectionTitle: { fontSize: 14, color: BLACK },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  sectionHint: { fontSize: 12, color: BLACK_STRONG, marginTop: 2, marginBottom: 12 },
-  optional: { fontSize: 12, color: BLACK_STRONG },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, backgroundColor: BLACK_SOFT },
+  sectionTitle: { fontSize: TEXT.md, color: BLACK, marginBottom: SM },
+  subSectionTitle: { fontSize: TEXT.sm, color: BLACK },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: XS },
+  sectionHint: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS, marginBottom: MD },
+  optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
+  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
   pillSelected: { backgroundColor: PRIMARY },
-  pillLabel: { fontSize: 14, color: BLACK },
+  pillLabel: { fontSize: TEXT.sm, color: BLACK },
   pillLabelSelected: { color: WHITE },
   sectionPill: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
     backgroundColor: PRIMARY_BG,
   },
   sectionPillDestructive: { backgroundColor: DESTRUCTIVE_BG },
-  sectionPillLabel: { fontSize: 13, color: PRIMARY },
+  sectionPillLabel: { fontSize: TEXT.sm, color: PRIMARY },
   sectionPillLabelDestructive: { color: DESTRUCTIVE },
   card: {
     backgroundColor: BLACK_SOFT,
@@ -1257,48 +1643,48 @@ const familyStyles = StyleSheet.create({
   cardRowDividerLast: { borderBottomWidth: 0 },
   dropdownRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 14,
+    paddingHorizontal: MD, paddingVertical: MD,
   },
-  dropdownLabel: { fontSize: 14, color: BLACK },
-  dropdownValue: { fontSize: 14, color: PRIMARY },
-  dropdownPlaceholder: { fontSize: 14, color: BLACK_STRONG },
+  dropdownLabel: { fontSize: TEXT.sm, color: BLACK },
+  dropdownValue: { fontSize: TEXT.sm, color: PRIMARY },
+  dropdownPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
 
   // "Days with kids" schedule. Title + weeks render inline with the rest of
   // the form (no enclosing card). Title sits flush, weeks gap below.
-  scheduleWrap: { marginTop: SINGLE, paddingHorizontal: 14, gap: 12 },
+  scheduleWrap: { marginTop: SM, paddingHorizontal: MD, gap: MD },
 
   // Kid age chips. Each chip is a pill split into a tappable label area
   // (opens age picker) and an × remove button. Wraps to multiple rows.
-  kidChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, marginTop: 4 },
+  kidChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, marginTop: XS },
   kidChip: {
     flexDirection: 'row', alignItems: 'center',
     borderRadius: 999, backgroundColor: BLACK_SOFT,
-    paddingStart: 14, paddingEnd: 6,
+    paddingStart: MD, paddingEnd: SM,
   },
-  kidChipMain: { paddingVertical: 8 },
-  kidChipLabel: { fontSize: 14, color: PRIMARY },
-  kidChipPlaceholder: { fontSize: 14, color: BLACK_STRONG },
-  kidChipRemoveBtn: { paddingHorizontal: 6, paddingVertical: 4 },
-  kidChipRemoveLabel: { fontSize: 18, color: BLACK_STRONG, lineHeight: 18 },
+  kidChipMain: { paddingVertical: SM },
+  kidChipLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
+  kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
   kidChipAdd: {
-    paddingHorizontal: 14, paddingVertical: 8,
+    paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: 999,
     borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
-  kidChipAddLabel: { fontSize: 14, color: PRIMARY },
+  kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
 
   // + Add kid / + Add week button.
-  addKidBtn: { paddingVertical: 10, alignItems: 'center', borderRadius: RADIUS, borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addKidLabel: { fontSize: 14, color: PRIMARY },
+  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addKidLabel: { fontSize: TEXT.sm, color: PRIMARY },
 
-  weekHeader: { marginBottom: 12, gap: 4 },
-  weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  weekLabel: { fontSize: 13, color: BLACK },
-  weekLabelEmphasis: { fontWeight: '700' },
-  weekHint: { fontSize: 12, color: BLACK_STRONG },
-  weekRemove: { fontSize: 13, color: DESTRUCTIVE },
-  daysRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  dayCell: { alignItems: 'center', justifyContent: 'flex-start', gap: 4 },
+  weekHeader: { marginBottom: MD, gap: XS },
+  weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
+  weekLabel: { fontSize: TEXT.sm, color: BLACK },
+  weekLabelEmphasis: { fontWeight: WEIGHT.extrabold },
+  weekHint: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  weekRemove: { fontSize: TEXT.sm, color: DESTRUCTIVE },
+  daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
@@ -1310,43 +1696,44 @@ const familyStyles = StyleSheet.create({
   // user can orient themselves visually toward their weekend without reading.
   dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
   dayLetterWeekend: { color: PRIMARY },
-  dayLetter: { fontSize: 13, color: BLACK },
+  dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
-  dayDate: { fontSize: 11, color: BLACK_STRONG },
-  addWeekBtn: { marginTop: 12, paddingVertical: 12, alignItems: 'center', borderRadius: RADIUS, borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addWeekLabel: { fontSize: 14, color: PRIMARY },
+  dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
+  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addWeekLabel: { fontSize: TEXT.sm, color: PRIMARY },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the gray cards expanding/collapsing inside
   // don't push it around. WHITE bg + same horizontal padding as the sheet
   // so the popup reads as one continuous surface.
-  interestedBar: { backgroundColor: WHITE, paddingHorizontal: SINGLE },
-  // Pinned at the popup bottom (sibling of the sheet). Anchored via the
-  // overlay's flex-end so it stays at the screen bottom regardless of the
-  // sheet's content size. WHITE bg merges with the sheet above visually.
-  saveBar: { paddingTop: SINGLE, paddingHorizontal: SINGLE, backgroundColor: WHITE },
+  interestedBar: { backgroundColor: WHITE },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
     backgroundColor: WHITE,
-    paddingTop: RADIUS, paddingHorizontal: SINGLE,
+    paddingTop: RADIUS, paddingHorizontal: SM,
   },
   valuePopupTitle: {
-    fontSize: 17, fontWeight: '700', color: BLACK,
-    textAlign: 'center', marginBottom: SINGLE,
+    fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK,
+    textAlign: 'center', marginBottom: SM,
   },
   valueRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 14, paddingHorizontal: 8,
+    paddingVertical: MD, paddingHorizontal: SM,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
   },
-  valueRowLabel: { fontSize: 16, color: BLACK },
-  valueRowLabelSelected: { color: PRIMARY, fontWeight: '700' },
-  valueRowCheck: { fontSize: 16, color: PRIMARY, fontWeight: '700' },
-  triOptionPills: { flexDirection: 'row', gap: 6 },
-  triOptionPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: BLACK_SOFT },
+  valueRowLabel: { fontSize: TEXT.md, color: BLACK },
+  valueRowLabelSelected: { color: PRIMARY, fontWeight: WEIGHT.extrabold },
+  valueRowCheck: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.extrabold },
+  // Label + Yes/No pills share one row when there's room; only wrap to two
+  // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
+  // them on the logical-end side in both the same-row and wrapped cases.
+  triOptionRow: { flexWrap: 'wrap', rowGap: SM },
+  triOptionLabel: { flexShrink: 1 },
+  triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
+  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
   triOptionPillSelected: { backgroundColor: PRIMARY },
-  triOptionPillLabel: { fontSize: 13, color: BLACK },
+  triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
   triOptionPillLabelSelected: { color: WHITE },
 })
 
@@ -1442,7 +1829,7 @@ export function BioEditPopup({
         <Text style={bioPopupStyles.tip}>{t('bio.tip')}</Text>
       </ScrollView>
 
-      <View style={[bioPopupStyles.saveBar, { paddingBottom: kbHeight > 0 ? SINGLE * 4 : Math.max(insets.bottom, SINGLE) }]}>
+      <View style={[bioPopupStyles.saveBar, { paddingBottom: kbHeight > 0 ? SM * 4 : Math.max(insets.bottom, SM) }]}>
         <Button
           label={t('settings.save')}
           onPress={handleSavePress}
@@ -1451,6 +1838,7 @@ export function BioEditPopup({
           variant="primary"
           tone="positive"
           size="lg"
+          iconStart={<CheckIcon color={WHITE} size={22} />}
         />
       </View>
     </BottomSheet>
@@ -1464,26 +1852,26 @@ const bioPopupStyles = StyleSheet.create({
   sheet: {
     backgroundColor: WHITE,
     paddingTop: RADIUS,
-    paddingHorizontal: SINGLE,
+    paddingHorizontal: SM,
     flexShrink: 1,
   },
   dragHandle: {
     alignSelf: 'center',
-    width: 36, height: 4, borderRadius: 2,
+    width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
     backgroundColor: BLACK_SOFT,
-    marginBottom: 12,
+    marginBottom: MD,
   },
-  scrollContent: { paddingTop: SINGLE, paddingBottom: SINGLE },
+  scrollContent: { paddingTop: SM, paddingBottom: SM },
   field: {
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 28,
+    paddingHorizontal: MD,
+    paddingTop: MD,
+    paddingBottom: LG,
     minHeight: 140,
   },
   input: {
-    fontSize: 16,
+    fontSize: TEXT.md,
     color: BLACK,
     padding: 0,
     minHeight: 96,
@@ -1493,17 +1881,17 @@ const bioPopupStyles = StyleSheet.create({
     position: 'absolute',
     end: 12,
     bottom: 8,
-    fontSize: 12,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
   },
   counterWarn: { color: DESTRUCTIVE },
   tip: {
-    marginTop: 14,
-    fontSize: 13,
+    marginTop: MD,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
     textAlign: 'center',
   },
-  saveBar: { paddingTop: SINGLE, paddingHorizontal: 0 },
+  saveBar: { paddingTop: SM, paddingHorizontal: 0 },
 })
 
 // ── Photo edit popup ────────────────────────────────────────────────────────
@@ -1516,11 +1904,12 @@ const bioPopupStyles = StyleSheet.create({
 // from '../src/components/icons'.
 
 function PhotoOptionsPopup({
-  visible, canMoveUp, canMoveDown, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
+  visible, canMoveUp, canMoveDown, canDelete, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
 }: {
   visible: boolean
   canMoveUp: boolean
   canMoveDown: boolean
+  canDelete: boolean
   onDismiss: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -1532,7 +1921,7 @@ function PhotoOptionsPopup({
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: Math.max(insets.bottom, SINGLE) + SINGLE }]}
+      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: Math.max(insets.bottom, SM) + SM }]}
     >
       <View style={photoOptionsStyles.row}>
         <Pressable
@@ -1564,12 +1953,18 @@ function PhotoOptionsPopup({
       </Pressable>
 
       <Pressable
-        style={[photoOptionsStyles.fullRow, photoOptionsStyles.destructiveRow]}
-        onPress={() => { tapWarning(); onDelete() }}
+        style={[
+          photoOptionsStyles.fullRow,
+          canDelete ? photoOptionsStyles.destructiveRow : photoOptionsStyles.disabledRow,
+        ]}
+        onPress={() => { if (canDelete) { tapWarning(); onDelete() } }}
       >
-        <PhotoTrashIcon color={DESTRUCTIVE} />
-        <Text style={[photoOptionsStyles.fullRowLabel, photoOptionsStyles.destructiveLabel]}>
-          {t('settings.photoEditDelete')}
+        <PhotoTrashIcon color={canDelete ? DESTRUCTIVE : BLACK_STRONG} />
+        <Text style={[
+          photoOptionsStyles.fullRowLabel,
+          canDelete ? photoOptionsStyles.destructiveLabel : photoOptionsStyles.disabledLabel,
+        ]}>
+          {canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
         </Text>
       </Pressable>
     </BottomSheet>
@@ -1578,27 +1973,27 @@ function PhotoOptionsPopup({
 
 const photoOptionsStyles = StyleSheet.create({
   sheet: {
-    paddingHorizontal: SINGLE,
+    paddingHorizontal: SM,
   },
   row: {
     flexDirection: 'row',
-    gap: SINGLE,
-    marginBottom: SINGLE,
+    gap: SM,
+    marginBottom: SM,
   },
   tile: {
     flex: 1,
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
-    paddingVertical: 18,
+    paddingVertical: MD,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: SM,
   },
   tileDisabled: {
     opacity: 0.5,
   },
   tileLabel: {
-    fontSize: 14, fontWeight: '600', color: BLACK,
+    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK,
   },
   tileLabelDisabled: {
     color: BLACK_STRONG,
@@ -1608,19 +2003,25 @@ const photoOptionsStyles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    gap: 14,
-    marginBottom: SINGLE,
+    paddingVertical: MD,
+    paddingHorizontal: MD,
+    gap: MD,
+    marginBottom: SM,
   },
   fullRowLabel: {
-    fontSize: 16, fontWeight: '600', color: BLACK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
   },
   destructiveRow: {
     backgroundColor: DESTRUCTIVE_BG,
   },
   destructiveLabel: {
     color: DESTRUCTIVE,
+  },
+  disabledRow: {
+    opacity: 0.55,
+  },
+  disabledLabel: {
+    color: BLACK_STRONG,
   },
 })
 
@@ -1702,6 +2103,7 @@ export function PreviewFieldPage({
       is_male: profile.is_male ?? undefined,
       distance: 0,
       last_seen: new Date().toISOString(),
+      location_custom: profile.location_custom ?? null,
     }
   }, [profile, user?.id])
 
@@ -1736,7 +2138,7 @@ export function PreviewFieldPage({
 
   const handleDelete = () => {
     if (photoPopupImageIndex == null || !profile?.images) return
-    if (photoCount <= 1) {
+    if (photoCount <= 2) {
       setPhotoPopupImageIndex(null)
       return
     }
@@ -1758,10 +2160,10 @@ export function PreviewFieldPage({
   // invoking app/profile.
   const handleAddPhoto = async () => {
     if (!user || !profile) return
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'image/*',
-      copyToCacheDirectory: true,
-      multiple: false,
+    const ImagePicker = await import('expo-image-picker')
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: false,
     })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
@@ -1802,10 +2204,10 @@ export function PreviewFieldPage({
     if (photoPopupImageIndex == null || !user || !profile?.images) return
     const targetIndex = photoPopupImageIndex
     setPhotoPopupImageIndex(null)
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'image/*',
-      copyToCacheDirectory: true,
-      multiple: false,
+    const ImagePicker = await import('expo-image-picker')
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: false,
     })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
@@ -1895,27 +2297,6 @@ export function PreviewFieldPage({
 
   return (
     <View style={[styles.root, dismissGestureRef ? null : { paddingTop: insets.top }]}>
-      {/* In the sheet path the home shell owns the status bar (light on the
-          PRIMARY strip), so declaring style="dark" here would clobber it. */}
-      {dismissGestureRef ? null : <StatusBar style="dark" />}
-      {dismissGestureRef ? (
-        // Slide-up sheet path: the home shell's TabStrip (with the "Close
-        // profile" tab) provides all the chrome and the close affordance,
-        // so the card runs flush to the top of the sheet under it like the
-        // page1 match card. headerBottomShared = 0 → the sheet's swipe-down
-        // dismiss only fires from scroll-at-top, which is the same rule as
-        // the home page.
-        null
-      ) : (
-        <View onLayout={e => {
-          if (headerBottomShared) headerBottomShared.value = e.nativeEvent.layout.y + e.nativeEvent.layout.height
-        }}>
-          <ScreenHeader
-            title={config.title}
-            trailing={<IconPressable onPress={onBack}><CloseIcon /></IconPressable>}
-          />
-        </View>
-      )}
       {previewData ? (
         <View style={styles.previewWrap}>
           <PullContext.Provider value={pullCtx}>
@@ -1936,12 +2317,12 @@ export function PreviewFieldPage({
                 const list: CardAction[] = []
                 if (photoAddEnabled) list.push({
                   key: 'photo',
-                  icon: <AddPhotoIcon color={WHITE} size={40} />,
+                  icon: <AddPhotoIcon size={ICON.huge} />,
                   onPress: () => { tap(); handleAddPhoto() },
                 })
                 if (familyAddEnabled) list.push({
                   key: 'family',
-                  icon: <FamilyKidsIcon color={WHITE} size={40} />,
+                  icon: <FamilyKidsIcon size={ICON.huge} />,
                   onPress: () => { tap(); setFamilyPopupVisible(true) },
                 })
                 return list
@@ -1954,6 +2335,7 @@ export function PreviewFieldPage({
         visible={photoPopupImageIndex != null}
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
+        canDelete={photoCount > 2}
         onDismiss={() => setPhotoPopupImageIndex(null)}
         onMoveUp={handleMoveUp}
         onMoveDown={handleMoveDown}
@@ -2085,6 +2467,7 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
         destructive
+        confirmIcon={<TrashIcon color={WHITE} size={22} />}
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
@@ -2105,6 +2488,7 @@ function GameModeCard() {
     watchers?: Profile[]
     page2?: unknown
     page1?: { state?: 'free' | 'watching' | 'waiting' | 'chat' | 'locked'; profile?: Profile }
+    last_add_at?: string
   } | null | undefined
 
   const page1State = relations?.page1?.state
@@ -2113,6 +2497,19 @@ function GameModeCard() {
   const page2Raw = relations?.page2
   const page2InviteObj = page2Raw && !Array.isArray(page2Raw) ? page2Raw : null
   const watchers = Array.isArray(relations?.watchers) ? relations!.watchers! : []
+
+  // Broadcast is "active" while the 30m app_add cooldown is still running
+  // (see home.tsx for the canonical derivation). Pausing while broadcasting
+  // kicks every freshly-pulled candidate — same destructive ripple as
+  // pausing with watchers present — so it must go through the confirm path.
+  const ADD_COOLDOWN_MS = 30 * 60 * 1000
+  const lastAddAtMs = (() => {
+    const raw = relations?.last_add_at
+    if (typeof raw !== 'string') return 0
+    const t = Date.parse(raw)
+    return Number.isFinite(t) ? t : 0
+  })()
+  const broadcastActive = !!lastAddAtMs && (Date.now() - lastAddAtMs) < ADD_COOLDOWN_MS
 
   // "Pause mode" reads off the canonical pair: both pages locked with no
   // live partner/profile on either side. Anything else counts as Game mode.
@@ -2123,11 +2520,12 @@ function GameModeCard() {
   const disabled = page2State === 'pending' || page1State === 'chat' || page1State === 'waiting'
   const isActive = !isOff && !disabled
 
-  // Whether switching to pause mode would notify someone: watchers in
-  // page2.profiles[], a pending invite incoming, a watching/waiting/chat
-  // partner on page1. When none of those apply, the press commits without
-  // a confirm prompt.
-  const hasSideEffects = watchers.length > 0
+  // Whether switching to pause mode would notify someone: broadcasting in
+  // flight, watchers in page2.profiles[], a pending invite incoming, a
+  // watching/waiting/chat partner on page1. When none of those apply, the
+  // press commits without a confirm prompt.
+  const hasSideEffects = broadcastActive
+    || watchers.length > 0
     || page2State === 'pending'
     || (page1HasPartner && page1State !== 'locked' && page1State !== 'free')
 
@@ -2157,10 +2555,22 @@ function GameModeCard() {
     }
   }, [busy, disabled, isOff, hasSideEffects, performToggle])
 
-  const tapProps = useTapResponder(handlePress)
-
   // Currently active → glyph is Pause. Otherwise → Play (invites resume).
   const showPause = isActive
+
+  // Confirm-popup copy/icon mirrors the visibility-toggle popups: ask the
+  // same question we'd ask if the user reached for the same destructive
+  // ripple via the toggle. The shared resolver returns the broadcast or
+  // hide-profile variant when one applies; otherwise (a watching partner on
+  // page1, etc.) we fall back to the generic pause copy. The confirm action
+  // itself is `app/pause` regardless of which variant is shown — see
+  // onConfirm below.
+  const sharedConfirm = visibilityConfirmFor({ broadcastActive, watchersCount: watchers.length })
+  const confirmTitle = sharedConfirm?.title ?? t('settings.gameMode.offConfirmTitle')
+  const confirmDesc = sharedConfirm?.description ?? tg('settings.gameMode.offConfirmDesc', profile?.is_male)
+  const confirmLabel = sharedConfirm?.confirmLabel ?? t('settings.gameMode.offConfirmButton')
+  const confirmIcon = sharedConfirm?.confirmIcon ?? <PauseIcon color={WHITE} size={22} />
+  const confirmDestructive = sharedConfirm?.destructive ?? true
 
   // Hidden entirely while a transient interaction (pending invite, outgoing
   // waiting, in-chat) owns the resolution flow elsewhere. The overlay would
@@ -2172,28 +2582,28 @@ function GameModeCard() {
   return (
     <>
       <Animated.View
-        {...tapProps}
-        entering={FadeIn.duration(DURATION.med)}
-        exiting={FadeOut.duration(DURATION.med)}
+        entering={FadeIn}
+        exiting={FadeOut}
         style={styles.gameModeOverlay}
       >
-        <View style={styles.gameModeButton}>
+        <RoundButton onPress={handlePress}>
           {busy ? (
             <ActivityIndicator size="small" color={WHITE} />
           ) : showPause ? (
-            <PauseIcon color={WHITE} size={ICON.xxxl} />
+            <PauseIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />
           ) : (
-            <PlayIcon color={WHITE} size={ICON.xxxl} />
+            <PlayIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />
           )}
-        </View>
+        </RoundButton>
       </Animated.View>
 
       <ConfirmDialog
         visible={confirmOpen}
-        title={t('settings.gameMode.offConfirmTitle')}
-        description={t('settings.gameMode.offConfirmDesc')}
-        confirmLabel={t('settings.gameMode.offConfirmButton')}
-        destructive
+        title={confirmTitle}
+        description={confirmDesc}
+        confirmLabel={confirmLabel}
+        destructive={confirmDestructive}
+        confirmIcon={confirmIcon}
         onCancel={() => { if (!busy) setConfirmOpen(false) }}
         onConfirm={() => { performToggle('app/pause'); setConfirmOpen(false) }}
         busy={busy}
@@ -2218,15 +2628,6 @@ export default function SettingsPage({ topInset = 0, onBack, focused: _focused =
   return (
     <View style={styles.rootOuter}>
       <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['bottom', 'left', 'right']}>
-        {!embedded && <StatusBar style="dark" />}
-
-        {!embedded && (
-          <ScreenHeader
-            title={t('settings.preferences')}
-            onBack={() => { tap(); if (onBack) onBack(); else if (router.canGoBack()) router.back() }}
-          />
-        )}
-
         <ScrollView
           style={styles.tabScroll}
           contentContainerStyle={[styles.tabContent, { paddingTop: 0 }]}
@@ -2266,7 +2667,7 @@ export default function SettingsPage({ topInset = 0, onBack, focused: _focused =
           <View style={styles.optionsWrap}>
             <PreferencesContent onOpenSubPage={onOpenSubPage} />
 
-            <View style={{ marginTop: QUAD }}>
+            <View style={{ marginTop: XL }}>
               <AppInlineContent onBack={onBack} onOpenSubPage={onOpenSubPage} />
             </View>
           </View>
@@ -2287,80 +2688,79 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 0, height: 56,
   },
-  backBtn: { minWidth: DOUBLE + SINGLE * 2, paddingHorizontal: SINGLE, paddingVertical: BUTTON, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { minWidth: MD + SM * 2, paddingHorizontal: SM, paddingVertical: MD, alignItems: 'center', justifyContent: 'center' },
 
   tabBar: {
-    flex: 1, flexDirection: 'row', marginHorizontal: SINGLE,
-    backgroundColor: BLACK_SOFT, borderRadius: RADIUS, padding: 2,
+    flex: 1, flexDirection: 'row', marginHorizontal: SM,
+    backgroundColor: BLACK_SOFT, borderRadius: RADIUS, padding: XS,
   },
-  tabItem: { flex: 1, paddingVertical: SINGLE, alignItems: 'center', borderRadius: RADIUS },
+  tabItem: { flex: 1, paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS },
   tabItemActive: { backgroundColor: BLACK_STRONG },
-  tabPill: { position: 'absolute', top: 2, bottom: 2, borderRadius: RADIUS, backgroundColor: BLACK_STRONG },
+  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: BLACK_STRONG },
 
   tabScroll: { flex: 1 },
   // No horizontal padding here: the profile card extends edge-to-edge, flush
   // with the tab strip. The option groups below get their inset via
   // `optionsWrap`.
   tabContent: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 },
-  optionsWrap: { paddingHorizontal: SINGLE, marginTop: DOUBLE },
+  optionsWrap: { paddingHorizontal: SM, marginTop: MD },
 
   section: { marginBottom: 0 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionLabelRow: { flexDirection: 'row', marginTop: 24, marginBottom: 8, paddingHorizontal: SINGLE },
-  sectionLabel: { fontSize: 12, fontWeight: '600', color: BLACK_STRONG, letterSpacing: 1, textAlign: 'center' },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: BLACK, marginBottom: 10 },
-  sectionValue: { fontSize: 15, fontWeight: '700', color: BLACK },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: MD },
+  sectionLabelRow: { flexDirection: 'row', marginTop: LG, marginBottom: SM, paddingHorizontal: SM },
+  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG, letterSpacing: 1, textAlign: 'center' },
+  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: BLACK, marginBottom: SM },
+  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: BLACK },
   divider: { height: 0 },
 
-  photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SINGLE, justifyContent: 'flex-end', width: 44 * 3 + SINGLE * 2 },
+  photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, justifyContent: 'flex-end', width: 44 * 3 + SM * 2 },
   photoThumb: { width: 44, height: 44, borderRadius: RADIUS },
 
-  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: SM },
   slider: { width: '100%', height: 40 },
-  sliderEndLabel: { fontSize: 12, color: BLACK_MID, minWidth: 22, textAlign: 'center' },
+  sliderEndLabel: { fontSize: TEXT.sm, color: BLACK_MID, minWidth: 22, textAlign: 'center' },
 
-  genderRow: { flexDirection: 'row', gap: 10, marginTop: SINGLE },
+  genderRow: { flexDirection: 'row', gap: SM, marginTop: SM },
 
   previewWrap: {
     flex: 1,
     backgroundColor: WHITE,
   },
 
-  textInputWrap: { marginTop: SINGLE, borderRadius: RADIUS, paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE, backgroundColor: BLACK_SOFT },
-  textInputWrapInner: { paddingHorizontal: BUTTON, paddingTop: BUTTON, paddingBottom: BUTTON + SINGLE },
-  textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: SINGLE },
-  aboutMeQuote: { width: 18, fontSize: 28, lineHeight: 18, color: FIELD_ICON_STROKE, fontWeight: '700', textAlign: 'center' },
-  textInput: { fontSize: 16, color: BLACK, padding: 0, textAlign: 'center', minHeight: 56 },
-  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: 12, color: BLACK_MID },
+  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: BLACK_SOFT },
+  textInputWrapInner: { paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM },
+  textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM },
+  textInput: { fontSize: TEXT.md, color: BLACK, padding: 0, textAlign: 'center', minHeight: 56 },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: BLACK_MID },
 
   // Account tab
   infoCard: {
-    marginTop: SINGLE, borderRadius: RADIUS, overflow: 'hidden',
+    marginTop: SM, borderRadius: RADIUS, overflow: 'hidden',
     backgroundColor: BLACK_SOFT,
   },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: MD, paddingVertical: MD,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
   },
   infoRowLast: { borderBottomWidth: 0 },
-  infoLabel: { fontSize: 15, color: BLACK_STRONG },
+  infoLabel: { fontSize: TEXT.md, color: BLACK_STRONG },
   infoValue: {
-    fontSize: 15, fontWeight: '600', color: BLACK,
-    flexShrink: 1, marginStart: 16,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
+    flexShrink: 1, marginStart: MD,
   },
 
   accountLinkRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+    flexDirection: 'row', alignItems: 'center', gap: MD,
     backgroundColor: BLACK_SOFT, borderRadius: RADIUS,
-    paddingHorizontal: 16, paddingVertical: 14,
-    marginBottom: DOUBLE,
+    paddingHorizontal: MD, paddingVertical: MD,
+    marginBottom: MD,
   },
   // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
   // the subtle hairline `accountActionDivider` between siblings.
   accountLinksCard: {
     backgroundColor: WHITE,
-    marginBottom: DOUBLE,
+    marginBottom: MD,
   },
   // Relative-positioned wrapper so the GameModeCard overlay anchors to the
   // photo card's box. Sits flush with the tab strip (no top margin) and
@@ -2380,84 +2780,72 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: BLACK_SOFT,
   },
-  profileCardTopSpacer: { height: BUTTON + BUTTON_MIN_HEIGHT + BUTTON },
+  profileCardTopSpacer: { height: MD + BUTTON_MIN_HEIGHT + MD },
 
-  // Game-mode toggle — overlay button anchored to the profile-card hero
-  // image. Visual language matches the heart action button on MatchCard: a
-  // circular translucent-black disc with a WHITE glyph, lifted shadow stack
-  // so it floats above the photo. The whole disc is the tap target. Same
-  // diameter as before (BUTTON_MIN_HEIGHT) — only the chrome and placement
-  // changed.
+  // Game-mode toggle — overlay anchored to the profile-card hero image.
+  // The circular button itself is a RoundButton (visual + tap feedback);
+  // this style only positions it.
   gameModeOverlay: {
     position: 'absolute',
-    top: BUTTON,
-    right: BUTTON,
+    top: MD,
+    left: MD,
     zIndex: 2,
-  },
-  gameModeButton: {
-    width: BUTTON_MIN_HEIGHT,
-    height: BUTTON_MIN_HEIGHT,
-    borderRadius: BUTTON_MIN_HEIGHT / 2,
-    backgroundColor: BLACK_STRONG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: BLACK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: BLACK_SOFT },
   profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
-  profileCardCaption: { paddingHorizontal: DOUBLE, paddingVertical: DOUBLE },
-  profileCardTitle: { color: WHITE, fontSize: TEXT.h1, fontWeight: WEIGHT.bold },
+  // flexDirection:'row' makes the single Text child sit on the logical
+  // start side (right in RTL, left in LTR) — same pattern documented above
+  // GameModeCard. textAlign/writingDirection alone proved inconsistent on iOS.
+  profileCardCaption: { paddingHorizontal: MD, paddingVertical: MD, flexDirection: 'row' },
+  profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
   // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
   // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
   accentCard: { backgroundColor: WHITE },
   accountLinkRowInner: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', gap: MD,
+    paddingHorizontal: MD, paddingVertical: MD,
   },
   // Flat group, identical visual language to `accountLinksCard`: no frame,
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
   accountActionsCard: {
-    backgroundColor: WHITE, marginTop: SINGLE,
+    backgroundColor: WHITE, marginTop: SM,
   },
   accountActionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', gap: MD,
+    paddingHorizontal: MD, paddingVertical: MD,
   },
   accountActionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
-    marginStart: 16,
+    marginStart: MD,
   },
-  accountActionText: { fontSize: 15, color: BLACK, fontWeight: '500' },
+  accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  accountActionText: { fontSize: TEXT.md, color: BLACK, fontWeight: WEIGHT.semibold },
   accountActionTextDestructive: { color: DESTRUCTIVE_MUTED },
 
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
-    flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 10,
+    flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: SM,
     backgroundColor: WHITE, borderRadius: RADIUS,
-    paddingHorizontal: BUTTON, paddingVertical: BUTTON, marginTop: SINGLE,
+    paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
     shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.
   selectRowInner: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'flex-start', gap: MD,
+    paddingHorizontal: MD, paddingVertical: MD,
   },
-  selectRowLarge: { paddingVertical: 18 },
+  selectRowLarge: { paddingVertical: MD },
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  selectRowLabelWrap: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', columnGap: 8, rowGap: 2 },
-  selectRowLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  selectRowLabel: { fontSize: 15, lineHeight: 22, color: BLACK, fontWeight: '500' },
-  selectRowSubtitle: { fontSize: 13, color: BLACK_STRONG, marginTop: 2 },
-  selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectRowValue: { fontSize: 15, color: PRIMARY, fontWeight: '500', flexShrink: 1, marginStart: 'auto', textAlign: isRTL ? 'left' : 'right' },
+  selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', columnGap: SM },
+  selectRowLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: MD },
+  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS },
+  selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
+  selectRowValue: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: BLACK_SOFT,
@@ -2469,31 +2857,24 @@ const styles = StyleSheet.create({
   },
   selectRowIconWrap: { alignItems: 'center', justifyContent: 'center' },
 
-  // Sub-page overlay panel
-  subPageRoot: { backgroundColor: WHITE },
-  subPageHeaderTitle: {
-    flex: 1, fontSize: 22, fontWeight: '800', color: BLACK,
-    letterSpacing: -0.5, lineHeight: 26, includeFontPadding: false,
-    textAlign: 'center', textAlignVertical: 'center',
-  },
   subPageOptionsCard: {
-    marginHorizontal: SINGLE, marginTop: DOUBLE,
+    marginHorizontal: SM, marginTop: MD,
     borderRadius: RADIUS, overflow: 'hidden',
     backgroundColor: BLACK_SOFT,
   },
   subPageOptionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: BUTTON, paddingVertical: DOUBLE,
+    paddingHorizontal: MD, paddingVertical: MD,
   },
-  subPageOptionLabel: { fontSize: 17, color: BLACK },
-  subPageCheckmark: { fontSize: 17, color: PRIMARY, fontWeight: '600' },
+  subPageOptionLabel: { fontSize: TEXT.lg, color: BLACK },
+  subPageCheckmark: { fontSize: TEXT.lg, color: PRIMARY, fontWeight: WEIGHT.semibold },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
-    marginStart: 16,
+    marginStart: MD,
   },
   subPageDesc: {
-    marginHorizontal: SINGLE, marginTop: 16,
-    fontSize: 13, color: BLACK_STRONG,
-    textAlign: 'center', lineHeight: 19,
+    marginHorizontal: SM, marginTop: MD,
+    fontSize: TEXT.sm, color: BLACK_STRONG,
+    textAlign: 'center', lineHeight: lh(TEXT.sm),
   },
 })

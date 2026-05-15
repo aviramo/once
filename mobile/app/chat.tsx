@@ -5,23 +5,23 @@ import { Text, TextInput } from '../src/components/AppText'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Circle, Path, Polyline, Rect } from 'react-native-svg'
-import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as Location from 'expo-location'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
-import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, Easing as REasing, interpolateColor } from 'react-native-reanimated'
+import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
-import { SINGLE, RADIUS } from '../src/tokens'
+import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, lh } from '../src/tokens'
 import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
+import { formatLastSeen } from '../src/lib/lastSeen'
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
@@ -88,21 +88,6 @@ function formatTime(dateStr: string): string {
     return new Intl.DateTimeFormat(isRTL ? 'he' : 'en', { hour: '2-digit', minute: '2-digit' })
       .format(new Date(dateStr))
   } catch { return '' }
-}
-function formatLastSeen(iso: string | null | undefined, isMale: boolean | null | undefined): string {
-  if (!iso) return ''
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return tg('match.justNow', isMale)
-  if (diff < 3600) {
-    const n = Math.floor(diff / 60)
-    return n === 1 ? tg('match.minAgo', isMale) : tg('match.minsAgo', isMale).replace('{n}', String(n))
-  }
-  if (diff < 86400) {
-    const n = Math.floor(diff / 3600)
-    return n === 1 ? tg('match.hrAgo', isMale) : tg('match.hrsAgo', isMale).replace('{n}', String(n))
-  }
-  const n = Math.floor(diff / 86400)
-  return n === 1 ? tg('match.dayAgo', isMale) : tg('match.daysAgo', isMale).replace('{n}', String(n))
 }
 
 // ── Icons (chat-specific only; shared icons live in src/components/icons.tsx) ─
@@ -217,9 +202,9 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   useEffect(() => {
     if (attachMenuOpen) {
       setAttachVisible(true)
-      attachAnim.value = withTiming(1, { duration: 360, easing: REasing.bezier(0.22, 1, 0.36, 1) })
+      attachAnim.value = withTiming(1)
     } else {
-      attachAnim.value = withTiming(0, { duration: 320, easing: REasing.bezier(0.5, 0, 0.75, 0) }, (finished) => {
+      attachAnim.value = withTiming(0, undefined, (finished) => {
         if (finished) runOnJS(setAttachVisible)(false)
       })
     }
@@ -344,6 +329,26 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
   // ── Reversed messages for inverted FlatList ──────────────────────────────
   const reversedMessages = useMemo(() => messages.reduceRight<Message[]>((acc, m) => { acc.push(m); return acc }, []), [messages])
+
+  // Backward-clamp displayed timestamps so each bubble's time never exceeds
+  // its newer neighbor's. The raw created_at value is whoever-sent-it's local
+  // clock, so two users with skewed clocks produce out-of-order times even
+  // though the messages themselves are in correct order. We trust the visual
+  // position, not the clock: walking newest → oldest, each message's display
+  // time = min(raw, newer-neighbor's display). The keys are user_id+created_at
+  // (the same composite used everywhere else as a message identity).
+  const displayTimes = useMemo(() => {
+    const result = new Map<string, string>()
+    let maxAllowed = Infinity
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      const raw = Date.parse(m.created_at)
+      const clamped = Number.isFinite(raw) ? Math.min(raw, maxAllowed) : maxAllowed
+      if (Number.isFinite(clamped)) maxAllowed = clamped
+      result.set(m.user_id + m.created_at, Number.isFinite(clamped) ? new Date(clamped).toISOString() : m.created_at)
+    }
+    return result
+  }, [messages])
 
   useEffect(() => {
     signedUrlCache.current = new Map()
@@ -871,10 +876,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
   const handlePickImage = useCallback(async () => {
     setAttachMenuOpen(false)
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'image/*',
-      copyToCacheDirectory: true,
-      multiple: false,
+    const ImagePicker = await import('expo-image-picker')
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: false,
     })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
@@ -1315,6 +1320,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     const msgAnimKey = msg.user_id + msg.created_at
     const animateIn = newMsgKeysRef.current.has(msgAnimKey)
     const isMine = msg.user_id === userId
+    const displayTime = formatTime(displayTimes.get(msgAnimKey) ?? msg.created_at)
     const msgStatus: 'pending' | 'failed' | 'sent' | 'read' =
       msg._failed ? 'failed' :
       msg._pending ? 'pending' :
@@ -1332,7 +1338,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               isLast={isLastInGroup}
               msg={msg}
               getChatAudioUrl={getChatAudioUrl}
-              time={formatTime(msg.created_at)}
+              time={displayTime}
               msgStatus={msgStatus}
               routedToEarpiece={routedToEarpiece}
               onToggleRouting={toggleAudioRouting}
@@ -1349,7 +1355,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               isLast={isLastInGroup}
               msg={msg}
               getChatImageUrl={getChatImageUrl}
-              time={formatTime(msg.created_at)}
+              time={displayTime}
               onPress={uri => setLightboxUri(uri)}
               status={msgStatus}
             />
@@ -1359,7 +1365,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               isMine={isMine}
               isLast={isLastInGroup}
               location={msg.location ?? null}
-              time={formatTime(msg.created_at)}
+              time={displayTime}
               status={msgStatus}
             />
           ) : msg.schedule ? (
@@ -1369,7 +1375,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               isLast={isLastInGroup}
               schedule={msg.schedule}
               senderIsMale={isMine ? isMale : matchIsMale}
-              time={formatTime(msg.created_at)}
+              time={displayTime}
               status={msgStatus}
             />
           ) : (
@@ -1388,7 +1394,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 </Text>
                 <View style={styles.textBubbleFooter}>
                   <Text style={[styles.inlineTime, isMine ? styles.inlineTimeMine : styles.inlineTimeTheirs]} maxFontSizeMultiplier={FONT_SCALE.ui}>
-                    {formatTime(msg.created_at)}
+                    {displayTime}
                   </Text>
                   {isMine && msgStatus !== 'failed' && <CheckMark status={msgStatus} isMine />}
                 </View>
@@ -1419,7 +1425,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     )
   }, [reversedMessages, messages.length, firstNewIdx, userId, otherLastRead, getChatImageUrl, getChatAudioUrl,
       handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation, handleRetrySchedule,
-      isMale, matchIsMale,
+      isMale, matchIsMale, displayTimes,
       routedToEarpiece, toggleAudioRouting, autoPlayKey, handleAudioFinished, consumeAutoPlay,
       activePlayingKey, handlePlayStart])
 
@@ -1456,7 +1462,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           onEndReachedThreshold={0.3}
           ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
-            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+            <View style={{ paddingVertical: MD, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={BLACK_SOFT} />
             </View>
           ) : null}
@@ -1718,7 +1724,7 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
           <ActivityIndicator color={isMine ? WHITE : BLACK} />
         </View>
       )}
-      <View style={[styles.imageTimeRow, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+      <View style={[styles.imageTimeRow, { flexDirection: 'row', alignItems: 'center', gap: XS }]}>
         <Text style={styles.imageTimeText} maxFontSizeMultiplier={FONT_SCALE.ui}>
           {time}
         </Text>
@@ -1907,7 +1913,7 @@ function AnimatedBubble({ style, children, animate, isMine }: {
   useEffect(() => {
     if (!animate) return
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
       Animated.spring(translateX, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
       Animated.spring(scale, { toValue: 1, damping: 22, stiffness: 320, useNativeDriver: true }),
@@ -1925,7 +1931,7 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
   return (
     <View style={styles.daySep}>
       <View style={styles.daySepLine} />
-      <Text style={[styles.daySepLabel, bold && { fontWeight: '600' }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{label}</Text>
+      <Text style={[styles.daySepLabel, bold && { fontWeight: WEIGHT.semibold }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{label}</Text>
       <View style={styles.daySepLine} />
     </View>
   )
@@ -1944,15 +1950,15 @@ function TypingIndicator({ visible }: { visible: boolean }) {
     if (visible) {
       setMounted(true)
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
         Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
         Animated.spring(scale, { toValue: 1, damping: 22, stiffness: 320, useNativeDriver: true }),
       ]).start()
     } else {
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 0, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 8, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.9, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 140, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 8, duration: 140, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.9, duration: 140, useNativeDriver: true }),
       ]).start(({ finished }) => { if (finished) setMounted(false) })
     }
   }, [visible])
@@ -1975,8 +1981,8 @@ function TypingDots() {
       Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(v, { toValue: 1, duration: 320, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0, duration: 320, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          Animated.timing(v, { toValue: 1, duration: 320, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0, duration: 320, useNativeDriver: true }),
           Animated.delay(480 - delay),
         ]),
       )
@@ -2381,7 +2387,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
                 ? (playing ? fmt(pos) : fmt(duration))
                 : (msg.audio_duration_ms ? fmt(msg.audio_duration_ms) : '–:––')}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: XS }}>
             <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{time}</Text>
             {isMine && msgStatus !== 'failed' && <CheckMark status={msgStatus} isMine />}
           </View>
@@ -2501,15 +2507,15 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: WHITE },
   header: {
     height: 56,
-    paddingHorizontal: SINGLE,
+    paddingHorizontal: SM,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: WHITE,
     zIndex: 2,
   },
   status: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: TEXT.lg,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK_STRONG,
     textAlign: 'center',
     // Android adds ~4px of invisible padding above text metrics that pushes
@@ -2521,50 +2527,50 @@ const styles = StyleSheet.create({
 
   body: { flex: 1 },
   messages: { flex: 1 },
-  messagesContent: { padding: 10, flexGrow: 1 },
+  messagesContent: { padding: SM, flexGrow: 1 },
   emptyLabel: {
     marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
-    color: BLACK_MID, fontSize: 15, letterSpacing: 0.4,
+    color: BLACK_MID, fontSize: TEXT.md, letterSpacing: 0.4,
   },
 
-  msgWrap: { marginTop: 2 },
-  msgWrapFirst: { marginTop: 8 },
+  msgWrap: { marginTop: XS },
+  msgWrapFirst: { marginTop: SM },
   failedOpacity: { opacity: 0.6 },
   retryRow: {
     alignSelf: 'flex-end',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 3,
-    paddingVertical: 2,
+    gap: XS,
+    marginTop: XS,
+    paddingVertical: XS,
   },
-  retryLabel: { fontSize: 11, color: DESTRUCTIVE },
+  retryLabel: { fontSize: TEXT.xs, color: DESTRUCTIVE },
 
-  daySep: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
   daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT },
-  daySepLabel: { fontSize: 11, color: BLACK_STRONG },
+  daySepLabel: { fontSize: TEXT.xs, color: BLACK_STRONG },
 
   bubble: {
     maxWidth: '80%',
-    paddingVertical: 8,
-    paddingHorizontal: 13,
+    paddingVertical: SM,
+    paddingHorizontal: MD,
     borderRadius: RADIUS,
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
   bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: BLACK_SOFT },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
-  bubbleText: { fontSize: 15, lineHeight: 21 },
+  bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md) },
   bubbleTextMine: { color: WHITE },
   bubbleTextTheirs: { color: BLACK },
 
-  inlineTime: { fontSize: 11, lineHeight: 16, letterSpacing: 0.3 },
+  inlineTime: { fontSize: TEXT.xs, lineHeight: lh(TEXT.xs), letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
   inlineTimeTheirs: { color: BLACK_MID },
   bubbleTextRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' },
-  textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: 2, marginStart: 'auto' as any, paddingStart: 4, marginEnd: -6 },
+  textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginStart: 'auto' as any, paddingStart: XS, marginEnd: -SM },
 
-  typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 13, paddingHorizontal: 16 },
+  typingBubble: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: MD, paddingHorizontal: MD },
   typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: BLACK_STRONG },
 
   // Outer wrapper: holds the single-row input + send button plus the
@@ -2578,9 +2584,9 @@ const styles = StyleSheet.create({
     // flex-end so the send button stays pinned to the bottom as the input
     // grows across multi-line content.
     alignItems: 'flex-end',
-    paddingTop: 10,
-    paddingHorizontal: 10,
-    gap: 8,
+    paddingTop: SM,
+    paddingHorizontal: SM,
+    gap: SM,
   },
   inputWrap: {
     flex: 1,
@@ -2592,7 +2598,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: BLACK_SOFT,
     backgroundColor: WHITE,
-    paddingEnd: 4,
+    paddingEnd: XS,
     overflow: 'hidden',
   },
   inputAnimWrap: {
@@ -2602,11 +2608,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     maxHeight: 174,
-    paddingStart: 18,
-    paddingEnd: 6,
-    paddingVertical: 10,
-    fontSize: 15,
-    lineHeight: 22,
+    paddingStart: MD,
+    paddingEnd: SM,
+    paddingVertical: SM,
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
     color: BLACK,
     textAlign: isRTL ? 'right' : 'left',
     textAlignVertical: 'center',
@@ -2624,7 +2630,7 @@ const styles = StyleSheet.create({
   attachBtn: {
     width: 36, height: 36,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: SM,
   },
   attachBtnPressed: { opacity: 0.4 },
   attachBar: {
@@ -2649,7 +2655,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: SM,
     alignSelf: 'stretch',
   },
   attachBarItemPressed: { backgroundColor: WHITE_SOFT },
@@ -2674,16 +2680,16 @@ const styles = StyleSheet.create({
   attachConfirm: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: SM,
+    paddingHorizontal: MD,
+    paddingVertical: SM,
     backgroundColor: PRIMARY,
   },
   attachConfirmText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: TEXT.sm,
     color: WHITE,
-    fontWeight: '500',
+    fontWeight: WEIGHT.semibold,
   },
   attachConfirmClose: {
     width: 32, height: 32,
@@ -2691,7 +2697,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   attachConfirmSend: {
-    paddingHorizontal: 16,
+    paddingHorizontal: MD,
     height: 32,
     borderRadius: 16,
     backgroundColor: WHITE,
@@ -2700,9 +2706,9 @@ const styles = StyleSheet.create({
   },
   attachConfirmSendPressed: { opacity: 0.7 },
   attachConfirmSendLabel: {
-    fontSize: 14,
+    fontSize: TEXT.sm,
     color: PRIMARY,
-    fontWeight: '700',
+    fontWeight: WEIGHT.extrabold,
   },
 
   // Image bubble
@@ -2710,7 +2716,7 @@ const styles = StyleSheet.create({
     width: '80%',
     borderRadius: RADIUS,
     overflow: 'hidden',
-    padding: SINGLE,
+    padding: SM,
   },
   chatImage: {
     width: '100%',
@@ -2734,16 +2740,16 @@ const styles = StyleSheet.create({
   },
   imageTimeRow: {
     position: 'absolute',
-    bottom: SINGLE + 8,
-    end: SINGLE + 8,
+    bottom: SM + SM,
+    end: SM + SM,
     backgroundColor: BLACK_MID,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    borderRadius: RADII.sm,
+    paddingHorizontal: SM,
+    paddingVertical: XS,
   },
   imageTimeText: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: TEXT.xs,
+    lineHeight: lh(TEXT.xs),
     letterSpacing: 0.3,
     color: WHITE_STRONG,
   },
@@ -2753,13 +2759,13 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SM,
   },
   audioBubble: {
     width: '80%',
     borderRadius: RADIUS,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: SM,
+    paddingHorizontal: SM,
   },
   audioRouteBtn: {
     width: 32, height: 32,
@@ -2773,7 +2779,7 @@ const styles = StyleSheet.create({
   audioRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SINGLE,
+    gap: SM,
   },
   audioPlayBtn: {
     width: 34, height: 34,
@@ -2783,13 +2789,14 @@ const styles = StyleSheet.create({
   audioWave: {
     flex: 1,
     height: 26,
-    marginHorizontal: SINGLE,
+    marginHorizontal: SM,
   },
   audioDurationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 3,
-    marginStart: 42,
+    marginTop: XS,
+    // SM + audioPlayBtn width (34) = 42; aligns text with waveform start.
+    marginStart: SM + 34,
   },
 
   // Recording / preview bar
@@ -2806,7 +2813,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SM,
   },
   recDot: {
     width: 8, height: 8,
@@ -2814,8 +2821,8 @@ const styles = StyleSheet.create({
     backgroundColor: DESTRUCTIVE,
   },
   recTime: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: TEXT.md,
+    fontWeight: WEIGHT.semibold,
     color: BLACK,
     fontVariant: ['tabular-nums'],
   },
@@ -2829,25 +2836,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   previewDuration: {
-    fontSize: 13,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
     fontVariant: ['tabular-nums'],
     minWidth: 34,
     textAlign: 'right',
-    paddingEnd: 2,
+    paddingEnd: XS,
   },
 
   // Location bubble
   locationBubble: {
     width: '80%',
     borderRadius: RADIUS,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: SM,
+    paddingHorizontal: SM,
   },
   locationInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SINGLE,
+    gap: SM,
   },
   locationIconWrap: {
     width: 34,
@@ -2860,15 +2867,15 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  locationLabel: { fontSize: 16, lineHeight: 21, fontWeight: '600' },
-  locationSubLabel: { fontSize: 12, lineHeight: 16, marginTop: 1 },
+  locationLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.semibold },
+  locationSubLabel: { fontSize: TEXT.sm, lineHeight: 16, marginTop: 1 },
   locationFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: XS,
     alignSelf: 'flex-end',
-    marginTop: 4,
-    marginEnd: -2,
+    marginTop: XS,
+    marginEnd: -XS,
   },
 
   // Schedule bubble. Shape mirrors the settings family-schedule grid (M T W T F S S
@@ -2878,15 +2885,15 @@ const styles = StyleSheet.create({
   // mine inverts (white accents on PRIMARY) to stay legible against the orange
   // outgoing-bubble background.
   scheduleBubble: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: SM,
+    paddingHorizontal: MD,
     borderRadius: RADIUS,
-    gap: 8,
+    gap: SM,
   },
-  scheduleTitle: { fontSize: 13, fontWeight: '600', color: BLACK, marginBottom: 2 },
+  scheduleTitle: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK, marginBottom: XS },
   scheduleTitleMine: { color: WHITE },
-  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
-  scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: 3 },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SM },
+  scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
@@ -2897,19 +2904,19 @@ const styles = StyleSheet.create({
   scheduleDayBubbleSelectedMine: { backgroundColor: WHITE, borderColor: WHITE },
   scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
   scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
-  scheduleDayLetter: { fontSize: 12, color: BLACK },
+  scheduleDayLetter: { fontSize: TEXT.sm, color: BLACK },
   scheduleDayLetterMine: { color: WHITE },
   scheduleDayLetterSelected: { color: WHITE },
   scheduleDayLetterSelectedMine: { color: PRIMARY },
   scheduleDayLetterWeekend: { color: PRIMARY },
   scheduleDayLetterWeekendMine: { color: WHITE },
-  scheduleDayDate: { fontSize: 10, color: BLACK_STRONG },
+  scheduleDayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
   scheduleDayDateMine: { color: WHITE_STRONG },
   scheduleFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: XS,
     alignSelf: 'flex-end',
-    marginEnd: -2,
+    marginEnd: -XS,
   },
 })

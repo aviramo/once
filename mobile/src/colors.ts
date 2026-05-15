@@ -17,8 +17,12 @@ export const WHITE_STRONG = 'rgba(255,255,255,0.85)' // strong text/active state
 
 // ── Primary brand color ──────────────────────────────────────────────────
 export const PRIMARY      = '#FF7A5C'
-export const PRIMARY_PRESS = '#E8644A'
 export const PRIMARY_BG   = 'rgba(255,122,92,0.10)'
+// Solid "light coral" surface — used as a full-screen background where a
+// translucent overlay would be wrong (the status bar can't accept alpha on
+// Android and would mismatch the screen underneath). Designed to read as
+// clearly coral while staying bright enough for BLACK text + icons.
+export const PRIMARY_LIGHT = '#FFE9E0'
 // ── Destructive ──────────────────────────────────────────────────────────
 // Three tiers matching the BLACK_/WHITE_ philosophy.
 export const DESTRUCTIVE        = '#D96B6B'                 // opaque — text, icon, button fill
@@ -36,4 +40,3 @@ export const ONLINE_GREEN = '#2BB673'
 // the brand coral so a premium control reads as "different surface" at a
 // glance, not just "another orange button".
 export const PREMIUM       = '#8B5CF6'
-export const PREMIUM_PRESS = '#7244D9'

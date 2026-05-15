@@ -99,10 +99,13 @@ export function startOfDisplayedWeek(today: Date, weekStart: number): Date {
 }
 
 // Anchor-aware kid-free overlap between two schedules, returned as 0..1.
-// Mirrors the server-side `schedule_overlap` SQL function: aligns by each
-// schedule's anchor so phase-shifted schedules score against the real
-// calendar, not naive week-0-vs-week-0. Returns null when either side has
-// no usable schedule (caller treats that as "no chip to show").
+// Asymmetric: denominator is A's free days (the viewer's, since the chip
+// expresses "out of MY free days, how many is the partner also free"), not
+// the full cycle. Mirrors the server-side `schedule_overlap` SQL function:
+// aligns by each schedule's anchor so phase-shifted schedules score against
+// the real calendar, not naive week-0-vs-week-0. Returns null when either
+// side has no usable schedule, OR when A has zero free days in the cycle
+// (no denominator → no meaningful overlap to display).
 export function familyScheduleOverlap(
   scheduleA: FamilySchedule | undefined | null,
   scheduleB: FamilySchedule | undefined | null,
@@ -120,15 +123,20 @@ export function familyScheduleOverlap(
   const refMs = today.getTime()
   const shiftA = familyMod(Math.floor((refMs - ancAMs) / 86400000), ca)
   const shiftB = familyMod(Math.floor((refMs - ancBMs) / 86400000), cb)
+  let aFree = 0
   let bothFree = 0
   for (let i = 0; i < cycle; i++) {
     const ai = (shiftA + i) % ca
     const bi = (shiftB + i) % cb
     const aWith = !!scheduleA!.weeks[Math.floor(ai / 7)]?.[ai % 7]
     const bWith = !!scheduleB!.weeks[Math.floor(bi / 7)]?.[bi % 7]
-    if (!aWith && !bWith) bothFree++
+    if (!aWith) {
+      aFree++
+      if (!bWith) bothFree++
+    }
   }
-  return bothFree / cycle
+  if (aFree === 0) return null
+  return bothFree / aFree
 }
 
 function familyGcd(a: number, b: number): number {

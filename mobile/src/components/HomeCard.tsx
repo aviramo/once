@@ -4,10 +4,9 @@ import { Gesture, GestureDetector, ScrollView, type GestureType } from 'react-na
 import type { NativeViewGestureHandlerProps } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withTiming, Easing, runOnJS,
+  withTiming, runOnJS,
 } from 'react-native-reanimated'
-import { HomeButtons } from './HomeButtons'
-import { SINGLE, RADIUS } from '../tokens'
+import { SM, RADIUS } from '../tokens'
 import { WHITE } from '../colors'
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
@@ -158,7 +157,7 @@ export function HomeCard({
         if (!scrollAtTopSV.value || isLoading.value) return
         if (!triggered.value) {
           pullProgress.value = 0
-          pullY.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.cubic) })
+          pullY.value = withTiming(0)
           return
         }
         triggered.value = false
@@ -195,11 +194,7 @@ export function HomeCard({
           {description}
         </View>
       </Animated.View>
-      {buttons && (
-        <HomeButtons>
-          {buttons}
-        </HomeButtons>
-      )}
+      {buttons}
     </View>
   )
 
@@ -219,7 +214,7 @@ export function HomeCard({
 const styles = StyleSheet.create({
   cardWrapper: {
     flex: 1,
-    marginHorizontal: SINGLE,
+    marginHorizontal: SM,
     marginTop: 0,
     marginBottom: 0,
   },

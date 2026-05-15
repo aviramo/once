@@ -30,6 +30,14 @@ export type Data = {
   appearance: string;
   push_token: PushToken | null;
   role?: string | null;
+  /** True if the user picked a manual address instead of using the device's
+   * GPS. While true the server treats `location` as user-provided and the
+   * client suppresses permission prompts + skips periodic location updates. */
+  location_custom?: boolean;
+  /** Human-readable label of the manually-picked address (e.g. "תל אביב"),
+   * shown in the settings row when location_custom is true. Null/undefined
+   * when device mode is active. */
+  location_label?: string | null;
 };
 
 export type Profile = {

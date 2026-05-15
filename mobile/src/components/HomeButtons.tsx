@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native'
-import { SINGLE } from '../tokens'
+import { SM, LG } from '../tokens'
 import { WHITE } from '../colors'
 
 type HomeButtonsProps = {
@@ -16,8 +16,8 @@ export function HomeButtons({ children }: HomeButtonsProps) {
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingTop: SINGLE,
-    paddingBottom: 24,
+    paddingTop: SM,
+    paddingBottom: LG,
     backgroundColor: WHITE,
   },
 })

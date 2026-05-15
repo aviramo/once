@@ -19,6 +19,12 @@
     "production": {
       "ios": {
         "ascAppId": "6765470965"
+      },
+      "android": {
+        "serviceAccountKeyPath": "../.claude/secrets/google-play.json",
+        "track": "alpha",
+        "releaseStatus": "completed",
+        "changesNotSentForReview": false
       }
     }
   }

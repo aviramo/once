@@ -19,6 +19,12 @@ export interface Profile {
   last_seen?: string | null
   push_enabled?: boolean | null
   distance?: number | null
+  /** True when this side picked a manual address instead of GPS. When true,
+   * the distance chip swaps the pin icon for a home icon — the distance was
+   * computed against a fixed address, not the user's live location. Server
+   * embeds this in make_profile when data.location_custom is true; absent
+   * key means GPS mode. */
+  location_custom?: boolean | null
 }
 
 // Server-side v3 page shapes. page2 is always an object (never an array).
@@ -98,6 +104,13 @@ interface UserProfile {
   /** First day of the displayed week (0 = Sunday, 1 = Monday). Used by the
    * family/kids schedule UI to know which day to show in the leftmost column. */
   weekStart: number | null
+  /** True when the user picked a manual address instead of the device's GPS.
+   * Promoted from data.location_custom. While true the home shell suppresses
+   * the location permission overlay and skips periodic /app/location pushes. */
+  location_custom: boolean | null
+  /** Human-readable label of the manually-picked address (e.g. "תל אביב").
+   * Promoted from data.location_label. Null when device mode is active. */
+  location_label: string | null
   appearance: string | null
   data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
   relations?: PagesCompat | null
@@ -121,6 +134,7 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
   'weekStart',
+  'location_custom', 'location_label',
   'appearance',
 ]
 
@@ -243,6 +257,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
     if (d.data && typeof d.data === 'object') {
       const dd = d.data as Record<string, unknown>
       if ('weekStart' in dd) (d as Record<string, unknown>).weekStart = dd.weekStart
+      if ('location_custom' in dd) (d as Record<string, unknown>).location_custom = dd.location_custom
+      if ('location_label' in dd) (d as Record<string, unknown>).location_label = dd.location_label
       ;(d as Record<string, unknown>).images = Array.isArray(dd.images) ? dd.images as Image[] : []
       ;(d as Record<string, unknown>).bio = typeof dd.bio === 'string' ? dd.bio : null
       ;(d as Record<string, unknown>).family = dd.family && typeof dd.family === 'object' && !Array.isArray(dd.family)

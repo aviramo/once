@@ -24,6 +24,11 @@
         "NSMicrophoneUsageDescription": "Once needs access to your microphone to record and send voice messages."
       }
     },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "translucent": false,
+      "backgroundColor": "#FF7A5C"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -61,6 +66,12 @@
       "expo-apple-authentication",
       "expo-font",
       "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Once needs access to your photos so you can pick a profile picture and share images in chat."
+        }
+      ],
       [
         "@react-native-google-signin/google-signin",
         {

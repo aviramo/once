@@ -6,43 +6,55 @@
 // duration 350) are DRY violations — pull the value into this module and import
 // it instead.
 
-import { Easing } from 'react-native-reanimated'
-
 // ── Spacing ────────────────────────────────────────────────────────────────
-// SINGLE is the app's base unit. DOUBLE/BUTTON/RADIUS are the only other
-// tiers actually referenced across the app. Add a constant only when an
-// actual layout needs it — don't grow the scale "just in case".
+// Material-style 5-tier scale, geometric progression (4→8 ×2, 8→16 ×2,
+// 16→24 ×1.5, 24→40 ×1.67). Every spacing tier in the app maps to one of
+// these five values; tighter or larger inline literals are DRY violations.
+// Add a tier only when an actual layout needs it.
 
-export const SINGLE = 10
-export const DOUBLE = 20
-export const QUAD = 40
-export const BUTTON = 16
+export const XS = 4    // micro gaps inside bubbles, hairline insets
+export const SM = 8    // base unit: common gap in rows and forms
+export const MD = 16   // page horizontal padding, row paddings, medium gaps
+export const LG = 24   // section gaps, page-level paddings
+export const XL = 40   // hero spacing, largest tier
+
+// Border radii — distinct semantic axis from spacing.
 export const RADIUS = 12
 
+// Button / input minimum height. Also reused as the brand-logotype font size
+// (see TEXT.xxxl below) — the "Once" logo on the login screen reads at this
+// exact size.
+export const BUTTON_MIN_HEIGHT = 56
+export const INPUT_MIN_HEIGHT = 56
+
 // ── Font size scale ────────────────────────────────────────────────────────
-// Named for role. TEXT.body is the most common size for paragraph copy and
-// row labels. Only the tiers that have real call sites are listed — when a
-// new size is needed, name it here first.
+// T-shirt-sized scale. Each tier captures all uses of that visual rank, from
+// the smallest captions up to the brand logotype. Add a tier only when a real
+// call site needs it.
 
 export const TEXT = {
-  tiny: 11,      // micro chip counters inside tab strips
-  small: 13,     // chips, secondary text, pill labels
-  base: 14,      // pills, dropdown values, sub-section titles
-  body: 15,      // primary body, row labels, button labels in dialogs
-  input: 16,     // form inputs, toggle labels, primary button text
-  subhead: 17,   // sub-page list rows, button labels (lg)
-  h2: 22,        // dialog titles, screen page titles
-  h1: 24,        // hero card titles
-  display: 32,   // large numeric values (age inputs, big readouts)
+  xs: 12,    // hints, micro labels, timestamps, day-separators, retry
+  sm: 14,    // secondary text, chips, pill labels, sub-section titles, counters
+  md: 16,    // primary body, row labels, form inputs, dialog button labels
+  lg: 18,    // count badges, kid-chip × glyph, brand slogan, sub-page list rows, popup titles, status header
+  xl: 24,    // dialog titles, screen page titles, section titles, hero card names
+  xxl: 32,   // large numeric values (age inputs, big readouts)
+  xxxl: BUTTON_MIN_HEIGHT,  // "Once" brand logotype (login screen)
 } as const
 
+// Line-height helper. 1.4× the font size is the comfortable body-text ratio
+// and fits most surfaces (paragraphs, row labels, button labels, bubble text).
+// Inline lineHeight is still appropriate for titles (tighter ratio, ~1.1×) and
+// for single-glyph decorative text where the line box should equal the glyph
+// size — call sites that don't fit 1.4× simply keep their literal value.
+export const lh = (size: number): number => Math.round(size * 1.4)
+
 // ── Font weights ───────────────────────────────────────────────────────────
-// Only the weights with active call sites. `fontWeight: '700'` should
-// reference WEIGHT.bold instead of repeating the magic string.
+// Two-tier weight scale. `fontWeight: '600'` should reference WEIGHT.semibold
+// instead of repeating the magic string.
 
 export const WEIGHT = {
   semibold: '600',
-  bold: '700',
   extrabold: '800',
 } as const
 
@@ -69,6 +81,7 @@ export const ICON = {
   xl: 22,
   xxl: 24,
   xxxl: 28,
+  huge: 48,   // glyph inside RoundButton overlays (heart / pause / dots / add-photo / family)
 } as const
 
 // ── Stroke widths ──────────────────────────────────────────────────────────
@@ -80,25 +93,6 @@ export const STROKE = {
   // Bold, used for chunky icons that should match the visual weight of the
   // filled HeartIcon (e.g. the close-X on the profile sheet tab).
   heavy: 3.5,
-} as const
-
-// ── Motion: durations (ms) + easings ───────────────────────────────────────
-// Only the tiers used by BottomSheet / LoginForm spinner. Two-tier rule of
-// thumb: press/feedback 80–180ms; mount/dismount 200–350ms. Use EASE.out for
-// things appearing, EASE.in for things leaving.
-
-export const DURATION = {
-  med: 250,        // backdrop tap-dismiss snap
-  slow: 300,       // swipe-not-committed return
-  sheetIn: 350,    // bottom-sheet slide-up
-  sheetOut: 250,   // bottom-sheet slide-down
-  rotate: 700,     // spinner full revolution
-} as const
-
-export const EASE = {
-  out: Easing.out(Easing.cubic),
-  in: Easing.in(Easing.cubic),
-  linear: Easing.linear,
 } as const
 
 // ── Gesture thresholds ─────────────────────────────────────────────────────
@@ -128,5 +122,41 @@ export const DRAG_HANDLE = {
   radius: 2,
 } as const
 
-export const BUTTON_MIN_HEIGHT = 56
-export const INPUT_MIN_HEIGHT = 56
+// ── Tab strip ──────────────────────────────────────────────────────────────
+// All TabStrip-specific dimensions and motion values. `rowHeight` is the
+// fixed height of the main label/icon/chip row; `selectedScale` is the
+// subtle lift applied to the active label as the pager crosses into its
+// tab; `pulseOpacity` + `pulseCount` define the `alerting` attention pulse
+// (chip / indicator fades to pulseOpacity and back, pulseCount times).
+// `pulseTimeoutMs` is the upper-bound the React `alerting` flag stays true
+// after a trigger — slightly longer than pulseCount × 2 × default-withTiming
+// (300ms) so the animation always completes before the flag resets.
+
+export const TAB = {
+  rowHeight: 32,
+  selectedScale: 1.04,
+  pulseOpacity: 0.15,
+  pulseCount: 3,
+  pulseTimeoutMs: 2200,
+  // Duration of the sub-label (live timer) slide-in / slide-out animation.
+  // Entering: FadeInDown drops the timer from above into its slot above the
+  // mainRow while fading in. Exiting: FadeOutUp lifts it back up while
+  // fading out. The slot is absolute-positioned so the tab's layout box
+  // never changes — labels stay locked at the same Y regardless of timer
+  // state. Only the timer itself animates.
+  timerSlideDuration: 220,
+  // Slow opacity heartbeat applied to the sub-label cluster when a tab is
+  // surfacing a live ongoing status word (e.g. "בשידור" / "צופים בי" above
+  // an icon-only side tab). 900ms per phase → ~1.8s full cycle reads as
+  // "alive" without feeling frantic — matches the PresenceDot beat so live
+  // indicators across the shell share one heartbeat.
+  subLabelPulsePhaseMs: 900,
+  subLabelPulseOpacity: 0.45,
+  // Vertical nudge applied to standalone tab icons (renderIndicator) so they
+  // visually center against the label glyphs next to them. Flex
+  // `alignItems: center` aligns BOXES, but on Android the actual rendered
+  // text sits low in its line-box (font metrics give extra space at the top),
+  // so a centered icon ends up appearing visually higher than the labels.
+  // Positive value pushes the icon DOWN to match the labels' rendered Y.
+  iconBaselineNudge: 3,
+} as const

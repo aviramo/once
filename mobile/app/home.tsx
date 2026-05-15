@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme } from 'react-native'
+import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme, I18nManager } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, SlideInDown, SlideOutDown, LinearTransition, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
 import PagerView from 'react-native-pager-view'
 
 // PagerView wrapped for Reanimated so onPageScroll events can be handled in a
@@ -31,8 +31,8 @@ function usePagerScrollHandler(
   ) as unknown as (e: { nativeEvent: { position: number; offset: number } }) => void
 }
 import { Text } from '../src/components/AppText'
+const AnimatedText = Animated.createAnimatedComponent(Text)
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
 import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from 'react-native-svg'
 import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
@@ -42,16 +42,15 @@ import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotific
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
-import { BLACK, WHITE, PRIMARY, PRIMARY_BG, DESTRUCTIVE, DESTRUCTIVE_MUTED, BLACK_STRONG, PREMIUM, BLACK_SOFT } from '../src/colors'
-import { SINGLE, DOUBLE, QUAD, RADIUS, RADII, BUTTON, WEIGHT, TEXT, EASE, DURATION, ICON } from '../src/tokens'
+import { BLACK, WHITE, WHITE_MID, PRIMARY, PRIMARY_BG, DESTRUCTIVE, DESTRUCTIVE_MUTED, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT } from '../src/colors'
+import { XS, SM, MD, LG, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
-import { DiscoveryReveal } from '../src/components/DiscoveryReveal'
-import { TabStrip, type TabSpec, type TabChip } from '../src/components/TabStrip'
+import { RisingCard } from '../src/components/RisingCard'
+import { TabStrip, type TabSpec } from '../src/components/TabStrip'
 import { PullScrollView, PullContext, type PullCtx } from '../src/components/HomeCard'
-import { HomeButtons } from '../src/components/HomeButtons'
 import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
 import ChatPage from './chat'
@@ -60,8 +59,10 @@ import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { FONT_SCALE } from '../src/fonts'
 import { STORAGE } from '../src/keys'
-import { SlidersIcon, CloseBoldIcon, CloseIcon, DotsIcon, PauseIcon, InboxIcon, PlayIcon } from '../src/components/icons'
+import { SlidersIcon, CloseBoldIcon, CloseIcon, PauseIcon, PlayIcon, QuestionIcon, SettingsIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon } from '../src/components/icons'
+import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
 import type { CardAction } from '../src/components/MatchCard'
+import { StatusBar } from 'expo-status-bar'
 
 
 // ── Avatar rings: static halo + radar pulse ───────────────────────────────
@@ -85,14 +86,14 @@ function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }
         withRepeat(
           withSequence(
             withTiming(0, { duration: 0 }),
-            withTiming(1, { duration: RADAR_DURATION, easing: Easing.out(Easing.quad) }),
+            withTiming(1, { duration: RADAR_DURATION, easing: Easing.out(Easing.cubic) }),
           ),
           -1,
           false,
         ),
       )
     } else {
-      progress.value = withTiming(1, { duration: 200 })
+      progress.value = withTiming(1)
     }
   }, [active])
 
@@ -172,7 +173,7 @@ const SKIP_HINT_HEIGHT = 58
 const SKIP_HINT_FONT = 26
 // Horizontal padding applied on each side of the label so text never
 // reaches the screen edges. The SVG is sized to (window - 2 × HPAD).
-const SKIP_HINT_HPAD = DOUBLE * 2
+const SKIP_HINT_HPAD = MD * 2
 // Vertical advance for each wrapped line beyond the first. Combined with
 // SKIP_HINT_HEIGHT, defines the fixed area that wraps the label so the
 // avatar below stays at the same position whether the text is 1 line or 2.
@@ -315,7 +316,7 @@ function PullCue({
   useEffect(() => {
     visibility.value = withTiming(pulling ? 1 : 0, {
       duration: pulling ? PULL_CUE_VIS_FADE_IN_MS : PULL_CUE_VIS_FADE_OUT_MS,
-      easing: EASE.out,
+      easing: Easing.out(Easing.cubic),
     })
   }, [pulling])
 
@@ -449,39 +450,6 @@ function HiddenMoonIllustration() {
   )
 }
 
-// Megaphone-style icon used in the premium popup for the "show me to people"
-// tile. Single-stroke, currentColor so it reads on both PREMIUM and disabled
-// backgrounds.
-function MegaphoneIcon({ color, size = 28 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
-      <Path d="M14 7a5 5 0 0 1 0 10" />
-      <Path d="M18 5a8 8 0 0 1 0 14" />
-    </Svg>
-  )
-}
-
-function EyeOffIcon({ color, size = 28 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-      <Path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-1.67 2.68" />
-      <Path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s4 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-      <Path d="M2 2l20 20" />
-    </Svg>
-  )
-}
-
-function EyeOpenIcon({ color, size = 28 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
-      <Circle cx={12} cy={12} r={3} />
-    </Svg>
-  )
-}
-
 // ── Message ────────────────────────────────────────────────────────────────
 // Centered title + description block. Used as the main content surface for
 // every per-state variant of this screen (HIDDEN, WATCHING, WAITING, etc.).
@@ -489,16 +457,16 @@ function EyeOpenIcon({ color, size = 28 }: { color: string; size?: number }) {
 const chatMenuStyles = StyleSheet.create({
   sheet: {
     paddingHorizontal: 0,
-    paddingVertical: SINGLE / 2,
+    paddingVertical: SM / 2,
   },
   row: {
-    paddingVertical: BUTTON,
-    paddingHorizontal: BUTTON,
+    paddingVertical: MD,
+    paddingHorizontal: MD,
     alignItems: 'center',
   },
   rowPressed: { backgroundColor: BLACK_SOFT },
   label: {
-    fontSize: TEXT.input,
+    fontSize: TEXT.md,
     color: BLACK,
     fontWeight: WEIGHT.semibold,
   },
@@ -507,23 +475,26 @@ const chatMenuStyles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: BLACK_SOFT,
-    marginHorizontal: BUTTON,
+    marginHorizontal: MD,
   },
 })
 
 
 // ── Invite timer ──────────────────────────────────────────────────────────
 
-function useSecsLeft(expiresAt: string) {
+function useSecsLeft(expiresAt: string | null | undefined) {
+  const target = expiresAt ? new Date(expiresAt).getTime() : 0
   const [secsLeft, setSecsLeft] = useState(() =>
-    Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000))
+    target ? Math.max(0, Math.floor((target - Date.now()) / 1000)) : 0
   )
   useEffect(() => {
+    if (!target) { setSecsLeft(0); return }
+    setSecsLeft(Math.max(0, Math.floor((target - Date.now()) / 1000)))
     const id = setInterval(() => {
-      setSecsLeft(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)))
+      setSecsLeft(Math.max(0, Math.floor((target - Date.now()) / 1000)))
     }, 1000)
     return () => clearInterval(id)
-  }, [expiresAt])
+  }, [target])
   return secsLeft
 }
 
@@ -536,373 +507,513 @@ function formatClock(secsLeft: number): string {
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-// ── StatusCard primitive ─────────────────────────────────────────────────
-// Shared scaffolding for both InfoBlock (page1 waiting/replying) and
-// Page2StatusCard (Viewers empty-state). Warm surface, optional title,
-// description, progress bar, and a bottom row with a clock slot on the
-// reading-edge side and an actions slot on the trailing side.
+// ── StatusCard scaffold ──────────────────────────────────────────────────
+// Visual scaffolding shared by InviteTimerCard (page1 invite timer), EventMessageCard
+// (terminal locked-message states) and ViewersStatusCard (Viewers empty-state).
+// All three render the same warm card surface with optional title,
+// description, and a stack of full-width Buttons below. The live timer for
+// invite/cooldown rides inside the primary Button itself (footer slot), so
+// no separate clock/bar row lives in this scaffold.
 
-const STATUS_BTN_SIZE = 44
-const STATUS_GLYPH_SIZE = 14
-const STATUS_BAR_HEIGHT = 6
+// Smooth layout transition for the card interior. When the description text
+// or the button stack grows/shrinks, height changes animate in sync instead
+// of snapping.
+const STATUS_LAYOUT = LinearTransition
 
-// Smooth layout transition for the StatusCard interior. When the description
-// text grows/shrinks (e.g., page2 toggle between visible vs. hidden subtitle),
-// the description's height, the bar position, and the bottom row position all
-// animate in sync instead of snapping.
-const STATUS_LAYOUT = LinearTransition.duration(DURATION.med).easing(EASE.out)
+const statusCardStyles = StyleSheet.create({
+  container: {
+    backgroundColor: WHITE,
+    paddingVertical: LG,
+    paddingHorizontal: MD,
+  },
+  title: {
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.extrabold,
+    color: BLACK,
+    textAlign: 'center',
+    marginBottom: SM,
+    includeFontPadding: false,
+  },
+  description: {
+    fontSize: TEXT.lg,
+    lineHeight: lh(TEXT.lg),
+    color: BLACK,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+})
 
-function StatusCard({
-  title,
-  description,
-  progress,
-  accent = PRIMARY,
-  clock,
-  actions,
-}: {
-  title?: string | null
-  description?: string
-  progress?: number
-  accent?: string
-  clock?: React.ReactNode
-  actions?: React.ReactNode
-}) {
+// Page1 "you sent an invitation" timer card. Title + description + a plain
+// full-width cancel button. The live countdown that used to ride inside
+// the button's footer now sits under the Once tab label, alongside the
+// symmetric page2 incoming-invite clock under the invite tab. Keeping the
+// two countdowns in the same chrome row (instead of one in the button and
+// one in the tab) means both sides of the invitation read the same way.
+function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean }) {
+  const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
+  const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
+
   return (
     <View style={statusCardStyles.container}>
-      {title ? (
-        <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
-          {title}
-        </Animated.Text>
-      ) : null}
-      {description ? (
-        <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
-          {description}
-        </Animated.Text>
-      ) : null}
-      {progress != null ? (
-        <Animated.View layout={STATUS_LAYOUT} style={statusCardStyles.barTrack}>
-          <View style={[statusCardStyles.barFill, { width: `${progress * 100}%`, backgroundColor: accent }]} />
-        </Animated.View>
-      ) : null}
-      <Animated.View layout={STATUS_LAYOUT} style={statusCardStyles.bottomRow}>
-        <View style={statusCardStyles.clockSlot}>{clock}</View>
-        <View style={statusCardStyles.actionsRow}>{actions}</View>
+      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {title}
+      </Animated.Text>
+      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {description}
+      </Animated.Text>
+      <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
+        <Button
+          label={t('home.cancelWaitingBtn')}
+          variant="primary"
+          iconStart={<CloseIcon color={WHITE} size={ICON.xxl} />}
+          onPress={onCancel}
+          loading={busy}
+        />
       </Animated.View>
     </View>
   )
 }
 
-function StatusAction({
-  onPress,
-  disabled,
-  accessibilityLabel,
-  color = PRIMARY,
-  variant = 'solid',
-  children,
-}: {
-  onPress: () => void
-  disabled?: boolean
-  accessibilityLabel: string
-  color?: string
-  variant?: 'solid' | 'outlined'
-  children: React.ReactNode
-}) {
-  const variantStyle = variant === 'outlined'
-    ? { backgroundColor: WHITE, borderColor: color, borderWidth: 2 }
-    : { backgroundColor: color }
-  return (
-    <Pressable
-      onPress={() => { if (!disabled) onPress() }}
-      disabled={disabled}
-      hitSlop={SINGLE}
-      style={[
-        statusCardStyles.actionBtn,
-        variantStyle,
-        disabled && statusCardStyles.actionBtnDisabled,
-      ]}
-      android_disableSound
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-    >
-      {children}
-    </Pressable>
-  )
-}
-
-const statusCardStyles = StyleSheet.create({
-  container: {
-    backgroundColor: WHITE,
-    paddingVertical: QUAD,
-    paddingHorizontal: BUTTON,
-  },
-  title: {
-    fontSize: TEXT.subhead,
-    fontWeight: WEIGHT.bold,
-    color: BLACK,
-    textAlign: 'center',
-    marginBottom: DOUBLE,
-    includeFontPadding: false,
-  },
-  description: {
-    fontSize: TEXT.body,
-    lineHeight: 23,
-    color: BLACK,
-    textAlign: 'center',
-    marginBottom: QUAD,
-    includeFontPadding: false,
-  },
-  barTrack: {
-    height: STATUS_BAR_HEIGHT,
-    backgroundColor: PRIMARY_BG,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: STATUS_BAR_HEIGHT,
-  },
-  bottomRow: {
-    marginTop: QUAD,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: STATUS_BTN_SIZE,
-  },
-  clockSlot: {
-    minWidth: 60,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: SINGLE,
-  },
-  clock: {
-    fontSize: TEXT.h2,
-    fontWeight: WEIGHT.extrabold,
-    letterSpacing: -0.4,
-    color: BLACK,
-    fontVariant: ['tabular-nums'],
-  },
-  clockWrap: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: SINGLE,
-  },
-  expiresLabel: {
-    fontSize: TEXT.tiny,
-    fontWeight: WEIGHT.semibold,
-  },
-  stopGlyph: {
-    width: STATUS_GLYPH_SIZE,
-    height: STATUS_GLYPH_SIZE,
-    borderRadius: RADII.xs,
-    backgroundColor: WHITE,
-  },
-  actionBtn: {
-    width: STATUS_BTN_SIZE,
-    height: STATUS_BTN_SIZE,
-    borderRadius: STATUS_BTN_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionBtnDisabled: {
-    opacity: 0.4,
-  },
-})
-
-function InfoBlock({ expiresAt, totalSecs, extended, targetIsMale, userIsMale, mode = 'inviter', onCancel, onAccept, onReject, busy }: { expiresAt: string; totalSecs: number; extended?: boolean; targetIsMale?: boolean | null; userIsMale?: boolean | null; mode?: 'inviter' | 'invitee'; onCancel?: () => void; onAccept?: () => void; onReject?: () => void; busy?: boolean }) {
-  const secsLeft = useSecsLeft(expiresAt)
-  const isExpired = secsLeft === 0
-  const isUrgent = secsLeft > 0 && secsLeft < 120
-  const progress = Math.max(0, Math.min(1, secsLeft / Math.max(1, totalSecs)))
-
-  const accentColor = isExpired ? DESTRUCTIVE : PRIMARY
-
-  // Gentle blink when expired.
-  const blink = useSharedValue(1)
-  useEffect(() => {
-    cancelAnimation(blink)
-    if (isExpired) {
-      blink.value = withRepeat(
-        withSequence(
-          withTiming(0.35, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        false,
-      )
-    } else {
-      blink.value = withTiming(1, { duration: 200 })
-    }
-  }, [isExpired])
-  const blinkStyle = useAnimatedStyle(() => ({ opacity: blink.value }))
-
-  const title = mode === 'inviter' ? tg('home.waitingTimerTitle', targetIsMale ?? null) : null
-  const description = mode === 'invitee'
-    ? tg('home.replyingTimerDesc', userIsMale ?? null)
-    : tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
-
-  return (
-    <StatusCard
-      title={title}
-      description={description}
-      progress={progress}
-      accent={accentColor}
-      clock={
-        <Animated.View style={[statusCardStyles.clockWrap, blinkStyle]}>
-          {extended ? (
-            <Text style={[statusCardStyles.expiresLabel, { color: accentColor }]} maxFontSizeMultiplier={FONT_SCALE.ui} numberOfLines={1}>
-              {t('home.inviteTimerLabelExtended')}
-            </Text>
-          ) : null}
-          <Text
-            style={[statusCardStyles.clock, (isUrgent || isExpired) && { color: accentColor }]}
-            maxFontSizeMultiplier={FONT_SCALE.ui}
-            numberOfLines={1}
-          >
-            {formatClock(secsLeft)}
-          </Text>
-        </Animated.View>
-      }
-      actions={mode === 'invitee' && (onAccept || onReject) ? (
-        <>
-          <StatusAction
-            color={DESTRUCTIVE}
-            variant="outlined"
-            disabled={busy}
-            onPress={onReject!}
-            accessibilityLabel={t('home.replyingReject')}
-          >
-            <CloseIcon color={DESTRUCTIVE} size={22} />
-          </StatusAction>
-          <StatusAction
-            color={PRIMARY}
-            disabled={busy}
-            onPress={onAccept!}
-            accessibilityLabel={t('home.replyingAccept')}
-          >
-            <CheckIcon color={WHITE} size={22} />
-          </StatusAction>
-        </>
-      ) : onCancel ? (
-        <StatusAction onPress={onCancel} accessibilityLabel={t('home.cancelWaitingBtn')}>
-          <View style={statusCardStyles.stopGlyph} />
-        </StatusAction>
-      ) : null}
-    />
-  )
-}
-
-// ── MessageBlock ─────────────────────────────────────────────────────────
+// ── EventMessageCard ─────────────────────────────────────────────────────────
 // Top-of-card info component for terminal locked-message states (page1 after
-// a terminal event, page2 dead invite). Same StatusCard layout as InfoBlock —
-// title + description + a passive bar in the place where the live timer would
-// sit + a continue StatusAction that mirrors cancel/accept/reject styling.
-function MessageBlock({ title, description, onContinue, busy }: { title: string; description: string; onContinue: () => void; busy?: boolean }) {
+// a terminal event, page2 dead invite). Same scaffold as InviteTimerCard —
+// title + description + a single full-width "back to game" button. No
+// timer here, so no footer on the button.
+function EventMessageCard({ title, description, onContinue, busy }: { title: string; description: string; onContinue: () => void; busy?: boolean }) {
   return (
-    <StatusCard
-      title={title}
-      description={description}
-      progress={1}
-      actions={
-        <StatusAction
-          color={PRIMARY}
-          disabled={busy}
+    <View style={statusCardStyles.container}>
+      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {title}
+      </Animated.Text>
+      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {description}
+      </Animated.Text>
+      <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
+        <Button
+          label={t('home.endedBack')}
+          variant="primary"
+          iconStart={<PlayIcon color={WHITE} size={ICON.xxl} />}
           onPress={onContinue}
-          accessibilityLabel={t('home.endedBack')}
-        >
-          <PlayIcon color={WHITE} size={22} />
-        </StatusAction>
-      }
-    />
+          loading={busy}
+        />
+      </Animated.View>
+    </View>
   )
 }
 
 // ── Page2 status card ────────────────────────────────────────────────────
-// Composes StatusCard for the Viewers empty-state. Two PREMIUM round action
-// buttons: broadcast (`app_add`) and hide/reveal (`app_lock2` / `app_free2`).
-// Broadcast carries a 1h cooldown; while it is counting down the bar reflects
-// the time-left ratio and the clock label renders next to the actions.
+// Title + description block for the Viewers empty-state. The 3-state
+// visibility toggle (VisibilityToggle) sits above this card and now owns the
+// broadcast action (`app_add`) as its third segment; this card no longer has
+// any siblings below it.
 
-function Page2StatusCard({
+function ViewersStatusCard({
   isHidden,
+  broadcastActive,
+  hasWatchers,
   userIsMale,
-  addEnabled,
-  addCooldownLabel,
-  addCooldownSecsLeft,
-  addCooldownTotalSecs,
-  busyKey,
-  onBroadcast,
-  onToggleHide,
-  title: titleOverride,
-  description: descriptionOverride,
 }: {
   isHidden: boolean
+  broadcastActive: boolean
+  hasWatchers: boolean
   userIsMale: boolean | null
-  addEnabled: boolean
-  addCooldownLabel: string | null
-  addCooldownSecsLeft: number
-  addCooldownTotalSecs: number
-  busyKey: string | null
-  onBroadcast: () => void
-  onToggleHide: () => void
-  title?: string | null
-  description?: string
 }) {
-  const addBusy = busyKey === 'add'
-  const toggleBusy = busyKey === 'lock2' || busyKey === 'free2'
-  const onCooldown = !addEnabled && !!addCooldownLabel
-  const broadcastDisabled = onCooldown || addBusy
-  const title = titleOverride !== undefined
-    ? titleOverride
-    : isHidden ? t('home.watchingMeHiddenTitle') : t('home.watchingMeNoOneTitle')
-  const description = descriptionOverride !== undefined
-    ? descriptionOverride
-    : isHidden
-      ? t('home.watchingMeHiddenSubtitle')
-      : tg('home.watchingMeNoOneSubtitle', userIsMale)
-  const ToggleIcon = isHidden ? EyeOpenIcon : EyeOffIcon
-  const progress = onCooldown
-    ? Math.max(0, Math.min(1, addCooldownSecsLeft / Math.max(1, addCooldownTotalSecs)))
-    : 1
+  // 5-state matrix: hidden wins over broadcast; then watched vs empty.
+  const [title, description] = (() => {
+    if (isHidden) return [tg('home.watchingMeHiddenTitle', userIsMale), tg('home.watchingMeHiddenSubtitle', userIsMale)]
+    if (broadcastActive && hasWatchers) return [tg('home.watchingMeBroadcastWatchedTitle', userIsMale), tg('home.watchingMeBroadcastWatchedSubtitle', userIsMale)]
+    if (broadcastActive) return [tg('home.watchingMeBroadcastEmptyTitle', userIsMale), tg('home.watchingMeBroadcastEmptySubtitle', userIsMale)]
+    if (hasWatchers) return [tg('home.watchingMeVisibleWatchedTitle', userIsMale), tg('home.watchingMeVisibleWatchedSubtitle', userIsMale)]
+    return [tg('home.watchingMeVisibleEmptyTitle', userIsMale), tg('home.watchingMeVisibleEmptySubtitle', userIsMale)]
+  })()
 
   return (
-    <StatusCard
-      title={title}
-      description={description}
-      progress={progress}
-      accent={PREMIUM}
-      clock={onCooldown ? (
-        <Text
-          style={statusCardStyles.clock}
-          maxFontSizeMultiplier={FONT_SCALE.ui}
-          numberOfLines={1}
-        >
-          {addCooldownLabel}
-        </Text>
-      ) : null}
-      actions={
-        <>
-          <StatusAction
-            color={PREMIUM}
-            variant="outlined"
-            disabled={broadcastDisabled}
-            onPress={() => { tap(); onBroadcast() }}
-            accessibilityLabel={t('home.premiumPopup.add')}
-          >
-            <MegaphoneIcon color={PREMIUM} size={22} />
-          </StatusAction>
-          <StatusAction
-            color={isHidden ? PRIMARY : PREMIUM}
-            variant="outlined"
-            disabled={toggleBusy}
-            onPress={() => { tap(); onToggleHide() }}
-            accessibilityLabel={isHidden ? t('home.premiumPopup.reveal') : t('home.premiumPopup.hide')}
-          >
-            <ToggleIcon color={isHidden ? PRIMARY : PREMIUM} size={22} />
-          </StatusAction>
-        </>
-      }
-    />
+    <View style={statusCardStyles.container}>
+      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {title}
+      </Animated.Text>
+      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {description}
+      </Animated.Text>
+    </View>
   )
 }
+
+// ── VisibilityToggle ─────────────────────────────────────────────────────
+// Connected 3-segment pill anchored at the bottom of the page2 pane: Hidden,
+// Visible, Broadcast. One shared outer pill (WHITE bg, PRIMARY border) with
+// a PRIMARY-filled sliding indicator that animates between segments on mode
+// change. Each segment renders both an active (WHITE) and a muted (PRIMARY)
+// icon stacked at the same position; their opacities are driven by the
+// shared `progress` value so the icon morphs in lockstep with the indicator
+// as it slides past. Segments are glyph-only — labels would crowd the
+// shared pill and the ViewersStatusCard directly above already explains the
+// active mode.
+//
+// All three buttons are always tappable. Broadcast is treated as a real
+// mode that the user enters via the popup confirmation, sits in for up to
+// 30 minutes, and exits explicitly via the same segment (now showing an
+// "exit broadcast?" popup). Tapping Hidden/Visible while broadcasting
+// switches modes; the server clears the cooldown atomically in those RPCs
+// (lock2) or via the explicit app/cancel_add call (used by the Visible
+// segment + the exit popup) so the toggle never gets stuck on broadcast.
+//
+// While a tap is in flight, the matching segment's icon swaps to a spinner
+// painted in the segment's tint (WHITE while the indicator is under it,
+// PRIMARY otherwise).
+
+type ToggleMode = 'hidden' | 'visible' | 'broadcast'
+type ToggleAction = ToggleMode
+
+// Small rotating spinner matching the toggle's icon dimensions. Same shape
+// as the Button's internal ButtonSpinner — separate copy to avoid coupling
+// the toggle to Button's internals.
+function ToggleSpinner({ color, size = 20 }: { color: string; size?: number }) {
+  const rotation = useSharedValue(0)
+  useEffect(() => {
+    rotation.value = withRepeat(withTiming(360, { duration: 600, easing: Easing.linear }), -1, false)
+  }, [])
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
+  return (
+    <Animated.View style={[{ width: size, height: size }, animStyle]}>
+      <Svg width={size} height={size} viewBox="0 0 22 22">
+        <Circle cx={11} cy={11} r={8} stroke={color} strokeOpacity={0.3} strokeWidth={2.5} fill="none" />
+        <Path d="M 11 3 A 8 8 0 0 1 19 11" stroke={color} strokeWidth={2.5} strokeLinecap="round" fill="none" />
+      </Svg>
+    </Animated.View>
+  )
+}
+
+const TOGGLE_ORDER: ToggleMode[] = ['hidden', 'visible', 'broadcast']
+// Padding past the popup's `visible=false` flip to cover BottomSheet's
+// slide-out animation (~300ms default withTiming). After this window the
+// VisibilityToggle is free to slide its indicator to the new mode.
+const TOGGLE_GATE_LINGER_MS = 320
+// Inset (px) between the toggle's outer pill and the WHITE indicator. The
+// indicator sits as a smaller rounded pill inside the track with breathing
+// room on every side, iOS segmented-control style.
+const TOGGLE_TRACK_INSET = 4
+
+// One segment of the connected toggle. The toggle sits on a white page
+// background and its body carries PRIMARY, so the palette is inverted
+// from a typical resting/active pair: resting segments read WHITE icon +
+// WHITE label on PRIMARY; the sliding WHITE thumb hosts the active
+// segment which paints PRIMARY icon + PRIMARY label. Each segment stacks
+// icon-over-label vertically and renders both color variants of the
+// stack as overlaid layers, cross-fading via opacity driven by the
+// shared `progress` value — same pattern as TabStrip's label cross-fade.
+// While a tap is in flight, both layers are swapped for a tint-matched
+// spinner.
+function ToggleSegment({
+  index,
+  pending,
+  busy,
+  progress,
+  onPress,
+  renderIcon,
+  label,
+}: {
+  index: number
+  pending: boolean
+  busy: boolean
+  progress: SharedValue<number>
+  onPress: () => void
+  renderIcon: (color: string) => React.ReactNode
+  label: string
+}) {
+  const activeStyle = useAnimatedStyle(() => ({
+    opacity: Math.max(0, 1 - Math.abs(progress.value - index)),
+  }))
+  const mutedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - Math.max(0, 1 - Math.abs(progress.value - index)),
+  }))
+  // Stack with label always present; the icon slot is swapped for a
+  // spinner during pending so the label keeps reading the option being
+  // committed even while the request is in flight. Sized to the icon
+  // (ICON.xxxl) so the layout doesn't shift when pending flips.
+  const renderContent = (color: string) => (
+    <View style={visibilityToggleStyles.segmentStack}>
+      {pending
+        ? <ToggleSpinner color={color} size={ICON.xxxl} />
+        : renderIcon(color)}
+      <Text style={[visibilityToggleStyles.segmentLabel, { color }]}>{label}</Text>
+    </View>
+  )
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        visibilityToggleStyles.segment,
+        pressed && !busy && visibilityToggleStyles.segmentPressed,
+      ]}
+      onPress={onPress}
+      disabled={busy}
+      hitSlop={SM}
+    >
+      {/* Muted layer flows normally — it drives the segment's natural
+          height (icon/spinner + gap + label + paddingVertical above/
+          below). Active layer is absolutely overlaid so the row's height
+          tracks content + padding instead of being pinned to a magic
+          number. Opposing opacities deliver the cross-fade as `progress`
+          slides past this index. */}
+      <Animated.View style={mutedStyle}>{renderContent(WHITE)}</Animated.View>
+      <Animated.View style={[visibilityToggleStyles.iconLayer, activeStyle]}>
+        {renderContent(PRIMARY)}
+      </Animated.View>
+    </Pressable>
+  )
+}
+
+// `gated` holds the indicator slide back while a confirm popup tied to
+// this toggle is open OR animating out. Without it, the indicator
+// finishes its 280ms slide while the BottomSheet is still on screen
+// dimming/dismissing, so by the time the popup is fully gone the user
+// sees the toggle already settled — no perceived movement. The parent
+// flips `gated` true while a popup is open and keeps it true through
+// the sheet's slide-out so the toggle's animation runs against a
+// clear stage.
+function VisibilityToggle({
+  mode,
+  pendingAction,
+  gated,
+  broadcastTimer,
+  onHidden,
+  onVisible,
+  onBroadcast,
+  busy,
+}: {
+  mode: ToggleMode
+  // Which action is awaiting a server response. The matching segment swaps
+  // its icon for a spinner in the matching tint. null when no action is in
+  // flight from this toggle.
+  pendingAction: ToggleAction | null
+  gated: boolean
+  // Live MM:SS countdown shown INSTEAD of the broadcast segment's default
+  // "שידור" / "Broadcast" label while broadcast is active. Null when the
+  // cooldown isn't running.
+  broadcastTimer: string | null
+  onHidden: () => void
+  onVisible: () => void
+  onBroadcast: () => void
+  busy: boolean
+}) {
+  const modeIndex = TOGGLE_ORDER.indexOf(mode)
+  const progress = useSharedValue(modeIndex)
+  const [trackWidth, setTrackWidth] = useState(0)
+  // Latest target index. While gated, modeIndex updates land here and the
+  // animation is deferred. When gated flips false the effect below picks
+  // up `latestTarget` and runs withTiming from current progress.
+  useEffect(() => {
+    if (gated) return
+    progress.value = withTiming(modeIndex, { duration: 280, easing: Easing.out(Easing.cubic) })
+  }, [modeIndex, gated])
+
+  // Segments share the inner track (`trackWidth - 2*INSET`). The indicator
+  // is `segmentWidth` wide and rides inside the track with INSET padding
+  // on every side (top/bottom/leading), giving an iOS-segmented-control
+  // thumb feel.
+  const innerWidth = Math.max(0, trackWidth - 2 * TOGGLE_TRACK_INSET)
+  const segmentWidth = innerWidth / TOGGLE_ORDER.length
+  // RTL: with native RTL the first JSX child is rendered at the right edge
+  // of the row. The indicator is anchored at `left: TOGGLE_TRACK_INSET`,
+  // which Yoga auto-flips to `right: TOGGLE_TRACK_INSET` (visual right
+  // edge of the track's padded interior). `transform: translateX` is
+  // pixel-space and not auto-flipped, so we mirror the sign explicitly via
+  // `dir`. `progress` itself stays in logical-index land so the per-segment
+  // cross-fade math holds regardless of writing direction.
+  const dir = I18nManager.isRTL ? -1 : 1
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dir * progress.value * segmentWidth }],
+  }))
+
+  const handlers: Record<ToggleMode, () => void> = {
+    hidden: onHidden,
+    visible: onVisible,
+    broadcast: onBroadcast,
+  }
+  const handle = (target: ToggleMode) => {
+    if (busy || target === mode) return
+    tap()
+    handlers[target]()
+  }
+
+  return (
+    <View
+      style={visibilityToggleStyles.row}
+      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+    >
+      {segmentWidth > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            visibilityToggleStyles.indicator,
+            { width: segmentWidth },
+            indicatorStyle,
+          ]}
+        />
+      )}
+      {TOGGLE_ORDER.map((m, i) => {
+        const iconSize = ICON.xxxl
+        const renderIcon =
+          m === 'hidden' ? (color: string) => <EyeOffIcon color={color} size={iconSize} />
+          : m === 'visible' ? (color: string) => <EyeOpenIcon color={color} size={iconSize} />
+          : (color: string) => <MegaphoneIcon color={color} size={iconSize} />
+        // The broadcast segment swaps its name for the live MM:SS while
+        // the 30m cooldown is running, so the user reads the countdown
+        // exactly where the broadcast control lives. Tabular-nums in
+        // segmentLabel keeps the digit columns stable as the value ticks.
+        const label = m === 'broadcast' && broadcastTimer
+          ? broadcastTimer
+          : t(`home.visibility.${m}` as const)
+        return (
+          <ToggleSegment
+            key={m}
+            index={i}
+            pending={pendingAction === m}
+            busy={busy}
+            progress={progress}
+            onPress={() => handle(m)}
+            renderIcon={renderIcon}
+            label={label}
+          />
+        )
+      })}
+    </View>
+  )
+}
+
+const visibilityToggleStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    // Height is content-driven: segments add their own paddingVertical,
+    // the row only adds TOGGLE_TRACK_INSET on every side to host the
+    // indicator gutter. No magic number.
+    borderRadius: RADIUS,
+    // The toggle stands alone on the white page background — its body
+    // carries the coral. Resting segments read as WHITE-on-PRIMARY, the
+    // WHITE thumb stands out, and the wrapper around the pill stays
+    // neutral so the toggle isn't framed by a coral strip.
+    backgroundColor: PRIMARY,
+    // Inner padding gives the indicator and segments breathing room from
+    // the outer pill edge.
+    padding: TOGGLE_TRACK_INSET,
+  },
+  indicator: {
+    position: 'absolute',
+    top: TOGGLE_TRACK_INSET,
+    bottom: TOGGLE_TRACK_INSET,
+    // Anchor at `left: TOGGLE_TRACK_INSET`. Yoga auto-flips to the visual
+    // right edge in RTL; `transform: translateX` is pixel-space and
+    // flipped in the animated style via `dir` (see VisibilityToggle).
+    left: TOGGLE_TRACK_INSET,
+    backgroundColor: WHITE,
+    // Smaller rounded corners than the outer pill — a rounded thumb riding
+    // inside a more-rounded slot. Subtract the inset so the visible curve
+    // tracks the outer pill's curvature.
+    borderRadius: RADIUS - TOGGLE_TRACK_INSET,
+    // Subtle lift to read as a moving thumb, not a flat painted slab.
+    shadowColor: BLACK,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Breathing room above the icon and below the label inside each
+    // segment. Drives the row's natural height — change this and the
+    // whole toggle grows/shrinks accordingly, no fixed height to chase.
+    paddingVertical: MD,
+  },
+  segmentPressed: {
+    opacity: 0.7,
+  },
+  // Fills the segment so alignItems/justifyContent center the icon+label
+  // stack. Without these stretch offsets the layer is sized 0×0 and the
+  // content paints at the segment's top-left corner instead of its
+  // center.
+  iconLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Vertical icon-over-label stack inside each segment. The label uses
+  // the same typographic register as the TabStrip timer (subLabel:
+  // TEXT.md + semibold) so the broadcast countdown above and the
+  // visibility labels below read as one family.
+  segmentStack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: XS,
+  },
+  segmentLabel: {
+    // Visual match to the TabStrip broadcast timer. Even though both use
+    // semibold tabular-style numbers in TEXT.md upstream, Hebrew letters
+    // here read heavier than digits in the same point size, so we drop
+    // a tier (TEXT.sm) to keep the same perceived weight as the timer.
+    fontSize: TEXT.sm,
+    lineHeight: TEXT.sm,
+    fontWeight: WEIGHT.semibold,
+    // Broadcast segment may swap its name for a live MM:SS countdown.
+    // Tabular numerals keep the digit columns from jittering each second
+    // (harmless for the Hebrew/English text labels).
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+  },
+})
+
+// Shared button-stack + in-button timer styles. Used by every StatusCard
+// variant (InviteTimerCard invite timer, ViewersStatusCard cooldown). Kept in one
+// place so the three call sites stay visually identical — the same bar,
+// the same small time text, the same horizontal insets.
+const statusButtonStyles = StyleSheet.create({
+  stack: {
+    marginTop: LG,
+    gap: SM,
+  },
+  stretch: { alignSelf: 'stretch' },
+  footer: {
+    paddingHorizontal: MD,
+    paddingBottom: SM,
+    gap: SM / 2,
+  },
+  footerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'flex-end',
+    gap: SM,
+  },
+  footerExtended: {
+    fontSize: TEXT.xs,
+    fontWeight: WEIGHT.semibold,
+    color: WHITE,
+    opacity: 0.85,
+    includeFontPadding: false,
+  },
+  footerTime: {
+    fontSize: TEXT.xs,
+    fontWeight: WEIGHT.semibold,
+    color: WHITE,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+  },
+  footerBarTrack: {
+    height: 4,
+    backgroundColor: WHITE_MID,
+    borderRadius: RADII.xs,
+    overflow: 'hidden',
+  },
+  footerBarFill: {
+    height: 4,
+    backgroundColor: WHITE,
+  },
+})
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
@@ -939,7 +1050,14 @@ export default function HomePage() {
   useEffect(() => {
     if (initialPaneFromNotif !== null) clearInitialNotification()
   }, [])
-  const [paneIndex, setPaneIndex] = useState<PaneIndex>(initialPaneFromNotif ?? HOME_PANE)
+  // First-render only: state→chat transitions during the session are owned
+  // by the chat-transition effect; this just seats the pager on mount.
+  const initialPane = useMemo<PaneIndex>(() => {
+    if (initialPaneFromNotif !== null) return initialPaneFromNotif
+    if (useUserStore.getState().profile?.state === 'chat') return CHAT_PANE
+    return HOME_PANE
+  }, [])
+  const [paneIndex, setPaneIndex] = useState<PaneIndex>(initialPane)
   // Unread message count reported by ChatPage — shown as a badge next to the
   // "Chat" title while we're on the home pane.
   const [chatUnread, setChatUnread] = useState(0)
@@ -959,31 +1077,41 @@ export default function HomePage() {
   // visually over a pane that doesn't own the focused input.
   useEffect(() => { requestAnimationFrame(() => Keyboard.dismiss()) }, [paneIndex])
 
-  // Profile sheet — slides up from the bottom as a full-screen popup showing the user's own match card.
+  // Profile sheet — rises from below using the same SlideInDown/SlideOutDown
+  // layout animations as the home-pane MatchCard, so both cards mount/unmount
+  // with identical motion. The swipe-down-to-dismiss gesture writes to a
+  // separate dragY shared value (analogous to MatchCard's pull-style transform)
+  // so the live finger-drag composes cleanly with the declarative mount motion.
   const [profileSheetOpen, setProfileSheetOpen] = useState(false)
   const profileSheetConfigRef = useRef(profileSheetOpen)
   useEffect(() => { profileSheetConfigRef.current = profileSheetOpen }, [profileSheetOpen])
   const shellHeight = useSharedValue(Dimensions.get('window').height)
-  const profileSheetSlide = useSharedValue(0)
+  const profileSheetDragY = useSharedValue(0)
   const profileSheetScrollAtTop = useSharedValue(true)
   const profileSheetHeaderBottom = useSharedValue(0)
   // Measured bottom of the home shell's TabStrip. Used to anchor the profile
   // sheet just below the tabs so the card doesn't slide behind them.
   const tabStripBottom = useSharedValue(0)
   const profileSheetGestureRef = useRef<import('react-native-gesture-handler').GestureType | undefined>(undefined)
-  const profileSheetAnimStyle = useAnimatedStyle(() => ({
+  // Outer wrapper: anchor top to the TabStrip's bottom + apply live drag
+  // offset. The inner Animated.View carries SlideInDown/SlideOutDown so the
+  // mount transform composes with this drag without conflicting on the same
+  // useAnimatedStyle target.
+  const profileSheetWrapStyle = useAnimatedStyle(() => ({
     top: tabStripBottom.value,
-    transform: [{ translateY: (1 - profileSheetSlide.value) * shellHeight.value }],
+    transform: [{ translateY: profileSheetDragY.value }],
   }))
-  const closeProfileSheetFn = () => setProfileSheetOpen(false)
-  const closeProfileSheet = () => {
+  const openProfileSheet = useCallback(() => {
+    profileSheetDragY.value = 0
+    setProfileSheetOpen(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const closeProfileSheet = useCallback(() => {
     tap()
     profileSheetScrollAtTop.value = true
-    profileSheetSlide.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.cubic) }, (finished) => {
-      'worklet'
-      if (finished) runOnJS(closeProfileSheetFn)()
-    })
-  }
+    setProfileSheetOpen(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const onProfileSheetScrollAtTop = useCallback((atTop: boolean) => {
     profileSheetScrollAtTop.value = atTop
   }, [profileSheetScrollAtTop])
@@ -1013,7 +1141,7 @@ export default function HomePage() {
         'worklet'
         const drag = e.translationY
         if (drag <= 0) return
-        profileSheetSlide.value = 1 - Math.min(1, drag / shellHeight.value)
+        profileSheetDragY.value = drag
       })
       .onEnd(e => {
         'worklet'
@@ -1022,12 +1150,12 @@ export default function HomePage() {
         const past = drag > shellHeight.value * 0.3
         const flick = vy > 500
         if (past || flick) {
-          profileSheetSlide.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }, (finished) => {
-            'worklet'
-            if (finished) runOnJS(closeProfileSheetFn)()
-          })
+          // Trigger unmount → SlideOutDown plays. dragY is retained so the
+          // composed visual continues smoothly from the user's release point
+          // (no upward bump before the exit animation starts).
+          runOnJS(setProfileSheetOpen)(false)
         } else {
-          profileSheetSlide.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) })
+          profileSheetDragY.value = withTiming(0)
         }
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1075,10 +1203,7 @@ export default function HomePage() {
 
   const openShellSubPage = (config: SubPageConfig): Promise<void> => {
     tap()
-    if (config.kind === 'profileSection') {
-      setProfileSheetOpen(true)
-      profileSheetSlide.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) })
-    }
+    if (config.kind === 'profileSection') openProfileSheet()
     return Promise.resolve()
   }
 
@@ -1124,11 +1249,11 @@ export default function HomePage() {
   const page1Profile = (profile?.relations?.page1 as { profile?: { user_id?: string } } | undefined)?.profile
   const gameModeOff = rawPage1State === 'locked' && page2State === 'locked'
     && !page1Profile?.user_id && !page2InviteObj
-  // "Show me to people" button: visible whenever there are no viewers and no
-  // active page2 profile (pending/dead invite, post-approve lock, etc.) and
-  // we're not in chat. Server-enforced 1h cooldown between presses, mirrored
-  // here so the button shows as disabled (faded) before the cooldown elapses.
-  const ADD_COOLDOWN_MS = 60 * 60 * 1000
+  // Broadcast = the "Show me to people" action: app_add. Server enforces a
+  // 30-minute cooldown between presses; the toggle keeps the broadcast
+  // segment visually "active" while the cooldown is running. The user can
+  // exit broadcast early via the toggle (calls app/cancel_add).
+  const ADD_COOLDOWN_MS = 30 * 60 * 1000
   const lastAddAt = (() => {
     const raw = profile?.relations?.last_add_at
     if (typeof raw !== 'string') return 0
@@ -1160,6 +1285,16 @@ export default function HomePage() {
     const sec = totalSec % 60
     return `${min}:${sec.toString().padStart(2, '0')}`
   })()
+  // Broadcast is "active" while the 30m app_add cooldown is still running.
+  // The toggle's broadcast segment lights up as the selected mode during
+  // this window. The side TabStrip tab also surfaces the live countdown
+  // above its "viewers" label (the label itself never swaps — broadcast
+  // isn't a separate pane). Hidden still wins over broadcast in toggleMode
+  // priority: hide-while-cooldown-runs is a valid state in which the user
+  // is genuinely hidden, not broadcasting (and app_lock2 clears the
+  // cooldown server-side anyway).
+  const broadcastActive = !addEnabled && !!lastAddAt
+  const toggleMode: ToggleMode = isHidden ? 'hidden' : broadcastActive ? 'broadcast' : 'visible'
   const isMale = profile?.is_male ?? null
 
   const [page2Alerting, setPage2Alerting] = useState(false)
@@ -1203,6 +1338,12 @@ export default function HomePage() {
   // Same 'undetermined' default as notifPerm — see the comment above.
   const [locPerm, setLocPerm] = useState<LocPermission>('undetermined')
   const [permBusy, setPermBusy] = useState(false)
+  // When the user picks a manual address in settings, data.location_custom
+  // flips true on the server. While true: skip the GPS permission overlay,
+  // skip the initial GPS fetch on /app/start, and stop the periodic
+  // /app/location pushes. The popup in settings owns every location write
+  // for these users (and may still flip back to device mode at any time).
+  const customLoc = profile?.location_custom === true
 
   const handlePermissionRequest = async () => {
     if (permBusy) return
@@ -1248,8 +1389,9 @@ export default function HomePage() {
 
   useEffect(() => {
     if (notifPerm !== 'granted') return
+    if (customLoc) return
     getLocPermission().then(setLocPerm)
-  }, [notifPerm])
+  }, [notifPerm, customLoc])
 
   // ── Startup completion ────────────────────────────────────────────────
   // Both permissions granted → send app/start + try to get location.
@@ -1282,14 +1424,23 @@ export default function HomePage() {
     setTimeout(() => setLocFetching(false), delay)
   }
   useEffect(() => {
-    if (notifPerm !== 'granted' || locPerm !== 'granted') return
+    if (notifPerm !== 'granted') return
+    // Custom-location users bypass GPS permission entirely — their location
+    // was already written from the settings popup. Device-mode users still
+    // need locPerm=granted before app/start runs (so the GPS fetch below has
+    // a chance to succeed).
+    if (!customLoc && locPerm !== 'granted') return
     if (startupSentRef.current) return
     startupSentRef.current = true
     ;(async () => {
-      // Get location + push token in parallel, then send app/start.
-      startLocFetch()
+      // Get location + push token in parallel, then send app/start. Skip
+      // the GPS fetch entirely in custom-location mode; the server already
+      // has the manual lat/lng on file from the picker.
+      if (!customLoc) startLocFetch()
       const [location, token] = await Promise.all([
-        getLocation().finally(stopLocFetch),
+        customLoc
+          ? Promise.resolve(null as { lat: number; lng: number } | null)
+          : getLocation().finally(stopLocFetch),
         pushTokenRef.current
           ? Promise.resolve(pushTokenRef.current)
           : ensurePushToken().catch(() => null),
@@ -1310,9 +1461,9 @@ export default function HomePage() {
           setStartupInflight(false)
           setStartupCompleted(true)
         })
-      if (!location) setLocFailed(true)
+      if (!location && !customLoc) setLocFailed(true)
     })()
-  }, [notifPerm, locPerm])
+  }, [notifPerm, locPerm, customLoc])
 
   const handleLocRetry = async () => {
     if (locBusy) return
@@ -1330,7 +1481,7 @@ export default function HomePage() {
     }
   }
 
-  const showLocOverlay = locPerm !== 'granted'
+  const showLocOverlay = locPerm !== 'granted' && !customLoc
 
   // ── Internet reachability ─────────────────────────────────────────────
   // Tracks device-level connectivity so we can surface a "no internet"
@@ -1378,12 +1529,17 @@ export default function HomePage() {
       dismissAllNotifications()
       const np = await getNotifPermission()
       setNotifPerm(np)
-      // Re-check location using the fresh notif result, not a stale closure value
-      if (np === 'granted') getLocPermission().then(setLocPerm)
-      // Send app/focus with last known location (only after initial startup completed, max once per 30s)
+      // Re-check location using the fresh notif result, not a stale closure value.
+      // Skip when the user opted into custom-location mode — we don't read GPS
+      // perm in that flow.
+      const customNow = useUserStore.getState().profile?.location_custom === true
+      if (np === 'granted' && !customNow) getLocPermission().then(setLocPerm)
+      // Send app/focus with last known location (only after initial startup completed, max once per 30s).
+      // Custom-location users don't attach a location — the server already has
+      // their manual lat/lng on file.
       if (startupSentRef.current && Date.now() - lastFocusRef.current > 30_000) {
         lastFocusRef.current = Date.now()
-        const location = await getLastKnownLocation()
+        const location = customNow ? null : await getLastKnownLocation()
         setFocusInflight(true)
         invoke('app/focus', location ? { location: { latitude: location.lat, longitude: location.lng } } : {})
           .catch(() => {})
@@ -1398,19 +1554,23 @@ export default function HomePage() {
   // into background, so AppState 'active' never fires. Poll every 2s so
   // the overlay appears/disappears without requiring the user to leave the app.
   // hasServicesEnabledAsync is a fast local call — negligible battery cost.
+  // Skipped while in custom-location mode: GPS perm is irrelevant there and
+  // the overlay is suppressed anyway, so the poll is pure waste.
   useEffect(() => {
-    if (notifPerm !== 'granted') return
+    if (notifPerm !== 'granted' || customLoc) return
     const id = setInterval(() => getLocPermission().then(setLocPerm), 2000)
     return () => clearInterval(id)
-  }, [notifPerm])
+  }, [notifPerm, customLoc])
 
   // ── Continuous location tracking ──────────────────────────────────────
   // After startup completes, watch for significant movement and push
   // updates to the server so distance calculations stay fresh.
   // A 60s interval guarantees at least one update per minute even when
   // the user is standing still (watchLocation only fires on movement).
+  // Custom-location users opt out entirely: their location is whatever
+  // they picked manually, GPS movement should not overwrite it.
   useEffect(() => {
-    if (!startupSentRef.current || locPerm !== 'granted') return
+    if (!startupSentRef.current || locPerm !== 'granted' || customLoc) return
     let sub: { remove(): void } | null = null
     watchLocation((coords) => {
       invoke('app/location', { location: { latitude: coords.lat, longitude: coords.lng } }).catch(() => {})
@@ -1421,7 +1581,7 @@ export default function HomePage() {
       })
     }, 60_000)
     return () => { sub?.remove(); clearInterval(id) }
-  }, [locPerm, locFailed])
+  }, [locPerm, locFailed, customLoc])
 
   // Anchor pane on state transitions. Entering CHAT animates to slot 3;
   // leaving CHAT snaps back to home (slot 1).
@@ -1459,7 +1619,18 @@ export default function HomePage() {
   useEffect(() => {
     const prev = prevPage2InviteUserIdRef.current
     prevPage2InviteUserIdRef.current = page2InviteUserId
-    if (prev === undefined) return
+    if (prev === undefined) {
+      // Initial mount with an already-active pending invite (app re-open or
+      // hot reload while an invite is still live): pulse the side tab so the
+      // returning user notices the live invitation. Skip the discovery card
+      // animation — the card itself was already present on the previous run.
+      if (page2InviteUserId !== null && paneIndexRef.current !== PAGE2_PANE) {
+        setPage2Alerting(true)
+        const timer = setTimeout(() => setPage2Alerting(false), TAB.pulseTimeoutMs)
+        return () => { clearTimeout(timer); setPage2Alerting(false) }
+      }
+      return
+    }
     // Clear discovery flag if invite went away (cancelled / approved / etc).
     if (prev !== null && page2InviteUserId === null) {
       setPage2Discovery(false)
@@ -1469,7 +1640,7 @@ export default function HomePage() {
       setPage2Discovery(true)
       if (paneIndexRef.current !== PAGE2_PANE) {
         setPage2Alerting(true)
-        const timer = setTimeout(() => setPage2Alerting(false), 4900)
+        const timer = setTimeout(() => setPage2Alerting(false), TAB.pulseTimeoutMs)
         return () => { clearTimeout(timer); setPage2Alerting(false) }
       }
     }
@@ -1489,7 +1660,7 @@ export default function HomePage() {
     prevChatUnreadRef.current = chatUnread
     if (prev === 0 && chatUnread > 0 && paneIndexRef.current !== CHAT_PANE) {
       setChatUnreadAlerting(true)
-      const timer = setTimeout(() => setChatUnreadAlerting(false), 4900)
+      const timer = setTimeout(() => setChatUnreadAlerting(false), TAB.pulseTimeoutMs)
       return () => { clearTimeout(timer); setChatUnreadAlerting(false) }
     }
   }, [chatUnread])
@@ -1521,6 +1692,15 @@ export default function HomePage() {
   // hidden card reports onReady (all photos painted), it gets promoted to
   // displayedMatch and the visible Animated.View slides in.
   const [preloadingMatch, setPreloadingMatch] = useState<Profile | null>(null)
+  // Mirror of preloadingMatch for use in stable callbacks (onPreloadReady) that
+  // can't depend on the state directly — reading the ref keeps the callback
+  // identity stable AND avoids passing an updater into setState. Updater
+  // callbacks run during React's render phase, and writing to a Reanimated
+  // shared value from there trips strict mode ("Writing to `value` during
+  // component render"). Reading the ref + calling setState with a plain value
+  // keeps the shared-value writes outside render.
+  const preloadingMatchRef = useRef<Profile | null>(null)
+  useEffect(() => { preloadingMatchRef.current = preloadingMatch }, [preloadingMatch])
   // True from the moment runFind/runIgnore is initiated until the new card
   // (if any) has finished its slide-in animation, OR until the empty pane
   // settles after the slide-out (when no new card arrives). Drives the
@@ -1615,10 +1795,10 @@ export default function HomePage() {
       setDemoPlaying(false)
     }
     pullY.value = withSequence(
-      withTiming(peek, { duration: 550, easing: Easing.out(Easing.cubic) }),
+      withTiming(peek),
       withDelay(
         1000,
-        withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) }, finished => {
+        withTiming(0, undefined, finished => {
           'worklet'
           if (finished) runOnJS(finish)()
         }),
@@ -1629,6 +1809,14 @@ export default function HomePage() {
     if (demoTriggeredRef.current) return
     if (state !== 'watching') return
     if (!displayedMatch) return
+    // Don't play while any home-pane overlay is up: notification/location
+    // permission cards, the location-failed retry, or the no-internet
+    // banner all eat the same surface the demo is supposed to animate on.
+    // These are the same booleans that compose `isPermMode` (and since
+    // state==='watching' here, the `state !== 'chat'` branch is implicit).
+    // Re-running on overlay flips is exactly what lets the demo fire once
+    // permissions finally land.
+    if (showNotifOverlay || showLocOverlay || locFailed || showNoInternetOverlay) return
     demoTriggeredRef.current = true
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -1658,7 +1846,7 @@ export default function HomePage() {
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [state, displayedMatch?.user_id, runFirstTimeDemo])
+  }, [state, displayedMatch?.user_id, showNotifOverlay, showLocOverlay, locFailed, showNoInternetOverlay, runFirstTimeDemo])
 
   const pullStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: pullY.value }],
@@ -1764,26 +1952,26 @@ export default function HomePage() {
   // MatchCard is still tearing down: we only promote when the user the
   // callback was bound to still matches the current preloadingMatch.
   const onPreloadReady = useCallback((readyUserId: string) => {
-    setPreloadingMatch(current => {
-      if (!current || current.user_id !== readyUserId) return current
-      // Reset the pull transform first — pull-to-skip leaves pullY at screenH
-      // (the outer wrapper translated off-screen). Mounting the new card while
-      // the outer wrapper is still translated means SlideInDown plays inside
-      // an off-screen container, invisible to the user. requestAnimationFrame
-      // gives the UI thread a chance to apply pullY=0 before React mounts the
-      // new keyed Animated.View.
-      pullY.value = 0
-      requestAnimationFrame(() => {
-        setDisplayedMatch(current)
-      })
-      setTimeout(() => setSearching(false), 480)
-      if (ignoreLoadingRef.current) {
-        setIgnoreLoading(false)
-        setBusy(false)
-        setPendingKey(null)
-      }
-      return null
+    const current = preloadingMatchRef.current
+    if (!current || current.user_id !== readyUserId) return
+    // Reset the pull transform first — pull-to-skip leaves pullY at screenH
+    // (the outer wrapper translated off-screen). Mounting the new card while
+    // the outer wrapper is still translated means SlideInDown plays inside
+    // an off-screen container, invisible to the user. requestAnimationFrame
+    // gives the UI thread a chance to apply pullY=0 before React mounts the
+    // new keyed Animated.View.
+    pullY.value = 0
+    preloadingMatchRef.current = null
+    setPreloadingMatch(null)
+    requestAnimationFrame(() => {
+      setDisplayedMatch(current)
     })
+    setTimeout(() => setSearching(false), 480)
+    if (ignoreLoadingRef.current) {
+      setIgnoreLoading(false)
+      setBusy(false)
+      setPendingKey(null)
+    }
   }, [pullY])
 
   const watchers = profile?.relations?.watchers
@@ -1856,9 +2044,41 @@ export default function HomePage() {
   // through a ConfirmDialog first.
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
+  const [skipHintOpen, setSkipHintOpen] = useState(false)
   const [removeWatcherTarget, setRemoveWatcherTarget] = useState<Profile | null>(null)
   const [removeWatcherBusy, setRemoveWatcherBusy] = useState(false)
+  const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false)
+  // While broadcasting, any toggle tap that would change mode opens a
+  // confirm popup first ("you're broadcasting — stop?"). The target tracks
+  // which destination button was tapped so the confirm callback can run
+  // the right server action. 'visible' and 'exit' both map to
+  // app/cancel_add (which lands the user back in visible mode); 'hidden'
+  // maps to app/lock2 (which also clears last_add_at atomically).
+  const [exitBroadcastTarget, setExitBroadcastTarget] = useState<'hidden' | 'visible' | 'exit' | null>(null)
+  // Tapping Hidden while watchers exist would silently kick every watcher
+  // (each receives page1=locked+message=remove + a `removed` push) on the
+  // bare app/lock2 call. Surface a confirm popup first so the destructive
+  // ripple isn't a surprise. Skipped during broadcast (exitBroadcastTarget
+  // already covers that branch) and when there are zero watchers.
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
+  // Hold the VisibilityToggle's indicator slide while one of its confirm
+  // popups is open OR animating out. Mode usually updates while the popup
+  // is still on screen (Realtime arrives mid-dismiss), so without this
+  // gate the indicator slide finishes UNDER the popup and the user only
+  // sees the post-state when the sheet is gone — no perceived movement.
+  // We extend the gate by `TOGGLE_GATE_LINGER_MS` past the popup's
+  // `visible=false` flip to cover BottomSheet's slide-out (default 300ms).
+  const visibilityPopupOpen = broadcastConfirmOpen || exitBroadcastTarget !== null || hideConfirmOpen
+  const [visibilityToggleGated, setVisibilityToggleGated] = useState(false)
+  useEffect(() => {
+    if (visibilityPopupOpen) {
+      setVisibilityToggleGated(true)
+      return
+    }
+    if (!visibilityToggleGated) return
+    const t = setTimeout(() => setVisibilityToggleGated(false), TOGGLE_GATE_LINGER_MS)
+    return () => clearTimeout(t)
+  }, [visibilityPopupOpen])
   const [hasBeenActiveThisSession, setHasBeenActiveThisSession] = useState(false)
   // Chat-state actions menu (opens from the MatchCard dots button in chat
   // state). Replaces the old chat-page dots dropdown for block/leave; adds
@@ -1879,20 +2099,19 @@ export default function HomePage() {
 
   const invitedPage1 = profile?.relations?.page1 as { expires_at?: string; invited_at?: string; extended?: boolean; message?: string } | undefined
   const inviteExpiresAt = invitedPage1?.expires_at
-  const inviteInvitedAt = invitedPage1?.invited_at
-  const inviteTotalSecs = inviteExpiresAt && inviteInvitedAt
-    ? Math.max(60, Math.round((new Date(inviteExpiresAt).getTime() - new Date(inviteInvitedAt).getTime()) / 1000))
-    : 3600
 
   // Title/description for terminal locked-message cards. Keyed by the raw v3
   // server `message` (page1.message / page2.message), not the legacy `event`
   // shim — keeps the lookup orthogonal to userStore's missed/fail synthesis.
+  // page1 texts vary by the other user's gender (he/she); page2 texts vary by
+  // both (other user's verb + user's "available/answered" adjective).
   const page1Message = isEndedState ? invitedPage1?.message : undefined
-  const page1MessageTitle = page1Message ? t(`home.locked.page1.${page1Message}.title` as never) : ''
-  const page1MessageDesc = page1Message ? t(`home.locked.page1.${page1Message}.desc` as never) : ''
+  const page1MessageTitle = page1Message ? tg(`home.locked.page1.${page1Message}.title` as never, matchIsMale) : ''
+  const page1MessageDesc = page1Message ? tg(`home.locked.page1.${page1Message}.desc` as never, matchIsMale) : ''
   const page2Message = page2DeadInvite?.message
-  const page2MessageTitle = page2Message ? t(`home.locked.page2.${page2Message}.title` as never) : ''
-  const page2MessageDesc = page2Message ? t(`home.locked.page2.${page2Message}.desc` as never) : ''
+  const page2OtherMale = page2DeadInvite?.is_male ?? null
+  const page2MessageTitle = page2Message ? tgg(`home.locked.page2.${page2Message}.title` as never, isMale, page2OtherMale) : ''
+  const page2MessageDesc = page2Message ? tgg(`home.locked.page2.${page2Message}.desc` as never, isMale, page2OtherMale) : ''
 
   // Mirrors runIgnore: sets searching=true so the empty pane keeps showing
   // the locating text across the whole round-trip + slide-in. Without this,
@@ -1980,13 +2199,90 @@ export default function HomePage() {
     pulling,
   }), [pulling])
 
+  // Screen height + commit distance hoisted so both the page1 and page2
+  // pan gestures can share the same half-screen commit threshold.
+  const screenH = Dimensions.get('window').height
+  const commitDistance = screenH * 0.5
+
+  // ── Page2 pending-invite swipe-down gesture ──────────────────────────────
+  // Mirrors the page1 watching pull-to-skip but commits to decline instead
+  // of ignore. Decline goes through the confirm dialog (setRefuseConfirmOpen)
+  // because it's irreversible — same UX as the old "לדלג" button used to be.
+  // Separate state from the page1 gesture so they can't interfere: both
+  // panes can technically be mounted simultaneously (page2 pending while
+  // page1 is in watching), and Reanimated shared values aren't safe to
+  // alias across two GestureDetector trees.
+  const page2PullY = useSharedValue(0)
+  const page2SlidOut = useSharedValue(false)
+  const page2ScrollAtTopSV = useSharedValue(true)
+  const page2PullEngaged = useSharedValue(false)
+  const page2ScrollOnly = useSharedValue(false)
+  const [page2Pulling, setPage2Pulling] = useState(false)
+  const page2CardPanRef = useRef<GestureType>(undefined as unknown as GestureType)
+  const page2PullStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: page2PullY.value }],
+  }))
+  const page2PullCtx = useMemo<PullCtx>(() => ({
+    panRef: page2CardPanRef,
+    extraRefs: [],
+    setScrollAtTop: (v: boolean) => { page2ScrollAtTopSV.value = v },
+    pulling: page2Pulling,
+  }), [page2Pulling])
+  const openRefuseConfirm = useCallback(() => {
+    tap()
+    setRefuseConfirmOpen(true)
+  }, [])
+  const page2CardPan = useMemo(() => {
+    return Gesture.Pan()
+      .withRef(page2CardPanRef)
+      .enabled(!!page2PendingInvite && !busy)
+      .activeOffsetY(4)
+      .failOffsetX([-25, 25])
+      .onStart(() => {
+        'worklet'
+        page2PullY.value = 0
+        page2SlidOut.value = false
+        page2PullEngaged.value = false
+        page2ScrollOnly.value = !page2ScrollAtTopSV.value
+      })
+      .onUpdate(e => {
+        'worklet'
+        if (page2ScrollOnly.value) { page2PullY.value = 0; return }
+        const raw = Math.max(0, e.translationY)
+        page2PullY.value = raw
+        if (raw > 0 && !page2PullEngaged.value) {
+          page2PullEngaged.value = true
+          runOnJS(setPage2Pulling)(true)
+        }
+      })
+      .onEnd(e => {
+        'worklet'
+        if (page2ScrollOnly.value) return
+        const pulled = Math.max(0, e.translationY)
+        if (pulled >= commitDistance) {
+          // Don't slide the card off-screen here — the confirm dialog might
+          // be cancelled. Snap back to rest and open the dialog instead.
+          runOnJS(openRefuseConfirm)()
+        }
+      })
+      .onFinalize(() => {
+        'worklet'
+        if (!page2SlidOut.value) {
+          page2PullY.value = withTiming(0)
+        }
+        if (page2PullEngaged.value) {
+          page2PullEngaged.value = false
+          runOnJS(setPage2Pulling)(false)
+        }
+      })
+  }, [page2PendingInvite, busy, commitDistance, openRefuseConfirm])
+
   const pullEnabled = state === 'watching' && !demoPlaying
   // Capture screen height in JS — Dimensions isn't available inside the
   // gesture worklets (UI thread), so we close over a plain number. Lifted
   // to component scope so the pull-down chevron cue can fade against the
-  // same threshold the gesture commits at.
-  const screenH = Dimensions.get('window').height
-  const commitDistance = screenH * 0.5
+  // same threshold the gesture commits at. (Now hoisted above so the
+  // page2 pan gesture can share commitDistance.)
   const cardPan = useMemo(() => {
     return Gesture.Pan()
       .withRef(cardPanRef)
@@ -2041,7 +2337,7 @@ export default function HomePage() {
         const pulled = Math.max(0, e.translationY)
         if (pulled >= commitDistance) {
           slidOut.value = true
-          pullY.value = withTiming(screenH, { duration: 280, easing: Easing.out(Easing.cubic) })
+          pullY.value = withTiming(screenH)
           runOnJS(runIgnore)()
         }
       })
@@ -2051,7 +2347,7 @@ export default function HomePage() {
         // cancelled mid-pull, animate the card back to position 0. Without
         // this, a cancelled pan would leave the card stuck partway down.
         if (!slidOut.value) {
-          pullY.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) })
+          pullY.value = withTiming(0)
         }
         if (pullEngaged.value) {
           pullEngaged.value = false
@@ -2083,33 +2379,85 @@ export default function HomePage() {
     const [leadDesc, ...restDesc] = fullDesc.split('\n\n')
     const tailDesc = restDesc.join('\n\n')
     return (
-    <View style={[styles.watchingInviteBlock, { paddingBottom: Math.max(bottomInset, SINGLE) }]}>
+    <View style={[styles.watchingInviteBlock, { paddingBottom: Math.max(bottomInset, SM) }]}>
       <Text style={styles.watchingInviteTitle}>
         {tgg('home.inviteConfirmTitle' as any, isMale, matchIsMale).replace('{name}', matchName)}
       </Text>
       <Text style={styles.watchingInviteLead}>{leadDesc}</Text>
       {tailDesc ? <Text style={styles.watchingInviteDesc}>{tailDesc}</Text> : null}
-      <View style={styles.watchingInviteButtonWrap}>
-        <Button
-          variant="primary"
-          label={t('home.inviteConfirmOk')}
-          iconEnd={<SparklesIcon color={WHITE} />}
-          onPress={() => {
-            setStickyInvite(true)
-            runAction('app/invite', 'invite-confirm')
-          }}
-          disabled={busy}
-          loading={busy && pendingKey === 'invite-confirm'}
-          silentDisabled={pendingKey !== 'invite-confirm'}
-        />
+      <View style={styles.replyingButtonRow}>
+        <View style={styles.replyingDeclineCell}>
+          <Button
+            variant="secondary"
+            label={t('home.watchingReject')}
+            onPress={() => { tap(); setSkipHintOpen(true) }}
+            disabled={busy}
+            loading={busy && pendingKey === 'watching-reject'}
+            silentDisabled={pendingKey !== 'watching-reject'}
+          />
+        </View>
+        <View style={styles.replyingAcceptCell}>
+          <Button
+            variant="primary"
+            label={t('home.inviteConfirmOk')}
+            iconStart={<SparklesIcon color={WHITE} />}
+            onPress={() => {
+              setStickyInvite(true)
+              runAction('app/invite', 'invite-confirm')
+            }}
+            disabled={busy}
+            loading={busy && pendingKey === 'invite-confirm'}
+            silentDisabled={pendingKey !== 'invite-confirm'}
+          />
+        </View>
       </View>
     </View>
     )
   })() : null
 
+  // Page2 pending-invite accept block — sits at the bottom of the page2
+  // MatchCard the way watchingInviteButton sits at the bottom of the page1
+  // watching card. Title + description + accept CTA + decline secondary.
+  // The countdown timer used to live in the accept button's footer; it now
+  // lives under the invite tab label (see inviteTabSubLabel above). The
+  // decline button opens the same refuse-confirm dialog as the swipe-down
+  // gesture (page2CardPan below).
+  const replyingAcceptBlock = page2PendingInvite ? (
+    <View style={[styles.watchingInviteBlock, { paddingBottom: Math.max(bottomInset, SM) }]}>
+      <Text style={styles.watchingInviteTitle}>
+        {t('home.replyingTitle')}
+      </Text>
+      <Text style={styles.watchingInviteLead}>
+        {tg('home.replyingDesc', isMale)}
+      </Text>
+      <View style={styles.replyingButtonRow}>
+        <View style={styles.replyingDeclineCell}>
+          <Button
+            variant="secondary"
+            label={t('home.watchingReject')}
+            onPress={openRefuseConfirm}
+            disabled={busy}
+            silentDisabled
+          />
+        </View>
+        <View style={styles.replyingAcceptCell}>
+          <Button
+            variant="primary"
+            label={t('home.replyingAccept')}
+            iconStart={<CheckIcon color={WHITE} size={ICON.xxl} />}
+            onPress={() => runAction('app/approve', 'replying-accept')}
+            disabled={busy}
+            loading={busy && pendingKey === 'replying-accept'}
+            silentDisabled={pendingKey !== 'replying-accept'}
+          />
+        </View>
+      </View>
+    </View>
+  ) : null
+
   // Hero-photo overlay button on the page1 MatchCard:
   //   - watching → default heart (omit actions → MatchCard falls back).
-  //   - chat     → dots menu (opens end-chat / block / report sheet).
+  //   - chat     → X menu (opens end-chat / block / report sheet).
   //   - else (waiting, ended) → no button at all. The relevant action for
   //     those states lives elsewhere (timer's cancel, message-block's
   //     continue), so a heart on the hero would just be noise.
@@ -2117,36 +2465,12 @@ export default function HomePage() {
     state === 'chat'
       ? [{
           key: 'chat-menu',
-          icon: <DotsIcon color={WHITE} size={ICON.xxxl} />,
+          icon: <CloseBoldIcon color={WHITE} size={ICON.huge} />,
           onPress: () => { tap(); setChatMenuOpen(true) },
         }]
       : state === 'watching'
         ? undefined
         : []
-
-  const matchButtons = (() => {
-    if (!isMatchCardOpen) return null
-    if (state === 'watching') {
-      // No bottom button row in the watching state — invite lives inside
-      // the card scroll (see watchingInviteButton above).
-      return null
-    }
-    if (state === 'waiting') {
-      // Cancel lives inside the timer card (InfoBlock's onCancel STOP
-      // button), so the bottom button row is unused in this state.
-      return null
-    }
-    if (state === 'chat') {
-      return null
-    }
-    if (isEndedState) {
-      // Continue affordance now lives inside the MessageBlock at the top of
-      // the card (StatusAction-style, matching cancel/accept/reject buttons
-      // in the live-timer states). No pinned bottom row in ended states.
-      return null
-    }
-    return null
-  })()
 
   const isNetMode = !showNotifOverlay && !showLocOverlay && !locFailed && showNoInternetOverlay
 
@@ -2157,6 +2481,14 @@ export default function HomePage() {
       : locFailed
         ? tg('home.locationUnavailableButton', isMale)
         : tg('home.noInternetButton', isMale)
+
+  const permConfirmIcon = showNotifOverlay
+    ? <BellIcon color={WHITE} size={22} />
+    : (showLocOverlay || locFailed)
+      ? <MapPinIcon color={WHITE} size={22} />
+      : isNetMode
+        ? <WifiOffIcon color={WHITE} size={22} />
+        : undefined
 
   const permOnConfirm = locFailed
     ? handleLocRetry
@@ -2178,8 +2510,6 @@ export default function HomePage() {
       setHasBeenActiveThisSession(true)
     }
   }, [state])
-  const cardButtons = isMatchCardOpen ? matchButtons : null
-
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
 
   const permTitle = showNotifOverlay
@@ -2202,26 +2532,70 @@ export default function HomePage() {
   // and their inline chips (chat unread / viewer count / pending-invite
   // alert). Page chrome lives here; individual panes render content only.
   const watchersCount = watchers?.length ?? 0
-  const tabChipSide: TabChip | null = chatAvailable
-    ? (chatUnread > 0
-        ? { value: chatUnread, bg: WHITE, fg: PRIMARY }
-        : null)
-    : (!page2PendingInvite && !page2DeadInvite && watchersCount > 0
-        ? { value: watchersCount, bg: WHITE, fg: PRIMARY }
-        : null)
-  // Page2 has two "needs attention" states surfaced as an inline indicator
-  // next to the side-tab label:
-  //   - pending invite → inbox glyph + "הזמנה" label, pulses on arrival.
-  //   - dead invite (cancel/expire/decline/fail) → pause glyph, paused-ish.
-  // Dead-invite uses the same pause glyph as the menu tab's game-mode pause
-  // because both communicate "this side is on hold" rather than an error.
-  const sideIndicator = chatAvailable
-    ? undefined
-    : page2PendingInvite
-      ? <InboxIcon color={WHITE} size={ICON.sm} />
-      : page2DeadInvite
-        ? <PauseIcon color={WHITE} size={ICON.sm} />
-        : undefined
+  // Pending-invite countdown rendered as a small clock directly under the
+  // invite tab's label. Replaces the old in-button timer footer; the bottom
+  // button on the page2 invite card is now a single full-width "accept" CTA
+  // with no timer of its own (decline is via swipe-down on the card).
+  const inviteSecsLeft = useSecsLeft(!chatAvailable ? page2PendingInvite?.expires_at : null)
+  // Once an incoming invitation expires (page2 transitions to locked +
+  // message='expire'), keep the tab-strip clock frozen at 00:00 instead of
+  // disappearing. Stays until the user acknowledges via clear2. Does not
+  // apply to broadcast — its cooldown label is handled separately below.
+  const page2ExpiredInvite = !chatAvailable && page2DeadInvite?.message === 'expire'
+  const inviteTabSubLabel = !chatAvailable && page2PendingInvite?.expires_at
+    ? formatClock(inviteSecsLeft)
+    : page2ExpiredInvite
+      ? formatClock(0)
+      : undefined
+  // Symmetric treatment for the page1 inviter side: when the user has sent
+  // an invitation and is waiting, the same countdown rides under the Once
+  // (home) tab label. The cancel button below stays plain — no embedded
+  // timer footer.
+  //
+  // Reveal sequence on a `watching → waiting` transition (i.e. the user just
+  // pressed "send invite"): the button spinner runs during the server call,
+  // then MatchCard slides the InviteTimerCard topBlock in from above (with a
+  // scroll-to-top first if needed). We hold the tab chip back until MatchCard
+  // signals that the slide-in landed (`onTopBlockShown`), so the four steps
+  // read sequentially: spinner → top card appears → smooth scroll/reveal →
+  // tab clock fades in. On any other path into `waiting` (cold mount, app
+  // focus while already waiting) the chip is visible from frame 1.
+  const waitingExpiresAt = displayedCardMode === 'waiting' ? inviteExpiresAt ?? null : null
+  const waitingSecsLeft = useSecsLeft(waitingExpiresAt)
+  const prevCardModeRef = useRef(displayedCardMode)
+  const [waitingChipReady, setWaitingChipReady] = useState(displayedCardMode === 'waiting')
+  useEffect(() => {
+    const prev = prevCardModeRef.current
+    prevCardModeRef.current = displayedCardMode
+    if (displayedCardMode !== 'waiting') {
+      setWaitingChipReady(false)
+      return
+    }
+    if (prev === 'waiting') return
+    if (prev === 'watching') {
+      // Wait for MatchCard's slide-in completion callback below.
+      setWaitingChipReady(false)
+      return
+    }
+    setWaitingChipReady(true)
+  }, [displayedCardMode])
+  const handleTopBlockShown = useCallback(() => setWaitingChipReady(true), [])
+  // Symmetric to page2ExpiredInvite: once the user's outgoing invitation
+  // expires (page1 transitions to locked + message='expire' → displayedCardMode
+  // becomes 'missed'), keep the home-tab clock frozen at 00:00. Stays until
+  // the user acknowledges via clear1.
+  const page1ExpiredInvite = displayedCardMode === 'missed' && invitedPage1?.message === 'expire'
+  const homeTabSubLabel = waitingExpiresAt && waitingChipReady
+    ? formatClock(waitingSecsLeft)
+    : page1ExpiredInvite
+      ? formatClock(0)
+      : undefined
+  // Unread-chat count chained into the side-tab label as `${label} ${n}` when
+  // chat is the active surface. Viewer-count is intentionally NOT chained on
+  // the viewers/broadcast labels — the bare word reads cleaner at tab size,
+  // and the broadcast state instead surfaces a flashing green "live" dot via
+  // `renderLeading` below.
+  const sideTabCount = chatAvailable && chatUnread > 0 ? chatUnread : 0
   const sideAlerting = chatAvailable
     ? chatUnreadAlerting
     : (page2PendingInvite ? page2Alerting : false)
@@ -2229,31 +2603,60 @@ export default function HomePage() {
   // doubles as the close affordance — render an X icon and clear the
   // game-mode dot (irrelevant in that state). Tap handler below closes the
   // sheet on any tab tap (and navigates to the tapped pane for the others).
+  // Inviter's name on page2 (stripped of trailing ", age") for the side-tab
+  // label when an incoming invitation is pending. Same one-on-one framing as
+  // matchName above: the tab reads as "you and this person", not a generic
+  // "Invitation" / "Viewers".
+  const page2InviteName = (page2PendingInvite?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
+  const page2DeadName = (page2DeadInvite?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
+  // Side-tab label resolves to the single counterpart's name whenever slot 2
+  // is dedicated to one user (pending inviter, or the user whose dead-invite
+  // "what happened" card is up). Chat falls through to the static `home.tabs.chat`
+  // label since the chat pane already shows the partner's name in its own header.
+  const sideTabName = page2PendingInvite
+    ? page2InviteName
+    : page2DeadInvite
+      ? page2DeadName
+      : ''
   const tabSpecs: TabSpec[] = [
-    profileSheetOpen
-      ? {
-          // Label + small X indicator next to it — same geometry as the
-          // pause indicator in the gameModeOff variant, so the menu tab
-          // reads consistently across states (label-leading, glyph-trailing)
-          // rather than swapping into a single oversized icon.
-          label: t('home.tabs.closeProfile'),
-          indicator: <CloseBoldIcon color={WHITE} size={ICON.sm} />,
-        }
-      : {
-          label: gameModeOff ? t('settings.gameMode.off') : t('home.tabs.menu'),
-          indicator: gameModeOff ? <PauseIcon color={WHITE} size={ICON.sm} /> : undefined,
-        },
-    { label: t('home.tabs.home') },
+    // Menu tab is icon-only (no label) — it's chrome, not a destination, so
+    // it shrinks to its glyph width and yields the freed flex space to the
+    // two content tabs (Home + Side). Icon swaps by state: settings gear
+    // normally, pause when the user has toggled game mode off, close-X while
+    // the profile preview sheet is open over the menu pane.
     {
-      label: chatAvailable
-        ? t('home.tabs.chat')
-        : page2PendingInvite
-          ? t('home.tabs.invite')
-          : t('home.tabs.viewers'),
-      chip: tabChipSide,
-      indicator: sideIndicator,
-      alerting: sideAlerting,
+      renderIndicator: profileSheetOpen
+        ? (color) => <CloseBoldIcon color={color} size={ICON.xl} />
+        : gameModeOff
+          ? (color) => <PauseIcon color={color} size={ICON.xl} />
+          : (color) => <SettingsIcon color={color} size={ICON.xl} />,
     },
+    { label: matchName || t('home.tabs.home'), subLabel: homeTabSubLabel },
+    (() => {
+      // Self-state mode = no counterpart on the side tab and no live chat
+      // (i.e. broadcasting, free-visible, or hidden). The label reads the
+      // current visibility state in plain text — same shape as every other
+      // tab. Gendered via tg so feminine users see "מוסתרת" / "גלויה".
+      const selfStateMode = !sideTabName && !chatAvailable
+      const base = selfStateMode
+        ? (broadcastActive
+            ? t('home.tabs.broadcast')
+            : isHidden
+              ? tg('home.tabs.hidden', isMale)
+              : tg('home.tabs.visible', isMale))
+        : sideTabName
+          ? sideTabName
+          : chatAvailable
+            ? t('home.tabs.chat')
+            : page2PendingInvite
+              ? t('home.tabs.invite')
+              : t('home.tabs.viewers')
+      return {
+        label: sideTabCount > 0 ? `${base} ${sideTabCount}` : base,
+        alerting: sideAlerting,
+        subLabel: inviteTabSubLabel ?? undefined,
+      } satisfies TabSpec
+    })(),
   ]
 
   // Single headline text for the home pane — swaps value based on state.
@@ -2280,12 +2683,42 @@ export default function HomePage() {
     },
   })
 
+  // Confirm-popup configs for the two visibility-toggle popups, sourced
+  // from the shared `visibilityConfirms` module so the equivalent popup
+  // on the settings Pause button stays in lockstep on a single edit.
+  const exitBroadcastConfig = exitBroadcastConfirm()
+  const hideConfirmConfig = hideProfileConfirm()
+
   return (
     <View style={styles.backdrop}>
+      {/* Paused state recolors the top chrome (status bar + TabStrip) from
+          PRIMARY to BLACK_MID so the whole header reads as "muted" without
+          going as dark as the round pause overlay button. Always render (not
+          gated on gameModeOff) so the value switches both ways: a gated mount
+          would leave the status bar stuck after resume, since expo-status-bar
+          applies its value imperatively and never restores prior values on
+          unmount. */}
+      <StatusBar
+        style="light"
+        backgroundColor={gameModeOff ? BLACK_MID : PRIMARY}
+        translucent={false}
+      />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
-        <StatusBar style="light" backgroundColor={PRIMARY} translucent={false} />
         <View
-          style={[styles.tabStripContainer, { paddingTop: topInset + RADII.sm }]}
+          style={[
+            styles.tabStripContainer,
+            { paddingTop: topInset + MD },
+            gameModeOff && {
+              backgroundColor: BLACK_MID,
+              // Drop shadow + elevation in pause mode. The drop shadow bleeds
+              // through the translucent BLACK_MID and reads as a dark frame
+              // around the strip; we don't need the separator effect anyway,
+              // since the dark chrome itself already contrasts with the
+              // content below.
+              shadowOpacity: 0,
+              elevation: 0,
+            },
+          ]}
           onLayout={e => { tabStripBottom.value = e.nativeEvent.layout.y + e.nativeEvent.layout.height }}
         >
           <TabStrip tabs={tabSpecs} progress={pagerProgress} onSelect={(i) => {
@@ -2304,7 +2737,7 @@ export default function HomePage() {
         <AnimatedPagerView
           ref={pagerRef}
           style={{ flex: 1 }}
-          initialPage={initialPaneFromNotif ?? HOME_PANE}
+          initialPage={initialPane}
           scrollEnabled={!sliding}
           overdrag={false}
           overScrollMode="never"
@@ -2331,16 +2764,20 @@ export default function HomePage() {
                     style={StyleSheet.absoluteFill}
                     pointerEvents={showHiddenPlaceholder ? 'auto' : 'none'}
                   >
-                    {/* Empty pane — vertically centers a single group of
-                        [headline + avatar] with a generous gap between them.
-                        Headline is the gradient SVG label; its text swaps
-                        with state (scanning / ready-to-find / no-one-nearby
-                        / "לא עכשיו" during pull). The action button stays
-                        anchored at the bottom. When a match card is showing
-                        on top, this whole pane sits behind it; the card
-                        sliding down reveals the centered group. */}
+                    {/* Empty pane — centers the headline+avatar group in the
+                        available area using two flex:1 spacers above and
+                        below. Equal spacers are the most reliable way to
+                        vertically center a column of content in RN; relying
+                        on justifyContent on the parent breaks here because
+                        the parent is an absoluteFill (its flex children
+                        sometimes shrink-collapse instead of filling on
+                        certain devices). Text swaps with state (scanning /
+                        ready-to-find / no-one-nearby / "לא עכשיו" during
+                        pull). When a match card is on top, this whole pane
+                        sits behind it; the card sliding down reveals the
+                        centered group. */}
                     <View style={styles.permScreen}>
-                      <View style={{ flex: 1 }} />
+                      <View style={styles.permFlexSpacer} />
                       <View pointerEvents="box-none" style={styles.permCenterGroup}>
                         <HeadlineArea text={headlineText} />
                         <View style={styles.permAvatarWrap}>
@@ -2354,8 +2791,7 @@ export default function HomePage() {
                               }
                               tap()
                               if (page1Profile) {
-                                setProfileSheetOpen(true)
-                                profileSheetSlide.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) })
+                                openProfileSheet()
                               } else {
                                 goToPreferences()
                               }
@@ -2383,7 +2819,7 @@ export default function HomePage() {
                           </Pressable>
                         </View>
                       </View>
-                      <View style={{ flex: 1 }} />
+                      <View style={styles.permFlexSpacer} />
                     </View>
                   </View>
 
@@ -2408,13 +2844,13 @@ export default function HomePage() {
                             so the GestureDetector has a stable target. */}
                         <Animated.View style={[styles.matchCardWrap, pullStyle]} collapsable={false}>
                           {displayedMatch && (
-                            /* Inner element owns the layout animations. Kept
-                               separate from pullStyle so SlideInDown/SlideOutDown's
-                               transform isn't clobbered by useAnimatedStyle. */
-                            <Animated.View
+                            /* RisingCard owns the slide-up / slide-down layout
+                               animations. Kept separate from the pullStyle
+                               above so SlideIn/SlideOut's transform doesn't
+                               clobber the useAnimatedStyle on the outer view. */
+                            <RisingCard
                               key={displayedMatch.user_id}
-                              entering={matchHasMountedRef.current ? SlideInDown.duration(420).easing(Easing.out(Easing.cubic)) : undefined}
-                              exiting={SlideOutDown.duration(380).easing(Easing.in(Easing.cubic))}
+                              animateEnter={matchHasMountedRef.current}
                               style={styles.matchCardWrap}
                             >
                               <View style={styles.matchPhoto}>
@@ -2422,21 +2858,19 @@ export default function HomePage() {
                                   match={displayedMatch}
 
                                   viewerFamily={profile?.family ?? null}
+                                  viewerLocationCustom={profile?.location_custom ?? null}
                                   bottomInset={0}
                                   hideTime={state === 'chat'}
                                   actions={page1CardActions}
                                   topBlock={
                                     displayedCardMode === 'waiting' && inviteExpiresAt ? (
-                                      <InfoBlock
-                                        expiresAt={inviteExpiresAt}
-                                        totalSecs={inviteTotalSecs}
-                                        extended={invitedPage1?.extended}
+                                      <InviteTimerCard
                                         targetIsMale={matchIsMale}
                                         userIsMale={isMale}
                                         onCancel={() => { tap(); setCancelConfirmOpen(true) }}
                                       />
                                     ) : isEndedState && page1MessageTitle ? (
-                                      <MessageBlock
+                                      <EventMessageCard
                                         title={page1MessageTitle}
                                         description={page1MessageDesc}
                                         onContinue={() => runAction('app/clear1', 'ended-stop')}
@@ -2444,14 +2878,12 @@ export default function HomePage() {
                                       />
                                     ) : undefined
                                   }
+                                  onTopBlockShown={handleTopBlockShown}
                                   footerBlock={watchingInviteButton}
                                   footerBg={watchingInviteButton ? PRIMARY : undefined}
                                 />
                               </View>
-                              {cardButtons && (
-                                <HomeButtons>{cardButtons}</HomeButtons>
-                              )}
-                            </Animated.View>
+                            </RisingCard>
                           )}
                         </Animated.View>
                       </GestureDetector>
@@ -2463,6 +2895,7 @@ export default function HomePage() {
                             match={preloadingMatch}
 
                             viewerFamily={profile?.family ?? null}
+                            viewerLocationCustom={profile?.location_custom ?? null}
                             bottomInset={0}
                             onReady={() => onPreloadReady(preloadingMatch.user_id)}
                           />
@@ -2497,6 +2930,24 @@ export default function HomePage() {
                 />
 
                 <ConfirmDialog
+                  visible={skipHintOpen}
+                  title={t('home.skipHintTitle')}
+                  description={t('home.skipHintDesc')}
+                  icon={<ChevronDownIcon color={PRIMARY} size={32} />}
+                  cancelLabel={t('home.skipHintCancel')}
+                  confirmLabel={t('home.watchingReject')}
+                  soft
+                  confirmIcon={<CloseIcon color={WHITE} size={22} />}
+                  onCancel={() => { if (!busy) setSkipHintOpen(false) }}
+                  onConfirm={() => {
+                    setSkipHintOpen(false)
+                    runIgnore()
+                  }}
+                  busy={busy}
+                  draggable
+                />
+
+                <ConfirmDialog
                   visible={!!removeWatcherTarget}
                   title={t('home.removeWatcherTitle')}
                   description={tg('home.removeWatcherDesc' as any, removeWatcherTarget?.is_male ?? null).replace('{name}', removeWatcherTarget?.name ?? '')}
@@ -2524,6 +2975,7 @@ export default function HomePage() {
                   title={permTitle}
                   description={permDesc}
                   confirmLabel={permConfirmLabel}
+                  confirmIcon={permConfirmIcon}
                   onConfirm={permOnConfirm}
                   onCancel={() => {}}
                   busy={permBusyState}
@@ -2531,12 +2983,12 @@ export default function HomePage() {
                 />
 
                 {/* Chat-state actions menu (opened from MatchCard dots).
-                    paddingBottom = safe-area bottom + DOUBLE so the last row
+                    paddingBottom = safe-area bottom + MD so the last row
                     sits clear of the home-indicator gesture area. */}
                 <BottomSheet
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
-                  contentStyle={[chatMenuStyles.sheet, { paddingBottom: Math.max(bottomInset, SINGLE) + DOUBLE }]}
+                  contentStyle={[chatMenuStyles.sheet, { paddingBottom: Math.max(bottomInset, SM) + MD }]}
                 >
                   <Pressable
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('leave') }}
@@ -2607,61 +3059,85 @@ export default function HomePage() {
               ) : <View style={styles.root}>
                 {page2PendingInvite ? (
                   <View style={styles.matchPhoto}>
-                    <DiscoveryReveal
-                      key={page2PendingInvite.user_id}
-                      enabled={page2Discovery}
-                      centerAvatarUrl={profileAvatarUrl}
-                      onComplete={() => setPage2Discovery(false)}
-                    >
-                      {({ onImagesReady }) => (
-                        <MatchCard
-                          match={page2PendingInvite}
-                          actions={[]}
-                          viewerFamily={profile?.family ?? null}
-                          bottomInset={0}
-                          onReady={page2Discovery ? onImagesReady : undefined}
-                          topBlock={page2PendingInvite.expires_at ? (
-                            <InfoBlock
-                              expiresAt={page2PendingInvite.expires_at}
-                              totalSecs={page2PendingInvite.invited_at
-                                ? Math.max(60, Math.round((new Date(page2PendingInvite.expires_at).getTime() - new Date(page2PendingInvite.invited_at).getTime()) / 1000))
-                                : 600}
-                              extended={page2PendingInvite.extended}
-                              targetIsMale={page2PendingInvite.is_male}
-
-                              mode="invitee"
-                              busy={busy}
-                              onAccept={() => runAction('app/approve', 'replying-accept')}
-                              onReject={() => { tap(); setRefuseConfirmOpen(true) }}
-                            />
-                          ) : undefined}
-                        />
-                      )}
-                    </DiscoveryReveal>
+                    {/* Pull-to-decline reveal — mirrors page1 watching.
+                        The "לא עכשיו" gradient headline sits centered behind
+                        the card; the coral PullCue gradient fills the gap
+                        above the card as it's pulled down. Both are hidden
+                        at rest because the opaque card covers them. */}
+                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                      <View style={styles.permScreen}>
+                        <View style={styles.permFlexSpacer} />
+                        <View style={styles.permCenterGroup}>
+                          <HeadlineArea text={t('home.watchingReject')} />
+                          {/* Invisible spacer matching the page1 avatar so the
+                              headline sits at the same Y as in watching. */}
+                          <View style={styles.permAvatarWrap} />
+                        </View>
+                        <View style={styles.permFlexSpacer} />
+                      </View>
+                    </View>
+                    <PullCue pulling={page2Pulling} pullY={page2PullY} />
+                    <View style={StyleSheet.absoluteFill}>
+                      <PullContext.Provider value={page2PullCtx}>
+                        <GestureDetector gesture={page2CardPan}>
+                          {/* Same split as page1: outer Animated.View owns the
+                              pull-to-decline transform, inner RisingCard owns
+                              the slide-up/slide-down mount animation. */}
+                          <Animated.View style={[StyleSheet.absoluteFill, page2PullStyle]} collapsable={false}>
+                            <RisingCard
+                              key={`pending-${page2PendingInvite.user_id}`}
+                              style={StyleSheet.absoluteFill}
+                            >
+                              <MatchCard
+                                match={page2PendingInvite}
+                                actions={[{
+                                  key: 'help',
+                                  icon: <QuestionIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
+                                }]}
+                                viewerFamily={profile?.family ?? null}
+                                viewerLocationCustom={profile?.location_custom ?? null}
+                                bottomInset={0}
+                                onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
+                                footerBlock={replyingAcceptBlock}
+                                footerBg={replyingAcceptBlock ? PRIMARY : undefined}
+                              />
+                            </RisingCard>
+                          </Animated.View>
+                        </GestureDetector>
+                      </PullContext.Provider>
+                    </View>
                   </View>
                 ) : page2DeadInvite ? (
                   <View style={styles.matchPhoto}>
-                    <MatchCard
-                      match={page2DeadInvite}
-                      actions={[]}
-                      viewerFamily={profile?.family ?? null}
-                      bottomInset={0}
-                      topBlock={page2MessageTitle ? (
-                        <MessageBlock
-                          title={page2MessageTitle}
-                          description={page2MessageDesc}
-                          onContinue={() => runAction('app/free2', 'free2')}
-                          busy={busy && pendingKey === 'free2'}
-                        />
-                      ) : undefined}
-                    />
+                    <RisingCard
+                      key={`dead-${page2DeadInvite.user_id}`}
+                      style={{ flex: 1 }}
+                    >
+                      <MatchCard
+                        match={page2DeadInvite}
+                        actions={[]}
+                        viewerFamily={profile?.family ?? null}
+                        viewerLocationCustom={profile?.location_custom ?? null}
+                        bottomInset={0}
+                        topBlock={page2MessageTitle ? (
+                          <EventMessageCard
+                            title={page2MessageTitle}
+                            description={page2MessageDesc}
+                            onContinue={() => runAction('app/free2', 'free2')}
+                            busy={busy && pendingKey === 'free2'}
+                          />
+                        ) : undefined}
+                      />
+                    </RisingCard>
                   </View>
                 ) : (
-                  // Premium "Hide / Reveal / Add viewers" CTA is always
-                  // anchored at the bottom of the page2 pane regardless of
-                  // whether the viewers list has anyone in it. The pane
-                  // splits into a flexing content area (watchers list or
-                  // empty-state illustration) and a fixed CTA row below.
+                  // Pane layout: 3-state visibility toggle (hidden | visible
+                  // | broadcast) anchored at the top of the pane; scrolling
+                  // status card + watchers list or telescope below. Broadcast
+                  // (formerly the premium "Show me to people" button) is a
+                  // real selectable mode now, lit up for the full 30m the
+                  // cooldown lasts; the side tab still surfaces the live
+                  // countdown above the "viewers" label.
                   <View style={{ flex: 1 }}>
                     {watchers.length > 0 ? (
                       <PullScrollView
@@ -2670,34 +3146,22 @@ export default function HomePage() {
                         scrollEventThrottle={16}
                         contentContainerStyle={styles.watchersScrollContent}
                       >
-                        <Page2StatusCard
+                        <ViewersStatusCard
                           isHidden={isHidden}
+                          broadcastActive={broadcastActive}
+                          hasWatchers={true}
                           userIsMale={isMale}
-                          addEnabled={addEnabled}
-                          addCooldownLabel={addCooldownLabel}
-                          addCooldownSecsLeft={addCooldownSecsLeft}
-                          addCooldownTotalSecs={Math.floor(ADD_COOLDOWN_MS / 1000)}
-                          busyKey={busy ? pendingKey : null}
-                          onBroadcast={() => runAction('app/add', 'add')}
-                          onToggleHide={() => {
-                            if (isHidden) {
-                              runAction('app/free2', 'free2')
-                            } else if (watchers.length === 0) {
-                              runAction('app/lock2', 'lock2')
-                            } else {
-                              setHideConfirmOpen(true)
-                            }
-                          }}
-                          title={null}
-                          description={t('home.watchingMePhotosHidden')}
                         />
                         <View style={styles.watchersList}>
                           {watchers.map((w) => (
-                            <WatcherCard
-                              key={w.user_id}
-                              watcher={w}
-                              onPress={() => { tap(); setRemoveWatcherTarget(w) }}
-                            />
+                            <View key={w.user_id} style={styles.watcherSlot}>
+                              <WatcherCard
+                                watcher={w}
+                                viewerFamily={profile?.family ?? null}
+                                viewerLocationCustom={profile?.location_custom ?? null}
+                                onPress={() => { tap(); setRemoveWatcherTarget(w) }}
+                              />
+                            </View>
                           ))}
                         </View>
                       </PullScrollView>
@@ -2708,53 +3172,125 @@ export default function HomePage() {
                         scrollEventThrottle={16}
                         contentContainerStyle={styles.emptyScrollContent}
                       >
-                        <Page2StatusCard
+                        <ViewersStatusCard
                           isHidden={isHidden}
+                          broadcastActive={broadcastActive}
+                          hasWatchers={false}
                           userIsMale={isMale}
-                          addEnabled={addEnabled}
-                          addCooldownLabel={addCooldownLabel}
-                          addCooldownSecsLeft={addCooldownSecsLeft}
-                          addCooldownTotalSecs={Math.floor(ADD_COOLDOWN_MS / 1000)}
-                          busyKey={busy ? pendingKey : null}
-                          onBroadcast={() => runAction('app/add', 'add')}
-                          onToggleHide={() => {
-                            if (isHidden) runAction('app/free2', 'free2')
-                            else runAction('app/lock2', 'lock2')
-                          }}
                         />
                         <View style={styles.telescopeWrap}>
                           {isHidden ? <HiddenMoonIllustration /> : <TelescopeIllustration />}
                         </View>
                       </PullScrollView>
                     )}
+                    <View style={[styles.page2BottomBar, { paddingBottom: Math.max(bottomInset, LG) }]}>
+                      <VisibilityToggle
+                        mode={toggleMode}
+                        gated={visibilityToggleGated}
+                        broadcastTimer={broadcastActive ? addCooldownLabel : null}
+                        pendingAction={
+                          busy && pendingKey === 'lock2' ? 'hidden'
+                          : busy && pendingKey === 'free2' ? 'visible'
+                          : busy && pendingKey === 'cancel_add' ? (broadcastActive ? 'broadcast' : 'visible')
+                          : busy && pendingKey === 'add' ? 'broadcast'
+                          : null
+                        }
+                        onHidden={() => {
+                          if (toggleMode === 'hidden') return
+                          // During broadcast, any mode switch is a "stop
+                          // broadcasting" action — confirm first.
+                          if (broadcastActive) setExitBroadcastTarget('hidden')
+                          // app/lock2 kicks every current watcher and pushes
+                          // each one a `removed` notification. Surface the
+                          // ripple before running it.
+                          else if (watchers.length > 0) setHideConfirmOpen(true)
+                          else runAction('app/lock2', 'lock2')
+                        }}
+                        onVisible={() => {
+                          if (toggleMode === 'visible') return
+                          if (broadcastActive) setExitBroadcastTarget('visible')
+                          else runAction('app/free2', 'free2')
+                        }}
+                        onBroadcast={() => {
+                          if (broadcastActive) setExitBroadcastTarget('exit')
+                          else setBroadcastConfirmOpen(true)
+                        }}
+                        busy={busy && (pendingKey === 'lock2' || pendingKey === 'free2' || pendingKey === 'add' || pendingKey === 'cancel_add')}
+                      />
+                    </View>
                   </View>
                 )}
               </View>}
             </View>,
           ]}
         </AnimatedPagerView>
-        {profileSheetOpen && (
-          <Animated.View style={[styles.profileSheetOverlay, profileSheetAnimStyle]}>
-            <GestureDetector gesture={profileSheetSwipe}>
-              <View style={{ flex: 1 }}>
-                <PreviewFieldPage
-                  config={{ kind: 'preview', title: t('settings.myProfile') }}
-                  onBack={closeProfileSheet}
-                  dismissGestureRef={profileSheetGestureRef}
-                  onScrollAtTop={onProfileSheetScrollAtTop}
-                  headerBottomShared={profileSheetHeaderBottom}
-                  clipBottom
-                />
-              </View>
-            </GestureDetector>
-          </Animated.View>
-        )}
+        {/* Always-mounted positioning wrapper: anchors below the TabStrip and
+            carries the live swipe-drag offset. Inner Animated.View is the one
+            conditional on open state — its SlideInDown / SlideOutDown layout
+            animations drive the mount/dismount motion, identical to the
+            MatchCard pane on the home slot. */}
+        <Animated.View
+          style={[styles.profileSheetOverlay, profileSheetWrapStyle]}
+          pointerEvents={profileSheetOpen ? 'box-none' : 'none'}
+        >
+          <GestureDetector gesture={profileSheetSwipe}>
+            <View style={{ flex: 1 }} collapsable={false}>
+              {profileSheetOpen && (
+                <RisingCard style={styles.profileSheetCard}>
+                  <PreviewFieldPage
+                    config={{ kind: 'preview', title: t('settings.myProfile') }}
+                    onBack={closeProfileSheet}
+                    dismissGestureRef={profileSheetGestureRef}
+                    onScrollAtTop={onProfileSheetScrollAtTop}
+                    headerBottomShared={profileSheetHeaderBottom}
+                    clipBottom
+                  />
+                </RisingCard>
+              )}
+            </View>
+          </GestureDetector>
+        </Animated.View>
+        <ConfirmDialog
+          visible={broadcastConfirmOpen}
+          title={t('home.broadcastConfirmTitle')}
+          description={t('home.broadcastConfirmDesc')}
+          confirmLabel={t('home.broadcastConfirmButton')}
+          // Confirm-button icon mirrors the toggle option being committed,
+          // so the popup's primary action visually echoes the segment the
+          // user just tapped on the toggle below.
+          confirmIcon={<MegaphoneIcon color={WHITE} size={ICON.xxl} />}
+          onCancel={() => { if (!(busy && pendingKey === 'add')) setBroadcastConfirmOpen(false) }}
+          onConfirm={() => runAction('app/add', 'add', () => setBroadcastConfirmOpen(false))}
+          busy={busy && pendingKey === 'add'}
+          draggable
+        />
+        {/* Action routes by destination: 'hidden' → app/lock2 (also clears
+            last_add_at server-side); 'visible' / 'exit' → app/cancel_add
+            (page2.state is already free during broadcast, so app_free2
+            would be a no-op). Copy/icon comes from the shared config above. */}
+        <ConfirmDialog
+          visible={exitBroadcastTarget !== null}
+          title={exitBroadcastConfig.title}
+          description={exitBroadcastConfig.description}
+          confirmLabel={exitBroadcastConfig.confirmLabel}
+          destructive={exitBroadcastConfig.destructive}
+          confirmIcon={exitBroadcastConfig.confirmIcon}
+          onCancel={() => { if (!busy) setExitBroadcastTarget(null) }}
+          onConfirm={() => {
+            const endpoint = exitBroadcastTarget === 'hidden' ? 'app/lock2' : 'app/cancel_add'
+            const key = exitBroadcastTarget === 'hidden' ? 'lock2' : 'cancel_add'
+            runAction(endpoint, key, () => setExitBroadcastTarget(null))
+          }}
+          busy={busy && (pendingKey === 'cancel_add' || pendingKey === 'lock2')}
+          draggable
+        />
         <ConfirmDialog
           visible={hideConfirmOpen}
-          title={t('home.hideConfirmTitle')}
-          description={t('home.hideConfirmDesc')}
-          confirmLabel={t('home.hideConfirmButton')}
-          premium
+          title={hideConfirmConfig.title}
+          description={hideConfirmConfig.description}
+          confirmLabel={hideConfirmConfig.confirmLabel}
+          destructive={hideConfirmConfig.destructive}
+          confirmIcon={hideConfirmConfig.confirmIcon}
           onCancel={() => { if (!(busy && pendingKey === 'lock2')) setHideConfirmOpen(false) }}
           onConfirm={() => runAction('app/lock2', 'lock2', () => setHideConfirmOpen(false))}
           busy={busy && pendingKey === 'lock2'}
@@ -2781,8 +3317,8 @@ const styles = StyleSheet.create({
   tabStripContainer: {
     width: '100%',
     backgroundColor: PRIMARY,
-    paddingHorizontal: SINGLE,
-    paddingBottom: RADII.sm,
+    paddingHorizontal: SM,
+    paddingBottom: MD,
     shadowColor: BLACK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -2805,12 +3341,17 @@ const styles = StyleSheet.create({
   },
   // `top` is set dynamically (= TabStrip bottom) so the sheet anchors just
   // below the tabs and the card doesn't slide under them. `bottom: 0` keeps
-  // the sheet stretched to the bottom of the screen.
+  // the sheet stretched to the bottom of the screen. The wrapper itself is
+  // transparent; the card child carries the white fill + shadow so the empty
+  // wrapper draws nothing while the sheet is closed.
   profileSheetOverlay: {
     position: 'absolute' as const,
     bottom: 0,
     start: 0,
     end: 0,
+  },
+  profileSheetCard: {
+    flex: 1,
     backgroundColor: WHITE,
     shadowColor: BLACK,
     shadowOffset: { width: 0, height: -3 },
@@ -2828,25 +3369,30 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   watchersList: {
-    paddingVertical: SINGLE,
-    paddingHorizontal: SINGLE,
+    paddingVertical: SM,
+    paddingHorizontal: SM,
+    flexDirection: 'column',
     alignItems: 'stretch',
+    gap: SM,
+  },
+  watcherSlot: {
+    width: '100%',
   },
   watchingMeSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
     color: BLACK_STRONG,
     textAlign: 'center',
-    marginTop: 14,
-    paddingHorizontal: 6,
+    marginTop: MD,
+    paddingHorizontal: SM,
   },
   rightNowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 22,
-    marginBottom: 14,
+    gap: MD,
+    marginTop: MD,
+    marginBottom: MD,
   },
   rightNowLine: {
     height: 1,
@@ -2855,20 +3401,24 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   rightNowText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: TEXT.sm,
+    fontWeight: WEIGHT.extrabold,
     color: PRIMARY,
     letterSpacing: 1.4,
   },
   morePeopleText: {
-    fontSize: 13,
+    fontSize: TEXT.sm,
     color: BLACK_STRONG,
     textAlign: 'center',
-    marginTop: 14,
+    marginTop: MD,
   },
   emptyScrollContent: {
     flexGrow: 1,
     paddingBottom: 0,
+  },
+  page2BottomBar: {
+    paddingHorizontal: MD,
+    paddingTop: LG,
   },
   telescopeWrap: {
     flex: 1,
@@ -2905,12 +3455,18 @@ const styles = StyleSheet.create({
   permScreen: {
     flex: 1,
   },
-  // Centered group: headline (gradient SVG label) + avatar with rings,
-  // stacked vertically with a generous gap. The two flex:1 spacers above
-  // and below push the group into the visual center of the home pane.
+  // Equal flex:1 spacers above and below permCenterGroup vertically center
+  // the visible group across every screen height. Named (not inline) so
+  // both copies of the layout (page1 watching + page2 pull-to-decline)
+  // share the same single source.
+  permFlexSpacer: {
+    flex: 1,
+  },
+  // The visible group: gradient SVG headline stacked above the avatar
+  // with a constant gap.
   permCenterGroup: {
     alignItems: 'center',
-    gap: DOUBLE * 4,
+    gap: MD * 4,
   },
   permAvatarWrap: {
     width: DOTTED_RING_SIZE,
@@ -2946,50 +3502,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   waitingActions: {
-    gap: 12,
-  },
-  // Two-button horizontal row used by WATCHING/REPLYING. flex:1 cells so
-  // both buttons share width evenly regardless of label length.
-  buttonRow: {
-    flexDirection: 'row',
-    gap: SINGLE,
-  },
-  buttonCell: {
-    flex: 1,
-  },
-  buttonCellReject: {
-    flex: 1,
-  },
-  buttonCellAccept: {
-    flex: 2,
+    gap: MD,
   },
   watchingInviteBlock: {
     backgroundColor: WHITE,
-    paddingHorizontal: DOUBLE,
-    paddingTop: DOUBLE,
-    paddingBottom: DOUBLE,
+    paddingHorizontal: MD,
+    paddingTop: MD,
+    paddingBottom: MD,
     gap: RADIUS,
   },
   watchingInviteTitle: {
-    fontSize: TEXT.h2,
-    fontWeight: WEIGHT.bold,
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.extrabold,
     color: PRIMARY,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   watchingInviteLead: {
-    fontSize: TEXT.body,
-    lineHeight: 24,
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
     color: PRIMARY,
     textAlign: 'center',
   },
   watchingInviteDesc: {
-    fontSize: TEXT.body,
-    lineHeight: 24,
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
     color: PRIMARY,
     textAlign: 'center',
   },
-  watchingInviteButtonWrap: {
-    marginTop: SINGLE,
+  replyingButtonRow: {
+    flexDirection: 'row',
+    gap: SM,
+    marginTop: SM,
+  },
+  replyingDeclineCell: {
+    flex: 1,
+  },
+  replyingAcceptCell: {
+    flex: 2,
   },
 })

@@ -1,6 +1,7 @@
 import { StyleSheet } from 'react-native'
 import { Text } from './AppText'
 import { FONT_SCALE } from '../fonts'
+import { TEXT, WEIGHT } from '../tokens'
 
 // Pill-shaped count badge — shared across the app for inline numeric
 // indicators (unread chat, watcher count, onboarding age, ...). One
@@ -21,8 +22,8 @@ export function CountBadge({
 
 const styles = StyleSheet.create({
   text: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: TEXT.lg,
+    fontWeight: WEIGHT.extrabold,
     includeFontPadding: false,
     textAlignVertical: 'center',
     lineHeight: 22,

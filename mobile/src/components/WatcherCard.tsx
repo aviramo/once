@@ -1,39 +1,20 @@
-import { useEffect, useRef, useCallback } from 'react'
-import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, useWindowDimensions, type GestureResponderEvent } from 'react-native'
+import { useEffect, useMemo, useRef, useCallback } from 'react'
+import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, type GestureResponderEvent } from 'react-native'
 import { Image } from 'expo-image'
 import { Text } from './AppText'
-import { t, tg } from '../i18n'
+import { t } from '../i18n'
 import type { Profile } from '../stores/userStore'
-import { Chip, PinIcon, ClockIcon } from './Chip'
-import { RADII, RADIUS, SINGLE, DOUBLE, TEXT, WEIGHT } from '../tokens'
-import { WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
-import { formatDistance } from '../lib/units'
+import type { FamilyData } from '../lib/family'
+import { Chip, PinIcon, HomeIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
+import { buildFamilyChipText } from './FamilyCard'
+import { RADII, RADIUS, SM, MD, TEXT, WEIGHT } from '../tokens'
 
-// ── Format helpers ────────────────────────────────────────────────────────
+import { WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG } from '../colors'
+import { formatDistance, isDistanceHere } from '../lib/units'
+import { formatLastSeen, isLastSeenJustNow } from '../lib/lastSeen'
 
-function formatLastSeen(iso: string | null | undefined, isMale: boolean | null | undefined): string {
-  if (!iso) return ''
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return tg('match.justNow', isMale)
-  if (diff < 3600) {
-    const n = Math.floor(diff / 60)
-    return tg(n === 1 ? 'match.minAgo' : 'match.minsAgo', isMale).replace('{n}', String(n))
-  }
-  if (diff < 86400) {
-    const n = Math.floor(diff / 3600)
-    return tg(n === 1 ? 'match.hrAgo' : 'match.hrsAgo', isMale).replace('{n}', String(n))
-  }
-  const n = Math.floor(diff / 86400)
-  return tg(n === 1 ? 'match.dayAgo' : 'match.daysAgo', isMale).replace('{n}', String(n))
-}
-
-const ONLINE_SECONDS = 60
 const NEW_SECONDS = 3600
 
-function isOnlineNow(iso?: string | null) {
-  if (!iso) return false
-  return (Date.now() - new Date(iso).getTime()) / 1000 < ONLINE_SECONDS
-}
 function isRecentlyCreated(iso?: string | null) {
   if (!iso) return false
   return (Date.now() - new Date(iso).getTime()) / 1000 < NEW_SECONDS
@@ -46,18 +27,26 @@ type Props = {
   exiting?: boolean
   onExited?: () => void
   onPress?: () => void
+  /** Viewer's own family data — when set, the kids chip appends the
+   * kid-free schedule overlap percentage (same as MatchCard). */
+  viewerFamily?: FamilyData | null
+  /** Viewer's own location_custom flag. When true, the distance is from the
+   * viewer's manually-picked address — chip swaps PinIcon → HomeIcon and the
+   * suffix becomes "from the location you set" instead of "from you". */
+  viewerLocationCustom?: boolean | null
 }
 
-export function WatcherCard({ watcher, exiting, onExited, onPress }: Props) {
-  const distance = formatDistance(watcher.distance ?? undefined, watcher.is_male)
+export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily, viewerLocationCustom }: Props) {
+  const customLocation = !!viewerLocationCustom || !!watcher.location_custom
+  const distance = formatDistance(watcher.distance ?? undefined, watcher.is_male, customLocation)
   const lastSeen = formatLastSeen(watcher.last_seen, watcher.is_male)
-  const online = isOnlineNow(watcher.last_seen)
+  const online = isLastSeenJustNow(watcher.last_seen)
   const isNew = isRecentlyCreated(watcher.created_at)
   const hash = watcher.images?.[0]?.hash
-
-  const { width: screenWidth } = useWindowDimensions()
-  const cardWidth = screenWidth - SINGLE * 2
-  const cardHeight = (cardWidth * 9) / 16
+  const familyChipText = useMemo(
+    () => buildFamilyChipText(watcher.family, undefined, false, viewerFamily),
+    [watcher.family, viewerFamily],
+  )
 
   const anim = useRef(new Animated.Value(0)).current
   const exitedRef = useRef(false)
@@ -65,7 +54,7 @@ export function WatcherCard({ watcher, exiting, onExited, onPress }: Props) {
   useEffect(() => {
     Animated.timing(anim, {
       toValue: 1,
-      duration: 280,
+      duration: 260,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start()
@@ -76,7 +65,7 @@ export function WatcherCard({ watcher, exiting, onExited, onPress }: Props) {
     exitedRef.current = true
     Animated.timing(anim, {
       toValue: 0,
-      duration: 240,
+      duration: 260,
       easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(({ finished }) => {
@@ -111,9 +100,9 @@ export function WatcherCard({ watcher, exiting, onExited, onPress }: Props) {
   }, [onPress])
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }, { scale }], width: cardWidth }}>
+    <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
       <Pressable
-        style={[styles.card, { width: cardWidth, height: cardHeight }]}
+        style={styles.card}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={handlePress}
@@ -134,23 +123,38 @@ export function WatcherCard({ watcher, exiting, onExited, onPress }: Props) {
               </View>
             ) : null}
           </View>
-          <View style={styles.chipRow}>
-            {distance ? (
-              <Chip
-                renderIcon={color => <PinIcon color={color} />}
-                text={distance}
-                tone="neutral"
-                onPhoto
-              />
-            ) : null}
+          <View style={styles.chipsStack}>
             {lastSeen ? (
-              <Chip
-                renderIcon={color => <ClockIcon color={color} />}
-                text={lastSeen}
-                tone="neutral"
-                onPhoto
-                renderTrailing={online ? () => <View style={styles.onlineDot} /> : undefined}
-              />
+              <View style={styles.chipsLine}>
+                <Chip
+                  renderIcon={color => <ClockIcon color={color} />}
+                  text={lastSeen}
+                  tone="neutral"
+                  onPhoto
+                  renderTrailing={online ? () => <PresenceDot /> : undefined}
+                />
+              </View>
+            ) : null}
+            {distance ? (
+              <View style={styles.chipsLine}>
+                <Chip
+                  renderIcon={color => customLocation ? <HomeIcon color={color} /> : <PinIcon color={color} />}
+                  text={distance}
+                  tone="neutral"
+                  onPhoto
+                  renderTrailing={isDistanceHere(watcher.distance ?? undefined) ? () => <PresenceDot /> : undefined}
+                />
+              </View>
+            ) : null}
+            {familyChipText ? (
+              <View style={styles.chipsLine}>
+                <Chip
+                  renderIcon={color => <KidsIcon color={color} />}
+                  text={familyChipText}
+                  onPhoto
+                  renderTrailing={() => <PresenceDot color={PRIMARY} />}
+                />
+              </View>
             ) : null}
           </View>
         </View>
@@ -164,35 +168,32 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: BLACK_SOFT,
-    justifyContent: 'flex-end',
-    marginVertical: SINGLE,
     borderRadius: RADIUS,
   },
   newBadge: {
     backgroundColor: PRIMARY,
-    paddingHorizontal: SINGLE,
+    paddingHorizontal: SM,
     paddingVertical: RADII.xs,
     borderRadius: RADII.chip,
   },
   newBadgeText: {
     color: WHITE,
-    fontSize: TEXT.tiny,
-    fontWeight: WEIGHT.bold,
+    fontSize: TEXT.xs,
+    fontWeight: WEIGHT.extrabold,
     letterSpacing: 0.2,
   },
   infoOverlay: {
-    paddingHorizontal: SINGLE,
-    paddingTop: SINGLE,
-    paddingBottom: DOUBLE,
-    gap: SINGLE,
+    paddingHorizontal: SM,
+    paddingVertical: MD,
+    gap: SM,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SINGLE,
+    gap: SM,
   },
   title: {
-    fontSize: TEXT.h2,
+    fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
     color: WHITE,
     letterSpacing: -0.3,
@@ -201,15 +202,15 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
     writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SINGLE,
+  chipsStack: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: SM,
   },
-  onlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 999,
-    backgroundColor: ONLINE_GREEN,
+  chipsLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: SM,
   },
 })

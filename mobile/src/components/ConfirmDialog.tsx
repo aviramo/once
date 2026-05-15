@@ -3,7 +3,8 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
-import { SINGLE, DOUBLE, RADII, TEXT as FSIZE, WEIGHT } from '../tokens'
+import { CheckIcon, CloseIcon } from './icons'
+import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, lh } from '../tokens'
 import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
 export function ConfirmDialog({
@@ -24,6 +25,8 @@ export function ConfirmDialog({
   cancelFlex,
   confirmFlex,
   draggable,
+  confirmIcon,
+  cancelIcon,
 }: {
   visible: boolean
   title: string
@@ -36,6 +39,11 @@ export function ConfirmDialog({
   tone?: 'positive'
   /** Optional icon rendered in a tinted circle above the title. */
   icon?: ReactNode
+  /** Override for the confirm-button icon. Defaults to CloseIcon for
+   * destructive, CheckIcon otherwise. */
+  confirmIcon?: ReactNode
+  /** Override for the cancel-button icon. Defaults to CloseIcon. */
+  cancelIcon?: ReactNode
   onCancel?: () => void
   onConfirm: () => void
   busy?: boolean
@@ -95,6 +103,7 @@ export function ConfirmDialog({
               disabled={busy}
               loading={busy && pressed === 'cancel'}
               silentDisabled={pressed !== 'cancel'}
+              iconStart={cancelIcon ?? <CloseIcon color={BLACK_STRONG} size={22} />}
             />
           </View>
         ) : null}
@@ -102,12 +111,13 @@ export function ConfirmDialog({
           <Button
             label={confirmLabel}
             onPress={() => { setPressed('confirm'); onConfirm() }}
-            variant={destructive ? 'destructive' : soft ? 'dark' : premium ? 'premium' : 'primary'}
+            variant={destructive || soft ? 'dark' : premium ? 'premium' : 'primary'}
             tone={!destructive && !soft && !premium ? tone : undefined}
             size="lg"
             disabled={busy}
             loading={busy && pressed === 'confirm'}
             silentDisabled={pressed !== 'confirm'}
+            iconStart={confirmIcon ?? (destructive ? <CloseIcon color={WHITE} size={22} /> : <CheckIcon color={WHITE} size={22} />)}
           />
         </View>
       </View>
@@ -117,40 +127,40 @@ export function ConfirmDialog({
 
 const styles = StyleSheet.create({
   card: {
-    padding: 24,
-    paddingTop: 12,
+    padding: LG,
+    paddingTop: MD,
   },
   iconWrap: {
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: MD,
   },
   iconCircle: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: 999,
     backgroundColor: PRIMARY_BG,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: FSIZE.h2,
-    fontWeight: WEIGHT.bold,
+    fontSize: FSIZE.xl,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   desc: {
-    marginTop: 8,
-    fontSize: FSIZE.body,
-    lineHeight: 22,
+    marginTop: SM,
+    fontSize: FSIZE.md,
+    lineHeight: lh(FSIZE.md),
     color: BLACK_STRONG,
     textAlign: 'center',
   },
   skipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SINGLE,
-    marginTop: DOUBLE,
+    gap: SM,
+    marginTop: MD,
   },
   checkbox: {
     width: 20,
@@ -167,20 +177,20 @@ const styles = StyleSheet.create({
     borderColor: PRIMARY,
   },
   checkboxTick: {
-    fontSize: FSIZE.small,
+    fontSize: FSIZE.sm,
     lineHeight: 14,
     color: WHITE,
-    fontWeight: WEIGHT.bold,
+    fontWeight: WEIGHT.extrabold,
     includeFontPadding: false,
   },
   skipLabel: {
-    fontSize: FSIZE.base,
+    fontSize: FSIZE.sm,
     color: BLACK_STRONG,
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
+    gap: MD,
+    marginTop: MD,
   },
   slot: { flex: 1 },
 })

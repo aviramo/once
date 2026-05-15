@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Pressable, StyleSheet, View, TextInput, I18nManager } from 'react-native'
-import { useSharedValue, useAnimatedStyle, withTiming, withRepeat } from 'react-native-reanimated'
+import { Pressable, StyleSheet, View } from 'react-native'
+import { useSharedValue, useAnimatedStyle, withTiming, withRepeat, Easing } from 'react-native-reanimated'
 import Animated from 'react-native-reanimated'
 import Svg, { Path, Circle } from 'react-native-svg'
-import { Text } from './AppText'
+import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
 import { BLACK, WHITE, BLACK_SOFT, BLACK_STRONG, PRIMARY, BLACK_MID, DESTRUCTIVE, BORDER_SOFT, DESTRUCTIVE_MUTED, WHITE_MID } from '../colors'
-import { SINGLE, RADIUS, TEXT as FSIZE, WEIGHT, DURATION, EASE, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT } from '../tokens'
+import { XS, SM, MD, RADIUS, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -31,9 +31,9 @@ function AppleIcon() {
   )
 }
 
-function MailIcon() {
+function MailIcon({ color = WHITE }: { color?: string } = {}) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 6h16v12H4z" />
       <Path d="M4 7l8 6 8-6" />
     </Svg>
@@ -43,7 +43,7 @@ function MailIcon() {
 function Spinner({ dark = false }: { dark?: boolean }) {
   const rotation = useSharedValue(0)
   useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: DURATION.rotate, easing: EASE.linear }), -1, false)
+    rotation.value = withRepeat(withTiming(360, { duration: 600, easing: Easing.linear }), -1, false)
   }, [])
   const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
   const arc = dark ? BLACK : WHITE
@@ -84,7 +84,7 @@ function GoogleButton({ onPress, loading, disabled }: { onPress: () => void; loa
 const gBtnStyles = StyleSheet.create({
   btn: {
     minHeight: BUTTON_MIN_HEIGHT,
-    paddingVertical: SINGLE,
+    paddingVertical: SM,
     paddingHorizontal: BUTTON_MIN_HEIGHT,
     backgroundColor: WHITE,
     borderRadius: RADIUS,
@@ -97,7 +97,7 @@ const gBtnStyles = StyleSheet.create({
   pressed: { backgroundColor: BLACK_SOFT },
   dim: { opacity: 0.55 },
   iconSlot: { position: 'absolute', start: 20, top: 0, bottom: 0, justifyContent: 'center' },
-  label: { fontSize: FSIZE.subhead, fontWeight: WEIGHT.bold, color: BLACK, letterSpacing: -0.3, textAlign: 'center' },
+  label: { fontSize: FSIZE.lg, fontWeight: WEIGHT.extrabold, color: BLACK, letterSpacing: -0.3, textAlign: 'center' },
 })
 
 type Provider = 'google' | 'apple' | 'email' | null
@@ -166,12 +166,13 @@ export function LoginForm({
         <Text style={styles.desc}>
           {t('auth.linkSentDesc').replace('{email}', sentTo)}
         </Text>
-        <View style={{ marginTop: 20 }}>
+        <View style={{ marginTop: MD }}>
           <Button
             label={t('auth.linkResend')}
             variant="secondary"
             size="lg"
             onPress={() => { setSentTo(null); setEmail(sentTo) }}
+            iconStart={<MailIcon color={BLACK_STRONG} />}
           />
         </View>
       </View>
@@ -180,7 +181,7 @@ export function LoginForm({
 
   return (
     <View style={styles.body}>
-      <View style={{ gap: 10 }}>
+      <View style={{ gap: SM }}>
         <GoogleButton
           onPress={handleGoogle}
           loading={loading === 'google'}
@@ -191,9 +192,10 @@ export function LoginForm({
             label={t('auth.signInApple')}
             onPress={handleApple}
             disabled={loading !== null && loading !== 'apple'}
+            loading={loading === 'apple'}
             silentDisabled
             variant="dark"
-            iconStart={loading === 'apple' ? <Spinner /> : <AppleIcon />}
+            iconStart={<AppleIcon />}
           />
         )}
       </View>
@@ -206,10 +208,7 @@ export function LoginForm({
 
       <View style={[styles.inputWrap, emailError && styles.inputWrapError]}>
         <TextInput
-          style={[
-            styles.input,
-            { textAlign: I18nManager.isRTL ? 'right' : 'left' },
-          ]}
+          style={styles.input}
           value={email}
           onChangeText={txt => { setEmail(txt); if (emailError) setEmailError(null) }}
           placeholder={t('auth.emailPlaceholder')}
@@ -228,7 +227,7 @@ export function LoginForm({
         <Text style={styles.errorText}>{emailError}</Text>
       ) : null}
 
-      <View style={{ marginTop: 12 }}>
+      <View style={{ marginTop: MD }}>
         <Button
           label={t('auth.sendLink')}
           onPress={handleEmail}
@@ -236,7 +235,8 @@ export function LoginForm({
           size="lg"
           loading={loading === 'email'}
           disabled={(loading !== null && loading !== 'email') || !canSendEmail}
-          silentDisabled={loading !== null && loading !== 'email'}
+          silentDisabled={loading !== null && loading !== 'email' && canSendEmail}
+          iconStart={<MailIcon />}
         />
       </View>
     </View>
@@ -245,28 +245,28 @@ export function LoginForm({
 
 const styles = StyleSheet.create({
   body: {
-    paddingHorizontal: 4,
+    paddingHorizontal: XS,
   },
   title: {
-    fontSize: FSIZE.h2,
-    fontWeight: WEIGHT.bold,
+    fontSize: FSIZE.xl,
+    fontWeight: WEIGHT.extrabold,
     color: BLACK,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   desc: {
-    marginTop: 8,
-    fontSize: FSIZE.body,
-    lineHeight: 22,
+    marginTop: SM,
+    fontSize: FSIZE.md,
+    lineHeight: lh(FSIZE.md),
     color: BLACK_STRONG,
     textAlign: 'center',
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 18,
-    marginBottom: 14,
+    gap: SM,
+    marginTop: MD,
+    marginBottom: MD,
   },
   dividerLine: {
     flex: 1,
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     backgroundColor: BLACK_MID,
   },
   dividerText: {
-    fontSize: FSIZE.small,
+    fontSize: FSIZE.sm,
     color: BLACK_STRONG,
     letterSpacing: 0.2,
   },
@@ -284,20 +284,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: BORDER_SOFT,
     backgroundColor: WHITE,
-    paddingHorizontal: 16,
+    paddingHorizontal: MD,
     justifyContent: 'center',
   },
   inputWrapError: {
     borderColor: DESTRUCTIVE_MUTED,
   },
   input: {
-    fontSize: FSIZE.input,
+    fontSize: FSIZE.md,
     color: BLACK,
     padding: 0,
+    textAlign: 'center',
   },
   errorText: {
-    marginTop: 8,
-    fontSize: FSIZE.small,
+    marginTop: SM,
+    fontSize: FSIZE.sm,
     color: DESTRUCTIVE,
     textAlign: 'center',
   },
@@ -305,10 +306,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: 999,
     backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: MD,
   },
 })

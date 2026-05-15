@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useEffect, type ReactNode } from 'react'
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated'
+import Svg, { Circle, Path } from 'react-native-svg'
 import { Text } from './AppText'
 import { FONT_SCALE } from '../fonts'
-import { SINGLE, RADIUS, BUTTON_MIN_HEIGHT } from '../tokens'
-import { WHITE, BLACK, PRIMARY, PRIMARY_PRESS, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM, PREMIUM_PRESS } from '../colors'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON } from '../tokens'
+import { WHITE, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
-// through this component so the press feedback and disabled state stay
-// identical everywhere.
+// through this component so the appearance and disabled state stay identical
+// everywhere.
 //
-// Press feedback: a quick scale-down followed by a spring-back bump, driven
-// natively so it stays smooth even when the JS thread is busy with the
-// in-flight action that the press kicks off. During loading the button
-// stays in its pressed (darker) fill so it reads as "working" without a
-// shaky/bouncy cue.
+// No press animation: a tap fires onPress without any visual cue beyond the
+// natural touch responder semantics. Loading replaces the start-position icon
+// with a spinner painted in the label's color; the fill never shifts.
 //
 // Tap target is built on raw View responder callbacks rather than Pressable:
 // RN 0.81's Pressability has an aggressive cancel-on-movement threshold that
@@ -22,11 +22,29 @@ import { WHITE, BLACK, PRIMARY, PRIMARY_PRESS, BLACK_SOFT, BLACK_STRONG, DESTRUC
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'destructive' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary'
+type Variant = 'primary' | 'secondary' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
 type Tone = 'positive'
+
+// Spinner painted in the button's text color — drops into the iconStart slot
+// while a tap is in flight so the press never alters the fill.
+function ButtonSpinner({ color, size = ICON.xl }: { color: string; size?: number }) {
+  const rotation = useSharedValue(0)
+  useEffect(() => {
+    rotation.value = withRepeat(withTiming(360, { duration: 600, easing: Easing.linear }), -1, false)
+  }, [])
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
+  return (
+    <Animated.View style={[{ width: size, height: size }, animStyle]}>
+      <Svg width={size} height={size} viewBox="0 0 22 22">
+        <Circle cx={11} cy={11} r={8} stroke={color} strokeOpacity={0.3} strokeWidth={2.5} fill="none" />
+        <Path d="M 11 3 A 8 8 0 0 1 19 11" stroke={color} strokeWidth={2.5} strokeLinecap="round" fill="none" />
+      </Svg>
+    </Animated.View>
+  )
+}
 
 export function Button({
   label,
@@ -38,16 +56,16 @@ export function Button({
   tone,
   silentDisabled,
   iconStart,
-  iconEnd,
+  footer,
   multiline,
   style,
 }: {
   label: string
   onPress: () => void
   disabled?: boolean
-  // In-flight server wait. Blocks taps like `disabled` but keeps the
-  // button in its pressed (darker) fill so it reads as "working" rather
-  // than dimmed or shaking.
+  // In-flight server wait. Blocks taps like `disabled`. The icon slot at the
+  // start of the label morphs into a spinner painted in the label color; no
+  // fill change, no shake, no fade.
   loading?: boolean
   variant?: Variant
   size?: Size
@@ -58,97 +76,52 @@ export function Button({
   // visual flicker as the user sees every button go gray for a frame.
   silentDisabled?: boolean
   iconStart?: ReactNode
-  iconEnd?: ReactNode
+  // Optional strip docked to the bottom edge of the button, full width,
+  // clipped to the rounded corners. Used for the page2 broadcast cooldown
+  // and the invite waiting timer (small time text + horizontal progress bar)
+  // so the timer reads as part of the button itself, not a separate row.
+  footer?: ReactNode
   // Allow the label to wrap to two lines. Strings should embed `\n` at the
   // split point. Disables auto-shrink so both lines render at full size.
   multiline?: boolean
   // Per-call container overrides (e.g. a larger borderRadius for hero buttons).
   style?: StyleProp<ViewStyle>
 }) {
-  const scale = useRef(new Animated.Value(1)).current
-  const heartbeat = useRef(new Animated.Value(1)).current
-  const [pressed, setPressed] = useState(false)
-
-  useEffect(() => {
-    if (loading) {
-      const anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(heartbeat, { toValue: 0.55, duration: 300, useNativeDriver: true }),
-          Animated.timing(heartbeat, { toValue: 1, duration: 450, useNativeDriver: true }),
-        ])
-      )
-      anim.start()
-      return () => anim.stop()
-    } else {
-      heartbeat.setValue(1)
-    }
-  }, [loading])
-
   const blocked = disabled || loading
-
-  const pressIn = () => {
-    setPressed(true)
-    Animated.timing(scale, {
-      toValue: 0.96,
-      duration: 90,
-      useNativeDriver: true,
-    }).start()
-  }
-
-  const pressOut = () => {
-    setPressed(false)
-    Animated.spring(scale, {
-      toValue: 1,
-      friction: 4,
-      tension: 140,
-      useNativeDriver: true,
-    }).start()
-  }
 
   const base = SIZE[size]
   const skin = VARIANT[variant]
-  // Tone only overrides the fill/pressed fill of the primary variant. For
+  // Tone only overrides the fill of the primary variant. For
   // secondary/destructive the tone is ignored — they already carry their
   // own semantic color.
   const toneSkin = variant === 'primary' && tone ? TONE[tone] : null
+  const textColor = skin.text.color
+  // While loading, swap the start-position icon (or insert one if none was
+  // provided) with a spinner in the label color. End-position icons stay.
+  const startIcon = loading ? <ButtonSpinner color={textColor} /> : iconStart
 
   return (
-    <Animated.View
-      collapsable={false}
-      // Only bind opacity to the heartbeat Animated.Value while the button is
-      // actually pulsing. With useNativeDriver:true, calling setValue(1) on
-      // transition back to non-loading does not always propagate to the JS
-      // render path on the same frame — so the View kept rendering at the
-      // last animated value (e.g. 0.6) even after loading became false. The
-      // visual symptom: a freshly transitioned button (notif popup → location
-      // popup) looked dimmed/disabled despite being clickable.
-      style={[styles.wrap, { transform: [{ scale }] }, loading && { opacity: heartbeat }]}
+    <View
+      style={[
+        styles.wrap,
+        styles.btn,
+        base.btn,
+        skin.btn,
+        toneSkin?.btn,
+        disabled && !loading && !silentDisabled && styles.disabled,
+        footer ? styles.btnWithFooter : null,
+        style,
+      ]}
+      onStartShouldSetResponder={() => !blocked}
+      onResponderRelease={() => { if (!blocked) onPress() }}
     >
-      <View
-        style={[
-          styles.btn,
-          base.btn,
-          skin.btn,
-          toneSkin?.btn,
-          (pressed || loading) && (toneSkin?.pressed ?? skin.pressed),
-          disabled && !loading && !silentDisabled && styles.disabled,
-          style,
-        ]}
-        onStartShouldSetResponder={() => !blocked}
-        onResponderGrant={pressIn}
-        onResponderRelease={() => {
-          pressOut()
-          if (!blocked) onPress()
-        }}
-        onResponderTerminate={pressOut}
-      >
-        {iconStart ? (
-          <View pointerEvents="none" style={styles.iconStart}>
-            {iconStart}
-          </View>
-        ) : null}
-        {iconEnd ? (
-          <View style={styles.labelRow} pointerEvents="none">
+        {/* Label area — sized identically whether or not a footer is present.
+            Splitting it from the outer btn means a button-with-footer reads
+            as "regular button + extra strip below" rather than "regular button
+            with the label squashed up to make room". */}
+        <View pointerEvents="none" style={[styles.labelArea, base.labelArea]}>
+          <View style={styles.labelRow}>
+            {startIcon ? <View>{startIcon}</View> : null}
             <Text
               style={[styles.text, base.text, skin.text]}
               numberOfLines={multiline ? 2 : 1}
@@ -158,21 +131,14 @@ export function Button({
             >
               {label}
             </Text>
-            <View>{iconEnd}</View>
           </View>
-        ) : (
-          <Text
-            style={[styles.text, base.text, skin.text]}
-            numberOfLines={multiline ? 2 : 1}
-            adjustsFontSizeToFit={!multiline}
-            minimumFontScale={0.85}
-            maxFontSizeMultiplier={FONT_SCALE.ui}
-          >
-            {label}
-          </Text>
-        )}
-      </View>
-    </Animated.View>
+        </View>
+        {footer ? (
+          <View pointerEvents="none" style={styles.footer}>
+            {footer}
+          </View>
+        ) : null}
+    </View>
   )
 }
 
@@ -181,72 +147,75 @@ const styles = StyleSheet.create({
   // in home/login span full width, and the dialog row split evenly when
   // wrapped in flex:1 slots.
   wrap: { alignSelf: 'stretch' },
-  btn: {
+  btn: {},
+  disabled: { opacity: 0.45 },
+  // The label region of the button. Owns the size invariants (minHeight,
+  // paddingVertical) so a button-with-footer keeps the exact same label-area
+  // geometry as a plain button — the footer just adds height below.
+  labelArea: {
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  disabled: { opacity: 0.45 },
-  iconStart: {
-    position: 'absolute',
-    start: 20,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+    paddingHorizontal: SM * 2,
   },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: SM,
   },
   text: {
     letterSpacing: -0.2,
     textAlign: 'center',
     textAlignVertical: 'center',
     includeFontPadding: false,
+    flexShrink: 1,
+  },
+  // Clips the footer strip to the button's rounded corners. No extra padding
+  // here — the footer is a sibling of the label area and adds its own height,
+  // so the label area stays identical to a plain button.
+  btnWithFooter: {
+    overflow: 'hidden',
+  },
+  footer: {
+    alignSelf: 'stretch',
   },
 })
 
-const SIZE: Record<Size, { btn: object; text: object }> = {
+const SIZE: Record<Size, { btn: object; labelArea: object; text: object }> = {
   lg: {
-    btn: { borderRadius: RADIUS, minHeight: BUTTON_MIN_HEIGHT, paddingVertical: SINGLE },
-    text: { fontSize: 16, fontWeight: '700' },
+    btn: { borderRadius: RADIUS },
+    labelArea: { minHeight: BUTTON_MIN_HEIGHT, paddingVertical: SM },
+    text: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold },
   },
   md: {
-    btn: { borderRadius: RADIUS, paddingVertical: SINGLE },
-    text: { fontSize: 15, fontWeight: '700' },
+    btn: { borderRadius: RADIUS },
+    labelArea: { paddingVertical: SM },
+    text: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold },
   },
 }
 
-const TONE: Record<Tone, { btn: object; pressed: object }> = {
+const TONE: Record<Tone, { btn: object }> = {
   positive: {
     btn: { backgroundColor: PRIMARY },
-    pressed: { backgroundColor: PRIMARY_PRESS },
   },
 }
 
-const VARIANT: Record<Variant, { btn: object; pressed?: object; text: object }> = {
+const VARIANT: Record<Variant, { btn: object; text: { color: string; fontWeight?: string } }> = {
   primary: {
     btn: { backgroundColor: PRIMARY },
-    pressed: { backgroundColor: PRIMARY_PRESS },
     text: { color: WHITE },
   },
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
-    pressed: { backgroundColor: BLACK_SOFT },
-    text: { color: BLACK_STRONG, fontWeight: '600' },
-  },
-  destructive: {
-    btn: { backgroundColor: BLACK },
-    text: { color: WHITE },
+    text: { color: BLACK_STRONG, fontWeight: WEIGHT.semibold },
   },
   softDestructive: {
     btn: { backgroundColor: BLACK_SOFT },
-    pressed: { backgroundColor: BLACK_SOFT },
     text: { color: DESTRUCTIVE },
   },
   soft: {
     btn: { backgroundColor: BLACK_STRONG },
-    pressed: { backgroundColor: BLACK_STRONG },
     text: { color: WHITE },
   },
   dark: {
@@ -255,14 +224,12 @@ const VARIANT: Record<Variant, { btn: object; pressed?: object; text: object }> 
   },
   premium: {
     btn: { backgroundColor: PREMIUM },
-    pressed: { backgroundColor: PREMIUM_PRESS },
     text: { color: WHITE },
   },
   // White button sized for placement on top of a PRIMARY-colored surface.
   // The white fill keeps the CTA legible against the coral background.
   onPrimary: {
     btn: { backgroundColor: WHITE },
-    pressed: { backgroundColor: BLACK_SOFT },
     text: { color: PRIMARY },
   },
 }
