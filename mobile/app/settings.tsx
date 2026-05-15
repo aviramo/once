@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Path, Line, Circle, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
-import { useUserStore } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -22,18 +22,17 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, lh } from '../src/tokens'
-import { BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_MUTED, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon, AppCalendarIcon, MailIcon } from '../src/components/icons'
+import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
-import { Chip } from '../src/components/Chip'
+import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
-const TAP_SLOP = 10
 // 16/9 floor for the profile card. The card is flush with the screen edges,
 // so its width equals the screen width.
 const PROFILE_CARD_MIN_HEIGHT = Math.round(Dimensions.get('window').width * 9 / 16)
@@ -90,7 +89,7 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
 // ── Local aliases for shared icons (keep call sites unchanged) ────────────
 
 const FIELD_ICON_STROKE = BLACK_STRONG
-const DESTRUCTIVE_COLOR = DESTRUCTIVE_MUTED
+const DESTRUCTIVE_COLOR = WHITE_MID
 
 // ── Select Field Types ─────────────────────────────────────────────────────
 
@@ -176,6 +175,7 @@ function SelectFieldRow({
   grouped,
   tone = 'default',
   size = 'default',
+  locked,
 }: {
   label?: string
   subtitle?: string
@@ -186,6 +186,9 @@ function SelectFieldRow({
   grouped?: boolean
   tone?: 'default' | 'accent'
   size?: 'default' | 'large'
+  /** Dims the row content to signal the field is currently unavailable.
+   * The row stays pressable so onPress can explain why. */
+  locked?: boolean
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
   const tapProps = useTapResponder(onPress, (pressed) => {
@@ -201,13 +204,14 @@ function SelectFieldRow({
       style={[
         grouped ? styles.selectRowInner : styles.selectRow,
         isLarge && styles.selectRowLarge,
+        locked && styles.selectRowLocked,
       ]}
       {...tapProps}
     >
       <RNAnimated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, {
-          backgroundColor: BLACK_SOFT,
+          backgroundColor: WHITE_SOFT,
           opacity: press,
           borderRadius: grouped ? 0 : RADIUS,
         }]}
@@ -297,15 +301,14 @@ function calcAge(birthDate: string): number {
 
 type Tab = 'preferences' | 'profile' | 'app'
 
-// Per-tab glyph used in the avatar preview row.
-const TAB_ICON_SIZE = 20
+// Per-tab glyph used in the avatar preview row. Sized to ICON.lg.
 
 function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   const stroke = color
   if (tab === 'preferences') {
     // Magnifying glass
     return (
-      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Circle cx="11" cy="11" r="7" />
         <Line x1="16.5" y1="16.5" x2="21" y2="21" />
       </Svg>
@@ -314,7 +317,7 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   if (tab === 'profile') {
     // Person — head + shoulders
     return (
-      <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Circle cx="12" cy="8" r="4" />
         <Path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
       </Svg>
@@ -322,7 +325,7 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   }
   // app → 2×2 grid (app icon)
   return (
-    <Svg width={TAB_ICON_SIZE} height={TAB_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="3" y="3" width="8" height="8" rx="2" />
       <Rect x="13" y="3" width="8" height="8" rx="2" />
       <Rect x="3" y="13" width="8" height="8" rx="2" />
@@ -341,6 +344,8 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
   const [genderPopupVisible, setGenderPopupVisible] = useState(false)
   const [locationPopupVisible, setLocationPopupVisible] = useState(false)
+  const [locationLockedInfoVisible, setLocationLockedInfoVisible] = useState(false)
+  const [locationPauseBusy, setLocationPauseBusy] = useState(false)
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
   const ageSliderMin = Math.max(18, age - 20)
@@ -356,10 +361,20 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
-  const isCustomLocation = profile.location_custom === true
-  const locationDisplayValue = isCustomLocation && profile.location_label
-    ? profile.location_label
+  const locationType = resolveLocationType(profile)
+  const locationDisplayValue =
+    locationType === 'home' ? (profile.location_label || t('settings.locationHome'))
+    : locationType === 'work' ? (profile.location_label || t('settings.locationWork'))
     : t('settings.locationDevice')
+  // An active page1/page2 interaction freezes the location field: 'watching'
+  // (looking at a candidate), 'waiting' (outgoing invite), or 'pending'
+  // (incoming invite on page2). Changing location mid-interaction would shift
+  // the distance shown to the other party under an in-flight interaction. The
+  // row stays tappable but explains why instead of opening the picker.
+  const locationLocked =
+    profile.state === 'watching' ||
+    profile.state === 'waiting' ||
+    profile.relations?.page2State === 'pending'
 
   return (
     <View style={styles.section}>
@@ -369,15 +384,18 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.range')}
           displayValue={formatRadius(radius)}
           onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon />}
+          icon={<RadiusIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.location')}
           displayValue={locationDisplayValue}
-          onPress={() => setLocationPopupVisible(true)}
-          icon={<MapPinIcon />}
+          locked={locationLocked}
+          onPress={() => locationLocked
+            ? setLocationLockedInfoVisible(true)
+            : setLocationPopupVisible(true)}
+          icon={<MapPinIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -385,7 +403,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.ageRange')}
           displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
           onPress={() => setAgePopupVisible(true)}
-          icon={<SlidersIcon />}
+          icon={<SlidersIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -393,7 +411,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.preferredGender')}
           displayValue={genderDisplayValue}
           onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon />}
+          icon={<GenderIcon color={WHITE} />}
         />
       </View>
       <RadiusPopup
@@ -430,24 +448,56 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
       />
       <LocationPopup
         visible={locationPopupVisible}
-        isCustom={isCustomLocation}
+        currentType={locationType}
         onSelectDevice={(lat, lng) => {
-          update({ location_custom: false, location_label: null })
+          update({ location_type: 'device', location_custom: false, location_label: null })
+          // Exiting to device mode must always take effect, even when the
+          // popup couldn't get a GPS fix right now (common straight after a
+          // fixed address — GPS was idle so there's no recent fix). Flip the
+          // type regardless; include the fix only if we have one. The home
+          // shell re-acquires + broadcasts the real device location the
+          // moment location_type turns 'device'. location_custom is mirrored
+          // for pre-typed mobile builds (see BACKWARD_COMPAT.md).
+          const hasFix = Number.isFinite(lat) && Number.isFinite(lng)
           invoke('app/location', {
-            location: { latitude: lat, longitude: lng },
+            ...(hasFix ? { location: { latitude: lat, longitude: lng } } : {}),
+            location_type: 'device',
             location_custom: false,
             location_label: null,
           }).catch(console.error)
         }}
-        onSelectCustom={(label, lat, lng) => {
-          update({ location_custom: true, location_label: label })
+        onSelectTyped={(type, label, lat, lng) => {
+          update({ location_type: type, location_custom: true, location_label: label })
           invoke('app/location', {
             location: { latitude: lat, longitude: lng },
+            location_type: type,
             location_custom: true,
             location_label: label,
           }).catch(console.error)
         }}
         onDismiss={() => setLocationPopupVisible(false)}
+      />
+      {/* Location is frozen during an active interaction. The only way to
+          change it is to switch to pause mode, which ends that interaction
+          (same app/pause transition the GameModeCard toggle commits). This
+          dialog explains that and is itself the pause confirmation: the
+          destructive Pause button performs app/pause directly. */}
+      <ConfirmDialog
+        visible={locationLockedInfoVisible}
+        icon={<PauseIcon color={PRIMARY} size={32} />}
+        title={t('settings.locationLockedTitle')}
+        description={t('settings.locationLockedDesc')}
+        confirmLabel={t('settings.gameMode.offConfirmButton')}
+        draggable
+        busy={locationPauseBusy}
+        onCancel={() => { if (!locationPauseBusy) setLocationLockedInfoVisible(false) }}
+        onConfirm={async () => {
+          if (locationPauseBusy) return
+          setLocationPauseBusy(true)
+          try { await invoke('app/pause', {}) } catch (e) { console.error(e) }
+          setLocationPauseBusy(false)
+          setLocationLockedInfoVisible(false)
+        }}
       />
     </View>
   )
@@ -504,10 +554,10 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     : '—'
 
   const nameAndGender = [profile.name, gender !== '—' ? gender : null].filter(Boolean).join(', ') || '—'
-  const detailRows: Array<{ label: string; value: string; renderIcon: (color: string) => React.ReactNode }> = [
-    { label: 'nameGender',            value: nameAndGender, renderIcon: color => <UserIcon color={color} size={16} /> },
-    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—', renderIcon: color => <AppCalendarIcon color={color} size={16} /> },
-    { label: t('settings.email'),     value: user.email ?? '—', renderIcon: color => <MailIcon color={color} size={16} /> },
+  const detailRows: Array<{ label: string; value: string }> = [
+    { label: 'nameGender',            value: nameAndGender },
+    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
+    { label: t('settings.email'),     value: user.email ?? '—' },
   ]
 
   return (
@@ -517,25 +567,36 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       onClosed={handleClosed}
       contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) }}
     >
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, paddingBottom: MD }}>
+      {/* Identity details as a plain stacked text list (PRIMARY on the white
+          sheet), not chip pills — one line per field, like a list. */}
+      <View style={styles.accountPopupList}>
         {detailRows.map(r => (
-          <Chip key={r.label} text={r.value} renderIcon={r.renderIcon} />
+          <Text
+            key={r.label}
+            style={styles.accountPopupListItem}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {r.value}
+          </Text>
         ))}
       </View>
       <View style={styles.accountActionsCard}>
         <View style={styles.accountActionRow} {...signOutTap}>
-          <SignOutIcon color={BLACK_STRONG} />
+          <SignOutIcon color={BLACK} />
           {/* Wrap label in flex:1 row so the Text auto-flips to the logical
               start side on iOS RTL. See the note above GameModeCard. */}
           <View style={styles.accountActionTextWrap}>
-            <Text style={styles.accountActionText} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
+            <Text style={[styles.accountActionText, { color: BLACK }]} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
           </View>
         </View>
-        <View style={styles.accountActionDivider} />
+        {/* Soft dark hairline — the shared WHITE_SOFT divider is invisible on
+            the white popup surface. */}
+        <View style={[styles.accountActionDivider, { backgroundColor: BLACK_SOFT }]} />
         <View style={styles.accountActionRow} {...deleteTap}>
-          <TrashIcon color={DESTRUCTIVE_MUTED} />
+          <TrashIcon color={BLACK_MID} />
           <View style={styles.accountActionTextWrap}>
-            <Text style={[styles.accountActionText, styles.accountActionTextDestructive]} numberOfLines={1} ellipsizeMode="clip">{t('settings.deleteAccount')}</Text>
+            <Text style={[styles.accountActionText, { color: BLACK_MID }]} numberOfLines={1} ellipsizeMode="clip">{t('settings.deleteAccount')}</Text>
           </View>
         </View>
       </View>
@@ -544,7 +605,6 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
 }
 
 // ── App Tab ────────────────────────────────────────────────────────────────
-// AppCalendarIcon imported from '../src/components/icons'.
 
 function AgeRangePopup({
   visible, ageMin, ageMax, sliderMin, sliderMax, onSave, onDismiss,
@@ -558,6 +618,8 @@ function AgeRangePopup({
   const insets = useSafeAreaInsets()
   const [fromText, setFromText] = useState(String(ageMin))
   const [toText, setToText] = useState(String(ageMax))
+  const [fromSel, setFromSel] = useState(false)
+  const [toSel, setToSel] = useState(false)
   const [kbHeight, setKbHeight] = useState(0)
   const fromRef = useRef<RNTextInput>(null)
   const toRef = useRef<RNTextInput>(null)
@@ -566,6 +628,8 @@ function AgeRangePopup({
     if (visible) {
       setFromText(String(ageMin))
       setToText(String(ageMax))
+      setFromSel(false)
+      setToSel(false)
     }
   }, [visible, ageMin, ageMax])
 
@@ -602,11 +666,14 @@ function AgeRangePopup({
           <Text style={agePopupStyles.fieldLabel}>{t('settings.ageFrom')}</Text>
           <TextInput
             ref={fromRef}
-            style={agePopupStyles.input}
+            style={[agePopupStyles.input, fromSel && agePopupStyles.inputSelected]}
             value={fromText}
             onChangeText={v => setFromText(v.replace(/[^0-9]/g, '').slice(0, 2))}
             keyboardType="number-pad"
             selectTextOnFocus
+            selectionColor={PRIMARY}
+            cursorColor={PRIMARY}
+            onSelectionChange={e => setFromSel(e.nativeEvent.selection.end > e.nativeEvent.selection.start)}
             maxLength={2}
             returnKeyType="next"
             onSubmitEditing={() => toRef.current?.focus()}
@@ -617,11 +684,14 @@ function AgeRangePopup({
           <Text style={agePopupStyles.fieldLabel}>{t('settings.ageTo')}</Text>
           <TextInput
             ref={toRef}
-            style={agePopupStyles.input}
+            style={[agePopupStyles.input, toSel && agePopupStyles.inputSelected]}
             value={toText}
             onChangeText={v => setToText(v.replace(/[^0-9]/g, '').slice(0, 2))}
             keyboardType="number-pad"
             selectTextOnFocus
+            selectionColor={PRIMARY}
+            cursorColor={PRIMARY}
+            onSelectionChange={e => setToSel(e.nativeEvent.selection.end > e.nativeEvent.selection.start)}
             maxLength={2}
             returnKeyType="done"
             onSubmitEditing={() => Keyboard.dismiss()}
@@ -648,7 +718,7 @@ const agePopupStyles = StyleSheet.create({
   },
   field: {
     flex: 1,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PRIMARY_BG,
     borderRadius: RADIUS,
     paddingVertical: SM,
     paddingHorizontal: SM,
@@ -656,15 +726,18 @@ const agePopupStyles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+    color: BLACK,
   },
   input: {
     fontSize: TEXT.xxl,
     fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    color: PRIMARY,
     textAlign: 'center',
     padding: 0,
     minWidth: 60,
+  },
+  inputSelected: {
+    color: WHITE,
   },
 })
 
@@ -722,11 +795,13 @@ function RadiusPopup({
 
 // Single-select row used by RadiusPopup / GenderPopup. Label + check icon
 // when selected; full-width tap target; subtle divider between rows.
-function SelectListRow({ label, selected, isLast, onPress }: {
+function SelectListRow({ label, selected, isLast, onPress, icon }: {
   label: string
   selected: boolean
   isLast: boolean
   onPress: () => void
+  /** Optional leading glyph (e.g. the location-anchor icon in the picker). */
+  icon?: React.ReactNode
 }) {
   const [pressed, setPressed] = useState(false)
   const tapProps = useTapResponder(onPress, setPressed)
@@ -737,6 +812,7 @@ function SelectListRow({ label, selected, isLast, onPress }: {
             the logical start side (right in RTL). See the wrap-in-row note
             above GameModeCard — more reliable on iOS than textAlign alone. */}
         <View style={selectListStyles.labelWrap}>
+          {icon ? <View style={selectListStyles.rowIcon}>{icon}</View> : null}
           <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
         </View>
         <View style={selectListStyles.checkSlot}>
@@ -755,9 +831,10 @@ const selectListStyles = StyleSheet.create({
     paddingVertical: MD, paddingHorizontal: MD,
   },
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  rowIcon: { marginEnd: SM },
   label: { fontSize: TEXT.md, color: BLACK },
   labelSelected: { color: PRIMARY, fontWeight: WEIGHT.semibold },
-  checkSlot: { width: ICON.xl, height: ICON.xl, alignItems: 'center', justifyContent: 'center' },
+  checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
 })
 
@@ -871,12 +948,14 @@ async function placeDetails(placeId: string, sessionToken: string, language: str
 }
 
 function LocationPopup({
-  visible, isCustom, onSelectDevice, onSelectCustom, onDismiss,
+  visible, currentType, onSelectDevice, onSelectTyped, onDismiss,
 }: {
   visible: boolean
-  isCustom: boolean
-  onSelectDevice: (lat: number, lng: number) => void
-  onSelectCustom: (label: string, lat: number, lng: number) => void
+  /** The user's current anchor — highlights the matching row. */
+  currentType: LocationType
+  onSelectDevice: (lat?: number, lng?: number) => void
+  /** Picked Home or Work + the chosen address. */
+  onSelectTyped: (type: 'home' | 'work', label: string, lat: number, lng: number) => void
   onDismiss: () => void
 }) {
   const insets = useSafeAreaInsets()
@@ -896,6 +975,9 @@ function LocationPopup({
   const [deviceBusy, setDeviceBusy] = useState(false)
   const [deviceError, setDeviceError] = useState<string | null>(null)
   const [selecting, setSelecting] = useState(false)
+  // Which typed anchor the user is picking an address for. Set when they tap
+  // the Home or Work row; consumed when a prediction is selected.
+  const [pendingType, setPendingType] = useState<'home' | 'work'>('home')
   const sessionTokenRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
   // Android keyboard tracking — Modal + statusBarTranslucent prevents the
@@ -914,6 +996,7 @@ function LocationPopup({
     setSearching(false)
     setDeviceBusy(false)
     setSelecting(false)
+    setPendingType(currentType === 'work' ? 'work' : 'home')
     sessionTokenRef.current = ''
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
   }, [visible])
@@ -984,12 +1067,14 @@ function LocationPopup({
         if (perm === 'denied') openLocPermSettings()
         return
       }
+      // Best-effort fix. If GPS can't deliver one this instant (typical right
+      // after custom mode, when GPS has been idle), still switch to device
+      // mode — onSelectDevice flips location_custom off and the home shell
+      // re-acquires + broadcasts the real location once tracking resumes.
+      // Permission/services were already verified above, so a null here is a
+      // transient cold-GPS miss, not a hard block.
       const coords = await getLocation()
-      if (!coords) {
-        setDeviceError(t('settings.locationDeviceFailedDesc'))
-        return
-      }
-      onSelectDevice(coords.lat, coords.lng)
+      onSelectDevice(coords?.lat, coords?.lng)
       onDismiss()
     } finally {
       setDeviceBusy(false)
@@ -1010,7 +1095,7 @@ function LocationPopup({
         return
       }
       const label = details.label || p.description
-      onSelectCustom(label, details.lat, details.lng)
+      onSelectTyped(pendingType, label, details.lat, details.lng)
       onDismiss()
     } finally {
       setSelecting(false)
@@ -1041,15 +1126,24 @@ function LocationPopup({
         <>
           <SelectListRow
             label={t('settings.locationDevice')}
-            selected={!isCustom}
+            icon={<PinGlyph color={currentType === 'device' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            selected={currentType === 'device'}
             isLast={false}
             onPress={handleMyLocation}
           />
           <SelectListRow
-            label={t('settings.locationCustom')}
-            selected={isCustom}
+            label={t('settings.locationHome')}
+            icon={<HomeGlyph color={currentType === 'home' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            selected={currentType === 'home'}
+            isLast={false}
+            onPress={() => { setPendingType('home'); setStep('address') }}
+          />
+          <SelectListRow
+            label={t('settings.locationWork')}
+            icon={<WorkGlyph color={currentType === 'work' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            selected={currentType === 'work'}
             isLast={true}
-            onPress={() => setStep('address')}
+            onPress={() => { setPendingType('work'); setStep('address') }}
           />
           {deviceBusy ? (
             <View style={locationPopupStyles.statusRow}>
@@ -1112,7 +1206,7 @@ const locationPopupStyles = StyleSheet.create({
   statusText: { fontSize: TEXT.sm, color: BLACK_STRONG },
   errorText: {
     paddingHorizontal: MD, paddingTop: MD,
-    fontSize: TEXT.sm, color: DESTRUCTIVE_MUTED,
+    fontSize: TEXT.sm, color: WHITE_MID,
     lineHeight: lh(TEXT.sm),
   },
   // Address-step content fills the (now tall) cardWrap.
@@ -1132,7 +1226,7 @@ const locationPopupStyles = StyleSheet.create({
     textAlign: isRTL ? 'right' : 'left',
   },
   searchSpinner: {
-    width: ICON.xl, height: ICON.xl,
+    width: ICON.xxl, height: ICON.xxl,
     alignItems: 'center', justifyContent: 'center',
   },
 })
@@ -1669,12 +1763,12 @@ const familyStyles = StyleSheet.create({
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: 999,
-    borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed',
+    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
   kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
 
   // + Add kid / + Add week button.
-  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
   addKidLabel: { fontSize: TEXT.sm, color: PRIMARY },
 
   weekHeader: { marginBottom: MD, gap: XS },
@@ -1688,7 +1782,7 @@ const familyStyles = StyleSheet.create({
   dayBubble: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: 1.5, borderColor: BLACK_SOFT,
+    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
   dayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
@@ -1699,7 +1793,7 @@ const familyStyles = StyleSheet.create({
   dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
   dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
-  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
   addWeekLabel: { fontSize: TEXT.sm, color: PRIMARY },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the gray cards expanding/collapsing inside
@@ -1735,163 +1829,6 @@ const familyStyles = StyleSheet.create({
   triOptionPillSelected: { backgroundColor: PRIMARY },
   triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
   triOptionPillLabelSelected: { color: WHITE },
-})
-
-// ── Bio edit popup ──────────────────────────────────────────────────────────
-// Bottom sheet shown when the user taps the bio bubble on their own profile
-// preview. Reuses the same TextInput look from the onboarding bio step
-// (gray pill, centered text, bottom-right counter, character-min hint), with
-// a Save button anchored below.
-
-const BIO_MAX = 150
-const BIO_MIN = 20
-
-export function BioEditPopup({
-  visible, initial, saving, onDismiss, onSave,
-}: {
-  visible: boolean
-  initial: string
-  saving: boolean
-  onDismiss: () => void
-  onSave: (value: string) => void
-}) {
-  const insets = useSafeAreaInsets()
-  const screenH = useRef(Dimensions.get('window').height).current
-  const sheetMaxH = Math.round(screenH * 0.88)
-
-  const [bio, setBio] = useState(initial)
-  const [kbHeight, setKbHeight] = useState(0)
-  const inputRef = useRef<RNTextInput>(null)
-
-  useEffect(() => {
-    if (!visible) return
-    setBio(initial)
-    // Match the onboarding step's auto-focus once the sheet has settled.
-    const id = setTimeout(() => inputRef.current?.focus(), 280)
-    return () => clearTimeout(id)
-  }, [visible, initial])
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const showSub = Keyboard.addListener(showEvent, e => setKbHeight(e.endCoordinates?.height ?? 0))
-    const hideSub = Keyboard.addListener(hideEvent, () => setKbHeight(0))
-    return () => { showSub.remove(); hideSub.remove() }
-  }, [])
-
-  const trimmed = bio.trim().length
-  const remaining = BIO_MAX - bio.length
-  const belowMin = trimmed < BIO_MIN
-  const valid = !belowMin
-  const dirty = bio.trim() !== initial.trim()
-  const canSave = valid && dirty && !saving
-
-  const handleSavePress = () => {
-    if (!canSave) return
-    onSave(bio.trim().replace(/\n{3,}/g, '\n\n'))
-  }
-
-  return (
-    <BottomSheet
-      visible={visible}
-      onDismiss={onDismiss}
-      disableBackdropDismiss={saving}
-      keyboardAvoiding
-      cardWrapStyle={[
-        { maxHeight: sheetMaxH },
-        Platform.OS !== 'ios' && kbHeight > 0 ? { marginBottom: kbHeight } : undefined,
-      ]}
-      contentStyle={bioPopupStyles.sheet}
-    >
-      <ScrollView
-        style={{ flexShrink: 1 }}
-        contentContainerStyle={bioPopupStyles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={bioPopupStyles.field}>
-          <TextInput
-            ref={inputRef}
-            style={bioPopupStyles.input}
-            value={bio}
-            onChangeText={(v) => setBio(v.slice(0, BIO_MAX))}
-            maxLength={BIO_MAX}
-            multiline
-            textAlignVertical="top"
-            placeholder={t('bio.placeholder')}
-            placeholderTextColor={BLACK_MID}
-            editable={!saving}
-          />
-          <Text style={[bioPopupStyles.counter, !belowMin && remaining < 20 && bioPopupStyles.counterWarn]}>
-            {belowMin ? t('bio.min') : remaining}
-          </Text>
-        </View>
-        <Text style={bioPopupStyles.tip}>{t('bio.tip')}</Text>
-      </ScrollView>
-
-      <View style={[bioPopupStyles.saveBar, { paddingBottom: kbHeight > 0 ? SM * 4 : Math.max(insets.bottom, SM) }]}>
-        <Button
-          label={t('settings.save')}
-          onPress={handleSavePress}
-          disabled={!canSave}
-          loading={saving}
-          variant="primary"
-          tone="positive"
-          size="lg"
-          iconStart={<CheckIcon color={WHITE} size={22} />}
-        />
-      </View>
-    </BottomSheet>
-  )
-}
-
-const bioPopupStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  shadowGradient: { height: 60, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: BLACK },
-  sheet: {
-    backgroundColor: WHITE,
-    paddingTop: RADIUS,
-    paddingHorizontal: SM,
-    flexShrink: 1,
-  },
-  dragHandle: {
-    alignSelf: 'center',
-    width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: BLACK_SOFT,
-    marginBottom: MD,
-  },
-  scrollContent: { paddingTop: SM, paddingBottom: SM },
-  field: {
-    backgroundColor: BLACK_SOFT,
-    borderRadius: RADIUS,
-    paddingHorizontal: MD,
-    paddingTop: MD,
-    paddingBottom: LG,
-    minHeight: 140,
-  },
-  input: {
-    fontSize: TEXT.md,
-    color: BLACK,
-    padding: 0,
-    minHeight: 96,
-    textAlign: 'center',
-  },
-  counter: {
-    position: 'absolute',
-    end: 12,
-    bottom: 8,
-    fontSize: TEXT.sm,
-    color: BLACK_STRONG,
-  },
-  counterWarn: { color: DESTRUCTIVE },
-  tip: {
-    marginTop: MD,
-    fontSize: TEXT.sm,
-    color: BLACK_STRONG,
-    textAlign: 'center',
-  },
-  saveBar: { paddingTop: SM, paddingHorizontal: 0 },
 })
 
 // ── Photo edit popup ────────────────────────────────────────────────────────
@@ -2044,8 +1981,11 @@ export function PreviewFieldPage({
   const [photoPopupImageIndex, setPhotoPopupImageIndex] = useState<number | null>(null)
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
   const [familySaving, setFamilySaving] = useState(false)
-  const [bioPopupVisible, setBioPopupVisible] = useState(false)
   const [bioSaving, setBioSaving] = useState(false)
+  // True while the OS image picker is launching from the profile-card round
+  // button. launchImageLibraryAsync has a cold-start delay; swap the
+  // add-photo glyph for a spinner until the native picker is up.
+  const [photoPicking, setPhotoPicking] = useState(false)
   // Tracks deferred uploads in flight so persistImages can await them before
   // invoking app/profile (preventing the server from receiving a filename
   // whose upload has not yet landed in storage).
@@ -2104,6 +2044,7 @@ export function PreviewFieldPage({
       distance: 0,
       last_seen: new Date().toISOString(),
       location_custom: profile.location_custom ?? null,
+      location_type: profile.location_type ?? null,
     }
   }, [profile, user?.id])
 
@@ -2159,12 +2100,13 @@ export function PreviewFieldPage({
   // in the background. persistImages() awaits the in-flight upload before
   // invoking app/profile.
   const handleAddPhoto = async () => {
-    if (!user || !profile) return
+    if (!user || !profile || photoPicking) return
     const ImagePicker = await import('expo-image-picker')
+    setPhotoPicking(true)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    })
+    }).finally(() => setPhotoPicking(false))
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
 
@@ -2254,8 +2196,12 @@ export function PreviewFieldPage({
   const familyInitial = profile?.family ?? null
   const bioInitial = profile?.bio ?? ''
 
-  const handleSaveBio = async (value: string) => {
+  // Commit handler for the inline bio editor (MatchCard's BioField). Called
+  // once on blur with the already-normalized text (>= BIO_MIN, or null for a
+  // cleared bio). No popup to close — the field stays in place.
+  const handleSaveBio = async (next: string | null) => {
     if (bioSaving) return
+    const value = next ?? ''
     setBioSaving(true)
     try {
       if (inFlightUploads.current.size > 0) {
@@ -2263,7 +2209,6 @@ export function PreviewFieldPage({
       }
       update({ bio: value.length === 0 ? null : value })
       await invoke('app/profile', { bio: value })
-      setBioPopupVisible(false)
     } catch (e) {
       console.error('Save bio error:', e)
     } finally {
@@ -2312,17 +2257,19 @@ export function PreviewFieldPage({
                 setPhotoPopupImageIndex(imageIndex)
               }}
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
-              onBioTap={() => { tap(); setBioPopupVisible(true) }}
+              bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
               actions={(() => {
                 const list: CardAction[] = []
                 if (photoAddEnabled) list.push({
                   key: 'photo',
-                  icon: <AddPhotoIcon size={ICON.huge} />,
+                  icon: photoPicking
+                    ? <ActivityIndicator color={WHITE} />
+                    : <AddPhotoIcon stroke={WHITE} size={ICON.huge} />,
                   onPress: () => { tap(); handleAddPhoto() },
                 })
                 if (familyAddEnabled) list.push({
                   key: 'family',
-                  icon: <FamilyKidsIcon size={ICON.huge} />,
+                  icon: <FamilyKidsIcon stroke={WHITE} size={ICON.huge} />,
                   onPress: () => { tap(); setFamilyPopupVisible(true) },
                 })
                 return list
@@ -2352,13 +2299,6 @@ export function PreviewFieldPage({
         onDismiss={() => setFamilyPopupVisible(false)}
         onSave={handleSaveFamily}
       />
-      <BioEditPopup
-        visible={bioPopupVisible}
-        initial={bioInitial}
-        saving={bioSaving}
-        onDismiss={() => setBioPopupVisible(false)}
-        onSave={handleSaveBio}
-      />
     </View>
   )
 }
@@ -2367,7 +2307,7 @@ export function PreviewFieldPage({
 // Used by ProfileSectionPage and AppSectionPage to render a second-level
 // ── App Inline Content ─────────────────────────────────────────────────────
 
-function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const router = useRouter()
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
@@ -2410,11 +2350,13 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
         k.startsWith('chatCache_') || k.startsWith('chatLastOpened_') || k.startsWith('chatLastRead_'),
       )
       if (chatKeys.length > 0) await AsyncStorage.multiRemove(chatKeys)
-      if (onBack) onBack()
+      // Server response is back: leave the menu pane and land on page1 (Home).
+      if (onNavigateHome) onNavigateHome()
+      else if (onBack) onBack()
       else if (router.canGoBack()) router.back()
     } catch (e) { console.error(e) }
     finally { setResetting(false) }
-  }, [resetting, onBack, router])
+  }, [resetting, onBack, onNavigateHome, router])
 
   const resetTap = useTapResponder(onReset)
 
@@ -2427,7 +2369,7 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={BLACK_STRONG} />}
+          icon={<UserIcon color={WHITE} />}
         />
         {profile.data?.role === 'ADMIN' && (
           <>
@@ -2453,21 +2395,20 @@ function AppInlineContent({ onBack, onOpenSubPage: _onOpenSubPage }: { onBack?: 
       />
       <ConfirmDialog
         visible={signOutDialog}
+        icon={<SignOutIcon color={PRIMARY} size={32} />}
         title={t('settings.signOutConfirmTitle')}
         description={tg('settings.signOutConfirmDesc', profile.is_male)}
         confirmLabel={tg('settings.signOutYes', profile.is_male)}
-        soft
         onCancel={() => setSignOutDialog(false)}
         onConfirm={onSignOutConfirmed}
         draggable
       />
       <ConfirmDialog
         visible={deleteDialog}
+        icon={<TrashIcon color={PRIMARY} size={32} />}
         title={t('settings.deleteConfirmTitle')}
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
-        destructive
-        confirmIcon={<TrashIcon color={WHITE} size={22} />}
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
@@ -2515,10 +2456,14 @@ function GameModeCard() {
   // live partner/profile on either side. Anything else counts as Game mode.
   const isOff = page1State === 'locked' && page2State === 'locked'
     && !page1HasPartner && !page2InviteObj
-  // Pending invite or in-chat are transient states whose own pane owns the
-  // resolution flow. Disable the button while those are open.
-  const disabled = page2State === 'pending' || page1State === 'chat' || page1State === 'waiting'
-  const isActive = !isOff && !disabled
+  // An active invitation (outgoing waiting / incoming pending) or a live chat
+  // on EITHER page is a transient state whose own pane owns the resolution
+  // flow. Hide the toggle entirely while any of those are open — it would be
+  // inert and just clutter the photo.
+  const hidden =
+    page1State === 'waiting' || page1State === 'chat'
+    || page2State === 'pending' || page2State === 'chat'
+  const isActive = !isOff && !hidden
 
   // Whether switching to pause mode would notify someone: broadcasting in
   // flight, watchers in page2.profiles[], a pending invite incoming, a
@@ -2544,7 +2489,7 @@ function GameModeCard() {
 
   const handlePress = useCallback(() => {
     if (busy) return
-    if (disabled) { tapWarning(); return }
+    if (hidden) { tapWarning(); return }
     tap()
     if (isOff) {
       performToggle('app/resume')
@@ -2553,7 +2498,7 @@ function GameModeCard() {
     } else {
       setConfirmOpen(true)
     }
-  }, [busy, disabled, isOff, hasSideEffects, performToggle])
+  }, [busy, hidden, isOff, hasSideEffects, performToggle])
 
   // Currently active → glyph is Pause. Otherwise → Play (invites resume).
   const showPause = isActive
@@ -2569,15 +2514,14 @@ function GameModeCard() {
   const confirmTitle = sharedConfirm?.title ?? t('settings.gameMode.offConfirmTitle')
   const confirmDesc = sharedConfirm?.description ?? tg('settings.gameMode.offConfirmDesc', profile?.is_male)
   const confirmLabel = sharedConfirm?.confirmLabel ?? t('settings.gameMode.offConfirmButton')
-  const confirmIcon = sharedConfirm?.confirmIcon ?? <PauseIcon color={WHITE} size={22} />
-  const confirmDestructive = sharedConfirm?.destructive ?? true
+  const topIcon = sharedConfirm?.topIcon ?? <PauseIcon color={PRIMARY} size={32} />
 
   // Hidden entirely while a transient interaction (pending invite, outgoing
   // waiting, in-chat) owns the resolution flow elsewhere. The overlay would
   // be non-interactive in those states and just clutter the photo. The
   // ConfirmDialog can only open from the interactive path, so unmounting it
   // alongside is safe.
-  if (disabled) return null
+  if (hidden) return null
 
   return (
     <>
@@ -2588,7 +2532,7 @@ function GameModeCard() {
       >
         <RoundButton onPress={handlePress}>
           {busy ? (
-            <ActivityIndicator size="small" color={WHITE} />
+            <ActivityIndicator size="small" color={PRIMARY} />
           ) : showPause ? (
             <PauseIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />
           ) : (
@@ -2602,8 +2546,7 @@ function GameModeCard() {
         title={confirmTitle}
         description={confirmDesc}
         confirmLabel={confirmLabel}
-        destructive={confirmDestructive}
-        confirmIcon={confirmIcon}
+        icon={topIcon}
         onCancel={() => { if (!busy) setConfirmOpen(false) }}
         onConfirm={() => { performToggle('app/pause'); setConfirmOpen(false) }}
         busy={busy}
@@ -2613,9 +2556,9 @@ function GameModeCard() {
   )
 }
 
-type SettingsPageProps = { topInset?: number; onBack?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
+type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
 
-export default function SettingsPage({ topInset = 0, onBack, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
+export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
   const router = useRouter()
   const { profile } = useUserStore()
   const { user } = useAuthStore()
@@ -2668,7 +2611,7 @@ export default function SettingsPage({ topInset = 0, onBack, focused: _focused =
             <PreferencesContent onOpenSubPage={onOpenSubPage} />
 
             <View style={{ marginTop: XL }}>
-              <AppInlineContent onBack={onBack} onOpenSubPage={onOpenSubPage} />
+              <AppInlineContent onBack={onBack} onNavigateHome={onNavigateHome} onOpenSubPage={onOpenSubPage} />
             </View>
           </View>
 
@@ -2681,7 +2624,7 @@ export default function SettingsPage({ topInset = 0, onBack, focused: _focused =
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: WHITE },
+  rootOuter: { flex: 1, backgroundColor: PRIMARY },
   root: { flex: 1 },
 
   header: {
@@ -2692,11 +2635,11 @@ const styles = StyleSheet.create({
 
   tabBar: {
     flex: 1, flexDirection: 'row', marginHorizontal: SM,
-    backgroundColor: BLACK_SOFT, borderRadius: RADIUS, padding: XS,
+    backgroundColor: WHITE_SOFT, borderRadius: RADIUS, padding: XS,
   },
   tabItem: { flex: 1, paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS },
-  tabItemActive: { backgroundColor: BLACK_STRONG },
-  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: BLACK_STRONG },
+  tabItemActive: { backgroundColor: WHITE },
+  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: WHITE },
 
   tabScroll: { flex: 1 },
   // No horizontal padding here: the profile card extends edge-to-edge, flush
@@ -2708,9 +2651,9 @@ const styles = StyleSheet.create({
   section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: MD },
   sectionLabelRow: { flexDirection: 'row', marginTop: LG, marginBottom: SM, paddingHorizontal: SM },
-  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG, letterSpacing: 1, textAlign: 'center' },
-  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: BLACK, marginBottom: SM },
-  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: BLACK },
+  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
+  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: WHITE, marginBottom: SM },
+  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: WHITE },
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, justifyContent: 'flex-end', width: 44 * 3 + SM * 2 },
@@ -2718,48 +2661,48 @@ const styles = StyleSheet.create({
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: SM },
   slider: { width: '100%', height: 40 },
-  sliderEndLabel: { fontSize: TEXT.sm, color: BLACK_MID, minWidth: 22, textAlign: 'center' },
+  sliderEndLabel: { fontSize: TEXT.sm, color: WHITE_MID, minWidth: 22, textAlign: 'center' },
 
   genderRow: { flexDirection: 'row', gap: SM, marginTop: SM },
 
   previewWrap: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
   },
 
-  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: BLACK_SOFT },
+  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: WHITE_SOFT },
   textInputWrapInner: { paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM },
-  textInput: { fontSize: TEXT.md, color: BLACK, padding: 0, textAlign: 'center', minHeight: 56 },
-  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: BLACK_MID },
+  textInput: { fontSize: TEXT.md, color: WHITE, padding: 0, textAlign: 'center', minHeight: 56 },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: WHITE_MID },
 
   // Account tab
   infoCard: {
     marginTop: SM, borderRadius: RADIUS, overflow: 'hidden',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WHITE_SOFT,
   },
   infoRowLast: { borderBottomWidth: 0 },
-  infoLabel: { fontSize: TEXT.md, color: BLACK_STRONG },
+  infoLabel: { fontSize: TEXT.md, color: WHITE_STRONG },
   infoValue: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE,
     flexShrink: 1, marginStart: MD,
   },
 
   accountLinkRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
-    backgroundColor: BLACK_SOFT, borderRadius: RADIUS,
+    backgroundColor: WHITE_SOFT, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD,
     marginBottom: MD,
   },
   // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
   // the subtle hairline `accountActionDivider` between siblings.
   accountLinksCard: {
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
     marginBottom: MD,
   },
   // Relative-positioned wrapper so the GameModeCard overlay anchors to the
@@ -2778,7 +2721,7 @@ const styles = StyleSheet.create({
     width: '100%', minHeight: PROFILE_CARD_MIN_HEIGHT,
     flexDirection: 'column', justifyContent: 'space-between',
     overflow: 'hidden',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   profileCardTopSpacer: { height: MD + BUTTON_MIN_HEIGHT + MD },
 
@@ -2792,7 +2735,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: BLACK_SOFT },
+  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
   profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
   // flexDirection:'row' makes the single Text child sit on the logical
   // start side (right in RTL, left in LTR) — same pattern documented above
@@ -2801,7 +2744,7 @@ const styles = StyleSheet.create({
   profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
   // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
   // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
-  accentCard: { backgroundColor: WHITE },
+  accentCard: { backgroundColor: PRIMARY },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
@@ -2817,17 +2760,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   accountActionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
     marginStart: MD,
   },
   accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  accountActionText: { fontSize: TEXT.md, color: BLACK, fontWeight: WEIGHT.semibold },
-  accountActionTextDestructive: { color: DESTRUCTIVE_MUTED },
+  accountActionText: { fontSize: TEXT.md, color: WHITE, fontWeight: WEIGHT.semibold },
+  accountActionTextDestructive: { color: WHITE_MID },
+  // Account popup identity block: stacked text list (one field per line) in
+  // PRIMARY on the white sheet, replacing the old chip pills.
+  accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
+  accountPopupListItem: {
+    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG,
+    // 'left' = start of writing direction (physically right in RTL after
+    // auto-flip) — same correct-in-both-directions value the Chip text uses.
+    textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr',
+  },
 
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: SM,
-    backgroundColor: WHITE, borderRadius: RADIUS,
+    backgroundColor: PRIMARY, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
     shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
@@ -2839,20 +2791,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   selectRowLarge: { paddingVertical: MD },
+  selectRowLocked: { opacity: 0.45 },
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
   selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', columnGap: SM },
   selectRowLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: MD },
-  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
-  selectRowSubtitle: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS },
+  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  selectRowValue: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowValue: { fontSize: TEXT.md, color: PRIMARY_LIGHT, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   selectRowAccentIcon: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
   selectRowIconWrap: { alignItems: 'center', justifyContent: 'center' },
@@ -2860,21 +2813,21 @@ const styles = StyleSheet.create({
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,
     borderRadius: RADIUS, overflow: 'hidden',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   subPageOptionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
   },
-  subPageOptionLabel: { fontSize: TEXT.lg, color: BLACK },
-  subPageCheckmark: { fontSize: TEXT.lg, color: PRIMARY, fontWeight: WEIGHT.semibold },
+  subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
+  subPageCheckmark: { fontSize: TEXT.lg, color: PRIMARY_LIGHT, fontWeight: WEIGHT.semibold },
   optionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
     marginStart: MD,
   },
   subPageDesc: {
     marginHorizontal: SM, marginTop: MD,
-    fontSize: TEXT.sm, color: BLACK_STRONG,
+    fontSize: TEXT.sm, color: WHITE_STRONG,
     textAlign: 'center', lineHeight: lh(TEXT.sm),
   },
 })

@@ -1,20 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, View, ActivityIndicator, Pressable } from 'react-native'
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
+import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, Platform } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { PullScrollView } from './HomeCard'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
-import { Text } from './AppText'
-import type { Profile } from '../stores/userStore'
+import { Text, TextInput } from './AppText'
+import { t } from '../i18n'
+import { BIO_MIN, BIO_MAX, normalizeBio } from '../lib/bio'
+import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
-import { Chip, PinIcon, HomeIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
+import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, QuoteIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
+import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatDistance, isDistanceHere } from '../lib/units'
 import { formatLastSeen, isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -49,6 +51,98 @@ function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: (
         </RoundButton>
       ))}
     </View>
+  )
+}
+
+// ── Inline bio editing (own-profile preview) ───────────────────────────────
+// Replaces the old "tap bio → BottomSheet popup" flow. The bio bubble itself
+// becomes the editor: a multiline TextInput styled byte-identically to the
+// read-only bio Text, so when it isn't focused it looks exactly like static
+// text. Tapping anywhere drops the caret at that character natively. There is
+// no save button — editing auto-commits on blur (keyboard dismissed / tap
+// outside / focus lost). Sub-min input is discarded and reverts to the last
+// committed value, matching the popup's old "can't save below minimum" rule.
+export type BioEdit = {
+  /** Last committed bio (server truth, '' when unset). */
+  value: string
+  /** Server round-trip in flight — locks the field. */
+  saving?: boolean
+  /** Called with the normalized bio once on blur, only when it changed and
+   * is at least BIO_MIN chars. `null` is reserved for a cleared bio (never
+   * produced today since sub-min reverts, but the contract allows it). */
+  onCommit: (next: string | null) => void
+}
+
+function BioField({
+  edit,
+  onFocusRequested,
+}: {
+  edit: BioEdit
+  /** Ask the parent card to scroll this field above the keyboard. */
+  onFocusRequested: () => void
+}) {
+  const { value, saving, onCommit } = edit
+  const [draft, setDraft] = useState(value)
+  const [focused, setFocused] = useState(false)
+  // Last value we consider authoritative locally — server truth until the
+  // user commits a change. Kept in a ref so blur logic reads the latest.
+  const committedRef = useRef(value)
+
+  // External value changes (Realtime profile refresh) sync into the draft
+  // only while not actively editing, so a server echo can't yank text out
+  // from under the user's caret.
+  useEffect(() => {
+    if (!focused) {
+      committedRef.current = value
+      setDraft(value)
+    }
+  }, [value, focused])
+
+  const trimmedLen = draft.trim().length
+  const belowMin = trimmedLen < BIO_MIN
+  const remaining = BIO_MAX - draft.length
+
+  const handleBlur = useCallback(() => {
+    setFocused(false)
+    const next = normalizeBio(draft)
+    const prev = normalizeBio(committedRef.current)
+    if (next === prev) {
+      setDraft(committedRef.current)
+      return
+    }
+    // Below the minimum (includes fully cleared) → discard, restore previous.
+    if (next.trim().length < BIO_MIN) {
+      setDraft(committedRef.current)
+      return
+    }
+    committedRef.current = next
+    setDraft(next)
+    onCommit(next)
+  }, [draft, onCommit])
+
+  return (
+    <>
+      <TextInput
+        style={[styles.aboutText, styles.bioInput]}
+        value={draft}
+        onChangeText={v => setDraft(v.slice(0, BIO_MAX))}
+        maxLength={BIO_MAX}
+        multiline
+        scrollEnabled={false}
+        textAlign="center"
+        textAlignVertical="top"
+        placeholder={t('bio.placeholder')}
+        placeholderTextColor={BLACK_MID}
+        editable={!saving}
+        onFocus={() => { setFocused(true); onFocusRequested() }}
+        onBlur={handleBlur}
+      />
+      {focused ? (
+        <Text style={[styles.bioCounter, !belowMin && remaining < 20 && styles.bioCounterWarn]}>
+          {belowMin ? t('bio.min') : remaining}
+        </Text>
+      ) : null}
+    </>
   )
 }
 
@@ -156,24 +250,7 @@ function LoadingImage({
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function MatchCard({
-  match,
-  bottomInset = 0,
-  hideTime = false,
-  onReady,
-  topBlock,
-  onTopBlockShown,
-  footerBlock,
-  footerBg,
-  onPhotoTap,
-  onFamilyTap,
-  onBioTap,
-  actions,
-  isForKids,
-  viewerFamily,
-  viewerLocationCustom,
-  self = false,
-}: {
+type MatchCardProps = {
   match: Profile
   bottomInset?: number
   hideTime?: boolean
@@ -199,8 +276,11 @@ export function MatchCard({
   onPhotoTap?: (imageIndex: number) => void
   /** When provided, the family/kids card becomes tappable (own-profile preview). */
   onFamilyTap?: () => void
-  /** When provided, the bio bubble becomes tappable (own-profile preview). */
-  onBioTap?: () => void
+  /** When provided (and `self`), the bio bubble becomes an inline editor:
+   * tap-to-place-caret, keyboard-aware scroll, auto-save on blur. Replaces
+   * the old onBioTap popup. The bio section renders even when the bio is
+   * empty in this mode, so the user can add one in place. */
+  bioEdit?: BioEdit
   /** Overlay action buttons stacked at the bottom-right of the hero photo,
    * starting at the heart's anchor and growing upward. When omitted, a
    * single heart button is rendered (tapping scrolls to the end of the
@@ -215,17 +295,41 @@ export function MatchCard({
    * sites so the family card can show the kid-free schedule overlap. Own
    * profile preview omits this — no overlap shown there. */
   viewerFamily?: FamilyData | null
-  /** Viewer's own location_custom flag. When true, the distance is computed
-   * against the viewer's manually-picked address — chip swaps PinIcon →
-   * HomeIcon and the suffix becomes "from the location you set" instead of
-   * "from you". The match-side custom (`match.location_custom`) also flips
-   * the icon to home (distance was computed against the match's fixed
-   * address), but doesn't change the suffix. */
-  viewerLocationCustom?: boolean | null
+  /** Viewer's (A's) own location anchor type. The distance chip's icon is
+   * driven by the *subject's* (B = `match`) anchor (pin/home/work); the text
+   * stays live ("away") only when BOTH viewer and subject are 'device',
+   * otherwise it flips to the passive "from the set location" (the number is
+   * anchored to a fixed address, not live proximity). Pass
+   * resolveLocationType(ownProfile). */
+  viewerLocationType?: LocationType | null
   /** First-person rendering for the own-profile preview ("I have 3 kids"
    * vs. the default third-person "Has 3 kids" used on remote match cards). */
   self?: boolean
-}) {
+}
+
+/** Imperative handle exposed to parents that need to drive the card's
+ * internal scroll (e.g. the skip-hint dialog scrolling back to the top so
+ * the user can perform the swipe-down-to-skip gesture). */
+export type MatchCardHandle = { scrollToTop: () => void }
+
+export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function MatchCard({
+  match,
+  bottomInset = 0,
+  hideTime = false,
+  onReady,
+  topBlock,
+  onTopBlockShown,
+  footerBlock,
+  footerBg,
+  onPhotoTap,
+  onFamilyTap,
+  bioEdit,
+  actions,
+  isForKids,
+  viewerFamily,
+  viewerLocationType,
+  self = false,
+}: MatchCardProps, ref) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
   // when image filenames are identical). Memo on the joined filename list
@@ -245,6 +349,11 @@ export function MatchCard({
   type CardSection =
     | { type: 'photo'; url: string; hash?: string; imageIndex: number; key: string }
     | { type: 'bio'; value: string; key: string }
+  // Inline-edit mode: the bio bubble is an editor. Stable boolean (not the
+  // bioEdit object, which settings recreates each render) so the sections
+  // memo doesn't thrash. In this mode the bio section always renders — even
+  // with no bio yet — so the user can add one in place.
+  const bioEditable = self && !!bioEdit
   const sections = useMemo((): CardSection[] => {
     const images = match.images ?? []
     const photos: CardSection[] = images
@@ -258,10 +367,10 @@ export function MatchCard({
       }))
     const built: CardSection[] = []
     if (photos.length > 0) built.push(photos[0])
-    if (match.bio) built.push({ type: 'bio', value: match.bio, key: 'bio' })
+    if (match.bio || bioEditable) built.push({ type: 'bio', value: match.bio ?? '', key: 'bio' })
     for (let i = 1; i < photos.length; i++) built.push(photos[i])
     return built
-  }, [match.user_id, match.images, imageUrls, match.bio])
+  }, [match.user_id, match.images, imageUrls, match.bio, bioEditable])
 
   const photoCount = sections.filter(s => s.type === 'photo').length
   const loadedCount = useRef(0)
@@ -281,8 +390,12 @@ export function MatchCard({
   const ready = cardH > 0
   const timeIso = match.last_seen
   const timeStr = hideTime ? '' : formatLastSeen(timeIso, match.is_male)
-  const customLocation = !!viewerLocationCustom || !!match.location_custom
-  const distStr = formatDistance(match.distance, match.is_male, customLocation)
+  // Icon = the subject's (B = match) anchor. Text = live only when both the
+  // viewer (A) and the subject are 'device'; any fixed address on either side
+  // makes the number anchored, not live proximity.
+  const subjectLocationType = resolveLocationType(match)
+  const viewerType: LocationType = viewerLocationType ?? 'device'
+  const distStr = formatDistance(match.distance, match.is_male, viewerType, subjectLocationType)
   const displayTitle = match.title
 
   const familyChipText = useMemo(
@@ -302,6 +415,51 @@ export function MatchCard({
   const wasAbsentRef = useRef(false)
   const scrollRef = useAnimatedRef<any>()
   const scrollYRef = useRef(0)
+
+  // ── Inline-bio keyboard handling ─────────────────────────────────────────
+  // The bio bubble is a TextInput inside this scroll view. On focus we scroll
+  // it to the top of the card's viewport (which sits just under the home
+  // TabStrip) so the whole bubble is visible above the keyboard. Because the
+  // app uses softwareKeyboardLayoutMode "resize", the window shrinks from the
+  // bottom and the TabStrip stays pinned — we must NOT pan/translate anything
+  // at the screen level, only scroll within this card.
+  const bioSectionYRef = useRef(0)
+  const bioFocusedRef = useRef(false)
+  const [kbHeight, setKbHeight] = useState(0)
+  const scrollBioIntoView = useCallback(() => {
+    // Land the bubble a hair below the viewport top. It's the section right
+    // after the hero, so a near-top offset is always clear of the keyboard
+    // regardless of keyboard height.
+    const target = Math.max(0, bioSectionYRef.current - MD)
+    // Defer one tick so the focus-triggered layout/resize settles first.
+    setTimeout(() => scrollRef.current?.scrollTo({ y: target, animated: true }), 60)
+  }, [])
+  const onBioFocusRequested = useCallback(() => {
+    bioFocusedRef.current = true
+    scrollBioIntoView()
+  }, [scrollBioIntoView])
+  useEffect(() => {
+    if (!bioEditable) return
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showSub = Keyboard.addListener(showEvt, e => {
+      setKbHeight(e.endCoordinates?.height ?? 0)
+      // On Android the window resizes after the keyboard shows; re-assert the
+      // scroll target so the bubble ends up correctly placed post-reflow.
+      if (bioFocusedRef.current) scrollBioIntoView()
+    })
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      bioFocusedRef.current = false
+      setKbHeight(0)
+    })
+    return () => { showSub.remove(); hideSub.remove() }
+  }, [bioEditable, scrollBioIntoView])
+
+  // Let parents drive the inner scroll back to the top (skip-hint "got it"
+  // returns the user to where the swipe-down-to-skip gesture is armed).
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => { scrollRef.current?.scrollTo({ y: 0, animated: true }) },
+  }), [])
   // Snap the scroll back to the top whenever a new profile is shown. The
   // ScrollView is the same instance across profile swaps, so a previously
   // scrolled position from card A would otherwise carry over into card B and
@@ -396,7 +554,10 @@ export function MatchCard({
   // footerBlock can claim the leftover vertical space when content < viewport.
   // When footerBlock owns the bottom we skip the container's paddingBottom —
   // the footer block already includes its own safe-area padding.
-  const contentPaddingBottom = footerBlock ? 0 : bottomInset + (endsWithPhoto ? 0 : MD)
+  // Extra bottom room while the bio keyboard is up so the field can scroll
+  // fully clear of it even when the bio is the last meaningful content.
+  const kbPad = bioEditable && kbHeight > 0 ? kbHeight : 0
+  const contentPaddingBottom = (footerBlock ? 0 : bottomInset + (endsWithPhoto ? 0 : MD)) + kbPad
 
   return (
     <View
@@ -490,7 +651,7 @@ export function MatchCard({
                 {distStr ? (
                   <View style={styles.chipsLine}>
                     <Chip
-                      renderIcon={c => customLocation ? <HomeIcon color={c} /> : <PinIcon color={c} />}
+                      renderIcon={c => subjectLocationType === 'work' ? <WorkIcon color={c} /> : subjectLocationType === 'home' ? <HomeIcon color={c} /> : <PinIcon color={c} />}
                       text={distStr}
                       tone="neutral"
                       onPhoto
@@ -547,20 +708,27 @@ export function MatchCard({
             </Animated.View>
           )
           if (section.type === 'bio') {
-            const bubble = (
-              <View style={styles.aboutBubble}>
-                <View style={styles.aboutQuoteOpen}>
-                  <QuoteIcon color={BLACK} size={ICON.xl} />
-                </View>
-                <Text style={styles.aboutText}>{section.value}</Text>
-                <View style={styles.aboutQuoteClose}>
-                  <QuoteIcon color={BLACK} size={ICON.xl} />
-                </View>
-              </View>
-            )
             return (
-              <View key={section.key} style={styles.aboutSection}>
-                {onBioTap ? <Pressable onPress={onBioTap} style={{ alignSelf: 'stretch' }}>{bubble}</Pressable> : bubble}
+              <View
+                key={section.key}
+                style={styles.aboutSection}
+                onLayout={bioEditable
+                  ? (e => { bioSectionYRef.current = e.nativeEvent.layout.y })
+                  : undefined}
+              >
+                <View style={styles.aboutBubble}>
+                  <View style={styles.aboutQuoteOpen}>
+                    <QuoteIcon color={BLACK} size={ICON.xxl} />
+                  </View>
+                  {bioEditable && bioEdit ? (
+                    <BioField edit={bioEdit} onFocusRequested={onBioFocusRequested} />
+                  ) : (
+                    <Text style={styles.aboutText}>{section.value}</Text>
+                  )}
+                  <View style={styles.aboutQuoteClose}>
+                    <QuoteIcon color={BLACK} size={ICON.xxl} />
+                  </View>
+                </View>
               </View>
             )
           }
@@ -579,7 +747,7 @@ export function MatchCard({
       </AnimatedPullScrollView>
     </View>
   )
-}
+})
 
 
 const styles = StyleSheet.create({
@@ -671,6 +839,20 @@ const styles = StyleSheet.create({
     color: BLACK,
     textAlign: 'center',
   },
+  // Layered over aboutText so the editor is visually identical to the static
+  // bio when unfocused: full bubble width (so a tap anywhere lands), no
+  // intrinsic TextInput padding, no Android font padding skew.
+  bioInput: {
+    alignSelf: 'stretch',
+    padding: 0,
+    includeFontPadding: false,
+  },
+  bioCounter: {
+    fontSize: TEXT.sm,
+    color: BLACK_STRONG,
+    textAlign: 'center',
+  },
+  bioCounterWarn: { color: DESTRUCTIVE },
   extraPhoto: {
     width: '100%',
     backgroundColor: BLACK_SOFT,

@@ -5,7 +5,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
-import { BLACK, WHITE, BLACK_SOFT } from '../colors'
+import { BLACK, WHITE, BLACK_MID } from '../colors'
 import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHADOW_GRADIENT_STOPS, SHADOW_GRADIENT_HEIGHT, DRAG_HANDLE } from '../tokens'
 
 // Single source of truth for the bottom-sheet behavior used by every popup
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     width: DRAG_HANDLE.width,
     height: DRAG_HANDLE.height,
     borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: BLACK_MID,
     marginTop: MD,
     marginBottom: MD,
   },

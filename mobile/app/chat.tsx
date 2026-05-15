@@ -16,7 +16,7 @@ import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
-import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, lh } from '../src/tokens'
+import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh } from '../src/tokens'
 import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
@@ -1913,7 +1913,7 @@ function AnimatedBubble({ style, children, animate, isMine }: {
   useEffect(() => {
     if (!animate) return
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: MOTION.fast, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
       Animated.spring(translateX, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
       Animated.spring(scale, { toValue: 1, damping: 22, stiffness: 320, useNativeDriver: true }),
@@ -1950,15 +1950,15 @@ function TypingIndicator({ visible }: { visible: boolean }) {
     if (visible) {
       setMounted(true)
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: MOTION.fast, useNativeDriver: true }),
         Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 320, useNativeDriver: true }),
         Animated.spring(scale, { toValue: 1, damping: 22, stiffness: 320, useNativeDriver: true }),
       ]).start()
     } else {
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 0, duration: 140, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 8, duration: 140, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.9, duration: 140, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: MOTION.fast, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 8, duration: MOTION.fast, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.9, duration: MOTION.fast, useNativeDriver: true }),
       ]).start(({ finished }) => { if (finished) setMounted(false) })
     }
   }, [visible])
@@ -1981,8 +1981,8 @@ function TypingDots() {
       Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(v, { toValue: 1, duration: 320, useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0, duration: 320, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 1, duration: MOTION.base, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0, duration: MOTION.base, useNativeDriver: true }),
           Animated.delay(480 - delay),
         ]),
       )
@@ -2595,7 +2595,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     maxHeight: 174,
     borderRadius: RADIUS,
-    borderWidth: 1.5,
+    borderWidth: STROKE.thin,
     borderColor: BLACK_SOFT,
     backgroundColor: WHITE,
     paddingEnd: XS,
@@ -2897,7 +2897,7 @@ const styles = StyleSheet.create({
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: 1.5, borderColor: BLACK_SOFT,
+    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
   scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
   scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },

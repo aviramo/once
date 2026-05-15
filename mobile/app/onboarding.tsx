@@ -3,21 +3,30 @@ import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, Platfor
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
+import { AppStatusBar } from '../src/components/AppStatusBar'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
 import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
+import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
-import { CheckIcon } from '../src/components/icons'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
-import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_LIGHT, BLACK_MID, BLACK_STRONG } from '../src/colors'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT } from '../src/tokens'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_STRONG, DESTRUCTIVE, PRIMARY, BLACK_MID, BLACK_STRONG } from '../src/colors'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION } from '../src/tokens'
 
 const TOTAL_STEPS = 5
+
+// Delay before auto-focusing a step's input after navigating to it. The step
+// transition slides the pager over MOTION.base; focusing an input that is
+// still mid-slide / offscreen makes Android silently drop the soft-keyboard
+// request, so every auto-focus waits for the slide to (nearly) finish. This
+// is a focus *gate*, NOT an animation duration — per tokens.ts it must not be
+// a MOTION value (retuning the slide must not silently retune this delay).
+const STEP_FOCUS_DELAY_MS = 280
+
 type DateUnit = 'dd' | 'mm' | 'yyyy'
 const DATE_ORDER: Record<string, DateUnit[]> = {
   he: ['dd', 'mm', 'yyyy'],
@@ -58,45 +67,40 @@ function GenderCard({
   onPress: () => void
 }) {
   const activeOpacity = useRef(new Animated.Value(selected ? 1 : 0)).current
-  const scale = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
     Animated.timing(activeOpacity, {
       toValue: selected ? 1 : 0,
-      duration: 220,
+      duration: MOTION.base,
       useNativeDriver: true,
     }).start()
   }, [selected])
 
   const handlePress = () => {
     tap()
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }),
-    ]).start()
     onPress()
   }
 
   return (
-    <Animated.View style={[{ flex: 1, transform: [{ scale }] }]}>
+    <View style={{ flex: 1 }}>
       <View
         style={styles.card}
         onStartShouldSetResponder={() => true}
         onResponderRelease={handlePress}
       >
         <View style={styles.cardInner}>
-          {icon(BLACK)}
+          {icon(WHITE)}
           <Text style={styles.cardLabel}>{label}</Text>
         </View>
         <Animated.View
           pointerEvents="none"
           style={[styles.cardActive, { opacity: activeOpacity }]}
         >
-          {icon(WHITE)}
+          {icon(PRIMARY)}
           <Text style={[styles.cardLabel, styles.cardLabelActive]}>{label}</Text>
         </Animated.View>
       </View>
-    </Animated.View>
+    </View>
   )
 }
 
@@ -133,9 +137,7 @@ export default function OnboardingPage() {
   const measuredOnceRef = useRef(false)
   const slideY = useRef(new Animated.Value(-(initialStep - 1) * initialPagerH)).current
   const keyboardOffset = useRef(new Animated.Value(0)).current
-  const keyboardShift = useRef(new Animated.Value(0)).current
   const [keyboardH, setKeyboardH] = useState(0)
-  const totalY = useRef(Animated.add(slideY, keyboardShift)).current
   const stepRef = useRef(step)
   const containerHRef = useRef(containerH)
   const bioSubmittingRef = useRef(false)
@@ -210,19 +212,18 @@ export default function OnboardingPage() {
       // and the keyboard frame on iOS extends through the home-indicator area.
       const h = Math.max(0, e.endCoordinates.height - insets.bottom)
       setKeyboardH(h)
-      Animated.parallel([
-        Animated.timing(keyboardOffset, { toValue: h, duration, useNativeDriver: false }),
-        Animated.timing(keyboardShift, { toValue: -h / 2, duration, useNativeDriver: true }),
-      ]).start()
+      // Only shrink the viewport from the bottom (paddingBottom). The content
+      // is top-aligned, so the focused input sits above the keyboard with no
+      // upward translate needed; translating up would push the header
+      // off-screen. (Step 5's bio lives in the absolute-fill overlay, which
+      // shrinks with the viewport via this same paddingBottom.)
+      Animated.timing(keyboardOffset, { toValue: h, duration, useNativeDriver: false }).start()
     })
     const hide = Keyboard.addListener(hideEvent, (e) => {
       if (bioSubmittingRef.current) return
       const duration = (e as any).duration ?? 250
       setKeyboardH(0)
-      Animated.parallel([
-        Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }),
-        Animated.timing(keyboardShift, { toValue: 0, duration, useNativeDriver: true }),
-      ]).start()
+      Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }).start()
     })
     return () => { show.remove(); hide.remove() }
   }, [insets.bottom])
@@ -241,12 +242,12 @@ export default function OnboardingPage() {
     if (containerH === 0) return
     Animated.timing(slideY, {
       toValue: -(step - 1) * containerH,
-      duration: 300,
+      duration: MOTION.base,
       useNativeDriver: true,
     }).start()
     Animated.timing(overlayY, {
       toValue: step === 5 ? 0 : containerH,
-      duration: 300,
+      duration: MOTION.base,
       useNativeDriver: true,
     }).start()
   }, [step, containerH])
@@ -313,16 +314,16 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (step === 2) {
-      const id = setTimeout(() => nameInputRef.current?.focus(), 0)
+      const id = setTimeout(() => nameInputRef.current?.focus(), STEP_FOCUS_DELAY_MS)
       return () => clearTimeout(id)
     }
     if (step === 3) {
       const first = dateOrder[0]
-      const id = setTimeout(() => unitRefs[first].current?.focus(), 280)
+      const id = setTimeout(() => unitRefs[first].current?.focus(), STEP_FOCUS_DELAY_MS)
       return () => clearTimeout(id)
     }
     if (step === 5) {
-      const id = setTimeout(() => bioInputRef.current?.focus(), 280)
+      const id = setTimeout(() => bioInputRef.current?.focus(), STEP_FOCUS_DELAY_MS)
       return () => clearTimeout(id)
     }
     Keyboard.dismiss()
@@ -343,8 +344,6 @@ export default function OnboardingPage() {
     return a
   })()
   const dateValid = age !== null && age >= 18 && age <= 120
-  const BIO_MAX = 150
-  const BIO_MIN = 20
   const bioRemaining = BIO_MAX - bio.length
   const bioValid = bio.trim().length >= BIO_MIN
   const canContinue =
@@ -386,7 +385,7 @@ export default function OnboardingPage() {
         await flushPromiseRef.current
         flushPromiseRef.current = null
       }
-      const bioValue = bio.trim().replace(/\n{3,}/g, '\n\n')
+      const bioValue = normalizeBio(bio)
       await invoke('app/profile', { bio: bioValue })
       useUserStore.getState().update({ bio: bioValue })
     } catch {
@@ -411,7 +410,7 @@ export default function OnboardingPage() {
   }
   const renderStep = (s: number) => {
     if (s === 1) return (
-      <View style={styles.pageCentered}>
+      <View style={styles.page}>
         <Text style={styles.title}>{t('ob.welcome')}</Text>
         <Text style={styles.subtitle}>{t('ob.whoAreYou')}</Text>
 
@@ -433,7 +432,7 @@ export default function OnboardingPage() {
     )
 
     if (s === 2) return (
-      <View style={styles.pageCentered}>
+      <View style={styles.page}>
         <Text style={styles.title}>{t('ob.nicknameStep')}</Text>
         <Text style={styles.subtitle}>{t('ob.nicknamePlaceholder')}</Text>
 
@@ -459,7 +458,6 @@ export default function OnboardingPage() {
             variant="primary"
             tone="positive"
             size="lg"
-            iconStart={<CheckIcon color={WHITE} size={22} />}
           />
         </View>
       </View>
@@ -473,13 +471,13 @@ export default function OnboardingPage() {
       const unitPlaceholder: Record<DateUnit, string> = { dd: 'DD', mm: 'MM', yyyy: 'YYYY' }
       const showMinAge = dateComplete && age !== null && age < 18
       return (
-        <View style={styles.pageCentered}>
+        <View style={styles.page}>
           <Text style={styles.title}>{t('ob.birthdate')}</Text>
           <View style={styles.subtitleRow}>
             <View style={styles.subtitleAnchor}>
               <Text style={[styles.subtitle, { marginTop: 0 }]}>{tg('ob.howOld', isMale === true)}</Text>
               <View style={{ opacity: dateValid ? 1 : 0 }}>
-                <CountBadge value={age ?? 0} color={PRIMARY} />
+                <CountBadge value={age ?? 0} color={WHITE} />
               </View>
             </View>
           </View>
@@ -502,10 +500,19 @@ export default function OnboardingPage() {
                     onChangeText={handleUnit(unit)}
                     keyboardType="number-pad"
                     maxLength={unit === 'yyyy' ? 4 : 2}
-                    placeholder={unitPlaceholder[unit]}
-                    placeholderTextColor={BLACK_MID}
                     selectTextOnFocus
                   />
+                  {/* Custom placeholder overlay: a TextInput shares one font
+                      size for placeholder + value, but the typed digits should
+                      stay large while the hint reads smaller. Render the hint
+                      as a separate, smaller Text shown only while empty; the
+                      input keeps TEXT.xl so the box height is identical whether
+                      empty or filled. */}
+                  {unitValue[unit] === '' && (
+                    <View style={styles.datePlaceholder} pointerEvents="none">
+                      <Text style={styles.datePlaceholderText}>{unitPlaceholder[unit]}</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={styles.dateUnit}>{unitLabel[unit]}</Text>
               </View>
@@ -524,7 +531,6 @@ export default function OnboardingPage() {
               variant="primary"
               tone="positive"
               size="lg"
-              iconStart={<CheckIcon color={WHITE} size={22} />}
             />
           </View>
         </View>
@@ -532,9 +538,9 @@ export default function OnboardingPage() {
     }
 
     if (s === 4) return (
-      <View style={styles.pageCentered}>
+      <View style={styles.page}>
         <Text style={styles.title}>{t('photo.title')}</Text>
-        <Text style={styles.subtitle}>{t('photo.sub')}</Text>
+        <Text style={styles.subtitle}>{tg('photo.sub', isMale === true)}</Text>
 
         <View style={styles.photoWrap} pointerEvents="box-none">
           <PhotoEditor
@@ -552,7 +558,6 @@ export default function OnboardingPage() {
             variant="primary"
             tone="positive"
             size="lg"
-            iconStart={<CheckIcon color={WHITE} size={22} />}
           />
           <Text style={styles.almostDone}>{t('photo.almostDone')}</Text>
         </View>
@@ -564,7 +569,9 @@ export default function OnboardingPage() {
       const belowMin = bioLen < BIO_MIN
       // On short screens (or any device whose remaining content height after
       // the keyboard pops up is below ~500dp) the bio textbox gets squeezed by
-      // the subtitle. Drop the subtitle in that case so the field stays usable.
+      // the surrounding copy. Drop BOTH the subtitle and the bottom tip in
+      // that case so the field + min-chars note stay usable (on tight screens
+      // the tip was overlapping the textbox / "minimum 20 chars" note).
       const tightSpace = keyboardH > 0 && (containerH - keyboardH) < 500
       return (
         <View style={styles.pageStretched}>
@@ -589,7 +596,7 @@ export default function OnboardingPage() {
             </Text>
           </View>
 
-          <Text style={styles.bioTip}>{t('bio.tip')}</Text>
+          {!tightSpace && <Text style={styles.bioTip}>{t('bio.tip')}</Text>}
 
           <View style={[styles.ctaWrap, { marginBottom: MD }]}>
             <Button
@@ -600,7 +607,6 @@ export default function OnboardingPage() {
               variant="primary"
               tone="positive"
               size="lg"
-              iconStart={<CheckIcon color={WHITE} size={22} />}
             />
           </View>
         </View>
@@ -612,11 +618,9 @@ export default function OnboardingPage() {
 
   return (
     <SafeAreaView style={styles.root}>
-      {/* Status bar matches the onboarding surface so it blends with the
-          screen instead of contrasting against it. Dark icons because the
-          background is light coral, not the saturated PRIMARY used inside
-          the home shell (where the status bar is light-on-coral). */}
-      <StatusBar style="dark" backgroundColor={PRIMARY_LIGHT} translucent={false} />
+      {/* Deep-wine PRIMARY surface: the app-wide white status-bar chrome
+          (AppStatusBar default) blends into the screen. */}
+      <AppStatusBar />
       <Animated.View style={{ flex: 1, paddingBottom: keyboardOffset }}>
         <View
           {...panResponder.panHandlers}
@@ -633,7 +637,7 @@ export default function OnboardingPage() {
           }}
         >
           {containerH > 0 && (
-            <Animated.View style={{ transform: [{ translateY: totalY }] }}>
+            <Animated.View style={{ transform: [{ translateY: slideY }] }}>
               {[1, 2, 3, 4, 5].map(s => (
                 <View key={String(s)} style={{ height: containerH }}>
                   {s !== 5 && renderedSteps.has(s) ? renderStep(s) : null}
@@ -645,7 +649,7 @@ export default function OnboardingPage() {
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: PRIMARY_LIGHT, transform: [{ translateY: overlayY }] },
+                { backgroundColor: PRIMARY, transform: [{ translateY: overlayY }] },
               ]}
               pointerEvents={step === 5 ? 'auto' : 'none'}
             >
@@ -661,24 +665,23 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: PRIMARY_LIGHT },
+  root: { flex: 1, backgroundColor: PRIMARY },
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
   page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },
-  pageCentered: { flex: 1, paddingHorizontal: LG, justifyContent: 'center' },
   pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: XL, paddingBottom: LG },
 
   title: {
     fontSize: TEXT.xxl,
     fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    color: WHITE,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   subtitle: {
     marginTop: SM,
     fontSize: TEXT.md,
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     textAlign: 'center',
   },
   subtitleRow: {
@@ -699,7 +702,7 @@ const styles = StyleSheet.create({
   card: {
     aspectRatio: 1,
     borderRadius: RADIUS,
-    backgroundColor: WHITE,
+    backgroundColor: WHITE_SOFT,
     overflow: 'hidden',
   },
   cardInner: {
@@ -710,7 +713,7 @@ const styles = StyleSheet.create({
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: PRIMARY,
+    backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,
@@ -718,15 +721,15 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    color: WHITE,
   },
-  cardLabelActive: { color: WHITE },
+  cardLabelActive: { color: PRIMARY },
 
-  ctaWrap: { marginTop: XL },
+  ctaWrap: { marginTop: LG },
   almostDone: {
     marginTop: MD,
     fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     textAlign: 'center',
   },
 
@@ -772,10 +775,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 0,
   },
+  datePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePlaceholderText: {
+    fontSize: TEXT.md,
+    fontWeight: WEIGHT.semibold,
+    color: BLACK_MID,
+    textAlign: 'center',
+  },
   dateUnit: {
     marginTop: SM,
     fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
   },
   errorText: {
     marginTop: MD,
@@ -784,13 +798,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  bioEmphasis: {
-    marginTop: MD,
-    fontSize: TEXT.md,
-    color: BLACK,
-    fontWeight: WEIGHT.extrabold,
-    textAlign: 'center',
-  },
   bioField: {
     marginTop: MD,
     backgroundColor: WHITE,
@@ -818,7 +825,7 @@ const styles = StyleSheet.create({
   bioTip: {
     marginTop: MD,
     fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     textAlign: 'center',
   },
 })

@@ -1,5 +1,6 @@
 import { getLocales } from 'expo-localization'
 import { t, tg } from '../i18n'
+import type { LocationType } from '../stores/userStore'
 
 // Distance unit system, derived once from the device locale.
 // Countries that use the imperial system for everyday distance.
@@ -22,17 +23,35 @@ export function isDistanceHere(m: number | null | undefined): boolean {
   return m != null && !isNaN(m) && m < M_HERE_THRESHOLD
 }
 
-export function formatDistance(m: number | null | undefined, isMale?: boolean | null, customLocation?: boolean | null): string {
+// The distance text is fully scenario-specific: which of the 9 viewer×subject
+// anchor combinations applies picks one of `home.dist.<ab>` (with a `{d}`
+// distance placeholder) or, when proximate, `home.near.<ab>`. `ab` is the
+// first letter of each type: d=device, h=home, w=work (e.g. 'hw' = my home ↔
+// their work). Subject-side phrasing is gendered (his/her) via tg on the
+// subject's is_male; the device/device cell has no subject pronoun so it
+// falls back to its base (non-gendered) key.
+export function formatDistance(
+  m: number | null | undefined,
+  isMale?: boolean | null,
+  viewerType: LocationType = 'device',
+  subjectType: LocationType = 'device',
+): string {
   if (m == null || isNaN(m)) return ''
-  if (isDistanceHere(m)) return tg('home.distanceHere', isMale)
-  const suffix = ` ${t(customLocation ? 'home.distanceFromYouCustom' : 'home.distanceFromYou')}`
+  const ab = `${viewerType[0]}${subjectType[0]}`
+  if (isDistanceHere(m)) return tg(`home.near.${ab}` as Parameters<typeof tg>[0], isMale)
+  let d: string
   if (units === 'imperial') {
     const miles = m / M_PER_MI
-    if (miles < 10) return `${miles.toFixed(1)} ${t('settings.miles')}${suffix}`
-    return `${Math.round(miles).toLocaleString()} ${t('settings.miles')}${suffix}`
+    d = miles < 10
+      ? `${miles.toFixed(1)} ${t('settings.miles')}`
+      : `${Math.round(miles).toLocaleString()} ${t('settings.miles')}`
+  } else if (m < 1000) {
+    d = `${Math.round(m)} ${t('settings.meter')}`
+  } else {
+    const km = m / 1000
+    d = km > 10
+      ? `${Math.round(km).toLocaleString()} ${t('settings.km')}`
+      : `${km.toFixed(1)} ${t('settings.km')}`
   }
-  if (m < 1000) return `${Math.round(m)} ${t('settings.meter')}${suffix}`
-  const km = m / 1000
-  if (km > 10) return `${Math.round(km).toLocaleString()} ${t('settings.km')}${suffix}`
-  return `${km.toFixed(1)} ${t('settings.km')}${suffix}`
+  return tg(`home.dist.${ab}` as Parameters<typeof tg>[0], isMale).replace('{d}', d)
 }

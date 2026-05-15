@@ -1,5 +1,5 @@
 import { I18nManager } from 'react-native'
-import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg'
+import Svg, { Path, Circle, Line, Polyline, Rect, G } from 'react-native-svg'
 import { BLACK, BLACK_STRONG, WHITE, PRIMARY } from '../colors'
 import { ICON, STROKE } from '../tokens'
 
@@ -25,7 +25,7 @@ export function BackIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
   )
 }
 
-export function ChevronUpIcon({ color = BLACK, size = ICON.xl }: IconProps = {}) {
+export function ChevronUpIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="6 15 12 9 18 15" />
@@ -33,7 +33,7 @@ export function ChevronUpIcon({ color = BLACK, size = ICON.xl }: IconProps = {})
   )
 }
 
-export function ChevronDownIcon({ color = BLACK, size = ICON.xl }: IconProps = {}) {
+export function ChevronDownIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="6 9 12 15 18 9" />
@@ -41,7 +41,7 @@ export function ChevronDownIcon({ color = BLACK, size = ICON.xl }: IconProps = {
   )
 }
 
-export function CheckIcon({ color = PRIMARY, size = ICON.xl }: IconProps = {}) {
+export function CheckIcon({ color = PRIMARY, size = ICON.xxl }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="5 12 10 17 19 7" />
@@ -77,15 +77,17 @@ export function CloseBoldIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}
 export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Line x1="4" y1="21" x2="4" y2="14" />
-      <Line x1="4" y1="10" x2="4" y2="3" />
-      <Line x1="12" y1="21" x2="12" y2="12" />
-      <Line x1="12" y1="8" x2="12" y2="3" />
-      <Line x1="20" y1="21" x2="20" y2="16" />
-      <Line x1="20" y1="12" x2="20" y2="3" />
-      <Line x1="1" y1="14" x2="7" y2="14" />
-      <Line x1="9" y1="8" x2="15" y2="8" />
-      <Line x1="17" y1="16" x2="23" y2="16" />
+      <G rotation={90} origin="12, 12">
+        <Line x1="4" y1="21" x2="4" y2="14" />
+        <Line x1="4" y1="10" x2="4" y2="3" />
+        <Line x1="12" y1="21" x2="12" y2="12" />
+        <Line x1="12" y1="8" x2="12" y2="3" />
+        <Line x1="20" y1="21" x2="20" y2="16" />
+        <Line x1="20" y1="12" x2="20" y2="3" />
+        <Line x1="1" y1="14" x2="7" y2="14" />
+        <Line x1="9" y1="8" x2="15" y2="8" />
+        <Line x1="17" y1="16" x2="23" y2="16" />
+      </G>
     </Svg>
   )
 }
@@ -246,7 +248,7 @@ export function FamilyKidsIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xx
 
 // ── Photo-options popup icons ──────────────────────────────────────────────
 
-export function PhotoReplaceIcon({ color, size = ICON.xl }: IconProps & { color: string }) {
+export function PhotoReplaceIcon({ color, size = ICON.xxl }: IconProps & { color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 9h13l-3-3" />
@@ -255,7 +257,7 @@ export function PhotoReplaceIcon({ color, size = ICON.xl }: IconProps & { color:
   )
 }
 
-export function PhotoTrashIcon({ color, size = ICON.xl }: IconProps & { color: string }) {
+export function PhotoTrashIcon({ color, size = ICON.xxl }: IconProps & { color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="3 6 5 6 21 6" />
@@ -300,7 +302,7 @@ export function QuestionIcon({
 
 // ── Chat-specific icons ────────────────────────────────────────────────────
 
-export function SendIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
+export function SendIcon({ color = WHITE, size = ICON.xxl }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <Path d={isRTL ? 'M22 21L1 12 22 3v7l-15 2 15 2z' : 'M2 21l21-9L2 3v7l15 2-15 2z'} />
@@ -308,7 +310,7 @@ export function SendIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
   )
 }
 
-export function MicIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
+export function MicIcon({ color = WHITE, size = ICON.xxl }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M12 1c-2.2 0-4 1.8-4 4v6c0 2.2 1.8 4 4 4s4-1.8 4-4V5c0-2.2-1.8-4-4-4z" />
@@ -321,7 +323,7 @@ export function MicIcon({ color = WHITE, size = ICON.xl }: IconProps = {}) {
 
 // ── Media transport ────────────────────────────────────────────────────────
 
-export function PlayIcon({ color = WHITE, stroke, size = ICON.xl }: IconProps & { stroke?: string } = {}) {
+export function PlayIcon({ color = WHITE, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={stroke ? STROKE.thick : 0} strokeLinejoin="round">
       <Path d="M8 5v14l11-7z" />
@@ -329,7 +331,7 @@ export function PlayIcon({ color = WHITE, stroke, size = ICON.xl }: IconProps & 
   )
 }
 
-export function PauseIcon({ color = WHITE, stroke, size = ICON.xl }: IconProps & { stroke?: string } = {}) {
+export function PauseIcon({ color = WHITE, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={stroke ? STROKE.thick : 0} strokeLinejoin="round">
       <Rect x="6" y="5" width="4" height="14" rx="1" />
@@ -352,7 +354,7 @@ export function SettingsIcon({ color = WHITE, size = ICON.md }: IconProps = {}) 
 // it reads on both PREMIUM and disabled backgrounds.
 export function MegaphoneIcon({ color = WHITE, size = 28 }: IconProps = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
       <Path d="M14 7a5 5 0 0 1 0 10" />
       <Path d="M18 5a8 8 0 0 1 0 14" />
@@ -366,7 +368,7 @@ export function MegaphoneIcon({ color = WHITE, size = 28 }: IconProps = {}) {
 // different megaphone).
 export function MegaphoneOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
       <Path d="M14 7a5 5 0 0 1 0 10" />
       <Path d="M18 5a8 8 0 0 1 0 14" />
@@ -377,7 +379,7 @@ export function MegaphoneOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
 
 export function EyeOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
       <Path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-1.67 2.68" />
       <Path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s4 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
@@ -388,9 +390,21 @@ export function EyeOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
 
 export function EyeOpenIcon({ color = WHITE, size = 28 }: IconProps = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
       <Circle cx={12} cy={12} r={3} />
+    </Svg>
+  )
+}
+
+// Speech-bubble glyph for the collapsed side tab when a chat is the active
+// surface. Same single-stroke STROKE.medium weight as the megaphone/eye
+// family it shares the tab indicator slot with, so swapping between them
+// reads as one icon morphing, not a weight jump.
+export function ChatIcon({ color = WHITE, size = 28 }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
     </Svg>
   )
 }

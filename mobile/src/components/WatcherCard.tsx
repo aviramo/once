@@ -3,11 +3,11 @@ import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, type Gestur
 import { Image } from 'expo-image'
 import { Text } from './AppText'
 import { t } from '../i18n'
-import type { Profile } from '../stores/userStore'
+import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import type { FamilyData } from '../lib/family'
-import { Chip, PinIcon, HomeIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
+import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { buildFamilyChipText } from './FamilyCard'
-import { RADII, RADIUS, SM, MD, TEXT, WEIGHT } from '../tokens'
+import { RADII, RADIUS, SM, MD, TEXT, WEIGHT, MOTION } from '../tokens'
 
 import { WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG } from '../colors'
 import { formatDistance, isDistanceHere } from '../lib/units'
@@ -30,15 +30,17 @@ type Props = {
   /** Viewer's own family data — when set, the kids chip appends the
    * kid-free schedule overlap percentage (same as MatchCard). */
   viewerFamily?: FamilyData | null
-  /** Viewer's own location_custom flag. When true, the distance is from the
-   * viewer's manually-picked address — chip swaps PinIcon → HomeIcon and the
-   * suffix becomes "from the location you set" instead of "from you". */
-  viewerLocationCustom?: boolean | null
+  /** Viewer's (A's) own location anchor type. Chip icon follows the
+   * watcher's (B's) anchor (pin/home/work); text stays live ("away") only
+   * when both sides are 'device', else the passive "from the set location".
+   * Pass resolveLocationType(ownProfile). */
+  viewerLocationType?: LocationType | null
 }
 
-export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily, viewerLocationCustom }: Props) {
-  const customLocation = !!viewerLocationCustom || !!watcher.location_custom
-  const distance = formatDistance(watcher.distance ?? undefined, watcher.is_male, customLocation)
+export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily, viewerLocationType }: Props) {
+  const subjectLocationType = resolveLocationType(watcher)
+  const viewerType: LocationType = viewerLocationType ?? 'device'
+  const distance = formatDistance(watcher.distance ?? undefined, watcher.is_male, viewerType, subjectLocationType)
   const lastSeen = formatLastSeen(watcher.last_seen, watcher.is_male)
   const online = isLastSeenJustNow(watcher.last_seen)
   const isNew = isRecentlyCreated(watcher.created_at)
@@ -54,7 +56,7 @@ export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily,
   useEffect(() => {
     Animated.timing(anim, {
       toValue: 1,
-      duration: 260,
+      duration: MOTION.base,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start()
@@ -65,7 +67,7 @@ export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily,
     exitedRef.current = true
     Animated.timing(anim, {
       toValue: 0,
-      duration: 260,
+      duration: MOTION.base,
       easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(({ finished }) => {
@@ -138,7 +140,7 @@ export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily,
             {distance ? (
               <View style={styles.chipsLine}>
                 <Chip
-                  renderIcon={color => customLocation ? <HomeIcon color={color} /> : <PinIcon color={color} />}
+                  renderIcon={color => subjectLocationType === 'work' ? <WorkIcon color={color} /> : subjectLocationType === 'home' ? <HomeIcon color={color} /> : <PinIcon color={color} />}
                   text={distance}
                   tone="neutral"
                   onPhoto

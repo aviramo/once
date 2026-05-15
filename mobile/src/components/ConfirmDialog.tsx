@@ -3,20 +3,20 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
-import { CheckIcon, CloseIcon } from './icons'
-import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, lh } from '../tokens'
+import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
 import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
+// Every decision popup in the app is this one component. The action is
+// always communicated by a single carefully-chosen icon in the tinted
+// circle above the title — never by the buttons. The primary button is a
+// plain PRIMARY label with no icon in every scenario (destructive or not);
+// the icon at the top is what tells the user what they're about to do.
 export function ConfirmDialog({
   visible,
   title,
   description,
   cancelLabel,
   confirmLabel,
-  destructive,
-  soft,
-  premium,
-  tone,
   icon,
   onCancel,
   onConfirm,
@@ -25,25 +25,17 @@ export function ConfirmDialog({
   cancelFlex,
   confirmFlex,
   draggable,
-  confirmIcon,
-  cancelIcon,
 }: {
   visible: boolean
   title: string
   description?: string
   cancelLabel?: string
   confirmLabel: string
-  destructive?: boolean
-  soft?: boolean
-  premium?: boolean
-  tone?: 'positive'
-  /** Optional icon rendered in a tinted circle above the title. */
-  icon?: ReactNode
-  /** Override for the confirm-button icon. Defaults to CloseIcon for
-   * destructive, CheckIcon otherwise. */
-  confirmIcon?: ReactNode
-  /** Override for the cancel-button icon. Defaults to CloseIcon. */
-  cancelIcon?: ReactNode
+  /** Action icon rendered in a tinted circle above the title. Required:
+   * every dialog communicates its action through this icon, since the
+   * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
+   * sized to the convention: `<XIcon color={PRIMARY} size={32} />`. */
+  icon: ReactNode
   onCancel?: () => void
   onConfirm: () => void
   busy?: boolean
@@ -68,13 +60,14 @@ export function ConfirmDialog({
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
-      contentStyle={styles.card}
+      // When draggable, the PRIMARY drag-handle bar (with its own top/bottom
+      // margins) already supplies the top breathing room — drop the card's
+      // own paddingTop so the gap above the icon isn't doubled up.
+      contentStyle={[styles.card, draggable && styles.cardDraggable]}
     >
-      {icon ? (
-        <View style={styles.iconWrap}>
-          <View style={styles.iconCircle}>{icon}</View>
-        </View>
-      ) : null}
+      <View style={styles.iconWrap}>
+        <View style={styles.iconCircle}>{icon}</View>
+      </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
 
@@ -103,7 +96,6 @@ export function ConfirmDialog({
               disabled={busy}
               loading={busy && pressed === 'cancel'}
               silentDisabled={pressed !== 'cancel'}
-              iconStart={cancelIcon ?? <CloseIcon color={BLACK_STRONG} size={22} />}
             />
           </View>
         ) : null}
@@ -111,13 +103,11 @@ export function ConfirmDialog({
           <Button
             label={confirmLabel}
             onPress={() => { setPressed('confirm'); onConfirm() }}
-            variant={destructive || soft ? 'dark' : premium ? 'premium' : 'primary'}
-            tone={!destructive && !soft && !premium ? tone : undefined}
+            variant="primary"
             size="lg"
             disabled={busy}
             loading={busy && pressed === 'confirm'}
             silentDisabled={pressed !== 'confirm'}
-            iconStart={confirmIcon ?? (destructive ? <CloseIcon color={WHITE} size={22} /> : <CheckIcon color={WHITE} size={22} />)}
           />
         </View>
       </View>
@@ -129,6 +119,9 @@ const styles = StyleSheet.create({
   card: {
     padding: LG,
     paddingTop: MD,
+  },
+  cardDraggable: {
+    paddingTop: 0,
   },
   iconWrap: {
     alignItems: 'center',
@@ -166,7 +159,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: RADII.sm,
-    borderWidth: 1.5,
+    borderWidth: STROKE.thin,
     borderColor: BLACK_MID,
     backgroundColor: WHITE,
     alignItems: 'center',

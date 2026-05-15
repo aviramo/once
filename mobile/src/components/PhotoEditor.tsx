@@ -17,9 +17,10 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SM, MD, RADIUS } from '../tokens'
+import { SM, MD, RADIUS, STROKE } from '../tokens'
 import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
+import { InfoIcon } from './icons'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
@@ -407,6 +408,10 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   // upload cell has disappeared, so re-picking the same asset still dedupes.
   const sigByFilename = useRef<Map<string, string>>(new Map())
   const [duplicateDialog, setDuplicateDialog] = useState(false)
+  // Which empty add-slot is waiting for the OS image picker to appear.
+  // launchImageLibraryAsync has a noticeable cold-start delay; show a spinner
+  // in the tapped "+" slot until the native picker is up (promise resolves).
+  const [pickingAddIdx, setPickingAddIdx] = useState<number | null>(null)
 
   const storeImages = profile?.images ?? []
   const photos = storeImages.map(e => e.normal ?? '')
@@ -486,14 +491,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     return processAndUploadPhoto(asset.uri, user.id, token)
   }
 
-  const pickPhoto = async () => {
+  const pickPhoto = async (addIdx: number) => {
     if (!user || photos.length >= 6) return
     const maxPick = 6 - photos.length
+    setPickingAddIdx(addIdx)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: maxPick,
-    })
+    }).finally(() => setPickingAddIdx(null))
     if (result.canceled || !result.assets?.length) return
 
     const sigs = await Promise.all(result.assets.map(async a => {
@@ -703,11 +709,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
               <Pressable
                 key={`add-${i}`}
                 style={photoStyles.add}
-                onPress={() => { tap(); pickPhoto() }}
+                onPress={() => { if (pickingAddIdx !== null) return; tap(); pickPhoto(i) }}
               >
-                <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={1.5} strokeLinecap="round">
-                  <Path d="M12 5v14M5 12h14" />
-                </Svg>
+                {pickingAddIdx === i ? (
+                  <ActivityIndicator size="small" color={PRIMARY} />
+                ) : (
+                  <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={1.5} strokeLinecap="round">
+                    <Path d="M12 5v14M5 12h14" />
+                  </Svg>
+                )}
               </Pressable>
             ))
           })()
@@ -715,10 +725,10 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       />
       <ConfirmDialog
         visible={duplicateDialog}
+        icon={<InfoIcon color={PRIMARY} size={32} />}
         title={t('settings.duplicatePhotoTitle')}
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}
-        soft
         onConfirm={() => setDuplicateDialog(false)}
         draggable
       />
@@ -761,7 +771,7 @@ const photoStyles = StyleSheet.create({
     width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS,
     backgroundColor: WHITE,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: BLACK_SOFT, borderStyle: 'dashed',
+    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,

@@ -7,8 +7,8 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { BLACK, WHITE, BLACK_SOFT, BLACK_STRONG, PRIMARY, BLACK_MID, DESTRUCTIVE, BORDER_SOFT, DESTRUCTIVE_MUTED, WHITE_MID } from '../colors'
-import { XS, SM, MD, RADIUS, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, lh } from '../tokens'
+import { BLACK, WHITE, PRIMARY, BLACK_MID, DESTRUCTIVE, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
+import { XS, SM, MD, RADIUS, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -43,7 +43,7 @@ function MailIcon({ color = WHITE }: { color?: string } = {}) {
 function Spinner({ dark = false }: { dark?: boolean }) {
   const rotation = useSharedValue(0)
   useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: 600, easing: Easing.linear }), -1, false)
+    rotation.value = withRepeat(withTiming(360, { duration: MOTION.spin, easing: Easing.linear }), -1, false)
   }, [])
   const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
   const arc = dark ? BLACK : WHITE
@@ -61,7 +61,7 @@ function Spinner({ dark = false }: { dark?: boolean }) {
 function GoogleButton({ onPress, loading, disabled }: { onPress: () => void; loading: boolean; disabled: boolean }) {
   return (
     <Pressable
-      style={({ pressed }) => [gBtnStyles.btn, pressed && gBtnStyles.pressed, disabled && gBtnStyles.dim]}
+      style={gBtnStyles.btn}
       onPress={onPress}
       disabled={disabled}
       accessibilityLabel={t('auth.continueGoogle')}
@@ -88,14 +88,12 @@ const gBtnStyles = StyleSheet.create({
     paddingHorizontal: BUTTON_MIN_HEIGHT,
     backgroundColor: WHITE,
     borderRadius: RADIUS,
-    borderWidth: 1.5,
+    borderWidth: STROKE.thin,
     borderColor: BORDER_SOFT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { backgroundColor: BLACK_SOFT },
-  dim: { opacity: 0.55 },
   iconSlot: { position: 'absolute', start: 20, top: 0, bottom: 0, justifyContent: 'center' },
   label: { fontSize: FSIZE.lg, fontWeight: WEIGHT.extrabold, color: BLACK, letterSpacing: -0.3, textAlign: 'center' },
 })
@@ -160,7 +158,7 @@ export function LoginForm({
     return (
       <View style={styles.body}>
         <View style={styles.successCircle}>
-          <MailIcon />
+          <MailIcon color={PRIMARY} />
         </View>
         <Text style={styles.title}>{t('auth.linkSent')}</Text>
         <Text style={styles.desc}>
@@ -169,10 +167,10 @@ export function LoginForm({
         <View style={{ marginTop: MD }}>
           <Button
             label={t('auth.linkResend')}
-            variant="secondary"
+            variant="onPrimaryGhost"
             size="lg"
             onPress={() => { setSentTo(null); setEmail(sentTo) }}
-            iconStart={<MailIcon color={BLACK_STRONG} />}
+            iconStart={<MailIcon color={WHITE} />}
           />
         </View>
       </View>
@@ -231,12 +229,12 @@ export function LoginForm({
         <Button
           label={t('auth.sendLink')}
           onPress={handleEmail}
-          variant="primary"
+          variant="onPrimary"
           size="lg"
           loading={loading === 'email'}
           disabled={(loading !== null && loading !== 'email') || !canSendEmail}
           silentDisabled={loading !== null && loading !== 'email' && canSendEmail}
-          iconStart={<MailIcon />}
+          iconStart={<MailIcon color={PRIMARY} />}
         />
       </View>
     </View>
@@ -250,7 +248,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FSIZE.xl,
     fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    color: WHITE,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
@@ -258,7 +256,7 @@ const styles = StyleSheet.create({
     marginTop: SM,
     fontSize: FSIZE.md,
     lineHeight: lh(FSIZE.md),
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     textAlign: 'center',
   },
   dividerRow: {
@@ -271,24 +269,24 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: BLACK_MID,
+    backgroundColor: WHITE_MID,
   },
   dividerText: {
     fontSize: FSIZE.sm,
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     letterSpacing: 0.2,
   },
   inputWrap: {
     height: INPUT_MIN_HEIGHT,
     borderRadius: RADIUS,
-    borderWidth: 1.5,
+    borderWidth: STROKE.thin,
     borderColor: BORDER_SOFT,
     backgroundColor: WHITE,
     paddingHorizontal: MD,
     justifyContent: 'center',
   },
   inputWrapError: {
-    borderColor: DESTRUCTIVE_MUTED,
+    borderColor: WHITE_MID,
   },
   input: {
     fontSize: FSIZE.md,
@@ -307,7 +305,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 999,
-    backgroundColor: PRIMARY,
+    backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: MD,

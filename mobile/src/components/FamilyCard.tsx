@@ -1,5 +1,5 @@
-import { t } from '../i18n'
-import { familyScheduleOverlap, type FamilyData } from '../lib/family'
+import { t, lang } from '../i18n'
+import { familyScheduleOverlap, familyWeekendKidStatus, type FamilyData } from '../lib/family'
 
 // Header line: count is folded into the title so the card reads as one
 // phrase. When `isForKids` is non-null, the user's "want (more) kids"
@@ -71,7 +71,13 @@ export function buildFamilyChipText(
     viewerFamily?.hasKids && family.hasKids
       ? familyScheduleOverlap(viewerFamily.schedule, family.schedule)
       : null
-  if (overlap == null) return base
+  // Upcoming-weekend kid status for the rendered profile, appended last so it
+  // reads after the overlap percentage when both are present.
+  const weekend = familyWeekendKidStatus(family.schedule, lang)
+  const weekendSuffix = weekend
+    ? t(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend')
+    : ''
+  if (overlap == null) return base + weekendSuffix
   const pct = Math.round(overlap * 100)
-  return base + t('family.overlapChipSuffix').replace('{pct}', String(pct))
+  return base + t('family.overlapChipSuffix').replace('{pct}', String(pct)) + weekendSuffix
 }

@@ -52,3 +52,5 @@ Thumbs.db
 # ── Claude / assistant metadata ────────────────────────────────────────────
 .claude/
 .mcp.json
+.agents/
+skills-lock.json

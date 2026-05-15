@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { t } from '../i18n'
-import { WHITE } from '../colors'
-import { ICON } from '../tokens'
+import { PRIMARY } from '../colors'
 import { MegaphoneOffIcon, EyeOffIcon } from './icons'
 
 // Single source of truth for the two confirm-popup variants the app uses
@@ -11,8 +10,8 @@ import { MegaphoneOffIcon, EyeOffIcon } from './icons'
 // Every surface that can trigger this destructive ripple — the visibility
 // toggle's Hide button (home.tsx) and the settings Pause button
 // (GameModeCard in settings.tsx) — pulls its title / description / button
-// label / icon / destructive styling from here, so changes propagate to
-// every popup instance in one edit.
+// label / top action icon from here, so changes propagate to every popup
+// instance in one edit.
 //
 // Note: `t(...)` is called eagerly inside each helper so the strings track
 // the current language at every render. Don't hoist to module-level
@@ -22,8 +21,9 @@ export type VisibilityConfirmConfig = {
   title: string
   description: string
   confirmLabel: string
-  confirmIcon: ReactNode
-  destructive: boolean
+  /** Action icon shown in the dialog's tinted circle. Sized to the
+   * ConfirmDialog convention (`color={PRIMARY} size={32}`). */
+  topIcon: ReactNode
 }
 
 /** "You're broadcasting — stop?" Used when a destination press would end an
@@ -33,8 +33,7 @@ export function exitBroadcastConfirm(): VisibilityConfirmConfig {
     title: t('home.exitBroadcastConfirmTitle'),
     description: t('home.exitBroadcastConfirmDesc'),
     confirmLabel: t('home.exitBroadcastConfirmButton'),
-    confirmIcon: <MegaphoneOffIcon color={WHITE} size={ICON.xxl} />,
-    destructive: false,
+    topIcon: <MegaphoneOffIcon color={PRIMARY} size={32} />,
   }
 }
 
@@ -45,8 +44,7 @@ export function hideProfileConfirm(): VisibilityConfirmConfig {
     title: t('home.hideConfirmTitle'),
     description: t('home.hideConfirmDesc'),
     confirmLabel: t('home.hideConfirmButton'),
-    confirmIcon: <EyeOffIcon color={WHITE} size={ICON.xxl} />,
-    destructive: true,
+    topIcon: <EyeOffIcon color={PRIMARY} size={32} />,
   }
 }
 

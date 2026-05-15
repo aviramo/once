@@ -32,10 +32,17 @@ export type Data = {
   role?: string | null;
   /** True if the user picked a manual address instead of using the device's
    * GPS. While true the server treats `location` as user-provided and the
-   * client suppresses permission prompts + skips periodic location updates. */
+   * client suppresses permission prompts + skips periodic location updates.
+   * Kept alongside `location_type` for backward compat with mobile builds
+   * that predate the typed model (they only read this boolean). */
   location_custom?: boolean;
+  /** Which anchor the stored `location` point represents: 'device' (live
+   * GPS), 'home', or 'work'. Supersedes the boolean `location_custom`
+   * (home/work ⇒ custom). Absent on rows last written by a pre-typed-model
+   * build — derive from `location_custom` then (true ⇒ home, else device). */
+  location_type?: 'device' | 'home' | 'work';
   /** Human-readable label of the manually-picked address (e.g. "תל אביב"),
-   * shown in the settings row when location_custom is true. Null/undefined
+   * shown in the settings row when location_type is home/work. Null/undefined
    * when device mode is active. */
   location_label?: string | null;
 };
@@ -52,6 +59,10 @@ export type Profile = {
   last_seen?: string;
   push_enabled?: boolean;
   distance?: number;
+  /** Embedded by make_profile when this user's location anchor is home/work
+   * (omitted for device). Lets the viewer's distance chip pick the right
+   * icon. `location_custom` is still embedded too for old mobile builds. */
+  location_type?: 'device' | 'home' | 'work';
 };
 
 export type Page1State = 'free' | 'watching' | 'waiting' | 'chat' | 'locked';

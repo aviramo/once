@@ -37,6 +37,10 @@ export type RoundButtonProps = {
 
 export function RoundButton({
   size = 76,
+  // Same dark translucent scrim the on-photo Chip uses (Chip's `onPhoto`
+  // background = BLACK_STRONG), so round overlay buttons and the profile
+  // chips read as one consistent fabric over the photo. Single source: the
+  // shared BLACK_STRONG token.
   bg = BLACK_STRONG,
   borderColor,
   borderWidth,

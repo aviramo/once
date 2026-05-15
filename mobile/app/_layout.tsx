@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
-import { Text, TextInput, AppState } from 'react-native'
+import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { StatusBar } from 'expo-status-bar'
+import { AppStatusBar } from '../src/components/AppStatusBar'
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
@@ -174,7 +174,31 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  return <>{children}</>
+  // After sign-in succeeds, the routing effect above still has to wait for
+  // the profile fetch (a blocking `users` round-trip) before it can decide
+  // home-vs-onboarding and `router.replace` off `/login`. Leaving the
+  // fully-mounted login screen visible during that wait makes it linger and
+  // repaint ("flicker") before the hard `animation: 'none'` cut. Cover it
+  // with a full-bleed PRIMARY layer — the same wine as the login background
+  // and the home header, so login → hold → destination reads as one
+  // continuous surface. It stays up only while the user is authenticated but
+  // still sitting on `/login` (or the profile hasn't loaded yet), and drops
+  // the instant the route changes, with the destination already painted
+  // underneath. The `seg0 === 'login'` term keeps it through the gap between
+  // the profile-fetched render and the post-render `replace` effect (no
+  // one-frame flash). The Stack is never unmounted, so the documented
+  // Fabric/Reanimated mount race is untouched.
+  const seg0 = (segments as readonly string[])[0]
+  const authHandoff = !!user && (!profileFetched || seg0 === 'login')
+
+  return (
+    <>
+      {children}
+      {authHandoff && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: PRIMARY }]} />
+      )}
+    </>
+  )
 }
 
 export default function RootLayout() {
@@ -217,7 +241,7 @@ export default function RootLayout() {
       {/* Global status bar: white text whenever the app is in the foreground.
           The OS automatically restores the system default when the app is
           backgrounded or closed — every app owns its own status bar style. */}
-      <StatusBar style="light" backgroundColor={PRIMARY} translucent={false} />
+      <AppStatusBar />
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           {/* Reanimated layout-animations (entering/exiting) race with Fabric's

@@ -32,7 +32,7 @@ export default {
   'ob.female': 'אישה',
   'ob.nicknameStep': 'איך קוראים לך?',
   'ob.nicknamePlaceholder': 'זה השם שיופיע בפרופיל שלך',
-  'ob.nicknameField': 'כינוי',
+  'ob.nicknameField': 'שם פרטי',
   'ob.next': 'המשך',
 
   // Onboarding step 2
@@ -48,7 +48,7 @@ export default {
 
   // Onboarding photo
   'photo.title': 'תמונות פרופיל',
-  'photo.sub': 'הוסף לפחות 2 תמונות, עד 6',
+  'photo.sub': 'הוסף 2-4 תמונות',
   'photo.confirm': 'אישור והמשך',
   'photo.almostDone': 'עוד צעד אחד ומסיימים',
 
@@ -60,12 +60,39 @@ export default {
   'bio.submit': 'סיום והצטרפות',
   'bio.min': 'מינימום 20 תווים',
 
-  // Home
-  'home.distanceHere': 'נמצא ממש כאן',
-  'home.distanceHere_m': 'נמצא ממש כאן',
-  'home.distanceHere_f': 'נמצאת ממש כאן',
-  'home.distanceFromYou': 'ממך',
-  'home.distanceFromYouCustom': 'מהמיקום שהוגדר',
+  // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
+  // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
+  // proximate (<250m) wording. Subject pronoun is gendered (_m/_f) only where
+  // the phrasing references the subject; cells whose wording has no subject
+  // pronoun are base-key only (dd, hd, wd, and near.hh / near.ww).
+  'home.dist.dd': '{d} ממך',
+  'home.dist.dh_m': '{d} מהבית שלו',
+  'home.dist.dh_f': '{d} מהבית שלה',
+  'home.dist.dw_m': '{d} מהעבודה שלו',
+  'home.dist.dw_f': '{d} מהעבודה שלה',
+  'home.dist.hd': '{d} מהבית שלך',
+  'home.dist.hh_m': '{d} בין הבית שלך לשלו',
+  'home.dist.hh_f': '{d} בין הבית שלך לשלה',
+  'home.dist.hw_m': '{d} הבית שלך מהעבודה שלו',
+  'home.dist.hw_f': '{d} הבית שלך מהעבודה שלה',
+  'home.dist.wd': '{d} מהעבודה שלך',
+  'home.dist.wh_m': '{d} העבודה שלך מהבית שלו',
+  'home.dist.wh_f': '{d} העבודה שלך מהבית שלה',
+  'home.dist.ww_m': '{d} בין העבודה שלך ושלו',
+  'home.dist.ww_f': '{d} בין העבודה שלך ושלה',
+  'home.near.dd': 'ממש כאן',
+  'home.near.dh_m': 'ממש ליד הבית שלו',
+  'home.near.dh_f': 'ממש ליד הבית שלה',
+  'home.near.dw_m': 'ממש ליד העבודה שלו',
+  'home.near.dw_f': 'ממש ליד העבודה שלה',
+  'home.near.hd': 'ממש ליד הבית שלך',
+  'home.near.hh': 'שכנים',
+  'home.near.hw_m': 'הוא עובד ליד הבית שלך',
+  'home.near.hw_f': 'היא עובדת ליד הבית שלך',
+  'home.near.wd': 'ליד העבודה שלך',
+  'home.near.wh_m': 'גר ליד העבודה שלך',
+  'home.near.wh_f': 'גרה ליד העבודה שלך',
+  'home.near.ww': 'שכנים בעבודה',
 
   // Location
 
@@ -102,7 +129,7 @@ export default {
   'settings.profile': 'עריכת הפרופיל',
   'settings.account': 'חשבון',
   'settings.preview': 'תצוגה מקדימה',
-  'settings.myProfile': 'הפרופיל שלי',
+  'settings.myProfile': 'פרופיל',
   'settings.photo': 'התמונות שלי',
   'settings.photoHint': 'לחיצה ארוכה וגרירה לשינוי סדר',
   'settings.aboutMe': 'קצת עלי',
@@ -134,6 +161,8 @@ export default {
   'settings.location': 'מיקום',
   'settings.locationDevice': 'מיקום שלי',
   'settings.locationCustom': 'כתובת מותאמת',
+  'settings.locationHome': 'בית',
+  'settings.locationWork': 'עבודה',
   'settings.locationDeviceDesc': 'משתמש במיקום המכשיר',
   'settings.locationCustomDesc': 'כתובת לפי בחירה',
   'settings.locationAddressPrompt': 'הקלד כתובת או שם של עיר',
@@ -150,6 +179,8 @@ export default {
   'settings.locationCancel': 'ביטול',
   'settings.locationServicesOffTitle': 'שירותי המיקום כבויים',
   'settings.locationServicesOffDesc': 'יש להפעיל את שירותי המיקום במכשיר ולנסות שוב.',
+  'settings.locationLockedTitle': 'כדי לשנות מיקום צריך מצב הפסקה',
+  'settings.locationLockedDesc': 'אי אפשר לשנות מיקום בזמן אינטראקציה פעילה. מעבר למצב הפסקה יסיים את האינטראקציה הנוכחית ויאפשר לעדכן את המיקום.',
   'settings.duplicatePhotoTitle': 'תמונה כפולה',
   'settings.duplicatePhotoBody': 'לא ניתן להעלות את אותה תמונה פעמיים. תמונות כפולות הוסרו.',
   'settings.photoEditMoveUp': 'הזזה למעלה',
@@ -224,8 +255,8 @@ export default {
   'family.addKid': 'הוספת ילד',
   'family.ageNotSet': 'ללא גיל',
   'family.ageFortyPlus': '40+',
-  'family.summaryFreeWeekend': 'פנוי בסופ״ש',
-  'family.summaryWithKidsWeekend': 'עם הילדים בסופ״ש',
+  'family.summaryFreeWeekend': ', פנוי בסופ״ש הקרוב',
+  'family.summaryWithKidsWeekend': ', לא פנוי בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
   'settings.miles': 'מייל',
   'settings.preferredGender': 'מגדר',
@@ -352,12 +383,64 @@ export default {
 
   // Home — match teaser
   'home.tapForMore': 'בחזרה למשחק',
-  'home.startHeadline': 'זה מתחיל בך',
+  // Ready-to-find headline pool. One line is picked at random each time the
+  // home pane (re)enters the ready state (see home.tsx headlineText). Stored
+  // as a newline-joined block, one sentence per source line; consumed via
+  // .split('\n') so adding/removing a line needs no other change.
+  'home.readyHeadlines': `פחות גלילה, יותר פגישה
+אדם אחד מקבל מקום
+הזמן שלך שווה נוכחות
+חיבור מתחיל בקשב
+לא קטלוג, רגע חי
+מי שכאן, כאן באמת
+פחות רעש, יותר אומץ
+הזדמנות אחת פתוחה עכשיו
+רגע אמיתי לא מחכה
+בוחרים פחות, מרגישים יותר
+מפגש אחד בלי מסכים פתוחים
+נוכחות היא הסינון החדש
+לא כולם, רק מי שמרגיש
+כשהלב פנוי, משהו קורה
+שיחה אחת יכולה להספיק
+בלי משחקים, עם כוונה
+להיות זמין למשהו אמיתי
+אהבה לא מתחילה ברשימה
+תן לרגע לבחור אותך
+מישהו רואה אותך עכשיו
+פחות אפשרויות, יותר בהירות
+חיבור צריך מקום לנשום
+לא לחפש, להיפגש
+מי שבפוקוס, מקבל לב
+העולם זז, אתה נוכח
+רגע קטן, אפשרות גדולה
+כשזה קורה, זה עכשיו
+לא עוד החמצות שקטות
+פגישה מתחילה בהחלטה קטנה
+מישהו אחד משנה את הערב
+בלי רעשי רקע רומנטיים
+להיות כאן זה כבר משהו
+יש קסם בפחות
+כוונה אחת, רגע אחד
+לאסוף אומץ, לא התאמות
+חיבור טוב לא צריך עומס
+עכשיו הוא זמן טוב
+פחות לבד מול אינסוף
+מבט אחד לפני עוד גלילה
+לתת סיכוי לרגע
+לא עוד חלונות פתוחים
+מישהו מחכה לקשב שלך
+רגע ברור בתוך הבלגן
+לבחור נוכחות על פני שפע
+אהבה אוהבת שקט
+לפעמים אחד זה עולם
+בלי לברוח לאפשרות הבאה
+להיות פנוי באמת
+קשר מתחיל כשעוצרים
+רק רגע, רק אתם`,
   'home.startNow': 'להתחיל עכשיו',
   'home.readyToContinue': 'מוכן להמשיך?',
   'home.readyToContinue_m': 'מוכן להמשיך?',
   'home.readyToContinue_f': 'מוכנה להמשיך?',
-  'home.continueHeadline': 'פרופיל אחד בכל פעם',
   'home.endedBack': 'חזרה למשחק',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).
@@ -513,6 +596,7 @@ export default {
   'home.skipHintTitle': 'אפשר להחליק את הכרטיס למטה',
   'home.skipHintDesc': 'בפעם הבאה החליקו את הכרטיס למטה כדי לדלג במהירות לפרופיל אחר. רוצים לדלג עכשיו?',
   'home.skipHintCancel': 'הבנתי',
+  'home.skipHintConfirm': 'לדלג',
   'home.replyingTimerDesc': 'התקבלה אצלך הזמנה. אם תבחרי לקבל, תתמקדו רק זה בזו',
   'home.replyingTimerDesc_m': 'התקבלה אצלך הזמנה. אם תבחר לקבל, תתמקדו רק זה בזו',
   'home.replyingTimerDesc_f': 'התקבלה אצלך הזמנה. אם תבחרי לקבל, תתמקדו רק זה בזו',
@@ -610,6 +694,8 @@ export default {
   'chat.inputPlaceholder_f': 'כתבי הודעה...',
   'ob.howOld_m': 'בן כמה אתה?',
   'ob.howOld_f': 'בת כמה את?',
+  'photo.sub_m': 'הוסף 2-4 תמונות',
+  'photo.sub_f': 'הוסיפי 2-4 תמונות',
 
   // Gender-aware: watcher/subject gender
   'home.notifOff_m': 'לא מקבל התראות',

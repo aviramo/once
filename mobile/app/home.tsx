@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme, I18nManager } from 'react-native'
+import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme, I18nManager, type StyleProp, type ViewStyle } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
+import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
 import PagerView from 'react-native-pager-view'
 
 // PagerView wrapped for Reanimated so onPageScroll events can be handled in a
@@ -36,14 +36,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from 'react-native-svg'
 import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
-import { useUserStore, type Profile, type Page2Invite } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
-import { BLACK, WHITE, WHITE_MID, PRIMARY, PRIMARY_BG, DESTRUCTIVE, DESTRUCTIVE_MUTED, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT } from '../src/colors'
-import { XS, SM, MD, LG, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, lh } from '../src/tokens'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, DESTRUCTIVE, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
+import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -59,10 +59,10 @@ import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { FONT_SCALE } from '../src/fonts'
 import { STORAGE } from '../src/keys'
-import { SlidersIcon, CloseBoldIcon, CloseIcon, PauseIcon, PlayIcon, QuestionIcon, SettingsIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon } from '../src/components/icons'
+import { SlidersIcon, CloseBoldIcon, PauseIcon, QuestionIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, InfoIcon } from '../src/components/icons'
 import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
-import type { CardAction } from '../src/components/MatchCard'
-import { StatusBar } from 'expo-status-bar'
+import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
+import { AppStatusBar } from '../src/components/AppStatusBar'
 
 
 // ── Avatar rings: static halo + radar pulse ───────────────────────────────
@@ -118,11 +118,13 @@ function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }
         height: AVATAR_SIZE,
         borderRadius: AVATAR_SIZE / 2,
         borderWidth: 2,
-        borderColor: PRIMARY,
+        borderColor: WHITE,
       }, style]}
     />
   )
 }
+// (RadarRing borderColor set to WHITE below so the pulse reads on the
+// deep-wine PRIMARY page — PRIMARY-on-PRIMARY was invisible.)
 
 function RadarRings({ active }: { active: boolean }) {
   return (
@@ -145,7 +147,7 @@ function AvatarHaloRings() {
         width: HALO_SIZE,
         height: HALO_SIZE,
         borderRadius: HALO_SIZE / 2,
-        backgroundColor: PRIMARY_BG,
+        backgroundColor: WHITE_SOFT,
       }} />
       <Svg
         pointerEvents="none"
@@ -157,7 +159,7 @@ function AvatarHaloRings() {
           cx={DOTTED_RING_SIZE / 2}
           cy={DOTTED_RING_SIZE / 2}
           r={DOTTED_RING_SIZE / 2 - 2}
-          stroke={PRIMARY}
+          stroke={WHITE}
           strokeWidth={1.5}
           strokeDasharray="2 5"
           fill="none"
@@ -183,6 +185,19 @@ const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H
 // used to decide whether a string needs wrapping. Conservative enough that
 // every string we ship today either fits as 1 line or wraps cleanly to 2.
 const SKIP_HINT_PER_CHAR_W = SKIP_HINT_FONT * 0.65 + 2
+
+// Ready-to-find headline pool: the i18n block split into lines (trimmed,
+// blanks dropped, so adding/removing a sentence in i18n is the only edit
+// needed). `pickReadyHeadline(prev)` returns a random index that differs
+// from `prev` when possible, so re-entering the ready state never repeats
+// the sentence it just showed.
+const READY_HEADLINES = t('home.readyHeadlines').split('\n').map(s => s.trim()).filter(Boolean)
+function pickReadyHeadline(prev: number): number {
+  if (READY_HEADLINES.length < 2) return 0
+  let next = prev
+  while (next === prev) next = Math.floor(Math.random() * READY_HEADLINES.length)
+  return next
+}
 
 // Splits a string into two lines at the space closest to its character
 // midpoint. Empty array if there is no space — caller falls back to
@@ -229,8 +244,8 @@ function SkipHintLabel({ text }: { text: string }) {
     <Svg width={w} height={h}>
       <Defs>
         <SvgLinearGradient id="skipHintFade" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={BLACK} stopOpacity={1} />
-          <Stop offset="1" stopColor={BLACK_STRONG} stopOpacity={1} />
+          <Stop offset="0" stopColor={WHITE} stopOpacity={1} />
+          <Stop offset="1" stopColor={WHITE_STRONG} stopOpacity={1} />
         </SvgLinearGradient>
       </Defs>
       {lines.map((line, i) => {
@@ -281,78 +296,419 @@ const headlineAreaStyle = StyleSheet.create({
   },
 })
 
-// ── Pull-to-skip "keep going" cue ────────────────────────────────────────
+// ── PullPane ─────────────────────────────────────────────────────────────
 //
-// Vertical coral→transparent gradient that fills the gap between the top
-// of the home pane and the top edge of the match card. Mounted BEHIND the
-// card in the stacking order, so at rest (pullY=0) the card covers it and
-// the cue has no visual footprint. As the user pulls the card down the
-// View's height tracks pullY pixel-for-pixel, revealing more of the
-// gradient: PRIMARY (coral) at the very top of the page, fading to fully
-// transparent right where the card's top edge sits. The colored "wake"
-// reads as "you're pulling, the card is moving" without any iconography.
+// The single framed element shared by all three pull-to-dismiss surfaces:
+// page1 (pull-to-skip), page2 (pull-to-decline) and the settings profile
+// preview sheet (swipe-down-to-dismiss). It composes, in one place:
+//   • the solid-PRIMARY "wake" that fills TabStrip → card-top, with a
+//     "לא עכשיו" headline centred in the wake itself that scales 0 → full;
+//   • the GestureDetector + a card wrapper that translates down by `pullY`;
+//   • an optional PullContext.Provider (page1/page2 need it so the card's
+//     inner scroll can coordinate with the pull; the sheet doesn't);
+//   • an optional non-translated `extra` slot (page1's hidden preloader).
 //
-// Visibility (opacity) is tied to `pulling` so the gradient fades out the
-// moment the gesture ends — that way it doesn't linger against the empty
-// pane in the brief window between the old card unmounting and pullY
-// being reset to 0 by the next card's preload-ready handler.
-const PULL_CUE_VIS_FADE_IN_MS = 160
-const PULL_CUE_VIS_FADE_OUT_MS = 200
-// Three opacity stops at positions 0, 0.5, 1 — transparent, half-coral,
-// transparent. No gradient interpolation between them; just three
-// equal-height bands sitting next to each other.
-const PULL_CUE_MID_OPACITY = 0.5
-
-function PullCue({
-  pulling,
+// Wake = a top-anchored block, sibling of (and behind) the card, whose
+// HEIGHT is animated to the live `pullY`. The card translates down by the
+// same `pullY`, so the wake's bottom edge is always exactly the card top —
+// the PRIMARY band length is dynamic with the card-top position. The
+// headline is centred IN that band (`justifyContent:'center'`); the wake's
+// `overflow:'hidden'` keeps it from spilling above while the band is short,
+// and its scale tracks pull depth (grows like the login "Once").
+//
+// Wake OPACITY is driven by `pulling`: visible while the finger is actively
+// pulling, and it FADES OUT the moment the pull ends — whether the card
+// snaps back or commits and slides off-screen. Without this fade the block
+// stays full-height behind the departed card and covers the page underneath
+// (Settings / empty pane). The fade is exactly what reveals that page on
+// dismiss; the card's own SlideOutDown carries it down at the same time.
+//
+// The inner RisingCard passed as `children` keeps owning its SlideIn/SlideOut
+// mount motion — the pull transform sits on a separate wrapper so the two
+// never clobber the same useAnimatedStyle target.
+const PULL_WAKE_FADE_IN_MS = 160
+const PULL_WAKE_FADE_OUT_MS = 220
+function PullPane({
+  gesture,
   pullY,
+  pulling,
+  topAnchor,
+  style,
+  pointerEvents,
+  cardStyle,
+  pullContext,
+  wakeLabel,
+  tutorialPlaying,
+  extra,
+  children,
 }: {
-  pulling: boolean
+  gesture: GestureType
   pullY: SharedValue<number>
+  pulling: boolean
+  topAnchor?: SharedValue<number>
+  style?: StyleProp<ViewStyle>
+  pointerEvents?: 'box-none' | 'none' | 'auto' | 'box-only'
+  cardStyle?: StyleProp<ViewStyle>
+  pullContext?: PullCtx
+  // Centred headline on the PRIMARY wake (page1/page2 pass "לא עכשיו"). The
+  // profile sheet omits it — its wake is plain. No label → no text node.
+  wakeLabel?: string
+  // When the first-time tutorial is playing, lock input so the user can't
+  // fight the choreography (page1 only; others never pass it).
+  tutorialPlaying?: boolean
+  extra?: React.ReactNode
+  children?: React.ReactNode
 }) {
-  const visibility = useSharedValue(0)
-  const screenH = Dimensions.get('window').height
-
+  const outerTopStyle = useAnimatedStyle(() => ({
+    top: topAnchor ? topAnchor.value : 0,
+  }))
+  const cardTranslate = useAnimatedStyle(() => ({
+    transform: [{ translateY: pullY.value }],
+  }))
+  // Fade the wake in while pulling, out the instant the pull ends — so on
+  // dismiss it doesn't linger over the page revealed behind the card.
+  const wakeVisibility = useSharedValue(0)
   useEffect(() => {
-    visibility.value = withTiming(pulling ? 1 : 0, {
-      duration: pulling ? PULL_CUE_VIS_FADE_IN_MS : PULL_CUE_VIS_FADE_OUT_MS,
+    wakeVisibility.value = withTiming(pulling ? 1 : 0, {
+      duration: pulling ? PULL_WAKE_FADE_IN_MS : PULL_WAKE_FADE_OUT_MS,
       easing: Easing.out(Easing.cubic),
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulling])
-
-  // Single solid-coral block whose overall opacity follows a triangular
-  // ramp over pull progress: 0 at no-pull, peaks at PULL_CUE_MID_OPACITY
-  // exactly at the half-screen commit threshold, then fades back to 0 as
-  // the user keeps pulling past commit. ScaleY still tracks pullY/screenH
-  // linearly so the block's bottom edge stays glued to the card's top.
-  // All UI-thread (transform + opacity), same fast path as the card.
-  const animatedStyle = useAnimatedStyle(() => {
-    const t = Math.max(0, Math.min(1, pullY.value / screenH))
-    const ramp = 1 - Math.abs(2 * t - 1)
-    return {
-      transform: [{ scaleY: t }],
-      opacity: visibility.value * ramp * PULL_CUE_MID_OPACITY,
-    }
+  // Wake height IS the live drag — its bottom edge is exactly the card top
+  // (the card translates down by the same pullY), so the PRIMARY band above
+  // the card grows/shrinks dynamically with the card-top position. Opacity
+  // faded by `pulling`.
+  const wakeStyle = useAnimatedStyle(() => ({
+    height: Math.max(0, pullY.value),
+    opacity: wakeVisibility.value,
+  }))
+  // "לא עכשיו" follows a triangular curve over the drag: it grows 0 → full
+  // from rest to the 50% commit point (peak), then shrinks back to 0 while
+  // fading out as the card keeps going to a full dismiss. Scale and opacity
+  // ride the same factor so it grows in and shrinks/fades out together.
+  const wakeScreenH = Dimensions.get('window').height
+  const commitDist = wakeScreenH * PULL_COMMIT_FRACTION
+  const wakeTextStyle = useAnimatedStyle(() => {
+    const p = pullY.value
+    const f = p <= commitDist
+      ? p / commitDist
+      : 1 - (p - commitDist) / Math.max(1, wakeScreenH - commitDist)
+    const v = Math.max(0, Math.min(1, f))
+    return { transform: [{ scale: v }], opacity: v }
   })
-
+  const card = (
+    <GestureDetector gesture={gesture}>
+      <Animated.View
+        style={[pullPaneStyles.card, cardStyle, cardTranslate]}
+        collapsable={false}
+      >
+        {children}
+      </Animated.View>
+    </GestureDetector>
+  )
   return (
     <Animated.View
-      pointerEvents="none"
-      style={[pullCueStyles.container, { height: screenH }, animatedStyle]}
-    />
+      // Default outer = absolute fill (page1/page2). The profile sheet
+      // passes its own bottom-anchored overlay style. `outerTopStyle`
+      // applies the topAnchor offset (0 unless provided).
+      style={[style ?? StyleSheet.absoluteFill, outerTopStyle]}
+      pointerEvents={pointerEvents}
+    >
+      {/* Solid-PRIMARY wake: top-anchored, height = the live drag (bottom
+          edge glued to the card top), fades out when the pull ends. The
+          headline is centred IN the wake itself (mid-band) and scales 0 →
+          full. Rendered behind the card. Rendered ONLY when a `wakeLabel`
+          is given — the profile sheet omits it entirely (no band, no text;
+          its gap simply reveals the Settings page behind it). */}
+      {wakeLabel ? (
+        <Animated.View style={[pullPaneStyles.wake, wakeStyle]} pointerEvents="none">
+          <AnimatedText style={[pullPaneStyles.wakeText, wakeTextStyle]} numberOfLines={1}>
+            {wakeLabel}
+          </AnimatedText>
+        </Animated.View>
+      ) : null}
+      {pullContext ? (
+        <PullContext.Provider value={pullContext}>{card}</PullContext.Provider>
+      ) : (
+        card
+      )}
+      {extra}
+      {tutorialPlaying && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="auto" />
+      )}
+    </Animated.View>
   )
 }
 
-const pullCueStyles = StyleSheet.create({
-  container: {
+const pullPaneStyles = StyleSheet.create({
+  card: {
+    flex: 1,
+  },
+  // Top-anchored; height is animated to the live drag so its bottom edge is
+  // exactly the card top. Centres the headline in its own (dynamic) band;
+  // overflow:hidden keeps it from spilling above the band while it's short.
+  wake: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     backgroundColor: PRIMARY,
-    transformOrigin: 'top',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Matches the login "Once" logotype (TEXT.xxxl / extrabold / white).
+  wakeText: {
+    fontSize: TEXT.xxxl,
+    fontWeight: WEIGHT.extrabold,
+    color: WHITE,
+    letterSpacing: -1.4,
+    textAlign: 'center',
   },
 })
+
+// page1 and page2 each need their OWN PullContext value — the two panes can
+// be mounted at once (page2 pending while page1 is watching), and a context
+// binds a specific panRef + scrollAtTop shared value + `pulling`, none of
+// which are safe to alias across the two GestureDetector trees. They can't
+// be one instance, but the *shape* is identical, so the construction lives
+// here once instead of being hand-rolled per pane.
+function usePullCtx(
+  panRef: React.MutableRefObject<GestureType | undefined>,
+  scrollAtTopSV: SharedValue<boolean>,
+  pulling: boolean,
+): PullCtx {
+  return useMemo(
+    () => ({
+      panRef,
+      extraRefs: [],
+      setScrollAtTop: (v: boolean) => {
+        scrollAtTopSV.value = v
+      },
+      pulling,
+    }),
+    // panRef / scrollAtTopSV are stable (useRef / useSharedValue); only
+    // `pulling` actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pulling],
+  )
+}
+
+// ── usePullBehavior ──────────────────────────────────────────────────────
+//
+// THE single source of "pull a card down" behaviour, shared by all three
+// surfaces. It owns everything that used to be hand-rolled per screen:
+//   • the drag shared value + `pulling` engage/disengage;
+//   • the Pan gesture itself — two activation strategies:
+//       'scrollPan' = page1/page2 (activeOffsetY + scroll-vs-pull, uses
+//                     PullContext so the card's inner scroll locks);
+//       'sheet'     = the profile sheet (manualActivation + header-vs-scroll
+//                     touch arbitration, no PullContext);
+//   • the resistance is 1:1 (no damping — PULL_DAMP was tuned to 1);
+//   • the commit threshold + what crossing it does, via `commit`:
+//       'slideOff'  = ride the card off-screen then onCommit (page1 skip);
+//       'snapBack'  = onCommit (a confirm dialog) then spring back (page2);
+//       'unmount'   = onCommit unmounts the card, drag retained (sheet);
+//     plus an optional velocity flick (sheet);
+//   • the snap-back animation when released short of commit;
+//   • the first-time tutorial: the peek->hold->return choreography AND its
+//     once-ever trigger policy (seenFlags gate + post-mount delay), exposing
+//     `tutorialPlaying` so the frame can lock input while it plays.
+// Each <PullPane> call site calls this once, so the two simultaneously-
+// mountable panes still get independent instances (see usePullCtx).
+type PullActivation = 'scrollPan' | 'sheet'
+type PullBehavior = {
+  gesture: GestureType
+  pullY: SharedValue<number>
+  pulling: boolean
+  pullCtx: PullCtx | undefined
+  panRef: React.MutableRefObject<GestureType | undefined>
+  setScrollAtTop: (v: boolean) => void
+  reset: () => void
+  tutorialPlaying: boolean
+  // The single commit distance (px) every consumer must share — exposed so
+  // e.g. the sheet's TabStrip morph normalizes by the exact same value.
+  commitDistance: number
+}
+// Commit motion is UNIFORM for all three surfaces: ride the card off-screen
+// then fire onCommit (the only per-screen difference is what onCommit does —
+// skip / decline / close). Threshold + flick are object-owned constants
+// (PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY) so no caller can desync.
+function usePullBehavior(opts: {
+  activation: PullActivation
+  enabled: boolean
+  onCommit: () => void
+  headerBottom?: SharedValue<number>
+  tutorial?: { ready: boolean; seenFlag: string }
+}): PullBehavior {
+  const { activation, enabled, onCommit, headerBottom, tutorial } = opts
+  const screenH = Dimensions.get('window').height
+  const commitDistance = screenH * PULL_COMMIT_FRACTION
+
+  const pullY = useSharedValue(0)
+  const engaged = useSharedValue(false)
+  const slidOut = useSharedValue(false)
+  const scrollOnly = useSharedValue(false)
+  const scrollAtTopSV = useSharedValue(true)
+  const swipeStart = useSharedValue({ x: 0, y: 0 })
+  // Sheet only: latched true once manualActivation fires, so onTouchesMove
+  // stops re-arbitrating (and can't fail/cancel) mid-drag — the pan then
+  // tracks the finger continuously instead of snapping back when the inner
+  // scroll briefly reports not-at-top.
+  const activated = useSharedValue(false)
+  const [pulling, setPulling] = useState(false)
+  const panRef = useRef<GestureType>(undefined as unknown as GestureType)
+
+  const setScrollAtTop = useCallback((v: boolean) => { scrollAtTopSV.value = v }, [scrollAtTopSV])
+  const reset = useCallback(() => { pullY.value = 0 }, [pullY])
+
+  // Called unconditionally (rules of hooks); only handed out for scrollPan.
+  const ctx = usePullCtx(panRef, scrollAtTopSV, pulling)
+  const pullCtx = activation === 'scrollPan' ? ctx : undefined
+
+  // First-time tutorial: choreography + once-ever trigger.
+  const [tutorialPlaying, setTutorialPlaying] = useState(false)
+  const tutorialTriggeredRef = useRef(false)
+  const playTutorial = useCallback(() => {
+    // Peek just under commit so the choreography can't trigger a real skip.
+    const peek = screenH * 0.45
+    setPulling(true)
+    const finish = () => { setPulling(false); setTutorialPlaying(false) }
+    pullY.value = withSequence(
+      withTiming(peek),
+      withDelay(1000, withTiming(0, undefined, finished => {
+        'worklet'
+        if (finished) runOnJS(finish)()
+      })),
+    )
+  }, [pullY, screenH])
+  const tutorialReady = tutorial?.ready ?? false
+  const tutorialSeenFlag = tutorial?.seenFlag
+  useEffect(() => {
+    if (!tutorialSeenFlag) return
+    if (tutorialTriggeredRef.current) return
+    if (!tutorialReady) return
+    tutorialTriggeredRef.current = true
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    ;(async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE.seenFlags)
+        if (cancelled) return
+        const flags = raw ? JSON.parse(raw) : {}
+        if (flags[tutorialSeenFlag]) return
+        // Persist immediately so it plays once per user, ever.
+        flags[tutorialSeenFlag] = true
+        AsyncStorage.setItem(STORAGE.seenFlags, JSON.stringify(flags)).catch(() => {})
+        // Wait out the card's SlideInDown before the demo so they don't fight.
+        timer = setTimeout(() => {
+          if (cancelled) return
+          setTutorialPlaying(true)
+          playTutorial()
+        }, 500)
+      } catch {}
+    })()
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
+  }, [tutorialReady, tutorialSeenFlag, playTutorial])
+
+  const gestureEnabled = enabled && !tutorialPlaying
+
+  const gesture = useMemo(() => {
+    if (activation === 'sheet') {
+      return Gesture.Pan()
+        .withRef(panRef)
+        .manualActivation(true)
+        .onTouchesDown(e => {
+          'worklet'
+          activated.value = false
+          const tch = e.allTouches[0]
+          if (tch) swipeStart.value = { x: tch.absoluteX, y: tch.absoluteY }
+        })
+        .onTouchesMove((e, manager) => {
+          'worklet'
+          // Once we own the gesture, never re-arbitrate — onUpdate keeps
+          // tracking the finger continuously (no mid-drag fail/snap-back
+          // when the inner scroll momentarily reports not-at-top).
+          if (activated.value) return
+          const inHeader = headerBottom ? swipeStart.value.y <= headerBottom.value : false
+          if (!scrollAtTopSV.value && !inHeader) { manager.fail(); return }
+          const tch = e.allTouches[0]
+          if (!tch) return
+          const dx = tch.absoluteX - swipeStart.value.x
+          const dy = tch.absoluteY - swipeStart.value.y
+          if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
+          if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 0.8) { activated.value = true; manager.activate(); return }
+          manager.fail()
+        })
+        .onUpdate(e => {
+          'worklet'
+          const drag = e.translationY
+          if (drag <= 0) return
+          pullY.value = drag
+          if (!engaged.value) { engaged.value = true; runOnJS(setPulling)(true) }
+        })
+        .onEnd(e => {
+          'worklet'
+          const past = e.translationY >= commitDistance
+          const flick = e.velocityY > SWIPE_DISMISS_VELOCITY
+          if (past || flick) {
+            // Uniform commit motion: ride off-screen, then onCommit.
+            slidOut.value = true
+            pullY.value = withTiming(screenH)
+            runOnJS(onCommit)()
+          } else {
+            pullY.value = withTiming(0)
+          }
+          if (engaged.value) { engaged.value = false; runOnJS(setPulling)(false) }
+        })
+    }
+    // 'scrollPan' — page1 skip / page2 decline.
+    return Gesture.Pan()
+      .withRef(panRef)
+      .enabled(gestureEnabled)
+      .activeOffsetY(4)
+      .failOffsetX([-25, 25])
+      .onStart(() => {
+        'worklet'
+        pullY.value = 0
+        slidOut.value = false
+        engaged.value = false
+        // Scroll always wins: a gesture that began below the top is
+        // committed to scrolling only for its lifetime.
+        scrollOnly.value = !scrollAtTopSV.value
+      })
+      .onUpdate(e => {
+        'worklet'
+        if (scrollOnly.value) { pullY.value = 0; return }
+        const raw = Math.max(0, e.translationY)
+        pullY.value = raw
+        if (raw > 0 && !engaged.value) { engaged.value = true; runOnJS(setPulling)(true) }
+      })
+      .onEnd(e => {
+        'worklet'
+        if (scrollOnly.value) return
+        const past = Math.max(0, e.translationY) >= commitDistance
+        const flick = e.velocityY > SWIPE_DISMISS_VELOCITY
+        if (past || flick) {
+          // Uniform commit motion: ride off-screen on the UI thread
+          // immediately so there's no 1-2 frame stick before the keyed
+          // card's SlideOutDown picks up, then fire onCommit.
+          slidOut.value = true
+          pullY.value = withTiming(screenH)
+          runOnJS(onCommit)()
+        }
+      })
+      .onFinalize(() => {
+        'worklet'
+        if (!slidOut.value) { pullY.value = withTiming(0) }
+        if (engaged.value) { engaged.value = false; runOnJS(setPulling)(false) }
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activation, gestureEnabled, commitDistance, screenH, onCommit, headerBottom])
+
+  return { gesture, pullY, pulling, pullCtx, panRef, setScrollAtTop, reset, tutorialPlaying, commitDistance }
+}
 
 // Single-figure silhouette: circle head + trapezoid/rectangular torso.
 function SparklesIcon({ color }: { color: string }) {
@@ -367,22 +723,14 @@ function SparklesIcon({ color }: { color: string }) {
   )
 }
 
-function CheckIcon({ color, size = 18 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M20 6L9 17l-5-5" />
-    </Svg>
-  )
-}
-
 // Telescope illustration: stars + clouds + a soft telescope on a tripod.
 function TelescopeIllustration() {
-  const sky = '#FAD7C9'
-  const cloud = '#F1E8E2'
-  const tube = '#FFFFFF'
-  const tubeStroke = '#E0CFC4'
-  const accent = PRIMARY
-  const tripod = '#C9B8AE'
+  const sky = ILLUSTRATION_WASH
+  const cloud = ILLUSTRATION_CLOUD
+  const tube = ILLUSTRATION_BODY
+  const tubeStroke = ILLUSTRATION_LINE
+  const accent = ILLUSTRATION_ACCENT
+  const tripod = ILLUSTRATION_STRUCT
   return (
     <Svg width={220} height={170} viewBox="0 0 220 170" fill="none">
       {/* sparkles */}
@@ -420,11 +768,11 @@ function TelescopeIllustration() {
 // mode, not a different screen — only the metaphor swaps from "scanning" to
 // "behind the moon".
 function HiddenMoonIllustration() {
-  const sky = '#FAD7C9'
-  const cloud = '#F1E8E2'
-  const moon = '#FFFFFF'
-  const moonShade = '#E0CFC4'
-  const accent = PRIMARY
+  const sky = ILLUSTRATION_WASH
+  const cloud = ILLUSTRATION_CLOUD
+  const moon = ILLUSTRATION_BODY
+  const moonShade = ILLUSTRATION_LINE
+  const accent = ILLUSTRATION_ACCENT
   return (
     <Svg width={220} height={170} viewBox="0 0 220 170" fill="none">
       {/* sparkles */}
@@ -470,7 +818,7 @@ const chatMenuStyles = StyleSheet.create({
     color: BLACK,
     fontWeight: WEIGHT.semibold,
   },
-  labelDestructive: { color: DESTRUCTIVE_MUTED },
+  labelDestructive: { color: WHITE_MID },
   labelEmphasis: { color: DESTRUCTIVE, fontWeight: WEIGHT.semibold },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -522,29 +870,50 @@ const STATUS_LAYOUT = LinearTransition
 
 const statusCardStyles = StyleSheet.create({
   container: {
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
     paddingVertical: LG,
     paddingHorizontal: MD,
-  },
-  title: {
-    fontSize: TEXT.xl,
-    fontWeight: WEIGHT.extrabold,
-    color: BLACK,
-    textAlign: 'center',
-    marginBottom: SM,
-    includeFontPadding: false,
   },
   description: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
-    color: BLACK,
+    // No fontWeight: rendered through AppText, so this resolves to the real
+    // NotoSansHebrew_400Regular face. Kept slightly dimmed so the full-white
+    // ExtraBold heading lead-in clearly carries the emphasis.
+    color: WHITE_STRONG,
     textAlign: 'center',
     includeFontPadding: false,
   },
+  // The heading is no longer a standalone element. It rides at the start of
+  // the description as a period-terminated lead-in on the same line. Through
+  // AppText this picks the real NotoSansHebrew_800ExtraBold face (not a weak
+  // synthetic bold); full-white vs the body's dimmed white adds a second
+  // contrast step so the two ranks read clearly apart.
+  lead: {
+    fontWeight: WEIGHT.extrabold,
+    color: WHITE,
+  },
 })
 
-// Page1 "you sent an invitation" timer card. Title + description + a plain
-// full-width cancel button. The live countdown that used to ride inside
+// Shared heading+body text for every StatusCard variant (InviteTimerCard /
+// EventMessageCard / ViewersStatusCard). One AppText-backed paragraph (real weighted Noto faces, not synthetic): the
+// bold heading terminated with a period, a space, then the body — a single
+// flowing run so it wraps naturally but never hard-breaks between heading
+// and body. The period is only appended when the heading doesn't already
+// end in sentence punctuation, so a question-style heading won't read "?.".
+function StatusCardText({ title, description }: { title: string; description: string }) {
+  const head = title.trim()
+  const lead = /[.!?]$/.test(head) ? head : `${head}.`
+  return (
+    <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
+      <Text style={statusCardStyles.lead}>{lead} </Text>
+      {description}
+    </AnimatedText>
+  )
+}
+
+// Page1 "you sent an invitation" timer card. Heading-led body
+// (StatusCardText) + a plain full-width cancel button. The live countdown that used to ride inside
 // the button's footer now sits under the Once tab label, alongside the
 // symmetric page2 incoming-invite clock under the invite tab. Keeping the
 // two countdowns in the same chrome row (instead of one in the button and
@@ -555,17 +924,11 @@ function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetI
 
   return (
     <View style={statusCardStyles.container}>
-      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
-        {title}
-      </Animated.Text>
-      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
-        {description}
-      </Animated.Text>
+      <StatusCardText title={title} description={description} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.cancelWaitingBtn')}
-          variant="primary"
-          iconStart={<CloseIcon color={WHITE} size={ICON.xxl} />}
+          variant="onPrimary"
           onPress={onCancel}
           loading={busy}
         />
@@ -577,22 +940,16 @@ function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetI
 // ── EventMessageCard ─────────────────────────────────────────────────────────
 // Top-of-card info component for terminal locked-message states (page1 after
 // a terminal event, page2 dead invite). Same scaffold as InviteTimerCard —
-// title + description + a single full-width "back to game" button. No
-// timer here, so no footer on the button.
+// heading-led body (StatusCardText) + a single full-width "back to game"
+// button. No timer here, so no footer on the button.
 function EventMessageCard({ title, description, onContinue, busy }: { title: string; description: string; onContinue: () => void; busy?: boolean }) {
   return (
     <View style={statusCardStyles.container}>
-      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
-        {title}
-      </Animated.Text>
-      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
-        {description}
-      </Animated.Text>
+      <StatusCardText title={title} description={description} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.endedBack')}
-          variant="primary"
-          iconStart={<PlayIcon color={WHITE} size={ICON.xxl} />}
+          variant="onPrimary"
           onPress={onContinue}
           loading={busy}
         />
@@ -602,7 +959,7 @@ function EventMessageCard({ title, description, onContinue, busy }: { title: str
 }
 
 // ── Page2 status card ────────────────────────────────────────────────────
-// Title + description block for the Viewers empty-state. The 3-state
+// Heading-led body block (StatusCardText) for the Viewers empty-state. The 3-state
 // visibility toggle (VisibilityToggle) sits above this card and now owns the
 // broadcast action (`app_add`) as its third segment; this card no longer has
 // any siblings below it.
@@ -629,25 +986,22 @@ function ViewersStatusCard({
 
   return (
     <View style={statusCardStyles.container}>
-      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.title} maxFontSizeMultiplier={FONT_SCALE.heading}>
-        {title}
-      </Animated.Text>
-      <Animated.Text layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
-        {description}
-      </Animated.Text>
+      <StatusCardText title={title} description={description} />
     </View>
   )
 }
 
 // ── VisibilityToggle ─────────────────────────────────────────────────────
-// Connected 3-segment pill anchored at the bottom of the page2 pane: Hidden,
-// Visible, Broadcast. One shared outer pill (WHITE bg, PRIMARY border) with
-// a PRIMARY-filled sliding indicator that animates between segments on mode
-// change. Each segment renders both an active (WHITE) and a muted (PRIMARY)
+// Connected 3-segment pill anchored at the top of the page2 pane, directly
+// under the global TabStrip and above the ViewersStatusCard: Hidden,
+// Visible, Broadcast. One shared outer pill (PRIMARY bg, seamless with the
+// wine page) with a WHITE-filled sliding indicator that animates between
+// segments on mode change. Each segment renders both an active (PRIMARY,
+// shown on the WHITE thumb) and a muted (WHITE, shown on the wine pill)
 // icon stacked at the same position; their opacities are driven by the
 // shared `progress` value so the icon morphs in lockstep with the indicator
 // as it slides past. Segments are glyph-only — labels would crowd the
-// shared pill and the ViewersStatusCard directly above already explains the
+// shared pill and the ViewersStatusCard directly below already explains the
 // active mode.
 //
 // All three buttons are always tappable. Broadcast is treated as a real
@@ -671,7 +1025,7 @@ type ToggleAction = ToggleMode
 function ToggleSpinner({ color, size = 20 }: { color: string; size?: number }) {
   const rotation = useSharedValue(0)
   useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: 600, easing: Easing.linear }), -1, false)
+    rotation.value = withRepeat(withTiming(360, { duration: MOTION.spin, easing: Easing.linear }), -1, false)
   }, [])
   const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
   return (
@@ -685,6 +1039,15 @@ function ToggleSpinner({ color, size = 20 }: { color: string; size?: number }) {
 }
 
 const TOGGLE_ORDER: ToggleMode[] = ['hidden', 'visible', 'broadcast']
+// Single source of truth for the visibility-state glyph. Consumed by the
+// in-page VisibilityToggle segments AND by the collapsed side TabStrip tab,
+// so a given state (hidden / visible / broadcast) always reads as the same
+// icon wherever it surfaces.
+const VISIBILITY_ICON: Record<ToggleMode, (color: string, size: number) => React.ReactNode> = {
+  hidden: (color, size) => <EyeOffIcon color={color} size={size} />,
+  visible: (color, size) => <EyeOpenIcon color={color} size={size} />,
+  broadcast: (color, size) => <MegaphoneIcon color={color} size={size} />,
+}
 // Padding past the popup's `visible=false` flip to cover BottomSheet's
 // slide-out animation (~300ms default withTiming). After this window the
 // VisibilityToggle is free to slide its indicator to the new mode.
@@ -694,11 +1057,11 @@ const TOGGLE_GATE_LINGER_MS = 320
 // room on every side, iOS segmented-control style.
 const TOGGLE_TRACK_INSET = 4
 
-// One segment of the connected toggle. The toggle sits on a white page
-// background and its body carries PRIMARY, so the palette is inverted
-// from a typical resting/active pair: resting segments read WHITE icon +
-// WHITE label on PRIMARY; the sliding WHITE thumb hosts the active
-// segment which paints PRIMARY icon + PRIMARY label. Each segment stacks
+// One segment of the connected toggle. The toggle sits on the deep-wine
+// PRIMARY page and its body is PRIMARY too (seamless with the page): resting
+// segments read WHITE icon + WHITE label on the wine pill; the sliding WHITE
+// thumb hosts the active segment which paints PRIMARY icon + PRIMARY label.
+// Each segment stacks
 // icon-over-label vertically and renders both color variants of the
 // stack as overlaid layers, cross-fading via opacity driven by the
 // shared `progress` value — same pattern as TabStrip's label cross-fade.
@@ -804,7 +1167,7 @@ function VisibilityToggle({
   // up `latestTarget` and runs withTiming from current progress.
   useEffect(() => {
     if (gated) return
-    progress.value = withTiming(modeIndex, { duration: 280, easing: Easing.out(Easing.cubic) })
+    progress.value = withTiming(modeIndex, { duration: MOTION.base, easing: Easing.out(Easing.cubic) })
   }, [modeIndex, gated])
 
   // Segments share the inner track (`trackWidth - 2*INSET`). The indicator
@@ -841,6 +1204,7 @@ function VisibilityToggle({
       style={visibilityToggleStyles.row}
       onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
     >
+      <View pointerEvents="none" style={visibilityToggleStyles.pillFill} />
       {segmentWidth > 0 && (
         <Animated.View
           pointerEvents="none"
@@ -853,10 +1217,7 @@ function VisibilityToggle({
       )}
       {TOGGLE_ORDER.map((m, i) => {
         const iconSize = ICON.xxxl
-        const renderIcon =
-          m === 'hidden' ? (color: string) => <EyeOffIcon color={color} size={iconSize} />
-          : m === 'visible' ? (color: string) => <EyeOpenIcon color={color} size={iconSize} />
-          : (color: string) => <MegaphoneIcon color={color} size={iconSize} />
+        const renderIcon = (color: string) => VISIBILITY_ICON[m](color, iconSize)
         // The broadcast segment swaps its name for the live MM:SS while
         // the 30m cooldown is running, so the user reads the countdown
         // exactly where the broadcast control lives. Tabular-nums in
@@ -888,14 +1249,28 @@ const visibilityToggleStyles = StyleSheet.create({
     // the row only adds TOGGLE_TRACK_INSET on every side to host the
     // indicator gutter. No magic number.
     borderRadius: RADIUS,
-    // The toggle stands alone on the white page background — its body
-    // carries the coral. Resting segments read as WHITE-on-PRIMARY, the
-    // WHITE thumb stands out, and the wrapper around the pill stays
-    // neutral so the toggle isn't framed by a coral strip.
+    // The pill must read as its own surface — distinctly between the
+    // deep-wine page and the WHITE thumb — and must stay OPAQUE: it sits
+    // directly between the wine TabStrip header and the wine page, so a
+    // translucent pill would visually dissolve into the surrounding wine.
+    // The fill is therefore two flat layers (not a gradient): this opaque
+    // PRIMARY base, and `pillFill` washing a flat translucent WHITE over
+    // it. The composite is a fixed opaque dusty-rose sitting visibly
+    // between the wine header/page and the pure-white thumb.
     backgroundColor: PRIMARY,
     // Inner padding gives the indicator and segments breathing room from
     // the outer pill edge.
     padding: TOGGLE_TRACK_INSET,
+  },
+  // Layer 2 of the pill fill (see `row`): a flat translucent-WHITE wash
+  // over the opaque PRIMARY base, lightening the wine toward white so the
+  // pill reads as its own panel. First child + pointerEvents none so it
+  // paints behind the indicator and segments and never eats a tap. Matches
+  // the row radius so the wash follows the capsule edge.
+  pillFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: WHITE_MID,
+    borderRadius: RADIUS,
   },
   indicator: {
     position: 'absolute',
@@ -952,12 +1327,13 @@ const visibilityToggleStyles = StyleSheet.create({
     gap: XS,
   },
   segmentLabel: {
-    // Visual match to the TabStrip broadcast timer. Even though both use
-    // semibold tabular-style numbers in TEXT.md upstream, Hebrew letters
-    // here read heavier than digits in the same point size, so we drop
-    // a tier (TEXT.sm) to keep the same perceived weight as the timer.
-    fontSize: TEXT.sm,
-    lineHeight: TEXT.sm,
+    // Compact micro-label register (TEXT.xs). Hebrew letters read heavier
+    // than digits at the same point size, and the toggle is a secondary
+    // control sitting under the page card, so the labels stay deliberately
+    // small — one tier below the TabStrip broadcast timer rather than
+    // matched to it.
+    fontSize: TEXT.xs,
+    lineHeight: TEXT.xs,
     fontWeight: WEIGHT.semibold,
     // Broadcast segment may swap its name for a live MM:SS countdown.
     // Tabular numerals keep the digit columns from jittering each second
@@ -1085,81 +1461,64 @@ export default function HomePage() {
   const [profileSheetOpen, setProfileSheetOpen] = useState(false)
   const profileSheetConfigRef = useRef(profileSheetOpen)
   useEffect(() => { profileSheetConfigRef.current = profileSheetOpen }, [profileSheetOpen])
-  const shellHeight = useSharedValue(Dimensions.get('window').height)
-  const profileSheetDragY = useSharedValue(0)
-  const profileSheetScrollAtTop = useSharedValue(true)
   const profileSheetHeaderBottom = useSharedValue(0)
   // Measured bottom of the home shell's TabStrip. Used to anchor the profile
   // sheet just below the tabs so the card doesn't slide behind them.
   const tabStripBottom = useSharedValue(0)
-  const profileSheetGestureRef = useRef<import('react-native-gesture-handler').GestureType | undefined>(undefined)
-  // Outer wrapper: anchor top to the TabStrip's bottom + apply live drag
-  // offset. The inner Animated.View carries SlideInDown/SlideOutDown so the
-  // mount transform composes with this drag without conflicting on the same
-  // useAnimatedStyle target.
-  const profileSheetWrapStyle = useAnimatedStyle(() => ({
-    top: tabStripBottom.value,
-    transform: [{ translateY: profileSheetDragY.value }],
-  }))
+  // Same unified pull behaviour as page1/page2, in 'sheet' mode: manual
+  // activation with header-vs-scroll arbitration. Threshold/flick/commit
+  // motion are all object-owned and identical to the other surfaces (slide
+  // off, then onCommit = close). No PullContext — PreviewFieldPage manages
+  // its own scroll via dismissGestureRef + onScrollAtTop. The tutorial runs
+  // once-ever the first time the sheet's card appears.
+  const closeSheetViaSwipe = useCallback(() => setProfileSheetOpen(false), [])
+  const profilePull = usePullBehavior({
+    activation: 'sheet',
+    enabled: true,
+    onCommit: closeSheetViaSwipe,
+    headerBottom: profileSheetHeaderBottom,
+    tutorial: { ready: profileSheetOpen, seenFlag: 'profile_demo' },
+  })
+  // ── Sheet open-progress → TabStrip morph (0 = closed, 1 = fully open) ────
+  // `profileSheetOpenV` ramps with the card's SlideIn/SlideOut (system
+  // default withTiming, matching the card's own mount motion — no magic
+  // duration). The live swipe-down drag (`profilePull.pullY`) is folded in
+  // and normalised by the SAME commit distance as the gesture, so the morph
+  // tracks the card 1:1 and lands exactly at "closed" the instant the drag
+  // reaches the dismiss point, then snaps back if released short.
+  // `tabProgress` blends the real pager position toward HOME_PANE by this
+  // amount: with the sheet shut it IS the pager progress (zero behaviour
+  // change); as the sheet rises the selected-chip slides Settings→Home and
+  // the Home tab's word morphs "Once"→"My profile" in lockstep.
+  const profileSheetOpenV = useSharedValue(0)
+  useEffect(() => {
+    profileSheetOpenV.value = withTiming(profileSheetOpen ? 1 : 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileSheetOpen])
+  const profileSheetProgress = useDerivedValue(() => {
+    // SAME commit distance as the gesture (object-owned single source) so
+    // the morph tracks the card 1:1 and can never drift from the threshold.
+    const span = profilePull.commitDistance
+    const d = span > 0 ? Math.min(1, Math.max(0, profilePull.pullY.value / span)) : 0
+    return profileSheetOpenV.value * (1 - d)
+  })
+  const tabProgress = useDerivedValue(() => {
+    const p = pagerProgress.value
+    return p + (HOME_PANE - p) * profileSheetProgress.value
+  })
+  // PullPane owns the anchor (top = tabStripBottom via topAnchor) and the
+  // live drag transform; the RisingCard inside still owns SlideIn/SlideOut.
   const openProfileSheet = useCallback(() => {
-    profileSheetDragY.value = 0
+    profilePull.reset()
     setProfileSheetOpen(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const closeProfileSheet = useCallback(() => {
     tap()
-    profileSheetScrollAtTop.value = true
+    profilePull.setScrollAtTop(true)
     setProfileSheetOpen(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const onProfileSheetScrollAtTop = useCallback((atTop: boolean) => {
-    profileSheetScrollAtTop.value = atTop
-  }, [profileSheetScrollAtTop])
-  const profileSheetSwipeStart = useSharedValue({ x: 0, y: 0 })
-  const profileSheetSwipe = useMemo(() =>
-    Gesture.Pan()
-      .withRef(profileSheetGestureRef)
-      .manualActivation(true)
-      .onTouchesDown((e, _manager) => {
-        'worklet'
-        const t = e.allTouches[0]
-        if (t) profileSheetSwipeStart.value = { x: t.absoluteX, y: t.absoluteY }
-      })
-      .onTouchesMove((e, manager) => {
-        'worklet'
-        const inHeader = profileSheetSwipeStart.value.y <= profileSheetHeaderBottom.value
-        if (!profileSheetScrollAtTop.value && !inHeader) { manager.fail(); return }
-        const t = e.allTouches[0]
-        if (!t) return
-        const dx = t.absoluteX - profileSheetSwipeStart.value.x
-        const dy = t.absoluteY - profileSheetSwipeStart.value.y
-        if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
-        if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 0.8) { manager.activate(); return }
-        manager.fail()
-      })
-      .onUpdate(e => {
-        'worklet'
-        const drag = e.translationY
-        if (drag <= 0) return
-        profileSheetDragY.value = drag
-      })
-      .onEnd(e => {
-        'worklet'
-        const drag = e.translationY
-        const vy = e.velocityY
-        const past = drag > shellHeight.value * 0.3
-        const flick = vy > 500
-        if (past || flick) {
-          // Trigger unmount → SlideOutDown plays. dragY is retained so the
-          // composed visual continues smoothly from the user's release point
-          // (no upward bump before the exit animation starts).
-          runOnJS(setProfileSheetOpen)(false)
-        } else {
-          profileSheetDragY.value = withTiming(0)
-        }
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [])
 
   const shellWidth = useSharedValue(Dimensions.get('window').width)
 
@@ -1571,6 +1930,18 @@ export default function HomePage() {
   // they picked manually, GPS movement should not overwrite it.
   useEffect(() => {
     if (!startupSentRef.current || locPerm !== 'granted' || customLoc) return
+    let cancelled = false
+    // Immediately acquire + broadcast a fresh fix whenever tracking
+    // (re)starts, most importantly right after the user switches from a
+    // custom address back to device mode. Without this the server keeps the
+    // stale custom location until the 60s interval ticks or the user
+    // physically moves 100m, so a re-scan in between still surfaces results
+    // from the old (custom) location.
+    getLocation().then(coords => {
+      if (!cancelled && coords) {
+        invoke('app/location', { location: { latitude: coords.lat, longitude: coords.lng } }).catch(() => {})
+      }
+    })
     let sub: { remove(): void } | null = null
     watchLocation((coords) => {
       invoke('app/location', { location: { latitude: coords.lat, longitude: coords.lng } }).catch(() => {})
@@ -1580,7 +1951,7 @@ export default function HomePage() {
         if (coords) invoke('app/location', { location: { latitude: coords.lat, longitude: coords.lng } }).catch(() => {})
       })
     }, 60_000)
-    return () => { sub?.remove(); clearInterval(id) }
+    return () => { cancelled = true; sub?.remove(); clearInterval(id) }
   }, [locPerm, locFailed, customLoc])
 
   // Anchor pane on state transitions. Entering CHAT animates to slot 3;
@@ -1737,120 +2108,53 @@ export default function HomePage() {
   }, [displayedMatch?.user_id])
 
   // Reset the cached "scroll is at top" gate whenever a new profile is shown.
-  // The MatchCard's PullScrollView is the same component instance across
-  // profile changes; the parent gesture below reads scrollAtTopSV at gesture
-  // start to decide whether to allow pull-to-skip. PullScrollView only
-  // refreshes that value from native onScroll events, so without this reset
-  // the value sticks at `false` (from the previous card's scrolled-down
-  // position) and the first swipe on the new card gets routed to scroll-only
-  // mode — the user has to nudge the scroll to "unstick" it.
+  // ── Pull-to-skip (page1) ─────────────────────────────────────────────
+  // The whole pull behaviour — gesture, 1:1 resistance, half-screen commit,
+  // the ride-off-screen animation, AND the first-time tutorial choreography
+  // + once-ever trigger — lives in usePullBehavior. runIgnore is the commit
+  // action (also fired by the skip-hint dialog) so it's declared here.
+  const runIgnore = useCallback(() => {
+    if (busy || ignoreLoading) return
+    tap()
+    setBusy(true)
+    setPendingKey('watching-reject')
+    setIgnoreLoading(true)
+    setSearching(true)
+    // Optimistic exit: clearing displayedMatch unmounts the keyed
+    // Animated.View, which plays SlideOutDown. The pull transform (pullY) is
+    // preserved during the layout exit, so a release at any pulled position
+    // continues smoothly off-screen. Realtime delivers the next match (or
+    // null) and the sync effect clears the loading state.
+    setDisplayedMatch(null)
+    invoke('app/ignore', {}).catch(err => {
+      console.error(err)
+      setBusy(false)
+      setPendingKey(null)
+      setIgnoreLoading(false)
+      setSearching(false)
+    })
+  }, [busy, ignoreLoading])
+  const page1Pull = usePullBehavior({
+    activation: 'scrollPan',
+    enabled: state === 'watching',
+    onCommit: runIgnore,
+    tutorial: {
+      // Once-ever, and only on a settled watching card with no overlay
+      // eating the surface the demo animates on.
+      ready: state === 'watching' && !!displayedMatch
+        && !showNotifOverlay && !showLocOverlay && !locFailed && !showNoInternetOverlay,
+      seenFlag: 'home_demo',
+    },
+  })
+  // MatchCard's PullScrollView is the same instance across profile changes;
+  // the pull gesture samples scrollAtTop at gesture start. PullScrollView
+  // only refreshes it from native onScroll, so without this reset it sticks
+  // at `false` (previous card's scrolled-down position) and the first swipe
+  // on the new card is routed to scroll-only until the user nudges it.
   useEffect(() => {
-    if (displayedMatch) scrollAtTopSV.value = true
+    if (displayedMatch) page1Pull.setScrollAtTop(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMatch?.user_id])
-
-  // Pull-to-skip gesture state. Lifted up from HomeCard so the entire match
-  // card (photo + buttons) shares the same translateY transform.
-  // 1:1 with the finger — no damping. Two-phase: while the inner ScrollView
-  // is not at top, the gesture passes through to the scroll (the offset
-  // tracks how far the finger moved while scrolling). Once scrollY hits 0,
-  // additional finger movement starts pulling the card.
-  const PULL_DAMP = 1
-  const pullY = useSharedValue(0)
-  const pullStartOffset = useSharedValue(0)
-  const slidOut = useSharedValue(false)
-  const scrollAtTopSV = useSharedValue(true)
-  // `pullEngaged` flips true the first time pullY moves >0 in this gesture.
-  // It stays true until the gesture ends so that disabling-scroll-during-
-  // pull is sticky (an upward reversal mid-pull goes to the pan, not back
-  // into the scroll). `pulling` mirrors it on JS so PullScrollView can
-  // disable its scroll via PullContext.
-  const pullEngaged = useSharedValue(false)
-  // Locks the current gesture to scroll-only mode when it began with the
-  // ScrollView not at the top. Scroll always wins; pulling the card to skip
-  // is only available on a fresh gesture that starts already at the top.
-  const scrollOnly = useSharedValue(false)
-  const [pulling, setPulling] = useState(false)
-  const cardPanRef = useRef<GestureType>(undefined as unknown as GestureType)
-
-  // First-time pull-to-skip demo. When the user lands in a watching state
-  // for the first time ever (gated by the `home_demo` flag in seenFlags),
-  // we run a single non-interactive choreography: card drops to mid-screen,
-  // holds for ~1s, slides back up. While the demo plays the screen is
-  // locked so the user can't fight the animation.
-  const [demoPlaying, setDemoPlaying] = useState(false)
-  const demoTriggeredRef = useRef(false)
-  const runFirstTimeDemo = useCallback(() => {
-    const screenH = Dimensions.get('window').height
-    // Stop just below the commit threshold so the animation can't trigger
-    // a real skip; the gesture handler reads `e.translationY` rather than
-    // `pullY.value`, but keeping the visual under commitDistance matches
-    // the intent ("a peek, not a skip").
-    const peek = screenH * 0.45
-    // Drive the same `pulling` flag the real gesture toggles, so the
-    // gradient PullCue fades in and the "לא עכשיו" headline takes over the
-    // empty pane behind the card. Cleared when the card returns to rest.
-    setPulling(true)
-    const finish = () => {
-      setPulling(false)
-      setDemoPlaying(false)
-    }
-    pullY.value = withSequence(
-      withTiming(peek),
-      withDelay(
-        1000,
-        withTiming(0, undefined, finished => {
-          'worklet'
-          if (finished) runOnJS(finish)()
-        }),
-      ),
-    )
-  }, [pullY])
-  useEffect(() => {
-    if (demoTriggeredRef.current) return
-    if (state !== 'watching') return
-    if (!displayedMatch) return
-    // Don't play while any home-pane overlay is up: notification/location
-    // permission cards, the location-failed retry, or the no-internet
-    // banner all eat the same surface the demo is supposed to animate on.
-    // These are the same booleans that compose `isPermMode` (and since
-    // state==='watching' here, the `state !== 'chat'` branch is implicit).
-    // Re-running on overlay flips is exactly what lets the demo fire once
-    // permissions finally land.
-    if (showNotifOverlay || showLocOverlay || locFailed || showNoInternetOverlay) return
-    demoTriggeredRef.current = true
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const scheduleDemo = () => {
-      // Wait out the card's SlideInDown (~420ms) before kicking off the
-      // demo so the two animations don't fight.
-      timer = setTimeout(() => {
-        if (cancelled) return
-        setDemoPlaying(true)
-        runFirstTimeDemo()
-      }, 500)
-    }
-    ;(async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE.seenFlags)
-        if (cancelled) return
-        const flags = raw ? JSON.parse(raw) : {}
-        if (flags.home_demo) return
-        // Persist the flag immediately so the demo plays once per user,
-        // ever — independent of whether they go on to actually skip.
-        flags.home_demo = true
-        AsyncStorage.setItem(STORAGE.seenFlags, JSON.stringify(flags)).catch(() => {})
-        scheduleDemo()
-      } catch {}
-    })()
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-  }, [state, displayedMatch?.user_id, showNotifOverlay, showLocOverlay, locFailed, showNoInternetOverlay, runFirstTimeDemo])
-
-  const pullStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pullY.value }],
-  }))
 
   // Sync remote → displayed. The card only rises (mounts with SlideInDown)
   // after its photos have been prefetched, so the user never sees a placeholder
@@ -1878,7 +2182,7 @@ export default function HomePage() {
     if (!remoteMatch) {
       setDisplayedMatch(null)
       setPreloadingMatch(null)
-      pullY.value = 0
+      page1Pull.reset()
       searchingTimer = setTimeout(() => {
         if (!cancelled) setSearching(false)
       }, 420)
@@ -1922,7 +2226,7 @@ export default function HomePage() {
     if (urls.length === 0) {
       // No photos to wait for — promote immediately.
       setDisplayedMatch(remoteMatch)
-      pullY.value = 0
+      page1Pull.reset()
       searchingTimer = setTimeout(() => {
         if (!cancelled) setSearching(false)
       }, 460)
@@ -1960,7 +2264,7 @@ export default function HomePage() {
     // an off-screen container, invisible to the user. requestAnimationFrame
     // gives the UI thread a chance to apply pullY=0 before React mounts the
     // new keyed Animated.View.
-    pullY.value = 0
+    page1Pull.reset()
     preloadingMatchRef.current = null
     setPreloadingMatch(null)
     requestAnimationFrame(() => {
@@ -1972,7 +2276,7 @@ export default function HomePage() {
       setBusy(false)
       setPendingKey(null)
     }
-  }, [pullY])
+  }, [page1Pull.reset])
 
   const watchers = profile?.relations?.watchers
     ? [...profile.relations.watchers].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
@@ -2045,6 +2349,10 @@ export default function HomePage() {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
   const [skipHintOpen, setSkipHintOpen] = useState(false)
+  // Drives the watching card's inner scroll back to the top when the user
+  // acknowledges the skip hint ("got it"), so the swipe-down-to-skip
+  // gesture they were just taught is armed again.
+  const watchingCardRef = useRef<MatchCardHandle>(null)
   const [removeWatcherTarget, setRemoveWatcherTarget] = useState<Profile | null>(null)
   const [removeWatcherBusy, setRemoveWatcherBusy] = useState(false)
   const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false)
@@ -2079,7 +2387,10 @@ export default function HomePage() {
     const t = setTimeout(() => setVisibilityToggleGated(false), TOGGLE_GATE_LINGER_MS)
     return () => clearTimeout(t)
   }, [visibilityPopupOpen])
-  const [hasBeenActiveThisSession, setHasBeenActiveThisSession] = useState(false)
+  // Index into READY_HEADLINES; re-rolled on each entry to the ready state
+  // by the effect next to headlineText. Lazy init so the first appearance is
+  // already random rather than always the first sentence.
+  const [readyHeadlineIdx, setReadyHeadlineIdx] = useState(() => pickReadyHeadline(-1))
   // Chat-state actions menu (opens from the MatchCard dots button in chat
   // state). Replaces the old chat-page dots dropdown for block/leave; adds
   // a Report option (placeholder feedback only — no server endpoint yet).
@@ -2136,28 +2447,6 @@ export default function HomePage() {
       })
   }, [busy])
 
-  const runIgnore = useCallback(() => {
-    if (busy || ignoreLoading) return
-    tap()
-    setBusy(true)
-    setPendingKey('watching-reject')
-    setIgnoreLoading(true)
-    setSearching(true)
-    // Optimistic exit: clearing displayedMatch unmounts the keyed
-    // Animated.View, which plays SlideOutDown. The Pan gesture's pullY is
-    // preserved as a transform during the layout exit, so a release at any
-    // pulled position continues smoothly off-screen. Realtime delivers the
-    // next match (or null) and the sync effect clears the loading state.
-    setDisplayedMatch(null)
-    invoke('app/ignore', {}).catch(err => {
-      console.error(err)
-      setBusy(false)
-      setPendingKey(null)
-      setIgnoreLoading(false)
-      setSearching(false)
-    })
-  }, [busy, ignoreLoading])
-
   // Optimistic exit: clear displayedMatch synchronously so the card slides
   // out carrying its last-rendered props (timer + cancel button intact),
   // avoiding the 1-frame in-between render where state is null but the card
@@ -2186,175 +2475,33 @@ export default function HomePage() {
       })
   }, [busy])
 
-  // Inner ScrollView (MatchCard's PullScrollView) coexistence: a Pan ref +
-  // PullContext lets the inner scroll and outer pan negotiate via
-  // simultaneousHandlers and dropped scroll while pulling. Same protocol as
-  // HomeCard, lifted up so the photo + buttons share one Animated.View.
-  const pullCtx = useMemo<PullCtx>(() => ({
-    panRef: cardPanRef,
-    extraRefs: [],
-    setScrollAtTop: (v: boolean) => {
-      scrollAtTopSV.value = v
-    },
-    pulling,
-  }), [pulling])
-
-  // Screen height + commit distance hoisted so both the page1 and page2
-  // pan gestures can share the same half-screen commit threshold.
-  const screenH = Dimensions.get('window').height
-  const commitDistance = screenH * 0.5
-
-  // ── Page2 pending-invite swipe-down gesture ──────────────────────────────
-  // Mirrors the page1 watching pull-to-skip but commits to decline instead
-  // of ignore. Decline goes through the confirm dialog (setRefuseConfirmOpen)
-  // because it's irreversible — same UX as the old "לדלג" button used to be.
-  // Separate state from the page1 gesture so they can't interfere: both
-  // panes can technically be mounted simultaneously (page2 pending while
-  // page1 is in watching), and Reanimated shared values aren't safe to
-  // alias across two GestureDetector trees.
-  const page2PullY = useSharedValue(0)
-  const page2SlidOut = useSharedValue(false)
-  const page2ScrollAtTopSV = useSharedValue(true)
-  const page2PullEngaged = useSharedValue(false)
-  const page2ScrollOnly = useSharedValue(false)
-  const [page2Pulling, setPage2Pulling] = useState(false)
-  const page2CardPanRef = useRef<GestureType>(undefined as unknown as GestureType)
-  const page2PullStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: page2PullY.value }],
-  }))
-  const page2PullCtx = useMemo<PullCtx>(() => ({
-    panRef: page2CardPanRef,
-    extraRefs: [],
-    setScrollAtTop: (v: boolean) => { page2ScrollAtTopSV.value = v },
-    pulling: page2Pulling,
-  }), [page2Pulling])
+  // ── Page2 pending-invite swipe-down ──────────────────────────────────────
+  // Same unified behaviour/threshold/commit motion as page1 (slide off, then
+  // onCommit). Independent instance from page1's — both panes can be mounted
+  // at once and shared values can't be aliased across the two gesture trees.
+  // `openRefuseConfirm` still backs the explicit decline BUTTON (confirm
+  // dialog, decline is irreversible); the SWIPE now declines directly, per
+  // the uniform-commit decision (decline-without-confirm accepted).
   const openRefuseConfirm = useCallback(() => {
     tap()
     setRefuseConfirmOpen(true)
   }, [])
-  const page2CardPan = useMemo(() => {
-    return Gesture.Pan()
-      .withRef(page2CardPanRef)
-      .enabled(!!page2PendingInvite && !busy)
-      .activeOffsetY(4)
-      .failOffsetX([-25, 25])
-      .onStart(() => {
-        'worklet'
-        page2PullY.value = 0
-        page2SlidOut.value = false
-        page2PullEngaged.value = false
-        page2ScrollOnly.value = !page2ScrollAtTopSV.value
-      })
-      .onUpdate(e => {
-        'worklet'
-        if (page2ScrollOnly.value) { page2PullY.value = 0; return }
-        const raw = Math.max(0, e.translationY)
-        page2PullY.value = raw
-        if (raw > 0 && !page2PullEngaged.value) {
-          page2PullEngaged.value = true
-          runOnJS(setPage2Pulling)(true)
-        }
-      })
-      .onEnd(e => {
-        'worklet'
-        if (page2ScrollOnly.value) return
-        const pulled = Math.max(0, e.translationY)
-        if (pulled >= commitDistance) {
-          // Don't slide the card off-screen here — the confirm dialog might
-          // be cancelled. Snap back to rest and open the dialog instead.
-          runOnJS(openRefuseConfirm)()
-        }
-      })
-      .onFinalize(() => {
-        'worklet'
-        if (!page2SlidOut.value) {
-          page2PullY.value = withTiming(0)
-        }
-        if (page2PullEngaged.value) {
-          page2PullEngaged.value = false
-          runOnJS(setPage2Pulling)(false)
-        }
-      })
-  }, [page2PendingInvite, busy, commitDistance, openRefuseConfirm])
+  const declineViaSwipe = useCallback(() => {
+    if (busy) return
+    tap()
+    setBusy(true)
+    setPendingKey('refuse-confirm')
+    invoke('app/decline', {})
+      .then(() => { setBusy(false); setPendingKey(null) })
+      .catch(err => { console.error(err); setBusy(false); setPendingKey(null) })
+  }, [busy])
+  const page2Pull = usePullBehavior({
+    activation: 'scrollPan',
+    enabled: !!page2PendingInvite && !busy,
+    onCommit: declineViaSwipe,
+    tutorial: { ready: !!page2PendingInvite, seenFlag: 'page2_demo' },
+  })
 
-  const pullEnabled = state === 'watching' && !demoPlaying
-  // Capture screen height in JS — Dimensions isn't available inside the
-  // gesture worklets (UI thread), so we close over a plain number. Lifted
-  // to component scope so the pull-down chevron cue can fade against the
-  // same threshold the gesture commits at. (Now hoisted above so the
-  // page2 pan gesture can share commitDistance.)
-  const cardPan = useMemo(() => {
-    return Gesture.Pan()
-      .withRef(cardPanRef)
-      .enabled(pullEnabled)
-      .activeOffsetY(4)
-      .failOffsetX([-25, 25])
-      .onStart(() => {
-        'worklet'
-        pullY.value = 0
-        pullStartOffset.value = 0
-        slidOut.value = false
-        pullEngaged.value = false
-        // Sample scroll position at gesture start. If the user wasn't at the
-        // top, this gesture is committed to scrolling only — they have to
-        // release and start a fresh gesture (with scroll already at top) to
-        // pull the card down. Scroll always wins.
-        scrollOnly.value = !scrollAtTopSV.value
-      })
-      .onUpdate(e => {
-        'worklet'
-        // Gesture started below the top: hand the whole gesture to the
-        // ScrollView. The card never moves, even if the user scrolls all
-        // the way back to the top mid-gesture.
-        if (scrollOnly.value) {
-          pullY.value = 0
-          return
-        }
-        // Started at the top — finger travel pulls the card 1:1.
-        const raw = Math.max(0, e.translationY)
-        pullY.value = raw * PULL_DAMP
-        // The first time the card actually moves, engage `pulling` so the
-        // inner ScrollView locks (scrollEnabled=false). This makes an
-        // upward reversal mid-pull go back to the pan instead of being
-        // consumed as a downward scroll.
-        if (raw > 0 && !pullEngaged.value) {
-          pullEngaged.value = true
-          runOnJS(setPulling)(true)
-        }
-      })
-      .onEnd(e => {
-        'worklet'
-        // Scroll-only gestures never commit — the card didn't move.
-        if (scrollOnly.value) return
-        // Commit only when the user pulled past the screen-half mark.
-        // A fast flick alone is not enough — the user must consciously cross
-        // the midpoint before lifting, otherwise an accidental fast swipe
-        // would skip the card. Continue the slide off-screen on the UI
-        // thread immediately — without this, pullY stays frozen at the
-        // finger's release position for the 1-2 frames it takes the JS
-        // thread to handle setDisplayedMatch(null), which reads as the card
-        // briefly sticking before SlideOutDown picks it up.
-        const pulled = Math.max(0, e.translationY)
-        if (pulled >= commitDistance) {
-          slidOut.value = true
-          pullY.value = withTiming(screenH)
-          runOnJS(runIgnore)()
-        }
-      })
-      .onFinalize(() => {
-        'worklet'
-        // Safety net — if the gesture didn't commit (snap back), or was
-        // cancelled mid-pull, animate the card back to position 0. Without
-        // this, a cancelled pan would leave the card stuck partway down.
-        if (!slidOut.value) {
-          pullY.value = withTiming(0)
-        }
-        if (pullEngaged.value) {
-          pullEngaged.value = false
-          runOnJS(setPulling)(false)
-        }
-      })
-  }, [pullEnabled, runIgnore])
 
   // Watching-state invite block lives inside the MatchCard scroll (passed
   // as footerBlock), not in the pinned HomeButtons row. The "skip" button
@@ -2388,7 +2535,7 @@ export default function HomePage() {
       <View style={styles.replyingButtonRow}>
         <View style={styles.replyingDeclineCell}>
           <Button
-            variant="secondary"
+            variant="onPrimaryGhost"
             label={t('home.watchingReject')}
             onPress={() => { tap(); setSkipHintOpen(true) }}
             disabled={busy}
@@ -2398,9 +2545,9 @@ export default function HomePage() {
         </View>
         <View style={styles.replyingAcceptCell}>
           <Button
-            variant="primary"
+            variant="onPrimary"
             label={t('home.inviteConfirmOk')}
-            iconStart={<SparklesIcon color={WHITE} />}
+            iconStart={<SparklesIcon color={PRIMARY} />}
             onPress={() => {
               setStickyInvite(true)
               runAction('app/invite', 'invite-confirm')
@@ -2421,7 +2568,7 @@ export default function HomePage() {
   // The countdown timer used to live in the accept button's footer; it now
   // lives under the invite tab label (see inviteTabSubLabel above). The
   // decline button opens the same refuse-confirm dialog as the swipe-down
-  // gesture (page2CardPan below).
+  // gesture (page2Pull below).
   const replyingAcceptBlock = page2PendingInvite ? (
     <View style={[styles.watchingInviteBlock, { paddingBottom: Math.max(bottomInset, SM) }]}>
       <Text style={styles.watchingInviteTitle}>
@@ -2433,7 +2580,7 @@ export default function HomePage() {
       <View style={styles.replyingButtonRow}>
         <View style={styles.replyingDeclineCell}>
           <Button
-            variant="secondary"
+            variant="onPrimaryGhost"
             label={t('home.watchingReject')}
             onPress={openRefuseConfirm}
             disabled={busy}
@@ -2442,9 +2589,8 @@ export default function HomePage() {
         </View>
         <View style={styles.replyingAcceptCell}>
           <Button
-            variant="primary"
+            variant="onPrimary"
             label={t('home.replyingAccept')}
-            iconStart={<CheckIcon color={WHITE} size={ICON.xxl} />}
             onPress={() => runAction('app/approve', 'replying-accept')}
             disabled={busy}
             loading={busy && pendingKey === 'replying-accept'}
@@ -2465,7 +2611,7 @@ export default function HomePage() {
     state === 'chat'
       ? [{
           key: 'chat-menu',
-          icon: <CloseBoldIcon color={WHITE} size={ICON.huge} />,
+          icon: <CloseBoldIcon color={PRIMARY} size={ICON.huge} />,
           onPress: () => { tap(); setChatMenuOpen(true) },
         }]
       : state === 'watching'
@@ -2482,13 +2628,14 @@ export default function HomePage() {
         ? tg('home.locationUnavailableButton', isMale)
         : tg('home.noInternetButton', isMale)
 
-  const permConfirmIcon = showNotifOverlay
-    ? <BellIcon color={WHITE} size={22} />
+  // Top action icon for the permission dialog — one per state (enable
+  // notifications / enable location / retry network). PRIMARY/32 to match
+  // the ConfirmDialog tinted-circle convention.
+  const permIcon = showNotifOverlay
+    ? <BellIcon color={PRIMARY} size={32} />
     : (showLocOverlay || locFailed)
-      ? <MapPinIcon color={WHITE} size={22} />
-      : isNetMode
-        ? <WifiOffIcon color={WHITE} size={22} />
-        : undefined
+      ? <MapPinIcon color={PRIMARY} size={32} />
+      : <WifiOffIcon color={PRIMARY} size={32} />
 
   const permOnConfirm = locFailed
     ? handleLocRetry
@@ -2505,11 +2652,6 @@ export default function HomePage() {
   // without message (brand-new user, or post-clear). Only the latter is "ready to
   // find" — when state is `free` we surface the no-one-nearby + Search Preferences UI.
   const isReadyToFind = state === null && rawPage1State !== 'free'
-  useEffect(() => {
-    if (state !== null && state !== undefined && !hasBeenActiveThisSession) {
-      setHasBeenActiveThisSession(true)
-    }
-  }, [state])
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
 
   const permTitle = showNotifOverlay
@@ -2621,40 +2763,62 @@ export default function HomePage() {
   const tabSpecs: TabSpec[] = [
     // Menu tab is icon-only (no label) — it's chrome, not a destination, so
     // it shrinks to its glyph width and yields the freed flex space to the
-    // two content tabs (Home + Side). Icon swaps by state: settings gear
-    // normally, pause when the user has toggled game mode off, close-X while
+    // two content tabs (Home + Side). Icon swaps by state: settings sliders
+    // glyph normally, pause when the user has toggled game mode off, close-X while
     // the profile preview sheet is open over the menu pane.
     {
       renderIndicator: profileSheetOpen
-        ? (color) => <CloseBoldIcon color={color} size={ICON.xl} />
+        ? (color) => <CloseBoldIcon color={color} size={ICON.xxl} />
         : gameModeOff
-          ? (color) => <PauseIcon color={color} size={ICON.xl} />
-          : (color) => <SettingsIcon color={color} size={ICON.xl} />,
+          ? (color) => <PauseIcon color={color} size={ICON.xxl} />
+          : (color) => <SlidersIcon color={color} size={ICON.xxl} />,
     },
-    { label: matchName || t('home.tabs.home'), subLabel: homeTabSubLabel },
+    // Home tab. While the own-profile preview sheet rises it morphs
+    // "Once" → "My profile" and (via tabProgress) the selected-chip slides
+    // onto it from the Menu tab — both driven 1:1 by the sheet's position.
+    {
+      label: matchName || t('home.tabs.home'),
+      subLabel: homeTabSubLabel,
+      altLabel: t('settings.myProfile'),
+      altProgress: profileSheetProgress,
+    },
     (() => {
-      // Self-state mode = no counterpart on the side tab and no live chat
-      // (i.e. broadcasting, free-visible, or hidden). The label reads the
-      // current visibility state in plain text — same shape as every other
-      // tab. Gendered via tg so feminine users see "מוסתרת" / "גלויה".
-      const selfStateMode = !sideTabName && !chatAvailable
-      const base = selfStateMode
-        ? (broadcastActive
-            ? t('home.tabs.broadcast')
-            : isHidden
-              ? tg('home.tabs.hidden', isMale)
-              : tg('home.tabs.visible', isMale))
-        : sideTabName
-          ? sideTabName
-          : chatAvailable
-            ? t('home.tabs.chat')
-            : page2PendingInvite
-              ? t('home.tabs.invite')
-              : t('home.tabs.viewers')
+      // The side tab carries a full text label ONLY when slot 2 is dedicated
+      // to a single counterpart — an incoming-invite card or a dead-invite
+      // "what happened" card (sideTabName is that person's name). In every
+      // ambient state (live chat, or self-visibility: broadcast / visible /
+      // hidden) there's no 1:1 counterpart to name, so the tab collapses to
+      // an icon-only compact tab exactly like Menu: it shrinks to its glyph
+      // width (TabStrip flags iconOnly when label && subLabel are absent),
+      // freeing flex so "Once" recenters between the two compact end tabs.
+      // The expand/collapse + recentre is animated by TabStrip itself
+      // (LinearTransition on every tab, TAB.collapseDuration). The icon is
+      // shared with the in-page VisibilityToggle via VISIBILITY_ICON so a
+      // state always reads as the same glyph; chat gets its own bubble.
+      if (!sideTabName) {
+        return {
+          renderIndicator: chatAvailable
+            ? (color) => <ChatIcon color={color} size={ICON.xxl} />
+            : (color) => VISIBILITY_ICON[toggleMode](color, ICON.xxl),
+          alerting: sideAlerting,
+          // While broadcasting the megaphone breathes (gentle heartbeat) to
+          // signal "you're live" — but only while the side tab isn't the
+          // selected pane (TabStrip gates it by selectedness).
+          indicatorPulsing: broadcastActive,
+          // Fade the whole side tab out 1:1 as the profile-preview sheet
+          // rises (same shared value that morphs "Once"→profile + slides the
+          // chip), so it disappears in sync with the close-button transition.
+          dimProgress: profileSheetProgress,
+        } satisfies TabSpec
+      }
       return {
-        label: sideTabCount > 0 ? `${base} ${sideTabCount}` : base,
+        label: sideTabCount > 0 ? `${sideTabName} ${sideTabCount}` : sideTabName,
         alerting: sideAlerting,
         subLabel: inviteTabSubLabel ?? undefined,
+        // Same as the ambient branch: the side tab (label + countdown) fades
+        // out 1:1 with the profile-preview sheet so it vanishes in sync with
+        // the close-button transition.
+        dimProgress: profileSheetProgress,
       } satisfies TabSpec
     })(),
   ]
@@ -2662,16 +2826,30 @@ export default function HomePage() {
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
   // every empty/scanning/ready/skip message uses one gradient label at one
-  // position with one styling.
-  const headlineText = pulling
-    ? t('home.watchingReject')
-    : (startupCompleted && (focusInflight || searching))
-      ? t('home.locatingDesc')
-      : (!showHiddenPlaceholder || cardExiting)
-        ? ''
-        : isReadyToFind
-          ? t(hasBeenActiveThisSession ? 'home.continueHeadline' : 'home.startHeadline')
-          : t('home.noOneNearbyTitle')
+  // position with one styling. Each predicate is named once so the
+  // "(re)entered the ready state" detection below reuses it instead of
+  // duplicating the branch condition.
+  const isLocatingHeadline = startupCompleted && (focusInflight || searching)
+  const isEmptyHeadline = !showHiddenPlaceholder || cardExiting
+  const showReadyHeadline = !isLocatingHeadline && !isEmptyHeadline && isReadyToFind
+  // Roll a fresh random sentence each time the ready headline (re)appears:
+  // the line is stable while shown but new on every entry. The roll lives in
+  // an effect (not render) so render stays pure and the chosen line holds
+  // across unrelated re-renders.
+  const prevShowReadyHeadline = useRef(false)
+  useEffect(() => {
+    if (showReadyHeadline && !prevShowReadyHeadline.current) {
+      setReadyHeadlineIdx(prev => pickReadyHeadline(prev))
+    }
+    prevShowReadyHeadline.current = showReadyHeadline
+  }, [showReadyHeadline])
+  const headlineText = isLocatingHeadline
+    ? t('home.locatingDesc')
+    : isEmptyHeadline
+      ? ''
+      : showReadyHeadline
+        ? READY_HEADLINES[readyHeadlineIdx] ?? ''
+        : t('home.noOneNearbyTitle')
 
   // PagerView onPageScroll drives the TabStrip indicator each frame. Runs on
   // the UI thread (worklet) so the underline tracks the swipe 1:1 instead of
@@ -2692,41 +2870,38 @@ export default function HomePage() {
   return (
     <View style={styles.backdrop}>
       {/* Paused state recolors the top chrome (status bar + TabStrip) from
-          PRIMARY to BLACK_MID so the whole header reads as "muted" without
-          going as dark as the round pause overlay button. Always render (not
+          the warm gradient shelf to flat BLACK_MID so the whole header reads
+          as "muted" without going as dark as the round pause overlay button.
+          The status bar can't take a gradient (Android), so it tracks the
+          gradient's PRIMARY 0% stop when active. Always render (not
           gated on gameModeOff) so the value switches both ways: a gated mount
           would leave the status bar stuck after resume, since expo-status-bar
           applies its value imperatively and never restores prior values on
           unmount. */}
-      <StatusBar
-        style="light"
-        backgroundColor={gameModeOff ? BLACK_MID : PRIMARY}
-        translucent={false}
-      />
+      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : PRIMARY} />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
         <View
           style={[
             styles.tabStripContainer,
-            { paddingTop: topInset + MD },
-            gameModeOff && {
-              backgroundColor: BLACK_MID,
-              // Drop shadow + elevation in pause mode. The drop shadow bleeds
-              // through the translucent BLACK_MID and reads as a dark frame
-              // around the strip; we don't need the separator effect anyway,
-              // since the dark chrome itself already contrasts with the
-              // content below.
-              shadowOpacity: 0,
-              elevation: 0,
-            },
+            // XL (not MD) above the safe inset so the sub-label timer, which
+            // floats as a caption above the selected-tab chip, has real
+            // breathing room and never sits jammed against the status bar.
+            { paddingTop: topInset + XL },
+            // Paused: swap the solid deep-wine for the flat muted BLACK_MID
+            // chrome. No shadow either way — the header is intentionally flat
+            // (the user removed the drop-shadow); the color contrast against
+            // the white content below is the only separation.
+            gameModeOff && { backgroundColor: BLACK_MID },
           ]}
           onLayout={e => { tabStripBottom.value = e.nativeEvent.layout.y + e.nativeEvent.layout.height }}
         >
-          <TabStrip tabs={tabSpecs} progress={pagerProgress} onSelect={(i) => {
-            // While the sheet is open, any tab tap dismisses it. Non-menu
-            // tabs additionally navigate to the tapped pane in the same tap.
+          <TabStrip tabs={tabSpecs} progress={tabProgress} onSelect={(i) => {
+            // While the preview sheet is up, the ONLY actionable chrome is
+            // the Menu tab (rendered as an X) — it closes the sheet, no
+            // navigation. The middle tab is a passive "My profile" label
+            // for the open sheet and the side tab is inert: only X closes.
             if (profileSheetOpen) {
-              if (i !== SETTINGS_PANE) goToPane(i as PaneIndex)
-              closeProfileSheet()
+              if (i === SETTINGS_PANE) closeProfileSheet()
               return
             }
             goToPane(i as PaneIndex)
@@ -2748,7 +2923,7 @@ export default function HomePage() {
             // Slot 0: settings (menu) — embedded mode hides the internal
             // ScreenHeader so the global TabStrip is the only chrome.
             <View key="settings" style={{ flex: 1 }}>
-              <SettingsPage embedded topInset={0} onOpenSubPage={openShellSubPage} />
+              <SettingsPage embedded topInset={0} onOpenSubPage={openShellSubPage} onNavigateHome={() => goToPane(HOME_PANE)} />
             </View>,
 
             // Slot 1: home (page1 — outgoing)
@@ -2801,7 +2976,7 @@ export default function HomePage() {
                           >
                             {isReadyToFind ? (
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
-                                <Svg width={64} height={64} viewBox="0 0 24 24" fill={WHITE}>
+                                <Svg width={64} height={64} viewBox="0 0 24 24" fill={PRIMARY}>
                                   <Path d="M8 5v14l11-7z" />
                                 </Svg>
                               </View>
@@ -2813,7 +2988,7 @@ export default function HomePage() {
                               )
                             ) : (
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <SlidersIcon color={WHITE} size={64} />
+                                <SlidersIcon color={PRIMARY} size={64} />
                               </View>
                             )}
                           </Pressable>
@@ -2823,94 +2998,84 @@ export default function HomePage() {
                     </View>
                   </View>
 
-                  {/* "Keep going" cue — vertical coral→transparent gradient
-                      that fills the gap above the card as it's pulled down.
-                      Sits BETWEEN the empty pane and the match card so the
-                      opaque card hides it entirely at rest. */}
-                  <PullCue pulling={pulling} pullY={pullY} />
-
-                  {/* Match-card pane — single Animated.View keyed by
-                      match.user_id. Layout animations (SlideInDown /
-                      SlideOutDown) handle the slide on key change; the Pan
-                      gesture below adds a pull-to-skip transform on top. */}
-                  <View
-                    style={styles.matchPaneWrapper}
+                  {/* Pull-to-skip. PullPane frames the coral wake + the
+                      match card on its pull transform; page1 supplies its
+                      PullContext (inner-scroll coordination) and the hidden
+                      preloader as the non-translated `extra` slot. The empty
+                      pane stays a separate sibling behind this. */}
+                  <PullPane
+                    gesture={page1Pull.gesture}
+                    pullY={page1Pull.pullY}
+                    pulling={page1Pull.pulling}
+                    wakeLabel={t('home.watchingReject')}
+                    tutorialPlaying={page1Pull.tutorialPlaying}
                     pointerEvents={showHiddenPlaceholder ? 'none' : 'box-none'}
-                  >
-                    <PullContext.Provider value={pullCtx}>
-                      <GestureDetector gesture={cardPan}>
-                        {/* Outer wrapper carries the pull-to-skip transform.
-                            Always mounted (even when displayedMatch is null)
-                            so the GestureDetector has a stable target. */}
-                        <Animated.View style={[styles.matchCardWrap, pullStyle]} collapsable={false}>
-                          {displayedMatch && (
-                            /* RisingCard owns the slide-up / slide-down layout
-                               animations. Kept separate from the pullStyle
-                               above so SlideIn/SlideOut's transform doesn't
-                               clobber the useAnimatedStyle on the outer view. */
-                            <RisingCard
-                              key={displayedMatch.user_id}
-                              animateEnter={matchHasMountedRef.current}
-                              style={styles.matchCardWrap}
-                            >
-                              <View style={styles.matchPhoto}>
-                                <MatchCard
-                                  match={displayedMatch}
-
-                                  viewerFamily={profile?.family ?? null}
-                                  viewerLocationCustom={profile?.location_custom ?? null}
-                                  bottomInset={0}
-                                  hideTime={state === 'chat'}
-                                  actions={page1CardActions}
-                                  topBlock={
-                                    displayedCardMode === 'waiting' && inviteExpiresAt ? (
-                                      <InviteTimerCard
-                                        targetIsMale={matchIsMale}
-                                        userIsMale={isMale}
-                                        onCancel={() => { tap(); setCancelConfirmOpen(true) }}
-                                      />
-                                    ) : isEndedState && page1MessageTitle ? (
-                                      <EventMessageCard
-                                        title={page1MessageTitle}
-                                        description={page1MessageDesc}
-                                        onContinue={() => runAction('app/clear1', 'ended-stop')}
-                                        busy={busy && pendingKey === 'ended-stop'}
-                                      />
-                                    ) : undefined
-                                  }
-                                  onTopBlockShown={handleTopBlockShown}
-                                  footerBlock={watchingInviteButton}
-                                  footerBg={watchingInviteButton ? PRIMARY : undefined}
-                                />
-                              </View>
-                            </RisingCard>
-                          )}
-                        </Animated.View>
-                      </GestureDetector>
-                    </PullContext.Provider>
-                    {preloadingMatch && preloadingMatch.user_id !== displayedMatch?.user_id && (
+                    cardStyle={styles.matchCardWrap}
+                    pullContext={page1Pull.pullCtx}
+                    extra={preloadingMatch && preloadingMatch.user_id !== displayedMatch?.user_id ? (
                       <View style={styles.preloaderWrap} pointerEvents="none">
                         <View style={styles.matchPhoto}>
                           <MatchCard
                             match={preloadingMatch}
-
                             viewerFamily={profile?.family ?? null}
-                            viewerLocationCustom={profile?.location_custom ?? null}
+                            viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
                             onReady={() => onPreloadReady(preloadingMatch.user_id)}
                           />
                         </View>
                       </View>
+                    ) : null}
+                  >
+                    {displayedMatch && (
+                      /* RisingCard owns the slide-up / slide-down layout
+                         animations; PullPane's wrapper owns the pull
+                         transform, so the two never clobber each other. */
+                      <RisingCard
+                        key={displayedMatch.user_id}
+                        animateEnter={matchHasMountedRef.current}
+                        style={styles.matchCardWrap}
+                      >
+                        <View style={styles.matchPhoto}>
+                          <MatchCard
+                            ref={watchingCardRef}
+                            match={displayedMatch}
+                            viewerFamily={profile?.family ?? null}
+                            viewerLocationType={resolveLocationType(profile)}
+                            bottomInset={0}
+                            hideTime={state === 'chat'}
+                            actions={page1CardActions}
+                            topBlock={
+                              displayedCardMode === 'waiting' && inviteExpiresAt ? (
+                                <InviteTimerCard
+                                  targetIsMale={matchIsMale}
+                                  userIsMale={isMale}
+                                  onCancel={() => { tap(); setCancelConfirmOpen(true) }}
+                                />
+                              ) : isEndedState && page1MessageTitle ? (
+                                <EventMessageCard
+                                  title={page1MessageTitle}
+                                  description={page1MessageDesc}
+                                  onContinue={() => runAction('app/clear1', 'ended-stop')}
+                                  busy={busy && pendingKey === 'ended-stop'}
+                                />
+                              ) : undefined
+                            }
+                            onTopBlockShown={handleTopBlockShown}
+                            footerBlock={watchingInviteButton}
+                            footerBg={watchingInviteButton ? PRIMARY : undefined}
+                          />
+                        </View>
+                      </RisingCard>
                     )}
-                  </View>
+                  </PullPane>
                 </View>
 
                 <ConfirmDialog
                   visible={cancelConfirmOpen}
+                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
                   title={t('home.cancelWaitingTitle')}
                   description={tg('home.cancelWaitingDesc', matchIsMale).replace(/\{name\}/g, matchName)}
                   confirmLabel={t('home.cancelWaitingConfirm')}
-                  destructive
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={runCancel}
                   busy={busy}
@@ -2919,10 +3084,10 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={refuseConfirmOpen}
+                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
                   title={t('home.refuseReplyTitle')}
                   description={tg('home.refuseReplyDesc', page2InviteObj?.is_male ?? null)}
                   confirmLabel={t('home.refuseReplyConfirm')}
-                  destructive
                   onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
                   onConfirm={() => runAction('app/decline', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
                   busy={busy}
@@ -2934,11 +3099,18 @@ export default function HomePage() {
                   title={t('home.skipHintTitle')}
                   description={t('home.skipHintDesc')}
                   icon={<ChevronDownIcon color={PRIMARY} size={32} />}
+                  // Secondary "got it": acknowledge the hint and scroll the
+                  // card back to the top so the user can perform the
+                  // swipe-down-to-skip gesture they were just taught (pull-
+                  // to-skip is gated on the inner scroll being at the top).
                   cancelLabel={t('home.skipHintCancel')}
-                  confirmLabel={t('home.watchingReject')}
-                  soft
-                  confirmIcon={<CloseIcon color={WHITE} size={22} />}
-                  onCancel={() => { if (!busy) setSkipHintOpen(false) }}
+                  // Primary: just skip now.
+                  confirmLabel={t('home.skipHintConfirm')}
+                  onCancel={() => {
+                    if (busy) return
+                    setSkipHintOpen(false)
+                    watchingCardRef.current?.scrollToTop()
+                  }}
                   onConfirm={() => {
                     setSkipHintOpen(false)
                     runIgnore()
@@ -2949,10 +3121,10 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={!!removeWatcherTarget}
+                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
                   title={t('home.removeWatcherTitle')}
                   description={tg('home.removeWatcherDesc' as any, removeWatcherTarget?.is_male ?? null).replace('{name}', removeWatcherTarget?.name ?? '')}
                   confirmLabel={t('home.removeWatcherConfirm')}
-                  destructive
                   onCancel={() => { if (!removeWatcherBusy) setRemoveWatcherTarget(null) }}
                   onConfirm={async () => {
                     if (!removeWatcherTarget || removeWatcherBusy) return
@@ -2972,14 +3144,13 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={isPermMode}
+                  icon={permIcon}
                   title={permTitle}
                   description={permDesc}
                   confirmLabel={permConfirmLabel}
-                  confirmIcon={permConfirmIcon}
                   onConfirm={permOnConfirm}
                   onCancel={() => {}}
                   busy={permBusyState}
-                  tone="positive"
                 />
 
                 {/* Chat-state actions menu (opened from MatchCard dots).
@@ -3014,30 +3185,30 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={chatConfirmAction === 'leave'}
+                  icon={<SignOutIcon color={PRIMARY} size={32} />}
                   title={t('home.leaveTitle')}
                   description={t('home.leaveDesc')}
                   confirmLabel={t('home.leaveConfirm')}
-                  destructive
                   onCancel={() => setChatConfirmAction(null)}
                   onConfirm={async () => { setChatConfirmAction(null); await invoke('app/leave') }}
                   draggable
                 />
                 <ConfirmDialog
                   visible={chatConfirmAction === 'block'}
+                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
                   title={t('chat.blockTitle')}
                   description={t('chat.blockDesc')}
                   confirmLabel={t('chat.blockConfirm')}
-                  destructive
                   onCancel={() => setChatConfirmAction(null)}
                   onConfirm={async () => { await invoke('app/block'); setChatConfirmAction(null) }}
                   draggable
                 />
                 <ConfirmDialog
                   visible={chatConfirmAction === 'report'}
+                  icon={<InfoIcon color={PRIMARY} size={32} />}
                   title={t('chat.reportTitle')}
                   description={t('chat.reportDesc')}
                   confirmLabel={t('chat.reportConfirm')}
-                  tone="positive"
                   onCancel={() => setChatConfirmAction(null)}
                   onConfirm={() => setChatConfirmAction(null)}
                   draggable
@@ -3060,10 +3231,10 @@ export default function HomePage() {
                 {page2PendingInvite ? (
                   <View style={styles.matchPhoto}>
                     {/* Pull-to-decline reveal — mirrors page1 watching.
-                        The "לא עכשיו" gradient headline sits centered behind
-                        the card; the coral PullCue gradient fills the gap
-                        above the card as it's pulled down. Both are hidden
-                        at rest because the opaque card covers them. */}
+                        The "לא עכשיו" headline sits centered behind the card;
+                        PullPane's solid-PRIMARY wake fills the gap above the
+                        card as it's pulled down. Both are hidden at rest
+                        because the opaque card covers them. */}
                     <View style={StyleSheet.absoluteFill} pointerEvents="none">
                       <View style={styles.permScreen}>
                         <View style={styles.permFlexSpacer} />
@@ -3076,36 +3247,37 @@ export default function HomePage() {
                         <View style={styles.permFlexSpacer} />
                       </View>
                     </View>
-                    <PullCue pulling={page2Pulling} pullY={page2PullY} />
-                    <View style={StyleSheet.absoluteFill}>
-                      <PullContext.Provider value={page2PullCtx}>
-                        <GestureDetector gesture={page2CardPan}>
-                          {/* Same split as page1: outer Animated.View owns the
-                              pull-to-decline transform, inner RisingCard owns
-                              the slide-up/slide-down mount animation. */}
-                          <Animated.View style={[StyleSheet.absoluteFill, page2PullStyle]} collapsable={false}>
-                            <RisingCard
-                              key={`pending-${page2PendingInvite.user_id}`}
-                              style={StyleSheet.absoluteFill}
-                            >
-                              <MatchCard
-                                match={page2PendingInvite}
-                                actions={[{
-                                  key: 'help',
-                                  icon: <QuestionIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
-                                }]}
-                                viewerFamily={profile?.family ?? null}
-                                viewerLocationCustom={profile?.location_custom ?? null}
-                                bottomInset={0}
-                                onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
-                                footerBlock={replyingAcceptBlock}
-                                footerBg={replyingAcceptBlock ? PRIMARY : undefined}
-                              />
-                            </RisingCard>
-                          </Animated.View>
-                        </GestureDetector>
-                      </PullContext.Provider>
-                    </View>
+                    {/* Pull-to-decline — same PullPane frame as page1, with
+                        page2's own gesture/shared values and PullContext. The
+                        "לא עכשיו" reveal headline above stays a sibling. */}
+                    <PullPane
+                      gesture={page2Pull.gesture}
+                      pullY={page2Pull.pullY}
+                      pulling={page2Pull.pulling}
+                      wakeLabel={t('home.watchingReject')}
+                      tutorialPlaying={page2Pull.tutorialPlaying}
+                      cardStyle={StyleSheet.absoluteFill}
+                      pullContext={page2Pull.pullCtx}
+                    >
+                      <RisingCard
+                        key={`pending-${page2PendingInvite.user_id}`}
+                        style={StyleSheet.absoluteFill}
+                      >
+                        <MatchCard
+                          match={page2PendingInvite}
+                          actions={[{
+                            key: 'help',
+                            icon: <QuestionIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
+                          }]}
+                          viewerFamily={profile?.family ?? null}
+                          viewerLocationType={resolveLocationType(profile)}
+                          bottomInset={0}
+                          onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
+                          footerBlock={replyingAcceptBlock}
+                          footerBg={replyingAcceptBlock ? PRIMARY : undefined}
+                        />
+                      </RisingCard>
+                    </PullPane>
                   </View>
                 ) : page2DeadInvite ? (
                   <View style={styles.matchPhoto}>
@@ -3117,7 +3289,7 @@ export default function HomePage() {
                         match={page2DeadInvite}
                         actions={[]}
                         viewerFamily={profile?.family ?? null}
-                        viewerLocationCustom={profile?.location_custom ?? null}
+                        viewerLocationType={resolveLocationType(profile)}
                         bottomInset={0}
                         topBlock={page2MessageTitle ? (
                           <EventMessageCard
@@ -3139,51 +3311,7 @@ export default function HomePage() {
                   // cooldown lasts; the side tab still surfaces the live
                   // countdown above the "viewers" label.
                   <View style={{ flex: 1 }}>
-                    {watchers.length > 0 ? (
-                      <PullScrollView
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        scrollEventThrottle={16}
-                        contentContainerStyle={styles.watchersScrollContent}
-                      >
-                        <ViewersStatusCard
-                          isHidden={isHidden}
-                          broadcastActive={broadcastActive}
-                          hasWatchers={true}
-                          userIsMale={isMale}
-                        />
-                        <View style={styles.watchersList}>
-                          {watchers.map((w) => (
-                            <View key={w.user_id} style={styles.watcherSlot}>
-                              <WatcherCard
-                                watcher={w}
-                                viewerFamily={profile?.family ?? null}
-                                viewerLocationCustom={profile?.location_custom ?? null}
-                                onPress={() => { tap(); setRemoveWatcherTarget(w) }}
-                              />
-                            </View>
-                          ))}
-                        </View>
-                      </PullScrollView>
-                    ) : (
-                      <PullScrollView
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        scrollEventThrottle={16}
-                        contentContainerStyle={styles.emptyScrollContent}
-                      >
-                        <ViewersStatusCard
-                          isHidden={isHidden}
-                          broadcastActive={broadcastActive}
-                          hasWatchers={false}
-                          userIsMale={isMale}
-                        />
-                        <View style={styles.telescopeWrap}>
-                          {isHidden ? <HiddenMoonIllustration /> : <TelescopeIllustration />}
-                        </View>
-                      </PullScrollView>
-                    )}
-                    <View style={[styles.page2BottomBar, { paddingBottom: Math.max(bottomInset, LG) }]}>
+                    <View style={styles.page2TopBar}>
                       <VisibilityToggle
                         mode={toggleMode}
                         gated={visibilityToggleGated}
@@ -3218,47 +3346,92 @@ export default function HomePage() {
                         busy={busy && (pendingKey === 'lock2' || pendingKey === 'free2' || pendingKey === 'add' || pendingKey === 'cancel_add')}
                       />
                     </View>
+                    {watchers.length > 0 ? (
+                      <PullScrollView
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        scrollEventThrottle={16}
+                        contentContainerStyle={[styles.watchersScrollContent, { paddingBottom: Math.max(bottomInset, LG) }]}
+                      >
+                        <ViewersStatusCard
+                          isHidden={isHidden}
+                          broadcastActive={broadcastActive}
+                          hasWatchers={true}
+                          userIsMale={isMale}
+                        />
+                        <View style={styles.watchersList}>
+                          {watchers.map((w) => (
+                            <View key={w.user_id} style={styles.watcherSlot}>
+                              <WatcherCard
+                                watcher={w}
+                                viewerFamily={profile?.family ?? null}
+                                viewerLocationType={resolveLocationType(profile)}
+                                onPress={() => { tap(); setRemoveWatcherTarget(w) }}
+                              />
+                            </View>
+                          ))}
+                        </View>
+                      </PullScrollView>
+                    ) : (
+                      <PullScrollView
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        scrollEventThrottle={16}
+                        contentContainerStyle={[styles.emptyScrollContent, { paddingBottom: Math.max(bottomInset, LG) }]}
+                      >
+                        <ViewersStatusCard
+                          isHidden={isHidden}
+                          broadcastActive={broadcastActive}
+                          hasWatchers={false}
+                          userIsMale={isMale}
+                        />
+                        <View style={styles.telescopeWrap}>
+                          {isHidden ? <HiddenMoonIllustration /> : <TelescopeIllustration />}
+                        </View>
+                      </PullScrollView>
+                    )}
                   </View>
                 )}
               </View>}
             </View>,
           ]}
         </AnimatedPagerView>
-        {/* Always-mounted positioning wrapper: anchors below the TabStrip and
-            carries the live swipe-drag offset. Inner Animated.View is the one
-            conditional on open state — its SlideInDown / SlideOutDown layout
-            animations drive the mount/dismount motion, identical to the
-            MatchCard pane on the home slot. */}
-        <Animated.View
-          style={[styles.profileSheetOverlay, profileSheetWrapStyle]}
+        {/* Profile preview sheet — same PullPane frame as page1/page2.
+            Outer container anchored at the TabStrip bottom (topAnchor) so
+            the wake fills the gap below the tabs; the RisingCard (conditional
+            on open, owning its SlideIn/SlideOut mount motion) rides the
+            swipe-down transform. No PullContext here — the sheet's own
+            gesture handles its header-vs-scroll logic. */}
+        <PullPane
+          gesture={profilePull.gesture}
+          pullY={profilePull.pullY}
+          pulling={profilePull.pulling}
+          tutorialPlaying={profilePull.tutorialPlaying}
+          topAnchor={tabStripBottom}
+          style={styles.profileSheetOverlay}
           pointerEvents={profileSheetOpen ? 'box-none' : 'none'}
         >
-          <GestureDetector gesture={profileSheetSwipe}>
-            <View style={{ flex: 1 }} collapsable={false}>
-              {profileSheetOpen && (
-                <RisingCard style={styles.profileSheetCard}>
-                  <PreviewFieldPage
-                    config={{ kind: 'preview', title: t('settings.myProfile') }}
-                    onBack={closeProfileSheet}
-                    dismissGestureRef={profileSheetGestureRef}
-                    onScrollAtTop={onProfileSheetScrollAtTop}
-                    headerBottomShared={profileSheetHeaderBottom}
-                    clipBottom
-                  />
-                </RisingCard>
-              )}
-            </View>
-          </GestureDetector>
-        </Animated.View>
+          {profileSheetOpen && (
+            <RisingCard style={styles.profileSheetCard}>
+              <PreviewFieldPage
+                config={{ kind: 'preview', title: t('settings.myProfile') }}
+                onBack={closeProfileSheet}
+                dismissGestureRef={profilePull.panRef}
+                onScrollAtTop={profilePull.setScrollAtTop}
+                headerBottomShared={profileSheetHeaderBottom}
+                clipBottom
+              />
+            </RisingCard>
+          )}
+        </PullPane>
         <ConfirmDialog
           visible={broadcastConfirmOpen}
+          // Top action icon echoes the broadcast segment the user just
+          // tapped on the toggle below.
+          icon={<MegaphoneIcon color={PRIMARY} size={32} />}
           title={t('home.broadcastConfirmTitle')}
           description={t('home.broadcastConfirmDesc')}
           confirmLabel={t('home.broadcastConfirmButton')}
-          // Confirm-button icon mirrors the toggle option being committed,
-          // so the popup's primary action visually echoes the segment the
-          // user just tapped on the toggle below.
-          confirmIcon={<MegaphoneIcon color={WHITE} size={ICON.xxl} />}
           onCancel={() => { if (!(busy && pendingKey === 'add')) setBroadcastConfirmOpen(false) }}
           onConfirm={() => runAction('app/add', 'add', () => setBroadcastConfirmOpen(false))}
           busy={busy && pendingKey === 'add'}
@@ -3270,11 +3443,10 @@ export default function HomePage() {
             would be a no-op). Copy/icon comes from the shared config above. */}
         <ConfirmDialog
           visible={exitBroadcastTarget !== null}
+          icon={exitBroadcastConfig.topIcon}
           title={exitBroadcastConfig.title}
           description={exitBroadcastConfig.description}
           confirmLabel={exitBroadcastConfig.confirmLabel}
-          destructive={exitBroadcastConfig.destructive}
-          confirmIcon={exitBroadcastConfig.confirmIcon}
           onCancel={() => { if (!busy) setExitBroadcastTarget(null) }}
           onConfirm={() => {
             const endpoint = exitBroadcastTarget === 'hidden' ? 'app/lock2' : 'app/cancel_add'
@@ -3286,19 +3458,15 @@ export default function HomePage() {
         />
         <ConfirmDialog
           visible={hideConfirmOpen}
+          icon={hideConfirmConfig.topIcon}
           title={hideConfirmConfig.title}
           description={hideConfirmConfig.description}
           confirmLabel={hideConfirmConfig.confirmLabel}
-          destructive={hideConfirmConfig.destructive}
-          confirmIcon={hideConfirmConfig.confirmIcon}
           onCancel={() => { if (!(busy && pendingKey === 'lock2')) setHideConfirmOpen(false) }}
           onConfirm={() => runAction('app/lock2', 'lock2', () => setHideConfirmOpen(false))}
           busy={busy && pendingKey === 'lock2'}
           draggable
         />
-        {demoPlaying && (
-          <View style={styles.demoLockOverlay} pointerEvents="auto" />
-        )}
       </View>
     </View>
   )
@@ -3307,23 +3475,31 @@ const styles = StyleSheet.create({
   // Outer, always-opaque backdrop behind the shell.
   backdrop: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
   },
   shell: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
   },
   tabStripContainer: {
     width: '100%',
+    // Flat solid deep-wine header (no gradients), seamless with the PRIMARY
+    // status bar, lifted off the white content by a soft shadow alone. The
+    // bottom edge is intentionally square and full-width: a rounded bottom
+    // over a top-flush header reveals the white shell in the corner cutouts
+    // (reads as a rendering glitch), and the soft shadow already gives the
+    // "floating shelf" separation. No overflow:hidden: the sub-label timer
+    // must be free to ride up into the top padding (see TabStrip.tsx).
     backgroundColor: PRIMARY,
+    // Tight SM screen-edge margin (the user wants the row close to the
+    // edges). Independent of the selected-tab chip, which is a fixed-width
+    // element centred on each tab inside the row, so reducing this does not
+    // affect the chip.
     paddingHorizontal: SM,
     paddingBottom: MD,
-    shadowColor: BLACK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 6,
+    // No drop-shadow: the header is intentionally flat. Separation from the
+    // white content below is the deep-wine color contrast alone.
     zIndex: 1,
   },
   subPageOverlay: {
@@ -3332,8 +3508,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     start: 0,
     end: 0,
-    backgroundColor: WHITE,
-    shadowColor: '#000',
+    backgroundColor: PRIMARY,
+    shadowColor: BLACK,
     shadowOffset: { width: -3, height: 0 },
     shadowOpacity: 0.10,
     shadowRadius: 12,
@@ -3352,7 +3528,7 @@ const styles = StyleSheet.create({
   },
   profileSheetCard: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
     shadowColor: BLACK,
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
@@ -3361,7 +3537,7 @@ const styles = StyleSheet.create({
   },
   root: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
   },
 
   // ── Watching Me page (page2 viewers) ───────────────────────────────────
@@ -3381,7 +3557,7 @@ const styles = StyleSheet.create({
   watchingMeSubtitle: {
     fontSize: TEXT.md,
     lineHeight: lh(TEXT.md),
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     textAlign: 'center',
     marginTop: MD,
     paddingHorizontal: SM,
@@ -3397,18 +3573,18 @@ const styles = StyleSheet.create({
   rightNowLine: {
     height: 1,
     width: 36,
-    backgroundColor: PRIMARY,
+    backgroundColor: WHITE,
     opacity: 0.5,
   },
   rightNowText: {
     fontSize: TEXT.sm,
     fontWeight: WEIGHT.extrabold,
-    color: PRIMARY,
+    color: WHITE,
     letterSpacing: 1.4,
   },
   morePeopleText: {
     fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
     textAlign: 'center',
     marginTop: MD,
   },
@@ -3416,23 +3592,25 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 0,
   },
-  page2BottomBar: {
+  page2TopBar: {
+    // Sits at the very top of the page2 pane, directly below the global
+    // TabStrip header and above the scrolling ViewersStatusCard, so the
+    // visibility control is the first thing under the tabs (matching the
+    // "toggle above this card" intent in the ViewersStatusCard comment).
+    // A normal flex band (no longer an absolute bottom overlay): the
+    // ScrollView starts below it instead of scrolling under it, so no
+    // bottom-padding measurement is needed. Paints nothing itself — only
+    // the toggle pill is opaque against the deep-wine page; the wine
+    // header above and the page below meet seamlessly through the
+    // transparent padding.
+    backgroundColor: 'transparent',
     paddingHorizontal: MD,
-    paddingTop: LG,
+    paddingTop: MD,
   },
   telescopeWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  matchPaneWrapper: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  // Transparent fullscreen overlay rendered above everything while the
-  // first-time pull-to-skip demo plays; absorbs every touch so the user
-  // can't fight the animation.
-  demoLockOverlay: {
-    ...StyleSheet.absoluteFillObject,
   },
   // Hidden MatchCard used to drive expo-image's onLoad before promoting the
   // match into the visible slot. Same dimensions as the visible card so the
@@ -3448,7 +3626,7 @@ const styles = StyleSheet.create({
   },
   matchPhoto: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
     overflow: 'hidden',
   },
   // ── Permission screen (no card) ────────────────────────────────────────
@@ -3481,6 +3659,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: WHITE,
     backgroundColor: BLACK_SOFT,
+    // overflow:hidden forces Android (New Arch/Fabric) to clip to the true
+    // rounded outline. Without it, borderRadius (=size/2) + borderWidth +
+    // elevation makes the border-path tessellation chamfer the corners and
+    // the circle renders as an octagon. Also clips the avatar Image variant
+    // to the circle. Native elevation shadow is unaffected (drawn from the
+    // view outline by the parent, not a clipped child).
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -3492,12 +3677,12 @@ const styles = StyleSheet.create({
     borderRadius: AVATAR_SIZE / 2,
   },
   permPlayButton: {
-    backgroundColor: PRIMARY,
+    backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   permSlidersButton: {
-    backgroundColor: BLACK_STRONG,
+    backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3505,7 +3690,7 @@ const styles = StyleSheet.create({
     gap: MD,
   },
   watchingInviteBlock: {
-    backgroundColor: WHITE,
+    backgroundColor: PRIMARY,
     paddingHorizontal: MD,
     paddingTop: MD,
     paddingBottom: MD,
@@ -3514,20 +3699,20 @@ const styles = StyleSheet.create({
   watchingInviteTitle: {
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
-    color: PRIMARY,
+    color: WHITE,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   watchingInviteLead: {
     fontSize: TEXT.md,
     lineHeight: lh(TEXT.md),
-    color: PRIMARY,
+    color: WHITE,
     textAlign: 'center',
   },
   watchingInviteDesc: {
     fontSize: TEXT.md,
     lineHeight: lh(TEXT.md),
-    color: PRIMARY,
+    color: WHITE,
     textAlign: 'center',
   },
   replyingButtonRow: {

@@ -78,8 +78,7 @@ export const ICON = {
   sm: 16,
   md: 18,
   lg: 20,
-  xl: 22,
-  xxl: 24,
+  xxl: 24,    // default glyph size — every standalone icon renders at this
   xxxl: 28,
   huge: 48,   // glyph inside RoundButton overlays (heart / pause / dots / add-photo / family)
 } as const
@@ -88,6 +87,10 @@ export const ICON = {
 
 export const STROKE = {
   thin: 1.5,
+  // Slightly heavier than `thin` — the weight shared by the line-art glyph
+  // family that reads at icon sizes (megaphone / eye / chat). Extracted so
+  // the family can't drift apart one icon at a time.
+  medium: 1.8,
   base: 2,
   thick: 2.2,
   // Bold, used for chunky icons that should match the visual weight of the
@@ -101,6 +104,36 @@ export const SWIPE_DISMISS_PX = 80         // translateY to commit a dismiss
 export const SWIPE_DISMISS_VELOCITY = 800  // px/s velocity that auto-commits
 export const PAN_ACTIVE_OFFSET_Y = 8       // when to start tracking the gesture
 export const PAN_FAIL_OFFSET_Y = -8        // upward drag cancels
+// Fraction of the screen height a pulled card must travel to commit — the
+// SINGLE uniform commit threshold for every pull surface (page1 skip, page2
+// decline, profile-sheet dismiss). The SAME fraction also normalizes the
+// sheet's open-progress while dragging (so the TabStrip "Once" → "My
+// profile" morph + chip slide track the card 1:1 and land exactly at
+// "Once"/Settings the instant the drag reaches the commit point). One
+// constant so the commit point and every consumer can never drift apart.
+export const PULL_COMMIT_FRACTION = 0.5
+
+// ── Motion (animation durations, ms) ───────────────────────────────────────
+// Three-tier duration scale. Every timed animation (fade, slide, scale,
+// spinner) references one of these — inline `duration: 260` literals are DRY
+// violations. Pick the tier whose *role* matches the animation, never the one
+// whose old raw number was closest.
+//
+//   fast — quick fades on small UI (chat bubble in, typing indicator in/out).
+//   base — the standard transition: screen/step slide, selection highlight,
+//          list-card mount/unmount, typing-dot pulse, segmented toggle.
+//   spin — one full 360° spinner revolution (looped, never a one-shot).
+//
+// IMPORTANT: this axis is animation *duration* only. Loop stagger / delay
+// offsets (e.g. the TypingDots inter-dot delays, or a setTimeout that gates a
+// UI state) are a SEPARATE concern and must never be folded into MOTION even
+// when a raw value happens to coincide — same number ≠ same meaning, and
+// retuning a duration must not silently retune an unrelated delay.
+export const MOTION = {
+  fast: 150,
+  base: 300,
+  spin: 600,
+} as const
 
 // ── Shadow gradient stops ──────────────────────────────────────────────────
 // Used to paint a 20-layer translucent-black gradient above bottom sheets so
@@ -117,16 +150,18 @@ export const SHADOW_GRADIENT_HEIGHT = 60
 // ── Misc UI dimensions ─────────────────────────────────────────────────────
 
 export const DRAG_HANDLE = {
-  width: 36,
+  width: 48,
   height: 4,
   radius: 2,
 } as const
 
 // ── Tab strip ──────────────────────────────────────────────────────────────
 // All TabStrip-specific dimensions and motion values. `rowHeight` is the
-// fixed height of the main label/icon/chip row; `selectedScale` is the
-// subtle lift applied to the active label as the pager crosses into its
-// tab; `pulseOpacity` + `pulseCount` define the `alerting` attention pulse
+// fixed height of the main label/icon/chip row. The label has NO
+// selection-driven transform (a former `selectedScale` grow was removed: it
+// re-rasterized the <Text> every swipe frame and made the label jitter
+// vertically as the chip arrived/left — the label's Y must stay constant).
+// `pulseOpacity` + `pulseCount` define the `alerting` attention pulse
 // (chip / indicator fades to pulseOpacity and back, pulseCount times).
 // `pulseTimeoutMs` is the upper-bound the React `alerting` flag stays true
 // after a trigger — slightly longer than pulseCount × 2 × default-withTiming
@@ -134,7 +169,6 @@ export const DRAG_HANDLE = {
 
 export const TAB = {
   rowHeight: 32,
-  selectedScale: 1.04,
   pulseOpacity: 0.15,
   pulseCount: 3,
   pulseTimeoutMs: 2200,
@@ -145,6 +179,14 @@ export const TAB = {
   // never changes — labels stay locked at the same Y regardless of timer
   // state. Only the timer itself animates.
   timerSlideDuration: 220,
+  // Duration of the side tab's expand/collapse choreography. When the side
+  // tab has no 1:1 counterpart (chat / broadcast / visible / hidden) it
+  // shrinks to an icon-only compact tab like Menu, freeing flex so "Once"
+  // recenters; when an incoming-invite profile arrives it grows back to a
+  // full labeled tab. One token drives BOTH the tab-width reflow
+  // (LinearTransition on every tab) and the label/icon cross-fade so the
+  // morph and the content swap stay in lockstep.
+  collapseDuration: 240,
   // Slow opacity heartbeat applied to the sub-label cluster when a tab is
   // surfacing a live ongoing status word (e.g. "בשידור" / "צופים בי" above
   // an icon-only side tab). 900ms per phase → ~1.8s full cycle reads as
@@ -159,4 +201,45 @@ export const TAB = {
   // so a centered icon ends up appearing visually higher than the labels.
   // Positive value pushes the icon DOWN to match the labels' rendered Y.
   iconBaselineNudge: 3,
+  // Upward nudge (px) applied to the tab LABEL cluster via a transform so
+  // its glyph centre matches the icon's. Even with lineHeight == rowHeight
+  // and includeFontPadding:false, Android renders the glyph low in its
+  // line-box, so a flex-centred label sits a few px below a flex-centred
+  // icon; this lifts it back to the icon's centre. Transform-only (no
+  // layout/width change); the chip is tall enough that the text stays fully
+  // enclosed. Tune this single value if label vs icon ever drifts. Applied
+  // inside `pressLabelStyle`'s transform array — NOT as a static transform on
+  // labelStack (a Reanimated style array replaces, not merges, `transform`, so
+  // the press worklet would clobber a static wrapper transform; same for
+  // iconBaselineNudge → pressIndicatorStyle).
+  labelLift: 3,
+  // ── Gliding selected-tab lozenge ─────────────────────────────────────────
+  // A flat translucent chip that slides behind the active tab AND spans that
+  // tab's full width (minus this inset each side so adjacent chips never
+  // touch). Tabs are very unequal (compact icons vs the wide flex "Once"),
+  // so the resize is done via `transform: scaleX` (GPU, smooth) — NEVER by
+  // animating the `width` layout prop per frame (that stutters the pager's
+  // auto-settle) and NEVER by snapping it (that pops). The layout `width`
+  // equals the *settled* tab's width and only changes once, while static,
+  // at settle; `scaleX` (and `translateX`) carry every per-frame change, so
+  // at rest scaleX = 1 (crisp capsule + border) and only a brief, transient
+  // ellipse shows mid-swipe.
+  indicatorInsetX: 8,
+  // Vertical pad around the single-line capsule (top + bottom). The chip is
+  // bottom-anchored at `-indicatorPadV`. Chip height = rowHeight +
+  // 2*indicatorPadV = 44, so `indicatorRadius` = 22 makes it a true capsule.
+  // The chip is intentionally a single-line capsule around the main row
+  // only; the sub-label timer floats as a caption ABOVE it (see
+  // subLabelOuter), with a clean gap so the chip never clips the timer.
+  indicatorPadV: 6,
+  indicatorRadius: 22,
+  // Subtle press feedback: a tab's content cluster (label / icon) dips to
+  // this scale while held. Tactile without being a bounce.
+  pressScale: 0.94,
+  // Static tracking on the header wordmark. Re-introduced now that the
+  // selected indicator is a real moving element: the old "no letterSpacing"
+  // rule existed only because it couldn't animate 1:1 with the weight
+  // cross-fade, but a constant value applied equally to BOTH stacked layers
+  // doesn't thrash width (the active layer still drives natural width).
+  labelTracking: 0.4,
 } as const

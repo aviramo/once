@@ -4,8 +4,8 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Eas
 import Svg, { Circle, Path } from 'react-native-svg'
 import { Text } from './AppText'
 import { FONT_SCALE } from '../fonts'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON } from '../tokens'
-import { WHITE, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON, MOTION } from '../tokens'
+import { WHITE, WHITE_SOFT, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the appearance and disabled state stay identical
@@ -22,7 +22,7 @@ import { WHITE, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM }
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary'
+type Variant = 'primary' | 'secondary' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -30,17 +30,17 @@ type Tone = 'positive'
 
 // Spinner painted in the button's text color — drops into the iconStart slot
 // while a tap is in flight so the press never alters the fill.
-function ButtonSpinner({ color, size = ICON.xl }: { color: string; size?: number }) {
+function ButtonSpinner({ color, size = ICON.xxl }: { color: string; size?: number }) {
   const rotation = useSharedValue(0)
   useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: 600, easing: Easing.linear }), -1, false)
+    rotation.value = withRepeat(withTiming(360, { duration: MOTION.spin, easing: Easing.linear }), -1, false)
   }, [])
   const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
   return (
     <Animated.View style={[{ width: size, height: size }, animStyle]}>
-      <Svg width={size} height={size} viewBox="0 0 22 22">
-        <Circle cx={11} cy={11} r={8} stroke={color} strokeOpacity={0.3} strokeWidth={2.5} fill="none" />
-        <Path d="M 11 3 A 8 8 0 0 1 19 11" stroke={color} strokeWidth={2.5} strokeLinecap="round" fill="none" />
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Circle cx={12} cy={12} r={8} stroke={color} strokeOpacity={0.3} strokeWidth={2.5} fill="none" />
+        <Path d="M 12 4 A 8 8 0 0 1 20 12" stroke={color} strokeWidth={2.5} strokeLinecap="round" fill="none" />
       </Svg>
     </Animated.View>
   )
@@ -231,5 +231,12 @@ const VARIANT: Record<Variant, { btn: object; text: { color: string; fontWeight?
   onPrimary: {
     btn: { backgroundColor: WHITE },
     text: { color: PRIMARY },
+  },
+  // Recessive companion to `onPrimary`: the secondary action when the
+  // surface is PRIMARY-colored. Mirrors `secondary` (soft fill + muted
+  // weight) but on the white-alpha scale so it sits on a tinted bg.
+  onPrimaryGhost: {
+    btn: { backgroundColor: WHITE_SOFT },
+    text: { color: WHITE, fontWeight: WEIGHT.semibold },
   },
 }

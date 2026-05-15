@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { View, StyleSheet, Platform, I18nManager, Linking, ScrollView, Keyboard } from 'react-native'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
+import { AppStatusBar } from '../src/components/AppStatusBar'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
-import { BLACK, BLACK_MID, BLACK_STRONG, PRIMARY, PRIMARY_LIGHT } from '../src/colors'
+import { PRIMARY, WHITE, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 
@@ -94,10 +94,10 @@ export default function LoginPage() {
 
   return (
     <View style={styles.root}>
-      {/* Match the onboarding surface: light-coral background with a dark
-          status bar so the OS chrome blends into the screen rather than
+      {/* Deep-wine PRIMARY surface: the app-wide white status-bar chrome
+          (AppStatusBar default) blends into the screen rather than
           contrasting against it. */}
-      <StatusBar style="dark" backgroundColor={PRIMARY_LIGHT} translucent={false} />
+      <AppStatusBar />
       <SafeAreaView style={styles.content} edges={['top', 'left', 'right']}>
         <View style={[styles.flex, { paddingBottom: kbHeight }]}>
           <ScrollView
@@ -142,7 +142,7 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: PRIMARY_LIGHT,
+    backgroundColor: PRIMARY,
   },
   content: {
     flex: 1,
@@ -164,13 +164,13 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: TEXT.xxxl,
     fontWeight: WEIGHT.extrabold,
-    color: PRIMARY,
+    color: WHITE,
     letterSpacing: -1.4,
   },
   brandSlogan: {
     fontSize: TEXT.lg,
     fontWeight: WEIGHT.semibold,
-    color: BLACK,
+    color: WHITE_STRONG,
     letterSpacing: -0.2,
     marginTop: XS,
   },
@@ -188,12 +188,12 @@ const styles = StyleSheet.create({
   },
   legalText: {
     fontSize: TEXT.sm,
-    color: BLACK_MID,
+    color: WHITE_MID,
     textAlign: 'center',
     lineHeight: lh(TEXT.sm),
   },
   legalLink: {
     textDecorationLine: 'underline',
-    color: BLACK_STRONG,
+    color: WHITE_STRONG,
   },
 })

@@ -139,6 +139,39 @@ export function familyScheduleOverlap(
   return bothFree / aFree
 }
 
+// Kid-status of the upcoming weekend for a single schedule, used by the
+// family chip so a viewer can see at a glance whether the candidate has the
+// kids next weekend. Locale decides which two days are "the weekend"
+// (Fri+Sat for he/ar, Sat+Sun otherwise) via the same weekendAnchor used by
+// the picker. Indexing matches familyScheduleOverlap: anchor-aligned cycle,
+// weeks[w][d] absolute weekday. Returns:
+//   'free' — kid-free across BOTH upcoming weekend days
+//   'kids' — with the kids on at least one of them
+//   null   — no usable schedule (nothing marked) → caller omits the suffix
+export function familyWeekendKidStatus(
+  schedule: FamilySchedule | undefined | null,
+  lang: string,
+): 'free' | 'kids' | null {
+  const weeks = schedule?.weeks
+  if (!familyHasAnyDayMarked(weeks)) return null
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  // Coming weekend: the next date whose weekday is the weekend anchor (the
+  // later of the two days), and the day before it.
+  const daysUntil = familyMod(weekendAnchor(lang) - today.getDay(), 7)
+  const late = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysUntil)
+  const early = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysUntil - 1)
+  const cycle = weeks!.length * 7
+  const ancMs = schedule!.anchor
+    ? parseISODate(schedule!.anchor).getTime()
+    : sundayOfWeek(today).getTime()
+  const withKids = (d: Date): boolean => {
+    const idx = familyMod(Math.floor((d.getTime() - ancMs) / 86400000), cycle)
+    return !!weeks![Math.floor(idx / 7)]?.[idx % 7]
+  }
+  return withKids(early) || withKids(late) ? 'kids' : 'free'
+}
+
 function familyGcd(a: number, b: number): number {
   while (b !== 0) { const t = b; b = a % b; a = t }
   return a

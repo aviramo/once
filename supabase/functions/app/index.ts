@@ -4,7 +4,7 @@ import User from "../user.ts";
 import { Notify, PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
-const updatable = ["weekStart", "os", "lang", "appearance", "push_token", "location_custom", "location_label"];
+const updatable = ["weekStart", "os", "lang", "appearance", "push_token", "location_custom", "location_type", "location_label"];
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {

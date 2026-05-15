@@ -32,7 +32,7 @@ export default {
   'ob.female': 'Female',
   'ob.nicknameStep': "What's your name?",
   'ob.nicknamePlaceholder': 'This name will appear on your profile',
-  'ob.nicknameField': 'Nickname',
+  'ob.nicknameField': 'First name',
   'ob.next': 'Continue',
 
   // Onboarding step 2
@@ -48,7 +48,7 @@ export default {
 
   // Onboarding photo
   'photo.title': 'Profile Photos',
-  'photo.sub': 'Add at least 2 photos, up to 6',
+  'photo.sub': 'Add 2-4 photos',
   'photo.confirm': 'Confirm & Continue',
   'photo.almostDone': 'One more step and we are done',
 
@@ -60,12 +60,39 @@ export default {
   'bio.submit': 'Finish & join',
   'bio.min': 'Minimum 20 characters',
 
-  // Home
-  'home.distanceHere': 'Right here',
-  'home.distanceHere_m': "He's right here",
-  'home.distanceHere_f': "She's right here",
-  'home.distanceFromYou': 'away',
-  'home.distanceFromYouCustom': 'from the set location',
+  // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
+  // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
+  // proximate (<250m) wording. Subject pronoun is gendered (_m/_f) only where
+  // the phrasing references the subject; cells whose wording has no subject
+  // pronoun are base-key only (dd, hd, wd, and near.hh / near.ww).
+  'home.dist.dd': '{d} away',
+  'home.dist.dh_m': '{d} from his home',
+  'home.dist.dh_f': '{d} from her home',
+  'home.dist.dw_m': '{d} from his work',
+  'home.dist.dw_f': '{d} from her work',
+  'home.dist.hd': '{d} from your home',
+  'home.dist.hh_m': '{d} between your home and his',
+  'home.dist.hh_f': '{d} between your home and hers',
+  'home.dist.hw_m': 'your home is {d} from his work',
+  'home.dist.hw_f': 'your home is {d} from her work',
+  'home.dist.wd': '{d} from your work',
+  'home.dist.wh_m': 'your work is {d} from his home',
+  'home.dist.wh_f': 'your work is {d} from her home',
+  'home.dist.ww_m': '{d} between your work and his',
+  'home.dist.ww_f': '{d} between your work and hers',
+  'home.near.dd': 'right here',
+  'home.near.dh_m': 'right by his home',
+  'home.near.dh_f': 'right by her home',
+  'home.near.dw_m': 'right by his work',
+  'home.near.dw_f': 'right by her work',
+  'home.near.hd': 'right by your home',
+  'home.near.hh': 'neighbors',
+  'home.near.hw_m': 'he works right by your home',
+  'home.near.hw_f': 'she works right by your home',
+  'home.near.wd': 'right by your work',
+  'home.near.wh_m': 'he lives right by your work',
+  'home.near.wh_f': 'she lives right by your work',
+  'home.near.ww': 'work neighbors',
 
   // Location
 
@@ -102,7 +129,7 @@ export default {
   'settings.profile': 'Edit your profile',
   'settings.account': 'Account',
   'settings.preview': 'Preview',
-  'settings.myProfile': 'My profile',
+  'settings.myProfile': 'Profile',
   'settings.photo': 'My Photos',
   'settings.photoHint': 'Long press and drag to reorder',
   'settings.aboutMe': 'About Me',
@@ -134,6 +161,8 @@ export default {
   'settings.location': 'Location',
   'settings.locationDevice': 'My location',
   'settings.locationCustom': 'Custom address',
+  'settings.locationHome': 'Home',
+  'settings.locationWork': 'Work',
   'settings.locationDeviceDesc': "Use the device's location",
   'settings.locationCustomDesc': 'Pick an address',
   'settings.locationAddressPrompt': 'Type an address or city name',
@@ -150,6 +179,8 @@ export default {
   'settings.locationCancel': 'Cancel',
   'settings.locationServicesOffTitle': 'Location services off',
   'settings.locationServicesOffDesc': 'Turn on location services on the device and try again.',
+  'settings.locationLockedTitle': 'Pause mode needed to change location',
+  'settings.locationLockedDesc': 'Location cannot be changed during an active interaction. Switching to pause mode will end the current interaction and let you update your location.',
   'settings.duplicatePhotoTitle': 'Duplicate photo',
   'settings.duplicatePhotoBody': 'The same photo cannot be uploaded twice. Duplicate photos were removed.',
   'settings.photoEditMoveUp': 'Move up',
@@ -221,8 +252,8 @@ export default {
   'family.addKid': 'Add kid',
   'family.ageNotSet': 'No age',
   'family.ageFortyPlus': '40+',
-  'family.summaryFreeWeekend': 'Free this weekend',
-  'family.summaryWithKidsWeekend': 'With kids this weekend',
+  'family.summaryFreeWeekend': ', free this weekend',
+  'family.summaryWithKidsWeekend': ', not free this weekend',
   'common.gotIt': 'Got it',
   'settings.miles': 'mi',
   'settings.preferredGender': 'Gender',
@@ -333,10 +364,62 @@ export default {
 
   // Home — match teaser
   'home.tapForMore': 'Back to the game',
-  'home.startHeadline': 'It starts with you',
+  // Ready-to-find headline pool. One line is picked at random each time the
+  // home pane (re)enters the ready state (see home.tsx headlineText). Stored
+  // as a newline-joined block, one sentence per source line; consumed via
+  // .split('\n') so adding/removing a line needs no other change.
+  'home.readyHeadlines': `Less scrolling, more meeting
+One person gets the space
+Your time deserves presence
+Connection starts with attention
+Not a catalog, a living moment
+Whoever is here, is really here
+Less noise, more courage
+One chance, open now
+A real moment does not wait
+Choose less, feel more
+One meeting, no tabs open
+Presence is the new filter
+Not everyone, only who feels it
+When the heart is free, something happens
+One conversation can be enough
+No games, with intention
+Be available for something real
+Love does not start with a list
+Let the moment choose you
+Someone sees you right now
+Fewer options, more clarity
+Connection needs room to breathe
+Do not search, meet
+Whoever is in focus gets a heart
+The world moves, you are present
+A small moment, a big chance
+When it happens, it is now
+No more quiet near misses
+A meeting starts with a small decision
+One person changes the evening
+No romantic background noise
+Being here is already something
+There is magic in less
+One intention, one moment
+Gather courage, not matches
+A good connection needs no clutter
+Now is a good time
+Less alone against the infinite
+One look before more scrolling
+Give the moment a chance
+No more open windows
+Someone is waiting for your attention
+A clear moment inside the noise
+Choosing presence over abundance
+Love loves quiet
+Sometimes one is a world
+Without escaping to the next option
+To be truly available
+A bond starts when you stop
+Just a moment, just the two of you`,
   'home.startNow': 'Start now',
   'home.readyToContinue': 'Ready to continue?',
-  'home.continueHeadline': 'One profile at a time',
   'home.endedBack': 'Back to game',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).
@@ -478,6 +561,7 @@ export default {
   'home.skipHintTitle': 'Swipe the card down to skip',
   'home.skipHintDesc': 'Next time, swipe the card down to quickly skip to another profile. Want to skip now?',
   'home.skipHintCancel': 'Got it',
+  'home.skipHintConfirm': 'Skip',
   'home.replyingTimerDesc': 'You\'ve received an invitation. If you accept, you\'ll focus only on each other',
   'home.replyingTitle': 'You\'ve received an invitation',
   'home.replyingDesc': 'If you accept, you\'ll focus only on each other.',
@@ -564,6 +648,8 @@ export default {
   'chat.inputPlaceholder_f': 'Write a message...',
   'ob.howOld_m': 'How old are you?',
   'ob.howOld_f': 'How old are you?',
+  'photo.sub_m': 'Add 2-4 photos',
+  'photo.sub_f': 'Add 2-4 photos',
 
   // Gender-aware: watcher/subject gender
   'home.notifOff_m': 'Not receiving notifications',

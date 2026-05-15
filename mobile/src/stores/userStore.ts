@@ -23,8 +23,26 @@ export interface Profile {
    * the distance chip swaps the pin icon for a home icon — the distance was
    * computed against a fixed address, not the user's live location. Server
    * embeds this in make_profile when data.location_custom is true; absent
-   * key means GPS mode. */
+   * key means GPS mode. Kept for backward compat with the typed model below. */
   location_custom?: boolean | null
+  /** Typed location anchor for this side: 'device' (live GPS), 'home', or
+   * 'work'. Drives the distance chip icon (pin/home/work). Absent on
+   * snapshots from a pre-typed build — use resolveLocationType(). */
+  location_type?: LocationType | null
+}
+
+export type LocationType = 'device' | 'home' | 'work'
+
+/** Effective location anchor for a profile snapshot or the own-user profile.
+ * Prefers the typed `location_type`; falls back to the legacy boolean
+ * (`location_custom` true ⇒ home) for rows last written by a build that
+ * predates the typed model. */
+export function resolveLocationType(
+  p: { location_type?: LocationType | null; location_custom?: boolean | null } | null | undefined,
+): LocationType {
+  const ty = p?.location_type
+  if (ty === 'device' || ty === 'home' || ty === 'work') return ty
+  return p?.location_custom ? 'home' : 'device'
 }
 
 // Server-side v3 page shapes. page2 is always an object (never an array).
@@ -111,6 +129,10 @@ interface UserProfile {
   /** Human-readable label of the manually-picked address (e.g. "תל אביב").
    * Promoted from data.location_label. Null when device mode is active. */
   location_label: string | null
+  /** Typed location anchor: 'device' (live GPS), 'home', or 'work'. Promoted
+   * from data.location_type. Use resolveLocationType() to read with the
+   * legacy location_custom fallback for pre-typed rows. */
+  location_type: LocationType | null
   appearance: string | null
   data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
   relations?: PagesCompat | null
@@ -134,7 +156,7 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
   'weekStart',
-  'location_custom', 'location_label',
+  'location_custom', 'location_type', 'location_label',
   'appearance',
 ]
 
@@ -258,6 +280,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       const dd = d.data as Record<string, unknown>
       if ('weekStart' in dd) (d as Record<string, unknown>).weekStart = dd.weekStart
       if ('location_custom' in dd) (d as Record<string, unknown>).location_custom = dd.location_custom
+      if ('location_type' in dd) (d as Record<string, unknown>).location_type = dd.location_type
       if ('location_label' in dd) (d as Record<string, unknown>).location_label = dd.location_label
       ;(d as Record<string, unknown>).images = Array.isArray(dd.images) ? dd.images as Image[] : []
       ;(d as Record<string, unknown>).bio = typeof dd.bio === 'string' ? dd.bio : null
