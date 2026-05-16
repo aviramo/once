@@ -19,6 +19,15 @@ function pickLocale(request: NextRequest): string {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Marketing landing: serve the static index.html at the site root.
+  // /admin/* stays the dynamic dashboard; the legal pages (*.html) fall
+  // through PUBLIC_FILE_RE below and are served straight from /public.
+  if (pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/index.html";
+    return NextResponse.rewrite(url);
+  }
+
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||

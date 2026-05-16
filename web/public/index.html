@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Once | רק אחד עכשיו</title>
+  <meta name="description" content="אפליקציית הכרויות בזמן אמת שמתמקדת באדם אחד בכל פעם, בלי רעש ובלי שיחות במקביל." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=4" />
+  <link rel="icon" type="image/png" href="favicon.png?v=4" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Once" />
+  <meta property="og:title" content="Once | רק אחד עכשיו" />
+  <meta property="og:description" content="הכרויות בזמן אמת, עם אדם אחד בכל פעם. בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי." />
+  <meta property="og:image" content="https://aviramo.github.io/once-app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Once — רק אחד עכשיו" />
+  <meta property="og:url" content="https://aviramo.github.io/once-app/" />
+  <meta property="og:locale" content="he_IL" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:locale:alternate" content="ru_RU" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Once | רק אחד עכשיו" />
+  <meta name="twitter:description" content="הכרויות בזמן אמת, עם אדם אחד בכל פעם." />
+  <meta name="twitter:image" content="https://aviramo.github.io/once-app/og-image.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=27" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <a class="brand" href="./" aria-label="Once home">
+        <span class="brand-name">Once</span>
+      </a>
+      <div class="lang-switcher">
+        <button class="lang-btn" id="lang-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Language">
+          <span id="lang-label">HE</span>
+          <svg class="lang-chevron" width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
+            <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <ul class="lang-menu" id="lang-menu" role="listbox" hidden>
+          <li><button type="button" role="option" data-lang="he">עברית<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
+          <li><button type="button" role="option" data-lang="en">English<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
+          <li><button type="button" role="option" data-lang="ru">Русский<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <div class="hero-slogan" id="hero-slogan">רק אחד עכשיו</div>
+        <h1 id="hero-title">הכרויות בזמן אמת, עם אדם אחד בכל פעם</h1>
+        <p id="hero-sub">בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.</p>
+        <div class="hero-cta">
+          <a class="btn-primary" id="hero-cta-primary" href="#">תעדכנו אותי כשנפתח</a>
+        </div>
+        <a class="hero-secondary-link" id="hero-cta-secondary" href="#how">איך זה עובד?</a>
+        <div class="hero-pills" id="hero-pills">
+          <span class="pill">אדם אחד</span>
+          <span class="pill">בזמן אמת</span>
+          <span class="pill">בלי רעשי רקע</span>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <img src="img/01-hero-one-bubble.webp" alt="" loading="eager" width="1122" height="672" class="blob-1" />
+        </div>
+      </div>
+    </section>
+
+    <section class="problem">
+      <div class="container">
+        <div class="section-split">
+          <div class="section-text">
+            <div class="eyebrow" id="problem-eyebrow">הבעיה</div>
+            <h2 id="problem-title">הבעיה היא לא שאין אנשים. הבעיה היא שאין פוקוס.</h2>
+            <p class="problem-body" id="problem-body">באפליקציות הכרויות רגילות הכול קורה במקביל:<br>עוד פרופיל, עוד התאמה, עוד שיחה, עוד התלבטות.<br>בסוף זה מרגיש פחות כמו להכיר מישהו<br>ויותר כמו לנהל רשימה.</p>
+            <div class="problem-points" id="problem-points">
+              <div class="problem-point">יותר מדי אפשרויות</div>
+              <div class="problem-point">פחות מדי נוכחות</div>
+              <div class="problem-point">שיחות שנמרחות בלי כיוון</div>
+            </div>
+          </div>
+          <div class="section-visual" aria-hidden="true">
+            <img src="img/02-crowd-noise-focus.webp" alt="" loading="lazy" width="1122" height="672" class="blob-2" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="solution">
+      <div class="container">
+        <div class="section-split flip">
+          <div class="section-text solution-text">
+            <div class="eyebrow" id="solution-eyebrow">הפתרון</div>
+            <h2 id="solution-title">ב־Once הכול קורה אחרת</h2>
+            <p class="solution-body" id="solution-body">במקום להיות פתוחים לעשרות אנשים במקביל,<br>Once יוצרת רגע אחד ברור:<br>אתם כאן, הצד השני כאן,<br>ועכשיו יש מקום לבדוק אם יש חיבור אמיתי.</p>
+            <div class="solution-points" id="solution-points">
+              <div class="solution-point">אדם אחד בכל פעם</div>
+              <div class="solution-point">שיחה בזמן אמת</div>
+              <div class="solution-point">בלי רעשי רקע</div>
+              <div class="solution-point">בלי תחושת קטלוג</div>
+            </div>
+          </div>
+          <div class="section-visual" aria-hidden="true">
+            <img src="img/06-two-sides-one-moment.webp" alt="" loading="lazy" width="1122" height="672" class="blob-3" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="how" id="how">
+      <div class="container">
+        <div class="eyebrow" id="how-eyebrow">איך זה עובד</div>
+        <h2 id="how-title">שלושה צעדים פשוטים</h2>
+        <div class="how-grid" id="how-grid">
+          <div class="how-card">
+            <div class="how-num">01</div>
+            <h3>נכנסים כשפנויים</h3>
+            <p>אתם בוחרים מתי להיות זמינים ומתי לא.</p>
+          </div>
+          <div class="how-card">
+            <div class="how-num">02</div>
+            <h3>מתמקדים באדם אחד</h3>
+            <p>בכל רגע יש רק חיבור אחד על המסך. בלי מקביליות.</p>
+          </div>
+          <div class="how-card">
+            <div class="how-num">03</div>
+            <h3>אם יש עניין, מדברים</h3>
+            <p>אם שני הצדדים בעניין, השיחה מתחילה בזמן אמת.</p>
+          </div>
+        </div>
+        <div class="lead-visual" aria-hidden="true">
+          <img src="img/04-send-invite.webp" alt="" loading="lazy" width="1122" height="672" class="blob-4" />
+        </div>
+      </div>
+    </section>
+
+    <section class="why">
+      <div class="container">
+        <div class="section-split">
+          <div class="section-text">
+            <div class="eyebrow" id="why-eyebrow">למה זה שונה</div>
+            <h2 id="why-title">פחות דפדוף. יותר מפגש.</h2>
+            <div class="why-grid" id="why-grid">
+              <div class="why-item">
+                <h3>בלי שיחות במקביל</h3>
+                <p>כדי שלא תרגישו שאתם מתחרים על תשומת לב.</p>
+              </div>
+              <div class="why-item">
+                <h3>בלי אינסוף פרופילים</h3>
+                <p>כדי שהחוויה לא תרגיש כמו קטלוג.</p>
+              </div>
+              <div class="why-item">
+                <h3>בזמן אמת</h3>
+                <p>כדי שהחיבור יקרה כששניכם באמת שם.</p>
+              </div>
+              <div class="why-item">
+                <h3>בשליטה שלכם</h3>
+                <p>אתם מחליטים מתי להופיע, לדבר ולעצור.</p>
+              </div>
+            </div>
+          </div>
+          <div class="section-visual" aria-hidden="true">
+            <img src="img/08-real-time-clock.webp" alt="" loading="lazy" width="1122" height="672" class="blob-5" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust">
+      <div class="container">
+        <div class="eyebrow" id="trust-eyebrow">אמון</div>
+        <h2 id="trust-title">אתם בשליטה</h2>
+        <p class="trust-body" id="trust-body">Once לא דוחפת אתכם להיות זמינים כל הזמן.<br>אתם בוחרים מתי להופיע,<br>עם מי להמשיך לדבר,<br>ומתי לעצור.</p>
+        <ul class="trust-list" id="trust-list">
+          <li>אפשר להיות זמינים רק כשמתאים לכם</li>
+          <li>אפשר לסיים שיחה בכל רגע</li>
+          <li>אין חובה לענות לכולם</li>
+          <li>אין ריבוי שיחות שמפעיל לחץ</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="container">
+        <div class="lead-visual" aria-hidden="true">
+          <img src="img/06-matchstick-brand.webp" alt="" loading="lazy" width="1122" height="672" class="blob-6" />
+        </div>
+        <h2 id="cta-title">רוצים להיות בין הראשונים?</h2>
+        <p id="cta-sub">Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.</p>
+        <a class="btn-primary" id="cta-button" href="#">תעדכנו אותי כשנפתח</a>
+        <div class="cta-contact">
+          <span id="cta-contact-label">שאלות? פנו אלינו בכתובת</span>
+          <a id="cta-contact-link" href="mailto:once.app.support@gmail.com?subject=שאלה%20ל-Once">once.app.support@gmail.com</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-links">
+      <a id="link-privacy" href="privacy.html">מדיניות פרטיות</a>
+      <span class="sep">·</span>
+      <a id="link-terms" href="terms.html">תנאי שימוש</a>
+      <span class="sep">·</span>
+      <a id="link-safety" href="child-safety.html">תקני בטיחות ילדים</a>
+    </div>
+    <div id="copyright">© Once 2026</div>
+  </footer>
+
+  <script>
+    const params = new URLSearchParams(location.search)
+    const urlLang = params.get('lang')
+    const browserLang = (() => {
+      const l = (navigator.language || '').toLowerCase()
+      if (l.startsWith('he')) return 'he'
+      if (l.startsWith('ru')) return 'ru'
+      return 'en'
+    })()
+    const SUPPORTED = ['he', 'en', 'ru']
+    const LANG_CODE = { he: 'HE', en: 'EN', ru: 'RU' }
+    let lang = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang
+
+    const STRINGS = {
+      he: {
+        title: 'Once | רק אחד עכשיו',
+        dir: 'rtl',
+        hero: {
+          slogan: 'רק אחד עכשיו',
+          title: 'הכרויות בזמן אמת, עם אדם אחד בכל פעם',
+          sub: 'בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.',
+          ctaPrimary: 'תעדכנו אותי כשנפתח',
+          ctaSecondary: 'איך זה עובד?',
+          pills: ['אדם אחד', 'בזמן אמת', 'בלי רעשי רקע']
+        },
+        problem: {
+          eyebrow: 'הבעיה',
+          title: 'הבעיה היא לא שאין אנשים. הבעיה היא שאין פוקוס.',
+          body: 'באפליקציות הכרויות רגילות הכול קורה במקביל:<br>עוד פרופיל, עוד התאמה, עוד שיחה, עוד התלבטות.<br>בסוף זה מרגיש פחות כמו להכיר מישהו<br>ויותר כמו לנהל רשימה.',
+          points: ['יותר מדי אפשרויות', 'פחות מדי נוכחות', 'שיחות שנמרחות בלי כיוון']
+        },
+        solution: {
+          eyebrow: 'הפתרון',
+          title: 'ב־Once הכול קורה אחרת',
+          body: 'במקום להיות פתוחים לעשרות אנשים במקביל,<br>Once יוצרת רגע אחד ברור:<br>אתם כאן, הצד השני כאן,<br>ועכשיו יש מקום לבדוק אם יש חיבור אמיתי.',
+          points: ['אדם אחד בכל פעם', 'שיחה בזמן אמת', 'בלי רעשי רקע', 'בלי תחושת קטלוג']
+        },
+        how: {
+          eyebrow: 'איך זה עובד',
+          title: 'שלושה צעדים פשוטים',
+          steps: [
+            { title: 'נכנסים כשפנויים', body: 'אתם בוחרים מתי להיות זמינים ומתי לא.' },
+            { title: 'מתמקדים באדם אחד', body: 'בכל רגע יש רק חיבור אחד על המסך. בלי מקביליות.' },
+            { title: 'אם יש עניין, מדברים', body: 'אם שני הצדדים בעניין, השיחה מתחילה בזמן אמת.' }
+          ]
+        },
+        why: {
+          eyebrow: 'למה זה שונה',
+          title: 'פחות דפדוף. יותר מפגש.',
+          items: [
+            { title: 'בלי שיחות במקביל', body: 'כדי שלא תרגישו שאתם מתחרים על תשומת לב.' },
+            { title: 'בלי אינסוף פרופילים', body: 'כדי שהחוויה לא תרגיש כמו קטלוג.' },
+            { title: 'בזמן אמת', body: 'כדי שהחיבור יקרה כששניכם באמת שם.' },
+            { title: 'בשליטה שלכם', body: 'אתם מחליטים מתי להופיע, לדבר ולעצור.' }
+          ]
+        },
+        trust: {
+          eyebrow: 'אמון',
+          title: 'אתם בשליטה',
+          body: 'Once לא דוחפת אתכם להיות זמינים כל הזמן.<br>אתם בוחרים מתי להופיע,<br>עם מי להמשיך לדבר,<br>ומתי לעצור.',
+          items: [
+            'אפשר להיות זמינים רק כשמתאים לכם',
+            'אפשר לסיים שיחה בכל רגע',
+            'אין חובה לענות לכולם',
+            'אין ריבוי שיחות שמפעיל לחץ'
+          ]
+        },
+        cta: {
+          title: 'רוצים להיות בין הראשונים?',
+          sub: 'Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.',
+          button: 'תעדכנו אותי כשנפתח'
+        },
+        contact: {
+          label: 'שאלות? פנו אלינו בכתובת',
+          subject: 'שאלה ל-Once'
+        },
+        footer: {
+          privacy: 'מדיניות פרטיות',
+          terms: 'תנאי שימוש',
+          safety: 'תקני בטיחות ילדים',
+          copyright: '© Once 2026'
+        }
+      },
+      en: {
+        title: 'Once | Just one. Now.',
+        dir: 'ltr',
+        hero: {
+          slogan: 'Just one. Now.',
+          title: 'Real-time dating, one person at a time',
+          sub: 'No dozens of open chats. No endless scrolling. Just one meeting, when both of you are really there.',
+          ctaPrimary: 'Let me know when it launches',
+          ctaSecondary: 'How it works',
+          pills: ['One person', 'Real-time', 'No background noise']
+        },
+        problem: {
+          eyebrow: 'The problem',
+          title: "The problem isn't that there aren't enough people. The problem is that there's no focus.",
+          body: 'On regular dating apps, everything happens in parallel: another profile, another match, another chat, another decision. In the end it feels less like meeting someone and more like managing a list.',
+          points: ['Too many options', 'Not enough presence', 'Conversations that drift']
+        },
+        solution: {
+          eyebrow: 'The solution',
+          title: 'On Once, everything works differently',
+          body: 'Instead of being open to dozens of people in parallel, Once creates one clear moment: you are here, the other person is here, and now there is space to find out if there is a real connection.',
+          points: ['One person at a time', 'Real-time conversation', 'No background noise', 'No catalog feel']
+        },
+        how: {
+          eyebrow: 'How it works',
+          title: 'Three simple steps',
+          steps: [
+            { title: 'Show up when you are free', body: 'You decide when to be available and when not.' },
+            { title: 'Focus on one person', body: 'At any moment there is only one connection on screen. No parallel chats.' },
+            { title: 'If there is interest, you talk', body: 'If both sides are interested, the conversation begins in real time.' }
+          ]
+        },
+        why: {
+          eyebrow: 'Why it is different',
+          title: 'Less scrolling. More meeting.',
+          items: [
+            { title: 'No parallel chats', body: 'So you do not feel like you are competing for attention.' },
+            { title: 'No infinite profiles', body: 'So the experience does not feel like a catalog.' },
+            { title: 'In real time', body: 'So the connection happens when both people are really there.' },
+            { title: 'In your control', body: 'You decide when to appear, when to talk, and when to stop.' }
+          ]
+        },
+        trust: {
+          eyebrow: 'Trust',
+          title: 'You are in control',
+          body: 'Once does not push you to be available all the time. You choose when to appear, who to continue with, and when to end.',
+          items: [
+            'Be available only when it suits you',
+            'End any conversation at any moment',
+            'No obligation to reply to everyone',
+            'No multiple chats creating pressure'
+          ]
+        },
+        cta: {
+          title: 'Want to be among the first?',
+          sub: 'Once is for people who want to meet in a present, simple, real way.',
+          button: 'Let me know when it launches'
+        },
+        contact: {
+          label: 'Have questions? Contact us at',
+          subject: 'Question for Once'
+        },
+        footer: {
+          privacy: 'Privacy Policy',
+          terms: 'Terms of Service',
+          safety: 'Child Safety Standards',
+          copyright: '© Once 2026'
+        }
+      },
+      ru: {
+        title: 'Once | Только один. Сейчас.',
+        dir: 'ltr',
+        hero: {
+          slogan: 'Только один. Сейчас.',
+          title: 'Знакомства в реальном времени, по одному человеку за раз',
+          sub: 'Никаких десятков открытых чатов. Никакого бесконечного скролла. Только одна встреча, когда вы оба действительно здесь.',
+          ctaPrimary: 'Сообщите мне, когда откроется',
+          ctaSecondary: 'Как это работает',
+          pills: ['Один человек', 'В реальном времени', 'Без шума']
+        },
+        problem: {
+          eyebrow: 'Проблема',
+          title: 'Проблема не в том, что нет людей. Проблема в том, что нет фокуса.',
+          body: 'В обычных приложениях знакомств всё происходит параллельно: ещё один профиль, ещё одно совпадение, ещё один разговор, ещё одно решение. В итоге это меньше похоже на знакомство и больше на ведение списка.',
+          points: ['Слишком много вариантов', 'Мало присутствия', 'Разговоры без направления']
+        },
+        solution: {
+          eyebrow: 'Решение',
+          title: 'В Once всё устроено иначе',
+          body: 'Вместо того чтобы быть открытыми для десятков людей одновременно, Once создаёт один ясный момент: вы здесь, другой человек здесь, и сейчас есть место проверить, есть ли настоящая связь.',
+          points: ['Один человек за раз', 'Разговор в реальном времени', 'Без фонового шума', 'Без ощущения каталога']
+        },
+        how: {
+          eyebrow: 'Как это работает',
+          title: 'Три простых шага',
+          steps: [
+            { title: 'Заходите, когда свободны', body: 'Вы выбираете, когда быть доступными, а когда нет.' },
+            { title: 'Сосредоточьтесь на одном', body: 'В каждый момент на экране только одна связь. Никакой многозадачности.' },
+            { title: 'Если есть интерес, говорите', body: 'Если обе стороны заинтересованы, разговор начинается в реальном времени.' }
+          ]
+        },
+        why: {
+          eyebrow: 'Почему это иначе',
+          title: 'Меньше скролла. Больше встреч.',
+          items: [
+            { title: 'Без параллельных чатов', body: 'Чтобы вы не чувствовали, что соревнуетесь за внимание.' },
+            { title: 'Без бесконечных профилей', body: 'Чтобы опыт не ощущался как каталог.' },
+            { title: 'В реальном времени', body: 'Чтобы связь происходила, когда оба человека действительно здесь.' },
+            { title: 'Под вашим контролем', body: 'Вы решаете, когда появиться, когда говорить и когда остановиться.' }
+          ]
+        },
+        trust: {
+          eyebrow: 'Доверие',
+          title: 'Вы в контроле',
+          body: 'Once не подталкивает вас быть доступными постоянно. Вы выбираете, когда появиться, с кем продолжить и когда закончить.',
+          items: [
+            'Будьте доступны только когда вам удобно',
+            'Завершите любой разговор в любой момент',
+            'Никаких обязательств отвечать всем',
+            'Никаких нескольких чатов, создающих давление'
+          ]
+        },
+        cta: {
+          title: 'Хотите быть среди первых?',
+          sub: 'Once создаётся для людей, которые хотят знакомиться по-настоящему, просто и присутствующе.',
+          button: 'Сообщите мне, когда откроется'
+        },
+        contact: {
+          label: 'Есть вопросы? Свяжитесь с нами по адресу',
+          subject: 'Вопрос для Once'
+        },
+        footer: {
+          privacy: 'Политика конфиденциальности',
+          terms: 'Условия использования',
+          safety: 'Стандарты безопасности детей',
+          copyright: '© Once 2026'
+        }
+      }
+    }
+
+    function applyLang() {
+      const t = STRINGS[lang]
+      document.documentElement.lang = lang
+      document.documentElement.dir = t.dir
+      document.title = t.title
+
+      document.getElementById('hero-slogan').textContent = t.hero.slogan
+      document.getElementById('hero-title').textContent = t.hero.title
+      document.getElementById('hero-sub').textContent = t.hero.sub
+      document.getElementById('hero-cta-primary').textContent = t.hero.ctaPrimary
+      document.getElementById('hero-cta-secondary').textContent = t.hero.ctaSecondary
+      document.getElementById('hero-pills').innerHTML = (t.hero.pills || [])
+        .map(x => '<span class="pill">' + x + '</span>').join('')
+
+      document.getElementById('problem-eyebrow').textContent = t.problem.eyebrow
+      document.getElementById('problem-title').textContent = t.problem.title
+      document.getElementById('problem-body').innerHTML = t.problem.body
+      document.getElementById('problem-points').innerHTML = t.problem.points
+        .map(x => '<div class="problem-point">' + x + '</div>').join('')
+
+      document.getElementById('solution-eyebrow').textContent = t.solution.eyebrow
+      document.getElementById('solution-title').textContent = t.solution.title
+      document.getElementById('solution-body').innerHTML = t.solution.body
+      document.getElementById('solution-points').innerHTML = t.solution.points
+        .map(x => '<div class="solution-point">' + x + '</div>').join('')
+
+      document.getElementById('how-eyebrow').textContent = t.how.eyebrow
+      document.getElementById('how-title').textContent = t.how.title
+      document.getElementById('how-grid').innerHTML = t.how.steps
+        .map((s, i) => '<div class="how-card"><div class="how-num">0' + (i + 1) + '</div><h3>' + s.title + '</h3><p>' + s.body + '</p></div>').join('')
+
+      document.getElementById('why-eyebrow').textContent = t.why.eyebrow
+      document.getElementById('why-title').textContent = t.why.title
+      document.getElementById('why-grid').innerHTML = t.why.items
+        .map(x => '<div class="why-item"><h3>' + x.title + '</h3><p>' + x.body + '</p></div>').join('')
+
+      document.getElementById('trust-eyebrow').textContent = t.trust.eyebrow
+      document.getElementById('trust-title').textContent = t.trust.title
+      document.getElementById('trust-body').innerHTML = t.trust.body
+      document.getElementById('trust-list').innerHTML = t.trust.items
+        .map(x => '<li>' + x + '</li>').join('')
+
+      document.getElementById('cta-title').textContent = t.cta.title
+      document.getElementById('cta-sub').textContent = t.cta.sub
+      document.getElementById('cta-button').textContent = t.cta.button
+
+      const langSuffix = '?lang=' + lang
+      const lp = document.getElementById('link-privacy')
+      const lt = document.getElementById('link-terms')
+      const ls = document.getElementById('link-safety')
+      document.getElementById('cta-contact-label').textContent = t.contact.label
+      document.getElementById('cta-contact-link').href = 'mailto:once.app.support@gmail.com?subject=' + encodeURIComponent(t.contact.subject)
+      lp.textContent = t.footer.privacy
+      lt.textContent = t.footer.terms
+      ls.textContent = t.footer.safety
+      lp.href = 'privacy.html' + langSuffix
+      lt.href = 'terms.html' + langSuffix
+      ls.href = 'child-safety.html' + langSuffix
+      document.getElementById('copyright').textContent = t.footer.copyright
+
+      document.getElementById('lang-label').textContent = LANG_CODE[lang]
+      document.querySelectorAll('#lang-menu button').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === lang)
+        b.setAttribute('aria-selected', b.dataset.lang === lang ? 'true' : 'false')
+      })
+    }
+
+    const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdrePIXKQch8L71Y5d0VFURbLiHssdtG6SuAd3zBuASsqCn9A/viewform'
+    ;['hero-cta-primary', 'cta-button'].forEach(function(id) {
+      const btn = document.getElementById(id)
+      btn.href = FORM_URL
+      btn.target = '_blank'
+      btn.rel = 'noopener'
+    })
+
+    const langBtn = document.getElementById('lang-btn')
+    const langMenu = document.getElementById('lang-menu')
+    function closeLangMenu() {
+      langMenu.setAttribute('hidden', '')
+      langBtn.setAttribute('aria-expanded', 'false')
+    }
+    function openLangMenu() {
+      langMenu.removeAttribute('hidden')
+      langBtn.setAttribute('aria-expanded', 'true')
+    }
+    langBtn.addEventListener('click', function(e) {
+      e.stopPropagation()
+      if (langMenu.hasAttribute('hidden')) openLangMenu()
+      else closeLangMenu()
+    })
+    document.addEventListener('click', function(e) {
+      if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) closeLangMenu()
+    })
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeLangMenu()
+    })
+    langMenu.querySelectorAll('button').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const newLang = btn.dataset.lang
+        if (newLang !== lang) {
+          lang = newLang
+          history.replaceState(null, '', '?lang=' + lang)
+          applyLang()
+        }
+        closeLangMenu()
+      })
+    })
+
+    applyLang()
+  </script>
+</body>
+</html>
