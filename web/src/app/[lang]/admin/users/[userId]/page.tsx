@@ -4,8 +4,25 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import { relativeTime } from "@/lib/relativeTime";
+import { relativeTime, dateTime } from "@/lib/relativeTime";
 import { fetchPartnerSummaries } from "@/lib/interactions";
+import {
+  page1Narrative,
+  page2Narrative,
+  eventLabel,
+  restrictionLabel,
+  statusResult,
+} from "@/lib/humanize";
+import {
+  AdminShell,
+  Section,
+  Card,
+  Avatar,
+  StatusBadge,
+  EmptyState,
+  KeyValue,
+} from "../../_components/ui";
+import { Disclosure, RevealList } from "../../_components/Disclosure";
 
 type Image = { normal?: string; hash?: string };
 
@@ -70,7 +87,8 @@ export default async function UserDetailPage({
   const { lang, userId } = await params;
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
-  const d = dict.admin;
+  const a = dict.admin;
+  const d = a.userDetail;
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -111,7 +129,6 @@ export default async function UserDetailPage({
   if (!target) notFound();
   const u = target as UserRecord;
 
-  // Look up partner names + images in one query
   const partnerIds = partners.map((p) => p.otherId);
   const { data: partnerProfiles } = partnerIds.length
     ? await admin
@@ -123,283 +140,227 @@ export default async function UserDetailPage({
     ((partnerProfiles ?? []) as PartnerMini[]).map((p) => [p.user_id, p]),
   );
 
-  const dateFmt = new Intl.DateTimeFormat(
-    locale === "he" ? "he-IL" : "en-US",
-    { dateStyle: "medium", timeStyle: "short" },
-  );
-
   const photo = imageUrl(u.user_id, u.data?.images?.[0]?.normal);
   const age = calcAge(u.birth_date);
+  const email = authUser?.user?.email ?? null;
+  const n1 = page1Narrative(a, u.relations);
+  const n2 = page2Narrative(a, u.relations);
   const p1 = u.relations?.page1;
   const p2 = u.relations?.page2;
   const watchers = p2?.profiles ?? [];
+  const gender =
+    u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <Link
-        href="/admin"
-        className="text-sm text-muted-foreground hover:text-foreground"
-      >
-        {d.back}
-      </Link>
-
-      <div className="mt-6 flex gap-6">
-        <div className="size-32 shrink-0 overflow-hidden rounded-2xl bg-muted">
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={photo} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-primary/60 text-4xl font-bold text-primary-foreground">
-              {(u.name ?? "?").charAt(0).toUpperCase()}
-            </div>
-          )}
-        </div>
+    <AdminShell dict={a} active="users" backHref="/admin">
+      {/* Identity + one-line status */}
+      <Card className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <Avatar src={photo} name={u.name} size="lg" />
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">{u.name ?? "—"}</h1>
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            {email ?? a.noEmail}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
+            <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {d.joinedFull}: {relativeTime(u.created_at, locale)}
+            {" · "}
+            {d.lastSeenFull}: {relativeTime(u.last_seen, locale)}
+          </p>
+        </div>
+      </Card>
+
+      {/* Profile — only what matters, the rest behind one toggle */}
+      <Section title={d.profile}>
+        <Card>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {age !== null ? (
-              <Row label={d.userDetail.age} value={String(age)} />
+              <KeyValue label={d.age} value={String(age)} />
             ) : null}
-            <Row
-              label={d.userDetail.gender}
-              value={
-                u.is_male === true
-                  ? d.userDetail.male
-                  : u.is_male === false
-                    ? d.userDetail.female
-                    : "—"
-              }
-            />
-            <Row
-              label={d.userDetail.email}
-              value={authUser?.user?.email ?? "—"}
-            />
-            <Row label={d.userDetail.userId} value={u.user_id} mono />
-            <Row
-              label={d.userDetail.joinedFull}
-              value={`${dateFmt.format(new Date(u.created_at))} · ${relativeTime(u.created_at, locale)}`}
-            />
-            <Row
-              label={d.userDetail.lastSeenFull}
-              value={
-                u.last_seen
-                  ? `${dateFmt.format(new Date(u.last_seen))} · ${relativeTime(u.last_seen, locale)}`
-                  : "—"
-              }
-            />
+            <KeyValue label={d.gender} value={gender} />
             {u.data?.location_label ? (
-              <Row
-                label={d.userDetail.location}
-                value={u.data.location_label}
-              />
+              <KeyValue label={d.location} value={u.data.location_label} />
             ) : null}
           </dl>
           {u.data?.bio ? (
-            <div className="mt-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {d.userDetail.bio}
+            <div className="mt-5">
+              <p className="text-xs font-medium text-muted-foreground">
+                {d.bio}
               </p>
               <p className="mt-1 whitespace-pre-wrap text-sm">{u.data.bio}</p>
             </div>
           ) : null}
-        </div>
-      </div>
+          <div className="mt-5 border-t border-border pt-4">
+            <Disclosure label={a.moreInfo}>
+              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <KeyValue label={d.email} value={email ?? "—"} />
+                <KeyValue label={d.userId} value={u.user_id} mono />
+                <KeyValue
+                  label={d.joinedFull}
+                  value={dateTime(u.created_at, locale)}
+                />
+                <KeyValue
+                  label={d.lastSeenFull}
+                  value={dateTime(u.last_seen, locale)}
+                />
+              </dl>
+            </Disclosure>
+          </div>
+        </Card>
+      </Section>
 
-      <section className="mt-8">
-        <h2 className="text-lg font-semibold">{d.userDetail.currentState}</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      {/* Current state — business sentence first, raw machine state hidden */}
+      <Section title={d.summary}>
+        <div className="grid gap-3 sm:grid-cols-2">
           <StateCard
-            title={d.filterP1}
-            state={p1?.state ?? "locked"}
-            stateLabel={
-              (d.page1States as Record<string, string>)[
-                p1?.state ?? "locked"
-              ] ?? "—"
-            }
-            message={p1?.message ?? null}
-            extra={
-              p1?.profile?.name
-                ? `${d.userDetail.page1Profile}: ${p1.profile.name}`
-                : null
-            }
+            title={a.filterP1}
+            narrative={n1.text}
+            tone={n1.tone}
+            techLabel={a.technicalDetails}
+            rows={[
+              ["state", p1?.state ?? "locked"],
+              ["message", p1?.message ?? "—"],
+              [d.page1Profile, p1?.profile?.name ?? "—"],
+            ]}
           />
           <StateCard
-            title={d.filterP2}
-            state={p2?.state ?? "locked"}
-            stateLabel={
-              (d.page2States as Record<string, string>)[
-                p2?.state ?? "locked"
-              ] ?? "—"
-            }
-            message={p2?.message ?? null}
-            extra={
-              p2?.profile?.name
-                ? `${d.userDetail.page2Profile}: ${p2.profile.name}`
-                : watchers.length > 0
-                  ? `${d.userDetail.watchers}: ${watchers.length}`
-                  : null
-            }
+            title={a.filterP2}
+            narrative={n2.text}
+            tone={n2.tone}
+            techLabel={a.technicalDetails}
+            rows={[
+              ["state", p2?.state ?? "locked"],
+              ["message", p2?.message ?? "—"],
+              [d.page2Profile, p2?.profile?.name ?? "—"],
+              [d.watchers, String(watchers.length)],
+            ]}
           />
         </div>
-      </section>
+      </Section>
 
-      <section className="mt-8">
-        <div className="flex items-end justify-between">
-          <h2 className="text-lg font-semibold">{d.userDetail.interactions}</h2>
-          <span className="text-sm text-muted-foreground">
-            {partners.length}
-          </span>
-        </div>
+      {/* People interacted with */}
+      <Section title={d.interactions} count={partners.length}>
         {partners.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            {d.userDetail.noInteractions}
-          </p>
+          <EmptyState>{d.noInteractions}</EmptyState>
         ) : (
-          <ol className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
-            {partners.map((p) => {
+          <RevealList
+            initial={6}
+            moreLabel={a.showMore}
+            lessLabel={a.showLess}
+            items={partners.map((p) => {
               const profile = partnerMap.get(p.otherId);
               const partnerPhoto = imageUrl(
                 p.otherId,
                 profile?.data?.images?.[0]?.normal,
               );
-              const events =
-                p.chatCount +
-                p.restrictOut.length +
-                p.restrictIn.length +
-                p.rpcCount;
+              const bits: string[] = [];
+              if (p.chatCount > 0)
+                bits.push(`${p.chatCount} ${d.messagesLabel}`);
+              for (const k of p.restrictOut)
+                bits.push(restrictionLabel(a, k));
+              for (const k of p.restrictIn)
+                bits.push(`${d.restrictionIn}: ${restrictionLabel(a, k)}`);
               return (
-                <li key={p.otherId}>
-                  <Link
-                    href={`/admin/users/${userId}/with/${p.otherId}`}
-                    className="flex items-center gap-3 bg-background px-4 py-3 transition-colors hover:bg-muted/40"
-                  >
-                    <div className="size-10 shrink-0 overflow-hidden rounded-full bg-muted">
-                      {partnerPhoto ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={partnerPhoto}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-primary/60 text-sm font-bold text-primary-foreground">
-                          {(profile?.name ?? "?").charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">
-                        {profile?.name ?? p.otherId.slice(0, 8)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {relativeTime(p.lastAt, locale)} · {events}{" "}
-                        {d.userDetail.interactionEvents}
-                        {p.chatCount > 0 ? ` · ${p.chatCount} chat` : ""}
-                        {p.restrictOut.length > 0
-                          ? ` · out: ${p.restrictOut.join(",")}`
-                          : ""}
-                        {p.restrictIn.length > 0
-                          ? ` · in: ${p.restrictIn.join(",")}`
-                          : ""}
-                      </p>
-                    </div>
-                    <span className="text-xs text-primary">
-                      {d.userDetail.viewHistory}
-                    </span>
-                  </Link>
-                </li>
+                <Link
+                  key={p.otherId}
+                  href={`/admin/users/${userId}/with/${p.otherId}`}
+                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+                >
+                  <Avatar
+                    src={partnerPhoto}
+                    name={profile?.name ?? null}
+                    size="sm"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {profile?.name ?? p.otherId.slice(0, 8)}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {relativeTime(p.lastAt, locale)}
+                      {bits.length ? ` · ${bits.join(" · ")}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-primary">
+                    {d.viewHistory}
+                  </span>
+                </Link>
               );
             })}
-          </ol>
+          />
         )}
-      </section>
+      </Section>
 
-      <section className="mt-8">
-        <h2 className="text-lg font-semibold">{d.userDetail.activity}</h2>
+      {/* What the user did — pure business language, no codes */}
+      <Section title={d.activity} hint={d.activityHint}>
         {(logRows ?? []).length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            {d.userDetail.noActivity}
-          </p>
+          <EmptyState>{d.noActivity}</EmptyState>
         ) : (
-          <ol className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
-            {((logRows ?? []) as LogRow[]).map((row) => (
-              <li
-                key={row.id}
-                className="flex items-center justify-between gap-4 bg-background px-4 py-3 text-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">{row.key}</span>
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-xs ${
-                      row.status >= 400
-                        ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    }`}
-                  >
-                    {row.status}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {row.run_ms}ms
+          <RevealList
+            initial={8}
+            moreLabel={a.showMore}
+            lessLabel={a.showLess}
+            items={((logRows ?? []) as LogRow[]).map((row) => {
+              const res = statusResult(a, row.status);
+              return (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between gap-4 px-4 py-3 text-sm"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <StatusBadge tone={res.ok ? "ok" : "ended"} dot>
+                      {res.label}
+                    </StatusBadge>
+                    <span className="truncate">{eventLabel(a, row.key)}</span>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {relativeTime(row.created_at, locale)}
                   </span>
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {dateFmt.format(new Date(row.created_at))}
-                </span>
-              </li>
-            ))}
-          </ol>
+              );
+            })}
+          />
         )}
-      </section>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <>
-      <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className={mono ? "font-mono text-xs" : "text-sm"}>{value}</dd>
-    </>
+      </Section>
+    </AdminShell>
   );
 }
 
 function StateCard({
   title,
-  state,
-  stateLabel,
-  message,
-  extra,
+  narrative,
+  tone,
+  techLabel,
+  rows,
 }: {
   title: string;
-  state: string;
-  stateLabel: string;
-  message: string | null;
-  extra: string | null;
+  narrative: string;
+  tone: Parameters<typeof StatusBadge>[0]["tone"];
+  techLabel: string;
+  rows: [string, string][];
 }) {
   return (
-    <div className="rounded-xl border border-border bg-background p-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {title}
-      </p>
-      <p className="mt-1 text-base font-semibold">{stateLabel}</p>
-      <p className="text-xs text-muted-foreground">state: {state}</p>
-      {message ? (
-        <p className="mt-2 text-xs">
-          <span className="text-muted-foreground">message:</span> {message}
-        </p>
-      ) : null}
-      {extra ? <p className="mt-2 text-xs">{extra}</p> : null}
-    </div>
+    <Card>
+      <p className="text-xs font-medium text-muted-foreground">{title}</p>
+      <div className="mt-2 flex items-start gap-2">
+        <StatusBadge tone={tone} dot>
+          {narrative}
+        </StatusBadge>
+      </div>
+      <div className="mt-4 border-t border-border pt-3">
+        <Disclosure label={techLabel}>
+          <dl className="space-y-1.5 text-xs">
+            {rows.map(([k, v]) => (
+              <div key={k} className="flex gap-2">
+                <dt className="text-muted-foreground">{k}:</dt>
+                <dd className="font-mono break-all">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </Disclosure>
+      </div>
+    </Card>
   );
 }

@@ -1,15 +1,45 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import { SignOutButton } from "./_components/SignOutButton";
+import { AdminShell, Section, EmptyState } from "./_components/ui";
 import { SearchControls } from "./_components/SearchControls";
 import { UserCard, type UserRow } from "./_components/UserCard";
 
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
+const SELECT = "user_id, name, created_at, last_seen, data, relations";
+
+/**
+ * Auth lives in Supabase Auth, not the `users` table, so email search and the
+ * per-card email both need the auth directory. We page through it once per
+ * dashboard load (cap: 10k accounts — comfortably above the current base; a
+ * larger directory would need a server-side email index instead).
+ */
+async function loadEmailMap(
+  admin: SupabaseClient,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const perPage = 1000;
+  for (let page = 1; page <= 10; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+    if (error || !data?.users?.length) break;
+    for (const u of data.users) {
+      if (u.email) map.set(u.id, u.email);
+    }
+    if (data.users.length < perPage) break;
+  }
+  return map;
+}
+
+function lastSeenSort(a: UserRow, b: UserRow): number {
+  return (b.last_seen ?? "").localeCompare(a.last_seen ?? "");
+}
 
 export default async function AdminDashboard({
   params,
@@ -18,6 +48,7 @@ export default async function AdminDashboard({
   const { lang } = await params;
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
+  const d = dict.admin;
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const p1Raw = typeof sp.p1 === "string" ? sp.p1 : "";
@@ -29,99 +60,109 @@ export default async function AdminDashboard({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) redirect("/admin/login");
-
   const isAdmin =
     (user.app_metadata as { role?: string } | undefined)?.role === "admin";
-
   if (!isAdmin) {
     await supabase.auth.signOut();
     redirect("/admin/login?error=not_admin");
   }
 
   const admin = createSupabaseAdmin();
-  let usersQuery = admin
-    .from("users")
-    .select("user_id, name, created_at, last_seen, data, relations")
-    .order("last_seen", { ascending: false, nullsFirst: false })
-    .limit(100);
-  if (q) usersQuery = usersQuery.ilike("name", `%${q}%`);
-  if (p1) usersQuery = usersQuery.eq("relations->page1->>state", p1);
-  if (p2) usersQuery = usersQuery.eq("relations->page2->>state", p2);
-  const { data: users } = await usersQuery;
-  const rows = (users ?? []) as UserRow[];
 
-  const { data: me } = await admin
-    .from("users")
-    .select("name")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [emailMap, meRes] = await Promise.all([
+    loadEmailMap(admin),
+    admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
+  ]);
+
+  let rows: UserRow[];
+  if (q) {
+    const ql = q.toLowerCase();
+    const emailIds = [...emailMap.entries()]
+      .filter(([, email]) => email.toLowerCase().includes(ql))
+      .map(([id]) => id);
+
+    let nameQ = admin
+      .from("users")
+      .select(SELECT)
+      .ilike("name", `%${q}%`)
+      .limit(100);
+    if (p1) nameQ = nameQ.eq("relations->page1->>state", p1);
+    if (p2) nameQ = nameQ.eq("relations->page2->>state", p2);
+
+    const byEmail = emailIds.length
+      ? await (() => {
+          let eq = admin
+            .from("users")
+            .select(SELECT)
+            .in("user_id", emailIds)
+            .limit(100);
+          if (p1) eq = eq.eq("relations->page1->>state", p1);
+          if (p2) eq = eq.eq("relations->page2->>state", p2);
+          return eq;
+        })()
+      : { data: [] as UserRow[] };
+    const byName = await nameQ;
+
+    const merged = new Map<string, UserRow>();
+    for (const r of (byName.data ?? []) as UserRow[]) merged.set(r.user_id, r);
+    for (const r of (byEmail.data ?? []) as UserRow[]) merged.set(r.user_id, r);
+    rows = [...merged.values()].sort(lastSeenSort).slice(0, 100);
+  } else {
+    let base = admin
+      .from("users")
+      .select(SELECT)
+      .order("last_seen", { ascending: false, nullsFirst: false })
+      .limit(100);
+    if (p1) base = base.eq("relations->page1->>state", p1);
+    if (p2) base = base.eq("relations->page2->>state", p2);
+    const { data } = await base;
+    rows = (data ?? []) as UserRow[];
+  }
+
+  const meName = (meRes.data as { name?: string } | null)?.name;
+  const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      <header className="flex items-center justify-between border-b border-border pb-4">
-        <div>
-          <h1 className="text-2xl font-bold">{dict.admin.dashboardTitle}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {dict.admin.loggedInAs}: {me?.name ?? user.email}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/admin/areas"
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            {dict.admin.areas.navLink}
-          </Link>
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            {locale === "he" ? "← לאתר" : "← Site"}
-          </Link>
-          <SignOutButton label={dict.admin.signOut} />
-        </div>
-      </header>
-
-      <section className="mt-8">
-        <div className="flex items-end justify-between">
-          <h2 className="text-lg font-semibold">{dict.admin.users}</h2>
-          <span className="text-sm text-muted-foreground">{rows.length}</span>
-        </div>
-        <div className="mt-4">
+    <AdminShell dict={d} active="users" userLabel={userLabel}>
+      <Section
+        title={d.users}
+        hint={d.resultsCount.replace("{count}", String(rows.length))}
+      >
+        <div className="space-y-6">
           <SearchControls
-            searchPlaceholder={dict.admin.search}
-            p1Label={dict.admin.filterP1}
-            p2Label={dict.admin.filterP2}
-            anyLabel={dict.admin.filterAny}
+            searchPlaceholder={d.searchNameEmail}
+            advancedLabel={d.advancedFilters}
+            clearLabel={d.clearFilters}
+            p1Label={d.filterP1}
+            p2Label={d.filterP2}
+            anyLabel={d.filterAny}
             p1States={P1_VALUES.map((v) => ({
               value: v,
-              label: (dict.admin.page1States as Record<string, string>)[v],
+              label: (d.page1States as Record<string, string>)[v],
             }))}
             p2States={P2_VALUES.map((v) => ({
               value: v,
-              label: (dict.admin.page2States as Record<string, string>)[v],
+              label: (d.page2States as Record<string, string>)[v],
             }))}
           />
           {rows.length === 0 ? (
-            <p className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              {dict.admin.noResults}
-            </p>
+            <EmptyState>{d.noResults}</EmptyState>
           ) : (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {rows.map((r) => (
                 <UserCard
                   key={r.user_id}
                   row={r}
-                  dict={dict.admin}
+                  email={emailMap.get(r.user_id) ?? null}
+                  dict={d}
                   locale={locale}
                 />
               ))}
             </div>
           )}
         </div>
-      </section>
-    </div>
+      </Section>
+    </AdminShell>
   );
 }

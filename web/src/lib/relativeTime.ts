@@ -8,12 +8,15 @@ const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ["minute", 60 * 1000],
 ];
 
+function intlLocale(locale: Locale): string {
+  return locale === "he" ? "he-IL" : "en-US";
+}
+
 export function relativeTime(iso: string | null, locale: Locale): string {
   if (!iso) return "—";
-  const rtf = new Intl.RelativeTimeFormat(
-    locale === "he" ? "he-IL" : "en-US",
-    { numeric: "auto" },
-  );
+  const rtf = new Intl.RelativeTimeFormat(intlLocale(locale), {
+    numeric: "auto",
+  });
   const diff = Date.now() - new Date(iso).getTime();
   for (const [unit, ms] of UNITS) {
     if (Math.abs(diff) >= ms) {
@@ -21,4 +24,16 @@ export function relativeTime(iso: string | null, locale: Locale): string {
     }
   }
   return rtf.format(0, "minute");
+}
+
+/** Absolute date + time, formatted for the locale. Single source for the
+ * admin pages that show an exact timestamp next to a relative one. */
+export function dateTime(iso: string | null, locale: Locale): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat(intlLocale(locale), {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(d);
 }

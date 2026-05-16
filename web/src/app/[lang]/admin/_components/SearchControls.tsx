@@ -2,11 +2,15 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Search, SlidersHorizontal, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type StateOption = { value: string; label: string };
 
 type Props = {
   searchPlaceholder: string;
+  advancedLabel: string;
+  clearLabel: string;
   p1Label: string;
   p2Label: string;
   anyLabel: string;
@@ -16,6 +20,8 @@ type Props = {
 
 export function SearchControls({
   searchPlaceholder,
+  advancedLabel,
+  clearLabel,
   p1Label,
   p2Label,
   anyLabel,
@@ -29,6 +35,8 @@ export function SearchControls({
   const [p1, setP1] = useState(sp.get("p1") ?? "");
   const [p2, setP2] = useState(sp.get("p2") ?? "");
   const [, startTransition] = useTransition();
+  const activeFilters = (p1 ? 1 : 0) + (p2 ? 1 : 0);
+  const [open, setOpen] = useState(activeFilters > 0);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -44,45 +52,97 @@ export function SearchControls({
     return () => clearTimeout(handle);
   }, [q, p1, p2, pathname, router]);
 
+  const selectCls =
+    "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <input
-        type="search"
-        placeholder={searchPlaceholder}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-      />
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span>{p1Label}</span>
-        <select
-          value={p1}
-          onChange={(e) => setP1(e.target.value)}
-          className="rounded-md border border-border bg-background px-2 py-2 text-sm outline-none focus:border-primary"
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search
+            className="pointer-events-none absolute inset-y-0 my-auto ms-3 size-4 text-muted-foreground"
+            aria-hidden
+          />
+          <input
+            type="search"
+            placeholder={searchPlaceholder}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="w-full rounded-xl border border-border bg-background py-2.5 ps-9 pe-3 text-sm outline-none transition-colors focus:border-primary"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors",
+            open || activeFilters > 0
+              ? "border-primary/40 bg-primary/5 text-foreground"
+              : "border-border text-muted-foreground hover:text-foreground",
+          )}
+          aria-expanded={open}
         >
-          <option value="">{anyLabel}</option>
-          {p1States.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span>{p2Label}</span>
-        <select
-          value={p2}
-          onChange={(e) => setP2(e.target.value)}
-          className="rounded-md border border-border bg-background px-2 py-2 text-sm outline-none focus:border-primary"
-        >
-          <option value="">{anyLabel}</option>
-          {p2States.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SlidersHorizontal className="size-4" aria-hidden />
+          <span className="hidden sm:inline">{advancedLabel}</span>
+          {activeFilters > 0 ? (
+            <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+              {activeFilters}
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      {open ? (
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-muted/30 p-4">
+          <label className="flex-1 space-y-1 text-sm">
+            <span className="text-xs font-medium text-muted-foreground">
+              {p1Label}
+            </span>
+            <select
+              value={p1}
+              onChange={(e) => setP1(e.target.value)}
+              className={selectCls}
+            >
+              <option value="">{anyLabel}</option>
+              {p1States.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex-1 space-y-1 text-sm">
+            <span className="text-xs font-medium text-muted-foreground">
+              {p2Label}
+            </span>
+            <select
+              value={p2}
+              onChange={(e) => setP2(e.target.value)}
+              className={selectCls}
+            >
+              <option value="">{anyLabel}</option>
+              {p2States.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {activeFilters > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setP1("");
+                setP2("");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <X className="size-4" aria-hidden />
+              {clearLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

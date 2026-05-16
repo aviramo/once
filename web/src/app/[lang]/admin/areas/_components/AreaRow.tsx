@@ -61,7 +61,7 @@ export function AreaRow({
 
   if (editing) {
     return (
-      <div className="rounded-xl border border-border bg-background p-4">
+      <div className="rounded-2xl border border-border bg-background p-5">
         <AreaForm
           action={updateAction}
           initial={area}
@@ -74,17 +74,23 @@ export function AreaRow({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-background p-5">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium">{area.label}</span>
           <span
-            className={`rounded-full px-2 py-0.5 text-xs ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
               area.enabled
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground"
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
             }`}
           >
+            <span
+              className={`size-1.5 rounded-full ${
+                area.enabled ? "bg-emerald-500" : "bg-zinc-400"
+              }`}
+              aria-hidden
+            />
             {area.enabled ? dict.enabled : dict.disabled}
           </span>
         </div>
@@ -100,14 +106,14 @@ export function AreaRow({
           type="button"
           onClick={runToggle}
           disabled={pending}
-          className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-60"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted/60 disabled:opacity-60"
         >
           {area.enabled ? dict.disable : dict.enable}
         </button>
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="rounded-md border border-border px-3 py-1.5 text-sm"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted/60"
         >
           {dict.edit}
         </button>
@@ -115,7 +121,7 @@ export function AreaRow({
           type="button"
           onClick={runDelete}
           disabled={pending}
-          className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-600 disabled:opacity-60"
+          className="rounded-lg border border-rose-300 px-3 py-1.5 text-sm text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-60 dark:border-rose-900 dark:hover:bg-rose-950/40"
         >
           {dict.delete}
         </button>

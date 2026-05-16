@@ -28,8 +28,14 @@ export default async function AdminLoginPage({
   if (user) redirect("/admin");
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-6">
       <div className="w-full max-w-md rounded-2xl border border-border bg-background p-8 shadow-sm">
+        <div className="mb-6 flex items-baseline gap-2">
+          <span className="text-xl font-bold tracking-tight">Once</span>
+          <span className="text-sm text-muted-foreground">
+            {dict.admin.dashboardTitle}
+          </span>
+        </div>
         <h1 className="text-2xl font-bold">{dict.admin.loginTitle}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {dict.admin.loginSubtitle}
