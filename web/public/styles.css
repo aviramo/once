@@ -367,12 +367,12 @@ p { color: var(--text-2); }
           mask-size: 100% 100%;
           mask-mode: alpha;
 }
-.blob-1 { --blob: url("mask/blob-1.svg"); }
-.blob-2 { --blob: url("mask/blob-2.svg"); }
-.blob-3 { --blob: url("mask/blob-3.svg"); }
-.blob-4 { --blob: url("mask/blob-4.svg"); }
-.blob-5 { --blob: url("mask/blob-5.svg"); }
-.blob-6 { --blob: url("mask/blob-6.svg"); }
+.blob-1 { --blob: url("mask/blob-1.svg?v=28"); }
+.blob-2 { --blob: url("mask/blob-2.svg?v=28"); }
+.blob-3 { --blob: url("mask/blob-3.svg?v=28"); }
+.blob-4 { --blob: url("mask/blob-4.svg?v=28"); }
+.blob-5 { --blob: url("mask/blob-5.svg?v=28"); }
+.blob-6 { --blob: url("mask/blob-6.svg?v=28"); }
 
 /* === When .why is split, stack items vertically === */
 .why .section-split .why-grid {
