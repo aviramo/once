@@ -422,8 +422,10 @@ Just a moment, just the two of you`,
   // server marks the user outside every active area (unavailable) or inside
   // an area that has not opened yet (notYet). While shown, the side tab is
   // removed so page2/chat is unreachable.
+  // {date} is interpolated by home.tsx from availability.starts_at (the
+  // area's launch time) — keep the placeholder.
   'home.geoGate.unavailable': 'The app is not available in your area yet. We are expanding areas gradually, see you soon.',
-  'home.geoGate.notYet': 'The app is about to open in your area. Just a little longer.',
+  'home.geoGate.notYet': 'The app opens in your area on {date}.',
   'home.startNow': 'Start now',
   'home.readyToContinue': 'Ready to continue?',
   'home.endedBack': 'Back to game',

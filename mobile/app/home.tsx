@@ -1568,6 +1568,15 @@ export default function HomePage() {
     availability?.state === 'unavailable' ||
     (availability?.state === 'not_yet' && (!availStartsAt || Date.now() < availStartsAt))
   )
+  // The launch moment ({date} in home.geoGate.notYet), formatted as
+  // DD/MM/YYYY HH:MM from the area's starts_at. Locale-independent manual
+  // format (no Intl dependency) — matches the day+time the admin sees.
+  const gateWhenStr = (() => {
+    if (!availStartsAt) return ''
+    const d = new Date(availStartsAt)
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+  })()
 
 
   const goToPane = (index: PaneIndex) => {
@@ -2927,7 +2936,9 @@ export default function HomePage() {
   // 'unavailable' get distinct copy; the find button is already suppressed
   // (isReadyToFind === false) and the side tab removed (tabSpecs below).
   const headlineText = geoGated
-    ? (availability?.state === 'not_yet' ? t('home.geoGate.notYet') : t('home.geoGate.unavailable'))
+    ? (availability?.state === 'not_yet'
+        ? t('home.geoGate.notYet').replace('{date}', gateWhenStr)
+        : t('home.geoGate.unavailable'))
     : isLocatingHeadline
       ? t('home.locatingDesc')
       : isEmptyHeadline

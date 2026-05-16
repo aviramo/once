@@ -441,8 +441,10 @@ export default {
   // server marks the user outside every active area (unavailable) or inside
   // an area that has not opened yet (notYet). While shown, the side tab is
   // removed so page2/chat is unreachable.
+  // {date} is interpolated by home.tsx from availability.starts_at (the
+  // area's launch time) — keep the placeholder.
   'home.geoGate.unavailable': 'האפליקציה עדיין לא זמינה באזור שלך. אנחנו מרחיבים אזורים בהדרגה, נתראה בקרוב.',
-  'home.geoGate.notYet': 'האפליקציה עומדת להיפתח באזור שלך. עוד רגע קט וזה כאן.',
+  'home.geoGate.notYet': 'האפליקציה תיפתח באזור שלך ב{date}.',
   'home.startNow': 'להתחיל עכשיו',
   'home.readyToContinue': 'מוכן להמשיך?',
   'home.readyToContinue_m': 'מוכן להמשיך?',
