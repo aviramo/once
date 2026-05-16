@@ -63,11 +63,22 @@ export function CloseIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
 // Chunky close X. Same shape as CloseIcon but with the visual weight of
 // HeartIcon — heavy rounded strokes so it reads as a "bold mark" rather
 // than a thin nav glyph. Used by the profile-sheet tab.
-export function CloseBoldIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+// `stroke` (optional) draws a contour around the X exactly like HeartIcon's
+// white perimeter: a wider underlay of the two lines in `stroke`, the colored
+// lines on top. Underlay width = heavy + thick so the visible halo each side
+// is STROKE.thick/2 — byte-matching the heart's white-edge weight (no new
+// literal; both derive from the same STROKE tokens).
+export function CloseBoldIcon({ color = BLACK, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.heavy} strokeLinecap="round" strokeLinejoin="round">
-      <Line x1="17" y1="7" x2="7" y2="17" />
-      <Line x1="7" y1="7" x2="17" y2="17" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {stroke ? (
+        <>
+          <Line x1="17" y1="7" x2="7" y2="17" stroke={stroke} strokeWidth={STROKE.heavy + STROKE.thick} />
+          <Line x1="7" y1="7" x2="17" y2="17" stroke={stroke} strokeWidth={STROKE.heavy + STROKE.thick} />
+        </>
+      ) : null}
+      <Line x1="17" y1="7" x2="7" y2="17" stroke={color} strokeWidth={STROKE.heavy} />
+      <Line x1="7" y1="7" x2="17" y2="17" stroke={color} strokeWidth={STROKE.heavy} />
     </Svg>
   )
 }
@@ -120,6 +131,17 @@ export function WifiOffIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps 
       <Path d="M16.85 11.25a10 10 0 0 1 2.22 1.68" />
       <Path d="M5 12.55a10 10 0 0 1 5.17-2.39" />
       <Line x1="12" y1="20" x2="12.01" y2="20" />
+    </Svg>
+  )
+}
+
+// Universal prohibition sign (circle + diagonal slash) — the "block" mark in
+// the chat-state menu. Same line-art family as the other list-row glyphs.
+export function BlockIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
     </Svg>
   )
 }

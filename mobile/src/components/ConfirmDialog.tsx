@@ -11,6 +11,10 @@ import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../c
 // circle above the title — never by the buttons. The primary button is a
 // plain PRIMARY label with no icon in every scenario (destructive or not);
 // the icon at the top is what tells the user what they're about to do.
+//
+// Informational variant: omit both `confirmLabel` and `cancelLabel` and the
+// button row is dropped entirely — the sheet becomes a notice the user
+// dismisses by swiping down / tapping the backdrop (pass `draggable`).
 export function ConfirmDialog({
   visible,
   title,
@@ -30,14 +34,15 @@ export function ConfirmDialog({
   title: string
   description?: string
   cancelLabel?: string
-  confirmLabel: string
+  /** Omit (together with `cancelLabel`) for a button-less info popup. */
+  confirmLabel?: string
   /** Action icon rendered in a tinted circle above the title. Required:
    * every dialog communicates its action through this icon, since the
    * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
    * sized to the convention: `<XIcon color={PRIMARY} size={32} />`. */
   icon: ReactNode
   onCancel?: () => void
-  onConfirm: () => void
+  onConfirm?: () => void
   busy?: boolean
   skipToggle?: { label: string; checked: boolean; onToggle: () => void }
   cancelFlex?: number
@@ -50,13 +55,14 @@ export function ConfirmDialog({
 
   const dismiss = () => {
     if (busy) return
-    onCancel?.()
+    if (onCancel) onCancel()
+    else onConfirm?.()
   }
 
   return (
     <BottomSheet
       visible={visible}
-      onDismiss={onCancel ? dismiss : onConfirm}
+      onDismiss={dismiss}
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
@@ -85,32 +91,36 @@ export function ConfirmDialog({
         </TouchableOpacity>
       )}
 
-      <View style={styles.row}>
-        {cancelLabel ? (
-          <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
-            <Button
-              label={cancelLabel}
-              onPress={() => { setPressed('cancel'); onCancel?.() }}
-              variant="secondary"
-              size="lg"
-              disabled={busy}
-              loading={busy && pressed === 'cancel'}
-              silentDisabled={pressed !== 'cancel'}
-            />
-          </View>
-        ) : null}
-        <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
-          <Button
-            label={confirmLabel}
-            onPress={() => { setPressed('confirm'); onConfirm() }}
-            variant="primary"
-            size="lg"
-            disabled={busy}
-            loading={busy && pressed === 'confirm'}
-            silentDisabled={pressed !== 'confirm'}
-          />
+      {(confirmLabel || cancelLabel) ? (
+        <View style={styles.row}>
+          {cancelLabel ? (
+            <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
+              <Button
+                label={cancelLabel}
+                onPress={() => { setPressed('cancel'); onCancel?.() }}
+                variant="secondary"
+                size="lg"
+                disabled={busy}
+                loading={busy && pressed === 'cancel'}
+                silentDisabled={pressed !== 'cancel'}
+              />
+            </View>
+          ) : null}
+          {confirmLabel ? (
+            <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
+              <Button
+                label={confirmLabel}
+                onPress={() => { setPressed('confirm'); onConfirm?.() }}
+                variant="primary"
+                size="lg"
+                disabled={busy}
+                loading={busy && pressed === 'confirm'}
+                silentDisabled={pressed !== 'confirm'}
+              />
+            </View>
+          ) : null}
         </View>
-      </View>
+      ) : null}
     </BottomSheet>
   )
 }

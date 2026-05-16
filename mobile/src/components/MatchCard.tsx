@@ -7,13 +7,14 @@ import { PullScrollView } from './HomeCard'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
-import { t } from '../i18n'
+import { t, tg } from '../i18n'
+import { ageFromTitle } from '../lib/profileTitle'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon } from './icons'
+import { HeartIcon, QuoteIcon, InfoIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
 import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
@@ -396,7 +397,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const subjectLocationType = resolveLocationType(match)
   const viewerType: LocationType = viewerLocationType ?? 'device'
   const distStr = formatDistance(match.distance, match.is_male, viewerType, subjectLocationType)
-  const displayTitle = match.title
+  // Age is shown as a small on-photo info chip (the name lives in the home
+  // tab, so neither name nor age is overlaid on the photo any more).
+  const age = ageFromTitle(match.title)
+  const ageChipText = age ? tg('home.ageChip', match.is_male).replace('{age}', age) : ''
 
   const familyChipText = useMemo(
     () => buildFamilyChipText(match.family, isForKids, self, viewerFamily),
@@ -632,11 +636,17 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               fall through to the photo. */}
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
-              <View pointerEvents="box-none">
-                <Text style={styles.name}>{displayTitle}</Text>
-              </View>
-
               <View pointerEvents="box-none" style={styles.chipsStack}>
+                {ageChipText ? (
+                  <View style={styles.chipsLine}>
+                    <Chip
+                      renderIcon={c => <InfoIcon color={c} size={ICON.sm} />}
+                      text={ageChipText}
+                      tone="neutral"
+                      onPhoto
+                    />
+                  </View>
+                ) : null}
                 {timeStr ? (
                   <View style={styles.chipsLine}>
                     <Chip
@@ -793,7 +803,6 @@ const styles = StyleSheet.create({
   chipsStack: {
     flexDirection: 'column',
     alignItems: 'flex-start',
-    marginTop: SM,
     gap: SM,
   },
   chipsLine: {
@@ -801,19 +810,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: SM,
-  },
-  name: {
-    fontSize: TEXT.xxl,
-    fontWeight: WEIGHT.extrabold,
-    color: WHITE,
-    textAlign: 'left',
-    letterSpacing: -0.4,
-    textShadowColor: BLACK_STRONG,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
-  },
-  nameNoChips: {
-    marginBottom: SM,
   },
   aboutSection: {
     alignItems: 'center',

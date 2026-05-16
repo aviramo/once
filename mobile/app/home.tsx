@@ -36,13 +36,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from 'react-native-svg'
 import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
+import { nameFromTitle } from '../src/lib/profileTitle'
 import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, DESTRUCTIVE, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
 import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -59,7 +60,7 @@ import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { FONT_SCALE } from '../src/fonts'
 import { STORAGE } from '../src/keys'
-import { SlidersIcon, CloseBoldIcon, PauseIcon, QuestionIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, InfoIcon } from '../src/components/icons'
+import { SlidersIcon, CloseBoldIcon, PauseIcon, QuestionIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, InfoIcon, BlockIcon } from '../src/components/icons'
 import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
@@ -216,7 +217,9 @@ function splitAtMidSpace(text: string): string[] {
     }
   }
   if (best === -1) return [text]
-  return [text.slice(0, best), text.slice(best + 1)]
+  // The forced line break already supplies the pause a comma at the split
+  // point was carrying, so a trailing comma on the first line just dangles.
+  return [text.slice(0, best).replace(/,\s*$/, ''), text.slice(best + 1)]
 }
 
 // "לא עכשיו" label revealed behind the match card during a pull-to-skip
@@ -812,14 +815,20 @@ const chatMenuStyles = StyleSheet.create({
     paddingHorizontal: MD,
     alignItems: 'center',
   },
+  // Icon + label cluster (block row only). Row direction follows RTL, so the
+  // glyph leads on the start edge with an SM gap to the label.
+  rowInner: { flexDirection: 'row', alignItems: 'center', gap: SM },
   rowPressed: { backgroundColor: BLACK_SOFT },
   label: {
     fontSize: TEXT.md,
     color: BLACK,
     fontWeight: WEIGHT.semibold,
   },
-  labelDestructive: { color: WHITE_MID },
-  labelEmphasis: { color: DESTRUCTIVE, fontWeight: WEIGHT.semibold },
+  // The three rows step down in weight black → in-between → semi-black so the
+  // most drastic action reads softest. labelSoft is BLACK_MID — the exact tone
+  // of the delete-account button (settings.tsx AccountPopup), by user request.
+  labelMid: { color: BLACK_STRONG },
+  labelSoft: { color: BLACK_MID },
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: BLACK_SOFT,
@@ -2331,7 +2340,7 @@ export default function HomePage() {
   }, [firstProfileImage, userId, selfAvatar?.filename])
 
   // Match name (strip trailing ", age") and gendered invite confirm desc.
-  const matchName = (profile?.relations?.match?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
+  const matchName = nameFromTitle(profile?.relations?.match?.title)
   const matchIsMale = profile?.relations?.match?.is_male
   const inviteConfirmDesc = tgg('home.inviteConfirmDesc' as any, isMale, matchIsMale)
 
@@ -2501,6 +2510,15 @@ export default function HomePage() {
     onCommit: declineViaSwipe,
     tutorial: { ready: !!page2PendingInvite, seenFlag: 'page2_demo' },
   })
+  // page2 has no match-sync (page1) / open() (sheet) reset path, and the
+  // unified slide-off commit leaves pullY at screenH after a decline. Reset
+  // it whenever a pending invite (re)appears, so the freshly-mounted card
+  // isn't translated fully off-screen (which would show only the bare
+  // PRIMARY container behind it).
+  useEffect(() => {
+    if (page2PendingInvite) page2Pull.reset()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page2PendingInvite?.user_id])
 
 
   // Watching-state invite block lives inside the MatchCard scroll (passed
@@ -2611,7 +2629,7 @@ export default function HomePage() {
     state === 'chat'
       ? [{
           key: 'chat-menu',
-          icon: <CloseBoldIcon color={PRIMARY} size={ICON.huge} />,
+          icon: <CloseBoldIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
           onPress: () => { tap(); setChatMenuOpen(true) },
         }]
       : state === 'watching'
@@ -2749,8 +2767,8 @@ export default function HomePage() {
   // label when an incoming invitation is pending. Same one-on-one framing as
   // matchName above: the tab reads as "you and this person", not a generic
   // "Invitation" / "Viewers".
-  const page2InviteName = (page2PendingInvite?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
-  const page2DeadName = (page2DeadInvite?.title ?? '').replace(/,\s*\d+\s*$/, '').replace(/,\s*$/, '')
+  const page2InviteName = nameFromTitle(page2PendingInvite?.title)
+  const page2DeadName = nameFromTitle(page2DeadInvite?.title)
   // Side-tab label resolves to the single counterpart's name whenever slot 2
   // is dedicated to one user (pending inviter, or the user whose dead-invite
   // "what happened" card is up). Chat falls through to the static `home.tabs.chat`
@@ -3165,21 +3183,24 @@ export default function HomePage() {
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('leave') }}
                     style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
                   >
-                    <Text style={[chatMenuStyles.label, chatMenuStyles.labelDestructive]}>{t('chat.leave')}</Text>
+                    <Text style={chatMenuStyles.label}>{t('chat.leave')}</Text>
                   </Pressable>
                   <View style={chatMenuStyles.divider} />
                   <Pressable
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('block') }}
                     style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
                   >
-                    <Text style={[chatMenuStyles.label, chatMenuStyles.labelDestructive]}>{t('chat.block')}</Text>
+                    <View style={chatMenuStyles.rowInner}>
+                      <BlockIcon color={BLACK_STRONG} />
+                      <Text style={[chatMenuStyles.label, chatMenuStyles.labelMid]}>{t('chat.block')}</Text>
+                    </View>
                   </Pressable>
                   <View style={chatMenuStyles.divider} />
                   <Pressable
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('report') }}
                     style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
                   >
-                    <Text style={[chatMenuStyles.label, chatMenuStyles.labelDestructive, chatMenuStyles.labelEmphasis]}>{t('chat.report')}</Text>
+                    <Text style={[chatMenuStyles.label, chatMenuStyles.labelSoft]}>{t('chat.report')}</Text>
                   </Pressable>
                 </BottomSheet>
 
@@ -3228,170 +3249,160 @@ export default function HomePage() {
                   autoFocusInput={chatJustStarted}
                 />
               ) : <View style={styles.root}>
-                {page2PendingInvite ? (
-                  <View style={styles.matchPhoto}>
-                    {/* Pull-to-decline reveal — mirrors page1 watching.
-                        The "לא עכשיו" headline sits centered behind the card;
-                        PullPane's solid-PRIMARY wake fills the gap above the
-                        card as it's pulled down. Both are hidden at rest
-                        because the opaque card covers them. */}
-                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                      <View style={styles.permScreen}>
-                        <View style={styles.permFlexSpacer} />
-                        <View style={styles.permCenterGroup}>
-                          <HeadlineArea text={t('home.watchingReject')} />
-                          {/* Invisible spacer matching the page1 avatar so the
-                              headline sits at the same Y as in watching. */}
-                          <View style={styles.permAvatarWrap} />
-                        </View>
-                        <View style={styles.permFlexSpacer} />
-                      </View>
-                    </View>
-                    {/* Pull-to-decline — same PullPane frame as page1, with
-                        page2's own gesture/shared values and PullContext. The
-                        "לא עכשיו" reveal headline above stays a sibling. */}
-                    <PullPane
-                      gesture={page2Pull.gesture}
-                      pullY={page2Pull.pullY}
-                      pulling={page2Pull.pulling}
-                      wakeLabel={t('home.watchingReject')}
-                      tutorialPlaying={page2Pull.tutorialPlaying}
-                      cardStyle={StyleSheet.absoluteFill}
-                      pullContext={page2Pull.pullCtx}
+                {/* Base layer — the viewers/visibility screen is ALWAYS
+                    mounted so it persists in its exact state (broadcast /
+                    visible / hidden) behind any invite card, and is revealed
+                    UNCHANGED once a card is dismissed (after the PRIMARY wake
+                    fades). Mirrors page1's always-mounted empty pane.
+                    Pane layout: 3-state visibility toggle (hidden | visible
+                    | broadcast) anchored at the top; scrolling status card +
+                    watchers list or telescope below. */}
+                <View style={{ flex: 1 }}>
+                  <View style={styles.page2TopBar}>
+                    <VisibilityToggle
+                      mode={toggleMode}
+                      gated={visibilityToggleGated}
+                      broadcastTimer={broadcastActive ? addCooldownLabel : null}
+                      pendingAction={
+                        busy && pendingKey === 'lock2' ? 'hidden'
+                        : busy && pendingKey === 'free2' ? 'visible'
+                        : busy && pendingKey === 'cancel_add' ? (broadcastActive ? 'broadcast' : 'visible')
+                        : busy && pendingKey === 'add' ? 'broadcast'
+                        : null
+                      }
+                      onHidden={() => {
+                        if (toggleMode === 'hidden') return
+                        // During broadcast, any mode switch is a "stop
+                        // broadcasting" action — confirm first.
+                        if (broadcastActive) setExitBroadcastTarget('hidden')
+                        // app/lock2 kicks every current watcher and pushes
+                        // each one a `removed` notification. Surface the
+                        // ripple before running it.
+                        else if (watchers.length > 0) setHideConfirmOpen(true)
+                        else runAction('app/lock2', 'lock2')
+                      }}
+                      onVisible={() => {
+                        if (toggleMode === 'visible') return
+                        if (broadcastActive) setExitBroadcastTarget('visible')
+                        else runAction('app/free2', 'free2')
+                      }}
+                      onBroadcast={() => {
+                        if (broadcastActive) setExitBroadcastTarget('exit')
+                        else setBroadcastConfirmOpen(true)
+                      }}
+                      busy={busy && (pendingKey === 'lock2' || pendingKey === 'free2' || pendingKey === 'add' || pendingKey === 'cancel_add')}
+                    />
+                  </View>
+                  {watchers.length > 0 ? (
+                    <PullScrollView
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      scrollEventThrottle={16}
+                      contentContainerStyle={[styles.watchersScrollContent, { paddingBottom: Math.max(bottomInset, LG) }]}
                     >
+                      <ViewersStatusCard
+                        isHidden={isHidden}
+                        broadcastActive={broadcastActive}
+                        hasWatchers={true}
+                        userIsMale={isMale}
+                      />
+                      <View style={styles.watchersList}>
+                        {watchers.map((w) => (
+                          <View key={w.user_id} style={styles.watcherSlot}>
+                            <WatcherCard
+                              watcher={w}
+                              viewerFamily={profile?.family ?? null}
+                              viewerLocationType={resolveLocationType(profile)}
+                              onPress={() => { tap(); setRemoveWatcherTarget(w) }}
+                            />
+                          </View>
+                        ))}
+                      </View>
+                    </PullScrollView>
+                  ) : (
+                    <PullScrollView
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      scrollEventThrottle={16}
+                      contentContainerStyle={[styles.emptyScrollContent, { paddingBottom: Math.max(bottomInset, LG) }]}
+                    >
+                      <ViewersStatusCard
+                        isHidden={isHidden}
+                        broadcastActive={broadcastActive}
+                        hasWatchers={false}
+                        userIsMale={isMale}
+                      />
+                      <View style={styles.telescopeWrap}>
+                        {isHidden ? <HiddenMoonIllustration /> : <TelescopeIllustration />}
+                      </View>
+                    </PullScrollView>
+                  )}
+                </View>
+                {/* Invite cards overlay the base (absolute-fill). Dismissing
+                    one reveals the base above, untouched. */}
+                {page2PendingInvite ? (
+                  <View style={StyleSheet.absoluteFill}>
+                    <View style={styles.matchPhoto}>
+                      {/* Pull-to-decline — same PullPane frame as page1, with
+                          page2's own gesture/shared values and PullContext.
+                          The "לא עכשיו" headline is the PullPane wake itself
+                          (via wakeLabel). */}
+                      <PullPane
+                        gesture={page2Pull.gesture}
+                        pullY={page2Pull.pullY}
+                        pulling={page2Pull.pulling}
+                        wakeLabel={t('home.watchingReject')}
+                        tutorialPlaying={page2Pull.tutorialPlaying}
+                        cardStyle={StyleSheet.absoluteFill}
+                        pullContext={page2Pull.pullCtx}
+                      >
+                        <RisingCard
+                          key={`pending-${page2PendingInvite.user_id}`}
+                          style={StyleSheet.absoluteFill}
+                        >
+                          <MatchCard
+                            match={page2PendingInvite}
+                            actions={[{
+                              key: 'help',
+                              icon: <QuestionIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
+                            }]}
+                            viewerFamily={profile?.family ?? null}
+                            viewerLocationType={resolveLocationType(profile)}
+                            bottomInset={0}
+                            onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
+                            footerBlock={replyingAcceptBlock}
+                            footerBg={replyingAcceptBlock ? PRIMARY : undefined}
+                          />
+                        </RisingCard>
+                      </PullPane>
+                    </View>
+                  </View>
+                ) : page2DeadInvite ? (
+                  <View style={StyleSheet.absoluteFill}>
+                    <View style={styles.matchPhoto}>
                       <RisingCard
-                        key={`pending-${page2PendingInvite.user_id}`}
-                        style={StyleSheet.absoluteFill}
+                        key={`dead-${page2DeadInvite.user_id}`}
+                        style={{ flex: 1 }}
                       >
                         <MatchCard
-                          match={page2PendingInvite}
-                          actions={[{
-                            key: 'help',
-                            icon: <QuestionIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
-                          }]}
+                          match={page2DeadInvite}
+                          actions={[]}
                           viewerFamily={profile?.family ?? null}
                           viewerLocationType={resolveLocationType(profile)}
                           bottomInset={0}
-                          onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
-                          footerBlock={replyingAcceptBlock}
-                          footerBg={replyingAcceptBlock ? PRIMARY : undefined}
+                          topBlock={page2MessageTitle ? (
+                            <EventMessageCard
+                              title={page2MessageTitle}
+                              description={page2MessageDesc}
+                              onContinue={() => runAction('app/free2', 'free2')}
+                              busy={busy && pendingKey === 'free2'}
+                            />
+                          ) : undefined}
                         />
                       </RisingCard>
-                    </PullPane>
-                  </View>
-                ) : page2DeadInvite ? (
-                  <View style={styles.matchPhoto}>
-                    <RisingCard
-                      key={`dead-${page2DeadInvite.user_id}`}
-                      style={{ flex: 1 }}
-                    >
-                      <MatchCard
-                        match={page2DeadInvite}
-                        actions={[]}
-                        viewerFamily={profile?.family ?? null}
-                        viewerLocationType={resolveLocationType(profile)}
-                        bottomInset={0}
-                        topBlock={page2MessageTitle ? (
-                          <EventMessageCard
-                            title={page2MessageTitle}
-                            description={page2MessageDesc}
-                            onContinue={() => runAction('app/free2', 'free2')}
-                            busy={busy && pendingKey === 'free2'}
-                          />
-                        ) : undefined}
-                      />
-                    </RisingCard>
-                  </View>
-                ) : (
-                  // Pane layout: 3-state visibility toggle (hidden | visible
-                  // | broadcast) anchored at the top of the pane; scrolling
-                  // status card + watchers list or telescope below. Broadcast
-                  // (formerly the premium "Show me to people" button) is a
-                  // real selectable mode now, lit up for the full 30m the
-                  // cooldown lasts; the side tab still surfaces the live
-                  // countdown above the "viewers" label.
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.page2TopBar}>
-                      <VisibilityToggle
-                        mode={toggleMode}
-                        gated={visibilityToggleGated}
-                        broadcastTimer={broadcastActive ? addCooldownLabel : null}
-                        pendingAction={
-                          busy && pendingKey === 'lock2' ? 'hidden'
-                          : busy && pendingKey === 'free2' ? 'visible'
-                          : busy && pendingKey === 'cancel_add' ? (broadcastActive ? 'broadcast' : 'visible')
-                          : busy && pendingKey === 'add' ? 'broadcast'
-                          : null
-                        }
-                        onHidden={() => {
-                          if (toggleMode === 'hidden') return
-                          // During broadcast, any mode switch is a "stop
-                          // broadcasting" action — confirm first.
-                          if (broadcastActive) setExitBroadcastTarget('hidden')
-                          // app/lock2 kicks every current watcher and pushes
-                          // each one a `removed` notification. Surface the
-                          // ripple before running it.
-                          else if (watchers.length > 0) setHideConfirmOpen(true)
-                          else runAction('app/lock2', 'lock2')
-                        }}
-                        onVisible={() => {
-                          if (toggleMode === 'visible') return
-                          if (broadcastActive) setExitBroadcastTarget('visible')
-                          else runAction('app/free2', 'free2')
-                        }}
-                        onBroadcast={() => {
-                          if (broadcastActive) setExitBroadcastTarget('exit')
-                          else setBroadcastConfirmOpen(true)
-                        }}
-                        busy={busy && (pendingKey === 'lock2' || pendingKey === 'free2' || pendingKey === 'add' || pendingKey === 'cancel_add')}
-                      />
                     </View>
-                    {watchers.length > 0 ? (
-                      <PullScrollView
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        scrollEventThrottle={16}
-                        contentContainerStyle={[styles.watchersScrollContent, { paddingBottom: Math.max(bottomInset, LG) }]}
-                      >
-                        <ViewersStatusCard
-                          isHidden={isHidden}
-                          broadcastActive={broadcastActive}
-                          hasWatchers={true}
-                          userIsMale={isMale}
-                        />
-                        <View style={styles.watchersList}>
-                          {watchers.map((w) => (
-                            <View key={w.user_id} style={styles.watcherSlot}>
-                              <WatcherCard
-                                watcher={w}
-                                viewerFamily={profile?.family ?? null}
-                                viewerLocationType={resolveLocationType(profile)}
-                                onPress={() => { tap(); setRemoveWatcherTarget(w) }}
-                              />
-                            </View>
-                          ))}
-                        </View>
-                      </PullScrollView>
-                    ) : (
-                      <PullScrollView
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        scrollEventThrottle={16}
-                        contentContainerStyle={[styles.emptyScrollContent, { paddingBottom: Math.max(bottomInset, LG) }]}
-                      >
-                        <ViewersStatusCard
-                          isHidden={isHidden}
-                          broadcastActive={broadcastActive}
-                          hasWatchers={false}
-                          userIsMale={isMale}
-                        />
-                        <View style={styles.telescopeWrap}>
-                          {isHidden ? <HiddenMoonIllustration /> : <TelescopeIllustration />}
-                        </View>
-                      </PullScrollView>
-                    )}
                   </View>
-                )}
+                ) : null}
               </View>}
             </View>,
           ]}

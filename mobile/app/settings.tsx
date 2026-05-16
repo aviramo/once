@@ -345,7 +345,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const [genderPopupVisible, setGenderPopupVisible] = useState(false)
   const [locationPopupVisible, setLocationPopupVisible] = useState(false)
   const [locationLockedInfoVisible, setLocationLockedInfoVisible] = useState(false)
-  const [locationPauseBusy, setLocationPauseBusy] = useState(false)
 
   const age = profile?.birth_date ? calcAge(profile.birth_date) : 40
   const ageSliderMin = Math.max(18, age - 20)
@@ -477,27 +476,17 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         }}
         onDismiss={() => setLocationPopupVisible(false)}
       />
-      {/* Location is frozen during an active interaction. The only way to
-          change it is to switch to pause mode, which ends that interaction
-          (same app/pause transition the GameModeCard toggle commits). This
-          dialog explains that and is itself the pause confirmation: the
-          destructive Pause button performs app/pause directly. */}
+      {/* Location is frozen during an active interaction. This is a
+          button-less informational notice (dismiss by swipe / backdrop):
+          it just explains why the row didn't open the picker and tells the
+          user to finish the current view/invitation first. */}
       <ConfirmDialog
         visible={locationLockedInfoVisible}
-        icon={<PauseIcon color={PRIMARY} size={32} />}
+        icon={<MapPinIcon color={PRIMARY} size={32} />}
         title={t('settings.locationLockedTitle')}
         description={t('settings.locationLockedDesc')}
-        confirmLabel={t('settings.gameMode.offConfirmButton')}
         draggable
-        busy={locationPauseBusy}
-        onCancel={() => { if (!locationPauseBusy) setLocationLockedInfoVisible(false) }}
-        onConfirm={async () => {
-          if (locationPauseBusy) return
-          setLocationPauseBusy(true)
-          try { await invoke('app/pause', {}) } catch (e) { console.error(e) }
-          setLocationPauseBusy(false)
-          setLocationLockedInfoVisible(false)
-        }}
+        onCancel={() => setLocationLockedInfoVisible(false)}
       />
     </View>
   )
