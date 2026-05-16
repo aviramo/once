@@ -146,6 +146,7 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'invite-fail': 'מישהו הקדים אותך',
     'approve-fail': 'איחרת לאישור',
     'chat': 'התקבלה הודעה',
+    'area-open': 'המשחק התחיל! האפליקציה זמינה עכשיו באזור שלך',
   },
   en: {
     'invite-in': 'Chat invitation',
@@ -161,6 +162,7 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'invite-fail': 'Already invited',
     'approve-fail': 'You missed the approval',
     'chat': 'New message',
+    'area-open': 'The game has started. The app is now available in your area.',
   },
 };
 

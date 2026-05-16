@@ -403,15 +403,15 @@ export default {
 כשהלב פנוי, משהו קורה
 שיחה אחת יכולה להספיק
 בלי משחקים, עם כוונה
-להיות זמין למשהו אמיתי
+להיות {זמין|זמינה} למשהו אמיתי
 אהבה לא מתחילה ברשימה
-תן לרגע לבחור אותך
+{תן|תני} לרגע לבחור אותך
 מישהו רואה אותך עכשיו
 פחות אפשרויות, יותר בהירות
 חיבור צריך מקום לנשום
 לא לחפש, להיפגש
 מי שבפוקוס, מקבל לב
-העולם זז, אתה נוכח
+העולם זז, {אתה|את} {נוכח|נוכחת}
 רגע קטן, אפשרות גדולה
 כשזה קורה, זה עכשיו
 לא עוד החמצות שקטות
@@ -434,7 +434,7 @@ export default {
 אהבה אוהבת שקט
 לפעמים אחד זה עולם
 בלי לברוח לאפשרות הבאה
-להיות פנוי באמת
+להיות {פנוי|פנויה} באמת
 קשר מתחיל כשעוצרים
 רק רגע, רק אתם`,
   // Geo-availability gate. Shown in the rotating-headline slot when the
@@ -443,8 +443,8 @@ export default {
   // removed so page2/chat is unreachable.
   // {date} is interpolated by home.tsx from availability.starts_at (the
   // area's launch time) — keep the placeholder.
-  'home.geoGate.unavailable': 'האפליקציה עדיין לא זמינה באזור שלך. אנחנו מרחיבים אזורים בהדרגה, נתראה בקרוב.',
-  'home.geoGate.notYet': 'האפליקציה תיפתח באזור שלך ב{date}.',
+  'home.geoGate.unavailable': 'האפליקציה לא זמינה באזורך',
+  'home.geoGate.notYet': 'נפתח באזורך {date}',
   'home.startNow': 'להתחיל עכשיו',
   'home.readyToContinue': 'מוכן להמשיך?',
   'home.readyToContinue_m': 'מוכן להמשיך?',

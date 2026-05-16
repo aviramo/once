@@ -37,6 +37,19 @@ export function tg(key: keyof Translations, isMale: boolean | null | undefined):
   return dict[key + suffix] ?? dict[key] ?? key
 }
 
+/**
+ * Resolves inline gender markers `{male|female}` inside an already-fetched
+ * string against the user's gender. Used where whole-string `_m`/`_f` variants
+ * (see `tg`) would force duplicating a large shared block to vary a few words
+ * (e.g. the 50-line ready-headline pool — only ~4 lines are gendered).
+ * Default (null/undefined/true) → male form, matching `tg`'s convention.
+ * Strings with no marker (e.g. all English copy) pass through unchanged.
+ */
+export function genderize(text: string, isMale: boolean | null | undefined): string {
+  const female = isMale === false
+  return text.replace(/\{([^{}|]*)\|([^{}|]*)\}/g, (_, m: string, f: string) => (female ? f : m))
+}
+
 /** Double-gender lookup: key_mm, key_mf, key_fm, key_ff → falls back to tg → t. */
 export function tgg(key: keyof Translations, userMale: boolean | null | undefined, otherMale: boolean | null | undefined): string {
   const dict = translations as Record<string, string>

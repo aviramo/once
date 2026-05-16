@@ -5,9 +5,9 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell, Section, Card, EmptyState } from "../_components/ui";
 import { Disclosure } from "../_components/Disclosure";
-import { AreaForm } from "./_components/AreaForm";
+import { AreaForm, type AreaMode } from "./_components/AreaForm";
 import { AreaRow } from "./_components/AreaRow";
-import { createArea, updateArea, deleteArea, toggleArea } from "./actions";
+import { createArea, updateArea, deleteArea, setAreaMode } from "./actions";
 
 type AreaListRow = {
   id: string;
@@ -16,7 +16,7 @@ type AreaListRow = {
   lng: number;
   radius_m: number;
   starts_at: string;
-  enabled: boolean;
+  mode: AreaMode;
 };
 
 export default async function AreasPage({
@@ -35,7 +35,7 @@ export default async function AreasPage({
   const admin = createSupabaseAdmin();
   const { data } = await admin
     .from("areas_list")
-    .select("id, label, lat, lng, radius_m, starts_at, enabled")
+    .select("id, label, lat, lng, radius_m, starts_at, mode")
     .order("created_at", { ascending: false });
   const areas = (data ?? []) as AreaListRow[];
 
@@ -52,15 +52,20 @@ export default async function AreasPage({
     save: a.save,
     cancel: a.cancel,
     add: a.add,
-    enabledField: a.enabledField,
+    modeLabel: a.modeLabel,
+    modeActive: a.modeActive,
+    modeScheduled: a.modeScheduled,
+    modeDisabled: a.modeDisabled,
   };
   const rowDict = {
     edit: a.edit,
     delete: a.delete,
-    enable: a.enable,
-    disable: a.disable,
-    enabled: a.enabled,
-    disabled: a.disabled,
+    modeActive: a.modeActive,
+    modeScheduled: a.modeScheduled,
+    modeDisabled: a.modeDisabled,
+    statusActive: a.statusActive,
+    statusWaiting: a.statusWaiting,
+    statusDisabled: a.statusDisabled,
     startsNow: a.startsNow,
     startsFuture: a.startsFuture,
     confirmDelete: a.confirmDelete,
@@ -89,7 +94,7 @@ export default async function AreasPage({
                   lang={locale}
                   updateAction={updateArea}
                   deleteAction={deleteArea}
-                  toggleAction={toggleArea}
+                  setModeAction={setAreaMode}
                 />
               ))}
             </div>

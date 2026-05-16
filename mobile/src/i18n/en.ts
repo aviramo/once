@@ -424,8 +424,8 @@ Just a moment, just the two of you`,
   // removed so page2/chat is unreachable.
   // {date} is interpolated by home.tsx from availability.starts_at (the
   // area's launch time) — keep the placeholder.
-  'home.geoGate.unavailable': 'The app is not available in your area yet. We are expanding areas gradually, see you soon.',
-  'home.geoGate.notYet': 'The app opens in your area on {date}.',
+  'home.geoGate.unavailable': 'Not available in your area',
+  'home.geoGate.notYet': 'Opens in your area {date}',
   'home.startNow': 'Start now',
   'home.readyToContinue': 'Ready to continue?',
   'home.endedBack': 'Back to game',

@@ -8,13 +8,24 @@ import { createSupabaseAdmin } from "@/lib/supabase/admin";
 // route segment to revalidate after every mutation.
 const AREAS_PATH = "/[lang]/admin/areas";
 
+// 3-state area mode (source of truth in the DB). `enabled` is still written,
+// mirrored as (mode !== 'disabled'), only for the transitional read-compat
+// window — see BACKWARD_COMPAT.md.
+export type AreaMode = "active" | "scheduled" | "disabled";
+const MODES: readonly AreaMode[] = ["active", "scheduled", "disabled"];
+
+function parseMode(raw: unknown): AreaMode {
+  const s = String(raw ?? "");
+  return (MODES as readonly string[]).includes(s) ? (s as AreaMode) : "scheduled";
+}
+
 type Parsed = {
   label: string;
   lat: number;
   lng: number;
   radius_m: number;
   starts_at: string;
-  enabled: boolean;
+  mode: AreaMode;
 };
 
 function parse(fd: FormData): Parsed {
@@ -24,12 +35,11 @@ function parse(fd: FormData): Parsed {
   const radius_m = Math.round(Number(fd.get("radius_m")));
   const startsRaw = String(fd.get("starts_at") ?? "").trim();
   // datetime-local has no timezone; treat it as the admin's local time and
-  // normalise to ISO. Empty → "available now".
+  // normalise to ISO. Empty → "now" (only meaningful for scheduled mode).
   const starts_at = startsRaw
     ? new Date(startsRaw).toISOString()
     : new Date().toISOString();
-  const enabled = fd.get("enabled") === "on" || fd.get("enabled") === "true";
-  return { label, lat, lng, radius_m, starts_at, enabled };
+  return { label, lat, lng, radius_m, starts_at, mode: parseMode(fd.get("mode")) };
 }
 
 function invalid(p: Parsed): string | null {
@@ -55,7 +65,8 @@ export async function createArea(fd: FormData) {
     center: ewkt(p.lng, p.lat),
     radius_m: p.radius_m,
     starts_at: p.starts_at,
-    enabled: p.enabled,
+    mode: p.mode,
+    enabled: p.mode !== "disabled",
   });
   if (error) throw new Error(error.message);
   revalidatePath(AREAS_PATH, "page");
@@ -76,7 +87,8 @@ export async function updateArea(fd: FormData) {
       center: ewkt(p.lng, p.lat),
       radius_m: p.radius_m,
       starts_at: p.starts_at,
-      enabled: p.enabled,
+      mode: p.mode,
+      enabled: p.mode !== "disabled",
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
@@ -93,15 +105,16 @@ export async function deleteArea(fd: FormData) {
   revalidatePath(AREAS_PATH, "page");
 }
 
-export async function toggleArea(fd: FormData) {
+// Quick mode switch from a row (the 3 buttons הפעלה / תזמון / מושבת).
+export async function setAreaMode(fd: FormData) {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
   const id = String(fd.get("id") ?? "");
   if (!id) throw new Error("missing_id");
-  const enabled = fd.get("enabled") === "true";
+  const mode = parseMode(fd.get("mode"));
   const admin = createSupabaseAdmin();
   const { error } = await admin
     .from("areas")
-    .update({ enabled })
+    .update({ mode, enabled: mode !== "disabled" })
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(AREAS_PATH, "page");

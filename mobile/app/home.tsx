@@ -38,7 +38,7 @@ import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
 import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
-import { t, tg, tgg, lang } from '../src/i18n'
+import { t, tg, tgg, genderize, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
@@ -1568,14 +1568,15 @@ export default function HomePage() {
     availability?.state === 'unavailable' ||
     (availability?.state === 'not_yet' && (!availStartsAt || Date.now() < availStartsAt))
   )
-  // The launch moment ({date} in home.geoGate.notYet), formatted as
-  // DD/MM/YYYY HH:MM from the area's starts_at. Locale-independent manual
-  // format (no Intl dependency) — matches the day+time the admin sees.
+  // The launch moment ({date} in home.geoGate.notYet), formatted short as
+  // DD/MM HH:MM from the area's starts_at. Kept short on purpose: the gate
+  // text shares the rotating-headline slot (SkipHintLabel), which is tuned
+  // for brief phrases — a long date string overflows/clips there.
   const gateWhenStr = (() => {
     if (!availStartsAt) return ''
     const d = new Date(availStartsAt)
     const p = (n: number) => String(n).padStart(2, '0')
-    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`
   })()
 
 
@@ -2944,7 +2945,7 @@ export default function HomePage() {
       : isEmptyHeadline
         ? ''
         : showReadyHeadline
-          ? READY_HEADLINES[readyHeadlineIdx] ?? ''
+          ? genderize(READY_HEADLINES[readyHeadlineIdx] ?? '', isMale)
           : t('home.noOneNearbyTitle')
 
   // PagerView onPageScroll drives the TabStrip indicator each frame. Runs on
@@ -3009,10 +3010,13 @@ export default function HomePage() {
           ref={pagerRef}
           style={{ flex: 1 }}
           initialPage={initialPane}
-          // Geo-gated: lock the pager so the (now tab-less) side slot can't be
-          // swiped to. Menu/Home stay reachable via their tab taps (setPage
-          // works regardless of scrollEnabled).
-          scrollEnabled={!sliding && !geoGated}
+          // Geo-gated: the pager stays swipeable so Home<->Menu(settings) keeps
+          // working by swipe (the user must still reach settings while waiting
+          // for launch). The side slot is kept unreachable WITHOUT locking the
+          // whole pager: its tab is removed (tabSpecs), goToPane swallows
+          // programmatic nav to it, and onPageSelected snaps back from it to
+          // Home if a swipe lands there.
+          scrollEnabled={!sliding}
           overdrag={false}
           overScrollMode="never"
           onPageSelected={onPageSelected}

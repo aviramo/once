@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 
+export type AreaMode = "active" | "scheduled" | "disabled";
+
 export type AreaInitial = {
   id: string;
   label: string;
@@ -9,7 +11,7 @@ export type AreaInitial = {
   lng: number;
   radius_m: number;
   starts_at: string;
-  enabled: boolean;
+  mode: AreaMode;
 };
 
 type Dict = {
@@ -25,7 +27,10 @@ type Dict = {
   save: string;
   cancel: string;
   add: string;
-  enabledField: string;
+  modeLabel: string;
+  modeActive: string;
+  modeScheduled: string;
+  modeDisabled: string;
 };
 
 type Prediction = { place_id: string; description: string };
@@ -71,7 +76,7 @@ export function AreaForm({
   const [startsAt, setStartsAt] = useState(
     initial ? toLocalInput(initial.starts_at) : "",
   );
-  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  const [mode, setMode] = useState<AreaMode>(initial?.mode ?? "scheduled");
 
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -148,7 +153,7 @@ export function AreaForm({
         setLng("");
         setRadius("1000");
         setStartsAt("");
-        setEnabled(true);
+        setMode("scheduled");
         setQuery("");
         setPredictions([]);
       }
@@ -261,16 +266,37 @@ export function AreaForm({
         </label>
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          name="enabled"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-          value="true"
-        />
-        <span>{dict.enabledField}</span>
-      </label>
+      <fieldset className="text-sm">
+        <legend className="text-muted-foreground">{dict.modeLabel}</legend>
+        <div className="mt-1 flex gap-2">
+          {(
+            [
+              ["active", dict.modeActive],
+              ["scheduled", dict.modeScheduled],
+              ["disabled", dict.modeDisabled],
+            ] as [AreaMode, string][]
+          ).map(([value, text]) => (
+            <label
+              key={value}
+              className={`flex-1 cursor-pointer rounded-md border px-3 py-2 text-center transition-colors ${
+                mode === value
+                  ? "border-primary bg-primary/10 font-medium text-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted/60"
+              }`}
+            >
+              <input
+                type="radio"
+                name="mode"
+                value={value}
+                checked={mode === value}
+                onChange={() => setMode(value)}
+                className="sr-only"
+              />
+              {text}
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <div className="flex items-center gap-2">
         <button

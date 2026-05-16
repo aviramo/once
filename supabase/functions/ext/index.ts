@@ -41,14 +41,24 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
 
 async function handleCron(log: Log) {
   const result = await Tools.rpc(log, "app_expire_sweep", {});
-  const notifyList: Array<{ user_id: string; code: string; actor_id?: string }> = result?.notify ?? [];
+  // Geo-availability launch sweep: flips users whose area just opened from
+  // not_yet → available and fires the 'area-open' ("game started") push to
+  // anyone who wasn't in the app at launch. Same notify/firePush pipeline.
+  const launch = await Tools.rpc(log, "app_area_launch_sweep", {});
+
+  const notifyList: Array<{ user_id: string; code: string; actor_id?: string }> = [
+    ...(result?.notify ?? []),
+    ...(launch?.notify ?? []),
+  ];
 
   for (const n of notifyList) {
     if (!n.user_id) continue;
     EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, n.actor_id));
   }
 
-  return log.success({ processed: result?.processed ?? 0 });
+  return log.success({
+    processed: (result?.processed ?? 0) + (launch?.processed ?? 0),
+  });
 }
 
 Deno.serve(async (req) => {
