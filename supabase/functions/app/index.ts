@@ -23,6 +23,17 @@ function applyBodyFields(user: User, body: Record<string, unknown>) {
   return null;
 }
 
+// Geo-availability gate state, read off a user-shaped object's
+// relations.availability (written by app_availability / area_state). Absent =
+// 'available' (gate not yet evaluated, or no enabled areas) so nothing is
+// gated until we've actually placed the user. Used to skip auto-find for a
+// gated user — there's no point pulling candidates they can't act on, and
+// others() already drops them from everyone else's candidate pool.
+function availabilityState(u: unknown): string {
+  const rel = (u as { relations?: { availability?: { state?: string } } } | null | undefined)?.relations;
+  return rel?.availability?.state ?? "available";
+}
+
 function pickGendered(table: Record<string, Record<string, string>>, code: string, lang: string, actorIsMale: boolean | null): string | undefined {
   const dict = table[lang] ?? table.he;
   if (actorIsMale !== null) {
@@ -111,7 +122,9 @@ Deno.serve(async (req) => {
         // Same auto-find rule as start/location/focus: account changes
         // (gender/age via birth_date) affect who matches, so re-pick when
         // the user is sitting idle with nothing in their page1 to look at.
-        if (user.relations?.page1?.state === "free" && !user.relations?.page1?.profile) {
+        // Skip while geo-gated — a gated user gets no candidates.
+        if (availabilityState(user) === "available"
+          && user.relations?.page1?.state === "free" && !user.relations?.page1?.profile) {
           const result = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: "find" });
           if (result && !result.error) {
             rpcUser = result.user;
@@ -136,12 +149,21 @@ Deno.serve(async (req) => {
           user.relations.page2 = { state: "free", profiles: [] } as typeof user.relations.page2;
         }
         await user.persist(log);
-        // Auto-find only when state='free' AND nothing already in page1 to
-        // look at — don't override an existing candidate the user hasn't
-        // acted on. Other states (locked / watching / waiting / chat) are
-        // intentionally skipped: they each represent an active interaction
-        // the user has to clear manually.
-        if (user.relations?.page1?.state === "free" && !user.relations?.page1?.profile) {
+        // Recompute the geo-availability gate from the just-persisted
+        // location and surface it via relations.availability. Synchronous so
+        // the /app/start (or /location, /focus) response — and the Realtime
+        // relations change it triggers — carries the gate state immediately,
+        // and so the auto-find skip below sees a fresh value.
+        const av = await Tools.rpc(log, "app_availability", { me_id: user.user_id });
+        if (av && !av.error) rpcUser = av.user;
+        const availableNow = availabilityState(rpcUser ?? user.db.new) === "available";
+        // Auto-find only when available AND state='free' AND nothing already
+        // in page1 to look at — don't override an existing candidate the user
+        // hasn't acted on. Other states (locked / watching / waiting / chat)
+        // are intentionally skipped: they each represent an active
+        // interaction the user has to clear manually. A geo-gated user gets
+        // no candidates (others() also drops them from everyone's pool).
+        if (availableNow && user.relations?.page1?.state === "free" && !user.relations?.page1?.profile) {
           const eventKey = key === "location" ? "location" : key;
           const result = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: eventKey });
           if (result && !result.error) {
@@ -156,7 +178,8 @@ Deno.serve(async (req) => {
       case "range":
       case "preferred_gender": {
         await user.persist(log);
-        if (user.relations?.page1?.state === "free" && !user.relations?.page1?.profile) {
+        if (availabilityState(user) === "available"
+          && user.relations?.page1?.state === "free" && !user.relations?.page1?.profile) {
           const result = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: "find" });
           if (result && !result.error) {
             rpcUser = result.user;
@@ -216,7 +239,8 @@ Deno.serve(async (req) => {
         // Resume flips both pages to free. Mirror start/focus auto-find so
         // the user lands on a candidate instead of an empty home pane.
         const relationsAfter = (resumeResult?.user as { relations?: { page1?: { state?: string; profile?: unknown } } } | undefined)?.relations;
-        if (relationsAfter?.page1?.state === "free" && !relationsAfter?.page1?.profile) {
+        if (availabilityState(resumeResult?.user) === "available"
+          && relationsAfter?.page1?.state === "free" && !relationsAfter?.page1?.profile) {
           const findResult = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: "find" });
           if (findResult && !findResult.error) {
             rpcUser = findResult.user;
@@ -370,7 +394,8 @@ Deno.serve(async (req) => {
         // Re-read state from the rpcUser (app_save_profile may have updated it).
         const userAfter = (rpcUser as Record<string, unknown> | undefined) ?? user;
         const relations = (userAfter as { relations?: { page1?: { state?: string; profile?: unknown } } }).relations;
-        if (relations?.page1?.state === "free" && !relations?.page1?.profile) {
+        if (availabilityState(userAfter) === "available"
+          && relations?.page1?.state === "free" && !relations?.page1?.profile) {
           const findResult = await Tools.rpc(log, "app_find", { me_id: user.user_id, event_key: "find" });
           if (findResult && !findResult.error) {
             rpcUser = findResult.user;

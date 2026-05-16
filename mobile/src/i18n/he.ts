@@ -437,6 +437,12 @@ export default {
 להיות פנוי באמת
 קשר מתחיל כשעוצרים
 רק רגע, רק אתם`,
+  // Geo-availability gate. Shown in the rotating-headline slot when the
+  // server marks the user outside every active area (unavailable) or inside
+  // an area that has not opened yet (notYet). While shown, the side tab is
+  // removed so page2/chat is unreachable.
+  'home.geoGate.unavailable': 'האפליקציה עדיין לא זמינה באזור שלך. אנחנו מרחיבים אזורים בהדרגה, נתראה בקרוב.',
+  'home.geoGate.notYet': 'האפליקציה עומדת להיפתח באזור שלך. עוד רגע קט וזה כאן.',
   'home.startNow': 'להתחיל עכשיו',
   'home.readyToContinue': 'מוכן להמשיך?',
   'home.readyToContinue_m': 'מוכן להמשיך?',

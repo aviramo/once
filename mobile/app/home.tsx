@@ -1538,8 +1538,43 @@ export default function HomePage() {
   const chatAvailable = profile?.state === 'chat'
   const [chatJustStarted, setChatJustStarted] = useState(false)
 
+  // ── Geo-availability gate ───────────────────────────────────────────────
+  // The server writes relations.availability from the admin-defined areas:
+  // 'unavailable' (outside every enabled area) or 'not_yet' (inside one that
+  // has not opened yet, with starts_at). While gated, the home pane shows a
+  // single fixed message in the rotating-headline slot, the find button is
+  // suppressed, and the side tab is removed so page2/chat is unreachable.
+  // Absent / 'available' → normal behaviour (also the no-areas-configured
+  // case, so this is fully backward compatible).
+  //
+  // Scoped to the idle world: an active chat is never gated (a user who
+  // matched before being geo-gated keeps their conversation — tearing it
+  // down would be destructive, and the gate UI is the discovery screen).
+  const availability = (profile?.relations as { availability?: { state?: string; starts_at?: string } } | undefined)?.availability
+  const availStartsAt = availability?.starts_at ? Date.parse(availability.starts_at) : 0
+  // 'not_yet' lifts itself the moment its start time passes; tick locally so
+  // the gate clears without waiting for the next server round-trip (the next
+  // /app/focus or /app/start reconfirms server-side anyway).
+  const [, setGateTick] = useState(0)
+  useEffect(() => {
+    if (availability?.state !== 'not_yet' || !availStartsAt) return
+    const ms = availStartsAt - Date.now()
+    if (ms <= 0) return
+    // setTimeout caps at int32 ms; clamp and let the re-render reschedule.
+    const timer = setTimeout(() => setGateTick(v => v + 1), Math.min(ms + 500, 0x7fffffff))
+    return () => clearTimeout(timer)
+  }, [availability?.state, availStartsAt])
+  const geoGated = !chatAvailable && (
+    availability?.state === 'unavailable' ||
+    (availability?.state === 'not_yet' && (!availStartsAt || Date.now() < availStartsAt))
+  )
+
 
   const goToPane = (index: PaneIndex) => {
+    // While geo-gated the side slot (page2/chat) is unreachable — swallow any
+    // navigation to it (notification taps, programmatic routes). Menu/Home
+    // stay reachable so the user can still open settings / change location.
+    if (geoGated && index === PAGE2_PANE) return
     if (index === paneIndexRef.current) return
     tap()
     paneIndexRef.current = index
@@ -1561,12 +1596,32 @@ export default function HomePage() {
 
   const onPageSelected = (e: { nativeEvent: { position: number } }) => {
     const pane = e.nativeEvent.position as PaneIndex
+    // Defense in depth: if the pager ever lands on the side slot while gated
+    // (e.g. mounted there from a stale notification), snap back to Home.
+    if (geoGated && pane === PAGE2_PANE) {
+      paneIndexRef.current = HOME_PANE
+      setPaneIndex(HOME_PANE)
+      pagerRef.current?.setPageWithoutAnimation(HOME_PANE)
+      return
+    }
     if (pane !== paneIndexRef.current) {
       tap()
       paneIndexRef.current = pane
       setPaneIndex(pane)
     }
   }
+
+  // If the gate turns on while the user is on the side slot (or mounted there
+  // from a notification), pull them back to Home so the gated slot can't stay
+  // on screen.
+  useEffect(() => {
+    if (geoGated && paneIndexRef.current === PAGE2_PANE) {
+      paneIndexRef.current = HOME_PANE
+      setPaneIndex(HOME_PANE)
+      pagerRef.current?.setPageWithoutAnimation(HOME_PANE)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoGated])
 
 
   const openShellSubPage = (config: SubPageConfig): Promise<void> => {
@@ -2669,7 +2724,9 @@ export default function HomePage() {
   // v3: synth state is null for both `free` (find ran, no candidate) and `locked`
   // without message (brand-new user, or post-clear). Only the latter is "ready to
   // find" — when state is `free` we surface the no-one-nearby + Search Preferences UI.
-  const isReadyToFind = state === null && rawPage1State !== 'free'
+  // Never offer the find/play button while geo-gated — the server returns no
+  // candidates for a gated user anyway, so the button would be a dead end.
+  const isReadyToFind = !geoGated && state === null && rawPage1State !== 'free'
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
 
   const permTitle = showNotifOverlay
@@ -2778,7 +2835,7 @@ export default function HomePage() {
     : page2DeadInvite
       ? page2DeadName
       : ''
-  const tabSpecs: TabSpec[] = [
+  const tabSpecsAll: TabSpec[] = [
     // Menu tab is icon-only (no label) — it's chrome, not a destination, so
     // it shrinks to its glyph width and yields the freed flex space to the
     // two content tabs (Home + Side). Icon swaps by state: settings sliders
@@ -2840,6 +2897,10 @@ export default function HomePage() {
       } satisfies TabSpec
     })(),
   ]
+  // While geo-gated, drop the side tab entirely so page2/chat has no entry
+  // point. Indices 0/1 still map to Menu/Home (TabStrip onSelect(i) →
+  // goToPane(i)), so the remaining tabs keep working unchanged.
+  const tabSpecs: TabSpec[] = geoGated ? tabSpecsAll.slice(0, 2) : tabSpecsAll
 
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
@@ -2861,13 +2922,19 @@ export default function HomePage() {
     }
     prevShowReadyHeadline.current = showReadyHeadline
   }, [showReadyHeadline])
-  const headlineText = isLocatingHeadline
-    ? t('home.locatingDesc')
-    : isEmptyHeadline
-      ? ''
-      : showReadyHeadline
-        ? READY_HEADLINES[readyHeadlineIdx] ?? ''
-        : t('home.noOneNearbyTitle')
+  // The geo-gate message takes the rotating-headline slot and overrides every
+  // other home-pane line (locating / ready / no-one-nearby). 'not_yet' and
+  // 'unavailable' get distinct copy; the find button is already suppressed
+  // (isReadyToFind === false) and the side tab removed (tabSpecs below).
+  const headlineText = geoGated
+    ? (availability?.state === 'not_yet' ? t('home.geoGate.notYet') : t('home.geoGate.unavailable'))
+    : isLocatingHeadline
+      ? t('home.locatingDesc')
+      : isEmptyHeadline
+        ? ''
+        : showReadyHeadline
+          ? READY_HEADLINES[readyHeadlineIdx] ?? ''
+          : t('home.noOneNearbyTitle')
 
   // PagerView onPageScroll drives the TabStrip indicator each frame. Runs on
   // the UI thread (worklet) so the underline tracks the swipe 1:1 instead of
@@ -2931,7 +2998,10 @@ export default function HomePage() {
           ref={pagerRef}
           style={{ flex: 1 }}
           initialPage={initialPane}
-          scrollEnabled={!sliding}
+          // Geo-gated: lock the pager so the (now tab-less) side slot can't be
+          // swiped to. Menu/Home stay reachable via their tab taps (setPage
+          // works regardless of scrollEnabled).
+          scrollEnabled={!sliding && !geoGated}
           overdrag={false}
           overScrollMode="never"
           onPageSelected={onPageSelected}

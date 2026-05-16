@@ -69,6 +69,12 @@ export default async function AdminDashboard({
         </div>
         <div className="flex items-center gap-3">
           <Link
+            href="/admin/areas"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            {dict.admin.areas.navLink}
+          </Link>
+          <Link
             href="/"
             className="text-sm text-muted-foreground hover:text-foreground"
           >

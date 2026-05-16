@@ -104,6 +104,11 @@ interface PagesCompat {
   page2Message?: string
   /** ISO timestamp of last `app_add` press; gates the page2 "Show me to people" cooldown. */
   last_add_at?: string
+  /** Server-computed geo-availability gate (relations.availability), written
+   * by app_availability/area_state. Absent = available (no enabled areas, or
+   * not yet evaluated). Passed straight through: applyServerUser spreads the
+   * raw server `relations`, so this unknown-to-the-shim key survives. */
+  availability?: { state: 'available' | 'unavailable' | 'not_yet'; starts_at?: string }
 }
 
 interface UserProfile {

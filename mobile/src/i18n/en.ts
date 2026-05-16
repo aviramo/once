@@ -418,6 +418,12 @@ Without escaping to the next option
 To be truly available
 A bond starts when you stop
 Just a moment, just the two of you`,
+  // Geo-availability gate. Shown in the rotating-headline slot when the
+  // server marks the user outside every active area (unavailable) or inside
+  // an area that has not opened yet (notYet). While shown, the side tab is
+  // removed so page2/chat is unreachable.
+  'home.geoGate.unavailable': 'The app is not available in your area yet. We are expanding areas gradually, see you soon.',
+  'home.geoGate.notYet': 'The app is about to open in your area. Just a little longer.',
   'home.startNow': 'Start now',
   'home.readyToContinue': 'Ready to continue?',
   'home.endedBack': 'Back to game',
