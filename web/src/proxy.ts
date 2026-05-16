@@ -4,6 +4,17 @@ import { updateSupabaseSession } from "@/lib/supabase/proxy";
 
 const PUBLIC_FILE_RE = /\.(.*)$/;
 
+// Clean URL -> static marketing file in /public. The deployed mobile app
+// links to the extensionless /privacy and /terms (with ?lang=), and GitHub
+// Pages served those via implicit clean URLs; this app must keep doing so
+// for the unified domain to be a true drop-in replacement for once-app.
+const STATIC_PAGES: Record<string, string> = {
+  "/": "/index.html",
+  "/privacy": "/privacy.html",
+  "/terms": "/terms.html",
+  "/child-safety": "/child-safety.html",
+};
+
 function pickLocale(request: NextRequest): string {
   const cookie = request.cookies.get("NEXT_LOCALE")?.value;
   if (cookie && hasLocale(cookie)) return cookie;
@@ -19,12 +30,14 @@ function pickLocale(request: NextRequest): string {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Marketing landing: serve the static index.html at the site root.
-  // /admin/* stays the dynamic dashboard; the legal pages (*.html) fall
-  // through PUBLIC_FILE_RE below and are served straight from /public.
-  if (pathname === "/") {
+  // Marketing landing + legal pages: serve the static files from /public,
+  // preserving the query string (the pages read ?lang= client-side).
+  // /admin/* stays the dynamic dashboard; *.html requests fall through
+  // PUBLIC_FILE_RE below and are served straight from /public.
+  const staticTarget = STATIC_PAGES[pathname];
+  if (staticTarget) {
     const url = request.nextUrl.clone();
-    url.pathname = "/index.html";
+    url.pathname = staticTarget;
     return NextResponse.rewrite(url);
   }
 
