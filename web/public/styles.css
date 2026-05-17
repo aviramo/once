@@ -275,14 +275,14 @@ p { color: var(--text-2); }
   justify-content: center;
   min-width: 0;
 }
-/* The illustrations are portrait transparent art; bound them by height as
-   well as width so a tall drawing never dominates the layout, and keep
-   aspect (width/height auto). The transparent surround means the centered
-   art needs no box. */
+/* Transparent illustrations. max-width:100% keeps them inside the
+   container on every screen (never wider than the viewport), and a small
+   max-height keeps them compact (the art is ~square, so height drives the
+   display size). Centered; the transparent surround needs no box. */
 .section-visual img {
   width: auto;
-  max-width: 520px;
-  max-height: 520px;
+  max-width: 100%;
+  max-height: 260px;
   height: auto;
   margin-inline: auto;
   display: block;
@@ -320,8 +320,8 @@ p { color: var(--text-2); }
 }
 .hero-visual img {
   width: auto;
-  max-width: 760px;
-  max-height: 600px;
+  max-width: 100%;
+  max-height: 320px;
   height: auto;
   margin-inline: auto;
   display: block;
@@ -339,8 +339,8 @@ p { color: var(--text-2); }
 .how .how-grid + .lead-visual { margin: 36px 0 0; }
 .lead-visual img {
   width: auto;
-  max-width: 360px;
-  max-height: 360px;
+  max-width: 100%;
+  max-height: 220px;
   height: auto;
   margin-inline: auto;
   display: block;
@@ -590,10 +590,16 @@ p { color: var(--text-2); }
     gap: 16px;
   }
   .section-split.flip .section-visual { order: 0; }
-  .section-visual img { max-width: 480px; max-height: 58vh; margin-inline: auto; }
+  /* Guaranteed inset from the screen edges on mobile, plus smaller caps.
+     padding-inline on the wrapper + img max-width:100% means the art can
+     never reach the viewport edge regardless of its aspect. */
+  .hero-visual,
+  .section-visual,
+  .lead-visual { padding-inline: 24px; }
+  .section-visual img { max-width: 100%; max-height: 200px; margin-inline: auto; }
   .hero-visual { margin-top: 8px; max-width: 640px; }
-  .hero-visual img { max-width: 640px; max-height: 62vh; }
-  .lead-visual img { max-width: 320px; max-height: 44vh; }
+  .hero-visual img { max-width: 100%; max-height: 240px; }
+  .lead-visual img { max-width: 100%; max-height: 180px; }
   .how-grid { grid-template-columns: 1fr; }
   .why-grid { grid-template-columns: 1fr; gap: 36px; }
   .cta { padding: 72px 24px; }
