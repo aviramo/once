@@ -199,6 +199,16 @@ export const TAB = {
   pulseOpacity: 0.15,
   pulseCount: 3,
   pulseTimeoutMs: 2200,
+  // The side tab's "a new viewer just joined your list" attention pulse is
+  // deliberately SHORTER than the generic 3-blink `alerting` (chat unread /
+  // incoming invite): the user asked for exactly two blinks so a rising
+  // viewer count reads as a quick double-tick, not a full alarm. Same
+  // `alerting` machinery, just `viewerPulseCount` repeats instead of
+  // `pulseCount`. `viewerPulseTimeoutMs` is the React-flag upper bound (≈
+  // viewerPulseCount × 2 × default-withTiming 300ms + margin), matching how
+  // `pulseTimeoutMs` relates to `pulseCount`.
+  viewerPulseCount: 2,
+  viewerPulseTimeoutMs: 1600,
   // Duration of the sub-label (live timer) slide-in / slide-out animation.
   // Entering: FadeInDown drops the timer from above into its slot above the
   // mainRow while fading in. Exiting: FadeOutUp lifts it back up while

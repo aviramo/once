@@ -14,7 +14,8 @@ import { PRIMARY, PRIMARY_BG, DESTRUCTIVE, WHITE, BLACK_SOFT, BLACK_STRONG, ONLI
 // is set, the chip switches to a dark translucent scrim + white text so it
 // stays readable over a color photo. State-presence chips (online,
 // proximate, kids-affinity) add a `renderTrailing` dot via `PresenceDot`,
-// colored per meaning (green = present/here, coral = brand-state).
+// colored per meaning (green = present/here, white = kids-affinity — a
+// neutral marker that stays visible on the dark photo scrim).
 //
 // RTL strategy: use `direction:'rtl'` on the chip View (and the inner text
 // wrapper) so the Yoga node renders right-to-left regardless of whether
@@ -135,7 +136,8 @@ export function KidsIcon({ color }: { color: string }) {
 
 // Small presence dot used as a chip trailing affordance. 7px filled circle,
 // hue carries the meaning: green (default) = "right now" / "right here" on
-// time + distance chips; coral = brand-state chip (e.g. kids affinity). When
+// time + distance chips; white = kids-affinity chip (readable on the dark
+// photo scrim, where a black/brand dot would disappear). When
 // `pulsing` is set, opacity loops 1 ↔ pulseOpacity continuously to signal a
 // live ongoing state (e.g. the side tab while broadcasting).
 

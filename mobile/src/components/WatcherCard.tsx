@@ -154,7 +154,7 @@ export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily,
                   renderIcon={color => <KidsIcon color={color} />}
                   text={familyChipText}
                   onPhoto
-                  renderTrailing={() => <PresenceDot color={PRIMARY} />}
+                  renderTrailing={() => <PresenceDot color={WHITE} />}
                 />
               </View>
             ) : null}

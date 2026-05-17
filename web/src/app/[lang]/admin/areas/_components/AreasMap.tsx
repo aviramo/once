@@ -56,12 +56,20 @@ export function AreasMap({
   dict: MapDict;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const { view, panPx, dragging, frameProps, zoomIn, zoomOut, fit, eatDragClick } =
-    useMapView({
-      frameRef,
-      logical: { w: MAP_SIZE, h: MAP_SIZE },
-      fitTargets: areas,
-    });
+  const {
+    view,
+    transientStyle,
+    dragging,
+    frameProps,
+    zoomIn,
+    zoomOut,
+    fit,
+    eatDragClick,
+  } = useMapView({
+    frameRef,
+    logical: { w: MAP_SIZE, h: MAP_SIZE },
+    fitTargets: areas,
+  });
 
   const points = useMemo(() => {
     if (!view) return [];
@@ -107,15 +115,8 @@ export function AreasMap({
       >
         {/* Transient drag offset rides the whole basemap+overlay together so
             it never refetches mid-gesture; committed on pointer-up. */}
-        <div
-          className="absolute inset-0"
-          style={
-            panPx
-              ? { transform: `translate(${panPx.x}px, ${panPx.y}px)` }
-              : undefined
-          }
-        >
-          <BaseMap key={src} src={src} alt="" dict={dict}>
+        <div className="absolute inset-0" style={transientStyle}>
+          <BaseMap src={src} alt="" dict={dict}>
             <svg
               viewBox={`0 0 ${MAP_SIZE} ${MAP_SIZE}`}
               className="absolute inset-0 size-full"

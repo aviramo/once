@@ -33,9 +33,11 @@ import { Avatar } from "./ui";
  * `postgres_changes` on `public.users` (allowed by the "admins read all" RLS
  * policy) and decodes each row's `location` client-side. A periodic tick
  * re-evaluates freshness so a green marker fades to gray and a >1d-stale one
- * drops off on its own, with no event. Pan/zoom/fit all come from the shared
- * useMapView — this component only owns the avatar markers + realtime.
+ * drops off on its own, with no event. Pan/pinch-zoom/fit all come from the
+ * shared useMapView — this component only owns the avatar markers + realtime.
  */
+
+export type LocationType = "device" | "home" | "work";
 
 export type MapUser = {
   user_id: string;
@@ -44,12 +46,15 @@ export type MapUser = {
   lat: number;
   lng: number;
   last_seen: string | null;
+  locationType: LocationType;
 };
 
 export type UsersMapDict = MapChromeDict & {
   live: string;
   idle: string;
   empty: string;
+  home: string;
+  work: string;
 };
 
 // Google Static Maps free-tier hard cap per logical dimension. The frame is
@@ -57,13 +62,29 @@ export type UsersMapDict = MapChromeDict & {
 // matches the frame aspect (no crop, overlay stays aligned).
 const MAX_LOGICAL = 640;
 
+type UserData = {
+  images?: Array<{ normal?: string }>;
+  location_type?: unknown;
+  location_custom?: unknown;
+} | null;
+
 type RawUserRow = {
   user_id?: string;
   name?: string | null;
   last_seen?: string | null;
   location?: unknown;
-  data?: { images?: Array<{ normal?: string }> } | null;
+  data?: UserData;
 };
+
+// Mirror of the users_map view's location_type derivation, for the realtime
+// path (raw users row): an explicit data.location_type wins; otherwise the
+// legacy boolean data.location_custom maps true → home (home/work can't be
+// told apart on pre-typed rows), false/absent → device.
+export function deriveLocationType(data: UserData): LocationType {
+  const t = data?.location_type;
+  if (t === "home" || t === "work" || t === "device") return t;
+  return data?.location_custom === true ? "home" : "device";
+}
 
 function rowToUser(row: RawUserRow, prev?: MapUser): MapUser | null {
   if (!row?.user_id) return null;
@@ -78,7 +99,50 @@ function rowToUser(row: RawUserRow, prev?: MapUser): MapUser | null {
     lat,
     lng,
     last_seen: row.last_seen ?? prev?.last_seen ?? null,
+    locationType: row.data
+      ? deriveLocationType(row.data)
+      : prev?.locationType ?? "device",
   };
+}
+
+// Tiny corner badge marking a non-device anchor (home / work). Devices get
+// nothing — most users, so a badge there would just be noise.
+function AnchorBadge({
+  type,
+  dict,
+}: {
+  type: LocationType;
+  dict: UsersMapDict;
+}) {
+  if (type === "device") return null;
+  const label = type === "home" ? dict.home : dict.work;
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className="pointer-events-auto absolute -bottom-1 -end-1 flex size-4 items-center justify-center rounded-full bg-background text-foreground shadow ring-1 ring-border"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="size-2.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        {type === "home" ? (
+          <path d="M3 11l9-8 9 8M5 9.5V21h14V9.5" />
+        ) : (
+          <>
+            <rect x="3" y="7" width="18" height="13" rx="1.5" />
+            <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </>
+        )}
+      </svg>
+    </span>
+  );
 }
 
 export function UsersMap({
@@ -124,8 +188,16 @@ export function UsersMap({
     [initial],
   );
 
-  const { view, panPx, dragging, frameProps, zoomIn, zoomOut, fit } =
-    useMapView({ frameRef, logical, fitTargets });
+  const {
+    view,
+    transientStyle,
+    dragging,
+    frameProps,
+    zoomIn,
+    zoomOut,
+    fit,
+    eatDragClick,
+  } = useMapView({ frameRef, logical, fitTargets });
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -137,7 +209,10 @@ export function UsersMap({
         (payload) => {
           setUsers((prev) => {
             const row = payload.new as RawUserRow;
-            const next = rowToUser(row, row.user_id ? prev.get(row.user_id) : undefined);
+            const next = rowToUser(
+              row,
+              row.user_id ? prev.get(row.user_id) : undefined,
+            );
             if (!next) return prev;
             const m = new Map(prev);
             m.set(next.user_id, next);
@@ -213,33 +288,29 @@ export function UsersMap({
     >
       {ready ? (
         <>
-          {/* Transient drag offset rides basemap + markers together. */}
-          <div
-            className="absolute inset-0"
-            style={
-              panPx
-                ? { transform: `translate(${panPx.x}px, ${panPx.y}px)` }
-                : undefined
-            }
-          >
-            <BaseMap key={src} src={src} alt="" dict={dict}>
-              <div
-                className="absolute inset-0"
-                role="presentation"
-              >
+          {/* Transient gesture transform rides basemap + markers together
+              (drag → translate, pinch → scale); committed on gesture end. */}
+          <div className="absolute inset-0" style={transientStyle}>
+            <BaseMap src={src} alt="" dict={dict}>
+              <div className="absolute inset-0" role="presentation">
                 {markers.map(({ u, presence, x, y }) => (
                   <Link
                     key={u.user_id}
                     href={`/admin/users/${u.user_id}`}
                     title={u.name ?? u.user_id}
-                    // pointer-events-none on the wrapper so a drag that starts
-                    // on a marker still pans; the inner parts re-enable them
-                    // so a genuine click/tap opens the profile.
+                    // pointer-events-none on the wrapper so a drag/pinch that
+                    // starts on a marker still moves the map; the inner parts
+                    // re-enable events so a genuine tap opens the profile. A
+                    // tap that was actually a pan/pinch is swallowed here so
+                    // it doesn't navigate.
+                    onClick={(e) => {
+                      if (eatDragClick()) e.preventDefault();
+                    }}
                     className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
                     style={{ left: x, top: y }}
                   >
                     <span
-                      className="pointer-events-auto rounded-full ring-2 ring-white"
+                      className="pointer-events-auto relative rounded-full ring-2 ring-white"
                       style={{
                         outline: `3px solid ${PRESENCE_COLOR[presence]}`,
                         outlineOffset: -1,
@@ -251,6 +322,7 @@ export function UsersMap({
                         size="sm"
                         circle
                       />
+                      <AnchorBadge type={u.locationType} dict={dict} />
                     </span>
                     <span className="pointer-events-auto max-w-28 truncate rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground shadow-sm backdrop-blur">
                       {u.name ?? "—"}
@@ -269,7 +341,8 @@ export function UsersMap({
             </div>
           ) : null}
 
-          {/* Presence legend. Logical start-side; doesn't block panning. */}
+          {/* Legend: presence colours + the home/work anchor glyphs. Logical
+              start-side; doesn't block panning. */}
           <div className="pointer-events-none absolute start-3 top-3 z-10 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-background/90 px-3 py-1.5 shadow-sm backdrop-blur">
             {(
               [
@@ -289,13 +362,44 @@ export function UsersMap({
                 {label}
               </span>
             ))}
+            {(["home", "work"] as const).map((k) => (
+              <span
+                key={k}
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+              >
+                <span className="flex size-4 items-center justify-center rounded-full bg-background text-foreground ring-1 ring-border">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="size-2.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    {k === "home" ? (
+                      <path d="M3 11l9-8 9 8M5 9.5V21h14V9.5" />
+                    ) : (
+                      <>
+                        <rect x="3" y="7" width="18" height="13" rx="1.5" />
+                        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </>
+                    )}
+                  </svg>
+                </span>
+                {k === "home" ? dict.home : dict.work}
+              </span>
+            ))}
           </div>
 
+          {/* Touch maps zoom by pinch; only Fit remains. */}
           <MapControls
             dict={dict}
             onZoomIn={zoomIn}
             onZoomOut={zoomOut}
             onFit={fit}
+            showZoom={false}
           />
         </>
       ) : null}

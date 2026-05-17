@@ -1813,6 +1813,15 @@ export default function HomePage() {
   const [page2Discovery, setPage2Discovery] = useState(false)
   const [chatUnreadAlerting, setChatUnreadAlerting] = useState(false)
   const prevChatUnreadRef = useRef(0)
+  // Fires the side tab's short 2-blink pulse whenever the viewer-list count
+  // rises (a new person started watching). Increase-only — a viewer leaving
+  // is not an attention event. Ambient (icon-only) side-tab states only;
+  // see the watchers-count effect just before `tabSpecsAll`.
+  const [viewersAlerting, setViewersAlerting] = useState(false)
+  // null until the first observed count establishes a baseline, so a cold
+  // mount that already has viewers (initial load 0→N) is NOT mistaken for "a
+  // viewer just joined" — only a genuine post-baseline rise pulses.
+  const prevWatchersCountRef = useRef<number | null>(null)
   const page2InviteUserId = page2PendingInvite?.user_id ?? null
   const prevPage2InviteUserIdRef = useRef<string | null | undefined>(undefined)
 
@@ -2927,6 +2936,30 @@ export default function HomePage() {
     : page2DeadInvite
       ? page2DeadName
       : ''
+  // Viewer-count number rendered above the collapsed side icon, in the EXACT
+  // slot the live timer uses (`subLabel`). Only in the ambient icon-only
+  // side states — broadcast / visible: chat has no viewer list, the labeled
+  // pending/dead-invite states own the slot with their timer, and hidden
+  // kicks every watcher so the count is 0 there anyway (so `> 0` already
+  // excludes it, no explicit hidden guard needed).
+  const showViewerCount = !sideTabName && !chatAvailable && watchersCount > 0
+  // Rising viewer count → the side tab's short 2-blink attention pulse
+  // (TAB.viewerPulseCount). Increase-only; a viewer leaving is not an
+  // attention event. Same coalescing/timeout pattern as the chat-unread
+  // pulse: a burst of new viewers within the window reads as one double-tick.
+  // Reads sideTabName/chatAvailable from closure (single-dep, like
+  // prevChatUnreadRef) so it can't re-fire on unrelated tab-state churn.
+  useEffect(() => {
+    const prev = prevWatchersCountRef.current
+    prevWatchersCountRef.current = watchersCount
+    if (prev === null) return
+    if (watchersCount > prev && !sideTabName && !chatAvailable) {
+      setViewersAlerting(true)
+      const timer = setTimeout(() => setViewersAlerting(false), TAB.viewerPulseTimeoutMs)
+      return () => { clearTimeout(timer); setViewersAlerting(false) }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchersCount])
   const tabSpecsAll: TabSpec[] = [
     // Menu tab is icon-only (no label) — it's chrome, not a destination, so
     // it shrinks to its glyph width and yields the freed flex space to the
@@ -2956,18 +2989,28 @@ export default function HomePage() {
       // ambient state (live chat, or self-visibility: broadcast / visible /
       // hidden) there's no 1:1 counterpart to name, so the tab collapses to
       // an icon-only compact tab exactly like Menu: it shrinks to its glyph
-      // width (TabStrip flags iconOnly when label && subLabel are absent),
-      // freeing flex so "Once" recenters between the two compact end tabs.
-      // The expand/collapse + recentre is animated by TabStrip itself
-      // (LinearTransition on every tab, TAB.collapseDuration). The icon is
-      // shared with the in-page VisibilityToggle via VISIBILITY_ICON so a
-      // state always reads as the same glyph; chat gets its own bubble.
+      // width (TabStrip flags iconOnly whenever there's no label — a
+      // sub-label no longer forces flex), freeing flex so "Once" recenters
+      // between the two compact end tabs. The expand/collapse + recentre is
+      // animated by TabStrip itself (LinearTransition on every tab,
+      // TAB.collapseDuration). The icon is shared with the in-page
+      // VisibilityToggle via VISIBILITY_ICON so a state always reads as the
+      // same glyph; chat gets its own bubble.
+      //
+      // `showViewerCount` (broadcast / visible with watchers): the count
+      // rides as a `subLabel` number above the icon — same slot the live
+      // timer uses on the labeled branch — without widening the still-compact
+      // tab. A rising count fires the short 2-blink `alerting`
+      // (TAB.viewerPulseCount) via `viewersAlerting`; chat-unread keeps the
+      // default 3-blink `sideAlerting`.
       if (!sideTabName) {
         return {
           renderIndicator: chatAvailable
             ? (color) => <ChatIcon color={color} size={ICON.xxl} />
             : (color) => VISIBILITY_ICON[toggleMode](color, ICON.xxl),
-          alerting: sideAlerting,
+          subLabel: showViewerCount ? String(watchersCount) : undefined,
+          alerting: showViewerCount ? viewersAlerting : sideAlerting,
+          alertCount: showViewerCount ? TAB.viewerPulseCount : undefined,
           // While broadcasting the megaphone breathes (gentle heartbeat) to
           // signal "you're live" — but only while the side tab isn't the
           // selected pane (TabStrip gates it by selectedness).

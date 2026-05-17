@@ -5,7 +5,11 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { presenceCutoffIso } from "@/lib/presence";
 import { AdminShell, Section } from "../_components/ui";
-import { UsersMap, type MapUser } from "../_components/UsersMap";
+import {
+  UsersMap,
+  type LocationType,
+  type MapUser,
+} from "../_components/UsersMap";
 
 type GeoRow = {
   user_id: string;
@@ -14,7 +18,14 @@ type GeoRow = {
   image: string | null;
   lat: number | null;
   lng: number | null;
+  location_type: string | null;
 };
+
+const LOCATION_TYPES: readonly LocationType[] = ["device", "home", "work"];
+const asLocationType = (v: string | null): LocationType =>
+  (LOCATION_TYPES as readonly string[]).includes(v ?? "")
+    ? (v as LocationType)
+    : "device";
 
 // Bounded server seed for first paint; realtime takes over after mount. The
 // active located base is small for this app, so 500 is comfortably above it
@@ -37,7 +48,7 @@ export default async function AdminMapPage({
   // is filtered the same way the client tick later drops it.
   const { data } = await admin
     .from("users_map")
-    .select("user_id, name, last_seen, image, lat, lng")
+    .select("user_id, name, last_seen, image, lat, lng, location_type")
     .gt("last_seen", presenceCutoffIso())
     .order("last_seen", { ascending: false })
     .limit(SEED_LIMIT);
@@ -54,6 +65,7 @@ export default async function AdminMapPage({
       lat: r.lat,
       lng: r.lng,
       last_seen: r.last_seen,
+      locationType: asLocationType(r.location_type),
     }));
 
   return (
@@ -71,6 +83,8 @@ export default async function AdminMapPage({
                 live: d.map.live,
                 idle: d.map.idle,
                 empty: d.map.empty,
+                home: d.map.home,
+                work: d.map.work,
                 mapUnavailable: d.map.mapUnavailable,
                 mapHint: d.map.mapHint,
                 zoomIn: d.map.zoomIn,

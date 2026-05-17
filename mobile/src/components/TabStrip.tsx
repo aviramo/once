@@ -86,8 +86,17 @@ import { SM, LG, RADII, TEXT, WEIGHT, TAB } from '../tokens'
 // Exiting: FadeOutUp lifts it back out while the pill collapses. So the
 // name stays locked at the same Y; only the timer and the pill's TOP move.
 //
-// Counts (unread messages / viewer counts) are chained into the label itself
-// (`${label} ${n}`) by the caller — there is no separate chip badge.
+// Counts: the unread-chat count is chained into the side-tab label itself
+// (`${label} ${n}`) by the caller — there is no separate chip badge. The
+// viewer count is different: in the ambient (icon-only) side-tab states
+// (broadcast / visible) the caller passes it as the `subLabel`, so it rides
+// as a small number ABOVE the collapsed icon in the EXACT slot the live
+// timer uses. A `subLabel` therefore NO LONGER forces the tab to flex width
+// — a tab with no `label` stays compact (icon-only) whether or not it has a
+// sub-label; the sub-label just floats above the icon (matching the
+// `subLabelPulsing` doc's "rides above an icon-only tab"). `subLabel` is
+// still flex on the timer-bearing tabs only because those also carry a
+// `label`.
 //
 // Indicator icons (pause / inbox / close) cross-fade with the tab's label —
 // they're status glyphs and should feel like part of the muted label cluster
@@ -127,19 +136,27 @@ export type TabSpec = {
    * fixed color (it carries its own meaning) and only its opacity dims with
    * tab selection. */
   renderLeading?: () => React.ReactNode
-  /** Fires a finite attention pulse (3 blinks) across every visible element
-   * in the tab — label, sub-label, indicator. While the pulse runs, the tab
-   * is forced to render in its "selected" typography (bold WHITE) regardless
-   * of whether the user is currently on this pane, so the blink is legible
-   * on an unselected tab too. */
+  /** Fires a finite attention pulse across every visible element in the tab
+   * — label, sub-label, indicator. While the pulse runs, the tab is forced
+   * to render in its "selected" typography (bold WHITE) regardless of
+   * whether the user is currently on this pane, so the blink is legible on
+   * an unselected tab too. Blink count is `alertCount` (default
+   * `TAB.pulseCount` = 3). */
   alerting?: boolean
-  /** Optional sub-label rendered ABSOLUTELY above the main label (same
-   * column, smaller type). Used to surface live timers (pending-invite
-   * countdown, broadcast cooldown) without changing the tab's layout box —
-   * the main label stays locked at the same Y whether the timer is showing
-   * or not. Animates in with FadeInDown (drops from above) and out with
-   * FadeOutUp (lifts back up). Cross-fades with selection state exactly
-   * like the label. */
+  /** Number of blinks for the `alerting` pulse. Defaults to
+   * `TAB.pulseCount`. The side tab passes `TAB.viewerPulseCount` (2) for the
+   * "a viewer just joined your list" double-tick so it reads lighter than a
+   * chat-unread / incoming-invite alarm. Constant per use site. */
+  alertCount?: number
+  /** Optional sub-label rendered ABSOLUTELY above the main label / icon
+   * (same column, smaller type). Used to surface live timers (pending-invite
+   * countdown) AND the ambient side tab's viewer-count number — both ride in
+   * the same slot. Does NOT change the tab's layout box (the main row stays
+   * locked at the same Y whether it is showing or not) and does NOT widen
+   * the tab: a tab with no `label` stays compact (icon-only) with the
+   * sub-label floating above the glyph. Animates in with FadeInDown (drops
+   * from above) and out with FadeOutUp (lifts back up). Cross-fades with
+   * selection state exactly like the label. */
   subLabel?: string
   /** Slow opacity heartbeat applied to the entire sub-label cluster. Used
    * for "live ongoing state" status words (e.g. "בשידור" / "צופים בי")
@@ -291,7 +308,14 @@ export function TabStrip({
       setMeasW(measWRef.current)
     }
   }
-  const compactFlags = tabs.map(s => s.label == null && s.subLabel == null)
+  // Compact (content-sized, flex:0) iff the tab has NO label. A sub-label
+  // alone no longer forces flex width: it rides absolutely above the icon
+  // (the viewer-count number / a status word) without widening the tab. Must
+  // stay byte-identical to TabButton's `iconOnly` so the parent's flexW math
+  // and the child's layout agree. A sub-label is absolute (zero layout box),
+  // so a compact tab's measured width is still just its glyph — compactSum /
+  // flexW are unaffected and the ambient side tab keeps its exact width.
+  const compactFlags = tabs.map(s => s.label == null)
   const nFlex = compactFlags.reduce((c, f) => c + (f ? 0 : 1), 0)
   const compactSum = compactFlags.reduce(
     (s, f, i) => s + (f ? measW[i] ?? 0 : 0),
@@ -487,14 +511,14 @@ function TabButton({
           withTiming(TAB.pulseOpacity),
           withTiming(1),
         ),
-        TAB.pulseCount,
+        spec.alertCount ?? TAB.pulseCount,
         false,
       )
     } else {
       alertActive.value = withTiming(0)
       alertOpacity.value = withTiming(1)
     }
-  }, [spec.alerting])
+  }, [spec.alerting, spec.alertCount])
   const pulseAnim = useAnimatedStyle(() => ({ opacity: alertOpacity.value }))
 
   // Continuous heartbeat applied to the sub-label cluster when it carries
@@ -630,11 +654,13 @@ function TabButton({
     return { opacity: (1 - t) * (1 - blend) }
   })
 
-  // Compact (flex:0, icon shrinks to its glyph width) only when the tab is
-  // purely chrome — no label AND no sub-label text. A sub-label-only tab
-  // (icon main row + status word above) needs the full flex column to host
-  // the status word, so it stays flex:1 like a labeled tab.
-  const iconOnly = spec.label == null && spec.subLabel == null
+  // Compact (flex:0, icon shrinks to its glyph width) whenever the tab has
+  // no label. A sub-label (the ambient side tab's viewer-count number, or a
+  // status word) rides ABSOLUTELY above the icon — zero layout box — so it
+  // does NOT need a flex column and the tab stays icon-only width. (This
+  // realigns with the `subLabelPulsing` doc's "rides above an icon-only
+  // tab".) MUST match the parent's `compactFlags` rule exactly.
+  const iconOnly = spec.label == null
   return (
     <AnimatedPressable
       style={[

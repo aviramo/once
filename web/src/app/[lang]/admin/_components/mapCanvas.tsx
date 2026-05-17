@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -35,6 +36,11 @@ export const MAP_SIZE = 640;
 // pan (and the trailing click is swallowed so it doesn't change selection).
 const DRAG_PX = 4;
 
+// Transient pinch scale is clamped to this range so a wild gesture can't
+// invert or explode the layer before it commits to an integer zoom step.
+const PINCH_MIN = 0.25;
+const PINCH_MAX = 6;
+
 export type MapChromeDict = {
   mapUnavailable: string;
   mapHint: string;
@@ -61,8 +67,19 @@ export function BaseMap({
   dict: Pick<MapChromeDict, "mapUnavailable" | "mapHint">;
   children: ReactNode;
 }) {
-  const [errored, setErrored] = useState(false);
-  if (errored) {
+  // Last src that successfully loaded — it stays painted as a stable base
+  // layer while the next src loads, so pan/zoom never blanks the map (the
+  // old fix remounted on every src change, which is exactly the flicker).
+  // `failedSrc` is the exact src that errored; comparing it to the current
+  // src is self-resetting (a new src is automatically "not failed"), so no
+  // effect / render-time setState is needed to clear the error.
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const knownFailed = failedSrc === src;
+
+  // Only a never-loaded failure shows the placeholder; a failed *refetch*
+  // keeps the last good map + overlay on screen instead.
+  if (knownFailed && !loaded) {
     return (
       <div className="flex size-full flex-col items-center justify-center gap-1 bg-muted/30 px-4 text-center">
         <span className="text-sm font-medium text-foreground">
@@ -74,15 +91,31 @@ export function BaseMap({
   }
   return (
     <>
-      {/* Server-proxied dynamic endpoint, not a static asset. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        draggable={false}
-        className="absolute inset-0 size-full select-none object-cover"
-        onError={() => setErrored(true)}
-      />
+      {/* Stable base: the last good basemap, kept until the new one loads. */}
+      {loaded ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={loaded}
+          alt=""
+          aria-hidden
+          draggable={false}
+          className="absolute inset-0 size-full select-none object-cover"
+        />
+      ) : null}
+      {/* Foreground: the requested src. Transparent while it loads (the base
+          shows through), promoted to the base on load. Skipped when this src
+          is known-failed so a broken refetch never paints a broken glyph. */}
+      {!knownFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={alt}
+          draggable={false}
+          className="absolute inset-0 size-full select-none object-cover"
+          onLoad={() => setLoaded(src)}
+          onError={() => setFailedSrc(src)}
+        />
+      ) : null}
       {children}
     </>
   );
@@ -119,43 +152,50 @@ export function MapControls({
   onZoomIn,
   onZoomOut,
   onFit,
+  showZoom = true,
 }: {
   dict: Pick<MapChromeDict, "zoomIn" | "zoomOut" | "fit">;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
+  /** Hide the +/- buttons (touch maps use pinch instead). Fit always shows. */
+  showZoom?: boolean;
 }) {
   return (
     <div
       className="absolute bottom-3 end-3 z-10 flex flex-col gap-1.5"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <CtrlButton label={dict.zoomIn} onClick={onZoomIn}>
-        <svg
-          viewBox="0 0 24 24"
-          className="size-5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </CtrlButton>
-      <CtrlButton label={dict.zoomOut} onClick={onZoomOut}>
-        <svg
-          viewBox="0 0 24 24"
-          className="size-5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M5 12h14" />
-        </svg>
-      </CtrlButton>
+      {showZoom ? (
+        <>
+          <CtrlButton label={dict.zoomIn} onClick={onZoomIn}>
+            <svg
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </CtrlButton>
+          <CtrlButton label={dict.zoomOut} onClick={onZoomOut}>
+            <svg
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M5 12h14" />
+            </svg>
+          </CtrlButton>
+        </>
+      ) : null}
       <CtrlButton label={dict.fit} onClick={onFit}>
         <svg
           viewBox="0 0 24 24"
@@ -179,8 +219,11 @@ export function MapControls({
 export type MapViewApi = {
   /** Null until the logical size is known (one frame for measured maps). */
   view: ViewBox | null;
-  /** Transient drag offset (px) to translate the basemap+overlay together. */
-  panPx: { x: number; y: number } | null;
+  /** Transform to apply to the basemap+overlay wrapper while a gesture is in
+   *  flight (drag → translate, pinch → scale around the pinch point), so the
+   *  map moves/zooms live and only refetches once on gesture end. undefined
+   *  when idle. */
+  transientStyle: CSSProperties | undefined;
   dragging: boolean;
   /** Spread on the pannable frame div (which the consumer owns/styles). */
   frameProps: {
@@ -276,49 +319,126 @@ export function useMapView({
     return () => el.removeEventListener("wheel", onWheel);
   }, [frameRef]);
 
-  const drag = useRef<{
-    id: number;
-    sx: number;
-    sy: number;
-    moved: boolean;
-  } | null>(null);
+  // --- gesture state -------------------------------------------------------
+  // Every live pointer (client px). One pointer → pan; two → pinch-zoom.
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const drag = useRef<{ sx: number; sy: number; moved: boolean } | null>(null);
+  const pinch = useRef<{ startDist: number; ox: number; oy: number } | null>(
+    null,
+  );
+  // After a pinch ends a finger may still be down; ignore it for panning
+  // until every finger lifts (otherwise the map jumps on gesture end).
+  const ignoreUntilEmpty = useRef(false);
   const suppressClick = useRef(false);
-  const [panPx, setPanPx] = useState<{ x: number; y: number } | null>(null);
+  const [transient, setTransient] = useState<{
+    tx: number;
+    ty: number;
+    scale: number;
+    ox: number;
+    oy: number;
+  } | null>(null);
+  const transientRef = useRef(transient);
+  useEffect(() => {
+    transientRef.current = transient;
+  }, [transient]);
   const [dragging, setDragging] = useState(false);
 
-  const onPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return;
-      suppressClick.current = false;
-      drag.current = {
-        id: e.pointerId,
-        sx: e.clientX,
-        sy: e.clientY,
-        moved: false,
-      };
-      e.currentTarget.setPointerCapture(e.pointerId);
-    },
-    [],
-  );
+  const frameLocal = (clientX: number, clientY: number) => {
+    const el = frameRef.current;
+    if (!el) return { x: clientX, y: clientY };
+    const r = el.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
+  };
 
-  const onPointerMove = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      const d = drag.current;
-      if (!d || d.id !== e.pointerId) return;
-      const dx = e.clientX - d.sx;
-      const dy = e.clientY - d.sy;
-      if (!d.moved && Math.hypot(dx, dy) < DRAG_PX) return;
-      d.moved = true;
-      setDragging((cur) => (cur ? cur : true));
-      setPanPx({ x: dx, y: dy });
-    },
-    [],
-  );
+  // Distance + frame-local midpoint of the first two live pointers.
+  const twoPointerInfo = () => {
+    const [a, b] = [...pointers.current.values()];
+    const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const mid = frameLocal((a.x + b.x) / 2, (a.y + b.y) / 2);
+    return { dist, mid };
+  };
 
-  const endDrag = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    suppressClick.current = false;
+
+    if (pointers.current.size === 1) {
+      ignoreUntilEmpty.current = false;
+      drag.current = { sx: e.clientX, sy: e.clientY, moved: false };
+      pinch.current = null;
+    } else if (pointers.current.size === 2) {
+      // Second finger → switch to pinch; cancel any single-finger pan.
+      drag.current = null;
+      setDragging(false);
+      const { dist, mid } = twoPointerInfo();
+      pinch.current = { startDist: dist, ox: mid.x, oy: mid.y };
+      setTransient({ tx: 0, ty: 0, scale: 1, ox: mid.x, oy: mid.y });
+    }
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const p = pointers.current.get(e.pointerId);
+    if (!p) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+
+    if (pinch.current && pointers.current.size >= 2) {
+      const { dist } = twoPointerInfo();
+      const scale = Math.max(
+        PINCH_MIN,
+        Math.min(PINCH_MAX, dist / pinch.current.startDist),
+      );
+      const { ox, oy } = pinch.current;
+      setTransient({ tx: 0, ty: 0, scale, ox, oy });
+      return;
+    }
+
+    if (ignoreUntilEmpty.current) return;
+
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    if (!d.moved && Math.hypot(dx, dy) < DRAG_PX) return;
+    d.moved = true;
+    setDragging((cur) => (cur ? cur : true));
+    setTransient({ tx: dx, ty: dy, scale: 1, ox: 0, oy: 0 });
+  };
+
+  const endPointer = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.delete(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+
+    if (pinch.current) {
+      if (pointers.current.size < 2) {
+        const pn = pinch.current;
+        pinch.current = null;
+        const scale = transientRef.current?.scale ?? 1;
+        const dz = Math.round(Math.log2(scale));
+        if (dz !== 0) {
+          const el = frameRef.current;
+          const cw = el?.clientWidth || 1;
+          const ch = el?.clientHeight || 1;
+          setView((v) =>
+            v
+              ? viewAround(v, (pn.ox * v.w) / cw, (pn.oy * v.h) / ch, v.zoom + dz)
+              : v,
+          );
+        }
+        setTransient(null);
+        suppressClick.current = true;
+        // A finger may still be down; don't let it pan until all are up.
+        ignoreUntilEmpty.current = pointers.current.size > 0;
+      }
+    } else if (drag.current) {
       const d = drag.current;
-      if (!d || d.id !== e.pointerId) return;
       drag.current = null;
       if (d.moved) {
         const dx = e.clientX - d.sx;
@@ -328,11 +448,16 @@ export function useMapView({
           v ? panView(v, toLogical(dx, "x"), toLogical(dy, "y")) : v,
         );
       }
-      setPanPx(null);
+      setTransient(null);
       setDragging(false);
-    },
-    [toLogical],
-  );
+    }
+
+    if (pointers.current.size === 0) {
+      ignoreUntilEmpty.current = false;
+      setTransient(null);
+      setDragging(false);
+    }
+  };
 
   const eatDragClick = useCallback(() => {
     if (!suppressClick.current) return false;
@@ -341,36 +466,34 @@ export function useMapView({
   }, []);
 
   const zoomIn = useCallback(
-    () =>
-      setView((v) =>
-        v ? viewAround(v, v.w / 2, v.h / 2, v.zoom + 1) : v,
-      ),
+    () => setView((v) => (v ? viewAround(v, v.w / 2, v.h / 2, v.zoom + 1) : v)),
     [],
   );
   const zoomOut = useCallback(
-    () =>
-      setView((v) =>
-        v ? viewAround(v, v.w / 2, v.h / 2, v.zoom - 1) : v,
-      ),
+    () => setView((v) => (v ? viewAround(v, v.w / 2, v.h / 2, v.zoom - 1) : v)),
     [],
   );
   const fit = useCallback(
-    () =>
-      setView((v) =>
-        v ? fitBounds(fitTargetsRef.current, v.w, v.h) : v,
-      ),
+    () => setView((v) => (v ? fitBounds(fitTargetsRef.current, v.w, v.h) : v)),
     [],
   );
 
+  const transientStyle: CSSProperties | undefined = transient
+    ? {
+        transform: `translate(${transient.tx}px, ${transient.ty}px) scale(${transient.scale})`,
+        transformOrigin: `${transient.ox}px ${transient.oy}px`,
+      }
+    : undefined;
+
   return {
     view,
-    panPx,
+    transientStyle,
     dragging,
     frameProps: {
       onPointerDown,
       onPointerMove,
-      onPointerUp: endDrag,
-      onPointerCancel: endDrag,
+      onPointerUp: endPointer,
+      onPointerCancel: endPointer,
     },
     zoomIn,
     zoomOut,

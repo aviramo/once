@@ -17,7 +17,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { HeartIcon, QuoteIcon, InfoIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
+import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatDistance, isDistanceHere } from '../lib/units'
 import { formatLastSeen, isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -675,7 +675,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                       renderIcon={c => <KidsIcon color={c} />}
                       text={familyChipText}
                       onPhoto
-                      renderTrailing={() => <PresenceDot color={PRIMARY} />}
+                      renderTrailing={() => <PresenceDot color={WHITE} />}
                       onPress={onFamilyTap}
                     />
                   </View>
