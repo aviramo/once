@@ -58,6 +58,7 @@ export default async function AdminDashboard({
   const p2Raw = typeof sp.p2 === "string" ? sp.p2 : "";
   const p1 = (P1_VALUES as readonly string[]).includes(p1Raw) ? p1Raw : "";
   const p2 = (P2_VALUES as readonly string[]).includes(p2Raw) ? p2Raw : "";
+  const roleRaw = typeof sp.role === "string" ? sp.role : "";
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -73,10 +74,31 @@ export default async function AdminDashboard({
 
   const admin = createSupabaseAdmin();
 
-  const [emailMap, meRes] = await Promise.all([
+  const [emailMap, meRes, { data: roleCatalogData }] = await Promise.all([
     loadEmailMap(admin),
     admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
+    admin
+      .from("roles")
+      .select("id, name, enabled")
+      .order("created_at", { ascending: true }),
   ]);
+  const roleCatalog = (roleCatalogData ?? []) as {
+    id: string;
+    name: string;
+    enabled: boolean;
+  }[];
+  // Only honour ?role= when it's a real role id (else treat as no filter).
+  const role = roleCatalog.some((r) => r.id === roleRaw) ? roleRaw : "";
+  // user_ids holding the selected role; null = no role filter. An empty array
+  // (role with no members) intentionally yields zero results.
+  let roleUserIds: string[] | null = null;
+  if (role) {
+    const { data: rl } = await admin
+      .from("user_roles")
+      .select("user_id")
+      .eq("role_id", role);
+    roleUserIds = ((rl ?? []) as { user_id: string }[]).map((x) => x.user_id);
+  }
 
   let rows: UserRow[];
   if (q) {
@@ -92,6 +114,7 @@ export default async function AdminDashboard({
       .limit(100);
     if (p1) nameQ = nameQ.eq("relations->page1->>state", p1);
     if (p2) nameQ = nameQ.eq("relations->page2->>state", p2);
+    if (roleUserIds) nameQ = nameQ.in("user_id", roleUserIds);
 
     const byEmail = emailIds.length
       ? await (() => {
@@ -102,6 +125,7 @@ export default async function AdminDashboard({
             .limit(100);
           if (p1) eq = eq.eq("relations->page1->>state", p1);
           if (p2) eq = eq.eq("relations->page2->>state", p2);
+          if (roleUserIds) eq = eq.in("user_id", roleUserIds);
           return eq;
         })()
       : { data: [] as UserRow[] };
@@ -119,6 +143,7 @@ export default async function AdminDashboard({
       .limit(100);
     if (p1) base = base.eq("relations->page1->>state", p1);
     if (p2) base = base.eq("relations->page2->>state", p2);
+    if (roleUserIds) base = base.in("user_id", roleUserIds);
     const { data } = await base;
     rows = (data ?? []) as UserRow[];
   }
@@ -140,24 +165,13 @@ export default async function AdminDashboard({
   const rolesByUser = new Map<string, { name: string; enabled: boolean }[]>();
   for (const link of (roleLinks ?? []) as RoleLink[]) {
     if (!link.roles) continue;
-    const role = Array.isArray(link.roles) ? link.roles[0] : link.roles;
-    if (!role) continue;
+    const roleObj = Array.isArray(link.roles) ? link.roles[0] : link.roles;
+    if (!roleObj) continue;
     const arr = rolesByUser.get(link.user_id) ?? [];
-    arr.push(role);
+    arr.push(roleObj);
     rolesByUser.set(link.user_id, arr);
   }
   rows = rows.map((r) => ({ ...r, roles: rolesByUser.get(r.user_id) ?? [] }));
-
-  // Full role catalog (incl. empty roles) for the reset checklist popup.
-  const { data: roleCatalogData } = await admin
-    .from("roles")
-    .select("id, name, enabled")
-    .order("created_at", { ascending: true });
-  const roleCatalog = (roleCatalogData ?? []) as {
-    id: string;
-    name: string;
-    enabled: boolean;
-  }[];
 
   const meName = (meRes.data as { name?: string } | null)?.name;
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
@@ -197,6 +211,7 @@ export default async function AdminDashboard({
             clearLabel={d.clearFilters}
             p1Label={d.filterP1}
             p2Label={d.filterP2}
+            roleLabel={d.filterRole}
             anyLabel={d.filterAny}
             p1States={P1_VALUES.map((v) => ({
               value: v,
@@ -205,6 +220,10 @@ export default async function AdminDashboard({
             p2States={P2_VALUES.map((v) => ({
               value: v,
               label: (d.page2States as Record<string, string>)[v],
+            }))}
+            roleOptions={roleCatalog.map((r) => ({
+              value: r.id,
+              label: r.name,
             }))}
           />
           {rows.length === 0 ? (

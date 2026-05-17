@@ -13,9 +13,11 @@ type Props = {
   clearLabel: string;
   p1Label: string;
   p2Label: string;
+  roleLabel: string;
   anyLabel: string;
   p1States: StateOption[];
   p2States: StateOption[];
+  roleOptions: StateOption[];
 };
 
 export function SearchControls({
@@ -24,9 +26,11 @@ export function SearchControls({
   clearLabel,
   p1Label,
   p2Label,
+  roleLabel,
   anyLabel,
   p1States,
   p2States,
+  roleOptions,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -34,8 +38,9 @@ export function SearchControls({
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [p1, setP1] = useState(sp.get("p1") ?? "");
   const [p2, setP2] = useState(sp.get("p2") ?? "");
+  const [role, setRole] = useState(sp.get("role") ?? "");
   const [, startTransition] = useTransition();
-  const activeFilters = (p1 ? 1 : 0) + (p2 ? 1 : 0);
+  const activeFilters = (p1 ? 1 : 0) + (p2 ? 1 : 0) + (role ? 1 : 0);
   const [open, setOpen] = useState(activeFilters > 0);
 
   useEffect(() => {
@@ -44,13 +49,14 @@ export function SearchControls({
       if (q) params.set("q", q);
       if (p1) params.set("p1", p1);
       if (p2) params.set("p2", p2);
+      if (role) params.set("role", role);
       const qs = params.toString();
       startTransition(() => {
         router.replace(qs ? `${pathname}?${qs}` : pathname);
       });
     }, 200);
     return () => clearTimeout(handle);
-  }, [q, p1, p2, pathname, router]);
+  }, [q, p1, p2, role, pathname, router]);
 
   const selectCls =
     "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
@@ -128,12 +134,30 @@ export function SearchControls({
               ))}
             </select>
           </label>
+          <label className="flex-1 space-y-1 text-sm">
+            <span className="text-xs font-medium text-muted-foreground">
+              {roleLabel}
+            </span>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className={selectCls}
+            >
+              <option value="">{anyLabel}</option>
+              {roleOptions.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
           {activeFilters > 0 ? (
             <button
               type="button"
               onClick={() => {
                 setP1("");
                 setP2("");
+                setRole("");
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >

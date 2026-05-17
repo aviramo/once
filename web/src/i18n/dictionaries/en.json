@@ -87,6 +87,7 @@
     "clearFilters": "Clear",
     "filterP1": "Main page",
     "filterP2": "Side page",
+    "filterRole": "Role",
     "filterAny": "All",
     "userCreated": "Joined",
     "userLastSeen": "Last active",
