@@ -25,7 +25,7 @@ import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startO
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
 import { useThemeStore, type ThemeMode } from '../src/stores/themeStore'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AppearanceIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
@@ -2403,16 +2403,17 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
         <SelectFieldRow
           grouped
-          label={t('settings.theme')}
-          displayValue={themeModeLabel}
-          onPress={() => setThemePopupVisible(true)}
+          label={t('settings.account')}
+          onPress={() => setAccountPopupVisible(true)}
+          icon={<UserIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          label={t('settings.account')}
-          onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={WHITE} />}
+          label={t('settings.theme')}
+          displayValue={themeModeLabel}
+          onPress={() => setThemePopupVisible(true)}
+          icon={<AppearanceIcon color={WHITE} />}
         />
         {profile.data?.role === 'ADMIN' && (
           <>

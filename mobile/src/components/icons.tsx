@@ -168,6 +168,17 @@ export function GenderIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps =
   )
 }
 
+// Appearance / theme glyph: the universal "light vs dark" contrast disc — a
+// ring with one half filled. Matches the settings-row icon style (md, stroke).
+export function AppearanceIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="9" />
+      <Path d="M12 3 a9 9 0 0 1 0 18 z" fill={color} stroke="none" />
+    </Svg>
+  )
+}
+
 export function ResetIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
