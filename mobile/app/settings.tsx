@@ -23,7 +23,7 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -2787,7 +2787,7 @@ const styles = StyleSheet.create({
   selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
   selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  selectRowValue: { fontSize: TEXT.md, color: PRIMARY_LIGHT, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,
@@ -2809,7 +2809,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
-  subPageCheckmark: { fontSize: TEXT.lg, color: PRIMARY_LIGHT, fontWeight: WEIGHT.semibold },
+  subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
     marginStart: MD,
