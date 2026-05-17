@@ -1,18 +1,18 @@
 /* === Once shared stylesheet ============================================ */
 
 :root {
-  --coral: #890824;
-  --coral-deep: #6B0620;
-  --coral-100: #FBEAEE;
-  --coral-150: #F6DCE2;
-  --coral-border: rgba(137, 8, 36, 0.16);
-  --coral-border-2: rgba(137, 8, 36, 0.28);
+  --coral: #000000;
+  --coral-deep: #333333;
+  --coral-100: #F2F2F2;
+  --coral-150: #E8E8E8;
+  --coral-border: rgba(0, 0, 0, 0.16);
+  --coral-border-2: rgba(0, 0, 0, 0.28);
   --bg: #FFF8F5;
   --text: #1A1411;
   --text-2: #5A4F47;
   --text-3: #8B7E72;
-  --shadow-soft: 0 18px 48px -18px rgba(137, 8, 36, 0.22), 0 2px 6px rgba(31, 26, 22, 0.03);
-  --shadow-cta: 0 12px 28px -6px rgba(137, 8, 36, 0.55), 0 2px 8px rgba(137, 8, 36, 0.3);
+  --shadow-soft: 0 18px 48px -18px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(31, 26, 22, 0.03);
+  --shadow-cta: 0 12px 28px -6px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
   --font: 'Noto Sans Hebrew', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -35,9 +35,9 @@ body::before {
   pointer-events: none;
   z-index: -1;
   background:
-    radial-gradient(60vw 70vw at 90% -10%, rgba(137, 8, 36, 0.13), transparent 55%),
-    radial-gradient(50vw 60vw at -10% 30%, rgba(137, 8, 36, 0.08), transparent 60%),
-    radial-gradient(45vw 55vw at 95% 70%, rgba(137, 8, 36, 0.07), transparent 60%);
+    radial-gradient(60vw 70vw at 90% -10%, rgba(0, 0, 0, 0.13), transparent 55%),
+    radial-gradient(50vw 60vw at -10% 30%, rgba(0, 0, 0, 0.08), transparent 60%),
+    radial-gradient(45vw 55vw at 95% 70%, rgba(0, 0, 0, 0.07), transparent 60%);
 }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; cursor: pointer; }
@@ -81,7 +81,7 @@ img { max-width: 100%; height: auto; display: block; }
   border-radius: 14px;
   list-style: none; padding: 6px;
   min-width: 160px;
-  box-shadow: 0 16px 40px -12px rgba(137, 8, 36, 0.18), 0 2px 8px rgba(31, 26, 22, 0.06);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(31, 26, 22, 0.06);
   z-index: 100;
 }
 .lang-menu[hidden] { display: none; }
@@ -143,7 +143,7 @@ p { color: var(--text-2); }
 .btn-primary:hover {
   background: var(--coral-deep);
   transform: translateY(-2px);
-  box-shadow: 0 16px 36px -6px rgba(229, 90, 64, 0.6), 0 4px 12px rgba(229, 90, 64, 0.35);
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 .btn-primary:active { transform: translateY(0); }
 .btn-link {
@@ -266,7 +266,7 @@ p { color: var(--text-2); }
   content: "";
   position: absolute;
   inset: 18% 28%;
-  background: rgba(137, 8, 36, 0.28);
+  background: rgba(0, 0, 0, 0.28);
   filter: blur(70px);
   border-radius: 999px;
   z-index: 0;
@@ -313,7 +313,7 @@ p { color: var(--text-2); }
   content: "";
   position: absolute;
   inset: 14% 28%;
-  background: rgba(137, 8, 36, 0.34);
+  background: rgba(0, 0, 0, 0.34);
   filter: blur(80px);
   border-radius: 999px;
   z-index: 0;
@@ -340,7 +340,7 @@ p { color: var(--text-2); }
   content: "";
   position: absolute;
   inset: 16% 28%;
-  background: rgba(137, 8, 36, 0.3);
+  background: rgba(0, 0, 0, 0.3);
   filter: blur(60px);
   border-radius: 999px;
   z-index: 0;
@@ -391,7 +391,7 @@ p { color: var(--text-2); }
 }
 .how-card {
   background: rgba(251, 234, 238, 0.55);
-  border: 1px solid rgba(137, 8, 36, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 28px;
   padding: 28px 28px;
   transition: transform .25s cubic-bezier(.2,.8,.2,1), background .25s ease, border-color .25s ease;
@@ -408,7 +408,7 @@ p { color: var(--text-2); }
   background: var(--coral); color: #fff;
   font-size: 12px; font-weight: 800;
   margin-bottom: 16px;
-  box-shadow: 0 4px 10px -3px rgba(137, 8, 36, 0.5);
+  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.5);
 }
 .how-card h3 { font-size: 19px; margin-bottom: 6px; }
 .how-card p { font-size: 14px; line-height: 1.55; }
@@ -450,7 +450,7 @@ p { color: var(--text-2); }
   display: inline-flex; align-items: center; gap: 10px;
   padding: 10px 18px;
   background: rgba(251, 234, 238, 0.5);
-  border: 1px solid rgba(137, 8, 36, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 999px;
   font-size: 14px; font-weight: 600; color: var(--text);
 }
@@ -516,7 +516,7 @@ p { color: var(--text-2); }
   flex-wrap: wrap; margin-bottom: 18px;
 }
 .footer-links a {
-  color: rgba(229, 90, 64, 0.85);
+  color: rgba(0, 0, 0, 0.85);
   font-weight: 500;
   font-size: 13px;
 }

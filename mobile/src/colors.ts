@@ -16,11 +16,11 @@ export const WHITE_MID    = 'rgba(255,255,255,0.40)' // borders, spinner track o
 export const WHITE_STRONG = 'rgba(255,255,255,0.85)' // strong text/active state on my bubble, replace-floating btn bg
 
 // ── Primary brand color ──────────────────────────────────────────────────
-// Deep wine / burgundy. A confident, premium dark brand hue (white text and
-// icons sit on it with strong contrast). PRIMARY_BG is just PRIMARY at 10%
-// (#890824 = rgb(137,8,36)) — keep the two in lockstep.
-export const PRIMARY      = '#890824'
-export const PRIMARY_BG   = 'rgba(137,8,36,0.10)'
+// Pure black. A confident, premium dark brand hue (white text and icons sit
+// on it with maximum contrast). PRIMARY_BG is just PRIMARY at 10%
+// (#000000 = rgb(0,0,0)) — keep the two in lockstep.
+export const PRIMARY      = '#000000'
+export const PRIMARY_BG   = 'rgba(0,0,0,0.10)'
 // Solid "light coral" surface — used as a full-screen background where a
 // translucent overlay would be wrong (the status bar can't accept alpha on
 // Android and would mismatch the screen underneath). Designed to read as
@@ -69,7 +69,7 @@ export const DESTRUCTIVE_BG     = 'rgba(232,176,75,0.14)'   // low-alpha bg tint
 // (which uses selectTextOnFocus) showed a black box hiding the digits. A
 // brand-tinted ~25% wash keeps the glyphs legible while reading as a
 // selection. The caret stays opaque BLACK via cursorColor.
-export const SELECTION = 'rgba(137,8,36,0.25)'
+export const SELECTION = 'rgba(0,0,0,0.25)'
 
 // ── Misc surface colors ──────────────────────────────────────────────────
 // Soft border used on white pills/inputs.
