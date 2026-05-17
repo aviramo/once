@@ -14,17 +14,26 @@ export type ResetResult =
   | { ok: false };
 
 /**
- * Global admin reset, moved here from the mobile app's settings screen.
- * Delegates to the single `app_admin_reset()` RPC which clears chat/log/
- * restrictions and resets every user's relations WHILE recomputing
- * relations.availability (area_state(location)) per row — so the geo gate
- * stays correct immediately after a reset instead of being wiped until each
- * user's next start/location/focus.
+ * Role-scoped admin reset. The dashboard control opens a role checklist;
+ * ONLY users holding at least one of the selected roles are reset. Delegates
+ * to the `app_admin_reset(p_role_ids uuid[])` overload, which clears those
+ * users' chat/log/restrictions and rebuilds their relations WHILE recomputing
+ * relations.availability via user_availability(user_id, location) — so the geo
+ * + role-disable gate stays correct immediately after the reset.
+ *
+ * Empty selection is a no-op (returns 0); it never falls through to a global
+ * reset (the RPC guards this too).
  */
-export async function resetAllUsers(): Promise<ResetResult> {
+export async function resetUsersByRoles(
+  roleIds: string[],
+): Promise<ResetResult> {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const ids = (roleIds ?? []).filter(Boolean);
+  if (ids.length === 0) return { ok: true, users: 0 };
   const admin = createSupabaseAdmin();
-  const { data, error } = await admin.rpc("app_admin_reset");
+  const { data, error } = await admin.rpc("app_admin_reset", {
+    p_role_ids: ids,
+  });
   if (error) return { ok: false };
   revalidatePath(ADMIN_PATH, "page");
   const users = Number((data as { users?: number } | null)?.users ?? 0);

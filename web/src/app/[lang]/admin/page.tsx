@@ -9,7 +9,7 @@ import { SearchControls } from "./_components/SearchControls";
 import type { UserRow } from "./_components/UserCard";
 import { UsersRealtime } from "./_components/UsersRealtime";
 import { ResetAllButton } from "./_components/ResetAllButton";
-import { resetAllUsers } from "./actions";
+import { resetUsersByRoles } from "./actions";
 
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
@@ -148,6 +148,17 @@ export default async function AdminDashboard({
   }
   rows = rows.map((r) => ({ ...r, roles: rolesByUser.get(r.user_id) ?? [] }));
 
+  // Full role catalog (incl. empty roles) for the reset checklist popup.
+  const { data: roleCatalogData } = await admin
+    .from("roles")
+    .select("id, name, enabled")
+    .order("created_at", { ascending: true });
+  const roleCatalog = (roleCatalogData ?? []) as {
+    id: string;
+    name: string;
+    enabled: boolean;
+  }[];
+
   const meName = (meRes.data as { name?: string } | null)?.name;
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
 
@@ -158,13 +169,23 @@ export default async function AdminDashboard({
         hint={d.resultsCount.replace("{count}", String(rows.length))}
         action={
           <ResetAllButton
-            action={resetAllUsers}
+            action={resetUsersByRoles}
+            roles={roleCatalog}
             dict={{
               label: d.resetAll,
               confirm: d.resetAllConfirm,
               busy: d.resetAllBusy,
               done: d.resetAllDone,
               fail: d.resetAllFail,
+              title: d.resetAllTitle,
+              hint: d.resetAllHint,
+              selectAll: d.resetSelectAll,
+              deselectAll: d.resetDeselectAll,
+              noRoles: d.resetNoRoles,
+              noneSelected: d.resetNoneSelected,
+              apply: d.resetApply,
+              cancel: d.resetCancel,
+              disabledTag: d.roles.statusDisabled,
             }}
           />
         }
