@@ -1,21 +1,21 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="cornerLight" cx="0%" cy="0%" r="95%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
-      <stop offset="10%" stop-color="#FFFFFF" stop-opacity="0.65"/>
-      <stop offset="24%" stop-color="#FFFFFF" stop-opacity="0.34"/>
-      <stop offset="46%" stop-color="#FFFFFF" stop-opacity="0.14"/>
-      <stop offset="72%" stop-color="#FFFFFF" stop-opacity="0.045"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="diagonalBeam" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.32"/>
-      <stop offset="22%" stop-color="#FFFFFF" stop-opacity="0.14"/>
-      <stop offset="48%" stop-color="#FFFFFF" stop-opacity="0.055"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
   <rect width="1024" height="1024" fill="#000000"/>
-  <rect width="1024" height="1024" fill="url(#diagonalBeam)"/>
-  <rect width="1024" height="1024" fill="url(#cornerLight)"/>
+  <path
+    d="
+      M 610 190
+      Q 690 190 690 270
+      L 690 760
+      Q 690 835 615 835
+      L 570 835
+      Q 495 835 495 760
+      L 495 390
+      L 430 440
+      Q 375 480 330 430
+      Q 285 380 340 335
+      L 505 210
+      Q 550 190 610 190
+      Z
+    "
+    fill="#FFFFFF"
+  />
 </svg>
