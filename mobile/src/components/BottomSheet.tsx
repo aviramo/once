@@ -5,7 +5,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
-import { useThemedStyles, type Colors } from '../colors'
+import { BLACK, WHITE, BLACK_MID } from '../colors'
 import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHADOW_GRADIENT_STOPS, SHADOW_GRADIENT_HEIGHT, DRAG_HANDLE } from '../tokens'
 
 // Single source of truth for the bottom-sheet behavior used by every popup
@@ -67,7 +67,6 @@ export function BottomSheet({
   scrollableGesture,
   scrollAtTop,
 }: BottomSheetProps) {
-  const styles = useThemedStyles(makeStyles)
   const translateY = useSharedValue(800)
   const dragY = useSharedValue(0)
   const cardHeight = useSharedValue(800)
@@ -194,22 +193,22 @@ export function BottomSheet({
   )
 }
 
-const makeStyles = (c: Colors) => StyleSheet.create({
+const styles = StyleSheet.create({
   rootView: { flex: 1 },
   flex: { flex: 1 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
   cardWrap: {},
   shadowGradient: { height: SHADOW_GRADIENT_HEIGHT, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: c.BLACK },
+  shadowLayer: { flex: 1, backgroundColor: BLACK },
   card: {
-    backgroundColor: c.WHITE,
+    backgroundColor: WHITE,
   },
   dragHandle: {
     alignSelf: 'center',
     width: DRAG_HANDLE.width,
     height: DRAG_HANDLE.height,
     borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: c.BLACK_MID,
+    backgroundColor: BLACK_MID,
     marginTop: MD,
     marginBottom: MD,
   },

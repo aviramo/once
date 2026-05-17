@@ -44,7 +44,6 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
-import { useThemeStore } from '../src/stores/themeStore'
 import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -1453,7 +1452,8 @@ export default function HomePage() {
   const pagerRef = useRef<PagerView>(null)
   const paneIndexRef = useRef(paneIndex)
   // Float progress across panes (0..N-1) driven by PagerView onPageScroll.
-  // The TabStrip indicator multiplies it by tabWidth to follow the swipe.
+  // Feeds `tabProgress`, which drives BOTH the TabStrip label cross-fade AND
+  // the selected chip (position + size) — one live, linear, synced motion.
   const pagerProgress = useSharedValue<number>(paneIndex)
   useEffect(() => {
     paneIndexRef.current = paneIndex
@@ -1511,6 +1511,10 @@ export default function HomePage() {
     const d = span > 0 ? Math.min(1, Math.max(0, profilePull.pullY.value / span)) : 0
     return profileSheetOpenV.value * (1 - d)
   })
+  // Drives the TabStrip label cross-fade AND the selected chip. The
+  // profile-sheet blend toward HOME_PANE is folded in here, so opening the
+  // sheet still slides the chip Settings->Home (and morphs "Once"->"My
+  // profile") with no separate chip driver.
   const tabProgress = useDerivedValue(() => {
     const p = pagerProgress.value
     return p + (HOME_PANE - p) * profileSheetProgress.value
@@ -1887,10 +1891,6 @@ export default function HomePage() {
         ...(pushChanged ? { push_token: { type: 'expo', token } } : {}),
         os: Platform.OS,
         lang,
-        // Mirror the user's theme preference to the server (data.appearance).
-        // Local storage is authoritative; this is the cross-device/telemetry
-        // copy. The legacy field used to carry the raw device scheme.
-        appearance: useThemeStore.getState().mode,
       })
         .catch(() => {})
         .finally(() => {

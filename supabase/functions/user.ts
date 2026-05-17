@@ -17,7 +17,7 @@ export default class User {
   is_for_male?: boolean;
   is_for_female?: boolean;
   name: string | null = null;
-  data: Data = { images: [], os: "unknown", lang: "unknown", appearance: "light", push_token: null };
+  data: Data = { images: [], os: "unknown", lang: "unknown", push_token: null };
   relations: Pages = defaultRelations;
   db: { new: Record<string, unknown>; old: Record<string, unknown> } = { new: {}, old: {} };
 

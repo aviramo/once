@@ -27,7 +27,6 @@ export type Data = {
   weekStart?: number;
   os: string;
   lang: string;
-  appearance: string;
   push_token: PushToken | null;
   role?: string | null;
   /** True if the user picked a manual address instead of using the device's

@@ -29,8 +29,7 @@ import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/r
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-import { useColors } from '../src/colors'
-import { useThemeStore } from '../src/stores/themeStore'
+import { PRIMARY } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -73,14 +72,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const { profile, loading: profileLoading, fetched: profileFetched, fetch: fetchProfile, clear } = useUserStore()
   const router = useRouter()
   const segments = useSegments()
-  const c = useColors()
-
-  // Seed the theme from the server's data.appearance the first time the
-  // profile arrives — but only if the user has no local choice yet (local is
-  // authoritative; see themeStore.adoptServer).
-  useEffect(() => {
-    useThemeStore.getState().adoptServer(profile?.appearance)
-  }, [profile?.appearance])
 
   // Onboarding is needed when profile is absent (new user not yet in DB) or
   // when it exists but bio is empty (partially completed). The !profileLoading
@@ -204,7 +195,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     <>
       {children}
       {authHandoff && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: c.bg }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: PRIMARY }]} />
       )}
     </>
   )
@@ -223,14 +214,6 @@ export default function RootLayout() {
     NotoSans_700Bold,
     NotoSans_800ExtraBold,
   })
-
-  const c = useColors()
-
-  // Read the persisted theme preference once on app boot (before this the UI
-  // uses 'system', so system users never flash).
-  useEffect(() => {
-    useThemeStore.getState().hydrate()
-  }, [])
 
   useEffect(() => {
     if (fontError) console.warn('[fonts] load error:', fontError)
@@ -254,7 +237,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.bg }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: PRIMARY }}>
       {/* Global status bar: white text whenever the app is in the foreground.
           The OS automatically restores the system default when the app is
           backgrounded or closed — every app owns its own status bar style. */}

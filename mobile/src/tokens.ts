@@ -66,9 +66,6 @@ export const RADII = {
   xs: 2,      // thin indicator bars (tab strip underline)
   sm: 5,      // small fills (checkbox, drag-handle pill)
   chip: 9,    // pill chips beside tab labels
-  round: 999, // fully-rounded: capsules/pills AND circles (avatars, knobs,
-              // toggle tracks, day bubbles) — RN clamps to half the smaller
-              // side, so one token covers both.
 } as const
 
 // ── Tap slop ───────────────────────────────────────────────────────────────
@@ -221,24 +218,22 @@ export const TAB = {
   // tab's full width (minus this inset each side so adjacent chips never
   // touch). Tabs are very unequal (compact icons vs the wide flex "Once").
   //
-  // POSITION/SIZE MODEL (ONE combined motion — user choice, 2026-05-17):
-  // each tab's geometry IS its measured `onLayout` width, in child order
-  // (the RN analogue of a CSS-resolved rect; never `measureInWindow`/an
-  // analytic RTL mirror). Position AND size both ride the SAME live pager
-  // value so the slide and the resize are one synced gesture-tracked motion.
-  //   • LIVE (tabProgress, from onPageScroll on the UI thread — the RN
-  //     equivalent of a CSS/native constraint, NOT a JS-thread loop): the
-  //     visual centre + visual w/h right now → drives translateX + scaleX +
-  //     scaleY together.
-  //   • BASE: layout width/height come from the decoupled `chipProgress`
-  //     (committed-pane withTiming), CONSTANT during a drag ⇒ ZERO Yoga
-  //     relayout while swiping (that per-frame relayout was the old
-  //     release-settle "drag"). The per-frame resize is GPU `scaleX/scaleY`
-  //     (= live/base), never a width/height relayout. On commit base tweens
-  //     and scale eases to ~1 (seamless); at rest scale==1 so border/radius
-  //     are crisp. scaleY is centre-based, so a counter translateY pins the
-  //     bottom (grows UPWARD only). Border/radius distort transiently
-  //     mid-swipe — the accepted cost of one synced motion.
+  // POSITION/SIZE MODEL (ONE live, linear, LAYOUT-driven motion — user
+  // choices, 2026-05-17): each tab's geometry IS its measured `onLayout`
+  // width, in child order (the RN analogue of a CSS-resolved rect; never
+  // `measureInWindow`/an analytic RTL mirror). Position AND size both
+  // interpolate from the SAME live pager value (tabProgress, from
+  // onPageScroll on the UI thread — the RN equivalent of a CSS/native
+  // constraint, not a JS-thread loop), so the slide and the resize are one
+  // synced motion that is perfectly LINEAR in the pager position. Size is
+  // the real layout `width`/`height` (NOT scaleX/scaleY): a non-uniformly
+  // scaled rounded rect cannot keep a constant-looking corner, so scaling is
+  // gone and `borderRadius` is a single CONSTANT (indicatorRadius) that
+  // never lerps or distorts. The chip is a single absolutely-positioned leaf
+  // in an absolute-fill overlay, so per-frame width/height re-lays out only
+  // that one node (no flex-row reflow). `bottom` is statically anchored, so
+  // a taller height grows the chip UPWARD only (name Y unchanged — iron
+  // rule), no scaleY counter-translate needed.
   //
   // WIDTH KNOB: chipW = (selected tab's measured width) − 2*indicatorInsetX.
   // Smaller value => the pill uses more of the tab's available room (the
@@ -251,31 +246,26 @@ export const TAB = {
   indicatorInsetX: 4,
   // Vertical pad around the chip (top + bottom). Bottom-anchored at
   // `-indicatorPadV`. SHORT (no-timer) height = rowHeight + 2*indicatorPadV =
-  // 44, so `indicatorRadius` = 22 makes it a true capsule. When the SELECTED
-  // tab carries a sub-label (the invite countdown / broadcast status word)
-  // the chip GROWS UPWARD into a 2-line rounded-rect that ENCLOSES the timer
-  // sitting just above the name (user choice 2026-05-17, replacing the old
-  // "timer floats as a caption above the chip"). It grows up only — the
-  // bottom anchor and therefore the name's Y are unchanged (iron rule: tab
-  // labels never move). TALL height = SHORT + timerGap + timerFontSize +
-  // CHIP_TOP_BAND, where CHIP_TOP_BAND is DERIVED in TabStrip from the
-  // metric tokens so the air above the timer equals the air below the name
-  // by construction (timerTopPad is just a 0-default residual nudge on it).
-  // Height
-  // interpolates per-tab via `chipProgress` exactly like width does (one
-  // decoupled collapseDuration tween on commit, or a single withTiming on
-  // hs[i] when a selected tab gains/loses its timer in place), so the border
-  // stays crisp. At TALL the corner uses `indicatorRadiusTall` (a real
-  // rounded-rect, NOT a fat half-height capsule); the radius lerps SHORT
-  // (=indicatorRadius capsule) -> TALL (=indicatorRadiusTall) with height.
+  // 44. When the SELECTED tab carries a sub-label (the invite countdown /
+  // broadcast status word) the chip GROWS UPWARD into a taller 2-line shape
+  // that ENCLOSES the timer sitting just above the name (user choice
+  // 2026-05-17, replacing the old "timer floats as a caption above the
+  // chip"). It grows up only — the static bottom anchor keeps the name's Y
+  // unchanged (iron rule: tab labels never move). TALL height = SHORT +
+  // timerGap + timerFontSize + CHIP_TOP_BAND, where CHIP_TOP_BAND is DERIVED
+  // in TabStrip from the metric tokens so the air above the timer equals the
+  // air below the name by construction (timerTopPad is just a 0-default
+  // residual nudge on it). Per-tab height = SHORT/TALL in the hs[i] shared
+  // values (instant first, withTiming(collapseDuration) when a selected tab
+  // gains/loses its timer in place); the chip's live height interpolates
+  // those by the live pager value, same as width.
   indicatorPadV: 6,
+  // CONSTANT corner radius — applied unchanged at SHORT and TALL and all
+  // through the motion (user 2026-05-17: "the radius must always stay the
+  // same"). No tall variant, no height-lerp, no scale: at SHORT (h=44) 22
+  // reads as a capsule; at TALL it's the same 22 corner on a taller rounded
+  // rectangle. `borderCurve: 'continuous'` keeps the non-capsule corner soft.
   indicatorRadius: 22,
-  // Corner radius when the chip is the TALL 2-line rounded-rect (timer above
-  // name). NOT half the tall height (that would read as a fat capsule);
-  // ~RADII.md, with `borderCurve: 'continuous'`, so the grown pill reads as a
-  // soft card. The radius interpolates indicatorRadius<->indicatorRadiusTall
-  // as the height interpolates SHORT<->TALL.
-  indicatorRadiusTall: 18,
   // Tight vertical gap between the name (bottom line) and the timer line
   // ABOVE it, INSIDE the grown pill. Deliberately small — the user wants the
   // timer "צמוד לשם" (attached to the name). Single knob for that breathing

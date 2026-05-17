@@ -138,7 +138,6 @@ interface UserProfile {
    * from data.location_type. Use resolveLocationType() to read with the
    * legacy location_custom fallback for pre-typed rows. */
   location_type: LocationType | null
-  appearance: string | null
   data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
   relations?: PagesCompat | null
   /** Synthesized legacy page1 state: 'watching' | 'waiting' | 'chat' | 'missed' | 'fail' | null. Derived from server's v3 page1.state + message via deriveCompat. */
@@ -162,7 +161,6 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
   'age_from', 'age_to', 'range',
   'weekStart',
   'location_custom', 'location_type', 'location_label',
-  'appearance',
 ]
 
 let lastAppliedLastSeen = 0

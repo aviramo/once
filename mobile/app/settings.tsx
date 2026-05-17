@@ -23,9 +23,8 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, themed, useThemeRerender, useColors } from '../src/colors'
-import { useThemeStore, type ThemeMode } from '../src/stores/themeStore'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AppearanceIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
@@ -90,6 +89,7 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
 // ── Local aliases for shared icons (keep call sites unchanged) ────────────
 
 const FIELD_ICON_STROKE = BLACK_STRONG
+const DESTRUCTIVE_COLOR = WHITE_MID
 
 // ── Select Field Types ─────────────────────────────────────────────────────
 
@@ -339,7 +339,6 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
 // Animates background color, text color, and a small scale bump on press.
 
 function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
-  const c = useColors()
   const { profile, update } = useUserStore()
   const [agePopupVisible, setAgePopupVisible] = useState(false)
   const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
@@ -384,7 +383,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.range')}
           displayValue={formatRadius(radius)}
           onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon color={c.fg} />}
+          icon={<RadiusIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -395,7 +394,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           onPress={() => locationLocked
             ? setLocationLockedInfoVisible(true)
             : setLocationPopupVisible(true)}
-          icon={<MapPinIcon color={c.fg} />}
+          icon={<MapPinIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -403,7 +402,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.ageRange')}
           displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
           onPress={() => setAgePopupVisible(true)}
-          icon={<SlidersIcon color={c.fg} />}
+          icon={<SlidersIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -411,7 +410,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.preferredGender')}
           displayValue={genderDisplayValue}
           onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon color={c.fg} />}
+          icon={<GenderIcon color={WHITE} />}
         />
       </View>
       <RadiusPopup
@@ -1288,49 +1287,6 @@ function FamilyTriOptionRow({
   )
 }
 
-// Theme (appearance) modes. One list, reused by the row's display value and
-// the popup (DRY). Order matches the user's spec: מערכת / כהה / בהיר.
-const THEME_OPTIONS: { v: ThemeMode; key: 'settings.themeSystem' | 'settings.themeDark' | 'settings.themeLight' }[] = [
-  { v: 'system', key: 'settings.themeSystem' },
-  { v: 'dark', key: 'settings.themeDark' },
-  { v: 'light', key: 'settings.themeLight' },
-]
-
-// Regular settings row → opens this popup to pick the appearance mode. The
-// pick applies live across the whole app and persists (themeStore →
-// AsyncStorage, mirrored to the server on the next app/start). Same
-// BottomSheet + checked-row pattern as FamilyValuePopup, so it looks native
-// to the rest of settings (no bespoke control).
-function ThemePopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
-  const insets = useSafeAreaInsets()
-  const mode = useThemeStore(s => s.mode)
-  const setMode = useThemeStore(s => s.setMode)
-  return (
-    <BottomSheet
-      visible={visible}
-      onDismiss={onDismiss}
-      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: Math.max(insets.bottom, SM) }]}
-    >
-      <Text style={familyStyles.valuePopupTitle}>{t('settings.theme')}</Text>
-      {THEME_OPTIONS.map(o => {
-        const isSelected = mode === o.v
-        return (
-          <Pressable
-            key={o.v}
-            style={familyStyles.valueRow}
-            onPress={() => { tap(); setMode(o.v); onDismiss() }}
-          >
-            <Text style={[familyStyles.valueRowLabel, isSelected && familyStyles.valueRowLabelSelected]}>
-              {t(o.key)}
-            </Text>
-            {isSelected ? <Text style={familyStyles.valueRowCheck}>✓</Text> : null}
-          </Pressable>
-        )
-      })}
-    </BottomSheet>
-  )
-}
-
 // Day-cell date label uses the OS locale (not the UI language) so a Hebrew UI
 // on a US device still reads month/day, and an English UI in Israel still reads
 // day/month — matches the date-format the user is used to elsewhere on their
@@ -1707,13 +1663,13 @@ export function FamilyKidsPopup({
   )
 }
 
-const familyStyles = themed((c) => ({
+const familyStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   shadowGradient: { height: 60, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: c.BLACK },
+  shadowLayer: { flex: 1, backgroundColor: BLACK },
   gestureWrap: { flexShrink: 1 },
   sheet: {
-    backgroundColor: c.bg,
+    backgroundColor: WHITE,
     paddingTop: RADIUS,
     paddingHorizontal: SM,
     flexShrink: 1,
@@ -1721,7 +1677,7 @@ const familyStyles = themed((c) => ({
   dragHandle: {
     alignSelf: 'center',
     width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: c.BLACK_SOFT,
+    backgroundColor: BLACK_SOFT,
     marginBottom: MD,
   },
   scrollContent: { paddingTop: SM, paddingBottom: SM },
@@ -1732,49 +1688,49 @@ const familyStyles = themed((c) => ({
     paddingVertical: SM,
     paddingHorizontal: MD,
   },
-  toggleLabel: { fontSize: TEXT.md, color: c.fg },
+  toggleLabel: { fontSize: TEXT.md, color: BLACK },
   toggleTrack: {
-    width: 48, height: 28, borderRadius: RADII.round,
+    width: 48, height: 28, borderRadius: 999,
     padding: XS, justifyContent: 'center',
   },
   toggleKnob: {
-    width: 24, height: 24, borderRadius: RADII.round,
-    backgroundColor: c.bg,
-    shadowColor: c.BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: WHITE,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
   section: { marginBottom: MD },
   subSection: {},
-  sectionTitle: { fontSize: TEXT.md, color: c.fg, marginBottom: SM },
-  subSectionTitle: { fontSize: TEXT.sm, color: c.fg },
+  sectionTitle: { fontSize: TEXT.md, color: BLACK, marginBottom: SM },
+  subSectionTitle: { fontSize: TEXT.sm, color: BLACK },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: XS },
-  sectionHint: { fontSize: TEXT.sm, color: c.BLACK_STRONG, marginTop: XS, marginBottom: MD },
-  optional: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
+  sectionHint: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS, marginBottom: MD },
+  optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
-  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: c.BLACK_SOFT },
-  pillSelected: { backgroundColor: c.fg },
-  pillLabel: { fontSize: TEXT.sm, color: c.fg },
-  pillLabelSelected: { color: c.bg },
+  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
+  pillSelected: { backgroundColor: PRIMARY },
+  pillLabel: { fontSize: TEXT.sm, color: BLACK },
+  pillLabelSelected: { color: WHITE },
   sectionPill: {
-    paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round,
-    backgroundColor: c.PRIMARY_BG,
+    paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
+    backgroundColor: PRIMARY_BG,
   },
-  sectionPillDestructive: { backgroundColor: c.DESTRUCTIVE_BG },
-  sectionPillLabel: { fontSize: TEXT.sm, color: c.fg },
-  sectionPillLabelDestructive: { color: c.fg },
+  sectionPillDestructive: { backgroundColor: DESTRUCTIVE_BG },
+  sectionPillLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  sectionPillLabelDestructive: { color: DESTRUCTIVE },
   card: {
-    backgroundColor: c.BLACK_SOFT,
+    backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
     overflow: 'hidden',
   },
-  cardRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.BLACK_SOFT },
+  cardRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT },
   cardRowDividerLast: { borderBottomWidth: 0 },
   dropdownRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
   },
-  dropdownLabel: { fontSize: TEXT.sm, color: c.fg },
-  dropdownValue: { fontSize: TEXT.sm, color: c.fg },
-  dropdownPlaceholder: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
+  dropdownLabel: { fontSize: TEXT.sm, color: BLACK },
+  dropdownValue: { fontSize: TEXT.sm, color: PRIMARY },
+  dropdownPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
 
   // "Days with kids" schedule. Title + weeks render inline with the rest of
   // the form (no enclosing card). Title sits flush, weeks gap below.
@@ -1785,84 +1741,84 @@ const familyStyles = themed((c) => ({
   kidChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, marginTop: XS },
   kidChip: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: RADII.round, backgroundColor: c.BLACK_SOFT,
+    borderRadius: 999, backgroundColor: BLACK_SOFT,
     paddingStart: MD, paddingEnd: SM,
   },
   kidChipMain: { paddingVertical: SM },
-  kidChipLabel: { fontSize: TEXT.sm, color: c.fg },
-  kidChipPlaceholder: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
+  kidChipLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
   kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
-  kidChipRemoveLabel: { fontSize: TEXT.lg, color: c.BLACK_STRONG, lineHeight: 18 },
+  kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
-    borderRadius: RADII.round,
-    borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT, borderStyle: 'dashed',
+    borderRadius: 999,
+    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
-  kidChipAddLabel: { fontSize: TEXT.sm, color: c.fg },
+  kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
 
   // + Add kid / + Add week button.
-  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT, borderStyle: 'dashed' },
-  addKidLabel: { fontSize: TEXT.sm, color: c.fg },
+  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addKidLabel: { fontSize: TEXT.sm, color: PRIMARY },
 
   weekHeader: { marginBottom: MD, gap: XS },
   weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
-  weekLabel: { fontSize: TEXT.sm, color: c.fg },
+  weekLabel: { fontSize: TEXT.sm, color: BLACK },
   weekLabelEmphasis: { fontWeight: WEIGHT.extrabold },
-  weekHint: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
-  weekRemove: { fontSize: TEXT.sm, color: c.fg },
+  weekHint: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  weekRemove: { fontSize: TEXT.sm, color: DESTRUCTIVE },
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
-    width: 36, height: 36, borderRadius: RADII.round,
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: c.bg, borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT,
+    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
-  dayBubbleSelected: { backgroundColor: c.fg, borderColor: c.fg },
+  dayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
-  dayBubbleWeekend: { backgroundColor: c.PRIMARY_BG, borderColor: c.PRIMARY_BG },
-  dayLetterWeekend: { color: c.fg },
-  dayLetter: { fontSize: TEXT.sm, color: c.fg },
-  dayLetterSelected: { color: c.bg },
-  dayDate: { fontSize: TEXT.xs, color: c.BLACK_STRONG },
-  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT, borderStyle: 'dashed' },
-  addWeekLabel: { fontSize: TEXT.sm, color: c.fg },
+  dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
+  dayLetterWeekend: { color: PRIMARY },
+  dayLetter: { fontSize: TEXT.sm, color: BLACK },
+  dayLetterSelected: { color: WHITE },
+  dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
+  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addWeekLabel: { fontSize: TEXT.sm, color: PRIMARY },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the gray cards expanding/collapsing inside
-  // don't push it around. bg + same horizontal padding as the sheet
+  // don't push it around. WHITE bg + same horizontal padding as the sheet
   // so the popup reads as one continuous surface.
-  interestedBar: { backgroundColor: c.bg },
+  interestedBar: { backgroundColor: WHITE },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
-    backgroundColor: c.bg,
+    backgroundColor: WHITE,
     paddingTop: RADIUS, paddingHorizontal: SM,
   },
   valuePopupTitle: {
-    fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: c.fg,
+    fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK,
     textAlign: 'center', marginBottom: SM,
   },
   valueRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: MD, paddingHorizontal: SM,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.BLACK_SOFT,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
   },
-  valueRowLabel: { fontSize: TEXT.md, color: c.fg },
-  valueRowLabelSelected: { color: c.fg, fontWeight: WEIGHT.extrabold },
-  valueRowCheck: { fontSize: TEXT.md, color: c.fg, fontWeight: WEIGHT.extrabold },
+  valueRowLabel: { fontSize: TEXT.md, color: BLACK },
+  valueRowLabelSelected: { color: PRIMARY, fontWeight: WEIGHT.extrabold },
+  valueRowCheck: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.extrabold },
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
   triOptionRow: { flexWrap: 'wrap', rowGap: SM },
   triOptionLabel: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
-  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: c.BLACK_SOFT },
-  triOptionPillSelected: { backgroundColor: c.fg },
-  triOptionPillLabel: { fontSize: TEXT.sm, color: c.fg },
-  triOptionPillLabelSelected: { color: c.bg },
-}))
+  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
+  triOptionPillSelected: { backgroundColor: PRIMARY },
+  triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
+  triOptionPillLabelSelected: { color: WHITE },
+})
 
 // ── Photo edit popup ────────────────────────────────────────────────────────
 // Bottom sheet shown when the user taps a photo on their own profile preview.
@@ -2341,15 +2297,11 @@ export function PreviewFieldPage({
 // ── App Inline Content ─────────────────────────────────────────────────────
 
 function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
-  const c = useColors()
   const router = useRouter()
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
   const [resetting, setResetting] = useState(false)
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
-  const [themePopupVisible, setThemePopupVisible] = useState(false)
-  const themeMode = useThemeStore(s => s.mode)
-  const themeModeLabel = t(THEME_OPTIONS.find(o => o.v === themeMode)?.key ?? 'settings.themeSystem')
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -2406,15 +2358,7 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={c.fg} />}
-        />
-        <View style={styles.accountActionDivider} />
-        <SelectFieldRow
-          grouped
-          label={t('settings.theme')}
-          displayValue={themeModeLabel}
-          onPress={() => setThemePopupVisible(true)}
-          icon={<AppearanceIcon color={c.fg} />}
+          icon={<UserIcon color={WHITE} />}
         />
         {profile.data?.role === 'ADMIN' && (
           <>
@@ -2424,18 +2368,14 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
               {...(resetting ? {} : resetTap)}
             >
               {resetting
-                ? <ActivityIndicator size={18} color={c.WHITE_MID} />
-                : <ResetIcon color={c.WHITE_MID} />
+                ? <ActivityIndicator size={18} color={DESTRUCTIVE_COLOR} />
+                : <ResetIcon color={DESTRUCTIVE_COLOR} />
               }
               <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.adminEntry')}</Text>
             </View>
           </>
         )}
       </View>
-      <ThemePopup
-        visible={themePopupVisible}
-        onDismiss={() => setThemePopupVisible(false)}
-      />
       <AccountPopup
         visible={accountPopupVisible}
         onDismiss={() => setAccountPopupVisible(false)}
@@ -2608,9 +2548,6 @@ function GameModeCard() {
 type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
 
 export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
-  // Re-render the whole settings screen when the appearance toggle flips, so
-  // every child re-reads the themed() Proxy stylesheet with the new scheme.
-  useThemeRerender()
   const router = useRouter()
   const { profile } = useUserStore()
   const { user } = useAuthStore()
@@ -2675,8 +2612,8 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
-const styles = themed((c) => ({
-  rootOuter: { flex: 1, backgroundColor: c.bg },
+const styles = StyleSheet.create({
+  rootOuter: { flex: 1, backgroundColor: PRIMARY },
   root: { flex: 1 },
 
   header: {
@@ -2687,11 +2624,11 @@ const styles = themed((c) => ({
 
   tabBar: {
     flex: 1, flexDirection: 'row', marginHorizontal: SM,
-    backgroundColor: c.WHITE_SOFT, borderRadius: RADIUS, padding: XS,
+    backgroundColor: WHITE_SOFT, borderRadius: RADIUS, padding: XS,
   },
   tabItem: { flex: 1, paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS },
-  tabItemActive: { backgroundColor: c.fg },
-  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: c.fg },
+  tabItemActive: { backgroundColor: WHITE },
+  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: WHITE },
 
   tabScroll: { flex: 1 },
   // No horizontal padding here: the profile card extends edge-to-edge, flush
@@ -2703,9 +2640,9 @@ const styles = themed((c) => ({
   section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: MD },
   sectionLabelRow: { flexDirection: 'row', marginTop: LG, marginBottom: SM, paddingHorizontal: SM },
-  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: c.WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
-  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: c.fg, marginBottom: SM },
-  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: c.fg },
+  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
+  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: WHITE, marginBottom: SM },
+  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: WHITE },
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, justifyContent: 'flex-end', width: 44 * 3 + SM * 2 },
@@ -2713,48 +2650,48 @@ const styles = themed((c) => ({
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: SM },
   slider: { width: '100%', height: 40 },
-  sliderEndLabel: { fontSize: TEXT.sm, color: c.WHITE_MID, minWidth: 22, textAlign: 'center' },
+  sliderEndLabel: { fontSize: TEXT.sm, color: WHITE_MID, minWidth: 22, textAlign: 'center' },
 
   genderRow: { flexDirection: 'row', gap: SM, marginTop: SM },
 
   previewWrap: {
     flex: 1,
-    backgroundColor: c.bg,
+    backgroundColor: PRIMARY,
   },
 
-  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: c.WHITE_SOFT },
+  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: WHITE_SOFT },
   textInputWrapInner: { paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM },
-  textInput: { fontSize: TEXT.md, color: c.fg, padding: 0, textAlign: 'center', minHeight: 56 },
-  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: c.WHITE_MID },
+  textInput: { fontSize: TEXT.md, color: WHITE, padding: 0, textAlign: 'center', minHeight: 56 },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: WHITE_MID },
 
   // Account tab
   infoCard: {
     marginTop: SM, borderRadius: RADIUS, overflow: 'hidden',
-    backgroundColor: c.WHITE_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.WHITE_SOFT,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WHITE_SOFT,
   },
   infoRowLast: { borderBottomWidth: 0 },
-  infoLabel: { fontSize: TEXT.md, color: c.WHITE_STRONG },
+  infoLabel: { fontSize: TEXT.md, color: WHITE_STRONG },
   infoValue: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: c.fg,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE,
     flexShrink: 1, marginStart: MD,
   },
 
   accountLinkRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
-    backgroundColor: c.WHITE_SOFT, borderRadius: RADIUS,
+    backgroundColor: WHITE_SOFT, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD,
     marginBottom: MD,
   },
   // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
   // the subtle hairline `accountActionDivider` between siblings.
   accountLinksCard: {
-    backgroundColor: c.bg,
+    backgroundColor: PRIMARY,
     marginBottom: MD,
   },
   // Relative-positioned wrapper so the GameModeCard overlay anchors to the
@@ -2773,7 +2710,7 @@ const styles = themed((c) => ({
     width: '100%', minHeight: PROFILE_CARD_MIN_HEIGHT,
     flexDirection: 'column', justifyContent: 'space-between',
     overflow: 'hidden',
-    backgroundColor: c.WHITE_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   profileCardTopSpacer: { height: MD + BUTTON_MIN_HEIGHT + MD },
 
@@ -2787,16 +2724,16 @@ const styles = themed((c) => ({
     zIndex: 2,
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: c.WHITE_SOFT },
+  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
   profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
   // flexDirection:'row' makes the single Text child sit on the logical
   // start side (right in RTL, left in LTR) — same pattern documented above
   // GameModeCard. textAlign/writingDirection alone proved inconsistent on iOS.
   profileCardCaption: { paddingHorizontal: MD, paddingVertical: MD, flexDirection: 'row' },
-  // On-image caption: always light, regardless of theme — it sits over the
-  // profile photo (a dark-ish surface), so inverting it would be unreadable.
   profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
-  accentCard: { backgroundColor: c.bg },
+  // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
+  // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
+  accentCard: { backgroundColor: PRIMARY },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
@@ -2805,24 +2742,24 @@ const styles = themed((c) => ({
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
   accountActionsCard: {
-    backgroundColor: c.bg, marginTop: SM,
+    backgroundColor: WHITE, marginTop: SM,
   },
   accountActionRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
   },
   accountActionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: c.WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
     marginStart: MD,
   },
   accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  accountActionText: { fontSize: TEXT.md, color: c.fg, fontWeight: WEIGHT.semibold },
-  accountActionTextDestructive: { color: c.WHITE_MID },
+  accountActionText: { fontSize: TEXT.md, color: WHITE, fontWeight: WEIGHT.semibold },
+  accountActionTextDestructive: { color: WHITE_MID },
   // Account popup identity block: stacked text list (one field per line) in
   // PRIMARY on the white sheet, replacing the old chip pills.
   accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
   accountPopupListItem: {
-    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: c.BLACK_STRONG,
+    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG,
     // 'left' = start of writing direction (physically right in RTL after
     // auto-flip) — same correct-in-both-directions value the Chip text uses.
     textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr',
@@ -2831,10 +2768,10 @@ const styles = themed((c) => ({
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: SM,
-    backgroundColor: c.bg, borderRadius: RADIUS,
+    backgroundColor: PRIMARY, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
-    shadowColor: c.BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
+    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.
@@ -2847,17 +2784,17 @@ const styles = themed((c) => ({
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
   selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', columnGap: SM },
   selectRowLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: MD },
-  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: c.fg, fontWeight: WEIGHT.semibold },
-  selectRowSubtitle: { fontSize: TEXT.sm, color: c.WHITE_STRONG, marginTop: XS },
+  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  selectRowValue: { fontSize: TEXT.md, color: c.WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
-    width: 44, height: 44, borderRadius: RADII.round,
-    backgroundColor: c.WHITE_SOFT,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: WHITE_SOFT,
   },
   selectRowAccentIcon: {
-    width: 36, height: 36, borderRadius: RADII.round,
-    backgroundColor: c.WHITE_SOFT,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
   selectRowIconWrap: { alignItems: 'center', justifyContent: 'center' },
@@ -2865,21 +2802,21 @@ const styles = themed((c) => ({
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,
     borderRadius: RADIUS, overflow: 'hidden',
-    backgroundColor: c.WHITE_SOFT,
+    backgroundColor: WHITE_SOFT,
   },
   subPageOptionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
   },
-  subPageOptionLabel: { fontSize: TEXT.lg, color: c.fg },
-  subPageCheckmark: { fontSize: TEXT.lg, color: c.WHITE_STRONG, fontWeight: WEIGHT.semibold },
+  subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
+  subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
   optionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: c.WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
     marginStart: MD,
   },
   subPageDesc: {
     marginHorizontal: SM, marginTop: MD,
-    fontSize: TEXT.sm, color: c.WHITE_STRONG,
+    fontSize: TEXT.sm, color: WHITE_STRONG,
     textAlign: 'center', lineHeight: lh(TEXT.sm),
   },
-}))
+})
