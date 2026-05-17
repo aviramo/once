@@ -75,7 +75,12 @@ export function UsersRealtime({
   }, [initial, store]);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    // grid-cols-1 (= minmax(0,1fr)) is load-bearing: without an explicit base
+    // track the implicit mobile column is `auto` = max-content, so a long
+    // unbroken email widened the grid past the viewport (the cards' `truncate`
+    // can't shrink an auto track). minmax(0,1fr) lets the track — and the
+    // truncation — collapse to the container width.
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {initial.map(({ row, email }) => (
         <LiveUserCard
           key={row.user_id}
