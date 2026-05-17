@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useColorScheme } from 'react-native'
 import { useThemeStore, type ThemeMode } from './stores/themeStore'
 
@@ -131,47 +132,66 @@ export const ILLUSTRATION_STRUCT = WHITE
 export const ILLUSTRATION_ACCENT = PRIMARY_LIGHT
 
 // ════════════════════════════════════════════════════════════════════════
-// THEMED MONOCHROME PALETTE (the new source of truth)
+// THEMED PALETTE — perfect light/dark inversion (the new source of truth)
 // ────────────────────────────────────────────────────────────────────────
-// One symmetric grayscale system. DARK = pure-black surface + a 5-step white
-// ink ramp. LIGHT = the exact inverse: pure-white surface + the SAME 5-step
-// ramp in black. No chromatic color anywhere (the old wine / gold / purple /
-// green / coral all collapse into the ramp) — "everything is shades of one
-// ink", per the user's spec.
+// The user's spec: LIGHT = white background + dark elements; DARK = the
+// EXACT inverse (black background + light elements); complete symmetry.
 //
-// The five ink steps (and nothing more — the cap is 5):
-//   fg      1.00  primary text, key icons, solid fills, accents
-//   fgMuted 0.72  secondary text
-//   fgFaint 0.45  tertiary / disabled text, placeholders
-//   line    0.16  borders, dividers, outlines
-//   fill    0.08  subtle fills, scrims, inactive backgrounds
-// plus the single surface anchor `bg`. LIGHT/DARK use identical alphas so the
-// two themes are perfect mirror images.
+// So the model is dead simple and risk-free:
+//   • LIGHT = the current static palette, verbatim (reuses the consts above
+//     — DRY). A screen migrated to useColors() therefore looks IDENTICAL to
+//     today in light mode → zero visual regression to reason about.
+//   • DARK  = every LIGHT token run through invert() (per-channel RGB
+//     inversion, alpha preserved). Because the inversion is uniform, every
+//     token keeps its RELATIVE role (a surface stays a surface, ink stays
+//     ink, a hairline stays a hairline) — just flipped. That makes the
+//     per-screen migration purely MECHANICAL: prefix color identifiers with
+//     `c.`, no per-call-site judgement, correct in both themes.
+//
+// `useThemedStyles(makeStyles)` keeps the per-component change to one line.
 // ════════════════════════════════════════════════════════════════════════
 
 export type Scheme = 'light' | 'dark'
 export type { ThemeMode }
 
-// The 5 ink alphas — the ONLY place the ramp is defined (DRY). Tune here and
-// both themes move together, staying symmetric by construction.
-const INK = { fg: 1, fgMuted: 0.72, fgFaint: 0.45, line: 0.16, fill: 0.08 } as const
+// Per-channel color inversion. Handles #rgb / #rrggbb, rgb()/rgba() (alpha
+// kept), the literal 'transparent', and any string that merely CONTAINS
+// colors (e.g. a boxShadow like '0px 4px 14px rgba(0,0,0,0.22)') — every
+// color token inside is inverted, the rest of the string is untouched.
+function invHex(h: string): string {
+  let s = h.slice(1)
+  if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2]
+  const n = parseInt(s.slice(0, 6), 16)
+  const r = 255 - ((n >> 16) & 255)
+  const g = 255 - ((n >> 8) & 255)
+  const b = 255 - (n & 255)
+  const h2 = (v: number) => v.toString(16).padStart(2, '0')
+  return '#' + h2(r) + h2(g) + h2(b)
+}
+function invRgb(m: string): string {
+  const p = m.replace(/rgba?\(|\)/g, '').split(',').map((x) => x.trim())
+  const r = 255 - Number(p[0]), g = 255 - Number(p[1]), b = 255 - Number(p[2])
+  return p.length > 3 ? `rgba(${r},${g},${b},${p[3]})` : `rgb(${r},${g},${b})`
+}
+export function invert(s: string): string {
+  if (s === 'transparent') return s
+  return s
+    .replace(/rgba?\([^)]*\)/g, invRgb)
+    .replace(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g, invHex)
+}
 
 export interface Colors {
   scheme: Scheme
-  // Semantic tokens — the target API every migrated screen should use.
+  // Semantic tokens (used by newly written code / _layout).
   bg: string
   fg: string
   fgMuted: string
   fgFaint: string
   line: string
   fill: string
-  // ── Legacy-name aliases ────────────────────────────────────────────────
-  // Same keys as the static consts above so a migrated screen can swap
-  // `import { X }` → `const { X } = useColors()` with no rename. Each is
-  // mapped to its dominant semantic role; the few call sites where a name
-  // was overloaded (WHITE-as-ink vs WHITE-as-surface, PRIMARY-as-header-bg
-  // vs PRIMARY-as-accent) are fixed to the right semantic token per screen
-  // as that screen is migrated.
+  // Legacy-name keys — identical names to the static consts above, so a
+  // screen migrates by a mechanical `X` → `c.X` prefix with NO renames and
+  // NO semantic decisions (inversion preserves every token's role).
   BLACK: string
   WHITE: string
   BLACK_SOFT: string
@@ -201,70 +221,32 @@ export interface Colors {
   ILLUSTRATION_ACCENT: string
 }
 
-function build(scheme: Scheme): Colors {
-  const bg = scheme === 'dark' ? '#000000' : '#FFFFFF'
-  // ink(a): the foreground color at alpha a. White on dark, black on light —
-  // the single point of symmetry between the two themes.
-  const rgb = scheme === 'dark' ? '255,255,255' : '0,0,0'
-  const ink = (a: number) => (a >= 1 ? (scheme === 'dark' ? '#FFFFFF' : '#000000') : `rgba(${rgb},${a})`)
-
-  const fg = ink(INK.fg)
-  const fgMuted = ink(INK.fgMuted)
-  const fgFaint = ink(INK.fgFaint)
-  const line = ink(INK.line)
-  const fill = ink(INK.fill)
-
-  return {
-    scheme,
-    bg, fg, fgMuted, fgFaint, line, fill,
-
-    // Surfaces → bg (flat; separation comes from `line`, never a shadow).
-    WHITE: bg,
-    PRIMARY: bg,
-    PRIMARY_LIGHT: bg,
-    ILLUSTRATION_WASH: bg,
-
-    // Max-contrast ink + every collapsed chromatic accent → fg.
-    BLACK: fg,
-    DESTRUCTIVE: fg,
-    PREMIUM: fg,
-    ONLINE_GREEN: fg,
-    ILLUSTRATION_BODY: fg,
-    ILLUSTRATION_STRUCT: fg,
-
-    // Secondary ink.
-    BLACK_STRONG: fgMuted,
-    WHITE_STRONG: fgMuted,
-    ILLUSTRATION_ACCENT: fgMuted,
-
-    // Tertiary ink.
-    BLACK_MID: fgFaint,
-    WHITE_MID: fgFaint,
-    ILLUSTRATION_LINE: fgFaint,
-    ILLUSTRATION_CLOUD: fgFaint,
-
-    // Lines / borders.
-    BORDER_SOFT: line,
-    HEADER_PILL_BORDER: line,
-
-    // Subtle fills / scrims / inactive backgrounds.
-    BLACK_SOFT: fill,
-    WHITE_SOFT: fill,
-    PRIMARY_BG: fill,
-    DESTRUCTIVE_BG: fill,
-    SELECTION: fill,
-    HEADER_PILL_FILL: fill,
-
-    // Flat monochrome: no emboss, no drop shadow.
-    HEADER_TEXT_SHADOW: 'transparent',
-    HEADER_PILL_SHADOW: '0px 0px 0px rgba(0,0,0,0)',
-  }
+// LIGHT = today's palette, verbatim (reuses the consts → single source).
+const LIGHT: Colors = {
+  scheme: 'light',
+  bg: WHITE,
+  fg: BLACK,
+  fgMuted: BLACK_STRONG,
+  fgFaint: BLACK_MID,
+  line: BORDER_SOFT,
+  fill: BLACK_SOFT,
+  BLACK, WHITE,
+  BLACK_SOFT, BLACK_MID, BLACK_STRONG,
+  WHITE_SOFT, WHITE_MID, WHITE_STRONG,
+  PRIMARY, PRIMARY_BG, PRIMARY_LIGHT,
+  HEADER_TEXT_SHADOW, HEADER_PILL_FILL, HEADER_PILL_BORDER, HEADER_PILL_SHADOW,
+  DESTRUCTIVE, DESTRUCTIVE_BG,
+  SELECTION, BORDER_SOFT, ONLINE_GREEN, PREMIUM,
+  ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY,
+  ILLUSTRATION_STRUCT, ILLUSTRATION_LINE, ILLUSTRATION_ACCENT,
 }
 
-export const PALETTES: Record<Scheme, Colors> = {
-  light: build('light'),
-  dark: build('dark'),
-}
+// DARK = LIGHT with every color inverted (scheme tag excepted).
+const DARK: Colors = (Object.fromEntries(
+  Object.entries(LIGHT).map(([k, v]) => [k, k === 'scheme' ? 'dark' : invert(v)]),
+) as unknown) as Colors
+
+export const PALETTES: Record<Scheme, Colors> = { light: LIGHT, dark: DARK }
 
 /** Resolve the effective scheme from the user's mode + device setting.
  * 'system' follows the device; 'light'/'dark' force it. */
@@ -274,11 +256,20 @@ export function resolveScheme(mode: ThemeMode, device: 'light' | 'dark' | null |
 }
 
 /** The themed palette for the current screen. Re-renders on device theme
- * change (useColorScheme) and on a settings toggle (themeStore) — so the
+ * change (useColorScheme) and on the settings toggle (themeStore) — the
  * whole app flips live, in perfect light/dark symmetry. */
 export function useColors(): Colors {
   const device = useColorScheme()
   const mode = useThemeStore((s) => s.mode)
   return PALETTES[resolveScheme(mode, device)]
+}
+
+/** One-liner per component: `const styles = useThemedStyles(makeStyles)`.
+ * `makeStyles` is a module-level `(c: Colors) => StyleSheet.create({...})`.
+ * Recomputes only when the scheme actually changes (palette refs are
+ * stable singletons). */
+export function useThemedStyles<T>(factory: (c: Colors) => T): T {
+  const c = useColors()
+  return useMemo(() => factory(c), [c])
 }
 
