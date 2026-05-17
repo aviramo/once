@@ -367,37 +367,19 @@ export function AreaForm({
         </label>
       </div>
 
-      <fieldset className="text-sm">
-        <legend className="text-muted-foreground">{dict.modeLabel}</legend>
-        <div className="mt-1 flex gap-2">
-          {(
-            [
-              ["active", dict.modeActive],
-              ["scheduled", dict.modeScheduled],
-              ["disabled", dict.modeDisabled],
-            ] as [AreaMode, string][]
-          ).map(([value, text]) => (
-            <label
-              key={value}
-              className={`flex-1 cursor-pointer rounded-md border px-3 py-2 text-center transition-colors ${
-                mode === value
-                  ? "border-primary bg-primary/10 font-medium text-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              <input
-                type="radio"
-                name="mode"
-                value={value}
-                checked={mode === value}
-                onChange={() => setMode(value)}
-                className="sr-only"
-              />
-              {text}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <label className="block text-sm">
+        <span className="text-muted-foreground">{dict.modeLabel}</span>
+        <select
+          name="mode"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as AreaMode)}
+          className={`mt-1 cursor-pointer ${field}`}
+        >
+          <option value="active">{dict.modeActive}</option>
+          <option value="scheduled">{dict.modeScheduled}</option>
+          <option value="disabled">{dict.modeDisabled}</option>
+        </select>
+      </label>
 
       <div className="flex items-center gap-2">
         <button
