@@ -15,6 +15,7 @@ import { SignOutButton } from "./SignOutButton";
 
 type Labels = {
   users: string;
+  roles: string;
   areas: string;
   map: string;
   site: string;
@@ -22,7 +23,7 @@ type Labels = {
 };
 
 type Props = {
-  active: "users" | "areas" | "map";
+  active: "users" | "roles" | "areas" | "map";
   labels: Labels;
   userLabel?: string;
 };
@@ -45,6 +46,12 @@ export function AdminNav({ active, labels, userLabel }: Props) {
           className={cn(linkBase, active === "users" ? linkOn : linkOff)}
         >
           {labels.users}
+        </Link>
+        <Link
+          href="/admin/roles"
+          className={cn(linkBase, active === "roles" ? linkOn : linkOff)}
+        >
+          {labels.roles}
         </Link>
         <Link
           href="/admin/areas"
@@ -95,6 +102,13 @@ export function AdminNav({ active, labels, userLabel }: Props) {
               className={cn(linkBase, active === "users" ? linkOn : linkOff)}
             >
               {labels.users}
+            </Link>
+            <Link
+              href="/admin/roles"
+              onClick={close}
+              className={cn(linkBase, active === "roles" ? linkOn : linkOff)}
+            >
+              {labels.roles}
             </Link>
             <Link
               href="/admin/areas"

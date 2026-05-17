@@ -3,38 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { triggerResync } from "@/lib/resync";
 import type { AreaMode } from "../_components/areaMode";
 
 // The middleware rewrites /admin/areas → /[lang]/admin/areas, so this is the
 // route segment to revalidate after every mutation.
 const AREAS_PATH = "/[lang]/admin/areas";
-
-// After any area mutation, kick the edge /ext/resync so EVERY affected user
-// is updated immediately — both directions (area turned on/off), both
-// scheduled and manual: it recomputes relations.availability (Realtime →
-// open apps update instantly) and fires area-open / area-closed pushes
-// (closed apps). Best-effort: the per-minute cron resync is the safety net,
-// so a slow/failed edge call never blocks or fails the admin action.
-async function triggerResync(): Promise<void> {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!base || !key) return;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 5000);
-    await fetch(`${base}/functions/v1/ext/resync`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: "{}",
-      signal: ctrl.signal,
-    }).finally(() => clearTimeout(t));
-  } catch {
-    /* cron resync will reconcile within ~60s */
-  }
-}
 
 // 3-state area mode (source of truth in the DB). `enabled` is still written,
 // mirrored as (mode !== 'disabled'), only for the transitional read-compat

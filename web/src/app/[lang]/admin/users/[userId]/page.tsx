@@ -24,6 +24,8 @@ import {
   KeyValue,
 } from "../../_components/ui";
 import { Disclosure, RevealList } from "../../_components/Disclosure";
+import { UserRolesEditor, type EditorRole } from "./_components/UserRolesEditor";
+import { setUserRoleAssignment } from "../../roles/actions";
 
 type Image = { normal?: string; hash?: string };
 
@@ -102,6 +104,8 @@ export default async function UserDetailPage({
     { data: authUser },
     { data: logRows },
     partners,
+    { data: allRoles },
+    { data: myRoleRows },
   ] = await Promise.all([
     admin
       .from("users")
@@ -118,7 +122,17 @@ export default async function UserDetailPage({
       .order("created_at", { ascending: false })
       .limit(50),
     fetchPartnerSummaries(admin, userId),
+    admin
+      .from("roles")
+      .select("id, name, enabled")
+      .order("created_at", { ascending: true }),
+    admin.from("user_roles").select("role_id").eq("user_id", userId),
   ]);
+
+  const roleCatalog = (allRoles ?? []) as EditorRole[];
+  const assignedRoleIds = ((myRoleRows ?? []) as { role_id: string }[]).map(
+    (r) => r.role_id,
+  );
 
   if (!target) notFound();
   const u = target as UserRecord;
@@ -204,6 +218,24 @@ export default async function UserDetailPage({
               </dl>
             </Disclosure>
           </div>
+        </Card>
+      </Section>
+
+      {/* Roles — multi-select checklist; a disabled role gates the user */}
+      <Section title={d.roles}>
+        <Card>
+          <UserRolesEditor
+            userId={u.user_id}
+            roles={roleCatalog}
+            assigned={assignedRoleIds}
+            dict={{
+              roles: d.roles,
+              rolesHint: d.rolesHint,
+              noRoles: d.noRoles,
+              disabledTag: a.roles.statusDisabled,
+            }}
+            action={setUserRoleAssignment}
+          />
         </Card>
       </Section>
 

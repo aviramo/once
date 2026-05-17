@@ -123,6 +123,31 @@ export default async function AdminDashboard({
     rows = (data ?? []) as UserRow[];
   }
 
+  // At-a-glance role badges on each card. One extra round trip for the shown
+  // page only; joined here (not in SELECT) since `users` realtime payloads
+  // can't carry it — UsersRealtime preserves it across ticks instead.
+  const userIds = rows.map((r) => r.user_id);
+  const { data: roleLinks } = userIds.length
+    ? await admin
+        .from("user_roles")
+        .select("user_id, roles(name, enabled)")
+        .in("user_id", userIds)
+    : { data: [] };
+  type RoleLink = {
+    user_id: string;
+    roles: { name: string; enabled: boolean } | { name: string; enabled: boolean }[] | null;
+  };
+  const rolesByUser = new Map<string, { name: string; enabled: boolean }[]>();
+  for (const link of (roleLinks ?? []) as RoleLink[]) {
+    if (!link.roles) continue;
+    const role = Array.isArray(link.roles) ? link.roles[0] : link.roles;
+    if (!role) continue;
+    const arr = rolesByUser.get(link.user_id) ?? [];
+    arr.push(role);
+    rolesByUser.set(link.user_id, arr);
+  }
+  rows = rows.map((r) => ({ ...r, roles: rolesByUser.get(r.user_id) ?? [] }));
+
   const meName = (meRes.data as { name?: string } | null)?.name;
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
 

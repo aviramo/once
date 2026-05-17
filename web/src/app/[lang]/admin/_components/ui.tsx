@@ -15,7 +15,7 @@ import { AdminNav } from "./AdminNav";
 
 type ShellProps = {
   dict: Dictionary["admin"];
-  active: "users" | "areas" | "map";
+  active: "users" | "roles" | "areas" | "map";
   children: ReactNode;
   /** Sub-page back link target (omitted on the top-level list pages). */
   backHref?: string;
@@ -49,6 +49,7 @@ export function AdminShell({
             active={active}
             labels={{
               users: dict.nav.users,
+              roles: dict.nav.roles,
               areas: dict.nav.areas,
               map: dict.nav.map,
               site: dict.nav.site,

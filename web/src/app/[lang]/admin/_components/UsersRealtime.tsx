@@ -57,6 +57,14 @@ export function UsersRealtime({
 
   useEffect(() => {
     const ids = new Set(initial.map((i) => i.row.user_id));
+    // The postgres_changes payload for `users` never carries the separately
+    // joined roles, so a realtime tick (e.g. last_seen) would blank the role
+    // badges. Re-attach the last-known roles on every merge; role assignment
+    // changes come through a server action + revalidate (full reload), not
+    // this channel, so the snapshot value is always current enough.
+    const rolesById = new Map(
+      initial.map((i) => [i.row.user_id, i.row.roles]),
+    );
     const supabase = createSupabaseBrowserClient();
     const channel = supabase
       .channel("admin-users-live")
@@ -65,7 +73,12 @@ export function UsersRealtime({
         { event: "UPDATE", schema: "public", table: "users" },
         (payload) => {
           const row = payload.new as UserRow;
-          if (row?.user_id && ids.has(row.user_id)) store.set(row);
+          if (row?.user_id && ids.has(row.user_id)) {
+            store.set({
+              ...row,
+              roles: store.get(row.user_id)?.roles ?? rolesById.get(row.user_id),
+            });
+          }
         },
       )
       .subscribe();

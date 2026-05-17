@@ -46,6 +46,7 @@
     "loggedInAs": "Signed in",
     "nav": {
       "users": "Users",
+      "roles": "Roles",
       "areas": "Availability areas",
       "map": "Map",
       "site": "Site"
@@ -214,8 +215,31 @@
       "none": "No areas defined. With no active area the app is not available to any user (except sign-up and profile setup).",
       "confirmDelete": "Delete this area?"
     },
+    "roles": {
+      "title": "Roles",
+      "subtitle": "A disabled role blocks every user assigned to it: they see the app-unavailable message and aren't shown to other users, exactly like being outside an active area.",
+      "add": "Add role",
+      "namePlaceholder": "Role name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "rename": "Rename",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "statusActive": "Active",
+      "statusDisabled": "Disabled",
+      "members": "users",
+      "none": "No roles defined.",
+      "confirmDelete": "Delete this role?",
+      "inUse": "Can't delete a role that still has members. Remove them first.",
+      "duplicate": "A role with this name already exists.",
+      "disabledHint": "Disabled role: assigned users are blocked just like geo-unavailability."
+    },
     "userDetail": {
       "profile": "Profile",
+      "roles": "Roles",
+      "rolesHint": "Ticking a disabled role blocks this user like geo-unavailability.",
+      "noRoles": "No roles defined in the system.",
       "summary": "Current status",
       "currentState": "Current state",
       "interactions": "People they interacted with",
