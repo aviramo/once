@@ -6,7 +6,8 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell, Section, EmptyState } from "./_components/ui";
 import { SearchControls } from "./_components/SearchControls";
-import { UserCard, type UserRow } from "./_components/UserCard";
+import type { UserRow } from "./_components/UserCard";
+import { UsersRealtime } from "./_components/UsersRealtime";
 
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
@@ -149,17 +150,14 @@ export default async function AdminDashboard({
           {rows.length === 0 ? (
             <EmptyState>{d.noResults}</EmptyState>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {rows.map((r) => (
-                <UserCard
-                  key={r.user_id}
-                  row={r}
-                  email={emailMap.get(r.user_id) ?? null}
-                  dict={d}
-                  locale={locale}
-                />
-              ))}
-            </div>
+            <UsersRealtime
+              initial={rows.map((r) => ({
+                row: r,
+                email: emailMap.get(r.user_id) ?? null,
+              }))}
+              dict={d}
+              locale={locale}
+            />
           )}
         </div>
       </Section>

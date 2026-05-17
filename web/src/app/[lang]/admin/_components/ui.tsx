@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import type { Tone } from "@/lib/humanize";
 import { cn } from "@/lib/utils";
-import { SignOutButton } from "./SignOutButton";
+import { AdminNav } from "./AdminNav";
 
 /**
  * The single admin design system. Every admin screen composes these — no page
@@ -32,38 +32,28 @@ export function AdminShell({
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-5">
+        {/* Wraps to a second line on narrow screens (no fixed height) so the
+            header never forces the document wider than the viewport. */}
+        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 sm:flex-nowrap sm:gap-6 sm:px-5 sm:py-0">
           <Link href="/admin" className="flex items-baseline gap-2">
             <span className="text-lg font-bold tracking-tight">Once</span>
             <span className="text-sm text-muted-foreground">
               {dict.dashboardTitle}
             </span>
           </Link>
-          <nav className="flex items-center gap-1 text-sm">
-            <NavLink href="/admin" on={active === "users"}>
-              {dict.nav.users}
-            </NavLink>
-            <NavLink href="/admin/areas" on={active === "areas"}>
-              {dict.nav.areas}
-            </NavLink>
-          </nav>
-          <div className="ms-auto flex items-center gap-4">
-            {userLabel ? (
-              <span className="hidden text-xs text-muted-foreground sm:inline">
-                {userLabel}
-              </span>
-            ) : null}
-            <Link
-              href="/"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {dict.nav.site}
-            </Link>
-            <SignOutButton label={dict.signOut} />
-          </div>
+          <AdminNav
+            active={active}
+            labels={{
+              users: dict.nav.users,
+              areas: dict.nav.areas,
+              site: dict.nav.site,
+              signOut: dict.signOut,
+            }}
+            userLabel={userLabel}
+          />
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-5 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-5 sm:py-8">
         {backHref ? (
           <Link
             href={backHref}
@@ -75,30 +65,6 @@ export function AdminShell({
         {children}
       </main>
     </div>
-  );
-}
-
-function NavLink({
-  href,
-  on,
-  children,
-}: {
-  href: string;
-  on: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-md px-3 py-1.5 font-medium transition-colors",
-        on
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-      )}
-    >
-      {children}
-    </Link>
   );
 }
 
