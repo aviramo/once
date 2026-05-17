@@ -19,8 +19,6 @@ type RowDict = {
   statusActive: string;
   statusWaiting: string;
   statusDisabled: string;
-  startsNow: string;
-  startsFuture: string;
   confirmDelete: string;
   // passed straight through to the edit AreaForm
   form: React.ComponentProps<typeof AreaForm>["dict"];
@@ -53,9 +51,10 @@ export function AreaRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const starts = new Date(area.starts_at);
   // Single source of truth for effective status (shared with the map).
-  const { status, future } = areaStatus(area.mode, area.starts_at, now);
+  const { status } = areaStatus(area.mode, area.starts_at, now);
+  // Thousands-separated, locale-aware (he/en both group with commas).
+  const radius = `${area.radius_m.toLocaleString(lang)} m`;
 
   const badge = {
     active: {
@@ -147,8 +146,7 @@ export function AreaRow({
       )}
     >
       {/* Whole-card edit affordance: an absolute button BEHIND the content so
-          the <p> caption stays valid markup (no block inside <button>) and we
-          avoid nesting the kebab <button> inside another button. */}
+          we avoid nesting the kebab <button> inside another button. */}
       <button
         type="button"
         aria-label={dict.edit}
@@ -156,29 +154,26 @@ export function AreaRow({
         className="absolute inset-0 z-0 cursor-pointer rounded-2xl outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-primary"
       />
 
-      <div className="pointer-events-none relative z-10 flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{area.label}</span>
+      <div className="pointer-events-none relative z-10 flex items-center gap-3">
+        {/* address · status · radius, one line — wraps only when there's no
+            room (long label truncates first to keep it single-line). */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 truncate font-medium">{area.label}</span>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${badge.pill}`}
+          >
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${badge.pill}`}
-            >
-              <span
-                className={`size-1.5 rounded-full ${badge.dot}`}
-                aria-hidden
-              />
-              {badge.text}
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {area.lat.toFixed(5)}, {area.lng.toFixed(5)} · {area.radius_m} m
-            {area.mode === "scheduled"
-              ? ` · ${future ? `${dict.startsFuture} ${starts.toLocaleString()}` : dict.startsNow}`
-              : ""}
-          </p>
+              className={`size-1.5 rounded-full ${badge.dot}`}
+              aria-hidden
+            />
+            {badge.text}
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {radius}
+          </span>
         </div>
 
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto shrink-0">
           <AreaMenu
             ariaLabel={dict.menu}
             items={items}

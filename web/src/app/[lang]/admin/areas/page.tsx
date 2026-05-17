@@ -62,8 +62,6 @@ export default async function AreasPage({
     statusActive: a.statusActive,
     statusWaiting: a.statusWaiting,
     statusDisabled: a.statusDisabled,
-    startsNow: a.startsNow,
-    startsFuture: a.startsFuture,
     confirmDelete: a.confirmDelete,
     form: formDict,
   };

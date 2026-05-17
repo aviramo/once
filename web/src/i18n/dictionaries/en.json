@@ -192,8 +192,6 @@
       "zoomOut": "Zoom out",
       "fit": "Fit to view",
       "none": "No areas defined. With no active area the app is not available to any user (except sign-up and profile setup).",
-      "startsNow": "Available now",
-      "startsFuture": "Opens",
       "confirmDelete": "Delete this area?"
     },
     "userDetail": {
