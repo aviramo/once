@@ -189,6 +189,8 @@
       "lat": "Latitude",
       "lng": "Longitude",
       "coordsHint": "Picking an address from search fills the coordinates. You can also enter them manually.",
+      "mapUnavailable": "Map preview unavailable",
+      "mapHint": "Enable the Maps Static API for the Google key in the GCP console",
       "none": "No areas defined. With no active area the app is not available to any user (except sign-up and profile setup).",
       "startsNow": "Available now",
       "startsFuture": "Opens",

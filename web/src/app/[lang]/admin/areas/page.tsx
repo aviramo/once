@@ -56,6 +56,8 @@ export default async function AreasPage({
     modeActive: a.modeActive,
     modeScheduled: a.modeScheduled,
     modeDisabled: a.modeDisabled,
+    mapUnavailable: a.mapUnavailable,
+    mapHint: a.mapHint,
   };
   const rowDict = {
     edit: a.edit,

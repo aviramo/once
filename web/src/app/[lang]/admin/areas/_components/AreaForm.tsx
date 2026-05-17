@@ -31,6 +31,8 @@ type Dict = {
   modeActive: string;
   modeScheduled: string;
   modeDisabled: string;
+  mapUnavailable: string;
+  mapHint: string;
 };
 
 type Prediction = { place_id: string; description: string };
@@ -53,6 +55,51 @@ function toLocalInput(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Map preview as its own component so the `key={lat,lng,radius}` remount gives
+// a fresh error state per location (no setState-in-effect to reset it). On any
+// staticmap failure (key lacks Maps Static API, upstream error) the <img>
+// onError flips to an explanatory placeholder instead of a silent empty box.
+function MapPreview({
+  lat,
+  lng,
+  radius,
+  lang,
+  label,
+  dict,
+}: {
+  lat: string;
+  lng: string;
+  radius: string;
+  lang: string;
+  label: string;
+  dict: Dict;
+}) {
+  const [errored, setErrored] = useState(false);
+  if (errored) {
+    return (
+      <div className="flex h-44 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center">
+        <span className="text-sm font-medium text-foreground">
+          {dict.mapUnavailable}
+        </span>
+        <span className="text-xs text-muted-foreground">{dict.mapHint}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      {/* Server-proxied dynamic endpoint, not a static asset — next/image
+          would need a custom loader for no real benefit in an admin tool. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/staticmap?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&r=${encodeURIComponent(radius || "0")}&lang=${encodeURIComponent(lang)}`}
+        alt={label || `${lat}, ${lng}`}
+        className="block h-44 w-full object-cover"
+        onError={() => setErrored(true)}
+      />
+    </div>
+  );
+}
+
 export function AreaForm({
   action,
   initial,
@@ -67,6 +114,9 @@ export function AreaForm({
   onDone?: () => void;
 }) {
   const isEdit = !!initial;
+  // `label` is the single source of truth: it is BOTH the search box and the
+  // selected place name. Typing in it drives Google autocomplete; picking a
+  // result fills it (+ lat/lng); it stays freely editable afterwards.
   const [label, setLabel] = useState(initial?.label ?? "");
   const [lat, setLat] = useState(initial ? String(initial.lat) : "");
   const [lng, setLng] = useState(initial ? String(initial.lng) : "");
@@ -78,22 +128,28 @@ export function AreaForm({
   );
   const [mode, setMode] = useState<AreaMode>(initial?.mode ?? "scheduled");
 
-  const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [searching, setSearching] = useState(false);
+  const [focused, setFocused] = useState(false);
   const tokenRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  // The last value committed by a pick (or the initial value). While `label`
+  // equals it we don't re-search — so selecting a result, or opening an
+  // existing area for edit, doesn't immediately reopen the dropdown. State
+  // (not a ref) because `canSearch` reads it during render.
+  const [committed, setCommitted] = useState(initial?.label ?? "");
   const [pending, startTransition] = useTransition();
 
-  // Debounced autocomplete via the server proxy. All state writes happen
+  // Debounced autocomplete via the server proxy. State writes happen only
   // inside the (asynchronous) debounce callback, never synchronously in the
-  // effect body — the dropdown's visibility is gated on the live query length
-  // (`canSearch` below) so there's nothing to clear synchronously. Aborts
-  // in-flight requests so a slow response never lands over a newer query.
+  // effect body — dropdown visibility is gated on `canSearch` in render so
+  // there's nothing to clear synchronously (keeps react-hooks/set-state-in-
+  // effect green). Aborts in-flight requests so a slow response never lands
+  // over a newer query.
   useEffect(() => {
-    const q = query.trim();
+    const q = label.trim();
     abortRef.current?.abort();
-    if (q.length < 2) return;
+    if (!focused || q.length < 2 || q === committed) return;
     if (!tokenRef.current) tokenRef.current = sessionToken();
     const handle = setTimeout(async () => {
       const ctrl = new AbortController();
@@ -116,12 +172,12 @@ export function AreaForm({
       }
     }, 300);
     return () => clearTimeout(handle);
-  }, [query, lang]);
+  }, [label, lang, focused, committed]);
 
-  const canSearch = query.trim().length >= 2;
+  const canSearch =
+    focused && label.trim().length >= 2 && label.trim() !== committed;
 
   async function pickPrediction(p: Prediction) {
-    setQuery("");
     setPredictions([]);
     try {
       const u = new URL("/api/places", window.location.origin);
@@ -131,11 +187,13 @@ export function AreaForm({
       const res = await fetch(u.toString());
       const j = await res.json();
       tokenRef.current = ""; // details call closes the billing session
+      const picked =
+        typeof j.label === "string" && j.label ? j.label : p.description;
+      setCommitted(picked);
+      setLabel(picked);
       if (typeof j.lat === "number" && typeof j.lng === "number") {
         setLat(String(j.lat));
         setLng(String(j.lng));
-        if (!label.trim()) setLabel(j.label || p.description);
-        else if (j.label) setLabel(j.label);
       }
     } catch {
       /* keep manual entry */
@@ -154,8 +212,8 @@ export function AreaForm({
         setRadius("1000");
         setStartsAt("");
         setMode("scheduled");
-        setQuery("");
         setPredictions([]);
+        setCommitted("");
       }
       onDone?.();
     });
@@ -164,95 +222,93 @@ export function AreaForm({
   const field =
     "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
 
+  // Convert the admin's local datetime-local value to UTC ISO *here in the
+  // browser* (where local time is reliably the admin's), not in the server
+  // action (Vercel runs in UTC — converting there shifts scheduled launches
+  // by the admin's offset). actions.ts treats this as already-ISO.
+  const startsAtIso = startsAt ? new Date(startsAt).toISOString() : "";
+
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       {isEdit && <input type="hidden" name="id" value={initial!.id} />}
       <input type="hidden" name="lat" value={lat} />
       <input type="hidden" name="lng" value={lng} />
+      <input type="hidden" name="starts_at" value={startsAtIso} />
 
-      <div className="relative">
-        <input
-          type="search"
-          placeholder={dict.search}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className={field}
-          autoComplete="off"
-        />
-        {canSearch && (searching || predictions.length > 0) && (
-          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-lg">
-            {searching && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                {dict.searching}
-              </div>
-            )}
-            {!searching &&
-              predictions.map((p) => (
-                <button
-                  key={p.place_id}
-                  type="button"
-                  onClick={() => pickPrediction(p)}
-                  className="block w-full px-3 py-2 text-start text-sm hover:bg-muted"
-                >
-                  {p.description}
-                </button>
-              ))}
-            {!searching && predictions.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                {dict.noResults}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Selected-location tag: the chosen place name, editable. Re-search
-          above to replace it (that also moves the map + coordinates). */}
+      {/* Single field: search + selected location in one. Type to search
+          Google; pick a result to fill it (+ coordinates + map); stays
+          editable. Re-typing reopens the dropdown. */}
       <label className="block text-sm">
         <span className="text-muted-foreground">{dict.label}</span>
-        <div className="mt-1 flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1.5">
-          <svg
-            viewBox="0 0 24 24"
-            className="size-4 shrink-0 text-primary"
-            fill="currentColor"
-            aria-hidden
-          >
-            <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z" />
-          </svg>
-          <input
-            name="label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            required
-            placeholder={dict.search}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-          />
+        <div className="relative mt-1">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 focus-within:border-primary">
+            <svg
+              viewBox="0 0 24 24"
+              className="size-4 shrink-0 text-primary"
+              fill="currentColor"
+              aria-hidden
+            >
+              <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z" />
+            </svg>
+            <input
+              name="label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              onFocus={() => setFocused(true)}
+              // Delay so a prediction click registers before the blur hides
+              // the dropdown (the buttons also preventDefault on mousedown).
+              onBlur={() => setTimeout(() => setFocused(false), 150)}
+              required
+              placeholder={dict.search}
+              autoComplete="off"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </div>
+          {canSearch && (searching || predictions.length > 0) && (
+            <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-lg">
+              {searching && (
+                <div className="px-3 py-2 text-sm text-muted-foreground">
+                  {dict.searching}
+                </div>
+              )}
+              {!searching &&
+                predictions.map((p) => (
+                  <button
+                    key={p.place_id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickPrediction(p)}
+                    className="block w-full px-3 py-2 text-start text-sm hover:bg-muted"
+                  >
+                    {p.description}
+                  </button>
+                ))}
+              {!searching && predictions.length === 0 && (
+                <div className="px-3 py-2 text-sm text-muted-foreground">
+                  {dict.noResults}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </label>
 
-      {/* Map preview: marker + radius circle, server-proxied (no browser
-          key). The img hides itself if the key lacks Maps Static API; the
-          coordinates caption below always shows so the area is still
-          verifiable. */}
       {lat && lng ? (
-        <div className="overflow-hidden rounded-xl border border-border">
-          {/* Server-proxied dynamic endpoint, not a static asset — next/image
-              would need a custom loader for no real benefit in an admin tool. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            key={`${lat},${lng},${radius}`}
-            src={`/api/staticmap?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&r=${encodeURIComponent(radius || "0")}&lang=${encodeURIComponent(lang)}`}
-            alt={label || `${lat}, ${lng}`}
-            className="block h-44 w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        </div>
+        <MapPreview
+          key={`${lat},${lng},${radius}`}
+          lat={lat}
+          lng={lng}
+          radius={radius}
+          lang={lang}
+          label={label}
+          dict={dict}
+        />
       ) : null}
       <p className="text-xs text-muted-foreground">
         {dict.coordsHint}
-        {lat && lng ? ` (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})` : ""}
+        {lat && lng
+          ? ` (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`
+          : ""}
       </p>
       <details className="text-sm">
         <summary className="cursor-pointer text-xs text-muted-foreground">
@@ -298,7 +354,6 @@ export function AreaForm({
         <label className="block text-sm">
           <span className="text-muted-foreground">{dict.startsAt}</span>
           <input
-            name="starts_at"
             value={startsAt}
             onChange={(e) => setStartsAt(e.target.value)}
             type="datetime-local"

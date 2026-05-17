@@ -4,21 +4,15 @@ import { getAdminUser } from "@/lib/admin-auth";
 // a polygon approximating the radius circle, so the admin sees the zone on a
 // real map instead of raw coordinates. The key stays server-side (same
 // GOOGLE_PLACES_KEY; it must additionally have the Maps Static API enabled).
-// Admin-gated. On any failure returns 1x1 transparent PNG so the <img>
-// onError fallback (coords text) kicks in cleanly.
+// Admin-gated. Any failure returns a non-2xx text response (NOT a blank 200
+// image) so the <img onError> in AreaForm fires and the form can show an
+// explanatory placeholder instead of a silent empty box.
 const KEY = process.env.GOOGLE_PLACES_KEY ?? "";
 
-// 1x1 transparent PNG.
-const BLANK = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=",
-  ),
-  (c) => c.charCodeAt(0),
-);
-const blank = () =>
-  new Response(BLANK, {
-    status: 200,
-    headers: { "Content-Type": "image/png", "Cache-Control": "no-store" },
+const fail = (status: number, reason: string) =>
+  new Response(reason, {
+    status,
+    headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
   });
 
 // Points around the centre at `radius` metres (destination-point formula).
@@ -48,16 +42,16 @@ function circle(lat: number, lng: number, radius: number, n = 48): string {
 }
 
 export async function GET(request: Request) {
-  if (!(await getAdminUser())) {
-    return new Response("forbidden", { status: 403 });
-  }
-  if (!KEY) return blank();
+  if (!(await getAdminUser())) return fail(403, "forbidden");
+  if (!KEY) return fail(503, "no_key");
 
   const u = new URL(request.url);
   const lat = Number(u.searchParams.get("lat"));
   const lng = Number(u.searchParams.get("lng"));
   const r = Math.max(1, Number(u.searchParams.get("r")) || 0);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return blank();
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return fail(400, "bad_coords");
+  }
 
   const g = new URL("https://maps.googleapis.com/maps/api/staticmap");
   g.searchParams.set("size", "640x300");
@@ -74,7 +68,7 @@ export async function GET(request: Request) {
 
   try {
     const res = await fetch(g.toString());
-    if (!res.ok) return blank();
+    if (!res.ok) return fail(502, "upstream");
     const buf = await res.arrayBuffer();
     return new Response(buf, {
       status: 200,
@@ -84,6 +78,6 @@ export async function GET(request: Request) {
       },
     });
   } catch {
-    return blank();
+    return fail(502, "error");
   }
 }
