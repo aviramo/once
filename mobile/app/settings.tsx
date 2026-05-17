@@ -1734,11 +1734,11 @@ const familyStyles = StyleSheet.create({
   },
   toggleLabel: { fontSize: TEXT.md, color: BLACK },
   toggleTrack: {
-    width: 48, height: 28, borderRadius: 999,
+    width: 48, height: 28, borderRadius: RADII.round,
     padding: XS, justifyContent: 'center',
   },
   toggleKnob: {
-    width: 24, height: 24, borderRadius: 12,
+    width: 24, height: 24, borderRadius: RADII.round,
     backgroundColor: WHITE,
     shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
@@ -1750,12 +1750,12 @@ const familyStyles = StyleSheet.create({
   sectionHint: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS, marginBottom: MD },
   optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
-  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
+  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: BLACK_SOFT },
   pillSelected: { backgroundColor: PRIMARY },
   pillLabel: { fontSize: TEXT.sm, color: BLACK },
   pillLabelSelected: { color: WHITE },
   sectionPill: {
-    paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
+    paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round,
     backgroundColor: PRIMARY_BG,
   },
   sectionPillDestructive: { backgroundColor: DESTRUCTIVE_BG },
@@ -1785,7 +1785,7 @@ const familyStyles = StyleSheet.create({
   kidChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, marginTop: XS },
   kidChip: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: 999, backgroundColor: BLACK_SOFT,
+    borderRadius: RADII.round, backgroundColor: BLACK_SOFT,
     paddingStart: MD, paddingEnd: SM,
   },
   kidChipMain: { paddingVertical: SM },
@@ -1795,7 +1795,7 @@ const familyStyles = StyleSheet.create({
   kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
-    borderRadius: 999,
+    borderRadius: RADII.round,
     borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
   kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
@@ -1813,7 +1813,7 @@ const familyStyles = StyleSheet.create({
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 36, height: 36, borderRadius: RADII.round,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
@@ -1858,7 +1858,7 @@ const familyStyles = StyleSheet.create({
   triOptionRow: { flexWrap: 'wrap', rowGap: SM },
   triOptionLabel: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
-  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
+  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: BLACK_SOFT },
   triOptionPillSelected: { backgroundColor: PRIMARY },
   triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
   triOptionPillLabelSelected: { color: WHITE },
@@ -2852,11 +2852,11 @@ const styles = themed((c) => ({
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
   selectRowValue: { fontSize: TEXT.md, color: c.WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 44, height: 44, borderRadius: RADII.round,
     backgroundColor: c.WHITE_SOFT,
   },
   selectRowAccentIcon: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 36, height: 36, borderRadius: RADII.round,
     backgroundColor: c.WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },

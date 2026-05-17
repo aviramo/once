@@ -66,6 +66,9 @@ export const RADII = {
   xs: 2,      // thin indicator bars (tab strip underline)
   sm: 5,      // small fills (checkbox, drag-handle pill)
   chip: 9,    // pill chips beside tab labels
+  round: 999, // fully-rounded: capsules/pills AND circles (avatars, knobs,
+              // toggle tracks, day bubbles) — RN clamps to half the smaller
+              // side, so one token covers both.
 } as const
 
 // ── Tap slop ───────────────────────────────────────────────────────────────
@@ -216,23 +219,101 @@ export const TAB = {
   // ── Gliding selected-tab lozenge ─────────────────────────────────────────
   // A flat translucent chip that slides behind the active tab AND spans that
   // tab's full width (minus this inset each side so adjacent chips never
-  // touch). Tabs are very unequal (compact icons vs the wide flex "Once"),
-  // so the resize is done via `transform: scaleX` (GPU, smooth) — NEVER by
-  // animating the `width` layout prop per frame (that stutters the pager's
-  // auto-settle) and NEVER by snapping it (that pops). The layout `width`
-  // equals the *settled* tab's width and only changes once, while static,
-  // at settle; `scaleX` (and `translateX`) carry every per-frame change, so
-  // at rest scaleX = 1 (crisp capsule + border) and only a brief, transient
-  // ellipse shows mid-swipe.
-  indicatorInsetX: 8,
-  // Vertical pad around the single-line capsule (top + bottom). The chip is
-  // bottom-anchored at `-indicatorPadV`. Chip height = rowHeight +
-  // 2*indicatorPadV = 44, so `indicatorRadius` = 22 makes it a true capsule.
-  // The chip is intentionally a single-line capsule around the main row
-  // only; the sub-label timer floats as a caption ABOVE it (see
-  // subLabelOuter), with a clean gap so the chip never clips the timer.
+  // touch). Tabs are very unequal (compact icons vs the wide flex "Once").
+  //
+  // POSITION/SIZE MODEL (ONE combined motion — user choice, 2026-05-17):
+  // each tab's geometry IS its measured `onLayout` width, in child order
+  // (the RN analogue of a CSS-resolved rect; never `measureInWindow`/an
+  // analytic RTL mirror). Position AND size both ride the SAME live pager
+  // value so the slide and the resize are one synced gesture-tracked motion.
+  //   • LIVE (tabProgress, from onPageScroll on the UI thread — the RN
+  //     equivalent of a CSS/native constraint, NOT a JS-thread loop): the
+  //     visual centre + visual w/h right now → drives translateX + scaleX +
+  //     scaleY together.
+  //   • BASE: layout width/height come from the decoupled `chipProgress`
+  //     (committed-pane withTiming), CONSTANT during a drag ⇒ ZERO Yoga
+  //     relayout while swiping (that per-frame relayout was the old
+  //     release-settle "drag"). The per-frame resize is GPU `scaleX/scaleY`
+  //     (= live/base), never a width/height relayout. On commit base tweens
+  //     and scale eases to ~1 (seamless); at rest scale==1 so border/radius
+  //     are crisp. scaleY is centre-based, so a counter translateY pins the
+  //     bottom (grows UPWARD only). Border/radius distort transiently
+  //     mid-swipe — the accepted cost of one synced motion.
+  //
+  // WIDTH KNOB: chipW = (selected tab's measured width) − 2*indicatorInsetX.
+  // Smaller value => the pill uses more of the tab's available room (the
+  // user wants it "יותר רחב אם יש מקום"). On a roomy flex tab ("Once",
+  // labelled side) this visibly widens the pill; a compact icon tab has
+  // little room so its pill stays naturally tight. Only ever ONE chip on
+  // screen (it slides, never coexists with a second), so a small inset can't
+  // make two pills touch — it's purely the pill↔tab-edge breathing room.
+  // Reduced 8 -> 4 at the user's request (pill was leaving too much room).
+  indicatorInsetX: 4,
+  // Vertical pad around the chip (top + bottom). Bottom-anchored at
+  // `-indicatorPadV`. SHORT (no-timer) height = rowHeight + 2*indicatorPadV =
+  // 44, so `indicatorRadius` = 22 makes it a true capsule. When the SELECTED
+  // tab carries a sub-label (the invite countdown / broadcast status word)
+  // the chip GROWS UPWARD into a 2-line rounded-rect that ENCLOSES the timer
+  // sitting just above the name (user choice 2026-05-17, replacing the old
+  // "timer floats as a caption above the chip"). It grows up only — the
+  // bottom anchor and therefore the name's Y are unchanged (iron rule: tab
+  // labels never move). TALL height = SHORT + timerGap + timerFontSize +
+  // CHIP_TOP_BAND, where CHIP_TOP_BAND is DERIVED in TabStrip from the
+  // metric tokens so the air above the timer equals the air below the name
+  // by construction (timerTopPad is just a 0-default residual nudge on it).
+  // Height
+  // interpolates per-tab via `chipProgress` exactly like width does (one
+  // decoupled collapseDuration tween on commit, or a single withTiming on
+  // hs[i] when a selected tab gains/loses its timer in place), so the border
+  // stays crisp. At TALL the corner uses `indicatorRadiusTall` (a real
+  // rounded-rect, NOT a fat half-height capsule); the radius lerps SHORT
+  // (=indicatorRadius capsule) -> TALL (=indicatorRadiusTall) with height.
   indicatorPadV: 6,
   indicatorRadius: 22,
+  // Corner radius when the chip is the TALL 2-line rounded-rect (timer above
+  // name). NOT half the tall height (that would read as a fat capsule);
+  // ~RADII.md, with `borderCurve: 'continuous'`, so the grown pill reads as a
+  // soft card. The radius interpolates indicatorRadius<->indicatorRadiusTall
+  // as the height interpolates SHORT<->TALL.
+  indicatorRadiusTall: 18,
+  // Tight vertical gap between the name (bottom line) and the timer line
+  // ABOVE it, INSIDE the grown pill. Deliberately small — the user wants the
+  // timer "צמוד לשם" (attached to the name). Single knob for that breathing
+  // room; also feeds the TALL height derivation so the pill always wraps the
+  // timer with the same gap. (subLabelOuter.bottom = rowHeight + timerGap.)
+  // May go NEGATIVE: it just shifts subLabelOuter (and the derived TALL
+  // height) down by |timerGap| px, pulling the timer down into the name
+  // row's empty top slack (the name is centred + lifted by -labelLift, so
+  // there is real whitespace above its glyph the timer can occupy without
+  // colliding). Each keeps its own text line-box so both stay legible.
+  // 0 was still too airy on device; reduced 2 -> 0 -> -8 at the user's
+  // request. Single knob — make it more negative for tighter, less for air.
+  timerGap: -8,
+  // Timer / sub-label font size (also its lineHeight, see styles.subLabel).
+  // 20 — a deliberate step BETWEEN TEXT.lg (18) and TEXT.xl (24): the user
+  // asked to enlarge the timer twice (16 -> 18 -> 20), but it must stay
+  // below the name's TEXT.xl so the timer never reads as large as the name.
+  // Feeds the TALL height derivation so the pill auto-grows to keep wrapping
+  // the bigger glyph. Shared by the invite countdown AND the broadcast
+  // status word (one sub-label tier, DRY). Single knob — nudge to resize.
+  timerFontSize: 20,
+  // RESIDUAL fine-tune (px) added on top of the DERIVED symmetric top band.
+  // The "make the air above the timer equal the air below the name" maths is
+  // no longer a hand-tuned number: TabStrip derives CHIP_TOP_BAND from the
+  // metric tokens (chipBaselineNudge, rowHeight, TEXT.xl, labelLift) so the
+  // top pad equals the bottom pad BY CONSTRUCTION and self-corrects if those
+  // tokens change. This stays only as a small ± eyeball nudge for Android
+  // glyph-metric drift; default 0. Positive => a touch more top air.
+  timerTopPad: 0,
+  // Declarative Y-centring nudge for the chip (px, pushes it DOWN). The chip
+  // is geometrically centred on the mainRow box, but the visible glyph sits
+  // low in that box (Android font metrics) and the label cluster is itself
+  // lifted by -labelLift, so a box-centred chip reads as sitting too high
+  // above the ink. This shifts the whole capsule down via a static `bottom`
+  // offset (declarative in the stylesheet, NOT computed) so its centre lands
+  // on the tab's optical content centre. This is the SINGLE knob to tune if
+  // the chip ever drifts vs. the text — change only this number.
+  chipBaselineNudge: 3,
   // Subtle press feedback: a tab's content cluster (label / icon) dips to
   // this scale while held. Tactile without being a bounce.
   pressScale: 0.94,
