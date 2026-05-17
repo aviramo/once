@@ -1,3 +1,15 @@
+import { useColorScheme } from 'react-native'
+import { useThemeStore, type ThemeMode } from './stores/themeStore'
+
+// ════════════════════════════════════════════════════════════════════════
+// LEGACY STATIC TOKENS (do not delete during the theme migration)
+// ────────────────────────────────────────────────────────────────────────
+// These flat constants are the pre-theme palette. They are kept verbatim so
+// any screen NOT yet migrated to useColors() keeps compiling and rendering
+// exactly as before. Migrated screens read the themed, symmetric values from
+// useColors() instead. Once every consumer is migrated these can be removed.
+// ════════════════════════════════════════════════════════════════════════
+
 export const BLACK = '#111111'
 export const WHITE        = '#FFFFFF'
 
@@ -117,3 +129,156 @@ export const ILLUSTRATION_BODY   = WHITE
 export const ILLUSTRATION_LINE   = '#E89AAB'
 export const ILLUSTRATION_STRUCT = WHITE
 export const ILLUSTRATION_ACCENT = PRIMARY_LIGHT
+
+// ════════════════════════════════════════════════════════════════════════
+// THEMED MONOCHROME PALETTE (the new source of truth)
+// ────────────────────────────────────────────────────────────────────────
+// One symmetric grayscale system. DARK = pure-black surface + a 5-step white
+// ink ramp. LIGHT = the exact inverse: pure-white surface + the SAME 5-step
+// ramp in black. No chromatic color anywhere (the old wine / gold / purple /
+// green / coral all collapse into the ramp) — "everything is shades of one
+// ink", per the user's spec.
+//
+// The five ink steps (and nothing more — the cap is 5):
+//   fg      1.00  primary text, key icons, solid fills, accents
+//   fgMuted 0.72  secondary text
+//   fgFaint 0.45  tertiary / disabled text, placeholders
+//   line    0.16  borders, dividers, outlines
+//   fill    0.08  subtle fills, scrims, inactive backgrounds
+// plus the single surface anchor `bg`. LIGHT/DARK use identical alphas so the
+// two themes are perfect mirror images.
+// ════════════════════════════════════════════════════════════════════════
+
+export type Scheme = 'light' | 'dark'
+export type { ThemeMode }
+
+// The 5 ink alphas — the ONLY place the ramp is defined (DRY). Tune here and
+// both themes move together, staying symmetric by construction.
+const INK = { fg: 1, fgMuted: 0.72, fgFaint: 0.45, line: 0.16, fill: 0.08 } as const
+
+export interface Colors {
+  scheme: Scheme
+  // Semantic tokens — the target API every migrated screen should use.
+  bg: string
+  fg: string
+  fgMuted: string
+  fgFaint: string
+  line: string
+  fill: string
+  // ── Legacy-name aliases ────────────────────────────────────────────────
+  // Same keys as the static consts above so a migrated screen can swap
+  // `import { X }` → `const { X } = useColors()` with no rename. Each is
+  // mapped to its dominant semantic role; the few call sites where a name
+  // was overloaded (WHITE-as-ink vs WHITE-as-surface, PRIMARY-as-header-bg
+  // vs PRIMARY-as-accent) are fixed to the right semantic token per screen
+  // as that screen is migrated.
+  BLACK: string
+  WHITE: string
+  BLACK_SOFT: string
+  BLACK_MID: string
+  BLACK_STRONG: string
+  WHITE_SOFT: string
+  WHITE_MID: string
+  WHITE_STRONG: string
+  PRIMARY: string
+  PRIMARY_BG: string
+  PRIMARY_LIGHT: string
+  HEADER_TEXT_SHADOW: string
+  HEADER_PILL_FILL: string
+  HEADER_PILL_BORDER: string
+  HEADER_PILL_SHADOW: string
+  DESTRUCTIVE: string
+  DESTRUCTIVE_BG: string
+  SELECTION: string
+  BORDER_SOFT: string
+  ONLINE_GREEN: string
+  PREMIUM: string
+  ILLUSTRATION_WASH: string
+  ILLUSTRATION_CLOUD: string
+  ILLUSTRATION_BODY: string
+  ILLUSTRATION_STRUCT: string
+  ILLUSTRATION_LINE: string
+  ILLUSTRATION_ACCENT: string
+}
+
+function build(scheme: Scheme): Colors {
+  const bg = scheme === 'dark' ? '#000000' : '#FFFFFF'
+  // ink(a): the foreground color at alpha a. White on dark, black on light —
+  // the single point of symmetry between the two themes.
+  const rgb = scheme === 'dark' ? '255,255,255' : '0,0,0'
+  const ink = (a: number) => (a >= 1 ? (scheme === 'dark' ? '#FFFFFF' : '#000000') : `rgba(${rgb},${a})`)
+
+  const fg = ink(INK.fg)
+  const fgMuted = ink(INK.fgMuted)
+  const fgFaint = ink(INK.fgFaint)
+  const line = ink(INK.line)
+  const fill = ink(INK.fill)
+
+  return {
+    scheme,
+    bg, fg, fgMuted, fgFaint, line, fill,
+
+    // Surfaces → bg (flat; separation comes from `line`, never a shadow).
+    WHITE: bg,
+    PRIMARY: bg,
+    PRIMARY_LIGHT: bg,
+    ILLUSTRATION_WASH: bg,
+
+    // Max-contrast ink + every collapsed chromatic accent → fg.
+    BLACK: fg,
+    DESTRUCTIVE: fg,
+    PREMIUM: fg,
+    ONLINE_GREEN: fg,
+    ILLUSTRATION_BODY: fg,
+    ILLUSTRATION_STRUCT: fg,
+
+    // Secondary ink.
+    BLACK_STRONG: fgMuted,
+    WHITE_STRONG: fgMuted,
+    ILLUSTRATION_ACCENT: fgMuted,
+
+    // Tertiary ink.
+    BLACK_MID: fgFaint,
+    WHITE_MID: fgFaint,
+    ILLUSTRATION_LINE: fgFaint,
+    ILLUSTRATION_CLOUD: fgFaint,
+
+    // Lines / borders.
+    BORDER_SOFT: line,
+    HEADER_PILL_BORDER: line,
+
+    // Subtle fills / scrims / inactive backgrounds.
+    BLACK_SOFT: fill,
+    WHITE_SOFT: fill,
+    PRIMARY_BG: fill,
+    DESTRUCTIVE_BG: fill,
+    SELECTION: fill,
+    HEADER_PILL_FILL: fill,
+
+    // Flat monochrome: no emboss, no drop shadow.
+    HEADER_TEXT_SHADOW: 'transparent',
+    HEADER_PILL_SHADOW: '0px 0px 0px rgba(0,0,0,0)',
+  }
+}
+
+export const PALETTES: Record<Scheme, Colors> = {
+  light: build('light'),
+  dark: build('dark'),
+}
+
+/** Resolve the effective scheme from the user's mode + device setting.
+ * 'system' follows the device; 'light'/'dark' force it. */
+export function resolveScheme(mode: ThemeMode, device: 'light' | 'dark' | null | undefined): Scheme {
+  if (mode === 'light' || mode === 'dark') return mode
+  return device === 'dark' ? 'dark' : 'light'
+}
+
+/** The themed palette for the current screen. Re-renders on device theme
+ * change (useColorScheme) and on a settings toggle (themeStore) — so the
+ * whole app flips live, in perfect light/dark symmetry. */
+export function useColors(): Colors {
+  const device = useColorScheme()
+  const mode = useThemeStore((s) => s.mode)
+  return PALETTES[resolveScheme(mode, device)]
+}
+

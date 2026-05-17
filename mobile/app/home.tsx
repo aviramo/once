@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, useColorScheme, I18nManager, type StyleProp, type ViewStyle } from 'react-native'
+import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, I18nManager, type StyleProp, type ViewStyle } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
@@ -44,6 +44,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
+import { useThemeStore } from '../src/stores/themeStore'
 import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -1405,7 +1406,6 @@ const statusButtonStyles = StyleSheet.create({
 export default function HomePage() {
   const { top: topInset, bottom: bottomInset } = useSafeAreaInsets()
   const { profile } = useUserStore()
-  const colorScheme = useColorScheme()
   // ── Horizontal pager shell ──────────────────────────────────────────────
   // 3-page layout: [settings(0), home(1), side(2)]
   // RTL right→left: Menu | Home | Side(page2/chat)
@@ -1887,7 +1887,10 @@ export default function HomePage() {
         ...(pushChanged ? { push_token: { type: 'expo', token } } : {}),
         os: Platform.OS,
         lang,
-        appearance: colorScheme ?? 'light',
+        // Mirror the user's theme preference to the server (data.appearance).
+        // Local storage is authoritative; this is the cross-device/telemetry
+        // copy. The legacy field used to carry the raw device scheme.
+        appearance: useThemeStore.getState().mode,
       })
         .catch(() => {})
         .finally(() => {
