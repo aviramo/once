@@ -1,19 +1,67 @@
 /* === Once shared stylesheet ============================================ */
 
+/* Strict monochrome that follows the browser color scheme.
+   :root = LIGHT (default / "no dark mode"): white page, black content,
+   black drawing on transparent. The dark media query flips every token to
+   the inverse: black page, white content, white drawing on transparent.
+   Every rule below reads these tokens, so the whole site (incl. legal
+   pages) inverts from this one place - single source of truth. The legacy
+   --coral* names are kept only so existing rules keep cascading; they now
+   resolve to the neutral accent, not coral. */
 :root {
   --coral: #000000;
   --coral-deep: #333333;
-  --coral-100: #F2F2F2;
-  --coral-150: #E8E8E8;
+  --coral-100: rgba(0, 0, 0, 0.05);
+  --coral-150: rgba(0, 0, 0, 0.10);
   --coral-border: rgba(0, 0, 0, 0.16);
   --coral-border-2: rgba(0, 0, 0, 0.28);
-  --bg: #FFF8F5;
-  --text: #1A1411;
-  --text-2: #5A4F47;
-  --text-3: #8B7E72;
-  --shadow-soft: 0 18px 48px -18px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(31, 26, 22, 0.03);
-  --shadow-cta: 0 12px 28px -6px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --bg: #FFFFFF;
+  --text: #000000;
+  --text-2: rgba(0, 0, 0, 0.72);
+  --text-3: rgba(0, 0, 0, 0.45);
+  --hairline: rgba(0, 0, 0, 0.08);
+  --menu-bg: #FFFFFF;
+  --shadow-soft: 0 18px 48px -18px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-cta: 0 12px 28px -6px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
   --font: 'Noto Sans Hebrew', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Illustration recolor (single tuning knob per scheme, DRY). The art is
+     a dense orange gradient with no clean edge, so we crush the field and
+     lift the drawing, then blend it onto the page so the crushed field
+     reads as transparent. LIGHT: drawing -> black, field -> white, dropped
+     via multiply on the white page. --img-filter is the bright-subject
+     images; --img-filter-crowd is 02-crowd (tonally inverted: dark
+     subjects on a bright field). */
+  --img-filter: grayscale(1) brightness(1.15) contrast(3.2) invert(1);
+  --img-filter-crowd: grayscale(1) brightness(1.1) contrast(3);
+  --img-blend: multiply;
+  /* Check glyph for the trust bullets. The bullet is var(--coral), so the
+     glyph must be the page bg colour: white on the black bullet here. */
+  --check-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'><path d='M3 7l3 3 6-6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --coral: #FFFFFF;
+    --coral-deep: #C9C9C9;
+    --coral-100: rgba(255, 255, 255, 0.06);
+    --coral-150: rgba(255, 255, 255, 0.10);
+    --coral-border: rgba(255, 255, 255, 0.16);
+    --coral-border-2: rgba(255, 255, 255, 0.28);
+    --bg: #000000;
+    --text: #FFFFFF;
+    --text-2: rgba(255, 255, 255, 0.72);
+    --text-3: rgba(255, 255, 255, 0.45);
+    --hairline: rgba(255, 255, 255, 0.08);
+    --menu-bg: #0A0A0A;
+    --shadow-soft: 0 18px 48px -18px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.5);
+    --shadow-cta: 0 12px 28px -6px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.5);
+    /* DARK: drawing -> white, field -> black, dropped via screen on the
+       black page. Inverse polarity of the light tokens above. */
+    --img-filter: grayscale(1) brightness(1.15) contrast(3.2);
+    --img-filter-crowd: grayscale(1) invert(1) brightness(1.1) contrast(3);
+    --img-blend: screen;
+    --check-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'><path d='M3 7l3 3 6-6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -28,28 +76,16 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(60vw 70vw at 90% -10%, rgba(0, 0, 0, 0.13), transparent 55%),
-    radial-gradient(50vw 60vw at -10% 30%, rgba(0, 0, 0, 0.08), transparent 60%),
-    radial-gradient(45vw 55vw at 95% 70%, rgba(0, 0, 0, 0.07), transparent 60%);
-}
 a { color: inherit; text-decoration: none; }
 button { font: inherit; cursor: pointer; }
 img { max-width: 100%; height: auto; display: block; }
-::selection { background: var(--coral); color: #fff; }
+::selection { background: var(--coral); color: var(--bg); }
 
 /* === Header (shared on every page) === */
 .header {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(255, 248, 245, 0.7);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
 }
 .header-inner {
   max-width: 1080px; margin: 0 auto; padding: 16px 28px;
@@ -62,26 +98,26 @@ img { max-width: 100%; height: auto; display: block; }
 .lang-switcher { position: relative; }
 .lang-btn {
   font-size: 13px; font-weight: 600; color: var(--text-2);
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--coral-100);
   border: 1px solid var(--coral-border); border-radius: 999px;
   padding: 8px 14px; cursor: pointer; transition: all .15s ease;
   display: inline-flex; align-items: center; gap: 6px;
   font-family: inherit;
 }
 .lang-btn:hover, .lang-btn[aria-expanded="true"] {
-  border-color: var(--coral); color: var(--coral); background: var(--coral-100);
+  border-color: var(--coral); color: var(--coral); background: var(--coral-150);
 }
 .lang-chevron { transition: transform .15s ease; flex-shrink: 0; }
 .lang-btn[aria-expanded="true"] .lang-chevron { transform: rotate(180deg); }
 .lang-menu {
   position: absolute; top: calc(100% + 8px);
   inset-inline-end: 0;
-  background: #fff;
+  background: var(--menu-bg);
   border: 1px solid var(--coral-border);
   border-radius: 14px;
   list-style: none; padding: 6px;
   min-width: 160px;
-  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(31, 26, 22, 0.06);
+  box-shadow: var(--shadow-soft);
   z-index: 100;
 }
 .lang-menu[hidden] { display: none; }
@@ -134,7 +170,7 @@ p { color: var(--text-2); }
 /* === Buttons === */
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--coral); color: #fff;
+  background: var(--coral); color: var(--bg);
   padding: 0 32px; height: 56px; border-radius: 999px;
   font-weight: 700; font-size: 16px; border: none;
   box-shadow: var(--shadow-cta);
@@ -143,7 +179,7 @@ p { color: var(--text-2); }
 .btn-primary:hover {
   background: var(--coral-deep);
   transform: translateY(-2px);
-  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-cta);
 }
 .btn-primary:active { transform: translateY(0); }
 .btn-link {
@@ -200,7 +236,7 @@ p { color: var(--text-2); }
   margin-top: 16px;
   font-size: 14px; font-weight: 500;
   color: var(--text-3);
-  border-bottom: 1px dashed rgba(139, 126, 114, 0.4);
+  border-bottom: 1px dashed var(--coral-border);
   padding-bottom: 1px;
   transition: color .15s ease, border-color .15s ease;
 }
@@ -262,16 +298,6 @@ p { color: var(--text-2); }
   position: relative;
   z-index: 1;
 }
-.section-visual::before {
-  content: "";
-  position: absolute;
-  inset: 18% 28%;
-  background: rgba(0, 0, 0, 0.28);
-  filter: blur(70px);
-  border-radius: 999px;
-  z-index: 0;
-  pointer-events: none;
-}
 
 /* Solution text body + points (also used inside .section-split) */
 .solution-text .solution-body {
@@ -309,16 +335,6 @@ p { color: var(--text-2); }
   position: relative;
   z-index: 1;
 }
-.hero-visual::before {
-  content: "";
-  position: absolute;
-  inset: 14% 28%;
-  background: rgba(0, 0, 0, 0.34);
-  filter: blur(80px);
-  border-radius: 999px;
-  z-index: 0;
-  pointer-events: none;
-}
 
 /* === Small section visuals (how / cta lead-in) === */
 .lead-visual {
@@ -336,43 +352,25 @@ p { color: var(--text-2); }
   position: relative;
   z-index: 1;
 }
-.lead-visual::before {
-  content: "";
-  position: absolute;
-  inset: 16% 28%;
-  background: rgba(0, 0, 0, 0.3);
-  filter: blur(60px);
-  border-radius: 999px;
-  z-index: 0;
-  pointer-events: none;
-}
 
-/* === Organic blob image mask ============================================
-   Replaces the old circular vignette. Each illustration gets its own
-   feathered, abstract SVG blob (smooth Bezier, no straight lines). The
-   shape is the only per-image variable (--blob, set by a .blob-N
-   modifier); the mask treatment is single-sourced here. No
-   mix-blend-mode: the vivid images sit on the page and the soft blob
-   edge dissolves them into it, so they stand out. */
+/* === Illustration recolor: drawing-only on the page =====================
+   No blur halo (the old ::before glow is gone) and no organic blob mask
+   (the old mask-image is gone) so every image stays a clean rectangle.
+   The orange field is crushed and the drawing recolored via --img-filter;
+   the scheme-matched blend (--img-blend) makes the crushed field read as
+   transparent against the page. Single source of truth: the tokens in
+   :root and the dark media query. */
 .hero-visual img,
 .section-visual img,
 .lead-visual img {
-  -webkit-mask-image: var(--blob);
-          mask-image: var(--blob);
-  -webkit-mask-repeat: no-repeat;
-          mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-          mask-position: center;
-  -webkit-mask-size: 100% 100%;
-          mask-size: 100% 100%;
-          mask-mode: alpha;
+  filter: var(--img-filter);
+  mix-blend-mode: var(--img-blend);
 }
-.blob-1 { --blob: url("mask/blob-1.svg?v=28"); }
-.blob-2 { --blob: url("mask/blob-2.svg?v=28"); }
-.blob-3 { --blob: url("mask/blob-3.svg?v=28"); }
-.blob-4 { --blob: url("mask/blob-4.svg?v=28"); }
-.blob-5 { --blob: url("mask/blob-5.svg?v=28"); }
-.blob-6 { --blob: url("mask/blob-6.svg?v=28"); }
+/* 02-crowd: dark subjects on a bright field -> its own polarity token so
+   the people become the drawing and the field crushes away like the rest. */
+.problem .section-visual img {
+  filter: var(--img-filter-crowd);
+}
 
 /* === When .why is split, stack items vertically === */
 .why .section-split .why-grid {
@@ -390,25 +388,25 @@ p { color: var(--text-2); }
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
 }
 .how-card {
-  background: rgba(251, 234, 238, 0.55);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: var(--coral-100);
+  border: 1px solid var(--coral-border);
   border-radius: 28px;
   padding: 28px 28px;
   transition: transform .25s cubic-bezier(.2,.8,.2,1), background .25s ease, border-color .25s ease;
 }
 .how-card:hover {
   transform: translateY(-2px);
-  background: var(--coral-100);
-  border-color: var(--coral-border);
+  background: var(--coral-150);
+  border-color: var(--coral-border-2);
 }
 .how-num {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px;
   border-radius: 999px;
-  background: var(--coral); color: #fff;
+  background: var(--coral); color: var(--bg);
   font-size: 12px; font-weight: 800;
   margin-bottom: 16px;
-  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-cta);
 }
 .how-card h3 { font-size: 19px; margin-bottom: 6px; }
 .how-card p { font-size: 14px; line-height: 1.55; }
@@ -449,17 +447,20 @@ p { color: var(--text-2); }
 .trust-list li {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 10px 18px;
-  background: rgba(251, 234, 238, 0.5);
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--coral-100);
+  border: 1px solid var(--coral-border);
   border-radius: 999px;
   font-size: 14px; font-weight: 600; color: var(--text);
 }
+/* Single bullet: a coloured circle with the scheme-aware --check-img glyph
+   composited on top. The glyph token flips with the color scheme so it is
+   always the page bg colour against the var(--coral) circle. */
 .trust-list li::before {
   content: '';
   width: 16px; height: 16px;
   border-radius: 50%;
   background-color: var(--coral);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'><path d='M3 7l3 3 6-6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-image: var(--check-img);
   background-repeat: no-repeat;
   background-position: center;
   background-size: 11px 11px;
@@ -516,11 +517,11 @@ p { color: var(--text-2); }
   flex-wrap: wrap; margin-bottom: 18px;
 }
 .footer-links a {
-  color: rgba(0, 0, 0, 0.85);
+  color: var(--text-2);
   font-weight: 500;
   font-size: 13px;
 }
-.footer-links a:hover { color: var(--coral-deep); text-decoration: underline; }
+.footer-links a:hover { color: var(--coral); text-decoration: underline; }
 .footer-links .sep { color: var(--text-3); opacity: 0.4; }
 
 /* === Legal pages (privacy / terms / child-safety) === */
