@@ -39,25 +39,34 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
   await Tools.notify(entry, token, payload);
 }
 
-async function handleCron(log: Log) {
-  const result = await Tools.rpc(log, "app_expire_sweep", {});
-  // Geo-availability launch sweep: flips users whose area just opened from
-  // not_yet → available and fires the 'area-open' ("game started") push to
-  // anyone who wasn't in the app at launch. Same notify/firePush pipeline.
-  const launch = await Tools.rpc(log, "app_area_launch_sweep", {});
-
-  const notifyList: Array<{ user_id: string; code: string; actor_id?: string }> = [
-    ...(result?.notify ?? []),
-    ...(launch?.notify ?? []),
-  ];
-
-  for (const n of notifyList) {
+function dispatch(log: Log, notify: Array<{ user_id: string; code: string; actor_id?: string }>) {
+  for (const n of notify) {
     if (!n.user_id) continue;
     EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, n.actor_id));
   }
+}
+
+// Geo-availability resync: recomputes every user's availability vs. the
+// admin-defined areas and, on any change, flips relations.availability
+// (Realtime → open apps update instantly) and fires area-open / area-closed
+// pushes (closed apps). Idempotent — only changed users are touched.
+async function handleResync(log: Log) {
+  const res = await Tools.rpc(log, "app_area_resync", {});
+  dispatch(log, res?.notify ?? []);
+  return log.success({ processed: res?.processed ?? 0 });
+}
+
+async function handleCron(log: Log) {
+  const expire = await Tools.rpc(log, "app_expire_sweep", {});
+  // Same resync the admin triggers on demand — here it's the per-minute
+  // scheduled-launch + self-heal safety net (covers scheduled areas going
+  // live, and anything an on-demand resync missed).
+  const resync = await Tools.rpc(log, "app_area_resync", {});
+
+  dispatch(log, [...(expire?.notify ?? []), ...(resync?.notify ?? [])]);
 
   return log.success({
-    processed: (result?.processed ?? 0) + (launch?.processed ?? 0),
+    processed: (expire?.processed ?? 0) + (resync?.processed ?? 0),
   });
 }
 
@@ -76,6 +85,7 @@ Deno.serve(async (req) => {
     }
 
     if (route === "cron") return await handleCron(log);
+    if (route === "resync") return await handleResync(log);
 
     return log.error("route", `unknown route: ${route}`, 404);
   } catch (err) {

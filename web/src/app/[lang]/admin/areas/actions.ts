@@ -8,6 +8,33 @@ import { createSupabaseAdmin } from "@/lib/supabase/admin";
 // route segment to revalidate after every mutation.
 const AREAS_PATH = "/[lang]/admin/areas";
 
+// After any area mutation, kick the edge /ext/resync so EVERY affected user
+// is updated immediately — both directions (area turned on/off), both
+// scheduled and manual: it recomputes relations.availability (Realtime →
+// open apps update instantly) and fires area-open / area-closed pushes
+// (closed apps). Best-effort: the per-minute cron resync is the safety net,
+// so a slow/failed edge call never blocks or fails the admin action.
+async function triggerResync(): Promise<void> {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !key) return;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    await fetch(`${base}/functions/v1/ext/resync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+  } catch {
+    /* cron resync will reconcile within ~60s */
+  }
+}
+
 // 3-state area mode (source of truth in the DB). `enabled` is still written,
 // mirrored as (mode !== 'disabled'), only for the transitional read-compat
 // window — see BACKWARD_COMPAT.md.
@@ -70,6 +97,7 @@ export async function createArea(fd: FormData) {
   });
   if (error) throw new Error(error.message);
   revalidatePath(AREAS_PATH, "page");
+  await triggerResync();
 }
 
 export async function updateArea(fd: FormData) {
@@ -93,6 +121,7 @@ export async function updateArea(fd: FormData) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(AREAS_PATH, "page");
+  await triggerResync();
 }
 
 export async function deleteArea(fd: FormData) {
@@ -103,6 +132,7 @@ export async function deleteArea(fd: FormData) {
   const { error } = await admin.from("areas").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(AREAS_PATH, "page");
+  await triggerResync();
 }
 
 // Quick mode switch from a row (the 3 buttons הפעלה / תזמון / מושבת).
@@ -118,4 +148,5 @@ export async function setAreaMode(fd: FormData) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(AREAS_PATH, "page");
+  await triggerResync();
 }

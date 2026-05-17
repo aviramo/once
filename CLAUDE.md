@@ -453,7 +453,8 @@ Tap-routing: lifecycle pushes open the app to the **pageX** that owns the messag
 | `approve-fail` | ✅ | my own approve attempt failed | `page1 = {state: locked, message: approve}` | `PUSH_TITLE.approve-fail` (= `home.ended.fail.approve`) | page1 |
 | `kick-invitee` | ❌ | mass: target got invited by someone else | `page1 = {state: locked, message: invite}` | — | — |
 | `kick-match` | ❌ | mass: target matched with someone else | `page1 = {state: locked, message: matched}` | — | — |
-| `area-open` | ✅ | my area's launch time arrived (geo-gate lifted) | `relations.availability.state` flips `not_yet → available` | `PUSH_BODY.area-open` | page1 (home) |
+| `area-open` | ✅ | an area covering me became active (scheduled time arrived, or admin enabled it) | `relations.availability.state` → `available` | `PUSH_BODY.area-open` | page1 (home) |
+| `area-closed` | ✅ | the area covering me was disabled/removed (admin) | `relations.availability.state` `available → unavailable` | `PUSH_BODY.area-closed` | page1 (home) |
 
 Push codes are lowercase kebab-case and are sent as `data.type` inside the push payload. The `collapseId` field uses the relevant other-user id where applicable, so an older push is superseded by a newer one for the same pair.
 
@@ -599,7 +600,7 @@ Indexes: GIST on `center` (`areas_center_gix`); partial index on `mode` (`areas_
 - Inside a `scheduled` area whose earliest matching `starts_at` is in the future → `not_yet` (+ that `starts_at`).
 - **Everything else** — zero active/scheduled areas, or a located user outside all of them → `unavailable`.
 
-**Scheduled launch push.** `app_area_launch_sweep()` runs every minute (added to the existing `/ext/cron` job alongside `app_expire_sweep`). For each user still marked `not_yet` whose `area_state` has since become `available` (scheduled time passed, or admin switched the area to `active`), it flips `relations.availability` to `available` and queues an `area-open` push ("the game has started"). Users who opened the app at launch were already flipped by `app_availability` (no longer `not_yet`) so they get no duplicate — the push only reaches people who weren't in the app.
+**Availability resync (immediate on admin change + cron safety net).** `app_area_resync()` recomputes `area_state(location)` for every user and, on any change to the stored `relations.availability.state`, persists it (Realtime delivers it to open apps **instantly**) and queues a push: any→`available` ⇒ `area-open` ("the game has started"); `available`→`unavailable` ⇒ `area-closed`. (→`not_yet` and the first-ever computation from null are silent.) It is **idempotent** — only changed users are touched, so whoever calls it consumes each transition exactly once. Triggers: (1) every web-admin area mutation (`createArea`/`updateArea`/`deleteArea`/`setAreaMode`) fire-and-forget POSTs `/functions/v1/ext/resync`, so an enable/disable — manual or scheduled-mode edit — updates **all affected users immediately, both directions**; (2) the per-minute `/ext/cron` also calls it (alongside `app_expire_sweep`) as the scheduled-launch trigger + self-heal net. The push reaches users who weren't in the app; those with the app open already got the Realtime flip.
 
 Enforcement:
 - **Edge handler:** `start`/`location`/`focus` call `app_availability` synchronously after persist (so the HTTP response + the Realtime `relations` change carry the gate state immediately), and skip the auto-find when not `available`. The other auto-find sites (`account`, `age`/`range`/`preferred_gender`, `profile`, `resume`) also skip when the last-computed availability is not `available`.
