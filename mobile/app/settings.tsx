@@ -23,7 +23,7 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, themed, useThemeRerender } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, themed, useThemeRerender, useColors } from '../src/colors'
 import { useThemeStore, type ThemeMode } from '../src/stores/themeStore'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AppearanceIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
@@ -340,6 +340,7 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
 // Animates background color, text color, and a small scale bump on press.
 
 function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+  const c = useColors()
   const { profile, update } = useUserStore()
   const [agePopupVisible, setAgePopupVisible] = useState(false)
   const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
@@ -384,7 +385,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.range')}
           displayValue={formatRadius(radius)}
           onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon color={WHITE} />}
+          icon={<RadiusIcon color={c.fg} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -395,7 +396,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           onPress={() => locationLocked
             ? setLocationLockedInfoVisible(true)
             : setLocationPopupVisible(true)}
-          icon={<MapPinIcon color={WHITE} />}
+          icon={<MapPinIcon color={c.fg} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -403,7 +404,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.ageRange')}
           displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
           onPress={() => setAgePopupVisible(true)}
-          icon={<SlidersIcon color={WHITE} />}
+          icon={<SlidersIcon color={c.fg} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -411,7 +412,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           label={t('settings.preferredGender')}
           displayValue={genderDisplayValue}
           onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon color={WHITE} />}
+          icon={<GenderIcon color={c.fg} />}
         />
       </View>
       <RadiusPopup
@@ -2341,6 +2342,7 @@ export function PreviewFieldPage({
 // ── App Inline Content ─────────────────────────────────────────────────────
 
 function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+  const c = useColors()
   const router = useRouter()
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
@@ -2405,7 +2407,7 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={WHITE} />}
+          icon={<UserIcon color={c.fg} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -2413,7 +2415,7 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
           label={t('settings.theme')}
           displayValue={themeModeLabel}
           onPress={() => setThemePopupVisible(true)}
-          icon={<AppearanceIcon color={WHITE} />}
+          icon={<AppearanceIcon color={c.fg} />}
         />
         {profile.data?.role === 'ADMIN' && (
           <>
@@ -2792,7 +2794,9 @@ const styles = themed((c) => ({
   // start side (right in RTL, left in LTR) — same pattern documented above
   // GameModeCard. textAlign/writingDirection alone proved inconsistent on iOS.
   profileCardCaption: { paddingHorizontal: MD, paddingVertical: MD, flexDirection: 'row' },
-  profileCardTitle: { color: c.fg, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
+  // On-image caption: always light, regardless of theme — it sits over the
+  // profile photo (a dark-ish surface), so inverting it would be unreadable.
+  profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
   accentCard: { backgroundColor: c.bg },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
