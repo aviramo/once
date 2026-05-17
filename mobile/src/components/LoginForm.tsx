@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import { useSharedValue, useAnimatedStyle, withTiming, withRepeat, Easing } from 'react-native-reanimated'
 import Animated from 'react-native-reanimated'
@@ -23,10 +23,10 @@ function GoogleColoredIcon() {
   )
 }
 
-function AppleIcon() {
+function AppleIcon({ color = BLACK }: { color?: string } = {}) {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24">
-      <Path fill={WHITE} d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.44c1.32.07 2.24.74 3.01.8.94-.19 1.84-.89 2.9-.95 1.24-.07 2.41.4 3.26 1.3-2.93 1.75-2.21 5.59.54 6.68-.56 1.49-1.3 2.97-1.71 4.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+      <Path fill={color} d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.44c1.32.07 2.24.74 3.01.8.94-.19 1.84-.89 2.9-.95 1.24-.07 2.41.4 3.26 1.3-2.93 1.75-2.21 5.59.54 6.68-.56 1.49-1.3 2.97-1.71 4.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
     </Svg>
   )
 }
@@ -58,30 +58,42 @@ function Spinner({ dark = false }: { dark?: boolean }) {
   )
 }
 
-function GoogleButton({ onPress, loading, disabled }: { onPress: () => void; loading: boolean; disabled: boolean }) {
+// One shared SSO button for every identity provider (Google, Apple, …). Both
+// providers render through this so they are byte-identical in layout: white
+// surface, label optically centred in the full width, the provider glyph
+// pinned to the start edge. Callers pass only the glyph + label + handlers —
+// no per-provider styling, so the two buttons can never drift (and an Apple
+// button can never end up dark-on-dark again).
+function ProviderButton({ icon, label, onPress, loading, disabled }: {
+  icon: ReactNode
+  label: string
+  onPress: () => void
+  loading: boolean
+  disabled: boolean
+}) {
   return (
     <Pressable
-      style={gBtnStyles.btn}
+      style={ssoBtnStyles.btn}
       onPress={onPress}
       disabled={disabled}
-      accessibilityLabel={t('auth.continueGoogle')}
+      accessibilityLabel={label}
       accessibilityRole="button"
     >
-      <View style={gBtnStyles.iconSlot} pointerEvents="none">
-        {loading ? <Spinner dark /> : <GoogleColoredIcon />}
+      <View style={ssoBtnStyles.iconSlot} pointerEvents="none">
+        {loading ? <Spinner dark /> : icon}
       </View>
       <Text
-        style={gBtnStyles.label}
+        style={ssoBtnStyles.label}
         numberOfLines={2}
         maxFontSizeMultiplier={FONT_SCALE.ui}
       >
-        {t('auth.continueGoogle')}
+        {label}
       </Text>
     </Pressable>
   )
 }
 
-const gBtnStyles = StyleSheet.create({
+const ssoBtnStyles = StyleSheet.create({
   btn: {
     minHeight: BUTTON_MIN_HEIGHT,
     paddingVertical: SM,
@@ -180,20 +192,20 @@ export function LoginForm({
   return (
     <View style={styles.body}>
       <View style={{ gap: SM }}>
-        <GoogleButton
+        <ProviderButton
+          icon={<GoogleColoredIcon />}
+          label={t('auth.signInGoogle')}
           onPress={handleGoogle}
           loading={loading === 'google'}
           disabled={loading !== null && loading !== 'google'}
         />
         {showApple && (
-          <Button
+          <ProviderButton
+            icon={<AppleIcon color={BLACK} />}
             label={t('auth.signInApple')}
             onPress={handleApple}
-            disabled={loading !== null && loading !== 'apple'}
             loading={loading === 'apple'}
-            silentDisabled
-            variant="dark"
-            iconStart={<AppleIcon />}
+            disabled={loading !== null && loading !== 'apple'}
           />
         )}
       </View>

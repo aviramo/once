@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, StyleSheet, Pressable, I18nManager } from 'react-native'
 import Animated, {
   useAnimatedStyle, useSharedValue,
@@ -18,24 +18,45 @@ import { SM, LG, RADII, TEXT, WEIGHT, TAB } from '../tokens'
 // Global tab strip used at the top of the home shell. Three tabs (Menu |
 // Home | Side).
 //
-// SELECTED INDICATOR — two layers, both driven by the one PagerView swipe
-// `progress` shared value so they move 1:1 with the finger:
+// SELECTED INDICATOR — two layers, both driven by the ONE live pager value:
 //      1. ONE flat translucent-white chip (no gradient), a real moving
 //      element (not per-tab opacity) that **spans the selected tab's full
-//      width and resizes per tab** — the state the user preferred, restored.
-//      Absolutely positioned, `left:0`. chipStyle animates BOTH `width`
-//      (interpolated tab width − inset) and `transform: translateX` (the
-//      slide), driven by `pagerProgress`. The ONLY thing changed vs. the
-//      original is RTL correctness: position is derived from tab WIDTHS in
-//      logical/child order (never an `x`/`measureInWindow`); this app
-//      RTL-swaps `left` so `left:0` lands at the row's start and
-//      `translateX = isRTL ? −logicalLeft : +logicalLeft` (logicalLeft =
-//      interpolated tab-centre − chipW/2) is correct both ways — the proven
-//      `marginStart = logicalLeft` equivalence; `transform` is immune to the
-//      RTL swap so the sign is the only directional term. (Per-frame `width`
-//      is a layout prop; this is the user's chosen trade-off for a
-//      full-width resizing chip — see iron rules.)
-//   2. On top of the chip, the typographic cross-fade below.
+//      width and resizes per tab**. Absolutely positioned, `left:0`. ONE
+//      live, linear, LAYOUT-driven motion (user choices 2026-05-17 —
+//      "translate AND grow/shrink TOGETHER", "perfectly linear in the pager
+//      position", "the radius must always stay the same"): position AND size
+//      both interpolate from the SAME live `progress` (= tabProgress, from
+//      PagerView onPageScroll on the UI thread — the RN analogue of a
+//      CSS/native constraint, not a JS-thread loop), so the slide and the
+//      resize are one synced motion exactly linear in the swipe. Size is the
+//      real layout `width`/`height` — NOT `scaleX`/`scaleY`: a non-uniformly
+//      scaled rounded rect cannot keep a constant-looking corner, so there
+//      is no scale at all and `borderRadius` is a single CONSTANT
+//      (TAB.indicatorRadius) that never lerps or distorts. RTL is unchanged:
+//      position is derived from tab WIDTHS in logical/child order (never an
+//      `x`/`measureInWindow`); this app RTL-swaps `left` so `left:0` lands
+//      at the row's start and `translateX = isRTL ? −logicalLeft :
+//      +logicalLeft` (the proven `marginStart = logicalLeft` equivalence);
+//      `transform` is immune to the RTL swap so the sign is the only
+//      directional term — and there is NO `Math.max(0,…)` clamp on it (the
+//      clamp once froze the centre mid-screen toward a narrow tab). The chip
+//      is box-centred on the mainRow then nudged down by
+//      TAB.chipBaselineNudge (a static, declarative Y offset) so it centres
+//      on the tab's optical ink. HEIGHT is per-tab: a tab with a sub-label
+//      (invite countdown / broadcast status word) targets the TALL 2-line
+//      shape so the chip ENCLOSES the timer sitting just above the name;
+//      every other tab targets the SHORT capsule. Per-tab height lives in
+//      the hs[i] shared values (CHIP_SHORT/CHIP_TALL — instant first,
+//      withTiming(collapseDuration) when a selected tab gains/loses its
+//      timer in place: the "invite arrives while already on the side tab"
+//      case); the chip's live height interpolates those by the live pager,
+//      same as width. The chip box is bottom-anchored (static `bottom`), so
+//      a taller height grows it UPWARD only and the name's Y never moves
+//      (iron rule). (2026-05-17, replacing the old "timer floats as a
+//      caption ABOVE the chip".)
+//      2. On top of the chip, the typographic cross-fade below — this one
+//      IS still driven 1:1 by the continuous swipe `progress` (opacity-only,
+//      no layout, so it stays smooth tracking the finger).
 //
 // Each label reads its own selectedness from `progress`
 // (`t = max(0, 1 - |progress - index|)`) and renders two stacked layers
@@ -49,17 +70,21 @@ import { SM, LG, RADII, TEXT, WEIGHT, TAB } from '../tokens'
 // cross-fade is the ONLY selection effect on the label — there is no scale or
 // any other transform tied to selection, so the label's position is constant
 // and it never moves vertically as the chip arrives/leaves. (The only offset
-// is the constant `-TAB.labelLift` glyph-centring nudge, folded into
-// `pressLabelStyle`'s transform array — see that worklet's comment.)
+// is the constant `-TAB.labelLift` glyph-centring nudge, applied as a STATIC
+// `styles.labelNudge` transform on a wrapper separate from the animated press
+// scale — see that style's comment.)
 //
 // Tab labels never move. The mainRow has a fixed TAB.rowHeight and that's
 // the only thing in the natural layout flow — the whole strip's bounding
 // box stays constant whether a sub-label (live timer) is showing or not.
-// The sub-label is rendered ABSOLUTELY above the mainRow, overflowing into
-// the container's PRIMARY-colored top padding. Entering: FadeInDown drops
-// the glyph from above into place while fading in. Exiting: FadeOutUp lifts
-// it back up while fading out. So the labels stay locked at the same Y,
-// and only the timer animates.
+// The sub-label is rendered ABSOLUTELY just above the mainRow, INSIDE the
+// grown pill (bottom = rowHeight + timerGap; on an unselected timer tab
+// there is no pill yet so it overflows into the container's PRIMARY-colored
+// top padding as plain text — when that tab becomes selected the chip grows
+// up to embrace it). Entering: FadeInDown drops the timer from above into
+// its slot while fading in (reads as the pill opening up to reveal it).
+// Exiting: FadeOutUp lifts it back out while the pill collapses. So the
+// name stays locked at the same Y; only the timer and the pill's TOP move.
 //
 // Counts (unread messages / viewer counts) are chained into the label itself
 // (`${label} ${n}`) by the caller — there is no separate chip badge.
@@ -176,6 +201,31 @@ function useGentlePulse(
   return v
 }
 
+// Chip heights, derived ONCE from tokens (no magic literals at call sites).
+// SHORT = the single-line capsule (no timer): rowHeight + pad top & bottom,
+// so SHORT/2 == TAB.indicatorRadius reads as a true capsule.
+//
+// TALL = the 2-line rounded-rect wrapping the timer ABOVE the name. The air
+// above the timer is DERIVED to EQUAL the air below the name (the user wants
+// them identical), not hand-tuned:
+//   • Below the name the chip extends (indicatorPadV + chipBaselineNudge)
+//     past the name's line-box bottom, AND the name glyph is centred within
+//     rowHeight then lifted by labelLift, so it has extra slack
+//     NAME_BOTTOM_SLACK = (rowHeight − TEXT.xl)/2 + labelLift below its ink
+//     that the tight timer line-box (lineHeight == fontSize) does NOT have.
+//   • The chip already sits chipBaselineNudge LOWER than box-centred, which
+//     eats chipBaselineNudge off the top — so the top band must add it back
+//     once to neutralise that and once more to mirror the bottom's
+//     chipBaselineNudge ⇒ 2*chipBaselineNudge — plus NAME_BOTTOM_SLACK to
+//     match the name's centring slack.
+// CHIP_TOP_BAND is therefore self-correcting if any of those metric tokens
+// change; TAB.timerTopPad is only a small residual eyeball nudge (default
+// 0). The chip is bottom-anchored, so growing SHORT->TALL extends it UPWARD
+// only and the name's Y never changes (iron rule: tab labels never move).
+const CHIP_SHORT = TAB.rowHeight + TAB.indicatorPadV * 2
+const NAME_BOTTOM_SLACK = (TAB.rowHeight - TEXT.xl) / 2 + TAB.labelLift
+const CHIP_TOP_BAND = 2 * TAB.chipBaselineNudge + NAME_BOTTOM_SLACK + TAB.timerTopPad
+const CHIP_TALL = CHIP_SHORT + TAB.timerGap + TAB.timerFontSize + CHIP_TOP_BAND
 
 export function TabStrip({
   tabs,
@@ -183,29 +233,49 @@ export function TabStrip({
   onSelect,
 }: {
   tabs: TabSpec[]
+  /** Live pager position (0..N-1, from PagerView onPageScroll on the UI
+   * thread — the RN analogue of a CSS/native constraint). Drives BOTH the
+   * typographic active/muted cross-fade AND the selected chip (position +
+   * size), so the chip moves and resizes 1:1 and linearly with the pager.
+   * Already includes the profile-sheet blend (it IS `tabProgress`). */
   progress: SharedValue<number>
   onSelect: (idx: number) => void
 }) {
-  // ONE chip that physically slides AND spans the selected tab's full width
-  // (resizes per tab). This is the state the user liked best — restored. The
-  // chip is absolutely positioned, anchored physical `left:0`. Per frame it
-  // animates BOTH `width` (interpolated tab width − inset → full-tab-width,
-  // resizing) and `transform: translateX` (the slide). RTL is the *only*
-  // thing fixed vs. the original: instead of the unreliable measureInWindow
-  // physical mapping, position comes from tab WIDTHS in logical/child order
-  // and the proven sign flip — this app RTL-swaps `left`, so `left:0` lands
-  // at the row's start and `translateX = isRTL ? −logicalLeft : +logicalLeft`
-  // (equivalent to the proven-correct `marginStart = logicalLeft`) is right
-  // in both directions; `transform` is immune to the swap so the sign is the
-  // only directional term. (Per-frame `width` is a layout prop; the user
-  // explicitly preferred this state — if its release-settle ever feels rough
-  // that is the known trade-off of full-width-resize, not a regression.)
+  // ONE chip that slides AND resizes 1:1 with the pager as a single linear
+  // motion, with a CONSTANT corner radius (user choices, 2026-05-17). It is
+  // driven entirely by the live `progress` (= tabProgress); there is no
+  // separate decoupled size driver and no `scaleX`/`scaleY` — size is the
+  // real layout width/height so the fixed `borderRadius` never distorts.
+  // Each tab's geometry is its measured `onLayout` width in child order (the
+  // layout engine's box, never measureInWindow / an analytic RTL mirror).
+  // RTL: position comes from tab WIDTHS in logical/child order; this app
+  // RTL-swaps `left`, so `left:0` lands at the row's start and
+  // `translateX = isRTL ? −logicalLeft : +logicalLeft` (the proven
+  // `marginStart = logicalLeft` equivalence) is right both ways; `transform`
+  // is immune to the swap so the sign is the only directional term. The chip
+  // is a single absolutely-positioned leaf in an absolute-fill overlay, so
+  // per-frame width/height only re-lays out that one node (see
+  // styles.chipOverlay) — the cheap path the overlay exists to provide.
   const isRTL = I18nManager.isRTL
+  const n = tabs.length
   const w0 = useSharedValue(0)
   const w1 = useSharedValue(0)
   const w2 = useSharedValue(0)
   const ws = [w0, w1, w2]
   const measuredOnce = useRef([false, false, false])
+  // DETERMINISTIC equal-width distribution. Flex auto-distribution
+  // (flex:1+flexBasis:0+minWidth:0) repeatedly did NOT yield equal content
+  // tabs in practice (the morph "Once" tab vs the labelled page2 tab), so
+  // the two flexible tabs are given an EXPLICIT, identical width computed
+  // here in JS: each = (row width − Σ compact-tab widths) / (#flexible
+  // tabs). `flexW` depends ONLY on the row width and the COMPACT tabs'
+  // content widths (never on the flexible tabs' own measured width), so
+  // there is no measure→resize→measure feedback loop. Compact tabs stay
+  // content-sized. `measW`/`rowW` are React state (settle in ≤2 renders at
+  // mount / on tab-config change, then stable).
+  const [rowW, setRowW] = useState(0)
+  const [measW, setMeasW] = useState<number[]>([0, 0, 0])
+  const measWRef = useRef([0, 0, 0])
   const onTabWidth = (i: number, w: number) => {
     if (i > 2 || w <= 0) return
     if (!measuredOnce.current[i]) {
@@ -216,34 +286,122 @@ export function TabStrip({
       // chip reflows in lockstep with the tab.
       ws[i].value = withTiming(w, { duration: TAB.collapseDuration })
     }
+    if (Math.abs(measWRef.current[i] - w) > 0.5) {
+      measWRef.current = measWRef.current.map((p, j) => (j === i ? w : p))
+      setMeasW(measWRef.current)
+    }
   }
+  const compactFlags = tabs.map(s => s.label == null && s.subLabel == null)
+  const nFlex = compactFlags.reduce((c, f) => c + (f ? 0 : 1), 0)
+  const compactSum = compactFlags.reduce(
+    (s, f, i) => s + (f ? measW[i] ?? 0 : 0),
+    0,
+  )
+  const flexW = rowW > 0 && nFlex > 0
+    ? Math.max(1, Math.round((rowW - compactSum) / nFlex))
+    : 0
+
+  // Per-tab target chip HEIGHT, mirroring the per-tab `ws` width model: a
+  // tab with a sub-label (the invite countdown / broadcast status word)
+  // wants the TALL 2-line pill so the chip can wrap the timer above the
+  // name; every other tab wants the SHORT capsule. The chip's live height
+  // interpolates these hs[i] by the live pager (same as width), so it grows
+  // UPWARD onto a timer-bearing tab as the swipe arrives, AND grows in place
+  // if the SELECTED tab gains/loses its timer (single withTiming on hs[i],
+  // pp constant) — the "invite arrives while already on the side tab" case.
+  // Driven by spec, not onLayout (it's a binary per tab).
+  const h0 = useSharedValue(CHIP_SHORT)
+  const h1 = useSharedValue(CHIP_SHORT)
+  const h2 = useSharedValue(CHIP_SHORT)
+  const hs = [h0, h1, h2]
+  const hInit = useRef([false, false, false])
+  // Only flips when a tab's timer presence actually changes (not every
+  // render — `tabs` is a fresh array literal each parent render).
+  const subLabelSig = tabs.slice(0, 3).map(t => (t.subLabel != null ? '1' : '0')).join('')
+  useEffect(() => {
+    for (let i = 0; i < 3; i++) {
+      const target = i < tabs.length && tabs[i].subLabel != null ? CHIP_TALL : CHIP_SHORT
+      if (!hInit.current[i]) {
+        hInit.current[i] = true
+        hs[i].value = target
+      } else if (Math.abs(hs[i].value - target) > 0.5) {
+        hs[i].value = withTiming(target, { duration: TAB.collapseDuration })
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subLabelSig])
 
   const inset2 = TAB.indicatorInsetX * 2
   const chipStyle = useAnimatedStyle(() => {
-    const a = w0.value
-    const b = w1.value
-    const c = w2.value
-    if (a + b + c <= 0) return { opacity: 0 }
-    // Logical centre + width of each tab (cumulative in child order).
-    const centres = [a / 2, a + b / 2, a + b + c / 2]
-    const widths = [a, b, c]
-    const p = Math.min(2, Math.max(0, progress.value))
-    const lo = Math.floor(p)
-    const hi = Math.min(2, lo + 1)
-    const f = p - lo
-    const centre = centres[lo] + (centres[hi] - centres[lo]) * f
-    const chipW = Math.max(1, (widths[lo] + (widths[hi] - widths[lo]) * f) - inset2)
-    const logicalLeft = Math.max(0, centre - chipW / 2)
+    // ONE synced motion, LAYOUT-driven (user choice 2026-05-17 — "translate
+    // AND grow/shrink TOGETHER" AND "the radius must always stay the same").
+    // Position AND size both ride the SAME live pager value (`progress`, from
+    // onPageScroll on the UI thread — the RN analogue of a CSS/native
+    // constraint, not a JS-thread loop), so the slide and the resize are one
+    // gesture-tracked motion that is perfectly LINEAR in the pager position.
+    //
+    // Size is the actual LAYOUT `width`/`height` (NOT `scaleX`/`scaleY`): a
+    // non-uniformly scaled rounded rect cannot keep a constant-looking
+    // corner — scaling is what made the radius visibly change mid-swipe. A
+    // plain unscaled element with a FIXED `borderRadius` keeps the corner
+    // crisp and identical at every position. The chip is a single
+    // absolutely-positioned leaf inside an absolute-fill overlay, so
+    // animating its width/height re-lays out ONLY this node (no flex-row
+    // reflow — see styles.chipOverlay), the cost the overlay design exists
+    // to make cheap. `bottom` is statically anchored, so a taller `height`
+    // grows the chip UPWARD only (name Y unchanged — iron rule), no scaleY
+    // counter-translate needed.
+    //
+    // Clamped to [0, n-1] (n = 2 while geo-gated, 3 otherwise).
+    const widths = [w0.value, w1.value, w2.value]
+    const heights = [h0.value, h1.value, h2.value]
+    let sum = 0
+    for (let i = 0; i < n; i++) sum += widths[i]
+    if (sum <= 0) return { opacity: 0 }
+    // Cumulative centre of each tab in child order.
+    const centres: number[] = []
+    let acc = 0
+    for (let i = 0; i < n; i++) {
+      centres.push(acc + widths[i] / 2)
+      acc += widths[i]
+    }
+    const lerp3 = (arr: number[], q: number) => {
+      const lo = Math.floor(q)
+      const hi = Math.min(n - 1, lo + 1)
+      return arr[lo] + (arr[hi] - arr[lo]) * (q - lo)
+    }
+    // Everything from the LIVE pager value → fully linear, fully synced.
+    // liveW = full tab width − 2*inset (inset is 0, so the chip spans the
+    // whole tab). The two content tabs are forced to an identical explicit
+    // width (flexW), so the chip is identical AND full on tab1 and tab2.
+    const pp = Math.min(n - 1, Math.max(0, progress.value))
+    const centre = lerp3(centres, pp)
+    const liveW = Math.max(1, lerp3(widths, pp) - inset2)
+    const liveH = Math.max(1, lerp3(heights, pp))
+    // No `Math.max(0,…)` clamp: with the real (unscaled) `liveW` this is the
+    // true box left; it is exactly `centre − liveW/2` so the visible centre
+    // is precisely linear in the pager (the old clamp froze it mid-screen).
+    const logicalLeft = centre - liveW / 2
     return {
       opacity: 1,
-      width: chipW,
+      width: liveW,
+      height: liveH,
+      // CONSTANT — never lerped, never scaled, so the corner reads identical
+      // at every tab and all through the motion.
+      borderRadius: TAB.indicatorRadius,
       transform: [{ translateX: isRTL ? -logicalLeft : logicalLeft }],
     }
-  }, [isRTL])
+  }, [isRTL, n])
 
   return (
     <View style={styles.outer}>
-      <View style={styles.row}>
+      <View
+        style={styles.row}
+        onLayout={e => {
+          const w = Math.round(e.nativeEvent.layout.width)
+          setRowW(prev => (Math.abs(prev - w) > 0.5 ? w : prev))
+        }}
+      >
         {/* Single sliding chip. Absolutely positioned (left:0); animated
             width (full tab width) + transform translateX carry the
             resize + slide. pointerEvents none; first child so it paints
@@ -258,6 +416,10 @@ export function TabStrip({
             index={i}
             progress={progress}
             onWidth={onTabWidth}
+            // Flexible content tabs get an explicit, identical width so
+            // tab1 and tab2 are exactly equal; compact tabs stay
+            // content-sized (undefined → falls back to tabCompact/tabFlex).
+            fixedWidth={compactFlags[i] || flexW <= 0 ? undefined : flexW}
             onPress={() => { tap(); onSelect(i) }}
           />
         ))}
@@ -271,45 +433,41 @@ function TabButton({
   index,
   progress,
   onWidth,
+  fixedWidth,
   onPress,
 }: {
   spec: TabSpec
   index: number
   progress: SharedValue<number>
   onWidth: (index: number, width: number) => void
+  /** When set (flexible content tabs), the tab takes this EXACT width so
+   * tab1 and tab2 are identical. Undefined → compact (content-sized) or the
+   * pre-measurement flex fallback. */
+  fixedWidth?: number
   onPress: () => void
 }) {
   // Subtle press feedback: the content cluster (label / icon) dips to
   // TAB.pressScale while held, then springs back. The gliding lozenge plus
   // this tactile dip make a tap feel physical without a bounce.
   const pressed = useSharedValue(0)
-  // Press feedback dips the held cluster to TAB.pressScale. The per-cluster
-  // CONSTANT glyph-centring nudge (label lifted by −labelLift, icons pushed by
-  // +iconBaselineNudge so both visual centres land on the mainRow centre) is
-  // folded INTO this same transform array — it must NOT live as a separate
-  // `transform` on the static labelStack/indicatorStack wrappers. A RN /
-  // Reanimated style array does not MERGE `transform`: the animated (press)
-  // transform REPLACES any static one, so a static translateY on the wrapper
-  // is silently clobbered by this worklet and the nudge never applies (the
-  // label then renders low on Android and sits below the icons — the bug this
-  // fixes). The nudge is constant, never selection-driven, so the label's Y is
-  // still rock-constant as the chip arrives/leaves — only `scale` is dynamic.
-  // Three variants: label (−labelLift), indicator (+iconBaselineNudge), and a
-  // plain scale-only one for the morph band (it centres via lineHeight ==
-  // rowHeight, so it needs no translateY nudge).
+  // Press feedback ONLY: dips the held cluster to TAB.pressScale, springs
+  // back on release. `pressLabelStyle` is now SCALE-ONLY — the constant
+  // −labelLift glyph-centring nudge was moved OUT of this worklet to a static
+  // StyleSheet transform (`styles.labelNudge`) on a SEPARATE wrapper view,
+  // because a worklet-captured constant does not reliably rebuild on Fast
+  // Refresh (retuning labelLift looked like a no-op until a full reload) and
+  // a constant layout offset does not belong in an animated worklet. Two
+  // different views (the static-nudge wrapper vs this animated-scale view) ⇒
+  // the RN "a style array REPLACES, never merges, transform" hazard does not
+  // apply, so the nudge is not clobbered. The icon nudge (+iconBaselineNudge)
+  // got the SAME treatment — moved out to a static `styles.iconNudge` on the
+  // icon's outer wrapper — so BOTH `pressLabelStyle` and `pressIndicatorStyle`
+  // are now SCALE-ONLY and BOTH nudges hot-reload reliably (one robust pattern
+  // for both, so tuning either by a px actually moves on Fast Refresh).
   const pressLabelStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: -TAB.labelLift },
-      { scale: 1 + pressed.value * (TAB.pressScale - 1) },
-    ],
+    transform: [{ scale: 1 + pressed.value * (TAB.pressScale - 1) }],
   }))
   const pressIndicatorStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: TAB.iconBaselineNudge },
-      { scale: 1 + pressed.value * (TAB.pressScale - 1) },
-    ],
-  }))
-  const pressStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + pressed.value * (TAB.pressScale - 1) }],
   }))
 
@@ -390,10 +548,11 @@ function TabButton({
   // animated `scale: 1 → TAB.selectedScale` here per swipe frame; scaling a
   // <Text> every frame re-rasterizes the glyph with rounding and made the
   // label visibly jitter up/down as the chip arrived/left. The only vertical
-  // offset is the CONSTANT `-TAB.labelLift` folded into `pressLabelStyle`'s
-  // transform array (a fixed glyph-centring nudge vs. icons — see that
-  // worklet's comment for why it can't live on the static wrapper); it never
-  // varies with selection so it can't move the text.
+  // offset is the CONSTANT `-TAB.labelLift`, applied as a STATIC
+  // `styles.labelNudge` transform on a wrapper SEPARATE from the animated
+  // press-scale view (so the RN transform-array replace hazard doesn't apply
+  // and it hot-reloads); it never varies with selection so it can't move the
+  // text.
   // Selection drives the cross-fade by default. While `alertActive` ramps to 1
   // (during alerting), the active layer is force-blended to full opacity and
   // the muted layer is force-blended to 0 — so an unselected tab still reads
@@ -478,7 +637,14 @@ function TabButton({
   const iconOnly = spec.label == null && spec.subLabel == null
   return (
     <AnimatedPressable
-      style={[styles.tab, iconOnly && styles.tabCompact]}
+      style={[
+        styles.tab,
+        iconOnly
+          ? styles.tabCompact
+          : fixedWidth != null
+            ? { width: fixedWidth }
+            : styles.tabFlex,
+      ]}
       onPress={onPress}
       onPressIn={() => { pressed.value = withTiming(1) }}
       onPressOut={() => { pressed.value = withTiming(0) }}
@@ -565,8 +731,13 @@ function TabButton({
             absolute morph band below so both words can use the full tab
             width (see `isMorph`). */}
         {spec.label != null && !isMorph ? (
+          // Outer wrapper carries the STATIC −labelLift nudge
+          // (styles.labelNudge) + the FadeIn/FadeOut mount animation; the
+          // inner view carries the animated press scale. Separate views so
+          // the static transform is never clobbered by the worklet transform.
           <Animated.View
             key="label"
+            style={styles.labelNudge}
             entering={FadeIn.duration(TAB.collapseDuration)}
             exiting={FadeOut.duration(TAB.collapseDuration)}
           >
@@ -596,6 +767,7 @@ function TabButton({
           // overlays the active one absolutely so it doesn't widen the row.
           <Animated.View
             key="ind"
+            style={styles.iconNudge}
             entering={FadeIn.duration(TAB.collapseDuration)}
             exiting={FadeOut.duration(TAB.collapseDuration)}
           >
@@ -615,15 +787,24 @@ function TabButton({
           overlaid on the (empty, for this tab) mainRow band: left/right:0
           spans the FULL flex-tab width so the longer word ("My profile")
           never clips and the tab width never reflows as it morphs. All
-          four text layers fill the band and centre via `styles.label`'s
-          textAlign + lineHeight==rowHeight, so the glyph centre lands on
-          the exact same Y as a normal tab's label. pulseAnim + pressStyle
-          match the normal cluster so alert/press feel identical. */}
+          four text layers fill the band (`styles.label`'s textAlign +
+          lineHeight==rowHeight). pulseAnim + the SAME pressLabelStyle the
+          normal label cluster uses make alert/press feel identical AND fold
+          in the identical −labelLift nudge, so the morph "Once" lands on the
+          EXACT same Y as a normal tab's name (without the shared lift it sat
+          labelLift px lower — the asymmetry bug). */}
       {isMorph ? (
-        <Animated.View
+        // Outer = static geometry + STATIC −labelLift nudge
+        // (styles.labelNudge), pointerEvents none. Inner = absolute-fill
+        // carrying the animated pulse opacity + press scale. Split so the
+        // static nudge transform is not clobbered by the worklet transform
+        // (same pattern as the normal label cluster); the four text layers
+        // fill the inner exactly as they filled the band before.
+        <View
           pointerEvents="none"
-          style={[styles.labelMorphBand, pulseAnim, pressStyle]}
+          style={[styles.labelMorphBand, styles.labelNudge]}
         >
+          <Animated.View style={[styles.morphInner, pulseAnim, pressLabelStyle]}>
           <AnimatedText
             style={[styles.label, styles.labelActive, styles.labelOverlay, baseActiveStyle]}
             numberOfLines={1}
@@ -652,7 +833,8 @@ function TabButton({
           >
             {spec.altLabel}
           </AnimatedText>
-        </Animated.View>
+          </Animated.View>
+        </View>
       ) : null}
     </AnimatedPressable>
   )
@@ -663,7 +845,11 @@ const styles = StyleSheet.create({
   // sub-label rides above the mainRow via absolute positioning and the
   // strip must not clip it into the home shell's PRIMARY-colored top padding.
   outer: { width: '100%' },
-  row: { flexDirection: 'row', alignItems: 'flex-end' },
+  // `width:'100%'` makes the row's main size definite so the flexible tabs'
+  // flexGrow has real free space to distribute (without it, indefinite main
+  // size collapses them to content width and the two content tabs end up
+  // unequal — the page1 "Once"/morph tab vs the page2 name+timer tab).
+  row: { flexDirection: 'row', alignItems: 'flex-end', width: '100%' },
   // Plain absolute-fill overlay (coordinate space = the row). The chip is
   // absolutely positioned inside it (NOT a flex child) so animating its
   // width only re-lays the chip itself — not a per-frame flexbox reflow of
@@ -675,15 +861,23 @@ const styles = StyleSheet.create({
   // spanning the selected tab's full width, resizing per tab. Anchored
   // physical `left:0`; this app RTL-swaps `left` so it lands at the row's
   // start (proven correct with the `isRTL ? − : +` sign in chipStyle).
-  // chipStyle animates both `width` (interpolated tab width) and
-  // `translateX` (slide). Single-line; the sub-label timer floats above.
+  // chipStyle animates `width`, `height` (SHORT capsule <-> TALL 2-line
+  // rounded-rect — grows UPWARD to wrap the timer above the name) and
+  // `borderRadius` (lerps capsule<->rounded-rect with the height), plus the
+  // `translateX` slide. Only `bottom` is static here — the fixed bottom
+  // anchor is precisely WHY height growth extends upward and never moves the
+  // name (iron rule). `borderCurve: 'continuous'` so the grown rounded-rect
+  // reads soft (no-op for the SHORT capsule).
   indicator: {
     position: 'absolute',
     left: 0,
-    bottom: -TAB.indicatorPadV,
-    // width is animated by chipStyle (interpolated tab width).
-    height: TAB.rowHeight + TAB.indicatorPadV * 2,
-    borderRadius: TAB.indicatorRadius,
+    // Box-centred on the mainRow, then nudged DOWN by chipBaselineNudge so
+    // the capsule centres on the tab's optical ink (the glyph renders low in
+    // its line-box and the label is itself lifted by -labelLift). A purely
+    // declarative static offset — the single Y-centring knob, never computed.
+    // This is also the fixed anchor the chip grows UPWARD from when tall.
+    bottom: -TAB.indicatorPadV - TAB.chipBaselineNudge,
+    // width / height / borderRadius are animated by chipStyle.
     borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: HEADER_PILL_BORDER,
@@ -693,23 +887,36 @@ const styles = StyleSheet.create({
   // Fixed-height tab: only mainRow is in the natural flow, so the tab's
   // layout box is always exactly TAB.rowHeight whether or not a timer is
   // showing above. The timer is rendered absolutely (see subLabelRow below).
+  // Shared tab base — NO flex/basis here on purpose. The flex behaviour is
+  // split into tabFlex vs tabCompact and applied EXCLUSIVELY (ternary in
+  // TabButton), so the equal-width treatment can never leak onto a compact
+  // tab (it once did: flexBasis:0 here + flex:0 from tabCompact collapsed
+  // the icon tabs to zero width and the end glyphs went asymmetric).
   tab: {
-    flex: 1,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingHorizontal: RADII.sm,
   },
-  // Icon-only tab: shrinks to content width so the labeled tabs absorb the
-  // freed flex. Wider horizontal padding gives the small glyph an honest tap
-  // target without bloating the visual footprint.
+  // PRE-MEASUREMENT FALLBACK ONLY. The real equal-width guarantee is the
+  // explicit `flexW` width applied to flexible tabs (see TabStrip) — flex
+  // auto-distribution (even flex:1+flexBasis:0+minWidth:0) repeatedly did
+  // NOT come out equal in practice for the morph "Once" tab vs the labelled
+  // page2 tab. This style is used for ~1 frame before `rowW`/compact widths
+  // are measured and `flexW` is known; after that flexible tabs switch to
+  // `{ width: flexW }` and are exactly identical. minWidth:0 + flexBasis:0
+  // keep even the fallback frame from biasing toward the wider-content tab.
+  tabFlex: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
+  // Icon-only tab: content-sized (flex:0 → uses its glyph width, NOT a
+  // zeroed basis). Wider horizontal padding gives the small glyph an honest
+  // tap target. Both end tabs (Menu, ambient side) use this identical style
+  // so they sit symmetrically from the screen edges.
   tabCompact: {
     flex: 0,
-    // Wide padding so the compact end tab is comfortably wider than its
-    // glyph; the fixed-width chip (TAB.indicatorWidth, centred on the tab)
-    // then sits around the glyph with even breathing room and stays clear
-    // of the screen edge. Not a screen-edge margin per se — the chip width
-    // is the constraint, this just gives it room.
     paddingHorizontal: LG,
   },
   // Main row keeps a fixed TAB.rowHeight so label + indicator stay anchored
@@ -721,28 +928,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SM,
   },
-  // Anchor for the absolutely-positioned muted overlay layer. The CONSTANT
-  // upward glyph-centring nudge (−TAB.labelLift) is intentionally NOT set
-  // here: it is folded into `pressLabelStyle`'s transform array, because a RN /
-  // Reanimated style array REPLACES (never merges) `transform`, so the press
-  // worklet would silently clobber a static transform on this wrapper and the
-  // nudge would never apply. Keep this style transform-free.
+  // Anchor for the absolutely-positioned muted overlay layer. The −labelLift
+  // nudge is NOT here and NOT in the press worklet anymore — it is a static
+  // transform on the OUTER wrapper (styles.labelNudge), a different view from
+  // the one carrying the animated press scale, so the RN "array replaces
+  // transform" hazard does not apply and the value hot-reloads. Keep this
+  // style transform-free (the animated press scale lives on this view).
   labelStack: {
     position: 'relative',
   },
-  // Absolute-positioned slot ABOVE the mainRow. `bottom` is set so the
-  // sub-label (timer) clears the selected-tab chip's top edge with a clean
-  // gap: chip top = rowHeight + indicatorPadV above the tab bottom, so
-  // anchoring the timer at chip-top + SM keeps it floating just above the
-  // pill as a caption, never clipped by it. Because the slot is absolute it
-  // doesn't add to the tab's natural height — the labels never shift Y when
-  // it appears or disappears. The flex row layout lives on the inner wrapper
-  // (subLabelRow) so the outer Animated.View can carry the entering/exiting
-  // layout animation without colliding with the animated opacity pulse on
-  // the inner row.
+  // STATIC constant glyph-centring nudge (−TAB.labelLift) for the label.
+  // Lives on a wrapper that carries NO animated transform (the press scale
+  // is on a child view), so it is never clobbered and — being a plain
+  // StyleSheet value, not a worklet-captured constant — actually reflects
+  // token edits on Fast Refresh. Shared by the normal label cluster AND the
+  // morph band so "Once" and a normal name share the exact same Y. THE
+  // single knob for label-vs-icon vertical alignment (value in TAB.labelLift).
+  labelNudge: {
+    transform: [{ translateY: -TAB.labelLift }],
+  },
+  // Absolute-fill inside the morph band's outer (static-nudge) wrapper. The
+  // four morph text layers (styles.labelOverlay) fill THIS, exactly as they
+  // filled the band before the outer/inner split; carries the animated pulse
+  // opacity + press scale.
+  morphInner: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  // Absolute-positioned slot just ABOVE the mainRow, sitting INSIDE the
+  // grown pill (no longer a caption floating above it). `bottom = rowHeight
+  // + timerGap` places the timer's box a tight timerGap above the name line;
+  // the TALL chip height is derived to wrap exactly this band with a top pad
+  // symmetric to the bottom one (see CHIP_TALL). Still absolute, so it adds
+  // nothing to the tab's natural height — the name never shifts Y when the
+  // timer appears/disappears (iron rule); only the pill grows up to embrace
+  // it. The flex row layout lives on the inner wrapper (subLabelRow) so the
+  // outer Animated.View can carry the entering/exiting (FadeInDown/FadeOutUp,
+  // the timer dropping into / lifting out of the pill) without colliding
+  // with the animated opacity pulse on the inner row.
   subLabelOuter: {
     position: 'absolute',
-    bottom: TAB.rowHeight + TAB.indicatorPadV + SM,
+    bottom: TAB.rowHeight + TAB.timerGap,
     left: 0,
     right: 0,
   },
@@ -764,8 +989,10 @@ const styles = StyleSheet.create({
     opacity: 0,
   },
   subLabel: {
-    fontSize: TEXT.md,
-    lineHeight: TEXT.md,
+    // TAB.timerFontSize (== the timer-line term in CHIP_TALL) so the pill
+    // always grows to wrap the glyph exactly; bump that one token to resize.
+    fontSize: TAB.timerFontSize,
+    lineHeight: TAB.timerFontSize,
     includeFontPadding: false,
     textAlignVertical: 'center',
     textAlign: 'center',
@@ -829,11 +1056,14 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   // Full-width band overlaying the (empty) mainRow on a morph tab. bottom:0
-  // + height:rowHeight pins it exactly where mainRow sits (the tab is a
-  // flex-end column, mainRow is its bottom-most rowHeight block, the
-  // sub-label floats absolutely above it) so the morphing word shares the
-  // normal label's Y. left/right:0 on the flex:1 tab gives both words the
-  // full tab width to render and centre in — no clip, no width reflow.
+  // + height:rowHeight pins it where mainRow sits (the tab is a flex-end
+  // column, mainRow is its bottom-most rowHeight block, the sub-label floats
+  // absolutely above it). That ALONE does NOT match a normal label's Y (a
+  // normal label is additionally lifted by −labelLift), so this band's OUTER
+  // wrapper also carries styles.labelNudge (the same static −labelLift the
+  // normal label cluster uses) — the two then share the EXACT same Y.
+  // left/right:0 on the flex:1 tab gives both words the full tab width to
+  // render and centre in — no clip, no width reflow.
   labelMorphBand: {
     position: 'absolute',
     left: 0,
@@ -841,11 +1071,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: TAB.rowHeight,
   },
-  // See labelStack: the +TAB.iconBaselineNudge centring nudge is folded into
-  // `pressIndicatorStyle`'s transform array, not set here, so the press
-  // worklet's transform can't clobber it.
+  // See labelStack/labelNudge: the +TAB.iconBaselineNudge centring nudge is
+  // NOT here and NOT in the press worklet anymore — it is a static transform
+  // on the icon's OUTER wrapper (styles.iconNudge), a different view from the
+  // animated press scale, so it isn't clobbered and it hot-reloads. Keep
+  // this style transform-free.
   indicatorStack: {
     position: 'relative',
+  },
+  // STATIC constant glyph-centring nudge (+TAB.iconBaselineNudge) for the
+  // icon — the icon-side twin of styles.labelNudge, same robust mechanism:
+  // plain StyleSheet on a wrapper with no animated transform, so it never
+  // gets clobbered and reflects token edits on Fast Refresh.
+  iconNudge: {
+    transform: [{ translateY: TAB.iconBaselineNudge }],
   },
   // Leading glyph slot (e.g. broadcast "live" dot). No vertical nudge — the
   // 7px dot already centers cleanly against the label glyphs via flex.

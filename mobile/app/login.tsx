@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, StyleSheet, Platform, I18nManager, Linking, ScrollView, Keyboard } from 'react-native'
+import { View, StyleSheet, Platform, Linking, ScrollView, Keyboard } from 'react-native'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AppStatusBar } from '../src/components/AppStatusBar'
@@ -11,6 +11,7 @@ import { LoginForm } from '../src/components/LoginForm'
 import { PRIMARY, WHITE, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
+import { legalUrl } from '../src/lib/links'
 
 // ── Auth setup (unchanged) ─────────────────────────────────────────────────
 
@@ -123,13 +124,13 @@ export default function LoginPage() {
 
           <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 4 }]}>
             <Text style={styles.legalText}>
-              {t('auth.legalPrefix')}{' '}
-              <Text style={styles.legalLink} onPress={() => Linking.openURL(`https://aviramo.github.io/once-app/terms?lang=${lang}`)} accessibilityRole="link">
-                {t('auth.legalTerms')}
+              {t('auth.legalPrefix')}{'\n'}
+              <Text style={styles.legalLink} onPress={() => Linking.openURL(legalUrl('terms', lang))} accessibilityRole="link">
+                {t('auth.legalConnTerms')}{t('auth.legalTerms')}
               </Text>
-              {' '}{I18nManager.isRTL ? 'ו' : '&'}{' '}
-              <Text style={styles.legalLink} onPress={() => Linking.openURL(`https://aviramo.github.io/once-app/privacy?lang=${lang}`)} accessibilityRole="link">
-                {t('auth.legalPrivacy')}
+              {t('auth.legalSep')}
+              <Text style={styles.legalLink} onPress={() => Linking.openURL(legalUrl('privacy', lang))} accessibilityRole="link">
+                {t('auth.legalConnPrivacy')}{t('auth.legalPrivacy')}
               </Text>
             </Text>
           </View>

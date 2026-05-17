@@ -14,6 +14,7 @@ import { t, tg, lang } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
 import { RoundButton } from '../src/components/RoundButton'
+import { Spinner } from '../src/components/Spinner'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
 import { PullContext, type PullCtx } from '../src/components/HomeCard'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
@@ -21,8 +22,8 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { XS, SM, MD, LG, XL, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SPINNER, lh } from '../src/tokens'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -1225,10 +1226,12 @@ function ageLabel(n: number): string {
 function FamilyToggleRow({ label, value, onValueChange }: { label: string; value: boolean; onValueChange: (v: boolean) => void }) {
   const trackBg = value ? PRIMARY : BLACK_SOFT
   // Knob travel = track width 48 - knob width 24 - padding 4 = 20px.
-  // In RTL the knob's natural layout position is the right edge (start), so
-  // ON sits at 0 translateX and OFF sits at -20 (visually pushed to the left
-  // end). translateX is not auto-flipped in RTL — only layout is.
-  const knobX = isRTL ? (value ? 0 : -20) : (value ? 20 : 0)
+  // OFF always rests at the knob's natural layout position (translateX 0):
+  // the left edge in LTR, the right edge in RTL (the `start` side — layout is
+  // auto-flipped in RTL, transforms are not). ON slides toward the opposite
+  // end, so the switch mirrors correctly in Hebrew (knob moves left when on).
+  const KNOB_TRAVEL = 20
+  const knobX = value ? (isRTL ? -KNOB_TRAVEL : KNOB_TRAVEL) : 0
   return (
     <Pressable
       style={familyStyles.toggleRow}
@@ -1947,13 +1950,19 @@ const photoOptionsStyles = StyleSheet.create({
 // profile tab via the sub-page mechanism.
 
 export function PreviewFieldPage({
-  config, onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, clipBottom: _clipBottom,
+  config, onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, pulling, clipBottom: _clipBottom,
 }: {
   config: PreviewFieldConfig
   onBack: () => void
   dismissGestureRef?: React.MutableRefObject<GestureType | undefined>
   onScrollAtTop?: (atTop: boolean) => void
   headerBottomShared?: SharedValue<number>
+  // Live "the dismiss-pan is engaged" flag from the parent's usePullBehavior.
+  // Threaded into pullCtx so PullScrollView drops scrollEnabled while pulling
+  // (same protection page1/page2 get via usePullCtx). Without it the inner
+  // ScrollView competes with the pan and keeps a few px of residual scroll
+  // velocity, so after a swipe-down + snap-back the content lands nudged down.
+  pulling?: boolean
   clipBottom?: boolean
 }) {
   const insets = useSafeAreaInsets()
@@ -1992,8 +2001,8 @@ export function PreviewFieldPage({
     panRef: dismissGestureRef,
     extraRefs: [],
     setScrollAtTop: onScrollAtTop ?? (() => {}),
-    pulling: false,
-  } : null, [dismissGestureRef, onScrollAtTop])
+    pulling: pulling ?? false,
+  } : null, [dismissGestureRef, onScrollAtTop, pulling])
 
   const previewData: Profile | null = useMemo(() => {
     if (!profile) return null
@@ -2477,7 +2486,7 @@ function GameModeCard() {
       >
         <RoundButton onPress={handlePress}>
           {busy ? (
-            <ActivityIndicator size="small" color={PRIMARY} />
+            <Spinner color={WHITE} size={SPINNER.sizeLg} thickness={SPINNER.thicknessLg} />
           ) : showPause ? (
             <PauseIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />
           ) : (
@@ -2522,6 +2531,8 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           delaysContentTouches={false}
+          bounces={false}
+          overScrollMode="never"
         >
           <View style={styles.profileCardWrap}>
             <Pressable
@@ -2539,12 +2550,12 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
                 <Defs>
                   <SvgLinearGradient id="profileScrim" x1="0" y1="0" x2="0" y2="1">
                     <Stop offset="0" stopColor={BLACK} stopOpacity="0" />
-                    <Stop offset="1" stopColor={BLACK} stopOpacity="0.7" />
+                    <Stop offset="0.55" stopColor={BLACK} stopOpacity="0.55" />
+                    <Stop offset="1" stopColor={BLACK} stopOpacity="1" />
                   </SvgLinearGradient>
                 </Defs>
                 <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
               </Svg>
-              <View style={styles.profileCardTopSpacer} pointerEvents="none" />
               <View style={styles.profileCardCaption} pointerEvents="none">
                 <Text style={styles.profileCardTitle}>{t('settings.profile')}</Text>
               </View>
@@ -2656,19 +2667,17 @@ const styles = StyleSheet.create({
   profileCardWrap: {
     position: 'relative',
   },
-  // 16/9 is the MINIMUM card height (via PROFILE_CARD_MIN_HEIGHT); the card
-  // grows taller if the caption content needs more room (a11y scaling, etc).
-  // Image + scrim are absolute background fills. Top spacer + caption are
-  // the two flex children: space-between pins spacer to top (reserving the
-  // pause-button area) and caption to bottom. Padding on the card would push
-  // absolute children inward, so the gap is reserved by the spacer instead.
+  // 16/9 minimum height (PROFILE_CARD_MIN_HEIGHT). Image, scrim and caption
+  // are all absolute fills/bands, so nothing drives layout and the card holds
+  // a stable min height. The caption is pinned to the BOTTOM THIRD of the
+  // photo and centered within that band ("Edit your profile" sits low on the
+  // image, not dead-center); the pause button stays an absolute top-left
+  // overlay so it never collides.
   profileCard: {
     width: '100%', minHeight: PROFILE_CARD_MIN_HEIGHT,
-    flexDirection: 'column', justifyContent: 'space-between',
     overflow: 'hidden',
     backgroundColor: WHITE_SOFT,
   },
-  profileCardTopSpacer: { height: MD + BUTTON_MIN_HEIGHT + MD },
 
   // Game-mode toggle — overlay anchored to the profile-card hero image.
   // The circular button itself is a RoundButton (visual + tap feedback);
@@ -2681,12 +2690,19 @@ const styles = StyleSheet.create({
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
-  // flexDirection:'row' makes the single Text child sit on the logical
-  // start side (right in RTL, left in LTR) — same pattern documented above
-  // GameModeCard. textAlign/writingDirection alone proved inconsistent on iOS.
-  profileCardCaption: { paddingHorizontal: MD, paddingVertical: MD, flexDirection: 'row' },
-  profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
+  // Tall bottom fade ending in solid BLACK: the photo reads as cut off below
+  // the fold, inviting a tap to open the full profile card.
+  profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
+  // Absolute band over the bottom third of the hero, contents centered on
+  // both axes → the title reads centered horizontally and sits in the lower
+  // third. A centered title reads identically in RTL and LTR, so the old
+  // flexDirection:'row' start-side trick is no longer needed. (The 1/3 height
+  // is a one-off layout fraction local to this hero, like the scrim's 60%.)
+  profileCardCaption: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: '33.333%',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: MD,
+  },
+  profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, textAlign: 'center', ...PHOTO_TEXT_SHADOW },
   // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
   // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
   accentCard: { backgroundColor: PRIMARY },

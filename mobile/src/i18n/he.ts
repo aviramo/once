@@ -8,7 +8,6 @@ export default {
   'auth.tagline': 'מפגש אחד בזמן אמת',
   'auth.msg1': 'לא קטלוג. לא צ\'אטים אינסופיים.',
   'auth.msg2': 'מפגש אחד\nבזמן אמת',
-  'auth.continueGoogle': 'כניסה עם Google',
   'auth.orDivider': 'או',
   'auth.emailPlaceholder': 'you@example.com',
   'auth.sendLink': 'שליחת קישור התחברות',
@@ -21,8 +20,11 @@ export default {
   'auth.howItWorksTitle': 'איך Once עובד',
   'auth.howItWorksBody': 'Once בנויה למפגש אחד ואמיתי בכל פעם.\n\nבחר אדם אחד.\nשלח הזמנה אחת.\nפגוש בזמן אמת.\n\nלא קטלוג. לא צ\'אטים מקבילים.',
   'auth.howItWorksBtn': 'הבנתי',
-  'auth.legalPrefix': 'בהמשך, אתה/את מסכים/ה ל',
+  'auth.legalPrefix': 'בהמשך, אתה/את מסכים/ה',
+  'auth.legalConnTerms': 'ל',
   'auth.legalTerms': 'תנאי השימוש',
+  'auth.legalSep': ' ',
+  'auth.legalConnPrivacy': 'ו',
   'auth.legalPrivacy': 'מדיניות הפרטיות',
 
   // Onboarding step 1
@@ -267,11 +269,6 @@ export default {
   'settings.kidsYes': 'כן',
   'settings.kidsNo': 'לא',
   'settings.kidsNa': 'לא רלוונטי',
-  'settings.adminTitle': 'ניהול',
-  'settings.adminLabel': 'אתחול משתמשים',
-  'settings.adminEntry': 'אתחול משתמשים',
-  'settings.resetVisible': 'גלוי',
-  'settings.resetHidden': 'מוסתר',
 
   // Match
   'match.justNow': 'מחובר עכשיו',
@@ -516,17 +513,20 @@ export default {
 
   // Home — reveal confirm popup (HIDDEN → VISIBLE)
 
-  // Home — hide confirm popup
-  'home.inviteConfirmTitle': 'לשלוח לה הזמנה?',
-  'home.inviteConfirmTitle_mm': 'לשלוח לו הזמנה?',
-  'home.inviteConfirmTitle_mf': 'לשלוח לה הזמנה?',
-  'home.inviteConfirmTitle_fm': 'לשלוח לו הזמנה?',
-  'home.inviteConfirmTitle_ff': 'לשלוח לה הזמנה?',
-  'home.inviteConfirmDesc': 'ההזמנה תשאיר את שניכם בפוקוס אחד, עד שהיא עונה.',
-  'home.inviteConfirmDesc_mm': 'ההזמנה תשאיר את שניכם בפוקוס אחד, עד שהוא עונה.',
-  'home.inviteConfirmDesc_mf': 'ההזמנה תשאיר את שניכם בפוקוס אחד, עד שהיא עונה.',
-  'home.inviteConfirmDesc_fm': 'ההזמנה תשאיר את שניכם בפוקוס אחד, עד שהוא עונה.',
-  'home.inviteConfirmDesc_ff': 'ההזמנה תשאיר את שתיכן בפוקוס אחד, עד שהיא עונה.',
+  // Home — invite-to-chat confirm popup. tgg(key, senderMale, inviteeMale):
+  // suffix _<sender><invitee>. Title varies only by invitee (אותה/אותו);
+  // desc varies by sender (אתה/את + שולח/שולחת), by invitee (היא/הוא +
+  // מקבלת/מקבל + לה/לו), and "שתיכן" only when both are female.
+  'home.inviteConfirmTitle': 'להזמין אותה לצ׳אט?',
+  'home.inviteConfirmTitle_mm': 'להזמין אותו לצ׳אט?',
+  'home.inviteConfirmTitle_mf': 'להזמין אותה לצ׳אט?',
+  'home.inviteConfirmTitle_fm': 'להזמין אותו לצ׳אט?',
+  'home.inviteConfirmTitle_ff': 'להזמין אותה לצ׳אט?',
+  'home.inviteConfirmDesc': 'ברגע השליחה שניכם בפוקוס אחד: אתה לא שולח עוד הזמנות, והיא לא מקבלת אחרות. יש לה 10 דקות לענות.',
+  'home.inviteConfirmDesc_mm': 'ברגע השליחה שניכם בפוקוס אחד: אתה לא שולח עוד הזמנות, והוא לא מקבל אחרות. יש לו 10 דקות לענות.',
+  'home.inviteConfirmDesc_mf': 'ברגע השליחה שניכם בפוקוס אחד: אתה לא שולח עוד הזמנות, והיא לא מקבלת אחרות. יש לה 10 דקות לענות.',
+  'home.inviteConfirmDesc_fm': 'ברגע השליחה שניכם בפוקוס אחד: את לא שולחת עוד הזמנות, והוא לא מקבל אחרות. יש לו 10 דקות לענות.',
+  'home.inviteConfirmDesc_ff': 'ברגע השליחה שתיכן בפוקוס אחד: את לא שולחת עוד הזמנות, והיא לא מקבלת אחרות. יש לה 10 דקות לענות.',
   'home.inviteConfirmOk': 'לשלוח הזמנה',
   'home.inviteTimerLabel': 'זמן שנותר',
   'home.inviteTimerLabelExtended': 'הוארך התוקף',
@@ -605,13 +605,22 @@ export default {
   'home.skipHintDesc': 'בפעם הבאה החליקו את הכרטיס למטה כדי לדלג במהירות לפרופיל אחר. רוצים לדלג עכשיו?',
   'home.skipHintCancel': 'הבנתי',
   'home.skipHintConfirm': 'לדלג',
-  'home.replyingTimerDesc': 'התקבלה אצלך הזמנה. אם תבחרי לקבל, תתמקדו רק זה בזו',
-  'home.replyingTimerDesc_m': 'התקבלה אצלך הזמנה. אם תבחר לקבל, תתמקדו רק זה בזו',
-  'home.replyingTimerDesc_f': 'התקבלה אצלך הזמנה. אם תבחרי לקבל, תתמקדו רק זה בזו',
-  'home.replyingTitle': 'התקבלה אצלך הזמנה',
-  'home.replyingDesc': 'אם תבחר לקבל, תתמקדו רק זה בזו.',
-  'home.replyingDesc_m': 'אם תבחר לקבל, תתמקדו רק זה בזו.',
-  'home.replyingDesc_f': 'אם תבחרי לקבל, תתמקדו רק זה בזו.',
+  // Incoming-invite card (page2). Title via tg(key, inviterMale) — only the
+  // inviter's gender (הוא/היא + הזמין/הזמינה). Desc via tgg(key, receiverMale,
+  // inviterMale) → suffix _<receiver><inviter>: receiver drives תחליטי/תחליט
+  // + ואת לא מקבלת/ואתה לא מקבל, inviter drives הוא/היא מחכה. replyingTimerDesc
+  // is unused dead code (no caller) kept only for parity; receiver-gendered.
+  'home.replyingTimerDesc': 'הוא הזמין אותך לצ׳אט. יש לך 10 דקות לענות.',
+  'home.replyingTimerDesc_m': 'הוא הזמין אותך לצ׳אט. יש לך 10 דקות לענות.',
+  'home.replyingTimerDesc_f': 'הוא הזמין אותך לצ׳אט. יש לך 10 דקות לענות.',
+  'home.replyingTitle': 'הוא הזמין אותך לצ׳אט',
+  'home.replyingTitle_m': 'הוא הזמין אותך לצ׳אט',
+  'home.replyingTitle_f': 'היא הזמינה אותך לצ׳אט',
+  'home.replyingDesc': 'יש לך 10 דקות לענות. עד שתחליטי, הוא מחכה לך ואת לא מקבלת הזמנות אחרות.',
+  'home.replyingDesc_mm': 'יש לך 10 דקות לענות. עד שתחליט, הוא מחכה לך ואתה לא מקבל הזמנות אחרות.',
+  'home.replyingDesc_mf': 'יש לך 10 דקות לענות. עד שתחליט, היא מחכה לך ואתה לא מקבל הזמנות אחרות.',
+  'home.replyingDesc_fm': 'יש לך 10 דקות לענות. עד שתחליטי, הוא מחכה לך ואת לא מקבלת הזמנות אחרות.',
+  'home.replyingDesc_ff': 'יש לך 10 דקות לענות. עד שתחליטי, היא מחכה לך ואת לא מקבלת הזמנות אחרות.',
   'home.replyingAccept': 'לקבל',
   'home.replyingReject': 'לדלג',
   'home.chatHeader': 'אתם אחד על אחד',
@@ -679,6 +688,7 @@ export default {
   'home.ageChip_m': 'בן {age}',
   'home.ageChip_f': 'בת {age}',
   'home.locatingDesc': 'סורק אנשים בסביבתך',
+  'home.loadingProfile': 'טוען נתוני פרופיל',
   'home.noOneNearbyTitle': 'אין כרגע אנשים בסביבה',
   'home.noOneNearbyDesc': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
   'home.noOneNearbyDesc_m': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',

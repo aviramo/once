@@ -1,10 +1,9 @@
-import { useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated'
-import Svg, { Circle, Path } from 'react-native-svg'
 import { Text } from './AppText'
+import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON, MOTION } from '../tokens'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
 import { WHITE, WHITE_SOFT, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
@@ -27,24 +26,6 @@ type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
 type Tone = 'positive'
-
-// Spinner painted in the button's text color — drops into the iconStart slot
-// while a tap is in flight so the press never alters the fill.
-function ButtonSpinner({ color, size = ICON.xxl }: { color: string; size?: number }) {
-  const rotation = useSharedValue(0)
-  useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: MOTION.spin, easing: Easing.linear }), -1, false)
-  }, [])
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
-  return (
-    <Animated.View style={[{ width: size, height: size }, animStyle]}>
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Circle cx={12} cy={12} r={8} stroke={color} strokeOpacity={0.3} strokeWidth={2.5} fill="none" />
-        <Path d="M 12 4 A 8 8 0 0 1 20 12" stroke={color} strokeWidth={2.5} strokeLinecap="round" fill="none" />
-      </Svg>
-    </Animated.View>
-  )
-}
 
 export function Button({
   label,
@@ -98,7 +79,7 @@ export function Button({
   const textColor = skin.text.color
   // While loading, swap the start-position icon (or insert one if none was
   // provided) with a spinner in the label color. End-position icons stay.
-  const startIcon = loading ? <ButtonSpinner color={textColor} /> : iconStart
+  const startIcon = loading ? <Spinner color={textColor} /> : iconStart
 
   return (
     <View

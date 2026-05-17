@@ -686,7 +686,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             {sections[0]?.type === 'photo' && (() => {
               const base: CardAction[] = actions ?? [{
                 key: 'like',
-                icon: <HeartIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
+                icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
               }]
               const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
               return resolved.length > 0 ? <CardActionStack actions={resolved} /> : null

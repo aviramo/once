@@ -145,27 +145,28 @@ export default async function UserDetailPage({
   const email = authUser?.user?.email ?? null;
   const n1 = page1Narrative(a, u.relations);
   const n2 = page2Narrative(a, u.relations);
-  const p1 = u.relations?.page1;
-  const p2 = u.relations?.page2;
-  const watchers = p2?.profiles ?? [];
   const gender =
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
 
   return (
     <AdminShell dict={a} active="users" backHref="/admin">
-      {/* Identity + one-line status */}
-      <Card className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        <Avatar src={photo} name={u.name} size="lg" />
+      {/* Identity — one compact rectangle: photo, name + email on one row */}
+      <Card className="flex items-center gap-4 p-4">
+        <Avatar src={photo} name={u.name} size="md" />
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold">{u.name ?? "—"}</h1>
-          <p className="mt-1 truncate text-sm text-muted-foreground">
-            {email ?? a.noEmail}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <h1 className="text-lg font-bold leading-tight">
+              {u.name ?? "—"}
+            </h1>
+            <span className="min-w-0 truncate text-sm text-muted-foreground">
+              {email ?? a.noEmail}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
             <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             {d.joinedFull}: {relativeTime(u.created_at, locale)}
             {" · "}
             {d.lastSeenFull}: {relativeTime(u.last_seen, locale)}
@@ -212,32 +213,11 @@ export default async function UserDetailPage({
         </Card>
       </Section>
 
-      {/* Current state — business sentence first, raw machine state hidden */}
+      {/* Current state — the two boards side by side, plain language only */}
       <Section title={d.summary}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <StateCard
-            title={a.filterP1}
-            narrative={n1.text}
-            tone={n1.tone}
-            techLabel={a.technicalDetails}
-            rows={[
-              ["state", p1?.state ?? "locked"],
-              ["message", p1?.message ?? "—"],
-              [d.page1Profile, p1?.profile?.name ?? "—"],
-            ]}
-          />
-          <StateCard
-            title={a.filterP2}
-            narrative={n2.text}
-            tone={n2.tone}
-            techLabel={a.technicalDetails}
-            rows={[
-              ["state", p2?.state ?? "locked"],
-              ["message", p2?.message ?? "—"],
-              [d.page2Profile, p2?.profile?.name ?? "—"],
-              [d.watchers, String(watchers.length)],
-            ]}
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <StateCard title={a.filterP1} narrative={n1.text} tone={n1.tone} />
+          <StateCard title={a.filterP2} narrative={n2.text} tone={n2.tone} />
         </div>
       </Section>
 
@@ -332,34 +312,18 @@ function StateCard({
   title,
   narrative,
   tone,
-  techLabel,
-  rows,
 }: {
   title: string;
   narrative: string;
   tone: Parameters<typeof StatusBadge>[0]["tone"];
-  techLabel: string;
-  rows: [string, string][];
 }) {
   return (
-    <Card>
+    <Card className="p-4">
       <p className="text-xs font-medium text-muted-foreground">{title}</p>
-      <div className="mt-2 flex items-start gap-2">
+      <div className="mt-2">
         <StatusBadge tone={tone} dot>
           {narrative}
         </StatusBadge>
-      </div>
-      <div className="mt-4 border-t border-border pt-3">
-        <Disclosure label={techLabel}>
-          <dl className="space-y-1.5 text-xs">
-            {rows.map(([k, v]) => (
-              <div key={k} className="flex gap-2">
-                <dt className="text-muted-foreground">{k}:</dt>
-                <dd className="font-mono break-all">{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </Disclosure>
       </div>
     </Card>
   );

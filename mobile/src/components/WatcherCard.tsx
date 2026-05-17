@@ -9,7 +9,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { buildFamilyChipText } from './FamilyCard'
 import { RADII, RADIUS, SM, MD, TEXT, WEIGHT, MOTION } from '../tokens'
 
-import { WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG } from '../colors'
+import { WHITE, PRIMARY, BLACK_SOFT, PHOTO_TEXT_SHADOW } from '../colors'
 import { formatDistance, isDistanceHere } from '../lib/units'
 import { formatLastSeen, isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -199,9 +199,7 @@ const styles = StyleSheet.create({
     fontWeight: WEIGHT.extrabold,
     color: WHITE,
     letterSpacing: -0.3,
-    textShadowColor: BLACK_STRONG,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    ...PHOTO_TEXT_SHADOW,
     writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
   },
   chipsStack: {

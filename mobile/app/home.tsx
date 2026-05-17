@@ -34,7 +34,7 @@ import { Text } from '../src/components/AppText'
 const AnimatedText = Animated.createAnimatedComponent(Text)
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from 'react-native-svg'
-import { invoke, markStartupComplete, publicImageUrl } from '../src/lib/api'
+import { invoke, markStartupComplete, publicImageUrl, API_TIMEOUT_MS } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
 import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
@@ -44,7 +44,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
-import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, SEARCH_WATCHDOG_SLACK_MS, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -60,7 +60,7 @@ import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { FONT_SCALE } from '../src/fonts'
 import { STORAGE } from '../src/keys'
-import { SlidersIcon, CloseBoldIcon, PauseIcon, QuestionIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, InfoIcon, BlockIcon } from '../src/components/icons'
+import { SlidersIcon, CloseBoldIcon, PauseIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, InfoIcon, BlockIcon } from '../src/components/icons'
 import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
@@ -386,18 +386,15 @@ function PullPane({
     height: Math.max(0, pullY.value),
     opacity: wakeVisibility.value,
   }))
-  // "לא עכשיו" follows a triangular curve over the drag: it grows 0 → full
-  // from rest to the 50% commit point (peak), then shrinks back to 0 while
-  // fading out as the card keeps going to a full dismiss. Scale and opacity
-  // ride the same factor so it grows in and shrinks/fades out together.
+  // "לא עכשיו" grows 0 → full from rest to the 50% commit point (peak),
+  // then HOLDS at full for the rest of the drag — once it has reached its
+  // shrink point it neither shrinks nor changes opacity as the card keeps
+  // going to a full dismiss (no triangular shrink/fade-back-out). Scale and
+  // opacity ride the same factor only during the grow-in, then stay at 1.
   const wakeScreenH = Dimensions.get('window').height
   const commitDist = wakeScreenH * PULL_COMMIT_FRACTION
   const wakeTextStyle = useAnimatedStyle(() => {
-    const p = pullY.value
-    const f = p <= commitDist
-      ? p / commitDist
-      : 1 - (p - commitDist) / Math.max(1, wakeScreenH - commitDist)
-    const v = Math.max(0, Math.min(1, f))
+    const v = Math.max(0, Math.min(1, pullY.value / commitDist))
     return { transform: [{ scale: v }], opacity: v }
   })
   const card = (
@@ -461,9 +458,10 @@ const pullPaneStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Matches the login "Once" logotype (TEXT.xxxl / extrabold / white).
+  // One token below the login "Once" logotype (TEXT.xxl, was TEXT.xxxl) /
+  // extrabold / white. Constant size — the wake label no longer scales down.
   wakeText: {
-    fontSize: TEXT.xxxl,
+    fontSize: TEXT.xxl,
     fontWeight: WEIGHT.extrabold,
     color: WHITE,
     letterSpacing: -1.4,
@@ -967,6 +965,71 @@ function EventMessageCard({ title, description, onContinue, busy }: { title: str
   )
 }
 
+// ── ReplyingInviteCard ───────────────────────────────────────────────────
+// The shared invitation card for BOTH sides of an invite:
+//   - page2 "you received an invitation" (topBlock) — the original use.
+//   - page1 "send her an invite?" (footerBlock) — the send prompt that used
+//     to be a bespoke title+lead+desc+button block. It is the same info
+//     component now: same StatusCard scaffold + spacings, no standalone
+//     heading (the title rides as a bold lead-in at the start of the body
+//     via StatusCardText), ghost decline + primary accept. The accept CTA
+//     carries the same SparklesIcon both ways so the two sides of an
+//     invitation read as mirror actions.
+// `footerInset` is supplied only by the page1 footer use: the card then
+// sits at the bottom of the MatchCard scroll, so its bottom padding must
+// clear the home indicator (never below the standard LG).
+function ReplyingInviteCard({
+  title,
+  description,
+  acceptLabel,
+  declineLabel,
+  onAccept,
+  onDecline,
+  busy,
+  acceptLoading,
+  footerInset,
+}: {
+  title: string
+  description: string
+  acceptLabel: string
+  declineLabel: string
+  onAccept: () => void
+  onDecline: () => void
+  busy?: boolean
+  acceptLoading?: boolean
+  footerInset?: number
+}) {
+  return (
+    <View style={[statusCardStyles.container, footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null]}>
+      <StatusCardText title={title} description={description} />
+      <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
+        <View style={statusButtonStyles.btnRow}>
+          <View style={statusButtonStyles.btnDecline}>
+            <Button
+              variant="onPrimaryGhost"
+              label={declineLabel}
+              onPress={onDecline}
+              disabled={busy}
+              silentDisabled
+            />
+          </View>
+          <View style={statusButtonStyles.btnAccept}>
+            <Button
+              variant="onPrimary"
+              label={acceptLabel}
+              iconStart={<SparklesIcon color={PRIMARY} />}
+              onPress={onAccept}
+              disabled={busy}
+              loading={acceptLoading}
+              silentDisabled={!acceptLoading}
+            />
+          </View>
+        </View>
+      </Animated.View>
+    </View>
+  )
+}
+
 // ── Page2 status card ────────────────────────────────────────────────────
 // Heading-led body block (StatusCardText) for the Viewers empty-state. The 3-state
 // visibility toggle (VisibilityToggle) sits above this card and now owns the
@@ -1358,9 +1421,19 @@ const visibilityToggleStyles = StyleSheet.create({
 // the same small time text, the same horizontal insets.
 const statusButtonStyles = StyleSheet.create({
   stack: {
-    marginTop: LG,
+    marginTop: XL,
     gap: SM,
   },
+  // Two-button row inside the StatusCard scaffold (ReplyingInviteCard:
+  // decline secondary + accept primary). The marginTop XL above the row
+  // comes from the enclosing `stack`, so the row itself is layout-only.
+  // declineCell:acceptCell = 1:2 keeps the accept CTA visually dominant.
+  btnRow: {
+    flexDirection: 'row',
+    gap: SM,
+  },
+  btnDecline: { flex: 1 },
+  btnAccept: { flex: 2 },
   stretch: { alignSelf: 'stretch' },
   footer: {
     paddingHorizontal: MD,
@@ -1478,15 +1551,17 @@ export default function HomePage() {
   // activation with header-vs-scroll arbitration. Threshold/flick/commit
   // motion are all object-owned and identical to the other surfaces (slide
   // off, then onCommit = close). No PullContext — PreviewFieldPage manages
-  // its own scroll via dismissGestureRef + onScrollAtTop. The tutorial runs
-  // once-ever the first time the sheet's card appears.
+  // its own scroll via dismissGestureRef + onScrollAtTop. No first-time
+  // swipe-down tutorial here: the user explicitly disabled the demo
+  // choreography on their own profile card (settings "My profile" sheet).
+  // Omitting `tutorial` makes usePullBehavior bail before any choreography;
+  // the page1/page2 tutorials are unaffected.
   const closeSheetViaSwipe = useCallback(() => setProfileSheetOpen(false), [])
   const profilePull = usePullBehavior({
     activation: 'sheet',
     enabled: true,
     onCommit: closeSheetViaSwipe,
     headerBottom: profileSheetHeaderBottom,
-    tutorial: { ready: profileSheetOpen, seenFlag: 'profile_demo' },
   })
   // ── Sheet open-progress → TabStrip morph (0 = closed, 1 = fully open) ────
   // `profileSheetOpenV` ramps with the card's SlideIn/SlideOut (system
@@ -2157,6 +2232,16 @@ export default function HomePage() {
   // itself does NOT set this — only the post-release server call does, so
   // mid-pull there's no scanning UI flicker.
   const [searching, setSearching] = useState(false)
+  // Sub-phase of `searching`: true once the server has answered with a
+  // candidate and we're now disk-prefetching + painting all of that
+  // profile's photos into the hidden preloader, false during the initial
+  // "no candidate yet" scan. Splits the single scanning headline into two
+  // copies — "Scanning..." while the round-trip is in flight, "Loading
+  // profile data" while the (already-resolved) candidate's images load —
+  // so the wait between server-answer and slide-up reads as progress, not a
+  // stalled scan. Always a strict subset of `searching`; the headline gates
+  // on `searching && loadingProfile`.
+  const [loadingProfile, setLoadingProfile] = useState(false)
   // Tracks the slide-out window: true from setDisplayedMatch(null) for ~400ms
   // (slightly more than SlideOutDown's 380ms duration). Used to keep the
   // empty-pane text hidden while the old card is still visually exiting,
@@ -2173,6 +2258,24 @@ export default function HomePage() {
       return () => clearTimeout(timer)
     }
   }, [displayedMatch?.user_id])
+
+  // Search watchdog. `searching` is normally cleared by the remote→displayed
+  // sync effect (or onPreloadReady) once Realtime confirms the find result.
+  // If that confirmation never arrives — a dropped Realtime relations event,
+  // or a server path that returns without changing state — the radar/locating
+  // UI would spin forever (the exact symptom of the page2-pending find bug).
+  // This is the safety net: a find can't legitimately take longer than the
+  // request ceiling plus Realtime/slide-in slack, so if `searching` is still
+  // true past that bound, force it off so the pane re-resolves to ready /
+  // no-one-nearby instead of hanging. Re-armed each time `searching` flips on.
+  useEffect(() => {
+    if (!searching) return
+    const timer = setTimeout(
+      () => { setSearching(false); setLoadingProfile(false) },
+      API_TIMEOUT_MS + SEARCH_WATCHDOG_SLACK_MS,
+    )
+    return () => clearTimeout(timer)
+  }, [searching])
 
   // Skip the entering animation only when the session started with a card
   // already in page1 (app-load instant appearance). If the session started
@@ -2197,6 +2300,10 @@ export default function HomePage() {
     setPendingKey('watching-reject')
     setIgnoreLoading(true)
     setSearching(true)
+    // Fresh scan starts in the "no candidate yet" phase, not the
+    // image-loading one (matters if a previous skip's loadingProfile
+    // hadn't cleared yet).
+    setLoadingProfile(false)
     // Optimistic exit: clearing displayedMatch unmounts the keyed
     // Animated.View, which plays SlideOutDown. The pull transform (pullY) is
     // preserved during the layout exit, so a release at any pulled position
@@ -2209,6 +2316,7 @@ export default function HomePage() {
       setPendingKey(null)
       setIgnoreLoading(false)
       setSearching(false)
+      setLoadingProfile(false)
     })
   }, [busy, ignoreLoading])
   const page1Pull = usePullBehavior({
@@ -2259,6 +2367,7 @@ export default function HomePage() {
     if (!remoteMatch) {
       setDisplayedMatch(null)
       setPreloadingMatch(null)
+      setLoadingProfile(false)
       page1Pull.reset()
       searchingTimer = setTimeout(() => {
         if (!cancelled) setSearching(false)
@@ -2280,6 +2389,7 @@ export default function HomePage() {
     // onPreloadReady re-promotes B. The card slides back in, then realtime
     // clears it: the visible "down→up→down" on cancel.
     if (displayedMatch && displayedMatch.user_id === remoteMatch.user_id) {
+      setLoadingProfile(false)
       clearLoading()
       return () => { cancelled = true }
     }
@@ -2301,7 +2411,9 @@ export default function HomePage() {
       setPreloadingMatch(remoteMatch)
     }
     if (urls.length === 0) {
-      // No photos to wait for — promote immediately.
+      // No photos to wait for — promote immediately. No image-loading wait,
+      // so the "Loading profile data" copy never applies here.
+      setLoadingProfile(false)
       setDisplayedMatch(remoteMatch)
       page1Pull.reset()
       searchingTimer = setTimeout(() => {
@@ -2309,6 +2421,10 @@ export default function HomePage() {
       }, 460)
       clearLoading()
     } else {
+      // Server has answered with a candidate; from here until the hidden
+      // preloader reports every photo painted we're loading this profile's
+      // images — swap the scanning headline to "Loading profile data".
+      setLoadingProfile(true)
       // Disk-cache the photos first; once cached, mount the hidden preloader.
       Image.prefetch(urls).then(startPreload, startPreload)
     }
@@ -2344,10 +2460,15 @@ export default function HomePage() {
     page1Pull.reset()
     preloadingMatchRef.current = null
     setPreloadingMatch(null)
+    // Keep `loadingProfile` (and `searching`) ON through the SlideInDown:
+    // the headline sits behind the rising card, so the copy must stay
+    // "Loading profile data" the whole way up rather than flipping back to
+    // "Scanning..." for the tail. Both clear together once the card has
+    // risen and covered the headline (480ms > the slide-up duration).
     requestAnimationFrame(() => {
       setDisplayedMatch(current)
     })
-    setTimeout(() => setSearching(false), 480)
+    setTimeout(() => { setSearching(false); setLoadingProfile(false) }, 480)
     if (ignoreLoadingRef.current) {
       setIgnoreLoading(false)
       setBusy(false)
@@ -2511,6 +2632,8 @@ export default function HomePage() {
     setBusy(true)
     setPendingKey('hidden-find')
     setSearching(true)
+    // Find always starts in the "no candidate yet" scan phase.
+    setLoadingProfile(false)
     invoke('app/find', {})
       .then(() => {
         setBusy(false)
@@ -2521,6 +2644,7 @@ export default function HomePage() {
         setBusy(false)
         setPendingKey(null)
         setSearching(false)
+        setLoadingProfile(false)
       })
   }, [busy])
 
@@ -2589,11 +2713,12 @@ export default function HomePage() {
   }, [page2PendingInvite?.user_id])
 
 
-  // Watching-state invite block lives inside the MatchCard scroll (passed
+  // Watching-state invite prompt lives inside the MatchCard scroll (passed
   // as footerBlock), not in the pinned HomeButtons row. The "skip" button
-  // is gone — pull-to-skip on the card handles the same intent. The prompt
-  // copy that used to live in the inviteConfirm popup is rendered inline
-  // above the button, so a single tap sends the invite.
+  // is gone — pull-to-skip on the card handles the same intent. It is the
+  // shared ReplyingInviteCard info component (same scaffold/spacings as the
+  // page2 side): the title rides as a bold lead-in into the body, so a
+  // single tap on the primary button sends the invite.
   //
   // After pressing send, we keep the block mounted for ~1.5s so it doesn't
   // pop out from under the user's finger when realtime flips state to
@@ -2607,84 +2732,38 @@ export default function HomePage() {
     return () => clearTimeout(id)
   }, [stickyInvite])
   const showInviteBlock = (state === 'watching' || stickyInvite) && isMatchCardOpen
-  const watchingInviteButton = showInviteBlock ? (() => {
-    const fullDesc = inviteConfirmDesc.replace(/\{name\}/g, matchName)
-    const [leadDesc, ...restDesc] = fullDesc.split('\n\n')
-    const tailDesc = restDesc.join('\n\n')
-    return (
-    <View style={[styles.watchingInviteBlock, { paddingBottom: Math.max(bottomInset, SM) }]}>
-      <Text style={styles.watchingInviteTitle}>
-        {tgg('home.inviteConfirmTitle' as any, isMale, matchIsMale).replace('{name}', matchName)}
-      </Text>
-      <Text style={styles.watchingInviteLead}>{leadDesc}</Text>
-      {tailDesc ? <Text style={styles.watchingInviteDesc}>{tailDesc}</Text> : null}
-      <View style={styles.replyingButtonRow}>
-        <View style={styles.replyingDeclineCell}>
-          <Button
-            variant="onPrimaryGhost"
-            label={t('home.watchingReject')}
-            onPress={() => { tap(); setSkipHintOpen(true) }}
-            disabled={busy}
-            loading={busy && pendingKey === 'watching-reject'}
-            silentDisabled={pendingKey !== 'watching-reject'}
-          />
-        </View>
-        <View style={styles.replyingAcceptCell}>
-          <Button
-            variant="onPrimary"
-            label={t('home.inviteConfirmOk')}
-            iconStart={<SparklesIcon color={PRIMARY} />}
-            onPress={() => {
-              setStickyInvite(true)
-              runAction('app/invite', 'invite-confirm')
-            }}
-            disabled={busy}
-            loading={busy && pendingKey === 'invite-confirm'}
-            silentDisabled={pendingKey !== 'invite-confirm'}
-          />
-        </View>
-      </View>
-    </View>
-    )
-  })() : null
+  const watchingInviteButton = showInviteBlock ? (
+    <ReplyingInviteCard
+      title={tgg('home.inviteConfirmTitle' as any, isMale, matchIsMale).replace(/\{name\}/g, matchName)}
+      description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
+      acceptLabel={t('home.inviteConfirmOk')}
+      declineLabel={t('home.watchingReject')}
+      onAccept={() => { setStickyInvite(true); runAction('app/invite', 'invite-confirm') }}
+      onDecline={() => { tap(); setSkipHintOpen(true) }}
+      busy={busy}
+      acceptLoading={busy && pendingKey === 'invite-confirm'}
+      footerInset={bottomInset}
+    />
+  ) : null
 
-  // Page2 pending-invite accept block — sits at the bottom of the page2
-  // MatchCard the way watchingInviteButton sits at the bottom of the page1
-  // watching card. Title + description + accept CTA + decline secondary.
-  // The countdown timer used to live in the accept button's footer; it now
-  // lives under the invite tab label (see inviteTabSubLabel above). The
-  // decline button opens the same refuse-confirm dialog as the swipe-down
-  // gesture (page2Pull below).
-  const replyingAcceptBlock = page2PendingInvite ? (
-    <View style={[styles.watchingInviteBlock, { paddingBottom: Math.max(bottomInset, SM) }]}>
-      <Text style={styles.watchingInviteTitle}>
-        {t('home.replyingTitle')}
-      </Text>
-      <Text style={styles.watchingInviteLead}>
-        {tg('home.replyingDesc', isMale)}
-      </Text>
-      <View style={styles.replyingButtonRow}>
-        <View style={styles.replyingDeclineCell}>
-          <Button
-            variant="onPrimaryGhost"
-            label={t('home.watchingReject')}
-            onPress={openRefuseConfirm}
-            disabled={busy}
-            silentDisabled
-          />
-        </View>
-        <View style={styles.replyingAcceptCell}>
-          <Button
-            variant="onPrimary"
-            label={t('home.replyingAccept')}
-            onPress={() => runAction('app/approve', 'replying-accept')}
-            disabled={busy}
-            loading={busy && pendingKey === 'replying-accept'}
-            silentDisabled={pendingKey !== 'replying-accept'}
-          />
-        </View>
-      </View>
-    </View>
+  // Page2 pending-invite card — sits at the TOP of the page2 MatchCard
+  // (topBlock), mirroring how InviteTimerCard sits on the page1 sent-invite
+  // card. StatusCard scaffold, no standalone heading (the title rides as a
+  // bold lead-in inside the body via StatusCardText), accept CTA + decline
+  // secondary inside the card. The countdown rides under the invite tab
+  // label (see inviteTabSubLabel above). The decline button opens the same
+  // refuse-confirm dialog as the swipe-down gesture (page2Pull below).
+  const replyingInviteCard = page2PendingInvite ? (
+    <ReplyingInviteCard
+      title={tg('home.replyingTitle', page2PendingInvite.is_male)}
+      description={tgg('home.replyingDesc', isMale, page2PendingInvite.is_male)}
+      acceptLabel={t('home.replyingAccept')}
+      declineLabel={t('home.watchingReject')}
+      onAccept={() => runAction('app/approve', 'replying-accept')}
+      onDecline={openRefuseConfirm}
+      busy={busy}
+      acceptLoading={busy && pendingKey === 'replying-accept'}
+    />
   ) : null
 
   // Hero-photo overlay button on the page1 MatchCard:
@@ -2922,6 +3001,10 @@ export default function HomePage() {
   // "(re)entered the ready state" detection below reuses it instead of
   // duplicating the branch condition.
   const isLocatingHeadline = startupCompleted && (focusInflight || searching)
+  // Strict subset of isLocatingHeadline: the server already answered with a
+  // candidate and we're painting its photos into the hidden preloader. Same
+  // slot, different copy ("Loading profile data" vs "Scanning...").
+  const isLoadingProfileHeadline = startupCompleted && searching && loadingProfile
   const isEmptyHeadline = !showHiddenPlaceholder || cardExiting
   const showReadyHeadline = !isLocatingHeadline && !isEmptyHeadline && isReadyToFind
   // Roll a fresh random sentence each time the ready headline (re)appears:
@@ -2943,13 +3026,15 @@ export default function HomePage() {
     ? (availability?.state === 'not_yet'
         ? t('home.geoGate.notYet').replace('{date}', gateWhenStr)
         : t('home.geoGate.unavailable'))
-    : isLocatingHeadline
-      ? t('home.locatingDesc')
-      : isEmptyHeadline
-        ? ''
-        : showReadyHeadline
-          ? genderize(READY_HEADLINES[readyHeadlineIdx] ?? '', isMale)
-          : t('home.noOneNearbyTitle')
+    : isLoadingProfileHeadline
+      ? t('home.loadingProfile')
+      : isLocatingHeadline
+        ? t('home.locatingDesc')
+        : isEmptyHeadline
+          ? ''
+          : showReadyHeadline
+            ? genderize(READY_HEADLINES[readyHeadlineIdx] ?? '', isMale)
+            : t('home.noOneNearbyTitle')
 
   // PagerView onPageScroll drives the TabStrip indicator each frame. Runs on
   // the UI thread (worklet) so the underline tracks the swipe 1:1 instead of
@@ -3012,13 +3097,20 @@ export default function HomePage() {
         <AnimatedPagerView
           ref={pagerRef}
           style={{ flex: 1 }}
-          initialPage={initialPane}
+          // Clamp the seed page when gated: the side slot doesn't exist while
+          // gated (2-child pager), so a stale chat/page2 notification must not
+          // try to seat the pager on a non-existent index 2.
+          initialPage={geoGated ? Math.min(initialPane, HOME_PANE) : initialPane}
           // Geo-gated: the pager stays swipeable so Home<->Menu(settings) keeps
           // working by swipe (the user must still reach settings while waiting
-          // for launch). The side slot is kept unreachable WITHOUT locking the
-          // whole pager: its tab is removed (tabSpecs), goToPane swallows
-          // programmatic nav to it, and onPageSelected snaps back from it to
-          // Home if a swipe lands there.
+          // for launch). The side slot is made unreachable by NOT rendering it
+          // at all (the children array drops slot 2 when geoGated, see below).
+          // react-native-pager-view has no per-page swipe lock, so a 3-child
+          // pager always lets a finger reach slot 2 — onPageSelected can only
+          // bounce it back *after* it's already on screen, which still reads
+          // as "accessible". Removing the child is the only way to make
+          // page2/chat truly inaccessible. Its tab is also removed (tabSpecs)
+          // and goToPane swallows programmatic nav to it.
           scrollEnabled={!sliding}
           overdrag={false}
           overScrollMode="never"
@@ -3326,7 +3418,13 @@ export default function HomePage() {
               </View>
             </View>,
 
-            // Slot 2: side — page2 or chat depending on chatAvailable
+            // Slot 2: side — page2 or chat depending on chatAvailable.
+            // While geo-gated this slot is NOT rendered at all: the pager has
+            // only [settings, home] children, so page2/chat is physically
+            // unreachable by swipe (not bounced back after it's already shown)
+            // while Home<->Menu keeps working. Spread an empty array, never a
+            // falsy child — see the React-19 array-children note above.
+            ...(geoGated ? [] : [
             <View key="side" style={{ flex: 1 }}>
               {chatAvailable ? (
                 <ChatPage
@@ -3450,16 +3548,12 @@ export default function HomePage() {
                         >
                           <MatchCard
                             match={page2PendingInvite}
-                            actions={[{
-                              key: 'help',
-                              icon: <QuestionIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
-                            }]}
+                            actions={[]}
                             viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
                             onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
-                            footerBlock={replyingAcceptBlock}
-                            footerBg={replyingAcceptBlock ? PRIMARY : undefined}
+                            topBlock={replyingInviteCard}
                           />
                         </RisingCard>
                       </PullPane>
@@ -3493,6 +3587,7 @@ export default function HomePage() {
                 ) : null}
               </View>}
             </View>,
+            ]),
           ]}
         </AnimatedPagerView>
         {/* Profile preview sheet — same PullPane frame as page1/page2.
@@ -3518,6 +3613,7 @@ export default function HomePage() {
                 dismissGestureRef={profilePull.panRef}
                 onScrollAtTop={profilePull.setScrollAtTop}
                 headerBottomShared={profileSheetHeaderBottom}
+                pulling={profilePull.pulling}
                 clipBottom
               />
             </RisingCard>
@@ -3591,12 +3687,22 @@ const styles = StyleSheet.create({
     // "floating shelf" separation. No overflow:hidden: the sub-label timer
     // must be free to ride up into the top padding (see TabStrip.tsx).
     backgroundColor: PRIMARY,
-    // Tight SM screen-edge margin (the user wants the row close to the
-    // edges). Independent of the selected-tab chip, which is a fixed-width
-    // element centred on each tab inside the row, so reducing this does not
-    // affect the chip.
-    paddingHorizontal: SM,
-    paddingBottom: MD,
+    // Snug screen-edge margin: SM + XS (a touch more than the original tight
+    // SM, at the user's request — composed from tokens, not a magic literal,
+    // same pattern as paddingBottom below). It is symmetric, so the row only
+    // narrows equally on both sides; TabStrip recomputes its equal flexW from
+    // the new rowW and the chip stays centred per tab — tab structure and
+    // symmetry are untouched. Independent of the selected-tab chip (a
+    // fixed-width element centred on each tab inside the row), so changing
+    // this does not affect the chip.
+    paddingHorizontal: SM + XS,
+    // The selected chip is bottom-anchored and overflows the row by
+    // (indicatorPadV + chipBaselineNudge) px downward, so a plain MD here
+    // left only ~7px between the pill and the content/photo below — it read
+    // as glued to the indicator. Add the chip's downward overflow back so
+    // the *visible* gap beneath the pill is a clean MD; self-corrects if the
+    // anchor tokens change.
+    paddingBottom: TAB.indicatorPadV + TAB.chipBaselineNudge + MD,
     // No drop-shadow: the header is intentionally flat. Separation from the
     // white content below is the deep-wine color contrast alone.
     zIndex: 1,
@@ -3787,42 +3893,5 @@ const styles = StyleSheet.create({
   },
   waitingActions: {
     gap: MD,
-  },
-  watchingInviteBlock: {
-    backgroundColor: PRIMARY,
-    paddingHorizontal: MD,
-    paddingTop: MD,
-    paddingBottom: MD,
-    gap: RADIUS,
-  },
-  watchingInviteTitle: {
-    fontSize: TEXT.xl,
-    fontWeight: WEIGHT.extrabold,
-    color: WHITE,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  watchingInviteLead: {
-    fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
-    color: WHITE,
-    textAlign: 'center',
-  },
-  watchingInviteDesc: {
-    fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
-    color: WHITE,
-    textAlign: 'center',
-  },
-  replyingButtonRow: {
-    flexDirection: 'row',
-    gap: SM,
-    marginTop: SM,
-  },
-  replyingDeclineCell: {
-    flex: 1,
-  },
-  replyingAcceptCell: {
-    flex: 2,
   },
 })

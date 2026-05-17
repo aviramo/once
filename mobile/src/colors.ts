@@ -49,6 +49,17 @@ export const HEADER_PILL_FILL = 'rgba(255,255,255,0.18)'
 export const HEADER_PILL_BORDER = 'rgba(255,255,255,0.38)'
 export const HEADER_PILL_SHADOW = '0px 4px 14px rgba(0,0,0,0.22)'
 
+// ── Photo-caption legibility ──────────────────────────────────────────────
+// White text laid directly over a user photo can vanish on a bright or white
+// image. This soft dark drop-shadow keeps it readable on any background.
+// Shared by every "white title on a photo" surface (watcher card, the
+// settings profile-card hero) so they never drift apart.
+export const PHOTO_TEXT_SHADOW = {
+  textShadowColor: BLACK_STRONG,
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 6,
+}
+
 // ── Destructive ──────────────────────────────────────────────────────────
 // Warm gold/amber. The app surface is now the deep-wine PRIMARY everywhere,
 // and the old red (#D96B6B) sat muddily on wine (red-on-red, low separation).
@@ -85,35 +96,32 @@ export const PREMIUM       = '#8B5CF6'
 
 // ── Illustration palette ──────────────────────────────────────────────────
 // The empty-state spot illustrations (telescope = "visible/scanning",
-// crescent moon = "hidden") used to be painted in a stray peach/tan set
-// (#FAD7C9 / #F1E8E2 / #E0CFC4 / #C9B8AE) that belonged to no other surface
-// and clashed with the deep-wine PRIMARY header sitting right above them.
-// They are now a single tonal set in the SAME wine/rose family as PRIMARY,
-// so the artwork reads as the same brand surface as the header instead of
-// an unrelated sticker. Both illustrations share this one palette by
-// contract (they are the same scene in two modes) — defined once here,
-// never re-inlined per component.
+// crescent moon = "hidden") are white line-art on the pure-black PRIMARY
+// field. The brand is strictly monochrome (black-only, no theme toggle), so
+// the artwork carries NO hue at all — only a neutral white→gray ramp. An
+// earlier rose/wine tint (#B86E80 / #E89AAB / #FFE9E0) was the last colored
+// surface left in the app and clashed with the black-only direction; it is
+// gone. Both illustrations share this one palette by contract (they are the
+// same scene in two modes) — defined once here, never re-inlined per
+// component.
 //
-// The app surface is now the deep-wine PRIMARY everywhere, so the ramp was
-// re-tuned to read as a clean, premium white/rose line illustration ON wine
-// (it used to be a dark-on-white ramp). Same contract: both illustrations
-// share this one palette, defined once here, never re-inlined per component.
+// NOTE: opaque, hand-tuned greys — NOT low-alpha white. The shapes are
+// already drawn with per-path `opacity`; an alpha fill would double-composite
+// against that and against the black field, muddying the ramp. Solid greys at
+// each step keep the artwork crisp and the depth order exact on pure black.
 //
-// NOTE: opaque, hand-tuned hues — NOT low-alpha white. A translucent white
-// over wine desaturates into a chalky pink that reads as washed-out; solid
-// hues at each step keep the artwork crisp on the saturated wine field.
-//
-// Layered for depth on the wine (PRIMARY) sheet:
+// Layered for depth on the black (PRIMARY) sheet, darkest → brightest:
 //   WASH   = PRIMARY itself — the moon's crescent cutout / lens-disc core,
 //            i.e. the parts "carved back to the background"
-//   CLOUD  dusty rose — drifting clouds, recede behind the figure (0.85 op.)
+//   CLOUD  mid-grey — drifting clouds, recede behind the figure (0.85 op.)
+//   LINE   light-grey — tube/moon outline & shade, craters (between body & bg)
 //   BODY   white — the tube / moon face, the brightest shape
-//   LINE   soft rose — tube/moon outline & shade, craters (between body & bg)
 //   STRUCT white — tripod legs & mount, the load-bearing lines
-//   ACCENT warm light — sparkles & lens ring (was PRIMARY; invisible on wine)
+//   ACCENT white — sparkles & lens ring (always drawn at low opacity, so it
+//          still reads as a faint twinkle distinct from the solid-white body)
 export const ILLUSTRATION_WASH   = PRIMARY
-export const ILLUSTRATION_CLOUD  = '#B86E80'
+export const ILLUSTRATION_CLOUD  = '#8C8C8C'
 export const ILLUSTRATION_BODY   = WHITE
-export const ILLUSTRATION_LINE   = '#E89AAB'
+export const ILLUSTRATION_LINE   = '#C4C4C4'
 export const ILLUSTRATION_STRUCT = WHITE
-export const ILLUSTRATION_ACCENT = PRIMARY_LIGHT
+export const ILLUSTRATION_ACCENT = WHITE

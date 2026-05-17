@@ -9,6 +9,12 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 let startupComplete = false
 export function markStartupComplete() { startupComplete = true }
 
+// Hard ceiling on a single edge-function round trip. Single source of truth:
+// the request abort below uses it, and the home-pane search watchdog derives
+// its hang timeout from it (no candidate/Realtime change can legitimately
+// take longer than the request itself).
+export const API_TIMEOUT_MS = 15_000
+
 export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
 
   const session = await supabase.auth.getSession()
@@ -26,7 +32,7 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000)
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
   let res: Response
   try {
     res = await fetch(`${supabaseUrl}/functions/v1/${fn}`, {

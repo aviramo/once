@@ -83,6 +83,24 @@ export const ICON = {
   huge: 48,   // glyph inside RoundButton overlays (heart / pause / dots / add-photo / family)
 } as const
 
+// ── Spinner ────────────────────────────────────────────────────────────────
+// The single in-app loading spinner (rotating SVG arc over a faint full
+// track). One component, sized/weighted by props from this token. `md` is the
+// default and MUST match what the in-button loading spinner used historically
+// — do not retune it without checking Button.tsx. `lg` is the prominent
+// variant: a white spinner standing in for a hero glyph inside a RoundButton
+// (game-mode toggle busy state), where a small black ActivityIndicator was
+// invisible on the dark photo. Larger + heavier so it reads clearly there.
+
+export const SPINNER = {
+  size: ICON.xxl,      // 24 — default footprint (matches the old ButtonSpinner)
+  thickness: 2.5,      // arc + track stroke width, in the 24-unit viewBox
+  sizeLg: 36,          // prominent variant (RoundButton busy state)
+  thicknessLg: 3.5,    // heavier arc for the large variant (own axis — not
+                       // STROKE.heavy: icon line-weight ≠ spinner arc weight)
+  trackOpacity: 0.3,   // faint full circle behind the moving arc
+} as const
+
 // ── Stroke widths ──────────────────────────────────────────────────────────
 
 export const STROKE = {
@@ -134,6 +152,15 @@ export const MOTION = {
   base: 300,
   spin: 600,
 } as const
+
+// Search-watchdog slack (ms). NOT a MOTION value: this is a UI-state-gating
+// delay, not an animation duration. The home pane keeps `searching=true` until
+// Realtime confirms the result; if a Realtime relations event is ever dropped
+// (known possibility — see realtime.ts resync), the radar would otherwise spin
+// forever. The watchdog clears it after API_TIMEOUT_MS (the request ceiling) +
+// this slack, which covers Realtime propagation + the card slide-in. Sized far
+// above any legitimate find so it can only fire on a genuine hang.
+export const SEARCH_WATCHDOG_SLACK_MS = 6_000
 
 // ── Shadow gradient stops ──────────────────────────────────────────────────
 // Used to paint a 20-layer translucent-black gradient above bottom sheets so
@@ -194,25 +221,46 @@ export const TAB = {
   // indicators across the shell share one heartbeat.
   subLabelPulsePhaseMs: 900,
   subLabelPulseOpacity: 0.45,
-  // Vertical nudge applied to standalone tab icons (renderIndicator) so they
-  // visually center against the label glyphs next to them. Flex
-  // `alignItems: center` aligns BOXES, but on Android the actual rendered
-  // text sits low in its line-box (font metrics give extra space at the top),
-  // so a centered icon ends up appearing visually higher than the labels.
-  // Positive value pushes the icon DOWN to match the labels' rendered Y.
-  iconBaselineNudge: 3,
-  // Upward nudge (px) applied to the tab LABEL cluster via a transform so
-  // its glyph centre matches the icon's. Even with lineHeight == rowHeight
-  // and includeFontPadding:false, Android renders the glyph low in its
-  // line-box, so a flex-centred label sits a few px below a flex-centred
-  // icon; this lifts it back to the icon's centre. Transform-only (no
-  // layout/width change); the chip is tall enough that the text stays fully
-  // enclosed. Tune this single value if label vs icon ever drifts. Applied
-  // inside `pressLabelStyle`'s transform array — NOT as a static transform on
-  // labelStack (a Reanimated style array replaces, not merges, `transform`, so
-  // the press worklet would clobber a static wrapper transform; same for
-  // iconBaselineNudge → pressIndicatorStyle).
-  labelLift: 3,
+  // Vertical nudge applied to standalone tab icons (renderIndicator). Flex
+  // `alignItems: center` aligns BOXES; positive value pushes the icon DOWN.
+  // MECHANISM: now a STATIC `styles.iconNudge` transform on the icon's outer
+  // wrapper (the icon-side twin of styles.labelNudge), NOT the press worklet
+  // — so it hot-reloads reliably, same as the label nudge.
+  // Bumped 3 -> 4: the user asked to move BOTH the icons and the text down
+  // by 1px together (labelLift -2 -> -3 in lockstep). Tunable live now that
+  // both nudges use the reliable static mechanism.
+  iconBaselineNudge: 4,
+  // Upward nudge (px) applied to the tab LABEL cluster so its glyph centre
+  // matches the icon's. Even with lineHeight == rowHeight and
+  // includeFontPadding:false, Android renders the glyph low in its line-box,
+  // so a flex-centred label sits a few px below a flex-centred icon; this
+  // lifts it back to the icon's centre. Transform-only (no layout/width
+  // change). THE single knob for label-vs-icon vertical alignment.
+  //
+  // MECHANISM (changed 2026-05-17): this used to live inside the
+  // `pressLabelStyle` *worklet*. Reanimated serialises worklet-captured
+  // constants to the UI thread and does NOT reliably rebuild them on Fast
+  // Refresh, so retuning this number appeared to do nothing until a full
+  // reload — and a constant layout offset has no business in an animated
+  // worklet anyway. It is now a STATIC StyleSheet transform
+  // (`styles.labelNudge`) on a wrapper SEPARATE from the one carrying the
+  // animated press `scale`; two different views ⇒ the RN transform-array
+  // "replace not merge" hazard does not apply, and a plain style prop
+  // reflects edits on a normal Fast Refresh. Tune this and it actually moves.
+  //
+  // MAY GO NEGATIVE. Positive = lift the word UP; negative = push it DOWN
+  // (styles.labelNudge applies `translateY: -labelLift`, so −2 ⇒ +2px down).
+  // Same pattern as timerGap, which is already negative. With the static
+  // mechanism finally hot-reloading, the user repeatedly reported the word
+  // sitting too HIGH even at +3 (and at the matched icon baseline) — so the
+  // glyph's real Android line-box offset is small here and the label needs a
+  // DOWNWARD nudge, not an upward one. Now −3: the user asked to move BOTH
+  // the text and the icons down by 1px together (−2 → −3 here, in lockstep
+  // with iconBaselineNudge 3 → 4). Applies equally to the morph "Once" and
+  // every normal label (both wrappers use `styles.labelNudge`), so they stay
+  // mutually aligned. Chip-vs-content centring is a SEPARATE concern owned by
+  // chipBaselineNudge (left as-is).
+  labelLift: -3,
   // ── Gliding selected-tab lozenge ─────────────────────────────────────────
   // A flat translucent chip that slides behind the active tab AND spans that
   // tab's full width (minus this inset each side so adjacent chips never
@@ -236,14 +284,13 @@ export const TAB = {
   // rule), no scaleY counter-translate needed.
   //
   // WIDTH KNOB: chipW = (selected tab's measured width) − 2*indicatorInsetX.
-  // Smaller value => the pill uses more of the tab's available room (the
-  // user wants it "יותר רחב אם יש מקום"). On a roomy flex tab ("Once",
-  // labelled side) this visibly widens the pill; a compact icon tab has
-  // little room so its pill stays naturally tight. Only ever ONE chip on
-  // screen (it slides, never coexists with a second), so a small inset can't
-  // make two pills touch — it's purely the pill↔tab-edge breathing room.
-  // Reduced 8 -> 4 at the user's request (pill was leaving too much room).
-  indicatorInsetX: 4,
+  // 0 ⇒ the chip spans the FULL tab width (user: "the indicator must occupy
+  // the whole tab width"). The two content tabs are forced to an identical
+  // explicit width in TabStrip (see flexW), so the chip is identical AND
+  // full on tab1 and tab2 whenever page2 carries a profile. Only ever ONE
+  // chip on screen (it slides, never coexists with a second), so a 0 inset
+  // can't make two pills touch. Reduced 8 -> 4 -> 0 at the user's request.
+  indicatorInsetX: 0,
   // Vertical pad around the chip (top + bottom). Bottom-anchored at
   // `-indicatorPadV`. SHORT (no-timer) height = rowHeight + 2*indicatorPadV =
   // 44. When the SELECTED tab carries a sub-label (the invite countdown /
@@ -276,9 +323,10 @@ export const TAB = {
   // row's empty top slack (the name is centred + lifted by -labelLift, so
   // there is real whitespace above its glyph the timer can occupy without
   // colliding). Each keeps its own text line-box so both stay legible.
-  // 0 was still too airy on device; reduced 2 -> 0 -> -8 at the user's
-  // request. Single knob — make it more negative for tighter, less for air.
-  timerGap: -8,
+  // History: 2 -> 0 -> -8 (user wanted it ever tighter), then -8 -> -4 (user
+  // asked for a little more air back between the timer and the name). Single
+  // knob — make it more negative for tighter, less negative for more air.
+  timerGap: -4,
   // Timer / sub-label font size (also its lineHeight, see styles.subLabel).
   // 20 — a deliberate step BETWEEN TEXT.lg (18) and TEXT.xl (24): the user
   // asked to enlarge the timer twice (16 -> 18 -> 20), but it must stay
@@ -302,8 +350,13 @@ export const TAB = {
   // above the ink. This shifts the whole capsule down via a static `bottom`
   // offset (declarative in the stylesheet, NOT computed) so its centre lands
   // on the tab's optical content centre. This is the SINGLE knob to tune if
-  // the chip ever drifts vs. the text — change only this number.
-  chipBaselineNudge: 3,
+  // the chip ever drifts vs. the text — change only this number. Raised
+  // 3 -> 5 at the user's request: the name still read too low inside the
+  // selected pill (too much air above the glyph, too little below), so the
+  // capsule needed to come down a touch more onto the ink. Larger => chip
+  // lower; CHIP_TOP_BAND and the container paddingBottom both depend on this
+  // and self-correct, so it stays one coherent knob.
+  chipBaselineNudge: 5,
   // Subtle press feedback: a tab's content cluster (label / icon) dips to
   // this scale while held. Tactile without being a bounce.
   pressScale: 0.94,
