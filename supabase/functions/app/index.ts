@@ -360,16 +360,6 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "reset": {
-        if (user.data.role !== "ADMIN") return log.error("reset", "unauthorized", 403);
-        await Tools.invoke(log, "reset_chat", Tools.supabase.from("chat").delete().not("user_id", "is", null));
-        await Tools.invoke(log, "reset_log", Tools.supabase.from("log").delete().not("user_id", "is", null));
-        await Tools.invoke(log, "reset_restrictions", Tools.supabase.from("restrictions").delete().not("id", "is", null));
-        await Tools.invoke(log, "reset_relations", Tools.supabase.from("users").update({ last_seen: new Date(), relations: { page1: { state: 'locked' }, page2: { state: 'free', profiles: [] } } }).not("user_id", "is", null));
-        await user.persist(log);
-        break;
-      }
-
       case "profile": {
         // Accept any subset of {images, bio, family}. Keys absent from the
         // body are left untouched on the row. Pass null on a key to clear
@@ -425,8 +415,8 @@ Deno.serve(async (req) => {
 
     // Propagate fresh last_seen / location into snapshots inside other users'
     // relations (and recompute distances inside this user's own relations).
-    // Skip for delete (row is gone) and reset (just touched everyone already).
-    if (key !== "delete" && key !== "reset") {
+    // Skip for delete (the row is gone).
+    if (key !== "delete") {
       EdgeRuntime.waitUntil(
         Tools.rpc(log, "app_refresh_snapshots", { me_id: user.user_id }).then(() => {}),
       );

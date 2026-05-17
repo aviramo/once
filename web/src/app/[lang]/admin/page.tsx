@@ -8,6 +8,8 @@ import { AdminShell, Section, EmptyState } from "./_components/ui";
 import { SearchControls } from "./_components/SearchControls";
 import type { UserRow } from "./_components/UserCard";
 import { UsersRealtime } from "./_components/UsersRealtime";
+import { ResetAllButton } from "./_components/ResetAllButton";
+import { resetAllUsers } from "./actions";
 
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
@@ -129,6 +131,18 @@ export default async function AdminDashboard({
       <Section
         title={d.users}
         hint={d.resultsCount.replace("{count}", String(rows.length))}
+        action={
+          <ResetAllButton
+            action={resetAllUsers}
+            dict={{
+              label: d.resetAll,
+              confirm: d.resetAllConfirm,
+              busy: d.resetAllBusy,
+              done: d.resetAllDone,
+              fail: d.resetAllFail,
+            }}
+          />
+        }
       >
         <div className="space-y-6">
           <SearchControls

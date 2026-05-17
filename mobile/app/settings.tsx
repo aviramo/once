@@ -5,7 +5,6 @@ import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Path, Line, Circle, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
@@ -24,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
@@ -89,7 +88,6 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
 // ── Local aliases for shared icons (keep call sites unchanged) ────────────
 
 const FIELD_ICON_STROKE = BLACK_STRONG
-const DESTRUCTIVE_COLOR = WHITE_MID
 
 // ── Select Field Types ─────────────────────────────────────────────────────
 
@@ -125,12 +123,6 @@ export type RadiusFieldConfig = {
   formatStep: (i: number) => string
 }
 
-export type AdminFieldConfig = {
-  kind: 'admin'
-  title: string
-  onReset: (state: 'VISIBLE' | 'HIDDEN') => Promise<void>
-}
-
 export type AccountFieldConfig = {
   kind: 'account'
   title: string
@@ -151,7 +143,7 @@ export type AppSectionFieldConfig = {
   title: string
 }
 
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AdminFieldConfig | AccountFieldConfig | PreviewFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AccountFieldConfig | PreviewFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Shared tappable settings row used across Preferences, Profile, App and the
@@ -2296,11 +2288,10 @@ export function PreviewFieldPage({
 // Used by ProfileSectionPage and AppSectionPage to render a second-level
 // ── App Inline Content ─────────────────────────────────────────────────────
 
-function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const router = useRouter()
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
-  const [resetting, setResetting] = useState(false)
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
@@ -2329,26 +2320,6 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
     await finishAndGoToLogin()
   }, [deleting, finishAndGoToLogin])
 
-  const onReset = useCallback(async () => {
-    if (resetting) return
-    setResetting(true)
-    try {
-      await invoke('app/reset', {})
-      const keys = await AsyncStorage.getAllKeys()
-      const chatKeys = keys.filter(k =>
-        k.startsWith('chatCache_') || k.startsWith('chatLastOpened_') || k.startsWith('chatLastRead_'),
-      )
-      if (chatKeys.length > 0) await AsyncStorage.multiRemove(chatKeys)
-      // Server response is back: leave the menu pane and land on page1 (Home).
-      if (onNavigateHome) onNavigateHome()
-      else if (onBack) onBack()
-      else if (router.canGoBack()) router.back()
-    } catch (e) { console.error(e) }
-    finally { setResetting(false) }
-  }, [resetting, onBack, onNavigateHome, router])
-
-  const resetTap = useTapResponder(onReset)
-
   if (!profile) return null
 
   return (
@@ -2360,21 +2331,6 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
           onPress={() => setAccountPopupVisible(true)}
           icon={<UserIcon color={WHITE} />}
         />
-        {profile.data?.role === 'ADMIN' && (
-          <>
-            <View style={styles.accountActionDivider} />
-            <View
-              style={[styles.accountActionRow, resetting && { opacity: 0.5 }]}
-              {...(resetting ? {} : resetTap)}
-            >
-              {resetting
-                ? <ActivityIndicator size={18} color={DESTRUCTIVE_COLOR} />
-                : <ResetIcon color={DESTRUCTIVE_COLOR} />
-              }
-              <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.adminEntry')}</Text>
-            </View>
-          </>
-        )}
       </View>
       <AccountPopup
         visible={accountPopupVisible}
@@ -2754,7 +2710,6 @@ const styles = StyleSheet.create({
   },
   accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   accountActionText: { fontSize: TEXT.md, color: WHITE, fontWeight: WEIGHT.semibold },
-  accountActionTextDestructive: { color: WHITE_MID },
   // Account popup identity block: stacked text list (one field per line) in
   // PRIMARY on the white sheet, replacing the old chip pills.
   accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
