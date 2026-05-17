@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import type { Tone } from "@/lib/humanize";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ import { AdminNav } from "./AdminNav";
 
 type ShellProps = {
   dict: Dictionary["admin"];
-  active: "users" | "roles" | "areas" | "map";
+  active: "dashboard" | "users" | "roles" | "areas" | "map";
   children: ReactNode;
   /** Sub-page back link target (omitted on the top-level list pages). */
   backHref?: string;
@@ -48,6 +49,7 @@ export function AdminShell({
           <AdminNav
             active={active}
             labels={{
+              dashboard: dict.nav.dashboard,
               users: dict.nav.users,
               roles: dict.nav.roles,
               areas: dict.nav.areas,
@@ -138,6 +140,126 @@ export function Card({
     );
   }
   return <div className={cn(base, className)}>{children}</div>;
+}
+
+/* -------------------------------------------------------------- CardGrid -- */
+
+/**
+ * The one responsive grid every dashboard cluster uses. `auto-fill` +
+ * `minmax` so a section reflows to fit its tiles at any width without per
+ * page breakpoint juggling; `min` is the only knob (nav tiles want a wider
+ * minimum than stat tiles).
+ */
+export function CardGrid({
+  children,
+  min = "14rem",
+  className,
+}: {
+  children: ReactNode;
+  min?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn("grid gap-3", className)}
+      style={{
+        gridTemplateColumns: `repeat(auto-fill, minmax(min(${min}, 100%), 1fr))`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- NavTile -- */
+
+type IconType = ComponentType<{ className?: string }>;
+
+/**
+ * A prominent navigation card for the dashboard hub: icon + title +
+ * description, with a headline metric and a direction-aware arrow. Composes
+ * <Card> so hover/href behaviour is never re-implemented.
+ */
+export function NavTile({
+  icon: Icon,
+  title,
+  desc,
+  value,
+  href,
+}: {
+  icon: IconType;
+  title: string;
+  desc: string;
+  value?: ReactNode;
+  href: string;
+}) {
+  return (
+    <Card href={href} className="group flex flex-col gap-4 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <span className="inline-flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Icon className="size-5" />
+        </span>
+        <ArrowLeft className="size-4 text-muted-foreground transition-colors group-hover:text-foreground ltr:-scale-x-100" />
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p>
+      </div>
+      {value != null ? (
+        <p className="mt-auto text-2xl font-bold tabular-nums tracking-tight">
+          {value}
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ Stat -- */
+
+/** Accent tints for a Stat's value — semantic, drawn from the shared Tone
+ * palette so the dashboard never invents its own colours. */
+const STAT_ACCENT: Record<Tone, string> = {
+  ok: "text-emerald-600 dark:text-emerald-400",
+  busy: "text-amber-600 dark:text-amber-400",
+  chat: "text-sky-600 dark:text-sky-400",
+  idle: "text-foreground",
+  ended: "text-rose-600 dark:text-rose-400",
+};
+
+/**
+ * A single KPI tile: label, big value, optional hint. Clickable when `href`
+ * is given (deep-links to the filtered screen that owns the metric) —
+ * composes <Card> so the link/hover treatment stays DRY.
+ */
+export function Stat({
+  label,
+  value,
+  hint,
+  href,
+  accent = "idle",
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  href?: string;
+  accent?: Tone;
+}) {
+  return (
+    <Card href={href} className="flex flex-col gap-1 p-4">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "text-3xl font-bold tabular-nums tracking-tight",
+          STAT_ACCENT[accent],
+        )}
+      >
+        {value}
+      </span>
+      {hint ? (
+        <span className="mt-0.5 text-xs text-muted-foreground">{hint}</span>
+      ) : null}
+    </Card>
+  );
 }
 
 /* ---------------------------------------------------------------- Avatar -- */

@@ -24,7 +24,7 @@ export async function createRole(fd: FormData) {
   const n = name(fd);
   if (!n) throw new Error("missing_name");
   const admin = createSupabaseAdmin();
-  const { error } = await admin.from("roles").insert({ name: n });
+  const { error } = await admin.from("groups").insert({ name: n });
   if (error) {
     throw new Error(error.code === UNIQUE_VIOLATION ? "duplicate_name" : error.message);
   }
@@ -40,7 +40,7 @@ export async function renameRole(fd: FormData) {
   if (!id) throw new Error("missing_id");
   if (!n) throw new Error("missing_name");
   const admin = createSupabaseAdmin();
-  const { error } = await admin.from("roles").update({ name: n }).eq("id", id);
+  const { error } = await admin.from("groups").update({ name: n }).eq("id", id);
   if (error) {
     throw new Error(error.code === UNIQUE_VIOLATION ? "duplicate_name" : error.message);
   }
@@ -57,14 +57,14 @@ export async function setRoleEnabled(fd: FormData) {
   if (!id) throw new Error("missing_id");
   const enabled = String(fd.get("enabled") ?? "") === "true";
   const admin = createSupabaseAdmin();
-  const { error } = await admin.from("roles").update({ enabled }).eq("id", id);
+  const { error } = await admin.from("groups").update({ enabled }).eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(ROLES_PATH, "page");
   await triggerResync();
 }
 
 // Delete is allowed ONLY when the role has zero members (the UI also disables
-// the button then). The user_roles.role_id FK is ON DELETE RESTRICT, so the
+// the button then). The user_groups.group_id FK is ON DELETE RESTRICT, so the
 // DB is the real backstop; this pre-check just yields a friendly reason.
 export async function deleteRole(fd: FormData) {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
@@ -72,12 +72,12 @@ export async function deleteRole(fd: FormData) {
   if (!id) throw new Error("missing_id");
   const admin = createSupabaseAdmin();
   const { count, error: cErr } = await admin
-    .from("user_roles")
+    .from("user_groups")
     .select("user_id", { count: "exact", head: true })
-    .eq("role_id", id);
+    .eq("group_id", id);
   if (cErr) throw new Error(cErr.message);
   if ((count ?? 0) > 0) throw new Error("role_in_use");
-  const { error } = await admin.from("roles").delete().eq("id", id);
+  const { error } = await admin.from("groups").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(ROLES_PATH, "page");
   // No members → nobody's availability changed.
@@ -95,15 +95,15 @@ export async function setUserRoleAssignment(fd: FormData) {
   const admin = createSupabaseAdmin();
   if (assigned) {
     const { error } = await admin
-      .from("user_roles")
-      .upsert({ user_id: userId, role_id: roleId }, { onConflict: "user_id,role_id", ignoreDuplicates: true });
+      .from("user_groups")
+      .upsert({ user_id: userId, group_id: roleId }, { onConflict: "user_id,group_id", ignoreDuplicates: true });
     if (error) throw new Error(error.message);
   } else {
     const { error } = await admin
-      .from("user_roles")
+      .from("user_groups")
       .delete()
       .eq("user_id", userId)
-      .eq("role_id", roleId);
+      .eq("group_id", roleId);
     if (error) throw new Error(error.message);
   }
   revalidatePath(USER_PATH, "page");

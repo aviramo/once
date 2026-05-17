@@ -1,291 +1,404 @@
 import { redirect } from "next/navigation";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { Users, Tags, MapPin, Map } from "lucide-react";
+import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import { AdminShell, Section, EmptyState } from "./_components/ui";
-import { SearchControls } from "./_components/SearchControls";
-import type { UserRow } from "./_components/UserCard";
-import { UsersRealtime } from "./_components/UsersRealtime";
-import { ResetAllButton } from "./_components/ResetAllButton";
-import { resetUsersByRoles } from "./actions";
-
-const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
-const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
-const SELECT = "user_id, name, created_at, last_seen, data, relations";
-// Sentinel role-filter value (can't collide with a uuid) = "users with no role".
-const ROLE_NONE = "__none__";
+import {
+  AdminShell,
+  Section,
+  CardGrid,
+  NavTile,
+  Stat,
+} from "./_components/ui";
 
 /**
- * Auth lives in Supabase Auth, not the `users` table, so email search and the
- * per-card email both need the auth directory. We page through it once per
- * dashboard load (cap: 10k accounts — comfortably above the current base; a
- * larger directory would need a server-side email index instead).
+ * The admin home screen: a hub that links to every other admin tab plus a
+ * real-time product/business KPI snapshot for managers and the board. Every
+ * card is a deep link to the **filtered list** that owns the number — the
+ * quick-nav tiles to each tab, and every stat to the exact subset
+ * (`/admin/users?p1=…|p2=…|role=…|avail=…|tier=…|seg=…`, `/admin/areas?mode=`,
+ * `/admin/roles?status=`). All figures come from one RPC
+ * (admin_dashboard_metrics), same service-role + SECURITY DEFINER pattern as
+ * admin_user_facet_counts.
  */
-async function loadEmailMap(
-  admin: SupabaseClient,
-): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  const perPage = 1000;
-  for (let page = 1; page <= 10; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({
-      page,
-      perPage,
-    });
-    if (error || !data?.users?.length) break;
-    for (const u of data.users) {
-      if (u.email) map.set(u.id, u.email);
-    }
-    if (data.users.length < perPage) break;
+
+type Metrics = {
+  users: {
+    total: number;
+    new_today: number;
+    new_7d: number;
+    new_30d: number;
+    online_5m: number;
+    active_today: number;
+    active_7d: number;
+    active_30d: number;
+    with_location: number;
+  };
+  engagement: {
+    chat: number;
+    waiting: number;
+    watching: number;
+    pending: number;
+    broadcasting: number;
+  };
+  availability: {
+    available: number;
+    unavailable: number;
+    not_yet: number;
+    unknown: number;
+  };
+  credits: {
+    balance_total: number;
+    held_total: number;
+    tier_free: number;
+    tier_pro: number;
+  };
+  areas: {
+    total: number;
+    active: number;
+    scheduled: number;
+    disabled: number;
+  };
+  groups: { total: number; disabled: number; gated_users: number };
+  funnel_7d: {
+    signups: number;
+    invites: number;
+    approves: number;
+    messages: number;
+  };
+};
+
+const EMPTY: Metrics = {
+  users: {
+    total: 0,
+    new_today: 0,
+    new_7d: 0,
+    new_30d: 0,
+    online_5m: 0,
+    active_today: 0,
+    active_7d: 0,
+    active_30d: 0,
+    with_location: 0,
+  },
+  engagement: { chat: 0, waiting: 0, watching: 0, pending: 0, broadcasting: 0 },
+  availability: { available: 0, unavailable: 0, not_yet: 0, unknown: 0 },
+  credits: { balance_total: 0, held_total: 0, tier_free: 0, tier_pro: 0 },
+  areas: { total: 0, active: 0, scheduled: 0, disabled: 0 },
+  groups: { total: 0, disabled: 0, gated_users: 0 },
+  funnel_7d: { signups: 0, invites: 0, approves: 0, messages: 0 },
+};
+
+/**
+ * Coerce the RPC payload onto the EMPTY shape: any top-level group that's
+ * missing or not an object (e.g. the contract drifts under a rename) falls
+ * back to zeros instead of hard-crashing the whole admin home. Numbers stay
+ * as-is; only the structural skeleton is guaranteed.
+ */
+function normalize(raw: unknown): Metrics {
+  const src = (raw ?? {}) as Record<string, unknown>;
+  const out = {} as Record<keyof Metrics, unknown>;
+  for (const key of Object.keys(EMPTY) as (keyof Metrics)[]) {
+    const part = src[key];
+    out[key] =
+      part && typeof part === "object"
+        ? { ...EMPTY[key], ...(part as object) }
+        : EMPTY[key];
   }
-  return map;
+  return out as Metrics;
 }
 
-function lastSeenSort(a: UserRow, b: UserRow): number {
-  return (b.last_seen ?? "").localeCompare(a.last_seen ?? "");
-}
+// Deep-link builders — every tile resolves to a filtered list of exactly the
+// users/areas/roles the number counts.
+const usersUrl = "/admin/users";
+const u = (qs: string) => `/admin/users?${qs}`;
+const aMode = (m: string) => `/admin/areas?mode=${m}`;
+const rolesUrl = "/admin/roles";
+const MAP = "/admin/map";
 
 export default async function AdminDashboard({
   params,
-  searchParams,
 }: PageProps<"/[lang]/admin">) {
   const { lang } = await params;
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
   const d = dict.admin;
-  const sp = await searchParams;
-  const q = typeof sp.q === "string" ? sp.q.trim() : "";
-  const p1Raw = typeof sp.p1 === "string" ? sp.p1 : "";
-  const p2Raw = typeof sp.p2 === "string" ? sp.p2 : "";
-  const p1 = (P1_VALUES as readonly string[]).includes(p1Raw) ? p1Raw : "";
-  const p2 = (P2_VALUES as readonly string[]).includes(p2Raw) ? p2Raw : "";
-  const roleRaw = typeof sp.role === "string" ? sp.role : "";
+  const t = d.dashboard;
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAdminUser();
   if (!user) redirect("/admin/login");
-  const isAdmin =
-    (user.app_metadata as { role?: string } | undefined)?.role === "admin";
-  if (!isAdmin) {
-    await supabase.auth.signOut();
-    redirect("/admin/login?error=not_admin");
-  }
 
   const admin = createSupabaseAdmin();
+  const [{ data: metricsData }, meRes] = await Promise.all([
+    admin.rpc("admin_dashboard_metrics"),
+    admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
+  ]);
+  const m = normalize(metricsData);
 
-  const [emailMap, meRes, { data: roleCatalogData }, { data: facetsData }] =
-    await Promise.all([
-      loadEmailMap(admin),
-      admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
-      admin
-        .from("roles")
-        .select("id, name, enabled")
-        .order("created_at", { ascending: true }),
-      admin.rpc("admin_user_facet_counts"),
-    ]);
-  const roleCatalog = (roleCatalogData ?? []) as {
-    id: string;
-    name: string;
-    enabled: boolean;
-  }[];
-  type Facets = {
-    total?: number;
-    roles_none?: number;
-    p1?: Record<string, number>;
-    p2?: Record<string, number>;
-    roles?: Record<string, number>;
-  };
-  const facets = (facetsData ?? {}) as Facets;
-
-  // ?role= is "" (any) | a role uuid | ROLE_NONE (users with no role at all).
-  const role =
-    roleRaw === ROLE_NONE
-      ? ROLE_NONE
-      : roleCatalog.some((r) => r.id === roleRaw)
-        ? roleRaw
-        : "";
-  // A specific role restricts to its members (.in); ROLE_NONE excludes anyone
-  // who holds any role (.not in). null = no role filter. An empty members
-  // array for a specific role intentionally yields zero results; an empty
-  // "has-any-role" set means nobody has roles, so no exclusion is applied.
-  let roleInIds: string[] | null = null;
-  let roleNotInIds: string[] | null = null;
-  if (role === ROLE_NONE) {
-    const { data: rl } = await admin.from("user_roles").select("user_id");
-    roleNotInIds = [
-      ...new Set(((rl ?? []) as { user_id: string }[]).map((x) => x.user_id)),
-    ];
-  } else if (role) {
-    const { data: rl } = await admin
-      .from("user_roles")
-      .select("user_id")
-      .eq("role_id", role);
-    roleInIds = ((rl ?? []) as { user_id: string }[]).map((x) => x.user_id);
-  }
-
-  let rows: UserRow[];
-  if (q) {
-    const ql = q.toLowerCase();
-    const emailIds = [...emailMap.entries()]
-      .filter(([, email]) => email.toLowerCase().includes(ql))
-      .map(([id]) => id);
-
-    let nameQ = admin
-      .from("users")
-      .select(SELECT)
-      .ilike("name", `%${q}%`)
-      .limit(100);
-    if (p1) nameQ = nameQ.eq("relations->page1->>state", p1);
-    if (p2) nameQ = nameQ.eq("relations->page2->>state", p2);
-    if (roleInIds) nameQ = nameQ.in("user_id", roleInIds);
-    else if (roleNotInIds && roleNotInIds.length)
-      nameQ = nameQ.not("user_id", "in", `(${roleNotInIds.join(",")})`);
-
-    const byEmail = emailIds.length
-      ? await (() => {
-          let eq = admin
-            .from("users")
-            .select(SELECT)
-            .in("user_id", emailIds)
-            .limit(100);
-          if (p1) eq = eq.eq("relations->page1->>state", p1);
-          if (p2) eq = eq.eq("relations->page2->>state", p2);
-          if (roleInIds) eq = eq.in("user_id", roleInIds);
-          else if (roleNotInIds && roleNotInIds.length)
-            eq = eq.not("user_id", "in", `(${roleNotInIds.join(",")})`);
-          return eq;
-        })()
-      : { data: [] as UserRow[] };
-    const byName = await nameQ;
-
-    const merged = new Map<string, UserRow>();
-    for (const r of (byName.data ?? []) as UserRow[]) merged.set(r.user_id, r);
-    for (const r of (byEmail.data ?? []) as UserRow[]) merged.set(r.user_id, r);
-    rows = [...merged.values()].sort(lastSeenSort).slice(0, 100);
-  } else {
-    let base = admin
-      .from("users")
-      .select(SELECT)
-      .order("last_seen", { ascending: false, nullsFirst: false })
-      .limit(100);
-    if (p1) base = base.eq("relations->page1->>state", p1);
-    if (p2) base = base.eq("relations->page2->>state", p2);
-    if (roleInIds) base = base.in("user_id", roleInIds);
-    else if (roleNotInIds && roleNotInIds.length)
-      base = base.not("user_id", "in", `(${roleNotInIds.join(",")})`);
-    const { data } = await base;
-    rows = (data ?? []) as UserRow[];
-  }
-
-  // At-a-glance role badges on each card. One extra round trip for the shown
-  // page only; joined here (not in SELECT) since `users` realtime payloads
-  // can't carry it — UsersRealtime preserves it across ticks instead.
-  const userIds = rows.map((r) => r.user_id);
-  const { data: roleLinks } = userIds.length
-    ? await admin
-        .from("user_roles")
-        .select("user_id, roles(name, enabled)")
-        .in("user_id", userIds)
-    : { data: [] };
-  type RoleLink = {
-    user_id: string;
-    roles: { name: string; enabled: boolean } | { name: string; enabled: boolean }[] | null;
-  };
-  const rolesByUser = new Map<string, { name: string; enabled: boolean }[]>();
-  for (const link of (roleLinks ?? []) as RoleLink[]) {
-    if (!link.roles) continue;
-    const roleObj = Array.isArray(link.roles) ? link.roles[0] : link.roles;
-    if (!roleObj) continue;
-    const arr = rolesByUser.get(link.user_id) ?? [];
-    arr.push(roleObj);
-    rolesByUser.set(link.user_id, arr);
-  }
-  rows = rows.map((r) => ({ ...r, roles: rolesByUser.get(r.user_id) ?? [] }));
-
-  // Filter options carry the global "(n)" count and are ordered by it
-  // descending (the "any" sentinel stays pinned first inside SearchControls).
-  const byCountDesc = <T extends { count: number }>(a: T, b: T) =>
-    b.count - a.count;
-  const p1Options = P1_VALUES.map((v) => ({
-    value: v,
-    label: (d.page1States as Record<string, string>)[v],
-    count: facets.p1?.[v] ?? 0,
-  })).sort(byCountDesc);
-  const p2Options = P2_VALUES.map((v) => ({
-    value: v,
-    label: (d.page2States as Record<string, string>)[v],
-    count: facets.p2?.[v] ?? 0,
-  })).sort(byCountDesc);
-  const roleOptions = [
-    ...roleCatalog.map((r) => ({
-      value: r.id,
-      label: r.name,
-      count: facets.roles?.[r.id] ?? 0,
-    })),
-    { value: ROLE_NONE, label: d.filterRoleNone, count: facets.roles_none ?? 0 },
-  ].sort(byCountDesc);
+  const nf = new Intl.NumberFormat(locale);
+  const fmt = (n: number) => nf.format(n ?? 0);
+  const proShare =
+    m.users.total > 0
+      ? Math.round((m.credits.tier_pro / m.users.total) * 100)
+      : 0;
+  const updatedTime = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jerusalem",
+  }).format(new Date());
 
   const meName = (meRes.data as { name?: string } | null)?.name;
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
 
   return (
-    <AdminShell dict={d} active="users" userLabel={userLabel}>
-      <Section
-        title={d.users}
-        hint={d.resultsCount.replace("{count}", String(rows.length))}
-        action={
-          <ResetAllButton
-            action={resetUsersByRoles}
-            roles={roleCatalog}
-            dict={{
-              label: d.resetAll,
-              confirm: d.resetAllConfirm,
-              busy: d.resetAllBusy,
-              done: d.resetAllDone,
-              fail: d.resetAllFail,
-              title: d.resetAllTitle,
-              hint: d.resetAllHint,
-              selectAll: d.resetSelectAll,
-              deselectAll: d.resetDeselectAll,
-              noRoles: d.resetNoRoles,
-              noneSelected: d.resetNoneSelected,
-              apply: d.resetApply,
-              cancel: d.resetCancel,
-              disabledTag: d.roles.statusDisabled,
-            }}
+    <AdminShell dict={d} active="dashboard" userLabel={userLabel}>
+      <div>
+        <h1 className="text-xl font-bold tracking-tight">{t.title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t.subtitle}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t.updated.replace("{time}", updatedTime)}
+        </p>
+      </div>
+
+      <Section title={t.navTitle}>
+        <CardGrid min="15rem">
+          <NavTile
+            icon={Users}
+            title={t.nav.usersTitle}
+            desc={t.nav.usersDesc}
+            value={fmt(m.users.total)}
+            href={usersUrl}
           />
-        }
-      >
-        <div className="space-y-6">
-          <SearchControls
-            searchPlaceholder={d.searchNameEmail}
-            advancedLabel={d.advancedFilters}
-            clearLabel={d.clearFilters}
-            p1Label={d.filterP1}
-            p2Label={d.filterP2}
-            roleLabel={d.filterRole}
-            anyLabel={d.filterAny}
-            anyCount={facets.total ?? 0}
-            p1States={p1Options}
-            p2States={p2Options}
-            roleOptions={roleOptions}
+          <NavTile
+            icon={Tags}
+            title={t.nav.rolesTitle}
+            desc={t.nav.rolesDesc}
+            value={fmt(m.groups.total)}
+            href={rolesUrl}
           />
-          {rows.length === 0 ? (
-            <EmptyState>{d.noResults}</EmptyState>
-          ) : (
-            <UsersRealtime
-              initial={rows.map((r) => ({
-                row: r,
-                email: emailMap.get(r.user_id) ?? null,
-              }))}
-              dict={d}
-              locale={locale}
-            />
-          )}
-        </div>
+          <NavTile
+            icon={MapPin}
+            title={t.nav.areasTitle}
+            desc={t.nav.areasDesc}
+            value={fmt(m.areas.active)}
+            href={aMode("active")}
+          />
+          <NavTile
+            icon={Map}
+            title={t.nav.mapTitle}
+            desc={t.nav.mapDesc}
+            value={fmt(m.users.online_5m)}
+            href={MAP}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.growth}>
+        <CardGrid min="12rem">
+          <Stat
+            label={t.metrics.total}
+            value={fmt(m.users.total)}
+            href={usersUrl}
+          />
+          <Stat
+            label={t.metrics.newToday}
+            value={fmt(m.users.new_today)}
+            accent="ok"
+            href={u("seg=new_today")}
+          />
+          <Stat
+            label={t.metrics.new7d}
+            value={fmt(m.users.new_7d)}
+            href={u("seg=new_7d")}
+          />
+          <Stat
+            label={t.metrics.new30d}
+            value={fmt(m.users.new_30d)}
+            href={u("seg=new_30d")}
+          />
+          <Stat
+            label={t.metrics.online}
+            value={fmt(m.users.online_5m)}
+            hint={t.hints.online}
+            accent="ok"
+            href={u("seg=online")}
+          />
+          <Stat
+            label={t.metrics.activeToday}
+            value={fmt(m.users.active_today)}
+            href={u("seg=active_today")}
+          />
+          <Stat
+            label={t.metrics.active7d}
+            value={fmt(m.users.active_7d)}
+            href={u("seg=active_7d")}
+          />
+          <Stat
+            label={t.metrics.withLocation}
+            value={fmt(m.users.with_location)}
+            href={u("seg=located")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.engagement}>
+        <CardGrid min="12rem">
+          <Stat
+            label={t.metrics.chat}
+            value={fmt(m.engagement.chat)}
+            accent="chat"
+            href={u("p1=chat")}
+          />
+          <Stat
+            label={t.metrics.waiting}
+            value={fmt(m.engagement.waiting)}
+            accent="busy"
+            href={u("p1=waiting")}
+          />
+          <Stat
+            label={t.metrics.watching}
+            value={fmt(m.engagement.watching)}
+            accent="busy"
+            href={u("p1=watching")}
+          />
+          <Stat
+            label={t.metrics.pending}
+            value={fmt(m.engagement.pending)}
+            accent="busy"
+            href={u("p2=pending")}
+          />
+          <Stat
+            label={t.metrics.broadcasting}
+            value={fmt(m.engagement.broadcasting)}
+            accent="busy"
+            href={u("seg=broadcasting")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.availability}>
+        <CardGrid min="12rem">
+          <Stat
+            label={t.metrics.available}
+            value={fmt(m.availability.available)}
+            accent="ok"
+            href={u("avail=available")}
+          />
+          <Stat
+            label={t.metrics.unavailable}
+            value={fmt(m.availability.unavailable)}
+            accent="ended"
+            href={u("avail=unavailable")}
+          />
+          <Stat
+            label={t.metrics.notYet}
+            value={fmt(m.availability.not_yet)}
+            accent="busy"
+            href={u("avail=not_yet")}
+          />
+          <Stat
+            label={t.metrics.unknownAvail}
+            value={fmt(m.availability.unknown)}
+            href={u("avail=unknown")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.credits}>
+        <CardGrid min="12rem">
+          <Stat
+            label={t.metrics.balanceTotal}
+            value={fmt(m.credits.balance_total)}
+            href={usersUrl}
+          />
+          <Stat
+            label={t.metrics.heldTotal}
+            value={fmt(m.credits.held_total)}
+            accent="busy"
+            href={u("seg=held")}
+          />
+          <Stat
+            label={t.metrics.tierFree}
+            value={fmt(m.credits.tier_free)}
+            href={u("tier=free")}
+          />
+          <Stat
+            label={t.metrics.tierPro}
+            value={fmt(m.credits.tier_pro)}
+            hint={t.hints.proShare.replace("{pct}", String(proShare))}
+            accent="ok"
+            href={u("tier=pro")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.catalog}>
+        <CardGrid min="12rem">
+          <Stat
+            label={t.metrics.areasActive}
+            value={fmt(m.areas.active)}
+            accent="ok"
+            href={aMode("active")}
+          />
+          <Stat
+            label={t.metrics.areasScheduled}
+            value={fmt(m.areas.scheduled)}
+            accent="busy"
+            href={aMode("scheduled")}
+          />
+          <Stat
+            label={t.metrics.areasDisabled}
+            value={fmt(m.areas.disabled)}
+            href={aMode("disabled")}
+          />
+          <Stat
+            label={t.metrics.rolesTotal}
+            value={fmt(m.groups.total)}
+            href={rolesUrl}
+          />
+          <Stat
+            label={t.metrics.rolesDisabled}
+            value={fmt(m.groups.disabled)}
+            accent="ended"
+            href={`${rolesUrl}?status=disabled`}
+          />
+          <Stat
+            label={t.metrics.rolesGated}
+            value={fmt(m.groups.gated_users)}
+            accent="ended"
+            href={u("seg=role_gated")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.funnel} hint={t.hints.funnel}>
+        <CardGrid min="12rem">
+          <Stat
+            label={t.metrics.fSignups}
+            value={fmt(m.funnel_7d.signups)}
+            accent="ok"
+            href={u("seg=new_7d")}
+          />
+          <Stat
+            label={t.metrics.fInvites}
+            value={fmt(m.funnel_7d.invites)}
+            href={u("p1=waiting")}
+          />
+          <Stat
+            label={t.metrics.fApproves}
+            value={fmt(m.funnel_7d.approves)}
+            accent="chat"
+            href={u("p1=chat")}
+          />
+          <Stat
+            label={t.metrics.fMessages}
+            value={fmt(m.funnel_7d.messages)}
+            accent="chat"
+            href={u("p1=chat")}
+          />
+        </CardGrid>
       </Section>
     </AdminShell>
   );

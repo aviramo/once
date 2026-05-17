@@ -19,13 +19,59 @@ type Props = {
   p1Label: string;
   p2Label: string;
   roleLabel: string;
+  availLabel: string;
+  tierLabel: string;
+  segLabel: string;
   anyLabel: string;
   /** Total user count shown next to the "any" (no-filter) option. */
   anyCount?: number;
   p1States: StateOption[];
   p2States: StateOption[];
   roleOptions: StateOption[];
+  availOptions: StateOption[];
+  tierOptions: StateOption[];
+  segOptions: StateOption[];
 };
+
+const selectCls =
+  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
+
+/** One labelled <select> — the single source for every advanced filter
+ * dropdown (page1 / page2 / role / availability / tier / segment). Variants
+ * are just different option lists, never a forked component. */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  anyLabel,
+  anyCount,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: StateOption[];
+  anyLabel: string;
+  anyCount?: number;
+}) {
+  return (
+    <label className="flex-1 space-y-1 text-sm">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={selectCls}
+      >
+        <option value="">{optionLabel(anyLabel, anyCount)}</option>
+        {options.map((s) => (
+          <option key={s.value} value={s.value}>
+            {optionLabel(s.label, s.count)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export function SearchControls({
   searchPlaceholder,
@@ -34,11 +80,17 @@ export function SearchControls({
   p1Label,
   p2Label,
   roleLabel,
+  availLabel,
+  tierLabel,
+  segLabel,
   anyLabel,
   anyCount,
   p1States,
   p2States,
   roleOptions,
+  availOptions,
+  tierOptions,
+  segOptions,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -47,8 +99,41 @@ export function SearchControls({
   const [p1, setP1] = useState(sp.get("p1") ?? "");
   const [p2, setP2] = useState(sp.get("p2") ?? "");
   const [role, setRole] = useState(sp.get("role") ?? "");
+  const [avail, setAvail] = useState(sp.get("avail") ?? "");
+  const [tier, setTier] = useState(sp.get("tier") ?? "");
+  const [seg, setSeg] = useState(sp.get("seg") ?? "");
   const [, startTransition] = useTransition();
-  const activeFilters = (p1 ? 1 : 0) + (p2 ? 1 : 0) + (role ? 1 : 0);
+
+  // One declarative list drives every dropdown + the active-count + clear,
+  // so adding a filter is a single entry, never parallel edits.
+  const filters = [
+    { key: "p1", label: p1Label, value: p1, set: setP1, options: p1States },
+    { key: "p2", label: p2Label, value: p2, set: setP2, options: p2States },
+    {
+      key: "role",
+      label: roleLabel,
+      value: role,
+      set: setRole,
+      options: roleOptions,
+    },
+    {
+      key: "avail",
+      label: availLabel,
+      value: avail,
+      set: setAvail,
+      options: availOptions,
+    },
+    {
+      key: "tier",
+      label: tierLabel,
+      value: tier,
+      set: setTier,
+      options: tierOptions,
+    },
+    { key: "seg", label: segLabel, value: seg, set: setSeg, options: segOptions },
+  ] as const;
+
+  const activeFilters = filters.reduce((n, f) => n + (f.value ? 1 : 0), 0);
   const [open, setOpen] = useState(activeFilters > 0);
 
   useEffect(() => {
@@ -58,16 +143,16 @@ export function SearchControls({
       if (p1) params.set("p1", p1);
       if (p2) params.set("p2", p2);
       if (role) params.set("role", role);
+      if (avail) params.set("avail", avail);
+      if (tier) params.set("tier", tier);
+      if (seg) params.set("seg", seg);
       const qs = params.toString();
       startTransition(() => {
         router.replace(qs ? `${pathname}?${qs}` : pathname);
       });
     }, 200);
     return () => clearTimeout(handle);
-  }, [q, p1, p2, role, pathname, router]);
-
-  const selectCls =
-    "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary";
+  }, [q, p1, p2, role, avail, tier, seg, pathname, router]);
 
   return (
     <div className="space-y-3">
@@ -108,65 +193,21 @@ export function SearchControls({
 
       {open ? (
         <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-muted/30 p-4">
-          <label className="flex-1 space-y-1 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">
-              {p1Label}
-            </span>
-            <select
-              value={p1}
-              onChange={(e) => setP1(e.target.value)}
-              className={selectCls}
-            >
-              <option value="">{optionLabel(anyLabel, anyCount)}</option>
-              {p1States.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {optionLabel(s.label, s.count)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex-1 space-y-1 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">
-              {p2Label}
-            </span>
-            <select
-              value={p2}
-              onChange={(e) => setP2(e.target.value)}
-              className={selectCls}
-            >
-              <option value="">{optionLabel(anyLabel, anyCount)}</option>
-              {p2States.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {optionLabel(s.label, s.count)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex-1 space-y-1 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">
-              {roleLabel}
-            </span>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className={selectCls}
-            >
-              <option value="">{optionLabel(anyLabel, anyCount)}</option>
-              {roleOptions.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {optionLabel(s.label, s.count)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {filters.map((f) => (
+            <FilterSelect
+              key={f.key}
+              label={f.label}
+              value={f.value}
+              onChange={f.set}
+              options={f.options}
+              anyLabel={anyLabel}
+              anyCount={anyCount}
+            />
+          ))}
           {activeFilters > 0 ? (
             <button
               type="button"
-              onClick={() => {
-                setP1("");
-                setP2("");
-                setRole("");
-              }}
+              onClick={() => filters.forEach((f) => f.set(""))}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <X className="size-4" aria-hidden />

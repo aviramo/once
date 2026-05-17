@@ -45,11 +45,76 @@
     "dashboardTitle": "Admin",
     "loggedInAs": "Signed in",
     "nav": {
+      "dashboard": "Overview",
       "users": "Users",
       "roles": "Groups",
       "areas": "Availability areas",
       "map": "Map",
       "site": "Site"
+    },
+    "dashboard": {
+      "title": "Admin overview",
+      "subtitle": "A real-time view of product and business health. Every card is clickable and opens the relevant screen.",
+      "navTitle": "Quick navigation",
+      "updated": "Updated {time}",
+      "nav": {
+        "usersTitle": "Users",
+        "usersDesc": "Search, filter and inspect every user",
+        "rolesTitle": "Groups",
+        "rolesDesc": "Manage groups and availability gating",
+        "areasTitle": "Availability areas",
+        "areasDesc": "Where the app is live",
+        "mapTitle": "Map",
+        "mapDesc": "Active users on the map, in real time"
+      },
+      "sections": {
+        "growth": "Users & growth",
+        "engagement": "Live engagement",
+        "availability": "Availability",
+        "credits": "Credits economy",
+        "catalog": "Areas & groups",
+        "funnel": "7-day funnel"
+      },
+      "metrics": {
+        "total": "Total users",
+        "newToday": "Signed up today",
+        "new7d": "Signed up in 7 days",
+        "new30d": "Signed up in 30 days",
+        "online": "Online now",
+        "activeToday": "Active today",
+        "active7d": "Active in 7 days",
+        "active30d": "Active in 30 days",
+        "withLocation": "With location",
+        "chat": "In active chat",
+        "waiting": "Waiting for reply",
+        "watching": "Viewing a profile",
+        "pending": "Pending invite",
+        "broadcasting": "Broadcasting",
+        "available": "Available",
+        "unavailable": "Gated (area/group)",
+        "notYet": "Awaiting area launch",
+        "unknownAvail": "No location yet",
+        "balanceTotal": "Total credit balance",
+        "heldTotal": "Held credits",
+        "tierFree": "Free tier",
+        "tierPro": "Pro tier",
+        "areasActive": "Active areas",
+        "areasScheduled": "Scheduled areas",
+        "areasDisabled": "Disabled areas",
+        "rolesTotal": "Groups",
+        "rolesDisabled": "Disabled groups",
+        "rolesGated": "Gated via group",
+        "fSignups": "Signups",
+        "fInvites": "Invites sent",
+        "fApproves": "Invites approved",
+        "fMessages": "Chat messages"
+      },
+      "hints": {
+        "online": "Activity in the last 5 minutes",
+        "funnel": "Total over the last 7 days",
+        "proShare": "{pct}% of users on the Pro tier"
+      },
+      "viewAll": "All users →"
     },
     "map": {
       "title": "Users map",
@@ -89,6 +154,9 @@
     "filterP2": "Side page",
     "filterRole": "Group",
     "filterRoleNone": "No group",
+    "filterAvail": "Availability",
+    "filterTier": "Tier",
+    "filterSeg": "Segment",
     "filterAny": "All",
     "userCreated": "Joined",
     "userLastSeen": "Last active",
@@ -116,6 +184,29 @@
       "pending": "Pending invite",
       "chat": "In chat",
       "locked": "Locked"
+    },
+    "availStates": {
+      "available": "Available",
+      "unavailable": "Gated",
+      "not_yet": "Awaiting area launch",
+      "unknown": "No location yet"
+    },
+    "tierStates": {
+      "free": "Free",
+      "pro": "Pro"
+    },
+    "segStates": {
+      "online": "Online now",
+      "active_today": "Active today",
+      "active_7d": "Active in 7 days",
+      "active_30d": "Active in 30 days",
+      "new_today": "Signed up today",
+      "new_7d": "Signed up in 7 days",
+      "new_30d": "Signed up in 30 days",
+      "located": "With location",
+      "broadcasting": "Broadcasting",
+      "held": "Held credits",
+      "role_gated": "Gated via group"
     },
     "narrative": {
       "page1": {

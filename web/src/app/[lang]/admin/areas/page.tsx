@@ -19,24 +19,35 @@ type AreaListRow = {
   mode: AreaMode;
 };
 
+const AREA_MODES = ["active", "scheduled", "disabled"] as const;
+
 export default async function AreasPage({
   params,
-}: {
-  params: Promise<{ lang: string }>;
-}) {
+  searchParams,
+}: PageProps<"/[lang]/admin/areas">) {
   const { lang } = await params;
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
   const a = dict.admin.areas;
+  const sp = await searchParams;
+  const mode =
+    typeof sp.mode === "string" &&
+    (AREA_MODES as readonly string[]).includes(sp.mode)
+      ? (sp.mode as AreaMode)
+      : "";
 
   const user = await getAdminUser();
   if (!user) redirect("/admin/login");
 
   const admin = createSupabaseAdmin();
-  const { data } = await admin
+  let areasQ = admin
     .from("areas_list")
     .select("id, label, lat, lng, radius_m, starts_at, mode")
     .order("created_at", { ascending: false });
+  // ?mode= deep-link from the dashboard catalog tiles → the matching subset
+  // (board + map both reflect it; the Areas nav tab returns to the full set).
+  if (mode) areasQ = areasQ.eq("mode", mode);
+  const { data } = await areasQ;
   const areas = (data ?? []) as AreaListRow[];
 
   const formDict = {

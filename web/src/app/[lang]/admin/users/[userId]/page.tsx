@@ -24,7 +24,7 @@ import {
   KeyValue,
 } from "../../_components/ui";
 import { Disclosure, RevealList } from "../../_components/Disclosure";
-import { UserRolesEditor, type EditorRole } from "./_components/UserRolesEditor";
+import { UserRolesEditor, type EditorRole } from "./_components/UserGroupsEditor";
 import { setUserRoleAssignment } from "../../roles/actions";
 
 type Image = { normal?: string; hash?: string };
@@ -123,15 +123,15 @@ export default async function UserDetailPage({
       .limit(50),
     fetchPartnerSummaries(admin, userId),
     admin
-      .from("roles")
+      .from("groups")
       .select("id, name, enabled")
       .order("created_at", { ascending: true }),
-    admin.from("user_roles").select("role_id").eq("user_id", userId),
+    admin.from("user_groups").select("group_id").eq("user_id", userId),
   ]);
 
   const roleCatalog = (allRoles ?? []) as EditorRole[];
-  const assignedRoleIds = ((myRoleRows ?? []) as { role_id: string }[]).map(
-    (r) => r.role_id,
+  const assignedRoleIds = ((myRoleRows ?? []) as { group_id: string }[]).map(
+    (r) => r.group_id,
   );
 
   if (!target) notFound();
@@ -157,7 +157,7 @@ export default async function UserDetailPage({
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
 
   return (
-    <AdminShell dict={a} active="users" backHref="/admin">
+    <AdminShell dict={a} active="users" backHref="/admin/users">
       {/* Identity — one compact rectangle: photo, name + email on one row */}
       <Card className="flex items-center gap-4 p-4">
         <Avatar src={photo} name={u.name} size="md" />

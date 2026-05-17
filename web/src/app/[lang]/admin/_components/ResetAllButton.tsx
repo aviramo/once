@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import type { ResetResult } from "../actions";
+import type { ResetResult } from "../users/actions";
 
 type Role = { id: string; name: string; enabled: boolean };
 

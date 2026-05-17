@@ -12,33 +12,39 @@ type RoleQueryRow = {
   id: string;
   name: string;
   enabled: boolean;
-  user_roles: { count: number }[];
+  user_groups: { count: number }[];
 };
 
 export default async function RolesPage({
   params,
-}: {
-  params: Promise<{ lang: string }>;
-}) {
+  searchParams,
+}: PageProps<"/[lang]/admin/roles">) {
   const { lang } = await params;
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
   const r = dict.admin.roles;
+  const sp = await searchParams;
+  // ?status= deep-link from the dashboard "disabled groups" tile → only the
+  // disabled (or enabled) subset; the Groups nav tab returns to the full set.
+  const status =
+    sp.status === "enabled" || sp.status === "disabled" ? sp.status : "";
 
   const user = await getAdminUser();
   if (!user) redirect("/admin/login");
 
   const admin = createSupabaseAdmin();
-  const { data } = await admin
-    .from("roles")
-    .select("id, name, enabled, user_roles(count)")
+  let rolesQ = admin
+    .from("groups")
+    .select("id, name, enabled, user_groups(count)")
     .order("created_at", { ascending: true });
+  if (status) rolesQ = rolesQ.eq("enabled", status === "enabled");
+  const { data } = await rolesQ;
 
   const roles: RoleRow[] = ((data ?? []) as RoleQueryRow[]).map((row) => ({
     id: row.id,
     name: row.name,
     enabled: row.enabled,
-    members: row.user_roles?.[0]?.count ?? 0,
+    members: row.user_groups?.[0]?.count ?? 0,
   }));
 
   return (

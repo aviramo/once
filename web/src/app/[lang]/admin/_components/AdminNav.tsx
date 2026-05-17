@@ -11,22 +11,31 @@ import { SignOutButton } from "./SignOutButton";
  * - sm and up: links + actions inline in the header bar.
  * - below sm: a single hamburger that opens a dropdown holding every option,
  *   so the bar stays one clean line and never overflows the viewport.
+ *
+ * The link set is declared ONCE (NAV_ITEMS) and rendered by both layouts —
+ * adding a tab is a single edit, never two parallel JSX blocks.
  */
 
-type Labels = {
-  users: string;
-  roles: string;
-  areas: string;
-  map: string;
+type NavKey = "dashboard" | "users" | "roles" | "areas" | "map";
+
+type Labels = Record<NavKey, string> & {
   site: string;
   signOut: string;
 };
 
 type Props = {
-  active: "users" | "roles" | "areas" | "map";
+  active: NavKey;
   labels: Labels;
   userLabel?: string;
 };
+
+const NAV_ITEMS: { key: NavKey; href: string }[] = [
+  { key: "dashboard", href: "/admin" },
+  { key: "users", href: "/admin/users" },
+  { key: "roles", href: "/admin/roles" },
+  { key: "areas", href: "/admin/areas" },
+  { key: "map", href: "/admin/map" },
+];
 
 const linkBase = "rounded-md px-3 py-1.5 font-medium transition-colors";
 const linkOn = "bg-muted text-foreground";
@@ -41,30 +50,15 @@ export function AdminNav({ active, labels, userLabel }: Props) {
     <>
       {/* Desktop: inline links */}
       <nav className="hidden items-center gap-1 text-sm sm:flex">
-        <Link
-          href="/admin"
-          className={cn(linkBase, active === "users" ? linkOn : linkOff)}
-        >
-          {labels.users}
-        </Link>
-        <Link
-          href="/admin/roles"
-          className={cn(linkBase, active === "roles" ? linkOn : linkOff)}
-        >
-          {labels.roles}
-        </Link>
-        <Link
-          href="/admin/areas"
-          className={cn(linkBase, active === "areas" ? linkOn : linkOff)}
-        >
-          {labels.areas}
-        </Link>
-        <Link
-          href="/admin/map"
-          className={cn(linkBase, active === "map" ? linkOn : linkOff)}
-        >
-          {labels.map}
-        </Link>
+        {NAV_ITEMS.map(({ key, href }) => (
+          <Link
+            key={key}
+            href={href}
+            className={cn(linkBase, active === key ? linkOn : linkOff)}
+          >
+            {labels[key]}
+          </Link>
+        ))}
       </nav>
 
       {/* Desktop: inline actions */}
@@ -96,39 +90,17 @@ export function AdminNav({ active, labels, userLabel }: Props) {
       {open ? (
         <nav className="basis-full border-t border-border pt-3 pb-1 text-sm sm:hidden">
           <div className="flex flex-col gap-1">
-            <Link
-              href="/admin"
-              onClick={close}
-              className={cn(linkBase, active === "users" ? linkOn : linkOff)}
-            >
-              {labels.users}
-            </Link>
-            <Link
-              href="/admin/roles"
-              onClick={close}
-              className={cn(linkBase, active === "roles" ? linkOn : linkOff)}
-            >
-              {labels.roles}
-            </Link>
-            <Link
-              href="/admin/areas"
-              onClick={close}
-              className={cn(linkBase, active === "areas" ? linkOn : linkOff)}
-            >
-              {labels.areas}
-            </Link>
-            <Link
-              href="/admin/map"
-              onClick={close}
-              className={cn(linkBase, active === "map" ? linkOn : linkOff)}
-            >
-              {labels.map}
-            </Link>
-            <Link
-              href="/"
-              onClick={close}
-              className={cn(linkBase, linkOff)}
-            >
+            {NAV_ITEMS.map(({ key, href }) => (
+              <Link
+                key={key}
+                href={href}
+                onClick={close}
+                className={cn(linkBase, active === key ? linkOn : linkOff)}
+              >
+                {labels[key]}
+              </Link>
+            ))}
+            <Link href="/" onClick={close} className={cn(linkBase, linkOff)}>
               {labels.site}
             </Link>
             {userLabel ? (

@@ -45,11 +45,76 @@
     "dashboardTitle": "ניהול",
     "loggedInAs": "מחובר/ת",
     "nav": {
+      "dashboard": "סקירה",
       "users": "משתמשים",
       "roles": "קבוצות",
       "areas": "אזורי זמינות",
       "map": "מפה",
       "site": "לאתר"
+    },
+    "dashboard": {
+      "title": "סקירת ניהול",
+      "subtitle": "מבט על על מצב המוצר והעסק בזמן אמת. כל כרטיס לחיץ ומוביל למסך הרלוונטי.",
+      "navTitle": "ניווט מהיר",
+      "updated": "עודכן {time}",
+      "nav": {
+        "usersTitle": "משתמשים",
+        "usersDesc": "חיפוש, סינון וצפייה בכל המשתמשים",
+        "rolesTitle": "קבוצות",
+        "rolesDesc": "ניהול קבוצות וחסימת זמינות",
+        "areasTitle": "אזורי זמינות",
+        "areasDesc": "היכן האפליקציה פעילה",
+        "mapTitle": "מפה",
+        "mapDesc": "משתמשים פעילים על המפה בזמן אמת"
+      },
+      "sections": {
+        "growth": "משתמשים וצמיחה",
+        "engagement": "מעורבות פעילה",
+        "availability": "זמינות",
+        "credits": "כלכלת קרדיטים",
+        "catalog": "אזורים וקבוצות",
+        "funnel": "משפך 7 ימים"
+      },
+      "metrics": {
+        "total": "סך משתמשים",
+        "newToday": "נרשמו היום",
+        "new7d": "נרשמו ב-7 ימים",
+        "new30d": "נרשמו ב-30 יום",
+        "online": "מחוברים עכשיו",
+        "activeToday": "פעילים היום",
+        "active7d": "פעילים ב-7 ימים",
+        "active30d": "פעילים ב-30 יום",
+        "withLocation": "עם מיקום",
+        "chat": "בצ׳אט פעיל",
+        "waiting": "ממתינים לתשובה",
+        "watching": "צופים בפרופיל",
+        "pending": "הזמנה ממתינה",
+        "broadcasting": "משדרים את עצמם",
+        "available": "זמינים",
+        "unavailable": "חסומים מחוץ לאזור/קבוצה",
+        "notYet": "ממתינים לפתיחת אזור",
+        "unknownAvail": "ללא מיקום עדיין",
+        "balanceTotal": "סך יתרת קרדיטים",
+        "heldTotal": "קרדיטים בהקפאה",
+        "tierFree": "מסלול חינמי",
+        "tierPro": "מסלול פרו",
+        "areasActive": "אזורים פעילים",
+        "areasScheduled": "אזורים מתוזמנים",
+        "areasDisabled": "אזורים מושבתים",
+        "rolesTotal": "קבוצות",
+        "rolesDisabled": "קבוצות מושבתות",
+        "rolesGated": "חסומים דרך קבוצה",
+        "fSignups": "הרשמות",
+        "fInvites": "הזמנות שנשלחו",
+        "fApproves": "הזמנות שאושרו",
+        "fMessages": "הודעות צ׳אט"
+      },
+      "hints": {
+        "online": "פעילות ב-5 הדקות האחרונות",
+        "funnel": "סך הכל ב-7 הימים האחרונים",
+        "proShare": "{pct}% מהמשתמשים במסלול פרו"
+      },
+      "viewAll": "לכל המשתמשים →"
     },
     "map": {
       "title": "מפת משתמשים",
@@ -89,6 +154,9 @@
     "filterP2": "דף צד",
     "filterRole": "קבוצה",
     "filterRoleNone": "ללא קבוצה",
+    "filterAvail": "זמינות",
+    "filterTier": "מסלול",
+    "filterSeg": "פלח",
     "filterAny": "הכל",
     "userCreated": "נרשם",
     "userLastSeen": "פעיל לאחרונה",
@@ -116,6 +184,29 @@
       "pending": "הזמנה ממתינה",
       "chat": "בצ׳אט",
       "locked": "נעול"
+    },
+    "availStates": {
+      "available": "זמין",
+      "unavailable": "חסום",
+      "not_yet": "ממתין לפתיחת אזור",
+      "unknown": "ללא מיקום עדיין"
+    },
+    "tierStates": {
+      "free": "חינמי",
+      "pro": "פרו"
+    },
+    "segStates": {
+      "online": "מחוברים עכשיו",
+      "active_today": "פעילים היום",
+      "active_7d": "פעילים ב-7 ימים",
+      "active_30d": "פעילים ב-30 יום",
+      "new_today": "נרשמו היום",
+      "new_7d": "נרשמו ב-7 ימים",
+      "new_30d": "נרשמו ב-30 יום",
+      "located": "עם מיקום",
+      "broadcasting": "משדרים את עצמם",
+      "held": "קרדיטים בהקפאה",
+      "role_gated": "חסומים דרך קבוצה"
     },
     "narrative": {
       "page1": {
