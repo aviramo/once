@@ -15,7 +15,7 @@ import { AdminNav } from "./AdminNav";
 
 type ShellProps = {
   dict: Dictionary["admin"];
-  active: "users" | "areas";
+  active: "users" | "areas" | "map";
   children: ReactNode;
   /** Sub-page back link target (omitted on the top-level list pages). */
   backHref?: string;
@@ -50,6 +50,7 @@ export function AdminShell({
             labels={{
               users: dict.nav.users,
               areas: dict.nav.areas,
+              map: dict.nav.map,
               site: dict.nav.site,
               signOut: dict.signOut,
             }}
@@ -151,16 +152,20 @@ export function Avatar({
   src,
   name,
   size = "md",
+  circle = false,
 }: {
   src: string | null;
   name: string | null;
   size?: "sm" | "md" | "lg" | "xl";
+  /** Round (map marker / pin) instead of the default squircle. */
+  circle?: boolean;
 }) {
   const cls = AVATAR_SIZE[size] ?? AVATAR_SIZE.md;
   return (
     <div
       className={cn(
-        "shrink-0 overflow-hidden rounded-2xl bg-muted",
+        "shrink-0 overflow-hidden bg-muted",
+        circle ? "rounded-full" : "rounded-2xl",
         cls,
       )}
     >

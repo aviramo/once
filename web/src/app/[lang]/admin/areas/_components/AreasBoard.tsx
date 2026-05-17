@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AreaRow } from "./AreaRow";
 import { AreasMap, type MapArea, type MapDict } from "./AreasMap";
-import { areaStatus } from "./geo";
+import { areaStatus } from "../../_components/geo";
 import type { AreaInitial } from "./AreaForm";
 
 // Owns the one piece of shared state between the overview map and the list:

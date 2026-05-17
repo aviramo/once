@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { AreaForm, type AreaInitial, type AreaMode } from "./AreaForm";
 import { AreaMenu, type MenuItem } from "./AreaMenu";
-import { areaStatus } from "./geo";
+import { areaStatus } from "../../_components/geo";
 
 type RowDict = {
   edit: string;

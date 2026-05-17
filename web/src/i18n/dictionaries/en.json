@@ -47,7 +47,20 @@
     "nav": {
       "users": "Users",
       "areas": "Availability areas",
+      "map": "Map",
       "site": "Site"
+    },
+    "map": {
+      "title": "Users map",
+      "subtitle": "Active users on the map, live.",
+      "live": "Active now",
+      "idle": "Active today",
+      "empty": "No active users to show",
+      "mapUnavailable": "Map view unavailable",
+      "mapHint": "Enable the Maps Static API for the Google key in the GCP console",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fit": "Fit view"
     },
     "back": "← Back",
     "users": "Users",

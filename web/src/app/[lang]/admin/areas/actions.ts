@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import type { AreaMode } from "../_components/areaMode";
 
 // The middleware rewrites /admin/areas → /[lang]/admin/areas, so this is the
 // route segment to revalidate after every mutation.
@@ -38,7 +39,6 @@ async function triggerResync(): Promise<void> {
 // 3-state area mode (source of truth in the DB). `enabled` is still written,
 // mirrored as (mode !== 'disabled'), only for the transitional read-compat
 // window — see BACKWARD_COMPAT.md.
-export type AreaMode = "active" | "scheduled" | "disabled";
 const MODES: readonly AreaMode[] = ["active", "scheduled", "disabled"];
 
 function parseMode(raw: unknown): AreaMode {

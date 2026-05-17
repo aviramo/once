@@ -592,6 +592,10 @@ Admin-defined geographic zones that gate where the app is usable. Managed from t
 
 Indexes: GIST on `center` (`areas_center_gix`); partial index on `mode` (`areas_mode_idx`, where `mode <> 'disabled'`).
 
+### `users_map` (read model; web admin live users map)
+
+`public.users_map` is a `security_invoker` view (same pattern as `areas_list`) that explodes `users.location` into `lat`/`lng` and surfaces `data->images[0]->normal` as `image`, so the web admin live map (`/admin/map`) can plot users without parsing PostGIS blobs server-side. Columns: `user_id`, `name`, `last_seen`, `image` (filename or null), `lat`, `lng`. Only rows with a non-null `location` are exposed (a user with no location can't be placed). `security_invoker = on` ⇒ the web admin's service-role client sees every located user; anon/auth would get only their own row (harmless). The map's **live** updates do NOT read this view: the admin browser subscribes to `postgres_changes` UPDATE on `public.users` directly (allowed by the `admins read all` RLS policy) and decodes the raw `location` EWKB-hex point client-side. The view is only the server-side initial-load read.
+
 ### Geo-availability gate
 
 `relations.availability` is `{state, starts_at?}` where `state ∈ {available, unavailable, not_yet}`, written by `app_availability(me_id)` (= `area_state(me.location)`):

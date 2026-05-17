@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 
-export type AreaMode = "active" | "scheduled" | "disabled";
+// Re-exported so existing `./AreaForm` importers don't churn; the single
+// definition lives in the shared, runtime-free areaMode module.
+export type { AreaMode } from "../../_components/areaMode";
+import type { AreaMode } from "../../_components/areaMode";
 
 export type AreaInitial = {
   id: string;

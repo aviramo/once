@@ -2,6 +2,7 @@ import type { Dictionary } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/locales";
 import { relativeTime } from "@/lib/relativeTime";
 import { userActivity, type Relations } from "@/lib/humanize";
+import { userImageUrl } from "@/lib/userImage";
 import { Card, Avatar, StatusBadge } from "./ui";
 
 export type UserRow = {
@@ -13,13 +14,6 @@ export type UserRow = {
   relations: Relations;
 };
 
-function imageUrl(userId: string, filename: string | undefined): string | null {
-  if (!filename) return null;
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!base) return null;
-  return `${base}/storage/v1/object/public/users/${userId}/normal/${filename}`;
-}
-
 type Props = {
   row: UserRow;
   email: string | null;
@@ -28,7 +22,7 @@ type Props = {
 };
 
 export function UserCard({ row, email, dict, locale }: Props) {
-  const photo = imageUrl(row.user_id, row.data?.images?.[0]?.normal);
+  const photo = userImageUrl(row.user_id, row.data?.images?.[0]?.normal);
   const activity = userActivity(dict, row.relations);
 
   return (

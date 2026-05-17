@@ -71,13 +71,28 @@ export async function GET(request: Request) {
   g.searchParams.set("center", `${lat},${lng}`);
 
   if (overview) {
-    // Square (1:1) basemap, capped at the 640 logical-px free-tier max.
+    // Plain `center`+`zoom` basemap, no baked overlay (the overlay is drawn
+    // client-side with the same Web Mercator math, so center/zoom must be
+    // exactly what we asked). Two size forms, both capped at the 640
+    // logical-px free-tier max per dimension:
+    //  - `w`+`h` → a rectangular basemap whose aspect matches the live map
+    //    frame (the full-screen users map). The projection uses the same w/h
+    //    so the image and overlay stay aligned with no crop.
+    //  - legacy `size` → a square basemap (the areas overview map).
+    const clampDim = (raw: string | null) =>
+      Math.min(640, Math.max(64, Math.round(Number(raw) || 640)));
     const zoom = Math.min(21, Math.max(0, Math.round(Number(zoomRaw) || 0)));
-    const sz = Math.min(
-      640,
-      Math.max(64, Math.round(Number(u.searchParams.get("size")) || 640)),
-    );
-    g.searchParams.set("size", `${sz}x${sz}`);
+    const wRaw = u.searchParams.get("w");
+    const hRaw = u.searchParams.get("h");
+    let bw: number;
+    let bh: number;
+    if (wRaw !== null && hRaw !== null) {
+      bw = clampDim(wRaw);
+      bh = clampDim(hRaw);
+    } else {
+      bw = bh = clampDim(u.searchParams.get("size"));
+    }
+    g.searchParams.set("size", `${bw}x${bh}`);
     g.searchParams.set("zoom", String(zoom));
   } else {
     // 4:3 landscape (scale 2 → 1280x960) — natural map orientation, taller

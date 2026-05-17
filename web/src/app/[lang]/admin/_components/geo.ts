@@ -1,9 +1,15 @@
-// Pure geo helpers shared by the areas overview map and the list rows. No
-// React, no framework — just the Web Mercator math Google Static Maps uses,
-// so an SVG overlay can sit pixel-exact on top of a `center`+`zoom` basemap,
-// plus the single source of truth for an area's effective status.
+// Pure geo helpers shared by every admin map (the areas overview circles and
+// the live users map). No React, no framework — just the Web Mercator math
+// Google Static Maps uses, so an overlay can sit pixel-exact on top of a
+// `center`+`zoom` basemap, plus the single source of truth for an area's
+// effective status.
+//
+// The projection space is a logical `w`×`h` rectangle (not a square): the
+// areas map passes a square (`w === h`), the users map passes the basemap's
+// real aspect so a full-screen rectangular map stays undistorted. Every
+// helper carries `w`/`h` through unchanged.
 
-import type { AreaMode } from "./AreaForm";
+import type { AreaMode } from "./areaMode";
 
 /* ----------------------------------------------------------------- status -- */
 
@@ -52,8 +58,10 @@ export type ViewBox = {
   centerLat: number;
   centerLng: number;
   zoom: number;
-  /** Logical pixel size of the (square) map the projection is relative to. */
-  size: number;
+  /** Logical pixel size of the (rectangular) map the projection is relative
+   *  to. The areas map keeps `w === h`; the users map matches the basemap. */
+  w: number;
+  h: number;
 };
 
 // Project a lat/lng to logical pixel coordinates inside the map frame.
@@ -66,8 +74,8 @@ export function project(
   const cx = worldX(view.centerLng) * scale;
   const cy = worldY(view.centerLat) * scale;
   return {
-    x: view.size / 2 + (worldX(lng) * scale - cx),
-    y: view.size / 2 + (worldY(lat) * scale - cy),
+    x: view.w / 2 + (worldX(lng) * scale - cx),
+    y: view.h / 2 + (worldY(lat) * scale - cy),
   };
 }
 
@@ -93,8 +101,8 @@ export function unproject(
   view: ViewBox,
 ): { lat: number; lng: number } {
   const scale = TILE * 2 ** view.zoom;
-  const wx = (x - view.size / 2) / scale + worldX(view.centerLng);
-  const wy = (y - view.size / 2) / scale + worldY(view.centerLat);
+  const wx = (x - view.w / 2) / scale + worldX(view.centerLng);
+  const wy = (y - view.h / 2) / scale + worldY(view.centerLat);
   const lng = wx * 360 - 180;
   // Invert the Mercator worldY: s = tanh(L/2), L = (0.5 - wy) * 4π.
   const s = Math.tanh((0.5 - wy) * 2 * Math.PI);
@@ -124,27 +132,33 @@ export function viewAround(
   if (z === view.zoom) return view;
   const p = unproject(x, y, view);
   const scale = TILE * 2 ** z;
-  const cwx = worldX(p.lng) - (x - view.size / 2) / scale;
-  const cwy = worldY(p.lat) - (y - view.size / 2) / scale;
+  const cwx = worldX(p.lng) - (x - view.w / 2) / scale;
+  const cwy = worldY(p.lat) - (y - view.h / 2) / scale;
   const centerLng = cwx * 360 - 180;
   const s = Math.tanh((0.5 - cwy) * 2 * Math.PI);
   const centerLat = deg(Math.asin(Math.max(-1, Math.min(1, s))));
-  return { centerLat, centerLng, zoom: z, size: view.size };
+  return { centerLat, centerLng, zoom: z, w: view.w, h: view.h };
 }
 
 // Commit a drag: the frame centre now shows whatever geo point sat at screen
-// (size/2 - dx, size/2 - dy) before the gesture (content follows the finger).
+// (w/2 - dx, h/2 - dy) before the gesture (content follows the finger).
 export function panView(
   view: ViewBox,
   dxLogical: number,
   dyLogical: number,
 ): ViewBox {
   const { lat, lng } = unproject(
-    view.size / 2 - dxLogical,
-    view.size / 2 - dyLogical,
+    view.w / 2 - dxLogical,
+    view.h / 2 - dyLogical,
     view,
   );
-  return { centerLat: lat, centerLng: lng, zoom: view.zoom, size: view.size };
+  return {
+    centerLat: lat,
+    centerLng: lng,
+    zoom: view.zoom,
+    w: view.w,
+    h: view.h,
+  };
 }
 
 /* -------------------------------------------------------------- fitBounds -- */
@@ -155,15 +169,19 @@ const M_PER_DEG_LAT = 111_320;
 
 type Circle = { lat: number; lng: number; radius_m: number };
 
-// Smallest integer zoom (centred on the collective bbox) at which every area
-// circle fits inside a `size`×`size` frame, leaving `pad` of the frame as
-// margin so nothing renders flush to the edge. Handles the single-area and
-// all-coincident cases via the MIN/MAX clamp.
+// Smallest integer zoom (centred on the collective bbox) at which every circle
+// fits inside a `w`×`h` frame, leaving `pad` of the frame as margin so nothing
+// renders flush to the edge. Handles the single-point/all-coincident cases via
+// the MIN/MAX clamp (a 0-radius point list still yields a sane street zoom).
 export function fitBounds(
   circles: Circle[],
-  size: number,
+  w: number,
+  h: number,
   pad = 0.18,
 ): ViewBox {
+  if (circles.length === 0) {
+    return { centerLat: 0, centerLng: 0, zoom: MIN_ZOOM, w, h };
+  }
   let minLat = 90;
   let maxLat = -90;
   let minLng = 180;
@@ -184,13 +202,12 @@ export function fitBounds(
   // Mercator fraction spans of the bbox (worldY decreases as lat grows).
   const latFrac = Math.max(1e-9, worldY(minLat) - worldY(maxLat));
   const lngFrac = Math.max(1e-9, worldX(maxLng) - worldX(minLng));
-  const usable = size * (1 - pad);
-  const zoomLat = Math.log2(usable / TILE / latFrac);
-  const zoomLng = Math.log2(usable / TILE / lngFrac);
+  const zoomLat = Math.log2((h * (1 - pad)) / TILE / latFrac);
+  const zoomLng = Math.log2((w * (1 - pad)) / TILE / lngFrac);
 
   const zoom = Math.max(
     MIN_ZOOM,
     Math.min(MAX_ZOOM, Math.floor(Math.min(zoomLat, zoomLng))),
   );
-  return { centerLat, centerLng, zoom, size };
+  return { centerLat, centerLng, zoom, w, h };
 }

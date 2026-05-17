@@ -5,6 +5,7 @@ import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { relativeTime, dateTime } from "@/lib/relativeTime";
+import { userImageUrl } from "@/lib/userImage";
 import { fetchPartnerSummaries } from "@/lib/interactions";
 import {
   page1Narrative,
@@ -66,13 +67,6 @@ type LogRow = {
   status: number;
   run_ms: number;
 };
-
-function imageUrl(userId: string, filename: string | undefined): string | null {
-  if (!filename) return null;
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!base) return null;
-  return `${base}/storage/v1/object/public/users/${userId}/normal/${filename}`;
-}
 
 function calcAge(birthDate: string | null): number | null {
   if (!birthDate) return null;
@@ -140,7 +134,7 @@ export default async function UserDetailPage({
     ((partnerProfiles ?? []) as PartnerMini[]).map((p) => [p.user_id, p]),
   );
 
-  const photo = imageUrl(u.user_id, u.data?.images?.[0]?.normal);
+  const photo = userImageUrl(u.user_id, u.data?.images?.[0]?.normal);
   const age = calcAge(u.birth_date);
   const email = authUser?.user?.email ?? null;
   const n1 = page1Narrative(a, u.relations);
@@ -232,7 +226,7 @@ export default async function UserDetailPage({
             lessLabel={a.showLess}
             items={partners.map((p) => {
               const profile = partnerMap.get(p.otherId);
-              const partnerPhoto = imageUrl(
+              const partnerPhoto = userImageUrl(
                 p.otherId,
                 profile?.data?.images?.[0]?.normal,
               );
