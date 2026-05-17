@@ -90,7 +90,6 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
 // ── Local aliases for shared icons (keep call sites unchanged) ────────────
 
 const FIELD_ICON_STROKE = BLACK_STRONG
-const DESTRUCTIVE_COLOR = WHITE_MID
 
 // ── Select Field Types ─────────────────────────────────────────────────────
 
@@ -2425,8 +2424,8 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
               {...(resetting ? {} : resetTap)}
             >
               {resetting
-                ? <ActivityIndicator size={18} color={DESTRUCTIVE_COLOR} />
-                : <ResetIcon color={DESTRUCTIVE_COLOR} />
+                ? <ActivityIndicator size={18} color={c.WHITE_MID} />
+                : <ResetIcon color={c.WHITE_MID} />
               }
               <Text style={[styles.accountActionText, styles.accountActionTextDestructive]}>{t('settings.adminEntry')}</Text>
             </View>
