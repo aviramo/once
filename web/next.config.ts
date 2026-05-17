@@ -5,12 +5,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
-  // Serve the static download page at the clean URL /download. This array
-  // form is applied after static/public files but before dynamic routes,
-  // so /download is never swallowed by the [lang] segment.
-  async rewrites() {
-    return [{ source: "/download", destination: "/download/index.html" }];
-  },
+  // Let proxy.ts (STATIC_PAGES) decide which clean paths keep a trailing
+  // slash. Without this, Next would 308 /download/ -> /download before the
+  // proxy runs, dropping the slash the brand link is shared with.
+  skipTrailingSlashRedirect: true,
 };
 
 export default nextConfig;

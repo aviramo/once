@@ -4,15 +4,19 @@ import { updateSupabaseSession } from "@/lib/supabase/proxy";
 
 const PUBLIC_FILE_RE = /\.(.*)$/;
 
-// Clean URL -> static marketing file in /public. The deployed mobile app
-// links to the extensionless /privacy and /terms (with ?lang=), and GitHub
-// Pages served those via implicit clean URLs; this app must keep doing so
-// for the unified domain to be a true drop-in replacement for once-app.
+// Clean URL -> static marketing file in /public. This Vercel deployment is
+// now the only site (the GitHub Pages once-app copy is retired): the
+// deployed mobile app links to the extensionless /privacy and /terms (with
+// ?lang=), so those paths must keep resolving here. /download is the
+// store-redirect landing; both the slashless and trailing-slash forms map
+// to it (skipTrailingSlashRedirect keeps /download/ from being stripped).
 const STATIC_PAGES: Record<string, string> = {
   "/": "/index.html",
   "/privacy": "/privacy.html",
   "/terms": "/terms.html",
   "/child-safety": "/child-safety.html",
+  "/download": "/download.html",
+  "/download/": "/download.html",
 };
 
 function pickLocale(request: NextRequest): string {
