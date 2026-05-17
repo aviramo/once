@@ -75,9 +75,9 @@ function MapPreview({
   dict: Dict;
 }) {
   const [errored, setErrored] = useState(false);
-  // 3:4 portrait, centred and width-capped — bigger than the old thin strip
+  // 4:3 landscape, centred and width-capped — bigger than the old thin strip
   // without dominating the form on wide screens.
-  const frame = "mx-auto w-full max-w-md aspect-[3/4]";
+  const frame = "mx-auto w-full max-w-xl aspect-[4/3]";
   if (errored) {
     return (
       <div
