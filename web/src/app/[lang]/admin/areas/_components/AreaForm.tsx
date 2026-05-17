@@ -75,9 +75,14 @@ function MapPreview({
   dict: Dict;
 }) {
   const [errored, setErrored] = useState(false);
+  // 3:4 portrait, centred and width-capped — bigger than the old thin strip
+  // without dominating the form on wide screens.
+  const frame = "mx-auto w-full max-w-md aspect-[3/4]";
   if (errored) {
     return (
-      <div className="flex h-44 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center">
+      <div
+        className={`flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center ${frame}`}
+      >
         <span className="text-sm font-medium text-foreground">
           {dict.mapUnavailable}
         </span>
@@ -86,14 +91,14 @@ function MapPreview({
     );
   }
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
+    <div className={`overflow-hidden rounded-xl border border-border ${frame}`}>
       {/* Server-proxied dynamic endpoint, not a static asset — next/image
           would need a custom loader for no real benefit in an admin tool. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/api/staticmap?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&r=${encodeURIComponent(radius || "0")}&lang=${encodeURIComponent(lang)}`}
         alt={label || `${lat}, ${lng}`}
-        className="block h-44 w-full object-cover"
+        className="block size-full object-cover"
         onError={() => setErrored(true)}
       />
     </div>

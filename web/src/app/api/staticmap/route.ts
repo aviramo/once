@@ -54,11 +54,14 @@ export async function GET(request: Request) {
   }
 
   const g = new URL("https://maps.googleapis.com/maps/api/staticmap");
-  g.searchParams.set("size", "640x300");
+  // 3:4 portrait (scale 2 → 960x1280) — taller frame shows more of the
+  // coastline/context than the old wide letterbox strip.
+  g.searchParams.set("size", "480x640");
   g.searchParams.set("scale", "2");
   g.searchParams.set("maptype", "roadmap");
   g.searchParams.set("language", u.searchParams.get("lang") || "he");
-  g.searchParams.set("markers", `color:0xe11d48|${lat},${lng}`);
+  // size:small → a smaller pin (the default marker dominated the frame).
+  g.searchParams.set("markers", `size:small|color:0xe11d48|${lat},${lng}`);
   // Translucent rose fill, matching the admin accent.
   g.searchParams.set(
     "path",
