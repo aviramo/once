@@ -23,7 +23,8 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, useColors } from '../src/colors'
+import { useThemeStore, type ThemeMode } from '../src/stores/themeStore'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -1287,6 +1288,53 @@ function FamilyTriOptionRow({
   )
 }
 
+// Theme picker: מערכת / כהה / בהיר. Self-contained and themed via useColors()
+// (it paints its own bg so it reads correctly even while the rest of the
+// settings screen is still on the legacy palette during the repaint
+// migration). Selecting a mode applies live across the whole app and
+// persists locally (themeStore -> AsyncStorage), mirrored to the server on
+// the next app/start. Pill visual language mirrors FamilyTriOptionRow.
+const THEME_OPTIONS: { v: ThemeMode; key: 'settings.themeSystem' | 'settings.themeDark' | 'settings.themeLight' }[] = [
+  { v: 'system', key: 'settings.themeSystem' },
+  { v: 'dark', key: 'settings.themeDark' },
+  { v: 'light', key: 'settings.themeLight' },
+]
+
+function ThemeModeRow() {
+  const c = useColors()
+  const mode = useThemeStore(s => s.mode)
+  const setMode = useThemeStore(s => s.setMode)
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: MD,
+      paddingHorizontal: MD, paddingVertical: MD, backgroundColor: c.bg,
+    }}>
+      <Text style={{ fontSize: TEXT.md, color: c.fg, fontWeight: WEIGHT.semibold, flexShrink: 1 }}>
+        {t('settings.theme')}
+      </Text>
+      <View style={{ marginStart: 'auto', flexDirection: 'row', gap: SM }}>
+        {THEME_OPTIONS.map(o => {
+          const sel = mode === o.v
+          return (
+            <Pressable
+              key={o.v}
+              onPress={() => { tap(); setMode(o.v) }}
+              style={{
+                paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
+                backgroundColor: sel ? c.fg : c.fill,
+              }}
+            >
+              <Text style={{ fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: sel ? c.bg : c.fg }}>
+                {t(o.key)}
+              </Text>
+            </Pressable>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 // Day-cell date label uses the OS locale (not the UI language) so a Hebrew UI
 // on a US device still reads month/day, and an English UI in Israel still reads
 // day/month — matches the date-format the user is used to elsewhere on their
@@ -2354,6 +2402,8 @@ function AppInlineContent({ onBack, onNavigateHome, onOpenSubPage: _onOpenSubPag
   return (
     <>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        <ThemeModeRow />
+        <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
