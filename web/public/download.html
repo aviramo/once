@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Once | הורדת האפליקציה</title>
+  <meta name="description" content="הורדת אפליקציית Once." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=7" />
+  <link rel="icon" type="image/png" href="favicon.png?v=7" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Noto Sans Hebrew", system-ui, -apple-system, sans-serif;
+      background: #ffffff;
+      color: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #000000; color: #ffffff; }
+      .btn { background: #ffffff; color: #000000; }
+      .btn.secondary { background: transparent; color: #ffffff; border-color: #ffffff; }
+    }
+    .wrap { width: 100%; max-width: 360px; }
+    .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.02em; }
+    .msg { margin-top: 14px; font-size: 16px; font-weight: 600; opacity: 0.7; }
+    .choices { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+    .btn {
+      display: block;
+      padding: 15px 20px;
+      border-radius: 14px;
+      background: #000000;
+      color: #ffffff;
+      border: 1.5px solid #000000;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn.secondary { background: transparent; color: #000000; }
+    /* The chooser is hidden until JS decides this device needs it (desktop / unknown). */
+    .choices { display: none; }
+    .no-js .choices, .show .choices { display: flex; }
+    .no-js .msg, .show .msg { display: none; }
+  </style>
+</head>
+<body class="no-js">
+  <div class="wrap">
+    <div class="brand-name">Once</div>
+    <div class="msg" id="msg">מעבירים אותך לחנות&hellip;</div>
+    <div class="choices">
+      <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">הורדה ל&#8209;Android</a>
+      <a class="btn secondary" id="ios" href="https://testflight.apple.com/join/dZw9a3wv">הורדה ל&#8209;iPhone&nbsp;(TestFlight)</a>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var ANDROID = "https://play.google.com/store/apps/details?id=com.aviramo.once";
+      var IOS = "https://testflight.apple.com/join/dZw9a3wv";
+
+      document.body.className = "";
+
+      var ua = navigator.userAgent || navigator.vendor || window.opera || "";
+      var isAndroid = /android/i.test(ua);
+      // iPadOS 13+ reports as "MacIntel" with a touch screen, so the platform
+      // check below catches modern iPads that no longer say "iPad" in the UA.
+      var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+      if (isAndroid) {
+        location.replace(ANDROID);
+      } else if (isIOS) {
+        location.replace(IOS);
+      } else {
+        // Desktop / unknown: no single right answer, show both.
+        document.body.className = "show";
+      }
+    })();
+  </script>
+</body>
+</html>
