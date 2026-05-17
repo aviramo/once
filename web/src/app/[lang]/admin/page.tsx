@@ -14,6 +14,8 @@ import { resetUsersByRoles } from "./actions";
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
 const SELECT = "user_id, name, created_at, last_seen, data, relations";
+// Sentinel role-filter value (can't collide with a uuid) = "users with no role".
+const ROLE_NONE = "__none__";
 
 /**
  * Auth lives in Supabase Auth, not the `users` table, so email search and the
@@ -74,30 +76,54 @@ export default async function AdminDashboard({
 
   const admin = createSupabaseAdmin();
 
-  const [emailMap, meRes, { data: roleCatalogData }] = await Promise.all([
-    loadEmailMap(admin),
-    admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
-    admin
-      .from("roles")
-      .select("id, name, enabled")
-      .order("created_at", { ascending: true }),
-  ]);
+  const [emailMap, meRes, { data: roleCatalogData }, { data: facetsData }] =
+    await Promise.all([
+      loadEmailMap(admin),
+      admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
+      admin
+        .from("roles")
+        .select("id, name, enabled")
+        .order("created_at", { ascending: true }),
+      admin.rpc("admin_user_facet_counts"),
+    ]);
   const roleCatalog = (roleCatalogData ?? []) as {
     id: string;
     name: string;
     enabled: boolean;
   }[];
-  // Only honour ?role= when it's a real role id (else treat as no filter).
-  const role = roleCatalog.some((r) => r.id === roleRaw) ? roleRaw : "";
-  // user_ids holding the selected role; null = no role filter. An empty array
-  // (role with no members) intentionally yields zero results.
-  let roleUserIds: string[] | null = null;
-  if (role) {
+  type Facets = {
+    total?: number;
+    roles_none?: number;
+    p1?: Record<string, number>;
+    p2?: Record<string, number>;
+    roles?: Record<string, number>;
+  };
+  const facets = (facetsData ?? {}) as Facets;
+
+  // ?role= is "" (any) | a role uuid | ROLE_NONE (users with no role at all).
+  const role =
+    roleRaw === ROLE_NONE
+      ? ROLE_NONE
+      : roleCatalog.some((r) => r.id === roleRaw)
+        ? roleRaw
+        : "";
+  // A specific role restricts to its members (.in); ROLE_NONE excludes anyone
+  // who holds any role (.not in). null = no role filter. An empty members
+  // array for a specific role intentionally yields zero results; an empty
+  // "has-any-role" set means nobody has roles, so no exclusion is applied.
+  let roleInIds: string[] | null = null;
+  let roleNotInIds: string[] | null = null;
+  if (role === ROLE_NONE) {
+    const { data: rl } = await admin.from("user_roles").select("user_id");
+    roleNotInIds = [
+      ...new Set(((rl ?? []) as { user_id: string }[]).map((x) => x.user_id)),
+    ];
+  } else if (role) {
     const { data: rl } = await admin
       .from("user_roles")
       .select("user_id")
       .eq("role_id", role);
-    roleUserIds = ((rl ?? []) as { user_id: string }[]).map((x) => x.user_id);
+    roleInIds = ((rl ?? []) as { user_id: string }[]).map((x) => x.user_id);
   }
 
   let rows: UserRow[];
@@ -114,7 +140,9 @@ export default async function AdminDashboard({
       .limit(100);
     if (p1) nameQ = nameQ.eq("relations->page1->>state", p1);
     if (p2) nameQ = nameQ.eq("relations->page2->>state", p2);
-    if (roleUserIds) nameQ = nameQ.in("user_id", roleUserIds);
+    if (roleInIds) nameQ = nameQ.in("user_id", roleInIds);
+    else if (roleNotInIds && roleNotInIds.length)
+      nameQ = nameQ.not("user_id", "in", `(${roleNotInIds.join(",")})`);
 
     const byEmail = emailIds.length
       ? await (() => {
@@ -125,7 +153,9 @@ export default async function AdminDashboard({
             .limit(100);
           if (p1) eq = eq.eq("relations->page1->>state", p1);
           if (p2) eq = eq.eq("relations->page2->>state", p2);
-          if (roleUserIds) eq = eq.in("user_id", roleUserIds);
+          if (roleInIds) eq = eq.in("user_id", roleInIds);
+          else if (roleNotInIds && roleNotInIds.length)
+            eq = eq.not("user_id", "in", `(${roleNotInIds.join(",")})`);
           return eq;
         })()
       : { data: [] as UserRow[] };
@@ -143,7 +173,9 @@ export default async function AdminDashboard({
       .limit(100);
     if (p1) base = base.eq("relations->page1->>state", p1);
     if (p2) base = base.eq("relations->page2->>state", p2);
-    if (roleUserIds) base = base.in("user_id", roleUserIds);
+    if (roleInIds) base = base.in("user_id", roleInIds);
+    else if (roleNotInIds && roleNotInIds.length)
+      base = base.not("user_id", "in", `(${roleNotInIds.join(",")})`);
     const { data } = await base;
     rows = (data ?? []) as UserRow[];
   }
@@ -172,6 +204,29 @@ export default async function AdminDashboard({
     rolesByUser.set(link.user_id, arr);
   }
   rows = rows.map((r) => ({ ...r, roles: rolesByUser.get(r.user_id) ?? [] }));
+
+  // Filter options carry the global "(n)" count and are ordered by it
+  // descending (the "any" sentinel stays pinned first inside SearchControls).
+  const byCountDesc = <T extends { count: number }>(a: T, b: T) =>
+    b.count - a.count;
+  const p1Options = P1_VALUES.map((v) => ({
+    value: v,
+    label: (d.page1States as Record<string, string>)[v],
+    count: facets.p1?.[v] ?? 0,
+  })).sort(byCountDesc);
+  const p2Options = P2_VALUES.map((v) => ({
+    value: v,
+    label: (d.page2States as Record<string, string>)[v],
+    count: facets.p2?.[v] ?? 0,
+  })).sort(byCountDesc);
+  const roleOptions = [
+    ...roleCatalog.map((r) => ({
+      value: r.id,
+      label: r.name,
+      count: facets.roles?.[r.id] ?? 0,
+    })),
+    { value: ROLE_NONE, label: d.filterRoleNone, count: facets.roles_none ?? 0 },
+  ].sort(byCountDesc);
 
   const meName = (meRes.data as { name?: string } | null)?.name;
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
@@ -213,18 +268,10 @@ export default async function AdminDashboard({
             p2Label={d.filterP2}
             roleLabel={d.filterRole}
             anyLabel={d.filterAny}
-            p1States={P1_VALUES.map((v) => ({
-              value: v,
-              label: (d.page1States as Record<string, string>)[v],
-            }))}
-            p2States={P2_VALUES.map((v) => ({
-              value: v,
-              label: (d.page2States as Record<string, string>)[v],
-            }))}
-            roleOptions={roleCatalog.map((r) => ({
-              value: r.id,
-              label: r.name,
-            }))}
+            anyCount={facets.total ?? 0}
+            p1States={p1Options}
+            p2States={p2Options}
+            roleOptions={roleOptions}
           />
           {rows.length === 0 ? (
             <EmptyState>{d.noResults}</EmptyState>

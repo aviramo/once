@@ -62,8 +62,12 @@ export function ResetAllButton({
     });
   }
 
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(roles.map((r) => r.id)));
+  function selectAll() {
+    setSelected(new Set(roles.map((r) => r.id)));
+  }
+
+  function deselectAll() {
+    setSelected(new Set());
   }
 
   function apply() {
@@ -126,13 +130,24 @@ export function ResetAllButton({
               </p>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={toggleAll}
-                  className="mt-4 text-xs font-medium text-primary transition-colors hover:underline"
-                >
-                  {allSelected ? dict.deselectAll : dict.selectAll}
-                </button>
+                <div className="mt-4 flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={selectAll}
+                    disabled={allSelected}
+                    className="text-xs font-medium text-primary transition-colors hover:underline disabled:opacity-40 disabled:hover:no-underline"
+                  >
+                    {dict.selectAll}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deselectAll}
+                    disabled={selected.size === 0}
+                    className="text-xs font-medium text-primary transition-colors hover:underline disabled:opacity-40 disabled:hover:no-underline"
+                  >
+                    {dict.deselectAll}
+                  </button>
+                </div>
                 <ul className="mt-2 max-h-64 divide-y divide-border overflow-y-auto rounded-xl border border-border">
                   {roles.map((role) => (
                     <li key={role.id} className="bg-background">

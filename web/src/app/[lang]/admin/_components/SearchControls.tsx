@@ -5,7 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type StateOption = { value: string; label: string };
+type StateOption = { value: string; label: string; count?: number };
+
+// "label (n)" when the option carries a facet count, else just the label.
+function optionLabel(label: string, count?: number): string {
+  return typeof count === "number" ? `${label} (${count})` : label;
+}
 
 type Props = {
   searchPlaceholder: string;
@@ -15,6 +20,8 @@ type Props = {
   p2Label: string;
   roleLabel: string;
   anyLabel: string;
+  /** Total user count shown next to the "any" (no-filter) option. */
+  anyCount?: number;
   p1States: StateOption[];
   p2States: StateOption[];
   roleOptions: StateOption[];
@@ -28,6 +35,7 @@ export function SearchControls({
   p2Label,
   roleLabel,
   anyLabel,
+  anyCount,
   p1States,
   p2States,
   roleOptions,
@@ -109,10 +117,10 @@ export function SearchControls({
               onChange={(e) => setP1(e.target.value)}
               className={selectCls}
             >
-              <option value="">{anyLabel}</option>
+              <option value="">{optionLabel(anyLabel, anyCount)}</option>
               {p1States.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {optionLabel(s.label, s.count)}
                 </option>
               ))}
             </select>
@@ -126,10 +134,10 @@ export function SearchControls({
               onChange={(e) => setP2(e.target.value)}
               className={selectCls}
             >
-              <option value="">{anyLabel}</option>
+              <option value="">{optionLabel(anyLabel, anyCount)}</option>
               {p2States.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {optionLabel(s.label, s.count)}
                 </option>
               ))}
             </select>
@@ -143,10 +151,10 @@ export function SearchControls({
               onChange={(e) => setRole(e.target.value)}
               className={selectCls}
             >
-              <option value="">{anyLabel}</option>
+              <option value="">{optionLabel(anyLabel, anyCount)}</option>
               {roleOptions.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {optionLabel(s.label, s.count)}
                 </option>
               ))}
             </select>
