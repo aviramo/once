@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { cn } from "@/lib/utils";
 import { AreaForm, type AreaInitial, type AreaMode } from "./AreaForm";
+import { areaStatus } from "./geo";
 
 type RowDict = {
   edit: string;
@@ -25,6 +27,10 @@ export function AreaRow({
   area,
   dict,
   lang,
+  now,
+  selected,
+  onSelect,
+  containerRef,
   updateAction,
   deleteAction,
   setModeAction,
@@ -32,30 +38,21 @@ export function AreaRow({
   area: AreaInitial;
   dict: RowDict;
   lang: string;
+  /** Shared clock from the board so the badge and the map circle agree. */
+  now: number;
+  selected: boolean;
+  onSelect: () => void;
+  containerRef?: (el: HTMLDivElement | null) => void;
   updateAction: (fd: FormData) => Promise<void>;
   deleteAction: (fd: FormData) => Promise<void>;
   setModeAction: (fd: FormData) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
-  // Captured once at mount (lazy state init keeps the impure read out of the
-  // render path). The label only needs to be right at paint time.
-  const [now] = useState(() => Date.now());
 
   const starts = new Date(area.starts_at);
-  const future = starts.getTime() > now;
-
-  // Effective status: active = live now; scheduled = enabled but waiting for
-  // its start time (בהמתנה); disabled = off. A scheduled area whose time has
-  // already passed is effectively live, so it reads as active.
-  const status: "active" | "waiting" | "disabled" =
-    area.mode === "disabled"
-      ? "disabled"
-      : area.mode === "active"
-        ? "active"
-        : future
-          ? "waiting"
-          : "active";
+  // Single source of truth for effective status (shared with the map).
+  const { status, future } = areaStatus(area.mode, area.starts_at, now);
 
   const badge = {
     active: {
@@ -96,7 +93,10 @@ export function AreaRow({
 
   if (editing) {
     return (
-      <div className="rounded-2xl border border-border bg-background p-5">
+      <div
+        ref={containerRef}
+        className="scroll-mt-24 rounded-2xl border border-border bg-background p-5"
+      >
         <AreaForm
           action={updateAction}
           initial={area}
@@ -125,8 +125,29 @@ export function AreaRow({
   );
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-background p-5">
-      <div className="min-w-0">
+    <div
+      ref={containerRef}
+      className={cn(
+        "flex scroll-mt-24 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-background p-5 transition-colors",
+        selected
+          ? "border-primary ring-2 ring-primary ring-offset-2 ring-offset-background"
+          : "border-border",
+      )}
+    >
+      {/* role=button (not <button>) so the <p> caption stays valid markup. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+        aria-pressed={selected}
+        className="-m-2 min-w-0 cursor-pointer rounded-xl p-2 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-primary"
+      >
         <div className="flex items-center gap-2">
           <span className="font-medium">{area.label}</span>
           <span

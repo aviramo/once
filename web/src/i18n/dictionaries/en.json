@@ -191,6 +191,7 @@
       "coordsHint": "Picking an address from search fills the coordinates. You can also enter them manually.",
       "mapUnavailable": "Map preview unavailable",
       "mapHint": "Enable the Maps Static API for the Google key in the GCP console",
+      "linkHint": "Click an area on the map or in the list to highlight it in both.",
       "none": "No areas defined. With no active area the app is not available to any user (except sign-up and profile setup).",
       "startsNow": "Available now",
       "startsFuture": "Opens",

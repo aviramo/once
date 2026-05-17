@@ -6,7 +6,7 @@ import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell, Section, Card, EmptyState } from "../_components/ui";
 import { Disclosure } from "../_components/Disclosure";
 import { AreaForm, type AreaMode } from "./_components/AreaForm";
-import { AreaRow } from "./_components/AreaRow";
+import { AreasBoard } from "./_components/AreasBoard";
 import { createArea, updateArea, deleteArea, setAreaMode } from "./actions";
 
 type AreaListRow = {
@@ -73,6 +73,14 @@ export default async function AreasPage({
     confirmDelete: a.confirmDelete,
     form: formDict,
   };
+  const mapDict = {
+    mapUnavailable: a.mapUnavailable,
+    mapHint: a.mapHint,
+    linkHint: a.linkHint,
+    statusActive: a.statusActive,
+    statusWaiting: a.statusWaiting,
+    statusDisabled: a.statusDisabled,
+  };
 
   return (
     <AdminShell dict={dict.admin} active="areas">
@@ -87,19 +95,15 @@ export default async function AreasPage({
           {areas.length === 0 ? (
             <EmptyState>{a.none}</EmptyState>
           ) : (
-            <div className="space-y-3">
-              {areas.map((area) => (
-                <AreaRow
-                  key={area.id}
-                  area={area}
-                  dict={rowDict}
-                  lang={locale}
-                  updateAction={updateArea}
-                  deleteAction={deleteArea}
-                  setModeAction={setAreaMode}
-                />
-              ))}
-            </div>
+            <AreasBoard
+              areas={areas}
+              rowDict={rowDict}
+              mapDict={mapDict}
+              lang={locale}
+              updateAction={updateArea}
+              deleteAction={deleteArea}
+              setModeAction={setAreaMode}
+            />
           )}
         </div>
       </Section>

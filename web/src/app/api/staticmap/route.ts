@@ -48,25 +48,49 @@ export async function GET(request: Request) {
   const u = new URL(request.url);
   const lat = Number(u.searchParams.get("lat"));
   const lng = Number(u.searchParams.get("lng"));
-  const r = Math.max(1, Number(u.searchParams.get("r")) || 0);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return fail(400, "bad_coords");
   }
 
+  // Two modes off the same proxy/key:
+  //  - overview: `zoom` given → a plain `center`+`zoom` basemap (no marker,
+  //    no path). The areas overview draws all colored circles itself in an
+  //    SVG overlay projected with the same Web Mercator math, so the image
+  //    must NOT bake any overlay and the center/zoom must be exactly what we
+  //    asked for (Google can't auto-fit, or the overlay would misalign).
+  //  - preview: legacy `r` given → centre marker + radius circle path, for
+  //    the single-area edit form. Unchanged.
+  const zoomRaw = u.searchParams.get("zoom");
+  const overview = zoomRaw !== null;
+  const r = Math.max(1, Number(u.searchParams.get("r")) || 0);
+
   const g = new URL("https://maps.googleapis.com/maps/api/staticmap");
-  // 4:3 landscape (scale 2 → 1280x960) — natural map orientation, taller
-  // than the old wide letterbox strip.
-  g.searchParams.set("size", "640x480");
   g.searchParams.set("scale", "2");
   g.searchParams.set("maptype", "roadmap");
   g.searchParams.set("language", u.searchParams.get("lang") || "he");
-  // size:small → a smaller pin (the default marker dominated the frame).
-  g.searchParams.set("markers", `size:small|color:0xe11d48|${lat},${lng}`);
-  // Translucent rose fill, matching the admin accent.
-  g.searchParams.set(
-    "path",
-    `color:0xe11d48aa|weight:2|fillcolor:0xe11d4833|${circle(lat, lng, r)}`,
-  );
+  g.searchParams.set("center", `${lat},${lng}`);
+
+  if (overview) {
+    // Square (1:1) basemap, capped at the 640 logical-px free-tier max.
+    const zoom = Math.min(21, Math.max(0, Math.round(Number(zoomRaw) || 0)));
+    const sz = Math.min(
+      640,
+      Math.max(64, Math.round(Number(u.searchParams.get("size")) || 640)),
+    );
+    g.searchParams.set("size", `${sz}x${sz}`);
+    g.searchParams.set("zoom", String(zoom));
+  } else {
+    // 4:3 landscape (scale 2 → 1280x960) — natural map orientation, taller
+    // than the old wide letterbox strip.
+    g.searchParams.set("size", "640x480");
+    // size:small → a smaller pin (the default marker dominated the frame).
+    g.searchParams.set("markers", `size:small|color:0xe11d48|${lat},${lng}`);
+    // Translucent rose fill, matching the admin accent.
+    g.searchParams.set(
+      "path",
+      `color:0xe11d48aa|weight:2|fillcolor:0xe11d4833|${circle(lat, lng, r)}`,
+    );
+  }
   g.searchParams.set("key", KEY);
 
   try {
