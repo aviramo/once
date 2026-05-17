@@ -21,16 +21,9 @@ type Dict = {
   noResults: string;
   radius: string;
   startsAt: string;
-  lat: string;
-  lng: string;
-  coordsHint: string;
   save: string;
   cancel: string;
   add: string;
-  modeLabel: string;
-  modeActive: string;
-  modeScheduled: string;
-  modeDisabled: string;
   mapUnavailable: string;
   mapHint: string;
 };
@@ -131,7 +124,14 @@ export function AreaForm({
   const [startsAt, setStartsAt] = useState(
     initial ? toLocalInput(initial.starts_at) : "",
   );
-  const [mode, setMode] = useState<AreaMode>(initial?.mode ?? "scheduled");
+  // Mode is no longer chosen here — it is switched from the list's kebab menu.
+  // On create the default follows the start time (a time set ⇒ scheduled,
+  // none ⇒ disabled); on edit we preserve whatever the area already is.
+  const mode: AreaMode = isEdit
+    ? initial!.mode
+    : startsAt
+      ? "scheduled"
+      : "disabled";
 
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [searching, setSearching] = useState(false);
@@ -207,6 +207,10 @@ export function AreaForm({
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Coordinates come only from picking a search result now (the manual
+    // lat/lng inputs were removed). Without a pick there is nothing to save —
+    // the server would reject it anyway, so block the submit silently.
+    if (!lat || !lng) return;
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
       await action(fd);
@@ -216,7 +220,6 @@ export function AreaForm({
         setLng("");
         setRadius("1000");
         setStartsAt("");
-        setMode("scheduled");
         setPredictions([]);
         setCommitted("");
       }
@@ -239,6 +242,7 @@ export function AreaForm({
       <input type="hidden" name="lat" value={lat} />
       <input type="hidden" name="lng" value={lng} />
       <input type="hidden" name="starts_at" value={startsAtIso} />
+      <input type="hidden" name="mode" value={mode} />
 
       {/* Single field: search + selected location in one. Type to search
           Google; pick a result to fill it (+ coordinates + map); stays
@@ -309,39 +313,6 @@ export function AreaForm({
           dict={dict}
         />
       ) : null}
-      <p className="text-xs text-muted-foreground">
-        {dict.coordsHint}
-        {lat && lng
-          ? ` (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`
-          : ""}
-      </p>
-      <details className="text-sm">
-        <summary className="cursor-pointer text-xs text-muted-foreground">
-          {dict.lat} / {dict.lng}
-        </summary>
-        <div className="mt-2 grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-muted-foreground">{dict.lat}</span>
-            <input
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-              inputMode="decimal"
-              required
-              className={`mt-1 ${field}`}
-            />
-          </label>
-          <label className="block">
-            <span className="text-muted-foreground">{dict.lng}</span>
-            <input
-              value={lng}
-              onChange={(e) => setLng(e.target.value)}
-              inputMode="decimal"
-              required
-              className={`mt-1 ${field}`}
-            />
-          </label>
-        </div>
-      </details>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-sm">
@@ -366,20 +337,6 @@ export function AreaForm({
           />
         </label>
       </div>
-
-      <label className="block text-sm">
-        <span className="text-muted-foreground">{dict.modeLabel}</span>
-        <select
-          name="mode"
-          value={mode}
-          onChange={(e) => setMode(e.target.value as AreaMode)}
-          className={`mt-1 cursor-pointer ${field}`}
-        >
-          <option value="active">{dict.modeActive}</option>
-          <option value="scheduled">{dict.modeScheduled}</option>
-          <option value="disabled">{dict.modeDisabled}</option>
-        </select>
-      </label>
 
       <div className="flex items-center gap-2">
         <button

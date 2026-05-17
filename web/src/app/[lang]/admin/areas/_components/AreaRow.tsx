@@ -3,15 +3,18 @@
 import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { AreaForm, type AreaInitial, type AreaMode } from "./AreaForm";
+import { AreaMenu, type MenuItem } from "./AreaMenu";
 import { areaStatus } from "./geo";
 
 type RowDict = {
   edit: string;
   delete: string;
-  // mode switch button labels (also reused as the badge text)
+  // kebab-menu mode labels (reused as the only place these strings render now)
   modeActive: string;
   modeScheduled: string;
   modeDisabled: string;
+  // kebab trigger aria-label
+  menu: string;
   // status badge text: מופעל / בהמתנה / מושבת
   statusActive: string;
   statusWaiting: string;
@@ -29,7 +32,6 @@ export function AreaRow({
   lang,
   now,
   selected,
-  onSelect,
   containerRef,
   updateAction,
   deleteAction,
@@ -40,14 +42,15 @@ export function AreaRow({
   lang: string;
   /** Shared clock from the board so the badge and the map circle agree. */
   now: number;
+  /** Driven by the map: clicking a circle highlights its row here. */
   selected: boolean;
-  onSelect: () => void;
   containerRef?: (el: HTMLDivElement | null) => void;
   updateAction: (fd: FormData) => Promise<void>;
   deleteAction: (fd: FormData) => Promise<void>;
   setModeAction: (fd: FormData) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const starts = new Date(area.starts_at);
@@ -108,84 +111,80 @@ export function AreaRow({
     );
   }
 
-  const modeBtn = (mode: AreaMode, label: string) => (
-    <button
-      key={mode}
-      type="button"
-      onClick={() => runSetMode(mode)}
-      disabled={pending || area.mode === mode}
-      className={`rounded-lg border px-3 py-1.5 text-sm transition-colors disabled:cursor-default ${
-        area.mode === mode
-          ? "border-primary bg-primary/10 font-medium text-foreground"
-          : "border-border text-muted-foreground hover:bg-muted/60"
-      }`}
-    >
-      {label}
-    </button>
-  );
+  const modeItem = (mode: AreaMode, label: string): MenuItem => ({
+    key: mode,
+    label,
+    onSelect: () => runSetMode(mode),
+    disabled: pending || area.mode === mode,
+    current: area.mode === mode,
+  });
+
+  const items: MenuItem[] = [
+    modeItem("active", dict.modeActive),
+    modeItem("scheduled", dict.modeScheduled),
+    modeItem("disabled", dict.modeDisabled),
+    {
+      key: "delete",
+      label: dict.delete,
+      onSelect: runDelete,
+      disabled: pending,
+      danger: true,
+      separated: true,
+    },
+  ];
 
   return (
     <div
       ref={containerRef}
       className={cn(
-        "flex scroll-mt-24 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-background p-5 transition-colors",
+        "relative scroll-mt-24 rounded-2xl border bg-background p-5 transition-colors",
+        // While the menu is open, lift this row above later siblings so the
+        // dropdown is never painted under the next card.
+        menuOpen ? "z-30" : "z-0",
         selected
           ? "border-primary ring-2 ring-primary ring-offset-2 ring-offset-background"
           : "border-border",
       )}
     >
-      {/* role=button (not <button>) so the <p> caption stays valid markup. */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onSelect();
-          }
-        }}
-        aria-pressed={selected}
-        className="-m-2 min-w-0 cursor-pointer rounded-xl p-2 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-primary"
-      >
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{area.label}</span>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${badge.pill}`}
-          >
+      {/* Whole-card edit affordance: an absolute button BEHIND the content so
+          the <p> caption stays valid markup (no block inside <button>) and we
+          avoid nesting the kebab <button> inside another button. */}
+      <button
+        type="button"
+        aria-label={dict.edit}
+        onClick={() => setEditing(true)}
+        className="absolute inset-0 z-0 cursor-pointer rounded-2xl outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-primary"
+      />
+
+      <div className="pointer-events-none relative z-10 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{area.label}</span>
             <span
-              className={`size-1.5 rounded-full ${badge.dot}`}
-              aria-hidden
-            />
-            {badge.text}
-          </span>
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${badge.pill}`}
+            >
+              <span
+                className={`size-1.5 rounded-full ${badge.dot}`}
+                aria-hidden
+              />
+              {badge.text}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {area.lat.toFixed(5)}, {area.lng.toFixed(5)} · {area.radius_m} m
+            {area.mode === "scheduled"
+              ? ` · ${future ? `${dict.startsFuture} ${starts.toLocaleString()}` : dict.startsNow}`
+              : ""}
+          </p>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {area.lat.toFixed(5)}, {area.lng.toFixed(5)} · {area.radius_m} m
-          {area.mode === "scheduled"
-            ? ` · ${future ? `${dict.startsFuture} ${starts.toLocaleString()}` : dict.startsNow}`
-            : ""}
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        {modeBtn("active", dict.modeActive)}
-        {modeBtn("scheduled", dict.modeScheduled)}
-        {modeBtn("disabled", dict.modeDisabled)}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted/60"
-        >
-          {dict.edit}
-        </button>
-        <button
-          type="button"
-          onClick={runDelete}
-          disabled={pending}
-          className="rounded-lg border border-rose-300 px-3 py-1.5 text-sm text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-60 dark:border-rose-900 dark:hover:bg-rose-950/40"
-        >
-          {dict.delete}
-        </button>
+
+        <div className="pointer-events-auto">
+          <AreaMenu
+            ariaLabel={dict.menu}
+            items={items}
+            onOpenChange={setMenuOpen}
+          />
+        </div>
       </div>
     </div>
   );

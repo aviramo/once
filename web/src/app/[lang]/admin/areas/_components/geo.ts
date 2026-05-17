@@ -82,6 +82,71 @@ export function metersToPixels(
   return meters / mPerPx;
 }
 
+const deg = (r: number) => (r * 180) / Math.PI;
+
+// Inverse of `project`: a logical pixel inside the frame → lat/lng. Used by the
+// interactive map for wheel-zoom-to-cursor and drag-to-pan (both need to know
+// which geographic point sits under a given screen pixel).
+export function unproject(
+  x: number,
+  y: number,
+  view: ViewBox,
+): { lat: number; lng: number } {
+  const scale = TILE * 2 ** view.zoom;
+  const wx = (x - view.size / 2) / scale + worldX(view.centerLng);
+  const wy = (y - view.size / 2) / scale + worldY(view.centerLat);
+  const lng = wx * 360 - 180;
+  // Invert the Mercator worldY: s = tanh(L/2), L = (0.5 - wy) * 4π.
+  const s = Math.tanh((0.5 - wy) * 2 * Math.PI);
+  const lat = deg(Math.asin(Math.max(-1, Math.min(1, s))));
+  return { lat, lng };
+}
+
+/* ----------------------------------------------------------- interaction -- */
+
+// Interactive zoom range. Wider than fitBounds' MAX (street level), capped
+// below the Static Maps hard limit (21) the proxy clamps to.
+export const ZOOM_MIN = 2;
+export const ZOOM_MAX = 20;
+
+export const clampZoom = (z: number) =>
+  Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z)));
+
+// Re-centre so the geo point currently under screen (x,y) stays under (x,y)
+// after changing zoom — the natural "zoom toward the cursor" behaviour.
+export function viewAround(
+  view: ViewBox,
+  x: number,
+  y: number,
+  newZoom: number,
+): ViewBox {
+  const z = clampZoom(newZoom);
+  if (z === view.zoom) return view;
+  const p = unproject(x, y, view);
+  const scale = TILE * 2 ** z;
+  const cwx = worldX(p.lng) - (x - view.size / 2) / scale;
+  const cwy = worldY(p.lat) - (y - view.size / 2) / scale;
+  const centerLng = cwx * 360 - 180;
+  const s = Math.tanh((0.5 - cwy) * 2 * Math.PI);
+  const centerLat = deg(Math.asin(Math.max(-1, Math.min(1, s))));
+  return { centerLat, centerLng, zoom: z, size: view.size };
+}
+
+// Commit a drag: the frame centre now shows whatever geo point sat at screen
+// (size/2 - dx, size/2 - dy) before the gesture (content follows the finger).
+export function panView(
+  view: ViewBox,
+  dxLogical: number,
+  dyLogical: number,
+): ViewBox {
+  const { lat, lng } = unproject(
+    view.size / 2 - dxLogical,
+    view.size / 2 - dyLogical,
+    view,
+  );
+  return { centerLat: lat, centerLng: lng, zoom: view.zoom, size: view.size };
+}
+
 /* -------------------------------------------------------------- fitBounds -- */
 
 const MIN_ZOOM = 1;

@@ -46,16 +46,9 @@ export default async function AreasPage({
     noResults: a.noResults,
     radius: a.radius,
     startsAt: a.startsAt,
-    lat: a.lat,
-    lng: a.lng,
-    coordsHint: a.coordsHint,
     save: a.save,
     cancel: a.cancel,
     add: a.add,
-    modeLabel: a.modeLabel,
-    modeActive: a.modeActive,
-    modeScheduled: a.modeScheduled,
-    modeDisabled: a.modeDisabled,
     mapUnavailable: a.mapUnavailable,
     mapHint: a.mapHint,
   };
@@ -65,6 +58,7 @@ export default async function AreasPage({
     modeActive: a.modeActive,
     modeScheduled: a.modeScheduled,
     modeDisabled: a.modeDisabled,
+    menu: a.menu,
     statusActive: a.statusActive,
     statusWaiting: a.statusWaiting,
     statusDisabled: a.statusDisabled,
@@ -76,10 +70,12 @@ export default async function AreasPage({
   const mapDict = {
     mapUnavailable: a.mapUnavailable,
     mapHint: a.mapHint,
-    linkHint: a.linkHint,
     statusActive: a.statusActive,
     statusWaiting: a.statusWaiting,
     statusDisabled: a.statusDisabled,
+    zoomIn: a.zoomIn,
+    zoomOut: a.zoomOut,
+    fit: a.fit,
   };
 
   return (
