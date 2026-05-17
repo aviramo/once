@@ -35,7 +35,22 @@ export function AreaMenu({
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const menuId = useId();
 
+  // Open upward when the row is near the bottom of the viewport (the last
+  // row's menu was otherwise clipped off-screen and unreachable). Decided at
+  // open time from the trigger's position so there's no post-mount flicker.
+  const [dropUp, setDropUp] = useState(false);
+
   function change(next: boolean) {
+    if (next) {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) {
+        // Generous per-item estimate (item + the delete divider/padding) so a
+        // borderline case still flips up and stays fully reachable.
+        const estimated = items.length * 44 + 24;
+        const below = window.innerHeight - r.bottom;
+        setDropUp(below < estimated && r.top > below);
+      }
+    }
     setOpen(next);
     onOpenChange?.(next);
   }
@@ -96,7 +111,10 @@ export function AreaMenu({
           id={menuId}
           role="menu"
           aria-label={ariaLabel}
-          className="absolute end-0 top-full z-30 mt-1 min-w-44 overflow-hidden rounded-xl border border-border bg-background py-1 shadow-lg"
+          className={cn(
+            "absolute end-0 z-30 min-w-44 overflow-hidden rounded-xl border border-border bg-background py-1 shadow-lg",
+            dropUp ? "bottom-full mb-1" : "top-full mt-1",
+          )}
         >
           {items.map((it) => (
             <button

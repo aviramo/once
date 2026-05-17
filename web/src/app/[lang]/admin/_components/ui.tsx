@@ -30,7 +30,11 @@ export function AdminShell({
   userLabel,
 }: ShellProps) {
   return (
-    <div className="min-h-screen bg-muted/30">
+    // overflow-x-clip (not hidden) guards every admin page against a child
+    // that's momentarily wider than the viewport — a long unbroken email/name,
+    // an input's intrinsic width — without introducing a scroll container
+    // (sticky header keeps working) or a horizontal scrollbar.
+    <div className="min-h-screen overflow-x-clip bg-muted/30">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         {/* Wraps to a second line on narrow screens (no fixed height) so the
             header never forces the document wider than the viewport. */}

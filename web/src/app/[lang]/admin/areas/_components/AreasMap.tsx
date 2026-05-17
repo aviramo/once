@@ -186,9 +186,14 @@ export function AreasMap({
 
   const src = `/api/staticmap?lat=${view.centerLat}&lng=${view.centerLng}&zoom=${view.zoom}&size=${MAP_SIZE}&lang=${encodeURIComponent(lang)}`;
 
-  // Selected last so it paints on top of any overlapping circles.
+  // Largest first → smallest painted last, so it sits on top and wins the
+  // click when one zone is contained in another (clicking inside the small
+  // circle selects the small one, not the big one swallowing it). Selected
+  // only breaks ties between same-size circles.
   const ordered = [...points].sort(
-    (a, b) => Number(a.id === selectedId) - Number(b.id === selectedId),
+    (a, b) =>
+      b.r - a.r ||
+      Number(a.id === selectedId) - Number(b.id === selectedId),
   );
 
   const legend: { status: AreaStatus; label: string }[] = [
