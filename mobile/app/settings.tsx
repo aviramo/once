@@ -1707,13 +1707,13 @@ export function FamilyKidsPopup({
   )
 }
 
-const familyStyles = StyleSheet.create({
+const familyStyles = themed((c) => ({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   shadowGradient: { height: 60, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: BLACK },
+  shadowLayer: { flex: 1, backgroundColor: c.BLACK },
   gestureWrap: { flexShrink: 1 },
   sheet: {
-    backgroundColor: WHITE,
+    backgroundColor: c.bg,
     paddingTop: RADIUS,
     paddingHorizontal: SM,
     flexShrink: 1,
@@ -1721,7 +1721,7 @@ const familyStyles = StyleSheet.create({
   dragHandle: {
     alignSelf: 'center',
     width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: c.BLACK_SOFT,
     marginBottom: MD,
   },
   scrollContent: { paddingTop: SM, paddingBottom: SM },
@@ -1732,49 +1732,49 @@ const familyStyles = StyleSheet.create({
     paddingVertical: SM,
     paddingHorizontal: MD,
   },
-  toggleLabel: { fontSize: TEXT.md, color: BLACK },
+  toggleLabel: { fontSize: TEXT.md, color: c.fg },
   toggleTrack: {
     width: 48, height: 28, borderRadius: RADII.round,
     padding: XS, justifyContent: 'center',
   },
   toggleKnob: {
     width: 24, height: 24, borderRadius: RADII.round,
-    backgroundColor: WHITE,
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
+    backgroundColor: c.bg,
+    shadowColor: c.BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
   section: { marginBottom: MD },
   subSection: {},
-  sectionTitle: { fontSize: TEXT.md, color: BLACK, marginBottom: SM },
-  subSectionTitle: { fontSize: TEXT.sm, color: BLACK },
+  sectionTitle: { fontSize: TEXT.md, color: c.fg, marginBottom: SM },
+  subSectionTitle: { fontSize: TEXT.sm, color: c.fg },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: XS },
-  sectionHint: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS, marginBottom: MD },
-  optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  sectionHint: { fontSize: TEXT.sm, color: c.BLACK_STRONG, marginTop: XS, marginBottom: MD },
+  optional: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
-  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: BLACK_SOFT },
-  pillSelected: { backgroundColor: PRIMARY },
-  pillLabel: { fontSize: TEXT.sm, color: BLACK },
-  pillLabelSelected: { color: WHITE },
+  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: c.BLACK_SOFT },
+  pillSelected: { backgroundColor: c.fg },
+  pillLabel: { fontSize: TEXT.sm, color: c.fg },
+  pillLabelSelected: { color: c.bg },
   sectionPill: {
     paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: c.PRIMARY_BG,
   },
-  sectionPillDestructive: { backgroundColor: DESTRUCTIVE_BG },
-  sectionPillLabel: { fontSize: TEXT.sm, color: PRIMARY },
-  sectionPillLabelDestructive: { color: DESTRUCTIVE },
+  sectionPillDestructive: { backgroundColor: c.DESTRUCTIVE_BG },
+  sectionPillLabel: { fontSize: TEXT.sm, color: c.fg },
+  sectionPillLabelDestructive: { color: c.fg },
   card: {
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: c.BLACK_SOFT,
     borderRadius: RADIUS,
     overflow: 'hidden',
   },
-  cardRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT },
+  cardRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.BLACK_SOFT },
   cardRowDividerLast: { borderBottomWidth: 0 },
   dropdownRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
   },
-  dropdownLabel: { fontSize: TEXT.sm, color: BLACK },
-  dropdownValue: { fontSize: TEXT.sm, color: PRIMARY },
-  dropdownPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  dropdownLabel: { fontSize: TEXT.sm, color: c.fg },
+  dropdownValue: { fontSize: TEXT.sm, color: c.fg },
+  dropdownPlaceholder: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
 
   // "Days with kids" schedule. Title + weeks render inline with the rest of
   // the form (no enclosing card). Title sits flush, weeks gap below.
@@ -1785,84 +1785,84 @@ const familyStyles = StyleSheet.create({
   kidChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, marginTop: XS },
   kidChip: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: RADII.round, backgroundColor: BLACK_SOFT,
+    borderRadius: RADII.round, backgroundColor: c.BLACK_SOFT,
     paddingStart: MD, paddingEnd: SM,
   },
   kidChipMain: { paddingVertical: SM },
-  kidChipLabel: { fontSize: TEXT.sm, color: PRIMARY },
-  kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  kidChipLabel: { fontSize: TEXT.sm, color: c.fg },
+  kidChipPlaceholder: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
   kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
-  kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
+  kidChipRemoveLabel: { fontSize: TEXT.lg, color: c.BLACK_STRONG, lineHeight: 18 },
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: RADII.round,
-    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
+    borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT, borderStyle: 'dashed',
   },
-  kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipAddLabel: { fontSize: TEXT.sm, color: c.fg },
 
   // + Add kid / + Add week button.
-  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addKidLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT, borderStyle: 'dashed' },
+  addKidLabel: { fontSize: TEXT.sm, color: c.fg },
 
   weekHeader: { marginBottom: MD, gap: XS },
   weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
-  weekLabel: { fontSize: TEXT.sm, color: BLACK },
+  weekLabel: { fontSize: TEXT.sm, color: c.fg },
   weekLabelEmphasis: { fontWeight: WEIGHT.extrabold },
-  weekHint: { fontSize: TEXT.sm, color: BLACK_STRONG },
-  weekRemove: { fontSize: TEXT.sm, color: DESTRUCTIVE },
+  weekHint: { fontSize: TEXT.sm, color: c.BLACK_STRONG },
+  weekRemove: { fontSize: TEXT.sm, color: c.fg },
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
     width: 36, height: 36, borderRadius: RADII.round,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: c.bg, borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT,
   },
-  dayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  dayBubbleSelected: { backgroundColor: c.fg, borderColor: c.fg },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
-  dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
-  dayLetterWeekend: { color: PRIMARY },
-  dayLetter: { fontSize: TEXT.sm, color: BLACK },
-  dayLetterSelected: { color: WHITE },
-  dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
-  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addWeekLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  dayBubbleWeekend: { backgroundColor: c.PRIMARY_BG, borderColor: c.PRIMARY_BG },
+  dayLetterWeekend: { color: c.fg },
+  dayLetter: { fontSize: TEXT.sm, color: c.fg },
+  dayLetterSelected: { color: c.bg },
+  dayDate: { fontSize: TEXT.xs, color: c.BLACK_STRONG },
+  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: c.BLACK_SOFT, borderStyle: 'dashed' },
+  addWeekLabel: { fontSize: TEXT.sm, color: c.fg },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the gray cards expanding/collapsing inside
-  // don't push it around. WHITE bg + same horizontal padding as the sheet
+  // don't push it around. bg + same horizontal padding as the sheet
   // so the popup reads as one continuous surface.
-  interestedBar: { backgroundColor: WHITE },
+  interestedBar: { backgroundColor: c.bg },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
-    backgroundColor: WHITE,
+    backgroundColor: c.bg,
     paddingTop: RADIUS, paddingHorizontal: SM,
   },
   valuePopupTitle: {
-    fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK,
+    fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: c.fg,
     textAlign: 'center', marginBottom: SM,
   },
   valueRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: MD, paddingHorizontal: SM,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.BLACK_SOFT,
   },
-  valueRowLabel: { fontSize: TEXT.md, color: BLACK },
-  valueRowLabelSelected: { color: PRIMARY, fontWeight: WEIGHT.extrabold },
-  valueRowCheck: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.extrabold },
+  valueRowLabel: { fontSize: TEXT.md, color: c.fg },
+  valueRowLabelSelected: { color: c.fg, fontWeight: WEIGHT.extrabold },
+  valueRowCheck: { fontSize: TEXT.md, color: c.fg, fontWeight: WEIGHT.extrabold },
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
   triOptionRow: { flexWrap: 'wrap', rowGap: SM },
   triOptionLabel: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
-  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: BLACK_SOFT },
-  triOptionPillSelected: { backgroundColor: PRIMARY },
-  triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
-  triOptionPillLabelSelected: { color: WHITE },
-})
+  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADII.round, backgroundColor: c.BLACK_SOFT },
+  triOptionPillSelected: { backgroundColor: c.fg },
+  triOptionPillLabel: { fontSize: TEXT.sm, color: c.fg },
+  triOptionPillLabelSelected: { color: c.bg },
+}))
 
 // ── Photo edit popup ────────────────────────────────────────────────────────
 // Bottom sheet shown when the user taps a photo on their own profile preview.
