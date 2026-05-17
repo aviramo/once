@@ -167,7 +167,7 @@
     "areas": {
       "title": "Availability areas",
       "navLink": "Availability areas",
-      "subtitle": "The app is active only for users inside an enabled area whose start date has already passed. With no areas, the app is available to everyone.",
+      "subtitle": "The app is available only to a user inside an active area. With no active area at their location, the app is not available to them.",
       "add": "Add area",
       "edit": "Edit",
       "delete": "Delete",
@@ -189,7 +189,7 @@
       "lat": "Latitude",
       "lng": "Longitude",
       "coordsHint": "Picking an address from search fills the coordinates. You can also enter them manually.",
-      "none": "No areas defined yet. With no areas the app is available to all users.",
+      "none": "No areas defined. With no active area the app is not available to any user (except sign-up and profile setup).",
       "startsNow": "Available now",
       "startsFuture": "Opens",
       "confirmDelete": "Delete this area?"

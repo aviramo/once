@@ -591,12 +591,13 @@ Indexes: GIST on `center` (`areas_center_gix`); partial index on `mode` (`areas_
 
 `relations.availability` is `{state, starts_at?}` where `state ∈ {available, unavailable, not_yet}`, written by `app_availability(me_id)` (= `area_state(me.location)`):
 
-- **No `active`/`scheduled` areas at all** (only `disabled`, or none) → `available`. Gate is OFF; identical to pre-feature behaviour. **Fully backward compatible.**
-- **`location` is null** (onboarding / permission not yet granted) → `available` (never gate a user we can't place — onboarding/profile setup works in every location state).
+**Default-DENY** (product decision 2026-05-17, supersedes the original "no areas → available" backward-compat default). Usable ONLY where an area actively covers the user; zero active/scheduled areas ⇒ every located user `unavailable` (deliberate gated launch). This is intentionally **not** backward compatible. Rules in order:
+
+- **`location` is null** (onboarding / permission not yet granted) → `available`. The only non-gated escape hatch — onboarding & profile setup work in every location state.
 - Inside an `active` area → `available` (regardless of `starts_at`).
 - Inside a `scheduled` area with `starts_at <= now()` → `available`.
 - Inside a `scheduled` area whose earliest matching `starts_at` is in the future → `not_yet` (+ that `starts_at`).
-- Inside no `active`/`scheduled` area → `unavailable`.
+- **Everything else** — zero active/scheduled areas, or a located user outside all of them → `unavailable`.
 
 **Scheduled launch push.** `app_area_launch_sweep()` runs every minute (added to the existing `/ext/cron` job alongside `app_expire_sweep`). For each user still marked `not_yet` whose `area_state` has since become `available` (scheduled time passed, or admin switched the area to `active`), it flips `relations.availability` to `available` and queues an `area-open` push ("the game has started"). Users who opened the app at launch were already flipped by `app_availability` (no longer `not_yet`) so they get no duplicate — the push only reaches people who weren't in the app.
 

@@ -206,40 +206,81 @@ export function AreaForm({
         )}
       </div>
 
+      {/* Selected-location tag: the chosen place name, editable. Re-search
+          above to replace it (that also moves the map + coordinates). */}
       <label className="block text-sm">
         <span className="text-muted-foreground">{dict.label}</span>
-        <input
-          name="label"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          required
-          className={`mt-1 ${field}`}
-        />
+        <div className="mt-1 flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1.5">
+          <svg
+            viewBox="0 0 24 24"
+            className="size-4 shrink-0 text-primary"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z" />
+          </svg>
+          <input
+            name="label"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            required
+            placeholder={dict.search}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
+        </div>
       </label>
 
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block text-sm">
-          <span className="text-muted-foreground">{dict.lat}</span>
-          <input
-            value={lat}
-            onChange={(e) => setLat(e.target.value)}
-            inputMode="decimal"
-            required
-            className={`mt-1 ${field}`}
+      {/* Map preview: marker + radius circle, server-proxied (no browser
+          key). The img hides itself if the key lacks Maps Static API; the
+          coordinates caption below always shows so the area is still
+          verifiable. */}
+      {lat && lng ? (
+        <div className="overflow-hidden rounded-xl border border-border">
+          {/* Server-proxied dynamic endpoint, not a static asset — next/image
+              would need a custom loader for no real benefit in an admin tool. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={`${lat},${lng},${radius}`}
+            src={`/api/staticmap?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&r=${encodeURIComponent(radius || "0")}&lang=${encodeURIComponent(lang)}`}
+            alt={label || `${lat}, ${lng}`}
+            className="block h-44 w-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
           />
-        </label>
-        <label className="block text-sm">
-          <span className="text-muted-foreground">{dict.lng}</span>
-          <input
-            value={lng}
-            onChange={(e) => setLng(e.target.value)}
-            inputMode="decimal"
-            required
-            className={`mt-1 ${field}`}
-          />
-        </label>
-      </div>
-      <p className="text-xs text-muted-foreground">{dict.coordsHint}</p>
+        </div>
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {dict.coordsHint}
+        {lat && lng ? ` (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})` : ""}
+      </p>
+      <details className="text-sm">
+        <summary className="cursor-pointer text-xs text-muted-foreground">
+          {dict.lat} / {dict.lng}
+        </summary>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-muted-foreground">{dict.lat}</span>
+            <input
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              inputMode="decimal"
+              required
+              className={`mt-1 ${field}`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-muted-foreground">{dict.lng}</span>
+            <input
+              value={lng}
+              onChange={(e) => setLng(e.target.value)}
+              inputMode="decimal"
+              required
+              className={`mt-1 ${field}`}
+            />
+          </label>
+        </div>
+      </details>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-sm">
