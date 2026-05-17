@@ -23,7 +23,7 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, BUTTON_MIN_HEIGHT, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, themed, useThemeRerender } from '../src/colors'
 import { useThemeStore, type ThemeMode } from '../src/stores/themeStore'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, ResetIcon, SignOutIcon, TrashIcon, UserIcon, AppearanceIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
@@ -2607,6 +2607,9 @@ function GameModeCard() {
 type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
 
 export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
+  // Re-render the whole settings screen when the appearance toggle flips, so
+  // every child re-reads the themed() Proxy stylesheet with the new scheme.
+  useThemeRerender()
   const router = useRouter()
   const { profile } = useUserStore()
   const { user } = useAuthStore()
@@ -2671,8 +2674,8 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: PRIMARY },
+const styles = themed((c) => ({
+  rootOuter: { flex: 1, backgroundColor: c.bg },
   root: { flex: 1 },
 
   header: {
@@ -2683,11 +2686,11 @@ const styles = StyleSheet.create({
 
   tabBar: {
     flex: 1, flexDirection: 'row', marginHorizontal: SM,
-    backgroundColor: WHITE_SOFT, borderRadius: RADIUS, padding: XS,
+    backgroundColor: c.WHITE_SOFT, borderRadius: RADIUS, padding: XS,
   },
   tabItem: { flex: 1, paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS },
-  tabItemActive: { backgroundColor: WHITE },
-  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: WHITE },
+  tabItemActive: { backgroundColor: c.fg },
+  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: c.fg },
 
   tabScroll: { flex: 1 },
   // No horizontal padding here: the profile card extends edge-to-edge, flush
@@ -2699,9 +2702,9 @@ const styles = StyleSheet.create({
   section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: MD },
   sectionLabelRow: { flexDirection: 'row', marginTop: LG, marginBottom: SM, paddingHorizontal: SM },
-  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
-  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: WHITE, marginBottom: SM },
-  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: WHITE },
+  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: c.WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
+  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: c.fg, marginBottom: SM },
+  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: c.fg },
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, justifyContent: 'flex-end', width: 44 * 3 + SM * 2 },
@@ -2709,48 +2712,48 @@ const styles = StyleSheet.create({
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: SM },
   slider: { width: '100%', height: 40 },
-  sliderEndLabel: { fontSize: TEXT.sm, color: WHITE_MID, minWidth: 22, textAlign: 'center' },
+  sliderEndLabel: { fontSize: TEXT.sm, color: c.WHITE_MID, minWidth: 22, textAlign: 'center' },
 
   genderRow: { flexDirection: 'row', gap: SM, marginTop: SM },
 
   previewWrap: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: c.bg,
   },
 
-  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: WHITE_SOFT },
+  textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: c.WHITE_SOFT },
   textInputWrapInner: { paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM },
-  textInput: { fontSize: TEXT.md, color: WHITE, padding: 0, textAlign: 'center', minHeight: 56 },
-  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: WHITE_MID },
+  textInput: { fontSize: TEXT.md, color: c.fg, padding: 0, textAlign: 'center', minHeight: 56 },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: c.WHITE_MID },
 
   // Account tab
   infoCard: {
     marginTop: SM, borderRadius: RADIUS, overflow: 'hidden',
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: c.WHITE_SOFT,
   },
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WHITE_SOFT,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.WHITE_SOFT,
   },
   infoRowLast: { borderBottomWidth: 0 },
-  infoLabel: { fontSize: TEXT.md, color: WHITE_STRONG },
+  infoLabel: { fontSize: TEXT.md, color: c.WHITE_STRONG },
   infoValue: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: c.fg,
     flexShrink: 1, marginStart: MD,
   },
 
   accountLinkRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
-    backgroundColor: WHITE_SOFT, borderRadius: RADIUS,
+    backgroundColor: c.WHITE_SOFT, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD,
     marginBottom: MD,
   },
   // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
   // the subtle hairline `accountActionDivider` between siblings.
   accountLinksCard: {
-    backgroundColor: PRIMARY,
+    backgroundColor: c.bg,
     marginBottom: MD,
   },
   // Relative-positioned wrapper so the GameModeCard overlay anchors to the
@@ -2769,7 +2772,7 @@ const styles = StyleSheet.create({
     width: '100%', minHeight: PROFILE_CARD_MIN_HEIGHT,
     flexDirection: 'column', justifyContent: 'space-between',
     overflow: 'hidden',
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: c.WHITE_SOFT,
   },
   profileCardTopSpacer: { height: MD + BUTTON_MIN_HEIGHT + MD },
 
@@ -2783,16 +2786,14 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
+  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: c.WHITE_SOFT },
   profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
   // flexDirection:'row' makes the single Text child sit on the logical
   // start side (right in RTL, left in LTR) — same pattern documented above
   // GameModeCard. textAlign/writingDirection alone proved inconsistent on iOS.
   profileCardCaption: { paddingHorizontal: MD, paddingVertical: MD, flexDirection: 'row' },
-  profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
-  // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
-  // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
-  accentCard: { backgroundColor: PRIMARY },
+  profileCardTitle: { color: c.fg, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold },
+  accentCard: { backgroundColor: c.bg },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
@@ -2801,24 +2802,24 @@ const styles = StyleSheet.create({
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
   accountActionsCard: {
-    backgroundColor: WHITE, marginTop: SM,
+    backgroundColor: c.bg, marginTop: SM,
   },
   accountActionRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
   },
   accountActionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: c.WHITE_SOFT,
     marginStart: MD,
   },
   accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  accountActionText: { fontSize: TEXT.md, color: WHITE, fontWeight: WEIGHT.semibold },
-  accountActionTextDestructive: { color: WHITE_MID },
+  accountActionText: { fontSize: TEXT.md, color: c.fg, fontWeight: WEIGHT.semibold },
+  accountActionTextDestructive: { color: c.WHITE_MID },
   // Account popup identity block: stacked text list (one field per line) in
   // PRIMARY on the white sheet, replacing the old chip pills.
   accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
   accountPopupListItem: {
-    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG,
+    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: c.BLACK_STRONG,
     // 'left' = start of writing direction (physically right in RTL after
     // auto-flip) — same correct-in-both-directions value the Chip text uses.
     textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr',
@@ -2827,10 +2828,10 @@ const styles = StyleSheet.create({
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: SM,
-    backgroundColor: PRIMARY, borderRadius: RADIUS,
+    backgroundColor: c.bg, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
+    shadowColor: c.BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.
@@ -2843,17 +2844,17 @@ const styles = StyleSheet.create({
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
   selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', columnGap: SM },
   selectRowLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: MD },
-  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
-  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS },
+  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: c.fg, fontWeight: WEIGHT.semibold },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: c.WHITE_STRONG, marginTop: XS },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowValue: { fontSize: TEXT.md, color: c.WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: c.WHITE_SOFT,
   },
   selectRowAccentIcon: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: c.WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
   selectRowIconWrap: { alignItems: 'center', justifyContent: 'center' },
@@ -2861,21 +2862,21 @@ const styles = StyleSheet.create({
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,
     borderRadius: RADIUS, overflow: 'hidden',
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: c.WHITE_SOFT,
   },
   subPageOptionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
   },
-  subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
-  subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
+  subPageOptionLabel: { fontSize: TEXT.lg, color: c.fg },
+  subPageCheckmark: { fontSize: TEXT.lg, color: c.WHITE_STRONG, fontWeight: WEIGHT.semibold },
   optionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: c.WHITE_SOFT,
     marginStart: MD,
   },
   subPageDesc: {
     marginHorizontal: SM, marginTop: MD,
-    fontSize: TEXT.sm, color: WHITE_STRONG,
+    fontSize: TEXT.sm, color: c.WHITE_STRONG,
     textAlign: 'center', lineHeight: lh(TEXT.sm),
   },
-})
+}))

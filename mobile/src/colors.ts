@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useColorScheme } from 'react-native'
+import { useColorScheme, Appearance, StyleSheet } from 'react-native'
 import { useThemeStore, type ThemeMode } from './stores/themeStore'
 
 // ════════════════════════════════════════════════════════════════════════
@@ -290,5 +290,52 @@ export function useColors(): Colors {
 export function useThemedStyles<T>(factory: (c: Colors) => T): T {
   const c = useColors()
   return useMemo(() => factory(c), [c])
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// themed() — zero-boilerplate themed stylesheet (the migration workhorse)
+// ────────────────────────────────────────────────────────────────────────
+// Converting a screen is now just: `StyleSheet.create({...})` →
+// `themed(c => ({...}))` (and prefix color ids with `c.`). NO per-component
+// hooks, NO hunting for every component that reads the sheet.
+//
+// How: both palettes' StyleSheets are precomputed once; the returned object
+// is a Proxy that resolves each key against whatever the CURRENT scheme is
+// at access time. A screen re-renders on theme change via one
+// `useThemeRerender()` at its top level (children re-render with it and
+// re-read the Proxy), so the whole screen flips with no other changes.
+// ════════════════════════════════════════════════════════════════════════
+
+let CURRENT: Scheme = resolveScheme(
+  useThemeStore.getState().mode,
+  Appearance.getColorScheme(),
+)
+function recomputeCurrent() {
+  CURRENT = resolveScheme(useThemeStore.getState().mode, Appearance.getColorScheme())
+}
+useThemeStore.subscribe(recomputeCurrent)
+Appearance.addChangeListener(recomputeCurrent)
+
+export function themed<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<unknown>>(
+  factory: (c: Colors) => T,
+): T {
+  const light = StyleSheet.create(factory(PALETTES.light))
+  const dark = StyleSheet.create(factory(PALETTES.dark))
+  return new Proxy({} as T, {
+    get: (_t, k) => (CURRENT === 'dark' ? dark : light)[k as keyof T],
+    ownKeys: () => Reflect.ownKeys(light),
+    getOwnPropertyDescriptor: (_t, k) =>
+      Object.getOwnPropertyDescriptor(CURRENT === 'dark' ? dark : light, k),
+  }) as T
+}
+
+/** Put one call at the top of a screen component. It subscribes to the
+ * scheme so the screen (and its children) re-render on a theme switch;
+ * every `themed()` sheet they read then reflects the new scheme. Returns
+ * the active scheme for the rare inline-color case. */
+export function useThemeRerender(): Scheme {
+  const mode = useThemeStore((s) => s.mode)
+  const device = useColorScheme()
+  return resolveScheme(mode, device)
 }
 
