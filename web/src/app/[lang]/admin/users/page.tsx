@@ -259,6 +259,9 @@ export default async function AdminUsers({
     p1?: Record<string, number>;
     p2?: Record<string, number>;
     groups?: Record<string, number>;
+    avail?: Record<string, number>;
+    tier?: Record<string, number>;
+    seg?: Record<string, number>;
   };
   const facets = (facetsData ?? {}) as Facets;
 
@@ -393,20 +396,24 @@ export default async function AdminUsers({
     })),
     { value: ROLE_NONE, label: d.filterRoleNone, count: facets.groups_none ?? 0 },
   ].sort(byCountDesc);
-  // The new segment/availability/tier filters have no precomputed facet
-  // counts (admin_user_facet_counts doesn't carry them) — SearchControls
-  // renders just the label when `count` is absent, so we omit it.
+  // avail / tier / seg now carry global "(n)" facet counts too (every
+  // dropdown + every option shows a count). Unlike p1/p2/groups these keep
+  // their declared order — the seg recency buckets (online → 30d) read
+  // better chronologically than count-sorted, and avail/tier are tiny.
   const availOptions = AVAIL_VALUES.map((v) => ({
     value: v,
     label: (d.availStates as Record<string, string>)[v],
+    count: facets.avail?.[v] ?? 0,
   }));
   const tierOptions = TIER_VALUES.map((v) => ({
     value: v,
     label: (d.tierStates as Record<string, string>)[v],
+    count: facets.tier?.[v] ?? 0,
   }));
   const segOptions = SEG_VALUES.map((v) => ({
     value: v,
     label: (d.segStates as Record<string, string>)[v],
+    count: facets.seg?.[v] ?? 0,
   }));
 
   const meName = (meRes.data as { name?: string } | null)?.name;
