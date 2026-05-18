@@ -16,7 +16,7 @@ import { SignOutButton } from "./SignOutButton";
  * adding a tab is a single edit, never two parallel JSX blocks.
  */
 
-type NavKey = "dashboard" | "users" | "roles" | "areas" | "map";
+type NavKey = "dashboard" | "users" | "roles" | "reports" | "areas" | "map";
 
 type Labels = Record<NavKey, string> & {
   site: string;
@@ -33,6 +33,7 @@ const NAV_ITEMS: { key: NavKey; href: string }[] = [
   { key: "dashboard", href: "/admin" },
   { key: "users", href: "/admin/users" },
   { key: "roles", href: "/admin/roles" },
+  { key: "reports", href: "/admin/reports" },
   { key: "areas", href: "/admin/areas" },
   { key: "map", href: "/admin/map" },
 ];

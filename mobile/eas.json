@@ -22,7 +22,7 @@
       },
       "android": {
         "serviceAccountKeyPath": "../.claude/secrets/google-play.json",
-        "track": "alpha",
+        "track": "production",
         "releaseStatus": "completed",
         "changesNotSentForReview": false
       }

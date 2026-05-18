@@ -50,7 +50,24 @@
       "roles": "Groups",
       "areas": "Availability areas",
       "map": "Map",
+      "reports": "Reports",
       "site": "Site"
+    },
+    "reports": {
+      "title": "Reports",
+      "subtitle": "User reports. Act on every new report within 24 hours.",
+      "none": "No reports.",
+      "reporter": "Reporter",
+      "reported": "Reported",
+      "context": "Source",
+      "reason": "Reason",
+      "note": "Note",
+      "when": "When",
+      "unhandled": "Pending",
+      "handledTab": "Handled",
+      "markHandled": "Mark handled",
+      "handled": "Handled",
+      "unknownUser": "Unknown user"
     },
     "dashboard": {
       "title": "Admin overview",
@@ -318,7 +335,7 @@
     },
     "roles": {
       "title": "Groups",
-      "subtitle": "A disabled group blocks every user assigned to it: they see the app-unavailable message and aren't shown to other users, exactly like being outside an active area.",
+      "subtitle": "To use the app a user must belong to at least one active group. Anyone in no active group, which includes every new user, sees the app-unavailable message and isn't shown to other users until you add them to an active group.",
       "add": "Add group",
       "namePlaceholder": "Group name",
       "save": "Save",
@@ -334,12 +351,12 @@
       "confirmDelete": "Delete this group?",
       "inUse": "Can't delete a group that still has members. Remove them first.",
       "duplicate": "A group with this name already exists.",
-      "disabledHint": "Disabled group: assigned users are blocked just like geo-unavailability."
+      "disabledHint": "A disabled group grants no access. Its members are blocked unless they also belong to another active group."
     },
     "userDetail": {
       "profile": "Profile",
       "roles": "Groups",
-      "rolesHint": "Ticking a disabled group blocks this user like geo-unavailability.",
+      "rolesHint": "Tick at least one active group so this user can use the app. With no active group they are disabled.",
       "noRoles": "No groups defined in the system.",
       "summary": "Current status",
       "currentState": "Current state",

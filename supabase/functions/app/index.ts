@@ -1,10 +1,16 @@
 import Log from "../log.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
-import { Notify, PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
+import { Notify, PushPresence, PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
 const updatable = ["weekStart", "os", "lang", "push_token", "location_custom", "location_type", "location_label"];
+// User-initiated actions that start/extend an interaction and therefore
+// require presence (the user must be reachable). A gated user — geo /
+// disabled-group / no-notifications, all of which surface as
+// relations.availability.state ≠ 'available' — is server-blocked from these,
+// the symmetric counterpart to others() dropping them from match pools.
+const requiresPresence = ["find", "invite", "add", "approve"];
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
@@ -32,6 +38,28 @@ function applyBodyFields(user: User, body: Record<string, unknown>) {
 function availabilityState(u: unknown): string {
   const rel = (u as { relations?: { availability?: { state?: string } } } | null | undefined)?.relations;
   return rel?.availability?.state ?? "available";
+}
+
+// Record the notification-presence signal into relations.push (drives the SQL
+// push_blocked() gate). Called from start/location/focus only. `notif_perm` is
+// client-reported — absent on old mobile builds, so they are left untouched
+// and never gated. A fresh push_token arriving (or perm 'granted') clears any
+// stale DeviceNotRegistered mark so the gate releases. No-op when the body
+// carries neither signal, so it never churns relations on every call.
+function recordPushPresence(user: User, body: Record<string, unknown>) {
+  const raw = typeof body.notif_perm === "string" ? body.notif_perm : undefined;
+  const perm = raw === "granted" || raw === "denied" || raw === "undetermined" ? raw : undefined;
+  const freshToken = "push_token" in body && !!body.push_token;
+  if (!perm && !freshToken) return;
+  const prev: PushPresence = user.relations.push ?? {};
+  const next: PushPresence = {
+    ...prev,
+    token: !!user.data?.push_token,
+    checked_at: new Date().toISOString(),
+  };
+  if (perm) next.perm = perm;
+  if (freshToken || perm === "granted") next.dead = false;
+  user.relations.push = next;
 }
 
 function pickGendered(table: Record<string, Record<string, string>>, code: string, lang: string, actorIsMale: boolean | null): string | undefined {
@@ -85,7 +113,15 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
     channelId: "default",
   };
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
-  await Tools.notify(entry, token, payload);
+  const res = await Tools.notify(entry, token, payload);
+  // Expo says this token is dead (app uninstalled / push receipt revoked).
+  // Clear it and recompute availability so the user drops out of every pool
+  // immediately — they can no longer be reached, the app requires presence.
+  if (!res.ok && res.error === "DeviceNotRegistered") {
+    EdgeRuntime.waitUntil(
+      Tools.rpc(log, "app_push_dead", { p_user_id: target_user_id }).then(() => {}),
+    );
+  }
 }
 
 Deno.serve(async (req) => {
@@ -110,6 +146,24 @@ Deno.serve(async (req) => {
 
     let rpcUser: Record<string, unknown> | undefined;
     let notifyList: Notify[] = [];
+
+    // Presence gate (symmetric direction). others() already drops a gated
+    // user from everyone's pool; this stops a gated user from actively
+    // searching / inviting / broadcasting / accepting. A no-notifications
+    // user who sends an invite could never be told it was accepted — a dead
+    // end for both sides; same for geo / disabled-group gating. The
+    // gate-aware mobile build already hides these CTAs while gated, so a
+    // correctly-gated current client never reaches here; this closes the
+    // loop for old builds and direct API calls. Teardown/exit actions
+    // (clear1/clear2, decline, cancel, leave, free2, lock2, pause, logout,
+    // ignore) are deliberately NOT gated — a gated user must still be able
+    // to clear a stale state and get out. availabilityState defaults to
+    // 'available' when the key is absent, so onboarding users (no gate
+    // computed yet) are unaffected.
+    if (requiresPresence.includes(key) && availabilityState(user) !== "available") {
+      await user.persist(log);
+      return log.error(key, "unavailable", 403);
+    }
 
     switch (key) {
       case "account": {
@@ -148,6 +202,11 @@ Deno.serve(async (req) => {
         if (p2?.state === "locked" && p2?.message === "logout") {
           user.relations.page2 = { state: "free", profiles: [] } as typeof user.relations.page2;
         }
+        // Capture the client-reported notification permission (+ token health)
+        // before persist, so the app_availability recompute below sees a fresh
+        // relations.push and the push_blocked() gate is correct in the same
+        // round-trip the client gets back.
+        recordPushPresence(user, body);
         await user.persist(log);
         // Recompute the geo-availability gate from the just-persisted
         // location and surface it via relations.availability. Synchronous so
@@ -171,6 +230,21 @@ Deno.serve(async (req) => {
             notifyList = result.notify ?? [];
           }
         }
+        break;
+      }
+
+      case "notif": {
+        // Lean notification-permission heartbeat. The client posts this the
+        // instant the OS permission changes (foreground poll / return from
+        // Settings), so the presence gate stays near-realtime. Only what the
+        // gate needs: record relations.push, persist, recompute availability
+        // (synchronous so the response + Realtime carry the new gate state).
+        // No auto-find / no extra work — keep this call cheap (it can fire
+        // a few times around a permission toggle).
+        recordPushPresence(user, body);
+        await user.persist(log);
+        const av = await Tools.rpc(log, "app_availability", { me_id: user.user_id });
+        if (av && !av.error) rpcUser = av.user;
         break;
       }
 
@@ -250,6 +324,21 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "set_tier": {
+        // User-initiated tier switch, now one-way free -> Pro (the mobile UI
+        // dropped the downgrade button). Upgrading to Pro tops the wallet to
+        // the Pro cap (max stars); a tier='free' call only flips the label
+        // (non-destructive). All of that lives in app_set_tier.
+        const tier = typeof body.tier === "string" ? body.tier.toLowerCase() : "";
+        if (tier !== "free" && tier !== "pro") return log.error("set_tier", "bad_tier", 400);
+        const result = await Tools.rpc(log, "app_set_tier", { me_id: user.user_id, new_tier: tier });
+        await user.persist(log);
+        if (result?.error) return log.error("set_tier", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
       case "extend": {
         const minutes = Number(body.minutes);
         if (!Number.isFinite(minutes)) return log.error("extend", "bad_minutes", 400);
@@ -267,6 +356,24 @@ Deno.serve(async (req) => {
         const result = await Tools.rpc(log, "app_remove", { me_id: user.user_id, viewer_id });
         await user.persist(log);
         if (result?.error) return log.error("remove", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
+      case "report": {
+        // Public-launch safety (Apple 1.2 / Google UGC): report another user.
+        // Always records + permanently blocks the pair; tears the live link
+        // down via app_report (mirrors leave/cancel/decline per surface).
+        const reported_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!reported_id) return log.error("report", "no_user_id", 400);
+        const p_reason = typeof body.reason === "string" ? body.reason : null;
+        const p_note = typeof body.note === "string" ? body.note : null;
+        const result = await Tools.rpc(log, "app_report", {
+          me_id: user.user_id, reported_id, p_reason, p_note,
+        });
+        await user.persist(log);
+        if (result?.error) return log.error("report", result.error, 400);
         rpcUser = result?.user;
         notifyList = result?.notify ?? [];
         break;
