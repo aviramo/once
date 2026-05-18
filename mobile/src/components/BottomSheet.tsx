@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Modal, Pressable, StyleSheet, View, Platform, Keyboard, KeyboardAvoidingView } from 'react-native'
+import { Modal, Pressable, StyleSheet, View, Keyboard, Dimensions } from 'react-native'
 import { GestureHandlerRootView, Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
@@ -31,8 +31,14 @@ type BottomSheetProps = {
   dragHandle?: boolean
   // True → enable swipe-down-to-dismiss gesture. Default true.
   swipeToDismiss?: boolean
-  // True → wrap content in KeyboardAvoidingView (iOS padding behavior). Used
-  // by sheets that contain a TextInput.
+  // True → lift the whole sheet by the keyboard height while it's open, so a
+  // TextInput in the sheet body stays visible. Set this for ANY sheet that
+  // contains a focusable text field. RN's KeyboardAvoidingView does NOT work
+  // here: the sheet lives inside a RN Modal, and on Android a Modal gets its
+  // own window that never receives the activity's adjustResize, so the field
+  // sits behind the keyboard. We instead drive a transform lift off the
+  // Keyboard events (the same approach chat.tsx uses), which works on both
+  // platforms. Single source of truth: fixing it here fixes every popup.
   keyboardAvoiding?: boolean
   // Disable the backdrop tap → dismiss (e.g. while a network call is in flight).
   // Defaults to allowed.
@@ -69,6 +75,8 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const translateY = useSharedValue(800)
   const dragY = useSharedValue(0)
+  // Keyboard-height lift (see `keyboardAvoiding` doc above). 0 when closed.
+  const keyboardOffset = useSharedValue(0)
   const cardHeight = useSharedValue(800)
   // Captured at gesture start: was the scrollable child at its top? Drives
   // whether this pan can dismiss the sheet or whether it should yield to the
@@ -110,6 +118,30 @@ export function BottomSheet({
     return () => cancelAnimationFrame(raf)
   }, [modalVisible, onClosed])
 
+  // Lift the sheet by the keyboard height while a field in it is focused.
+  // Height is derived from screen geometry (screenH − endCoordinates.screenY)
+  // rather than `endCoordinates.height` — Gboard's clipboard/suggestion strip
+  // isn't always counted in `height`. We listen to *willShow* + *didShow* so
+  // the lift starts in sync with the keyboard on iOS, and still catches the
+  // Android case (no willShow). Mirrors chat.tsx's proven handling.
+  useEffect(() => {
+    if (!keyboardAvoiding) return
+    const onShow = (e: any) => {
+      const screenH = Dimensions.get('screen').height
+      const fromScreenY = screenH - (e.endCoordinates?.screenY ?? screenH)
+      const reportedH = e.endCoordinates?.height ?? 0
+      keyboardOffset.value = withTiming(Math.max(reportedH, fromScreenY))
+    }
+    const onHide = () => { keyboardOffset.value = withTiming(0) }
+    const subs = [
+      Keyboard.addListener('keyboardWillShow', onShow),
+      Keyboard.addListener('keyboardDidShow', onShow),
+      Keyboard.addListener('keyboardWillHide', onHide),
+      Keyboard.addListener('keyboardDidHide', onHide),
+    ]
+    return () => { subs.forEach(s => s.remove()); keyboardOffset.value = 0 }
+  }, [keyboardAvoiding])
+
   const panBase = Gesture.Pan()
     .enabled(swipeToDismiss)
     .activeOffsetY(PAN_ACTIVE_OFFSET_Y)
@@ -140,7 +172,7 @@ export function BottomSheet({
     })
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value + dragY.value }],
+    transform: [{ translateY: translateY.value + dragY.value - keyboardOffset.value }],
   }))
 
   const Inner = (
@@ -178,16 +210,7 @@ export function BottomSheet({
       statusBarTranslucent
     >
       <GestureHandlerRootView style={styles.rootView}>
-        {keyboardAvoiding ? (
-          <KeyboardAvoidingView
-            style={styles.flex}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            {Inner}
-          </KeyboardAvoidingView>
-        ) : (
-          Inner
-        )}
+        {Inner}
       </GestureHandlerRootView>
     </Modal>
   )
@@ -195,7 +218,6 @@ export function BottomSheet({
 
 const styles = StyleSheet.create({
   rootView: { flex: 1 },
-  flex: { flex: 1 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
   cardWrap: {},
   shadowGradient: { height: SHADOW_GRADIENT_HEIGHT, marginBottom: -1 },

@@ -5,6 +5,8 @@ export default {
   // Auth
   'auth.signInGoogle': 'Sign in with Google',
   'auth.signInApple': 'Sign in with Apple',
+  'auth.reviewCodePlaceholder': 'Review code',
+  'auth.reviewSubmit': 'Enter',
   'auth.tagline': 'One encounter in real time',
   'auth.msg1': 'Not a catalog. Not endless chats.',
   'auth.msg2': 'One encounter\nin real time',
@@ -130,6 +132,8 @@ export default {
   'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone.",
   'settings.profile': 'Edit your profile',
   'settings.account': 'Account',
+  'settings.credits': 'Stars',
+  'settings.creditsNext': 'Renews {when}',
   'settings.preview': 'Preview',
   'settings.myProfile': 'Profile',
   'settings.photo': 'My Photos',
@@ -150,12 +154,14 @@ export default {
   'settings.signOutConfirmTitle': 'Sign out',
   'settings.signOutConfirmDesc': 'You won\'t receive notifications after signing out. If someone is watching you, they\'ll be notified.',
   'settings.signOutYes': 'Sign out',
-  'settings.ageRange': 'Age',
+  'settings.ageRange': 'Ages',
   'settings.ageFrom': 'From',
   'settings.ageTo': 'To',
   'settings.save': 'Save',
   'settings.add': 'Add',
-  'settings.range': 'Distance',
+  'settings.range': 'Up to',
+  // Distance-field LABEL when range is unlimited (value column left empty).
+  'settings.rangeUnlimitedLabel': 'No distance limit',
   'settings.rangeHere': 'Right here',
   'settings.rangeUnlimited': 'Unlimited',
   'settings.km': 'km',
@@ -165,6 +171,11 @@ export default {
   'settings.locationCustom': 'Custom address',
   'settings.locationHome': 'Home',
   'settings.locationWork': 'Work',
+  // Location field LABEL, by the chosen anchor type (value column shows the
+  // address for home/work, nothing for the device case).
+  'settings.locationFromHome': 'From home',
+  'settings.locationFromWork': 'From work',
+  'settings.locationFromDevice': 'From my current location',
   'settings.locationDeviceDesc': "Use the device's location",
   'settings.locationCustomDesc': 'Pick an address',
   'settings.locationAddressPrompt': 'Type an address or city name',
@@ -257,11 +268,34 @@ export default {
   'family.summaryFreeWeekend': ', free this weekend',
   'family.summaryWithKidsWeekend': ', not free this weekend',
   'common.gotIt': 'Got it',
+  // Not-enough-stars popup (shown when an action costs more stars than the
+  // user has). {n} = the action's cost.
+  // Count phrase with correct singular/plural — built by starsText() in
+  // lib/credits.ts and substituted wherever a stars amount is shown in prose.
+  'stars.count.one': '1 star',
+  'stars.count.many': '{n} stars',
+  'stars.insufficient.title': 'Not enough stars',
+  'stars.insufficient.desc': 'This action costs {stars} and you do not have enough right now. Stars renew every day.',
+  // Stars / package popup (opened from the settings stars row). The
+  // description is assembled in code from these lines (so the renew line can
+  // be dropped when the next-grant time is unknown). Plan names stay Latin.
+  // The {stars}/{tier}/{cap}/{when} tokens are rendered bold in code. {cap}
+  // is the daily ceiling: the grant TOPS UP to it (not additive), so the
+  // tier line says the stars "top up to {cap}", never "you get {cap}".
+  // English is non-gendered (genderize() is a no-op without {m|f} markers).
+  'stars.popup.title': 'Your stars',
+  'stars.popup.line.balance': 'You have {stars} right now.',
+  'stars.popup.line.tier': 'On the {tier} plan, your stars top up to {cap} every day.',
+  'stars.popup.line.renew': 'Your stars will refresh on {when}.',
+  'stars.popup.line.switch': 'You can upgrade to Pro anytime.\nUpgrading immediately gives you the maximum stars.',
+  'stars.popup.upgrade': 'Upgrade to Pro',
+  'stars.popup.downgrade': 'Downgrade plan',
   'settings.miles': 'mi',
-  'settings.preferredGender': 'Gender',
-  'settings.genderM': 'Men',
-  'settings.genderF': 'Women',
-  'settings.genderBoth': 'Men & Women',
+  // genderize() is a no-op on English (no {m|f} marker) — single form.
+  'settings.preferredGender': 'Available',
+  'settings.genderM': 'For men',
+  'settings.genderF': 'For women',
+  'settings.genderBoth': 'For everyone',
   'settings.kidsLabel': 'Planning for kids?',
   'settings.kidsYes': 'Yes',
   'settings.kidsNo': 'No',
@@ -344,7 +378,9 @@ export default {
   'home.premiumPopup.hide': 'Hide my profile',
   'home.premiumPopup.reveal': 'Show my profile',
   'home.broadcastConfirmTitle': 'Switch to broadcast mode?',
-  'home.broadcastConfirmDesc': 'In broadcast mode your profile gets extra visibility for half an hour, increasing your chances of invitations from matching people nearby.',
+  'home.broadcastConfirmDesc': 'In broadcast mode, your profile gets extra visibility for 30 minutes, helping more nearby people discover you.',
+  'home.broadcastConfirmDescFree': 'Receiving invitations is free.',
+  'home.broadcastConfirmDescNoStars': 'No stars are used when someone invites you.',
   'home.broadcastConfirmButton': 'Broadcast me',
   'home.exitBroadcastConfirmTitle': 'Stop broadcasting?',
   'home.exitBroadcastConfirmDesc': "You're currently in broadcast mode. Confirming will stop the broadcast.",
@@ -423,6 +459,10 @@ Just a moment, just the two of you`,
   // area's launch time) — keep the placeholder.
   'home.geoGate.unavailable': 'Not available in your area',
   'home.geoGate.notYet': 'Opens in your area {date}',
+  // Join-request gate: the user is not in any active group. The center
+  // icon-button itself sends the request (no separate button label).
+  'home.joinGate.requestText': 'Access by approval, tap to request to join',
+  'home.joinGate.waitingText': 'Request sent, waiting for approval',
   'home.startNow': 'Start now',
   'home.readyToContinue': 'Ready to continue?',
   'home.endedBack': 'Back to game',
@@ -599,11 +639,12 @@ Just a moment, just the two of you`,
   'chat.blockTitle': 'Block user',
   'chat.blockDesc': 'This user will be blocked and won\'t be able to contact you again. This action cannot be undone.',
   'chat.blockConfirm': 'Block',
-  'chat.leave': 'End conversation',
+  'chat.leave': 'End chat',
   'chat.report': 'Report',
   'chat.reportTitle': 'Report user',
-  'chat.reportDesc': 'Thanks. Your report will be sent to our team for review. This feature is launching soon.',
-  'chat.reportConfirm': 'OK',
+  'chat.reportDesc': 'Your report will be sent to our team for review. This user will be blocked and you will not be matched again. Any active connection between you will end.',
+  'chat.reportPlaceholder': 'What happened? You can add details (optional)',
+  'chat.reportConfirm': 'Report and block',
   'chat.newMessages': 'New messages',
   'chat.attachMenu.image': 'Photo',
   'chat.attachMenu.location': 'Location',
@@ -635,6 +676,9 @@ Just a moment, just the two of you`,
   'home.locationUnavailableDesc': 'We couldn\'t determine your location. Try moving to a spot with better reception and tap Broadcast Location.',
   'home.locationUnavailableButton': 'Broadcast Location',
   'home.hiddenHeader2': 'Once',
+  // Broadcast countdown, now shown as a line in the viewers info card
+  // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
+  'home.broadcast.endsIn': 'Broadcast ends in {time}',
   'home.tabs.home': 'Once',
   'home.tabs.viewers': 'Viewers',
   'home.tabs.hidden': 'Hidden',

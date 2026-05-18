@@ -10,6 +10,19 @@ export const STORAGE = {
   seenFlags: 'seen_flags',
 } as const
 
+// One-time "seen" flag names stored inside the STORAGE.seenFlags JSON map
+// (see src/lib/seenFlags.ts). Referenced by symbol — never a bare string at
+// a call site.
+export const SEEN_FLAGS = {
+  /** Home pull-to-skip first-run demo choreography. */
+  homeDemo: 'home_demo',
+  /** Page2 pull-to-decline first-run demo choreography. */
+  page2Demo: 'page2_demo',
+  /** The watching "not now" → skip-hint popup has been acknowledged via its
+   * "got it" button. Once set, "not now" skips directly (no popup). */
+  skipHintAck: 'skip_hint_ack',
+} as const
+
 // Per-conversation cache key for chat messages list.
 export function chatCacheKey(otherId: string): string {
   return `chatCache_${otherId}`

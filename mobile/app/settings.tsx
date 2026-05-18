@@ -10,7 +10,7 @@ import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore, resolveLocationType, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
-import { t, tg, lang } from '../src/i18n'
+import { t, tg, lang, genderize } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
 import { RoundButton } from '../src/components/RoundButton'
@@ -24,7 +24,8 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SPINNER, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon, StarIcon } from '../src/components/icons'
+import { creditBalance, formatNextGrant, creditTier, CREDIT_TIER, starsText } from '../src/lib/credits'
 import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
@@ -219,6 +220,12 @@ function SelectFieldRow({
             <View style={styles.selectRowIconWrap}>{icon}</View>
           )
         ) : null
+        // The subtitle (e.g. the stars renewal note) must align with the
+        // LABEL TEXT, not under the leading icon. Indent it by the icon
+        // column's footprint + the label group's gap (MD) so its left edge
+        // lands exactly where the label starts.
+        const iconColW = avatar ? 44 : icon ? (tone === 'accent' ? 36 : ICON.md) : 0
+        const subtitleIndent = iconColW > 0 ? iconColW + MD : 0
         return label != null ? (
           <View style={styles.selectRowTextCol}>
             <View style={styles.selectRowLabelWrap}>
@@ -231,13 +238,23 @@ function SelectFieldRow({
               ) : null}
             </View>
             {subtitle ? (
-              <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
+              <Text style={[styles.selectRowSubtitle, { marginStart: subtitleIndent }]}>{subtitle}</Text>
             ) : null}
           </View>
         ) : (
           <>
             {renderedIcon}
-            <Text style={[styles.selectRowValue, { flex: 1 }]}>{displayValue ?? ''}</Text>
+            {/* Label-less variant: value fills the row and stays end-aligned
+                (the continuation-after-label positioning is a labelled-row
+                concern; this branch has no label to continue from). */}
+            <Text
+              style={[
+                styles.selectRowValue,
+                { flex: 1, textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right' },
+              ]}
+            >
+              {displayValue ?? ''}
+            </Text>
           </>
         )
       })()}
@@ -353,11 +370,26 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
+  // The gender field's LABEL is itself gendered by the user's own sex
+  // ("פנוי"/"פנויה"); English collapses to "Available" (genderize no-op).
+  const genderLabel = genderize(t('settings.preferredGender'), profile.is_male)
   const locationType = resolveLocationType(profile)
-  const locationDisplayValue =
+  // Location row: the LABEL names the chosen anchor ("מהבית" / "מהמשרד" /
+  // "מהמיקום הנוכחי שלי"); the icon matches it; and the value column shows
+  // the picked address for home/work but NOTHING for the device case (the
+  // label already says it's the current location).
+  const locationFieldLabel =
+    locationType === 'home' ? t('settings.locationFromHome')
+    : locationType === 'work' ? t('settings.locationFromWork')
+    : t('settings.locationFromDevice')
+  const locationFieldValue =
     locationType === 'home' ? (profile.location_label || t('settings.locationHome'))
     : locationType === 'work' ? (profile.location_label || t('settings.locationWork'))
-    : t('settings.locationDevice')
+    : undefined
+  const locationFieldIcon =
+    locationType === 'home' ? <HomeGlyph color={WHITE} size={ICON.md} />
+    : locationType === 'work' ? <WorkGlyph color={WHITE} size={ICON.md} />
+    : <PinGlyph color={WHITE} size={ICON.md} />
   // An active page1/page2 interaction freezes the location field: 'watching'
   // (looking at a candidate), 'waiting' (outgoing invite), or 'pending'
   // (incoming invite on page2). Changing location mid-interaction would shift
@@ -371,23 +403,13 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   return (
     <View style={styles.section}>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        {/* Order (user request): gender, then ages, then distance, location. */}
         <SelectFieldRow
           grouped
-          label={t('settings.range')}
-          displayValue={formatRadius(radius)}
-          onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon color={WHITE} />}
-        />
-        <View style={styles.accountActionDivider} />
-        <SelectFieldRow
-          grouped
-          label={t('settings.location')}
-          displayValue={locationDisplayValue}
-          locked={locationLocked}
-          onPress={() => locationLocked
-            ? setLocationLockedInfoVisible(true)
-            : setLocationPopupVisible(true)}
-          icon={<MapPinIcon color={WHITE} />}
+          label={genderLabel}
+          displayValue={genderDisplayValue}
+          onPress={() => setGenderPopupVisible(true)}
+          icon={<GenderIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -400,10 +422,25 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          label={t('settings.preferredGender')}
-          displayValue={genderDisplayValue}
-          onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon color={WHITE} />}
+          // "עד {value}" normally; when unlimited the value column is empty
+          // and the label itself says "ללא הגבלת מרחק". (The zero/"ממש כאן"
+          // special-case was reverted at the user's request — it shows
+          // normally as label "עד" + value "ממש כאן".)
+          label={radius === Infinity ? t('settings.rangeUnlimitedLabel') : t('settings.range')}
+          displayValue={radius === Infinity ? undefined : formatRadius(radius)}
+          onPress={() => setRadiusPopupVisible(true)}
+          icon={<RadiusIcon color={WHITE} />}
+        />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={locationFieldLabel}
+          displayValue={locationFieldValue}
+          locked={locationLocked}
+          onPress={() => locationLocked
+            ? setLocationLockedInfoVisible(true)
+            : setLocationPopupVisible(true)}
+          icon={locationFieldIcon}
         />
       </View>
       <RadiusPopup
@@ -600,8 +637,6 @@ function AgeRangePopup({
   const insets = useSafeAreaInsets()
   const [fromText, setFromText] = useState(String(ageMin))
   const [toText, setToText] = useState(String(ageMax))
-  const [fromSel, setFromSel] = useState(false)
-  const [toSel, setToSel] = useState(false)
   const [kbHeight, setKbHeight] = useState(0)
   const fromRef = useRef<RNTextInput>(null)
   const toRef = useRef<RNTextInput>(null)
@@ -610,8 +645,6 @@ function AgeRangePopup({
     if (visible) {
       setFromText(String(ageMin))
       setToText(String(ageMax))
-      setFromSel(false)
-      setToSel(false)
     }
   }, [visible, ageMin, ageMax])
 
@@ -648,14 +681,11 @@ function AgeRangePopup({
           <Text style={agePopupStyles.fieldLabel}>{t('settings.ageFrom')}</Text>
           <TextInput
             ref={fromRef}
-            style={[agePopupStyles.input, fromSel && agePopupStyles.inputSelected]}
+            style={agePopupStyles.input}
             value={fromText}
             onChangeText={v => setFromText(v.replace(/[^0-9]/g, '').slice(0, 2))}
             keyboardType="number-pad"
             selectTextOnFocus
-            selectionColor={PRIMARY}
-            cursorColor={PRIMARY}
-            onSelectionChange={e => setFromSel(e.nativeEvent.selection.end > e.nativeEvent.selection.start)}
             maxLength={2}
             returnKeyType="next"
             onSubmitEditing={() => toRef.current?.focus()}
@@ -666,14 +696,11 @@ function AgeRangePopup({
           <Text style={agePopupStyles.fieldLabel}>{t('settings.ageTo')}</Text>
           <TextInput
             ref={toRef}
-            style={[agePopupStyles.input, toSel && agePopupStyles.inputSelected]}
+            style={agePopupStyles.input}
             value={toText}
             onChangeText={v => setToText(v.replace(/[^0-9]/g, '').slice(0, 2))}
             keyboardType="number-pad"
             selectTextOnFocus
-            selectionColor={PRIMARY}
-            cursorColor={PRIMARY}
-            onSelectionChange={e => setToSel(e.nativeEvent.selection.end > e.nativeEvent.selection.start)}
             maxLength={2}
             returnKeyType="done"
             onSubmitEditing={() => Keyboard.dismiss()}
@@ -713,13 +740,14 @@ const agePopupStyles = StyleSheet.create({
   input: {
     fontSize: TEXT.xxl,
     fontWeight: WEIGHT.extrabold,
+    // Always black. selectTextOnFocus highlights the digits on focus; the
+    // selection tint is AppText's app-standard translucent SELECTION, so the
+    // black number stays readable on it (the old bespoke solid-black
+    // selectionColor + white-text flip rendered white-on-light, unreadable).
     color: PRIMARY,
     textAlign: 'center',
     padding: 0,
     minWidth: 60,
-  },
-  inputSelected: {
-    color: WHITE,
   },
 })
 
@@ -2305,6 +2333,29 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // Stars / package popup. Explains the balance, the renewal time and the
+  // current plan, and offers a free<->pro switch (anytime, no limit; the
+  // switch never changes the balance — see app_set_tier).
+  const [starsPopupVisible, setStarsPopupVisible] = useState(false)
+  const [tierBusy, setTierBusy] = useState(false)
+
+  const onSwitchTier = useCallback(async () => {
+    if (tierBusy) return
+    // One-way switch: free → Pro only (no downgrade — user request). Read
+    // the freshest tier off the store so a stale closure can't fire this
+    // for an already-Pro user; invoke() merges the returned user back in,
+    // so the row + popup reflect the new plan immediately.
+    if (creditTier(useUserStore.getState().profile) === 'pro') {
+      setStarsPopupVisible(false)
+      return
+    }
+    tap()
+    setTierBusy(true)
+    try { await invoke('app/set_tier', { tier: 'pro' }) }
+    catch (e) { console.error(e) }
+    setTierBusy(false)
+    setStarsPopupVisible(false)
+  }, [tierBusy])
 
   const finishAndGoToLogin = useCallback(async () => {
     // See AccountFieldPage.finishAndGoToLogin for the ordering rationale.
@@ -2331,9 +2382,69 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
+  // Stars / package popup content. The plan switch is now one-way: a free
+  // user can upgrade to Pro; a Pro user has no downgrade action (user
+  // request — Pro is a one-way switch). Description is assembled so the
+  // renew line drops cleanly when the next-grant time isn't known yet.
+  const tier = creditTier(profile)
+  const isPro = tier === 'pro'
+  const nextGrant = formatNextGrant(profile)
+  // Rich, gendered description. The dynamic values ({stars}/{tier}/{cap}/
+  // {when}) render BOLD inside the otherwise-regular text; Hebrew verb
+  // gender is resolved via genderize() inline {male|female} markers (no-op
+  // on English). {cap} is the per-tier daily ceiling: the grant is a
+  // top-up TO this number (LEAST(cap, balance+daily)), NOT an additive
+  // "+cap every day" — the copy must say "tops up to {cap}", not "you get
+  // {cap}". The renew line drops when the next-grant time is unknown; the
+  // "switch plan" sentence is its own paragraph (blank line above).
+  const starsTok: Record<string, string> = {
+    '{stars}': starsText(creditBalance(profile)),
+    '{tier}': isPro ? 'Pro' : 'Free',
+    '{cap}': starsText(CREDIT_TIER[tier].cap),
+    '{when}': nextGrant,
+  }
+  let starsEmKey = 0
+  const emLine = (template: string) =>
+    genderize(template, profile.is_male)
+      .split(/(\{stars\}|\{tier\}|\{cap\}|\{when\})/g)
+      .map(p => starsTok[p] !== undefined
+        ? <Text key={`em${starsEmKey++}`} style={styles.starsEm}>{starsTok[p]}</Text>
+        : p)
+  const starsBodyLines = [
+    emLine(t('stars.popup.line.balance')),
+    emLine(t('stars.popup.line.tier')),
+    ...(nextGrant ? [emLine(t('stars.popup.line.renew'))] : []),
+  ]
+  // Balance + plan + renew flow as ONE wrapping paragraph (space-joined, no
+  // forced line breaks — user request); the "you can change your plan"
+  // sentence stays its own paragraph below (blank line above). It is shown
+  // only to free users — Pro has no switch action now, so promising one
+  // would be misleading.
+  const starsDesc = [
+    ...starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln])),
+    ...(isPro ? [] : ['\n\n', genderize(t('stars.popup.line.switch'), profile.is_male)]),
+  ]
+
   return (
     <>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        {/* Stars FIRST in the group (user request), then Account. Tapping
+            stars opens the stars/package popup (balance + renewal + plan). */}
+        <SelectFieldRow
+          grouped
+          label={t('settings.credits')}
+          // Subtitle is now ONLY the "renews {when}" note (plan name moved
+          // into the value); dropped entirely when the time is unknown.
+          subtitle={nextGrant
+            ? t('settings.creditsNext').replace('{when}', nextGrant)
+            : undefined}
+          // Value carries the plan name + balance/cap, e.g. "Free 3/5" or
+          // "Pro 7/10" (the plan label the user asked to live here).
+          displayValue={`${isPro ? 'Pro' : 'Free'} ${creditBalance(profile)}/${CREDIT_TIER[tier].cap}`}
+          onPress={() => setStarsPopupVisible(true)}
+          icon={<StarIcon color={WHITE} />}
+        />
+        <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
@@ -2366,6 +2477,22 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
+        draggable
+      />
+      {/* Stars / package popup. Star icon, assembled explainer, and a single
+          "upgrade to Pro" button for free users (NO star-count badge — it
+          read as a price/cost and confused users). A Pro user gets no button
+          at all (one-way switch, user request) — the sheet is then purely
+          informational, dismissed by the drag handle / backdrop tap. */}
+      <ConfirmDialog
+        visible={starsPopupVisible}
+        icon={<StarIcon color={PRIMARY} size={32} />}
+        title={t('stars.popup.title')}
+        description={starsDesc}
+        confirmLabel={isPro ? undefined : t('stars.popup.upgrade')}
+        busy={tierBusy}
+        onCancel={() => { if (!tierBusy) setStarsPopupVisible(false) }}
+        onConfirm={onSwitchTier}
         draggable
       />
     </>
@@ -2753,12 +2880,28 @@ const styles = StyleSheet.create({
   selectRowLarge: { paddingVertical: MD },
   selectRowLocked: { opacity: 0.45 },
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', columnGap: SM },
-  selectRowLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: MD },
-  selectRowLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
+  // No `justifyContent: space-between`: the value must read as a CONTINUATION
+  // of the label text, so children pack from the start (label, then value)
+  // separated only by `columnGap` instead of being shoved to opposite edges.
+  selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', columnGap: SM },
+  // flexShrink:1 (not flex:1) + minWidth:0: the label group sizes to its
+  // content so the value can sit immediately after it, but it can still
+  // shrink below content width so a long label with no value (e.g.
+  // "מהמיקום הנוכחי שלי") wraps to a second line instead of clipping.
+  selectRowLabelGroup: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: MD },
+  // flexShrink:1 lets the text box shrink below its content width so it
+  // wraps (multi-line, flexible) instead of overflowing/clipping.
+  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
   selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS },
+  // Bold emphasis span inside the stars-popup description (the dynamic
+  // values). Sits in ConfirmDialog's centered desc <Text>, so it inherits
+  // size/line-height and only overrides weight + (darker) colour.
+  starsEm: { fontWeight: WEIGHT.extrabold, color: BLACK },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, marginStart: 'auto', textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  // No `marginStart: 'auto'` / no forced right textAlign: the value flows
+  // right after the label as a continuation (its position is the only thing
+  // that changed; it stays its own element with its own colour/weight).
+  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,

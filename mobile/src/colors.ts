@@ -88,6 +88,14 @@ export const BORDER_SOFT = '#E2DADA'
 // Online dot / success indicator.
 export const ONLINE_GREEN = '#2BB673'
 
+// Signed-delta semantics (the stars +/- text in the Menu tab — no badge,
+// no circle: just the coloured number). Deliberate green/red, the only
+// place the app uses true semantic colour, by explicit user request.
+// Brightened so the small +N / -N reads clearly on the pure-black header
+// (the muted online-green was too dim there).
+export const POSITIVE = '#3DDC84'  // bright green for an added-stars delta
+export const NEGATIVE = '#FF5C5C'  // bright red for a removed-stars delta
+
 // ── Premium ──────────────────────────────────────────────────────────────
 // Purple band reserved for paid / premium affordances. Distinct hue from
 // the brand coral so a premium control reads as "different surface" at a

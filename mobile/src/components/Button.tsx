@@ -36,6 +36,7 @@ export function Button({
   size = 'lg',
   tone,
   silentDisabled,
+  disabledHint,
   iconStart,
   footer,
   multiline,
@@ -56,6 +57,13 @@ export function Button({
   // another action in the same row is in-flight — we want the lockout, not a
   // visual flicker as the user sees every button go gray for a frame.
   silentDisabled?: boolean
+  // "Disabled but explainable": when the button is `disabled` (and not
+  // `loading`) AND this is set, the button KEEPS the disabled look (the
+  // 0.45 fade — do not also pass `silentDisabled`) but stays pressable, and
+  // a tap fires this instead of `onPress`. Used for the action buttons that
+  // can't be afforded (not enough stars): the real action is blocked, the
+  // tap opens an explainer popup. Same intent as SelectFieldRow's `locked`.
+  disabledHint?: () => void
   iconStart?: ReactNode
   // Optional strip docked to the bottom edge of the button, full width,
   // clipped to the rounded corners. Used for the page2 broadcast cooldown
@@ -69,6 +77,9 @@ export function Button({
   style?: StyleProp<ViewStyle>
 }) {
   const blocked = disabled || loading
+  // Disabled-but-explainable: visually disabled, real action blocked, but a
+  // tap is captured and routed to `disabledHint` (the explainer popup).
+  const hintable = !!disabledHint && !!disabled && !loading
 
   const base = SIZE[size]
   const skin = VARIANT[variant]
@@ -93,8 +104,11 @@ export function Button({
         footer ? styles.btnWithFooter : null,
         style,
       ]}
-      onStartShouldSetResponder={() => !blocked}
-      onResponderRelease={() => { if (!blocked) onPress() }}
+      onStartShouldSetResponder={() => !blocked || hintable}
+      onResponderRelease={() => {
+        if (!blocked) onPress()
+        else if (hintable) disabledHint!()
+      }}
     >
         {/* Label area — sized identically whether or not a footer is present.
             Splitting it from the outer btn means a button-with-footer reads

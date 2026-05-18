@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, I18nManager, type StyleProp, type ViewStyle } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
-import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
+import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, FadeIn, FadeOut, FadeInUp, FadeOutUp, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
 import PagerView from 'react-native-pager-view'
 
 // PagerView wrapped for Reanimated so onPageScroll events can be handled in a
@@ -37,13 +36,14 @@ import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Tex
 import { invoke, markStartupComplete, publicImageUrl, API_TIMEOUT_MS } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
+import { matchImageUrls } from '../src/lib/profileImages'
 import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, HEADER_PILL_SHADOW, POSITIVE, NEGATIVE, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
 import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, SEARCH_WATCHDOG_SLACK_MS, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -51,6 +51,8 @@ import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { RisingCard } from '../src/components/RisingCard'
 import { TabStrip, type TabSpec } from '../src/components/TabStrip'
+import { CreditCost } from '../src/components/CreditCost'
+import { CREDIT_COST, creditBalance, starsText } from '../src/lib/credits'
 import { PullScrollView, PullContext, type PullCtx } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
@@ -59,8 +61,9 @@ import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { FONT_SCALE } from '../src/fonts'
-import { STORAGE } from '../src/keys'
-import { SlidersIcon, CloseBoldIcon, PauseIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, InfoIcon, BlockIcon } from '../src/components/icons'
+import { SEEN_FLAGS } from '../src/keys'
+import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
+import { HamburgerIcon, CloseBoldIcon, PauseIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, StarIcon, MailIcon, InboxIcon } from '../src/components/icons'
 import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
@@ -595,13 +598,11 @@ function usePullBehavior(opts: {
     let timer: ReturnType<typeof setTimeout> | null = null
     ;(async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE.seenFlags)
+        if (await hasSeenFlag(tutorialSeenFlag)) return
         if (cancelled) return
-        const flags = raw ? JSON.parse(raw) : {}
-        if (flags[tutorialSeenFlag]) return
         // Persist immediately so it plays once per user, ever.
-        flags[tutorialSeenFlag] = true
-        AsyncStorage.setItem(STORAGE.seenFlags, JSON.stringify(flags)).catch(() => {})
+        await markSeenFlag(tutorialSeenFlag)
+        if (cancelled) return
         // Wait out the card's SlideInDown before the demo so they don't fight.
         timer = setTimeout(() => {
           if (cancelled) return
@@ -711,19 +712,6 @@ function usePullBehavior(opts: {
   return { gesture, pullY, pulling, pullCtx, panRef, setScrollAtTop, reset, tutorialPlaying, commitDistance }
 }
 
-// Single-figure silhouette: circle head + trapezoid/rectangular torso.
-function SparklesIcon({ color }: { color: string }) {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-      <Path d="M20 3v4" />
-      <Path d="M22 5h-4" />
-      <Path d="M4 17v2" />
-      <Path d="M5 18H3" />
-    </Svg>
-  )
-}
-
 // Telescope illustration: stars + clouds + a soft telescope on a tripod.
 function TelescopeIllustration() {
   const sky = ILLUSTRATION_WASH
@@ -813,8 +801,8 @@ const chatMenuStyles = StyleSheet.create({
     paddingHorizontal: MD,
     alignItems: 'center',
   },
-  // Icon + label cluster (block row only). Row direction follows RTL, so the
-  // glyph leads on the start edge with an SM gap to the label.
+  // Icon + label cluster (both rows carry a glyph). Row direction follows
+  // RTL, so the glyph leads on the start edge with an SM gap to the label.
   rowInner: { flexDirection: 'row', alignItems: 'center', gap: SM },
   rowPressed: { backgroundColor: BLACK_SOFT },
   label: {
@@ -822,11 +810,9 @@ const chatMenuStyles = StyleSheet.create({
     color: BLACK,
     fontWeight: WEIGHT.semibold,
   },
-  // The three rows step down in weight black → in-between → semi-black so the
-  // most drastic action reads softest. labelSoft is BLACK_MID — the exact tone
-  // of the delete-account button (settings.tsx AccountPopup), by user request.
+  // End-chat reads at full BLACK; block (the more drastic / irreversible
+  // action) steps down to BLACK_STRONG so it reads a touch softer.
   labelMid: { color: BLACK_STRONG },
-  labelSoft: { color: BLACK_MID },
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: BLACK_SOFT,
@@ -973,8 +959,8 @@ function EventMessageCard({ title, description, onContinue, busy }: { title: str
 //     component now: same StatusCard scaffold + spacings, no standalone
 //     heading (the title rides as a bold lead-in at the start of the body
 //     via StatusCardText), ghost decline + primary accept. The accept CTA
-//     carries the same SparklesIcon both ways so the two sides of an
-//     invitation read as mirror actions.
+//     carries the CreditCost badge (coin × N) both ways so the two sides of
+//     an invitation read as mirror actions and surface what they spend.
 // `footerInset` is supplied only by the page1 footer use: the card then
 // sits at the bottom of the MatchCard scroll, so its bottom padding must
 // clear the home indicator (never below the standard LG).
@@ -983,6 +969,9 @@ function ReplyingInviteCard({
   description,
   acceptLabel,
   declineLabel,
+  costCredits,
+  affordable = true,
+  onUnaffordable,
   onAccept,
   onDecline,
   busy,
@@ -993,12 +982,21 @@ function ReplyingInviteCard({
   description: string
   acceptLabel: string
   declineLabel: string
+  /** Stars the accept action spends — shown as the in-button cost badge
+   * (star + N) in place of the old decorative icon. */
+  costCredits: number
+  /** False ⇒ the user can't afford the accept. The accept button then
+   * renders disabled (faded) but stays tappable: a tap fires
+   * `onUnaffordable` (the not-enough-stars explainer) instead of accepting. */
+  affordable?: boolean
+  onUnaffordable?: () => void
   onAccept: () => void
   onDecline: () => void
   busy?: boolean
   acceptLoading?: boolean
   footerInset?: number
 }) {
+  const unaffordable = affordable === false
   return (
     <View style={[statusCardStyles.container, footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null]}>
       <StatusCardText title={title} description={description} />
@@ -1017,11 +1015,15 @@ function ReplyingInviteCard({
             <Button
               variant="onPrimary"
               label={acceptLabel}
-              iconStart={<SparklesIcon color={PRIMARY} />}
+              iconStart={<CreditCost cost={costCredits} color={PRIMARY} bg={PRIMARY_BG} />}
               onPress={onAccept}
-              disabled={busy}
+              disabled={busy || unaffordable}
               loading={acceptLoading}
-              silentDisabled={!acceptLoading}
+              // Keep the in-flight lockout silent (no gray flicker) exactly
+              // as before; but when the block is "can't afford" show the
+              // disabled look and route the tap to the explainer.
+              silentDisabled={!unaffordable && !acceptLoading}
+              disabledHint={unaffordable && !busy ? onUnaffordable : undefined}
             />
           </View>
         </View>
@@ -1031,21 +1033,26 @@ function ReplyingInviteCard({
 }
 
 // ── Page2 status card ────────────────────────────────────────────────────
-// Heading-led body block (StatusCardText) for the Viewers empty-state. The 3-state
-// visibility toggle (VisibilityToggle) sits above this card and now owns the
-// broadcast action (`app_add`) as its third segment; this card no longer has
-// any siblings below it.
+// Heading-led body block (StatusCardText) for the Viewers state. Visibility
+// is now switched from the side-tab dropdown (no in-page toggle); while
+// broadcasting this card's description also carries the live "ends in MM:SS"
+// countdown (broadcastTimer), the slot the toggle's segment timer used to own.
 
 function ViewersStatusCard({
   isHidden,
   broadcastActive,
   hasWatchers,
   userIsMale,
+  broadcastTimer,
 }: {
   isHidden: boolean
   broadcastActive: boolean
   hasWatchers: boolean
   userIsMale: boolean | null
+  // Live MM:SS until broadcast ends. When broadcasting it is appended to the
+  // card description as a readable line ("03:45 לסיום השידור") — this is
+  // where the old toggle's broadcast-segment countdown moved to.
+  broadcastTimer?: string | null
 }) {
   // 5-state matrix: hidden wins over broadcast; then watched vs empty.
   const [title, description] = (() => {
@@ -1055,64 +1062,31 @@ function ViewersStatusCard({
     if (hasWatchers) return [tg('home.watchingMeVisibleWatchedTitle', userIsMale), tg('home.watchingMeVisibleWatchedSubtitle', userIsMale)]
     return [tg('home.watchingMeVisibleEmptyTitle', userIsMale), tg('home.watchingMeVisibleEmptySubtitle', userIsMale)]
   })()
+  // Append the broadcast countdown as its own readable line under the
+  // description while broadcasting (replaces the toggle's segment timer).
+  const fullDescription = broadcastActive && broadcastTimer
+    ? `${description}\n${t('home.broadcast.endsIn').replace('{time}', broadcastTimer)}`
+    : description
 
   return (
     <View style={statusCardStyles.container}>
-      <StatusCardText title={title} description={description} />
+      <StatusCardText title={title} description={fullDescription} />
     </View>
   )
 }
 
-// ── VisibilityToggle ─────────────────────────────────────────────────────
-// Connected 3-segment pill anchored at the top of the page2 pane, directly
-// under the global TabStrip and above the ViewersStatusCard: Hidden,
-// Visible, Broadcast. One shared outer pill (PRIMARY bg, seamless with the
-// wine page) with a WHITE-filled sliding indicator that animates between
-// segments on mode change. Each segment renders both an active (PRIMARY,
-// shown on the WHITE thumb) and a muted (WHITE, shown on the wine pill)
-// icon stacked at the same position; their opacities are driven by the
-// shared `progress` value so the icon morphs in lockstep with the indicator
-// as it slides past. Segments are glyph-only — labels would crowd the
-// shared pill and the ViewersStatusCard directly below already explains the
-// active mode.
-//
-// All three buttons are always tappable. Broadcast is treated as a real
-// mode that the user enters via the popup confirmation, sits in for up to
-// 30 minutes, and exits explicitly via the same segment (now showing an
-// "exit broadcast?" popup). Tapping Hidden/Visible while broadcasting
-// switches modes; the server clears the cooldown atomically in those RPCs
-// (lock2) or via the explicit app/cancel_add call (used by the Visible
-// segment + the exit popup) so the toggle never gets stuck on broadcast.
-//
-// While a tap is in flight, the matching segment's icon swaps to a spinner
-// painted in the segment's tint (WHITE while the indicator is under it,
-// PRIMARY otherwise).
+// ── Visibility modes ─────────────────────────────────────────────────────
+// hidden / visible / broadcast. The old 3-segment in-page toggle was
+// replaced by a dropdown opened from the side tab's visibility glyph
+// (VisibilityTabGlyph caret + VisibilityMenu); the transition logic lives
+// once in handleVisibilitySelect. The broadcast countdown moved into the
+// ViewersStatusCard description.
 
 type ToggleMode = 'hidden' | 'visible' | 'broadcast'
-type ToggleAction = ToggleMode
-
-// Small rotating spinner matching the toggle's icon dimensions. Same shape
-// as the Button's internal ButtonSpinner — separate copy to avoid coupling
-// the toggle to Button's internals.
-function ToggleSpinner({ color, size = 20 }: { color: string; size?: number }) {
-  const rotation = useSharedValue(0)
-  useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: MOTION.spin, easing: Easing.linear }), -1, false)
-  }, [])
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }))
-  return (
-    <Animated.View style={[{ width: size, height: size }, animStyle]}>
-      <Svg width={size} height={size} viewBox="0 0 22 22">
-        <Circle cx={11} cy={11} r={8} stroke={color} strokeOpacity={0.3} strokeWidth={2.5} fill="none" />
-        <Path d="M 11 3 A 8 8 0 0 1 19 11" stroke={color} strokeWidth={2.5} strokeLinecap="round" fill="none" />
-      </Svg>
-    </Animated.View>
-  )
-}
 
 const TOGGLE_ORDER: ToggleMode[] = ['hidden', 'visible', 'broadcast']
 // Single source of truth for the visibility-state glyph. Consumed by the
-// in-page VisibilityToggle segments AND by the collapsed side TabStrip tab,
+// side-tab dropdown (VisibilityMenu) AND the collapsed side TabStrip tab,
 // so a given state (hidden / visible / broadcast) always reads as the same
 // icon wherever it surfaces.
 const VISIBILITY_ICON: Record<ToggleMode, (color: string, size: number) => React.ReactNode> = {
@@ -1120,301 +1094,122 @@ const VISIBILITY_ICON: Record<ToggleMode, (color: string, size: number) => React
   visible: (color, size) => <EyeOpenIcon color={color} size={size} />,
   broadcast: (color, size) => <MegaphoneIcon color={color} size={size} />,
 }
-// Padding past the popup's `visible=false` flip to cover BottomSheet's
-// slide-out animation (~300ms default withTiming). After this window the
-// VisibilityToggle is free to slide its indicator to the new mode.
-const TOGGLE_GATE_LINGER_MS = 320
-// Inset (px) between the toggle's outer pill and the WHITE indicator. The
-// indicator sits as a smaller rounded pill inside the track with breathing
-// room on every side, iOS segmented-control style.
-const TOGGLE_TRACK_INSET = 4
 
-// One segment of the connected toggle. The toggle sits on the deep-wine
-// PRIMARY page and its body is PRIMARY too (seamless with the page): resting
-// segments read WHITE icon + WHITE label on the wine pill; the sliding WHITE
-// thumb hosts the active segment which paints PRIMARY icon + PRIMARY label.
-// Each segment stacks
-// icon-over-label vertically and renders both color variants of the
-// stack as overlaid layers, cross-fading via opacity driven by the
-// shared `progress` value — same pattern as TabStrip's label cross-fade.
-// While a tap is in flight, both layers are swapped for a tint-matched
-// spinner.
-function ToggleSegment({
-  index,
-  pending,
-  busy,
-  progress,
-  onPress,
-  renderIcon,
-  label,
-}: {
-  index: number
-  pending: boolean
-  busy: boolean
-  progress: SharedValue<number>
-  onPress: () => void
-  renderIcon: (color: string) => React.ReactNode
-  label: string
-}) {
-  const activeStyle = useAnimatedStyle(() => ({
-    opacity: Math.max(0, 1 - Math.abs(progress.value - index)),
-  }))
-  const mutedStyle = useAnimatedStyle(() => ({
-    opacity: 1 - Math.max(0, 1 - Math.abs(progress.value - index)),
-  }))
-  // Stack with label always present; the icon slot is swapped for a
-  // spinner during pending so the label keeps reading the option being
-  // committed even while the request is in flight. Sized to the icon
-  // (ICON.xxxl) so the layout doesn't shift when pending flips.
-  const renderContent = (color: string) => (
-    <View style={visibilityToggleStyles.segmentStack}>
-      {pending
-        ? <ToggleSpinner color={color} size={ICON.xxxl} />
-        : renderIcon(color)}
-      <Text style={[visibilityToggleStyles.segmentLabel, { color }]}>{label}</Text>
-    </View>
-  )
+// The side tab's visibility glyph + an optional dropdown caret hinting the
+// mode can be changed. The caret is ABSOLUTELY positioned (zero layout box)
+// so it never changes the compact side tab's measured width — the TabStrip
+// chip/equal-width math (iron rules) is untouched whether or not it shows.
+// It mounts/unmounts with Fade in/out (user: "appears with animation and is
+// removed with animation"). Rendered inside TabStrip's renderIndicator, so
+// the glyph itself still gets the normal active/muted selection cross-fade.
+function VisibilityTabGlyph({ color, mode, showCaret }: { color: string; mode: ToggleMode; showCaret: boolean }) {
   return (
-    <Pressable
-      style={({ pressed }) => [
-        visibilityToggleStyles.segment,
-        pressed && !busy && visibilityToggleStyles.segmentPressed,
-      ]}
-      onPress={onPress}
-      disabled={busy}
-      hitSlop={SM}
-    >
-      {/* Muted layer flows normally — it drives the segment's natural
-          height (icon/spinner + gap + label + paddingVertical above/
-          below). Active layer is absolutely overlaid so the row's height
-          tracks content + padding instead of being pinned to a magic
-          number. Opposing opacities deliver the cross-fade as `progress`
-          slides past this index. */}
-      <Animated.View style={mutedStyle}>{renderContent(WHITE)}</Animated.View>
-      <Animated.View style={[visibilityToggleStyles.iconLayer, activeStyle]}>
-        {renderContent(PRIMARY)}
-      </Animated.View>
-    </Pressable>
-  )
-}
-
-// `gated` holds the indicator slide back while a confirm popup tied to
-// this toggle is open OR animating out. Without it, the indicator
-// finishes its 280ms slide while the BottomSheet is still on screen
-// dimming/dismissing, so by the time the popup is fully gone the user
-// sees the toggle already settled — no perceived movement. The parent
-// flips `gated` true while a popup is open and keeps it true through
-// the sheet's slide-out so the toggle's animation runs against a
-// clear stage.
-function VisibilityToggle({
-  mode,
-  pendingAction,
-  gated,
-  broadcastTimer,
-  onHidden,
-  onVisible,
-  onBroadcast,
-  busy,
-}: {
-  mode: ToggleMode
-  // Which action is awaiting a server response. The matching segment swaps
-  // its icon for a spinner in the matching tint. null when no action is in
-  // flight from this toggle.
-  pendingAction: ToggleAction | null
-  gated: boolean
-  // Live MM:SS countdown shown INSTEAD of the broadcast segment's default
-  // "שידור" / "Broadcast" label while broadcast is active. Null when the
-  // cooldown isn't running.
-  broadcastTimer: string | null
-  onHidden: () => void
-  onVisible: () => void
-  onBroadcast: () => void
-  busy: boolean
-}) {
-  const modeIndex = TOGGLE_ORDER.indexOf(mode)
-  const progress = useSharedValue(modeIndex)
-  const [trackWidth, setTrackWidth] = useState(0)
-  // Latest target index. While gated, modeIndex updates land here and the
-  // animation is deferred. When gated flips false the effect below picks
-  // up `latestTarget` and runs withTiming from current progress.
-  useEffect(() => {
-    if (gated) return
-    progress.value = withTiming(modeIndex, { duration: MOTION.base, easing: Easing.out(Easing.cubic) })
-  }, [modeIndex, gated])
-
-  // Segments share the inner track (`trackWidth - 2*INSET`). The indicator
-  // is `segmentWidth` wide and rides inside the track with INSET padding
-  // on every side (top/bottom/leading), giving an iOS-segmented-control
-  // thumb feel.
-  const innerWidth = Math.max(0, trackWidth - 2 * TOGGLE_TRACK_INSET)
-  const segmentWidth = innerWidth / TOGGLE_ORDER.length
-  // RTL: with native RTL the first JSX child is rendered at the right edge
-  // of the row. The indicator is anchored at `left: TOGGLE_TRACK_INSET`,
-  // which Yoga auto-flips to `right: TOGGLE_TRACK_INSET` (visual right
-  // edge of the track's padded interior). `transform: translateX` is
-  // pixel-space and not auto-flipped, so we mirror the sign explicitly via
-  // `dir`. `progress` itself stays in logical-index land so the per-segment
-  // cross-fade math holds regardless of writing direction.
-  const dir = I18nManager.isRTL ? -1 : 1
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: dir * progress.value * segmentWidth }],
-  }))
-
-  const handlers: Record<ToggleMode, () => void> = {
-    hidden: onHidden,
-    visible: onVisible,
-    broadcast: onBroadcast,
-  }
-  const handle = (target: ToggleMode) => {
-    if (busy || target === mode) return
-    tap()
-    handlers[target]()
-  }
-
-  return (
-    <View
-      style={visibilityToggleStyles.row}
-      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-    >
-      <View pointerEvents="none" style={visibilityToggleStyles.pillFill} />
-      {segmentWidth > 0 && (
+    <View style={visMenuStyles.glyphWrap}>
+      {VISIBILITY_ICON[mode](color, ICON.xxl)}
+      {showCaret ? (
         <Animated.View
+          key="vis-caret"
+          entering={FadeIn.duration(TAB.collapseDuration)}
+          exiting={FadeOut.duration(TAB.collapseDuration)}
+          style={visMenuStyles.caret}
           pointerEvents="none"
-          style={[
-            visibilityToggleStyles.indicator,
-            { width: segmentWidth },
-            indicatorStyle,
-          ]}
-        />
-      )}
-      {TOGGLE_ORDER.map((m, i) => {
-        const iconSize = ICON.xxxl
-        const renderIcon = (color: string) => VISIBILITY_ICON[m](color, iconSize)
-        // The broadcast segment swaps its name for the live MM:SS while
-        // the 30m cooldown is running, so the user reads the countdown
-        // exactly where the broadcast control lives. Tabular-nums in
-        // segmentLabel keeps the digit columns stable as the value ticks.
-        const label = m === 'broadcast' && broadcastTimer
-          ? broadcastTimer
-          : t(`home.visibility.${m}` as const)
-        return (
-          <ToggleSegment
-            key={m}
-            index={i}
-            pending={pendingAction === m}
-            busy={busy}
-            progress={progress}
-            onPress={() => handle(m)}
-            renderIcon={renderIcon}
-            label={label}
-          />
-        )
-      })}
+        >
+          <ChevronDownIcon color={color} size={ICON.sm} />
+        </Animated.View>
+      ) : null}
     </View>
   )
 }
 
-const visibilityToggleStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    // Height is content-driven: segments add their own paddingVertical,
-    // the row only adds TOGGLE_TRACK_INSET on every side to host the
-    // indicator gutter. No magic number.
-    borderRadius: RADIUS,
-    // The pill must read as its own surface — distinctly between the
-    // deep-wine page and the WHITE thumb — and must stay OPAQUE: it sits
-    // directly between the wine TabStrip header and the wine page, so a
-    // translucent pill would visually dissolve into the surrounding wine.
-    // The fill is therefore two flat layers (not a gradient): this opaque
-    // PRIMARY base, and `pillFill` washing a flat translucent WHITE over
-    // it. The composite is a fixed opaque dusty-rose sitting visibly
-    // between the wine header/page and the pure-white thumb.
-    backgroundColor: PRIMARY,
-    // Inner padding gives the indicator and segments breathing room from
-    // the outer pill edge.
-    padding: TOGGLE_TRACK_INSET,
+// Dropdown of the OTHER visibility modes (the current one is omitted — you're
+// already in it), opened from the side tab. Each row is icon + name. Picking
+// one routes through the SAME handleVisibilitySelect the old toggle used
+// (DRY), including its broadcast-confirm / not-enough-stars / watcher-kick
+// branches. A full-screen transparent catcher closes it on an outside tap;
+// the card itself drops in / lifts out (FadeInUp / FadeOutUp).
+function VisibilityMenu({ currentMode, busy, top, onSelect, onClose }: {
+  currentMode: ToggleMode
+  busy: boolean
+  top: number
+  onSelect: (m: ToggleMode) => void
+  onClose: () => void
+}) {
+  const items = TOGGLE_ORDER.filter(m => m !== currentMode)
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Animated.View
+        entering={FadeInUp.duration(MOTION.base)}
+        exiting={FadeOutUp.duration(MOTION.base)}
+        style={[visMenuStyles.menu, { top }]}
+      >
+        {items.map((m, idx) => (
+          <Pressable
+            key={m}
+            style={({ pressed }) => [
+              visMenuStyles.item,
+              idx > 0 && visMenuStyles.itemDivider,
+              pressed && !busy && visMenuStyles.itemPressed,
+            ]}
+            disabled={busy}
+            onPress={() => onSelect(m)}
+            hitSlop={SM}
+          >
+            {VISIBILITY_ICON[m](PRIMARY, ICON.lg)}
+            <Text style={visMenuStyles.itemLabel}>{t(`home.visibility.${m}` as const)}</Text>
+          </Pressable>
+        ))}
+      </Animated.View>
+    </View>
+  )
+}
+
+const visMenuStyles = StyleSheet.create({
+  // Relative host for the side-tab glyph so the caret can sit absolutely
+  // under it without contributing a layout box.
+  glyphWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  // Layer 2 of the pill fill (see `row`): a flat translucent-WHITE wash
-  // over the opaque PRIMARY base, lightening the wine toward white so the
-  // pill reads as its own panel. First child + pointerEvents none so it
-  // paints behind the indicator and segments and never eats a tap. Matches
-  // the row radius so the wash follows the capsule edge.
-  pillFill: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: WHITE_MID,
-    borderRadius: RADIUS,
-  },
-  indicator: {
+  caret: {
     position: 'absolute',
-    top: TOGGLE_TRACK_INSET,
-    bottom: TOGGLE_TRACK_INSET,
-    // Anchor at `left: TOGGLE_TRACK_INSET`. Yoga auto-flips to the visual
-    // right edge in RTL; `transform: translateX` is pixel-space and
-    // flipped in the animated style via `dir` (see VisibilityToggle).
-    left: TOGGLE_TRACK_INSET,
+    bottom: -ICON.sm + XS,
+    alignSelf: 'center',
+  },
+  // Popover card under the TabStrip, on the side-tab (row-end) edge. `end`
+  // auto-flips (LTR right / RTL left) so it lands under the side tab in both
+  // directions. Flat WHITE surface (no gradient) with the shared pill lift.
+  menu: {
+    position: 'absolute',
+    end: SM,
+    minWidth: 168,
     backgroundColor: WHITE,
-    // Smaller rounded corners than the outer pill — a rounded thumb riding
-    // inside a more-rounded slot. Subtract the inset so the visible curve
-    // tracks the outer pill's curvature.
-    borderRadius: RADIUS - TOGGLE_TRACK_INSET,
-    // Subtle lift to read as a moving thumb, not a flat painted slab.
-    shadowColor: BLACK,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-    elevation: 2,
+    borderRadius: RADIUS,
+    paddingVertical: XS,
+    boxShadow: HEADER_PILL_SHADOW,
+    elevation: 8,
   },
-  segment: {
-    flex: 1,
+  item: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    // Breathing room above the icon and below the label inside each
-    // segment. Drives the row's natural height — change this and the
-    // whole toggle grows/shrinks accordingly, no fixed height to chase.
+    gap: MD,
     paddingVertical: MD,
+    paddingHorizontal: LG,
   },
-  segmentPressed: {
-    opacity: 0.7,
+  itemDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: BLACK_SOFT,
   },
-  // Fills the segment so alignItems/justifyContent center the icon+label
-  // stack. Without these stretch offsets the layer is sized 0×0 and the
-  // content paints at the segment's top-left corner instead of its
-  // center.
-  iconLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+  itemPressed: {
+    backgroundColor: BLACK_SOFT,
   },
-  // Vertical icon-over-label stack inside each segment. The label uses
-  // the same typographic register as the TabStrip timer (subLabel:
-  // TEXT.md + semibold) so the broadcast countdown above and the
-  // visibility labels below read as one family.
-  segmentStack: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: XS,
-  },
-  segmentLabel: {
-    // Compact micro-label register (TEXT.xs). Hebrew letters read heavier
-    // than digits at the same point size, and the toggle is a secondary
-    // control sitting under the page card, so the labels stay deliberately
-    // small — one tier below the TabStrip broadcast timer rather than
-    // matched to it.
-    fontSize: TEXT.xs,
-    lineHeight: TEXT.xs,
+  itemLabel: {
+    fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
-    // Broadcast segment may swap its name for a live MM:SS countdown.
-    // Tabular numerals keep the digit columns from jittering each second
-    // (harmless for the Hebrew/English text labels).
-    fontVariant: ['tabular-nums'],
-    includeFontPadding: false,
+    color: PRIMARY,
   },
 })
-
 // Shared button-stack + in-button timer styles. Used by every StatusCard
 // variant (InviteTimerCard invite timer, ViewersStatusCard cooldown). Kept in one
 // place so the three call sites stay visually identical — the same bar,
@@ -1629,7 +1424,7 @@ export default function HomePage() {
   // Scoped to the idle world: an active chat is never gated (a user who
   // matched before being geo-gated keeps their conversation — tearing it
   // down would be destructive, and the gate UI is the discovery screen).
-  const availability = (profile?.relations as { availability?: { state?: string; starts_at?: string } } | undefined)?.availability
+  const availability = (profile?.relations as { availability?: { state?: string; starts_at?: string; reason?: 'group' | 'push'; join_requested?: boolean } } | undefined)?.availability
   const availStartsAt = availability?.starts_at ? Date.parse(availability.starts_at) : 0
   // 'not_yet' lifts itself the moment its start time passes; tick locally so
   // the gate clears without waiting for the next server round-trip (the next
@@ -1761,6 +1556,16 @@ export default function HomePage() {
   const page1Profile = (profile?.relations?.page1 as { profile?: { user_id?: string } } | undefined)?.profile
   const gameModeOff = rawPage1State === 'locked' && page2State === 'locked'
     && !page1Profile?.user_id && !page2InviteObj
+  // Drives the Home-tab base word cross-fade "Once" ⇄ "פאוזה". 0 = normal,
+  // 1 = paused. withTiming (system default duration — DRY, no magic number)
+  // so toggling game mode animates the swap. Fed to TabStrip as the Home
+  // tab's `pauseProgress`; the glyph is intentionally NOT changed (the
+  // settings glyph stays identical in every state — see the Menu tab spec).
+  const pauseProgress = useSharedValue(0)
+  useEffect(() => {
+    pauseProgress.value = withTiming(gameModeOff ? 1 : 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameModeOff])
   // Broadcast = the "Show me to people" action: app_add. Server enforces a
   // 30-minute cooldown between presses; the toggle keeps the broadcast
   // segment visually "active" while the cooldown is running. The user can
@@ -1822,6 +1627,19 @@ export default function HomePage() {
   // mount that already has viewers (initial load 0→N) is NOT mistaken for "a
   // viewer just joined" — only a genuine post-baseline rise pulses.
   const prevWatchersCountRef = useRef<number | null>(null)
+  // Stars-balance change → the Menu tab's standard 3-blink `alerting` pulse
+  // AND, for that window, the star glyph is RECOLOURED (no number element):
+  // green when stars were added, red when removed. Same baseline-null +
+  // pulseTimeoutMs coalescing pattern as the viewer-count pulse: a burst of
+  // changes inside the window reads as one pulse, and a cold mount that loads
+  // with a balance (null→N) does NOT pulse. Both flags clear on the timeout
+  // so the glyph returns to its normal white right after the blink.
+  const [starsAlerting, setStarsAlerting] = useState(false)
+  const [starsChangeActive, setStarsChangeActive] = useState(false)
+  // Sign of the change → green (added) vs red (removed) glyph tint.
+  const [starsChangePositive, setStarsChangePositive] = useState(false)
+  const prevStarsBalanceRef = useRef<number | null>(null)
+  const starsBalance = creditBalance(profile)
   const page2InviteUserId = page2PendingInvite?.user_id ?? null
   const prevPage2InviteUserIdRef = useRef<string | null | undefined>(undefined)
 
@@ -1865,6 +1683,17 @@ export default function HomePage() {
   // /app/location pushes. The popup in settings owns every location write
   // for these users (and may still flip back to device mode at any time).
   const customLoc = profile?.location_custom === true
+
+  // "Request to join" — the not-in-any-enabled-group gate's CTA. Records
+  // relations.join_request server-side; availability.join_requested flips
+  // live (Realtime), swapping this CTA for the "waiting for approval" state.
+  const [joinBusy, setJoinBusy] = useState(false)
+  const runJoinRequest = async () => {
+    if (joinBusy) return
+    setJoinBusy(true)
+    try { await invoke('app/join_request', {}) } catch { /* realtime corrects */ }
+    finally { setJoinBusy(false) }
+  }
 
   const handlePermissionRequest = async () => {
     if (permBusy) return
@@ -1914,10 +1743,31 @@ export default function HomePage() {
     getLocPermission().then(setLocPerm)
   }, [notifPerm, customLoc])
 
+  // No location permission (and not a custom-location user, whose `location`
+  // is a deliberate manual point) → null the server location so the user
+  // truly leaves everyone's candidate pool (others() excludes null-location).
+  // Debounced to the lost→regained transition so it fires once, not per tick.
+  const locNulledRef = useRef(false)
+  useEffect(() => {
+    if (customLoc) { locNulledRef.current = false; return }
+    if (locPerm && locPerm !== 'granted') {
+      if (!locNulledRef.current) {
+        locNulledRef.current = true
+        invoke('app/location', { location: null }).catch(() => {})
+      }
+    } else if (locPerm === 'granted') {
+      locNulledRef.current = false
+    }
+  }, [locPerm, customLoc])
+
   // ── Startup completion ────────────────────────────────────────────────
   // Both permissions granted → send app/start + try to get location.
   const lastFocusRef = useRef(0)
   const startupSentRef = useRef(false)
+  // Last notification-permission value we've reported to the server. Lets the
+  // change-debounced reporter (reportNotifPerm) keep the foreground poll
+  // network-free in steady state.
+  const lastReportedPermRef = useRef<NotifPermission | null>(null)
   const [locFailed, setLocFailed] = useState(false)
   const [locBusy, setLocBusy] = useState(false)
   const [locFetching, setLocFetching] = useState(false)
@@ -1970,9 +1820,17 @@ export default function HomePage() {
       const pushChanged = token && token !== profile?.data?.push_token?.token
       markStartupComplete()
       setStartupInflight(true)
+      // /app/start carries notif_perm itself, so seed the reporter's ref to
+      // avoid a redundant /app/notif right after boot.
+      lastReportedPermRef.current = notifPerm
       invoke('app/start', {
         ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
         ...(pushChanged ? { push_token: { type: 'expo', token } } : {}),
+        // Notification-presence signal: a user who can't be notified is gated
+        // unavailable server-side (the app requires presence). startup only
+        // runs when granted, but report it explicitly anyway so the server
+        // records reachability and clears any stale dead-token mark.
+        notif_perm: notifPerm,
         os: Platform.OS,
         lang,
       })
@@ -2033,11 +1891,39 @@ export default function HomePage() {
   }
   const showNoInternetOverlay = netReachable === false
 
+  // A blocking center-notice will be shown (missing notif/location/internet
+  // permission, or the server availability gate). This is exactly when
+  // centerNotice (computed below) is non-null: geoGated || isPermMode, with
+  // isPermMode's isNetMode guards subsumed into showNoInternetOverlay here.
+  // Per spec: when such a notice applies AND page1 is NOT waiting-for-invite
+  // and NOT chat, the profile/card is removed and the notice takes the
+  // center. waiting/chat are preserved (the user has a live interaction).
+  const blockingNotice = geoGated
+    || showNotifOverlay
+    || (state !== 'chat' && (showLocOverlay || locFailed || showNoInternetOverlay))
+  const noticeOverridesCard = blockingNotice && state !== 'waiting' && state !== 'chat'
+
   // Unified card mode — derived synchronously. The home pane is laid out
   // with both the empty/no-match content and the match-card content always
   // mounted; visibility is driven by `paneOpacity` below, so transient state
-  // transitions can't unmount the match card.
-  const displayedCardMode = state
+  // transitions can't unmount the match card. When a blocking notice
+  // overrides the card we report `null` (the existing "empty pane" path):
+  // showHiddenPlaceholder flips true → the empty pane (with the notice)
+  // becomes interactive and PullPane goes non-interactive, no bespoke hack.
+  const displayedCardMode = noticeOverridesCard ? null : state
+
+  // Report OS notification permission to the server the instant it changes,
+  // via the lean /app/notif endpoint (persists relations.push + recomputes
+  // availability only — no auto-find / snapshot work). Change-debounced
+  // against lastReportedPermRef so the foreground poll and the app-active
+  // handler are network-free whenever nothing actually changed. This is what
+  // keeps the server's notification-presence gate as close to realtime as a
+  // mobile OS allows (no OS event exists for permission changes).
+  const reportNotifPerm = useCallback((perm: NotifPermission) => {
+    if (perm === lastReportedPermRef.current) return
+    lastReportedPermRef.current = perm
+    invoke('app/notif', { notif_perm: perm }).catch(() => {})
+  }, [])
 
   // ── Re-check permissions when app returns to foreground ────────────────
   // Covers the user changing app permissions in device settings, etc.
@@ -2049,6 +1935,9 @@ export default function HomePage() {
       dismissAllNotifications()
       const np = await getNotifPermission()
       setNotifPerm(np)
+      // Returning from OS Settings is THE moment permission changes — report
+      // it immediately, un-throttled (the /app/focus below is throttled 30s).
+      reportNotifPerm(np)
       // Re-check location using the fresh notif result, not a stale closure value.
       // Skip when the user opted into custom-location mode — we don't read GPS
       // perm in that flow.
@@ -2061,7 +1950,14 @@ export default function HomePage() {
         lastFocusRef.current = Date.now()
         const location = customNow ? null : await getLastKnownLocation()
         setFocusInflight(true)
-        invoke('app/focus', location ? { location: { latitude: location.lat, longitude: location.lng } } : {})
+        // Report the freshly-read OS notification permission. This is the
+        // signal that catches "granted at startup, revoked later in OS
+        // settings": the server marks relations.push.perm and gates the user
+        // unavailable until they re-enable (the app requires presence).
+        invoke('app/focus', {
+          ...(location ? { location: { latitude: location.lat, longitude: location.lng } } : {}),
+          notif_perm: np,
+        })
           .catch(() => {})
           .finally(() => setFocusInflight(false))
       }
@@ -2078,9 +1974,40 @@ export default function HomePage() {
   // the overlay is suppressed anyway, so the poll is pure waste.
   useEffect(() => {
     if (notifPerm !== 'granted' || customLoc) return
-    const id = setInterval(() => getLocPermission().then(setLocPerm), 2000)
+    // PERF: this fires every 2s for the entire session in the common case
+    // (device-location mode, permission granted). `Home` is a very large
+    // component, so an unconditional setLocPerm here re-ran its whole render
+    // every 2s forever — background work that visibly contended with the
+    // pager / TabStrip / card animations. The permission almost never
+    // changes between ticks, so feed the value through a functional updater
+    // that returns the SAME reference when unchanged: React then skips the
+    // re-render entirely (state-bail-out). A real change still renders once
+    // and the services overlay updates exactly as before.
+    const id = setInterval(() => {
+      getLocPermission().then(p => setLocPerm(prev => (prev === p ? prev : p)))
+    }, 2000)
     return () => clearInterval(id)
   }, [notifPerm, customLoc])
+
+  // ── Poll notification permission while foreground ─────────────────────
+  // The OS emits no "permission changed" event. AppState 'active' covers the
+  // return-from-Settings case, but not an in-app revoke (Android shade
+  // long-press toggles notifications without backgrounding the app) or any
+  // gap left by the 30s /app/focus throttle. Poll every 3s (a cheap local
+  // getPermissionsAsync, same cost class as the 2s location-services poll
+  // above) and report the instant it changes, so the server's presence gate
+  // is updated within ~3s of any change. reportNotifPerm is change-debounced
+  // ⇒ steady state is zero network and zero re-render (state bail-out).
+  useEffect(() => {
+    if (!startupCompleted) return
+    const id = setInterval(() => {
+      getNotifPermission().then(p => {
+        setNotifPerm(prev => (prev === p ? prev : p))
+        reportNotifPerm(p)
+      })
+    }, 3000)
+    return () => clearInterval(id)
+  }, [startupCompleted, reportNotifPerm])
 
   // ── Continuous location tracking ──────────────────────────────────────
   // After startup completes, watch for significant movement and push
@@ -2337,7 +2264,7 @@ export default function HomePage() {
       // eating the surface the demo animates on.
       ready: state === 'watching' && !!displayedMatch
         && !showNotifOverlay && !showLocOverlay && !locFailed && !showNoInternetOverlay,
-      seenFlag: 'home_demo',
+      seenFlag: SEEN_FLAGS.homeDemo,
     },
   })
   // MatchCard's PullScrollView is the same instance across profile changes;
@@ -2402,17 +2329,10 @@ export default function HomePage() {
       clearLoading()
       return () => { cancelled = true }
     }
-    // URL must match exactly what MatchCard requests, otherwise expo-image's
-    // disk cache key differs and the prefetch goes to waste. MatchCard uses
-    // raw filenames (no encodeURI) and passes through anything containing
-    // "://" as-is.
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
-    const urls = (remoteMatch.images ?? [])
-      .filter(img => !!img.normal)
-      .map(img => {
-        const n = img.normal!
-        return n.includes('://') ? n : `${supabaseUrl}/storage/v1/object/public/users/${remoteMatch.user_id}/normal/${n}`
-      })
+    // Same exact URLs MatchCard requests (raw filename, no encodeURI) so the
+    // prefetch shares expo-image's disk-cache key — single source of truth in
+    // matchImageUrls (also used by the look-ahead warm in api.ts).
+    const urls = matchImageUrls(remoteMatch)
     const startPreload = () => {
       if (cancelled) return
       // Mount the hidden MatchCard. The card slides up only after that
@@ -2556,6 +2476,19 @@ export default function HomePage() {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
   const [skipHintOpen, setSkipHintOpen] = useState(false)
+  // Once the user taps "got it" on the skip-hint popup it's acknowledged
+  // forever (persisted seen-flag): from then on "not now" skips directly,
+  // exactly as if they'd pressed the popup's "skip" — the popup never opens
+  // again. Loaded once on mount; flipped immediately on ack so the very next
+  // "not now" in the same session already skips.
+  const [skipHintAcked, setSkipHintAcked] = useState(false)
+  useEffect(() => {
+    hasSeenFlag(SEEN_FLAGS.skipHintAck).then(setSkipHintAcked).catch(() => {})
+  }, [])
+  // Not-enough-stars explainer. Holds the blocked action's cost (so the
+  // popup can say how many stars it needs); null = hidden. Opened by tapping
+  // an action button the user can't afford (invite / approve / broadcast).
+  const [insufficientCost, setInsufficientCost] = useState<number | null>(null)
   // Drives the watching card's inner scroll back to the top when the user
   // acknowledges the skip hint ("got it"), so the swipe-down-to-skip
   // gesture they were just taught is armed again.
@@ -2576,33 +2509,39 @@ export default function HomePage() {
   // ripple isn't a surprise. Skipped during broadcast (exitBroadcastTarget
   // already covers that branch) and when there are zero watchers.
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
-  // Hold the VisibilityToggle's indicator slide while one of its confirm
-  // popups is open OR animating out. Mode usually updates while the popup
-  // is still on screen (Realtime arrives mid-dismiss), so without this
-  // gate the indicator slide finishes UNDER the popup and the user only
-  // sees the post-state when the sheet is gone — no perceived movement.
-  // We extend the gate by `TOGGLE_GATE_LINGER_MS` past the popup's
-  // `visible=false` flip to cover BottomSheet's slide-out (default 300ms).
-  const visibilityPopupOpen = broadcastConfirmOpen || exitBroadcastTarget !== null || hideConfirmOpen
-  const [visibilityToggleGated, setVisibilityToggleGated] = useState(false)
-  useEffect(() => {
-    if (visibilityPopupOpen) {
-      setVisibilityToggleGated(true)
-      return
-    }
-    if (!visibilityToggleGated) return
-    const t = setTimeout(() => setVisibilityToggleGated(false), TOGGLE_GATE_LINGER_MS)
-    return () => clearTimeout(t)
-  }, [visibilityPopupOpen])
+  // Dropdown of the OTHER visibility modes, opened by tapping the side
+  // tab's visibility glyph while it's the selected pane and ambient (no
+  // 1:1 counterpart). Replaces the old 3-segment toggle.
+  const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false)
+  // Bottom Y (px) of the TabStrip header, in JS land, so the dropdown can
+  // be absolutely positioned directly under it. (tabStripBottom is a
+  // Reanimated shared value used by the chip; an RN `top` needs a number.)
+  const [headerBottomPx, setHeaderBottomPx] = useState(0)
   // Index into READY_HEADLINES; re-rolled on each entry to the ready state
   // by the effect next to headlineText. Lazy init so the first appearance is
   // already random rather than always the first sentence.
   const [readyHeadlineIdx, setReadyHeadlineIdx] = useState(() => pickReadyHeadline(-1))
-  // Chat-state actions menu (opens from the MatchCard dots button in chat
-  // state). Replaces the old chat-page dots dropdown for block/leave; adds
-  // a Report option (placeholder feedback only — no server endpoint yet).
+  // Chat-state actions menu (opens from the MatchCard X button in chat
+  // state). Exactly two destructive options: end chat (leave) and block.
+  // Report is NOT here any more — it moved to a dedicated flag button on
+  // every match card (see reportTargetId / MatchCard.onReport below) so a
+  // user can report an inappropriate photo/bio before ever entering chat.
   const [chatMenuOpen, setChatMenuOpen] = useState(false)
-  const [chatConfirmAction, setChatConfirmAction] = useState<'block' | 'leave' | 'report' | null>(null)
+  const [chatConfirmAction, setChatConfirmAction] = useState<'block' | 'leave' | null>(null)
+  // User id to report, set by the flag button on ANY match card (page1
+  // watching/waiting/chat/ended + page2 pending/dead-invite). One shared
+  // report confirm is driven off this — the surface is detected server-side,
+  // so the only thing the client needs is which user. Replaces the old
+  // chat-only `chatConfirmAction === 'report'` path.
+  const [reportTargetId, setReportTargetId] = useState<string | null>(null)
+  // Free-text note the user can optionally add to a report. Reset each time
+  // a report is opened (openReport) and after submit/cancel.
+  const [reportNote, setReportNote] = useState('')
+  const openReport = useCallback((userId: string) => {
+    tap()
+    setReportNote('')
+    setReportTargetId(userId)
+  }, [tap])
 
   const runAction = (endpoint: string, key: string, onDone?: () => void) => {
     if (busy) return
@@ -2613,6 +2552,29 @@ export default function HomePage() {
     invoke(endpoint, {})
       .then(done)
       .catch(err => { console.error(err); done() })
+  }
+
+  // Visibility-mode selection — the SINGLE source of the hidden/visible/
+  // broadcast transition logic (DRY). Was inlined on the old 3-segment
+  // VisibilityToggle's onHidden/onVisible/onBroadcast; now the side-tab
+  // dropdown (VisibilityMenu) is the only caller. Behaviour is byte-for-byte
+  // what the toggle did: a no-op for the current mode, a "stop broadcasting"
+  // confirm while broadcasting, the watcher-kick confirm for hidden, the
+  // not-enough-stars popup / broadcast confirm for broadcast.
+  const handleVisibilitySelect = (target: ToggleMode) => {
+    if (busy || target === toggleMode) return
+    if (target === 'hidden') {
+      if (broadcastActive) setExitBroadcastTarget('hidden')
+      else if (watchers.length > 0) setHideConfirmOpen(true)
+      else runAction('app/lock2', 'lock2')
+    } else if (target === 'visible') {
+      if (broadcastActive) setExitBroadcastTarget('visible')
+      else runAction('app/free2', 'free2')
+    } else {
+      if (broadcastActive) setExitBroadcastTarget('exit')
+      else if (starsBalance < CREDIT_COST.broadcast) { tap(); setInsufficientCost(CREDIT_COST.broadcast) }
+      else setBroadcastConfirmOpen(true)
+    }
   }
 
   const invitedPage1 = profile?.relations?.page1 as { expires_at?: string; invited_at?: string; extended?: boolean; message?: string } | undefined
@@ -2709,7 +2671,7 @@ export default function HomePage() {
     activation: 'scrollPan',
     enabled: !!page2PendingInvite && !busy,
     onCommit: declineViaSwipe,
-    tutorial: { ready: !!page2PendingInvite, seenFlag: 'page2_demo' },
+    tutorial: { ready: !!page2PendingInvite, seenFlag: SEEN_FLAGS.page2Demo },
   })
   // page2 has no match-sync (page1) / open() (sheet) reset path, and the
   // unified slide-off commit leaves pullY at screenH after a decline. Reset
@@ -2747,8 +2709,14 @@ export default function HomePage() {
       description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
       acceptLabel={t('home.inviteConfirmOk')}
       declineLabel={t('home.watchingReject')}
+      costCredits={CREDIT_COST.invite}
+      affordable={starsBalance >= CREDIT_COST.invite}
+      onUnaffordable={() => { tap(); setInsufficientCost(CREDIT_COST.invite) }}
       onAccept={() => { setStickyInvite(true); runAction('app/invite', 'invite-confirm') }}
-      onDecline={() => { tap(); setSkipHintOpen(true) }}
+      // "Not now": first time → teach via the skip-hint popup; after the
+      // user has acknowledged it once ("got it"), skip directly (runIgnore
+      // already taps), exactly as the popup's "skip" would.
+      onDecline={() => { if (skipHintAcked) runIgnore(); else { tap(); setSkipHintOpen(true) } }}
       busy={busy}
       acceptLoading={busy && pendingKey === 'invite-confirm'}
       footerInset={bottomInset}
@@ -2768,6 +2736,13 @@ export default function HomePage() {
       description={tgg('home.replyingDesc', isMale, page2PendingInvite.is_male)}
       acceptLabel={t('home.replyingAccept')}
       declineLabel={t('home.watchingReject')}
+      // While broadcasting, accepting an invitation is free (the user already
+      // paid 2 stars to broadcast). The badge stays — it shows 0, not hidden —
+      // so the user sees it costs nothing. Server enforces the same 0 cost
+      // (app_approve, same 30m window as broadcastActive).
+      costCredits={broadcastActive ? 0 : CREDIT_COST.approve}
+      affordable={broadcastActive || starsBalance >= CREDIT_COST.approve}
+      onUnaffordable={() => { tap(); setInsufficientCost(CREDIT_COST.approve) }}
       onAccept={() => runAction('app/approve', 'replying-accept')}
       onDecline={openRefuseConfirm}
       busy={busy}
@@ -2794,23 +2769,9 @@ export default function HomePage() {
 
   const isNetMode = !showNotifOverlay && !showLocOverlay && !locFailed && showNoInternetOverlay
 
-  const permConfirmLabel = showNotifOverlay
-    ? tg('home.notifPromptButton', isMale)
-    : showLocOverlay
-      ? tg('home.locationPromptButton', isMale)
-      : locFailed
-        ? tg('home.locationUnavailableButton', isMale)
-        : tg('home.noInternetButton', isMale)
-
-  // Top action icon for the permission dialog — one per state (enable
-  // notifications / enable location / retry network). PRIMARY/32 to match
-  // the ConfirmDialog tinted-circle convention.
-  const permIcon = showNotifOverlay
-    ? <BellIcon color={PRIMARY} size={32} />
-    : (showLocOverlay || locFailed)
-      ? <MapPinIcon color={PRIMARY} size={32} />
-      : <WifiOffIcon color={PRIMARY} size={32} />
-
+  // (permConfirmLabel / permIcon / permDesc were removed with the permission
+  // ConfirmDialog popup — the inline centerNotice below owns the icon/text
+  // now; permTitle is still the notice's text for the permission states.)
   const permOnConfirm = locFailed
     ? handleLocRetry
     : isNetMode
@@ -2838,13 +2799,42 @@ export default function HomePage() {
         ? t('home.locationUnavailableTitle')
         : t('home.noInternetTitle')
 
-  const permDesc = showNotifOverlay
-    ? (notifPerm === 'denied' ? tg('home.emptyNotifBlockedDesc', isMale) : state !== null ? t('home.notifPromptWithMatchDesc') : tg('home.notifPromptDesc', isMale))
-    : showLocOverlay
-      ? (locPerm === 'services-off' ? t('home.locationServicesOffDesc') : locPerm === 'denied' ? t('home.emptyLocationBlockedDesc') : state !== null ? t('home.locationPromptWithMatchDesc') : t('home.locationPromptDesc'))
-      : locFailed
-        ? t('home.locationUnavailableDesc')
-        : t('home.noInternetDesc')
+  // Single source of truth for the home-pane center "notice": the short
+  // headline text + the round center button's icon + its action, unified
+  // across every blocked state (missing notif/location/internet permission,
+  // or the server gate: not-in-any-group → request-to-join / waiting, or
+  // no-notifications/geo). Replaces the old ~5 ConfirmDialog popups: the
+  // existing permCenterGroup (text + the round Pressable that normally
+  // renders play/avatar/hamburger) becomes the action surface. Priority
+  // matches the old isPermMode precedence (permission first — you must fix
+  // it regardless), then the server availability gate. null = normal home.
+  const centerNotice: { text: string; icon: ReactNode; onPress?: () => void; busy?: boolean; disabled?: boolean } | null =
+    isPermMode
+      ? {
+          text: permTitle,
+          icon: showNotifOverlay
+            ? <BellIcon color={PRIMARY} size={64} />
+            : (showLocOverlay || locFailed)
+              ? <MapPinIcon color={PRIMARY} size={64} />
+              : <WifiOffIcon color={PRIMARY} size={64} />,
+          onPress: permOnConfirm,
+          busy: permBusyState,
+        }
+      : geoGated
+        ? (availability?.state === 'not_yet'
+            ? { text: t('home.geoGate.notYet').replace('{date}', gateWhenStr), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true }
+            : availability?.reason === 'push'
+              // notif perm IS granted but the server still push-gates (dead
+              // Expo token): nudge the user to re-enable / reopen.
+              ? { text: t('home.notifPromptTitle'), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
+              : availability?.join_requested
+                ? { text: t('home.joinGate.waitingText'), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true }
+                : availability?.reason === 'group'
+                  ? { text: t('home.joinGate.requestText'), icon: <MailIcon color={PRIMARY} size={64} />, onPress: runJoinRequest, busy: joinBusy }
+                  // old server (no reason) / any other unavailable → keep the
+                  // pre-existing geo copy, no action.
+                  : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true })
+        : null
 
   // Tab strip content — single source of truth for the three pane titles
   // and their inline chips (chat unread / viewer count / pending-invite
@@ -2936,6 +2926,21 @@ export default function HomePage() {
     : page2DeadInvite
       ? page2DeadName
       : ''
+  // Side tab is in ambient self-visibility mode (no 1:1 counterpart, not in
+  // chat, not geo-gated) — the only context where switching hidden/visible/
+  // broadcast is meaningful, so the only context the dropdown affordance
+  // exists. The caret on the glyph (and tap-to-open) only show while that
+  // tab is the SELECTED pane (user: "when tab2 is selected").
+  const sideVisibilityAffordance = !sideTabName && !chatAvailable && !geoGated
+  const showVisibilityCaret = sideVisibilityAffordance && paneIndex === PAGE2_PANE
+  // Auto-close the dropdown if its context disappears (an invite arrives,
+  // chat starts, geo-gate flips, or the user swipes off the side pane) so a
+  // stale menu can never linger over an unrelated screen.
+  useEffect(() => {
+    if (visibilityMenuOpen && (!sideVisibilityAffordance || paneIndex !== PAGE2_PANE)) {
+      setVisibilityMenuOpen(false)
+    }
+  }, [visibilityMenuOpen, sideVisibilityAffordance, paneIndex])
   // Viewer-count number rendered above the collapsed side icon, in the EXACT
   // slot the live timer uses (`subLabel`). Only in the ambient icon-only
   // side states — broadcast / visible: chat has no viewer list, the labeled
@@ -2960,27 +2965,75 @@ export default function HomePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchersCount])
+  // Stars-balance change (grant, spend, refund) → blink the Menu-tab stars
+  // marking 3× (the default `alerting` count) and surface a signed delta
+  // next to the count. ANY change (up or down) is an attention event here,
+  // unlike the increase-only viewer pulse. Baseline-null so the first
+  // observed balance (cold mount) doesn't pulse. Single-dep on the numeric
+  // balance + pulseTimeoutMs coalescing so a burst within the window reads
+  // as one pulse; the cleanup clears the delta so it FadeOuts after the blink.
+  useEffect(() => {
+    const prev = prevStarsBalanceRef.current
+    prevStarsBalanceRef.current = starsBalance
+    if (prev === null || starsBalance === prev) return
+    const d = starsBalance - prev
+    // No number element: just recolour the star (green added / red removed)
+    // for the blink window, then revert.
+    setStarsChangePositive(d > 0)
+    setStarsChangeActive(true)
+    setStarsAlerting(true)
+    const timer = setTimeout(() => {
+      setStarsAlerting(false)
+      setStarsChangeActive(false)
+    }, TAB.pulseTimeoutMs)
+    return () => {
+      clearTimeout(timer)
+      setStarsAlerting(false)
+      setStarsChangeActive(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [starsBalance])
   const tabSpecsAll: TabSpec[] = [
     // Menu tab is icon-only (no label) — it's chrome, not a destination, so
     // it shrinks to its glyph width and yields the freed flex space to the
-    // two content tabs (Home + Side). Icon swaps by state: settings sliders
-    // glyph normally, pause when the user has toggled game mode off, close-X while
-    // the profile preview sheet is open over the menu pane.
+    // two content tabs (Home + Side). The settings glyph stays the SAME in
+    // every state, INCLUDING pause (per the user: pause is signalled on the
+    // Home tab word "Once"→"פאוזה", not by morphing this glyph). The only
+    // swap is close-X while the profile-preview sheet is open over the menu
+    // pane (that is the sheet's close affordance, not a "state").
     {
       renderIndicator: profileSheetOpen
         ? (color) => <CloseBoldIcon color={color} size={ICON.xxl} />
-        : gameModeOff
-          ? (color) => <PauseIcon color={color} size={ICON.xxl} />
-          : (color) => <SlidersIcon color={color} size={ICON.xxl} />,
+        : (color) => <HamburgerIcon color={color} size={ICON.xxl} />,
+      // Stars balance rides above the Menu glyph in the EXACT slot the side
+      // tab's viewer-count uses. On a wallet change the star glyph itself
+      // recolours green (added) / red (removed) for the blink window — no
+      // number element. Suppressed while the profile-preview sheet is open
+      // (Menu is then the close-X affordance), change-pulse gated the same.
+      subLabel: profileSheetOpen ? undefined : String(starsBalance),
+      subLabelIcon: profileSheetOpen
+        ? undefined
+        : (color) => (
+            <StarIcon
+              color={starsChangeActive ? (starsChangePositive ? POSITIVE : NEGATIVE) : color}
+              size={TAB.timerFontSize}
+            />
+          ),
+      alerting: profileSheetOpen ? undefined : starsAlerting,
     },
     // Home tab. While the own-profile preview sheet rises it morphs
     // "Once" → "My profile" and (via tabProgress) the selected-chip slides
     // onto it from the Menu tab — both driven 1:1 by the sheet's position.
+    // Orthogonally, while game mode is paused the BASE word cross-fades
+    // "Once" ⇄ a pause GLYPH (pauseIcon/pauseProgress) — the profile-sheet
+    // morph still applies on top of whichever base is showing.
     {
       label: matchName || t('home.tabs.home'),
       subLabel: homeTabSubLabel,
       altLabel: t('settings.myProfile'),
       altProgress: profileSheetProgress,
+      pauseIcon: (color) => <PauseIcon color={color} size={ICON.xxl} />,
+      pauseProgress,
     },
     (() => {
       // The side tab carries a full text label ONLY when slot 2 is dedicated
@@ -3007,7 +3060,7 @@ export default function HomePage() {
         return {
           renderIndicator: chatAvailable
             ? (color) => <ChatIcon color={color} size={ICON.xxl} />
-            : (color) => VISIBILITY_ICON[toggleMode](color, ICON.xxl),
+            : (color) => <VisibilityTabGlyph color={color} mode={toggleMode} showCaret={showVisibilityCaret} />,
           subLabel: showViewerCount ? String(watchersCount) : undefined,
           alerting: showViewerCount ? viewersAlerting : sideAlerting,
           alertCount: showViewerCount ? TAB.viewerPulseCount : undefined,
@@ -3065,10 +3118,8 @@ export default function HomePage() {
   // other home-pane line (locating / ready / no-one-nearby). 'not_yet' and
   // 'unavailable' get distinct copy; the find button is already suppressed
   // (isReadyToFind === false) and the side tab removed (tabSpecs below).
-  const headlineText = geoGated
-    ? (availability?.state === 'not_yet'
-        ? t('home.geoGate.notYet').replace('{date}', gateWhenStr)
-        : t('home.geoGate.unavailable'))
+  const headlineText = centerNotice
+    ? centerNotice.text
     : isLoadingProfileHeadline
       ? t('home.loadingProfile')
       : isLocatingHeadline
@@ -3121,7 +3172,11 @@ export default function HomePage() {
             // the white content below is the only separation.
             gameModeOff && { backgroundColor: BLACK_MID },
           ]}
-          onLayout={e => { tabStripBottom.value = e.nativeEvent.layout.y + e.nativeEvent.layout.height }}
+          onLayout={e => {
+            const bottom = e.nativeEvent.layout.y + e.nativeEvent.layout.height
+            tabStripBottom.value = bottom
+            setHeaderBottomPx(prev => (Math.abs(prev - bottom) > 0.5 ? bottom : prev))
+          }}
         >
           <TabStrip tabs={tabSpecs} progress={tabProgress} onSelect={(i) => {
             // While the preview sheet is up, the ONLY actionable chrome is
@@ -3132,6 +3187,16 @@ export default function HomePage() {
               if (i === SETTINGS_PANE) closeProfileSheet()
               return
             }
+            // Tapping the side tab while it's ALREADY the selected pane and
+            // in ambient self-visibility → open/close the visibility
+            // dropdown (replaces the old segmented toggle). A first tap
+            // (not yet selected) just navigates there; the next tap opens it.
+            if (i === PAGE2_PANE && paneIndexRef.current === PAGE2_PANE && sideVisibilityAffordance) {
+              tap()
+              setVisibilityMenuOpen(o => !o)
+              return
+            }
+            if (visibilityMenuOpen) setVisibilityMenuOpen(false)
             goToPane(i as PaneIndex)
           }} />
         </View>
@@ -3201,6 +3266,10 @@ export default function HomePage() {
                           <RadarRings active={startupCompleted && (focusInflight || searching)} />
                           <Pressable
                             onPress={() => {
+                              if (centerNotice) {
+                                if (!centerNotice.disabled && !centerNotice.busy) centerNotice.onPress?.()
+                                return
+                              }
                               if (isReadyToFind) {
                                 runFind()
                                 return
@@ -3212,10 +3281,16 @@ export default function HomePage() {
                                 goToPreferences()
                               }
                             }}
-                            disabled={isReadyToFind && (busy || locFetching || startupInflight || focusInflight || searching || !startupCompleted)}
+                            disabled={centerNotice
+                              ? (!!centerNotice.disabled || !!centerNotice.busy || !centerNotice.onPress)
+                              : (isReadyToFind && (busy || locFetching || startupInflight || focusInflight || searching || !startupCompleted))}
                             style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                           >
-                            {isReadyToFind ? (
+                            {centerNotice ? (
+                              <View style={[styles.permAvatar, styles.permSlidersButton]}>
+                                {centerNotice.icon}
+                              </View>
+                            ) : isReadyToFind ? (
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
                                 <Svg width={64} height={64} viewBox="0 0 24 24" fill={PRIMARY}>
                                   <Path d="M8 5v14l11-7z" />
@@ -3229,7 +3304,7 @@ export default function HomePage() {
                               )
                             ) : (
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <SlidersIcon color={PRIMARY} size={64} />
+                                <HamburgerIcon color={PRIMARY} size={64} />
                               </View>
                             )}
                           </Pressable>
@@ -3267,10 +3342,13 @@ export default function HomePage() {
                       </View>
                     ) : null}
                   >
-                    {displayedMatch && (
+                    {displayedMatch && !noticeOverridesCard && (
                       /* RisingCard owns the slide-up / slide-down layout
                          animations; PullPane's wrapper owns the pull
-                         transform, so the two never clobber each other. */
+                         transform, so the two never clobber each other.
+                         Suppressed when a blocking notice overrides the card
+                         (permission/gate problem, page1 not waiting/chat) —
+                         the empty pane's centerNotice takes over instead. */
                       <RisingCard
                         key={displayedMatch.user_id}
                         animateEnter={matchHasMountedRef.current}
@@ -3285,6 +3363,7 @@ export default function HomePage() {
                             bottomInset={0}
                             hideTime={state === 'chat'}
                             actions={page1CardActions}
+                            onReport={() => openReport(displayedMatch.user_id)}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
                                 <InviteTimerCard
@@ -3350,6 +3429,11 @@ export default function HomePage() {
                   onCancel={() => {
                     if (busy) return
                     setSkipHintOpen(false)
+                    // Remember the acknowledgement: next "not now" skips
+                    // directly and this popup never opens again. Still
+                    // scrolls the card to top (the taught gesture is armed).
+                    setSkipHintAcked(true)
+                    markSeenFlag(SEEN_FLAGS.skipHintAck).catch(() => {})
                     watchingCardRef.current?.scrollToTop()
                   }}
                   onConfirm={() => {
@@ -3358,6 +3442,19 @@ export default function HomePage() {
                   }}
                   busy={busy}
                   draggable
+                />
+
+                {/* Not-enough-stars explainer. Reuses the one ConfirmDialog
+                    component (DRY): star icon, title, cost-aware description,
+                    single "got it" button. Opened by tapping an action the
+                    user can't afford (invite / approve / broadcast). */}
+                <ConfirmDialog
+                  visible={insufficientCost != null}
+                  icon={<StarIcon color={PRIMARY} size={32} />}
+                  title={t('stars.insufficient.title')}
+                  description={t('stars.insufficient.desc').replace('{stars}', starsText(insufficientCost ?? 0))}
+                  confirmLabel={t('common.gotIt')}
+                  onConfirm={() => setInsufficientCost(null)}
                 />
 
                 <ConfirmDialog
@@ -3383,20 +3480,17 @@ export default function HomePage() {
                   draggable
                 />
 
-                <ConfirmDialog
-                  visible={isPermMode}
-                  icon={permIcon}
-                  title={permTitle}
-                  description={permDesc}
-                  confirmLabel={permConfirmLabel}
-                  onConfirm={permOnConfirm}
-                  onCancel={() => {}}
-                  busy={permBusyState}
-                />
+                {/* The permission ConfirmDialog popup was removed: the
+                    missing-permission / gate UI now lives inline as the home
+                    pane's centerNotice (HeadlineArea text + the round center
+                    icon-as-action-button), and is mirrored on page2. See
+                    `centerNotice` and `noticeOverridesCard`. */}
 
-                {/* Chat-state actions menu (opened from MatchCard dots).
-                    paddingBottom = safe-area bottom + MD so the last row
-                    sits clear of the home-indicator gesture area. */}
+                {/* Chat-state actions menu (opened from the MatchCard X
+                    button). Exactly two rows, each with its own glyph: end
+                    chat (leave) and block. Report is a card-level affordance,
+                    not here. paddingBottom = safe-area bottom + MD so the
+                    last row sits clear of the home-indicator gesture area. */}
                 <BottomSheet
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
@@ -3406,7 +3500,10 @@ export default function HomePage() {
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('leave') }}
                     style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
                   >
-                    <Text style={chatMenuStyles.label}>{t('chat.leave')}</Text>
+                    <View style={chatMenuStyles.rowInner}>
+                      <SignOutIcon color={BLACK} />
+                      <Text style={chatMenuStyles.label}>{t('chat.leave')}</Text>
+                    </View>
                   </Pressable>
                   <View style={chatMenuStyles.divider} />
                   <Pressable
@@ -3417,13 +3514,6 @@ export default function HomePage() {
                       <BlockIcon color={BLACK_STRONG} />
                       <Text style={[chatMenuStyles.label, chatMenuStyles.labelMid]}>{t('chat.block')}</Text>
                     </View>
-                  </Pressable>
-                  <View style={chatMenuStyles.divider} />
-                  <Pressable
-                    onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('report') }}
-                    style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
-                  >
-                    <Text style={[chatMenuStyles.label, chatMenuStyles.labelSoft]}>{t('chat.report')}</Text>
                   </Pressable>
                 </BottomSheet>
 
@@ -3439,7 +3529,7 @@ export default function HomePage() {
                 />
                 <ConfirmDialog
                   visible={chatConfirmAction === 'block'}
-                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
+                  icon={<BlockIcon color={PRIMARY} size={32} />}
                   title={t('chat.blockTitle')}
                   description={t('chat.blockDesc')}
                   confirmLabel={t('chat.blockConfirm')}
@@ -3447,14 +3537,29 @@ export default function HomePage() {
                   onConfirm={async () => { await invoke('app/block'); setChatConfirmAction(null) }}
                   draggable
                 />
+                {/* One shared report confirm for every match-card surface
+                    (page1 + page2). The reported user id is whatever card's
+                    flag was tapped; the server detects the relation surface
+                    and tears it down + permanent-blocks the pair. */}
                 <ConfirmDialog
-                  visible={chatConfirmAction === 'report'}
-                  icon={<InfoIcon color={PRIMARY} size={32} />}
+                  visible={!!reportTargetId}
+                  icon={<ShieldIcon color={PRIMARY} size={32} />}
                   title={t('chat.reportTitle')}
                   description={t('chat.reportDesc')}
+                  noteInput={{
+                    value: reportNote,
+                    onChangeText: setReportNote,
+                    placeholder: t('chat.reportPlaceholder'),
+                  }}
                   confirmLabel={t('chat.reportConfirm')}
-                  onCancel={() => setChatConfirmAction(null)}
-                  onConfirm={() => setChatConfirmAction(null)}
+                  onCancel={() => { setReportTargetId(null); setReportNote('') }}
+                  onConfirm={async () => {
+                    const pid = reportTargetId
+                    const note = reportNote.trim()
+                    setReportTargetId(null)
+                    setReportNote('')
+                    if (pid) await invoke('app/report', { user_id: pid, reason: 'profile', note: note || undefined })
+                  }}
                   draggable
                 />
 
@@ -3477,51 +3582,46 @@ export default function HomePage() {
                   topInset={0}
                   autoFocusInput={chatJustStarted}
                 />
+              ) : (centerNotice && !page2PendingInvite) ? (
+                /* Page2 display-hidden: a permission notice is active and
+                   page2 isn't a pending incoming invite (those are kept).
+                   Non-destructive — NO app_lock2 (no watcher kick / no
+                   restriction); the viewers list is just suppressed behind
+                   the same notice as page1 (identical text/icon/action via
+                   the shared centerNotice). Auto-reverts the instant the
+                   permission is granted (centerNotice → null). geoGated
+                   never reaches here (the side slot is dropped entirely),
+                   so this is the permission cases only. */
+                <View style={styles.root}>
+                  <View style={styles.permScreen}>
+                    <View style={styles.permFlexSpacer} />
+                    <View pointerEvents="box-none" style={styles.permCenterGroup}>
+                      <HeadlineArea text={centerNotice.text} />
+                      <Pressable
+                        onPress={() => { if (!centerNotice.disabled && !centerNotice.busy) centerNotice.onPress?.() }}
+                        disabled={!!centerNotice.disabled || !!centerNotice.busy || !centerNotice.onPress}
+                        style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+                      >
+                        <View style={[styles.permAvatar, styles.permSlidersButton]}>
+                          {centerNotice.icon}
+                        </View>
+                      </Pressable>
+                    </View>
+                    <View style={styles.permFlexSpacer} />
+                  </View>
+                </View>
               ) : <View style={styles.root}>
                 {/* Base layer — the viewers/visibility screen is ALWAYS
                     mounted so it persists in its exact state (broadcast /
                     visible / hidden) behind any invite card, and is revealed
                     UNCHANGED once a card is dismissed (after the PRIMARY wake
                     fades). Mirrors page1's always-mounted empty pane.
-                    Pane layout: 3-state visibility toggle (hidden | visible
-                    | broadcast) anchored at the top; scrolling status card +
-                    watchers list or telescope below. */}
+                    The 3-segment visibility toggle that used to be anchored
+                    here was replaced by the dropdown on the side tab's
+                    visibility glyph (see VisibilityMenu + handleVisibilitySelect);
+                    this pane is now just the scrolling status card + watchers
+                    list or telescope. */}
                 <View style={{ flex: 1 }}>
-                  <View style={styles.page2TopBar}>
-                    <VisibilityToggle
-                      mode={toggleMode}
-                      gated={visibilityToggleGated}
-                      broadcastTimer={broadcastActive ? addCooldownLabel : null}
-                      pendingAction={
-                        busy && pendingKey === 'lock2' ? 'hidden'
-                        : busy && pendingKey === 'free2' ? 'visible'
-                        : busy && pendingKey === 'cancel_add' ? (broadcastActive ? 'broadcast' : 'visible')
-                        : busy && pendingKey === 'add' ? 'broadcast'
-                        : null
-                      }
-                      onHidden={() => {
-                        if (toggleMode === 'hidden') return
-                        // During broadcast, any mode switch is a "stop
-                        // broadcasting" action — confirm first.
-                        if (broadcastActive) setExitBroadcastTarget('hidden')
-                        // app/lock2 kicks every current watcher and pushes
-                        // each one a `removed` notification. Surface the
-                        // ripple before running it.
-                        else if (watchers.length > 0) setHideConfirmOpen(true)
-                        else runAction('app/lock2', 'lock2')
-                      }}
-                      onVisible={() => {
-                        if (toggleMode === 'visible') return
-                        if (broadcastActive) setExitBroadcastTarget('visible')
-                        else runAction('app/free2', 'free2')
-                      }}
-                      onBroadcast={() => {
-                        if (broadcastActive) setExitBroadcastTarget('exit')
-                        else setBroadcastConfirmOpen(true)
-                      }}
-                      busy={busy && (pendingKey === 'lock2' || pendingKey === 'free2' || pendingKey === 'add' || pendingKey === 'cancel_add')}
-                    />
-                  </View>
                   {watchers.length > 0 ? (
                     <PullScrollView
                       showsVerticalScrollIndicator={false}
@@ -3534,6 +3634,7 @@ export default function HomePage() {
                         broadcastActive={broadcastActive}
                         hasWatchers={true}
                         userIsMale={isMale}
+                        broadcastTimer={broadcastActive ? addCooldownLabel : null}
                       />
                       <View style={styles.watchersList}>
                         {watchers.map((w) => (
@@ -3560,6 +3661,7 @@ export default function HomePage() {
                         broadcastActive={broadcastActive}
                         hasWatchers={false}
                         userIsMale={isMale}
+                        broadcastTimer={broadcastActive ? addCooldownLabel : null}
                       />
                       <View style={styles.telescopeWrap}>
                         {isHidden ? <HiddenMoonIllustration /> : <TelescopeIllustration />}
@@ -3592,6 +3694,7 @@ export default function HomePage() {
                           <MatchCard
                             match={page2PendingInvite}
                             actions={[]}
+                            onReport={() => openReport(page2PendingInvite.user_id)}
                             viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
@@ -3612,6 +3715,7 @@ export default function HomePage() {
                         <MatchCard
                           match={page2DeadInvite}
                           actions={[]}
+                          onReport={() => openReport(page2DeadInvite.user_id)}
                           viewerFamily={profile?.family ?? null}
                           viewerLocationType={resolveLocationType(profile)}
                           bottomInset={0}
@@ -3633,6 +3737,20 @@ export default function HomePage() {
             ]),
           ]}
         </AnimatedPagerView>
+        {/* Visibility dropdown — opened from the side tab's glyph while it's
+            the selected pane and ambient. Painted above the pager (later
+            sibling) but below the profile sheet (which never co-occurs with
+            page2-ambient). Routes selections through handleVisibilitySelect
+            (the same logic the old toggle used). */}
+        {visibilityMenuOpen && sideVisibilityAffordance && paneIndex === PAGE2_PANE && headerBottomPx > 0 ? (
+          <VisibilityMenu
+            currentMode={toggleMode}
+            busy={busy}
+            top={headerBottomPx}
+            onSelect={(m) => { setVisibilityMenuOpen(false); handleVisibilitySelect(m) }}
+            onClose={() => setVisibilityMenuOpen(false)}
+          />
+        ) : null}
         {/* Profile preview sheet — same PullPane frame as page1/page2.
             Outer container anchored at the TabStrip bottom (topAnchor) so
             the wake fills the gap below the tabs; the RisingCard (conditional
@@ -3668,8 +3786,18 @@ export default function HomePage() {
           // tapped on the toggle below.
           icon={<MegaphoneIcon color={PRIMARY} size={32} />}
           title={t('home.broadcastConfirmTitle')}
-          description={t('home.broadcastConfirmDesc')}
+          // One flowing paragraph (no forced line breaks), with the two
+          // value-prop sentences emphasized bold inside the shared centered
+          // desc <Text> (ConfirmDialog inherits size/colour to nested spans).
+          description={
+            <>
+              {t('home.broadcastConfirmDesc')}{' '}
+              <Text style={{ fontWeight: WEIGHT.extrabold }}>{t('home.broadcastConfirmDescFree')}</Text>{' '}
+              <Text style={{ fontWeight: WEIGHT.extrabold }}>{t('home.broadcastConfirmDescNoStars')}</Text>
+            </>
+          }
           confirmLabel={t('home.broadcastConfirmButton')}
+          confirmIconStart={<CreditCost cost={CREDIT_COST.broadcast} color={WHITE} bg={WHITE_SOFT} />}
           onCancel={() => { if (!(busy && pendingKey === 'add')) setBroadcastConfirmOpen(false) }}
           onConfirm={() => runAction('app/add', 'add', () => setBroadcastConfirmOpen(false))}
           busy={busy && pendingKey === 'add'}
@@ -3839,21 +3967,6 @@ const styles = StyleSheet.create({
   emptyScrollContent: {
     flexGrow: 1,
     paddingBottom: 0,
-  },
-  page2TopBar: {
-    // Sits at the very top of the page2 pane, directly below the global
-    // TabStrip header and above the scrolling ViewersStatusCard, so the
-    // visibility control is the first thing under the tabs (matching the
-    // "toggle above this card" intent in the ViewersStatusCard comment).
-    // A normal flex band (no longer an absolute bottom overlay): the
-    // ScrollView starts below it instead of scrolling under it, so no
-    // bottom-padding measurement is needed. Paints nothing itself — only
-    // the toggle pill is opaque against the deep-wine page; the wine
-    // header above and the page below meet seamlessly through the
-    // transparent padding.
-    backgroundColor: 'transparent',
-    paddingHorizontal: MD,
-    paddingTop: MD,
   },
   telescopeWrap: {
     flex: 1,

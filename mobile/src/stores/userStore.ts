@@ -108,7 +108,22 @@ interface PagesCompat {
    * by app_availability/area_state. Absent = available (no enabled areas, or
    * not yet evaluated). Passed straight through: applyServerUser spreads the
    * raw server `relations`, so this unknown-to-the-shim key survives. */
-  availability?: { state: 'available' | 'unavailable' | 'not_yet'; starts_at?: string }
+  availability?: {
+    state: 'available' | 'unavailable' | 'not_yet'
+    starts_at?: string
+    /** Why the server gated this user (set only when state ≠ available):
+     * 'group' = not in any enabled group (→ request-to-join CTA),
+     * 'push' = no notifications. Absent on pre-reason server builds. */
+    reason?: 'group' | 'push'
+    /** True once the user pressed "request to join" (relations.join_request
+     * set). Swaps the join CTA for a "waiting for approval" state. */
+    join_requested?: boolean
+  }
+  /** ISO timestamp the user pressed "request to join" (relations.join_request.at). */
+  join_request?: { at?: string }
+  /** Credits wallet (relations.credits). Like `availability` / `last_add_at`
+   * it rides through untouched by the shim's raw-relations spread. */
+  credits?: import('../lib/credits').CreditsWallet | null
 }
 
 interface UserProfile {
@@ -151,7 +166,7 @@ interface UserStore {
   fetched: boolean
   fetch: (userId: string) => Promise<void>
   update: (patch: Partial<UserProfile>) => void
-  applyServerUser: (data: Record<string, unknown> | null | undefined, source?: 'fetch' | 'invoke' | 'realtime') => void
+  applyServerUser: (data: Record<string, unknown> | null | undefined, source?: 'fetch' | 'invoke' | 'invoke:find' | 'realtime') => void
   clear: () => void
 }
 
@@ -164,6 +179,13 @@ const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
 ]
 
 let lastAppliedLastSeen = 0
+
+// Last RAW server `relations` (v3 Pages, before deriveCompat overwrites page2
+// with the legacy shape) delivered by Realtime/fetch. The trusted find/ignore
+// path merges only the response's page1 over this so page2 (incoming invites /
+// watcher list — only ever changed by OTHER users' RPCs, which don't bump our
+// last_seen and so can't be ordered) stays Realtime-authoritative.
+let lastRawRelations: Pages | null = null
 
 const pending = new Map<keyof UserProfile, unknown>()
 
@@ -237,6 +259,27 @@ function deriveCompat(relations: Pages | null | undefined) {
   }
 }
 
+// Translate raw v3 `relations` into the legacy compat shape the UI reads and
+// write the result onto the in-flight payload `d` (sets d.state + d.relations
+// = raw relations spread + synthesized watchers/match/page2/page2State).
+// Single source of truth for both the Realtime/fetch path and the trusted
+// find/ignore page1 merge.
+function writeCompat(d: Record<string, unknown>, relations: Pages | null | undefined) {
+  const compat = deriveCompat(relations)
+  d.state = compat.state
+  const relationsWithCompat: Record<string, unknown> = { ...(relations ?? {}) }
+  relationsWithCompat.watchers = compat.watchers
+  relationsWithCompat.match = compat.match
+  relationsWithCompat.page2 = compat.legacyPage2
+  relationsWithCompat.page2State = compat.page2State
+  if (compat.page2Message !== undefined) {
+    relationsWithCompat.page2Message = compat.page2Message
+  } else {
+    delete relationsWithCompat.page2Message
+  }
+  d.relations = relationsWithCompat
+}
+
 export const useUserStore = create<UserStore>((set, get) => ({
   profile: null,
   loading: false,
@@ -292,11 +335,26 @@ export const useUserStore = create<UserStore>((set, get) => ({
         : null
     }
     const prev = get().profile
-    if (source === 'invoke' && prev) {
-      // Invoke (HTTP) responses can race with Realtime events and arrive stale.
-      // Realtime and explicit fetch calls are the authoritative source for game
-      // state — strip relations/state from invoke responses so they cannot
-      // overwrite Realtime-delivered state.
+    if (source === 'invoke:find' && prev && d.relations) {
+      // Trusted page1 from the actor's OWN find/ignore. The response is the
+      // authoritative result of the action and already carries the next
+      // candidate in page1 — advance from it immediately instead of waiting
+      // for Realtime to redeliver the same state. We trust ONLY page1: page2
+      // (incoming invites / watcher list) is only ever changed by OTHER
+      // users' RPCs, which don't bump our last_seen so the ordering guard
+      // can't protect it — so keep page2 Realtime-owned by merging the
+      // response's page1 over the last raw relations Realtime/fetch delivered.
+      // Cold start (no raw yet): trust the full response relations.
+      const respRel = d.relations as Pages
+      const base = lastRawRelations ?? respRel
+      const rebuilt = { ...base, page1: respRel.page1 } as Pages
+      lastRawRelations = rebuilt
+      writeCompat(d, rebuilt)
+    } else if ((source === 'invoke' || source === 'invoke:find') && prev) {
+      // Plain invoke (or a find/ignore response with no relations / before any
+      // prev existed). Invoke (HTTP) responses can race with Realtime events
+      // and arrive stale — Realtime and explicit fetch are the authoritative
+      // source for game state — so strip relations/state.
       delete (d as Record<string, unknown>).relations
       delete (d as Record<string, unknown>).state
     } else if (!('relations' in d)) {
@@ -304,27 +362,16 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // only changed columns + primary key). When `relations` isn't in the
       // payload, the row's relations didn't actually change — preserve the
       // previous state instead of overwriting with an empty derived shape.
-      // Same logic applies to `state` (top-level derived field).
+      // Same logic applies to `state` (top-level derived field). lastRawRelations
+      // is intentionally NOT touched here (relations didn't change).
       delete (d as Record<string, unknown>).state
     } else {
-      // Translate v3 relations into the legacy shape the UI reads:
-      // - top-level `state` synth from page1.state + message
-      // - relations.match / relations.watchers synthesized
-      // - relations.page2 shimmed into legacy Profile[] | Page2Invite
+      // Realtime/fetch with relations present — authoritative. Stash the raw
+      // relations for the find/ignore page1 merge, then translate v3 relations
+      // into the legacy shape the UI reads (state / match / watchers / page2).
       const relations = d.relations as Pages | null | undefined
-      const compat = deriveCompat(relations)
-      ;(d as Record<string, unknown>).state = compat.state
-      const relationsWithCompat: Record<string, unknown> = { ...(relations ?? {}) }
-      ;(relationsWithCompat as Record<string, unknown>).watchers = compat.watchers
-      ;(relationsWithCompat as Record<string, unknown>).match = compat.match
-      ;(relationsWithCompat as Record<string, unknown>).page2 = compat.legacyPage2
-      ;(relationsWithCompat as Record<string, unknown>).page2State = compat.page2State
-      if (compat.page2Message !== undefined) {
-        ;(relationsWithCompat as Record<string, unknown>).page2Message = compat.page2Message
-      } else {
-        delete (relationsWithCompat as Record<string, unknown>).page2Message
-      }
-      ;(d as Record<string, unknown>).relations = relationsWithCompat
+      lastRawRelations = relations ?? null
+      writeCompat(d, relations)
     }
     if (!prev) { set({ profile: d as unknown as UserProfile }); return }
     const merged: Record<string, unknown> = { ...prev, ...d }
@@ -340,5 +387,5 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ profile: merged as unknown as UserProfile })
   },
 
-  clear: () => { pending.clear(); lastAppliedLastSeen = 0; set({ profile: null, fetched: false }) },
+  clear: () => { pending.clear(); lastAppliedLastSeen = 0; lastRawRelations = null; set({ profile: null, fetched: false }) },
 }))

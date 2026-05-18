@@ -66,6 +66,7 @@ export const RADII = {
   xs: 2,      // thin indicator bars (tab strip underline)
   sm: 5,      // small fills (checkbox, drag-handle pill)
   chip: 9,    // pill chips beside tab labels
+  pill: 999,  // fully-rounded capsule (credit-cost badge, circular fills)
 } as const
 
 // ── Tap slop ───────────────────────────────────────────────────────────────
@@ -345,6 +346,16 @@ export const TAB = {
   // the bigger glyph. Shared by the invite countdown AND the broadcast
   // status word (one sub-label tier, DRY). Single knob — nudge to resize.
   timerFontSize: 20,
+  // The transient signed stars delta — "+1" / "-3" — rendered beside the
+  // Menu-tab balance for one attention pulse after the wallet changes.
+  // WITHOUT a badge/circle: just a bright, vivid signed number (POSITIVE/
+  // NEGATIVE). Sized comfortably below the count so it reads as a small
+  // delta annotation, not a second balance; well under `timerFontSize` so
+  // it stays inside the sub-label line-box and does NOT affect CHIP_TALL.
+  starDeltaFontSize: 14,
+  // No longer a subscript — it now centres on the count baseline (the badge
+  // that needed the drop is gone), so zero offset.
+  starDeltaDropY: 0,
   // RESIDUAL fine-tune (px) added on top of the DERIVED symmetric top band.
   // The "make the air above the timer equal the air below the name" maths is
   // no longer a hand-tuned number: TabStrip derives CHIP_TOP_BAND from the

@@ -110,12 +110,14 @@ const ssoBtnStyles = StyleSheet.create({
   label: { fontSize: FSIZE.lg, fontWeight: WEIGHT.extrabold, color: BLACK, letterSpacing: -0.3, textAlign: 'center' },
 })
 
-type Provider = 'google' | 'apple' | 'email' | null
+type Provider = 'google' | 'apple' | 'email' | 'review' | null
 
 export function LoginForm({
   onGoogle,
   onApple,
   onEmail,
+  onReview,
+  reviewEmail,
   showApple,
 }: {
   onGoogle: () => Promise<void>
@@ -123,14 +125,22 @@ export function LoginForm({
   // Returns true if a link was successfully sent (shows confirmation),
   // false on validation failure or send error (stays in input mode).
   onEmail: (email: string) => Promise<boolean>
+  // Store-review sign-in: a fixed email reveals a code field that signs the
+  // reviewer into the pre-approved review account (no magic link).
+  onReview: (code: string) => Promise<void>
+  reviewEmail: string
   showApple: boolean
 }) {
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [loading, setLoading] = useState<Provider>(null)
+  const [reviewCode, setReviewCode] = useState('')
 
   const canSendEmail = EMAIL_RE.test(email.trim())
+  // A real user would never type this address; when present, the email flow
+  // becomes the code-gated review login instead of sending a magic link.
+  const isReviewEmail = email.trim().toLowerCase() === reviewEmail.toLowerCase()
 
   const handleGoogle = async () => {
     if (loading) return
@@ -144,6 +154,20 @@ export function LoginForm({
     setLoading('apple')
     try { await onApple() }
     catch { setLoading(null) }
+  }
+
+  const handleReview = async () => {
+    if (loading) return
+    const code = reviewCode.trim()
+    if (!code) return
+    setLoading('review')
+    try {
+      await onReview(code)
+      // success → auth state change unmounts this screen
+    } catch {
+      setEmailError(t('auth.linkError'))
+      setLoading(null)
+    }
   }
 
   const handleEmail = async () => {
@@ -233,19 +257,39 @@ export function LoginForm({
           onSubmitEditing={handleEmail}
         />
       </View>
+      {isReviewEmail ? (
+        <View style={[styles.inputWrap, { marginTop: SM }]}>
+          <TextInput
+            style={styles.input}
+            value={reviewCode}
+            onChangeText={txt => { setReviewCode(txt); if (emailError) setEmailError(null) }}
+            placeholder={t('auth.reviewCodePlaceholder')}
+            placeholderTextColor={BLACK_MID}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!loading}
+            returnKeyType="go"
+            onSubmitEditing={handleReview}
+          />
+        </View>
+      ) : null}
       {emailError ? (
         <Text style={styles.errorText}>{emailError}</Text>
       ) : null}
 
       <View style={{ marginTop: MD }}>
         <Button
-          label={t('auth.sendLink')}
-          onPress={handleEmail}
+          label={isReviewEmail ? t('auth.reviewSubmit') : t('auth.sendLink')}
+          onPress={isReviewEmail ? handleReview : handleEmail}
           variant="onPrimary"
           size="lg"
-          loading={loading === 'email'}
-          disabled={(loading !== null && loading !== 'email') || !canSendEmail}
-          silentDisabled={loading !== null && loading !== 'email' && canSendEmail}
+          loading={isReviewEmail ? loading === 'review' : loading === 'email'}
+          disabled={
+            isReviewEmail
+              ? (loading !== null && loading !== 'review') || reviewCode.trim() === ''
+              : (loading !== null && loading !== 'email') || !canSendEmail
+          }
+          silentDisabled={!isReviewEmail && loading !== null && loading !== 'email' && canSendEmail}
           iconStart={<MailIcon color={PRIMARY} />}
         />
       </View>

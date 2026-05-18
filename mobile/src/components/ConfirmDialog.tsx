@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { StyleSheet, View, TouchableOpacity } from 'react-native'
-import { Text } from './AppText'
+import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
-import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
+import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
 import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
 // Every decision popup in the app is this one component. The action is
@@ -22,17 +22,22 @@ export function ConfirmDialog({
   cancelLabel,
   confirmLabel,
   icon,
+  confirmIconStart,
   onCancel,
   onConfirm,
   busy,
   skipToggle,
+  noteInput,
   cancelFlex,
   confirmFlex,
   draggable,
 }: {
   visible: boolean
   title: string
-  description?: string
+  // String, or rich content (e.g. a line with bold <Text> spans). Rendered
+  // inside the shared centered `styles.desc` <Text>, so nested <Text> spans
+  // inherit size/colour and only override what they set (weight/colour).
+  description?: ReactNode
   cancelLabel?: string
   /** Omit (together with `cancelLabel`) for a button-less info popup. */
   confirmLabel?: string
@@ -41,10 +46,20 @@ export function ConfirmDialog({
    * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
    * sized to the convention: `<XIcon color={PRIMARY} size={32} />`. */
   icon: ReactNode
+  /** Opt-in icon/badge rendered INSIDE the confirm button before its label.
+   * Deliberately breaks the "buttons carry no icon" convention for the one
+   * case the user asked for it: the broadcast popup must show the credit
+   * cost on its confirm button (see CLAUDE.md "Credits economy"). */
+  confirmIconStart?: ReactNode
   onCancel?: () => void
   onConfirm?: () => void
   busy?: boolean
   skipToggle?: { label: string; checked: boolean; onToggle: () => void }
+  /** Optional free-text field rendered between the description and the
+   * buttons (same slot pattern as `skipToggle`). When set, the sheet also
+   * enables keyboard avoidance. Used by the report flow so the user can add
+   * a note. The value/handler are owned by the caller. */
+  noteInput?: { value: string; onChangeText: (s: string) => void; placeholder: string; maxLength?: number }
   cancelFlex?: number
   confirmFlex?: number
   draggable?: boolean
@@ -66,6 +81,7 @@ export function ConfirmDialog({
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
+      keyboardAvoiding={!!noteInput}
       // When draggable, the PRIMARY drag-handle bar (with its own top/bottom
       // margins) already supplies the top breathing room — drop the card's
       // own paddingTop so the gap above the icon isn't doubled up.
@@ -91,6 +107,20 @@ export function ConfirmDialog({
         </TouchableOpacity>
       )}
 
+      {noteInput && (
+        <TextInput
+          style={styles.noteInput}
+          value={noteInput.value}
+          onChangeText={noteInput.onChangeText}
+          placeholder={noteInput.placeholder}
+          placeholderTextColor={BLACK_MID}
+          maxLength={noteInput.maxLength ?? 500}
+          multiline
+          textAlignVertical="top"
+          editable={!busy}
+        />
+      )}
+
       {(confirmLabel || cancelLabel) ? (
         <View style={styles.row}>
           {cancelLabel ? (
@@ -110,6 +140,7 @@ export function ConfirmDialog({
             <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
               <Button
                 label={confirmLabel}
+                iconStart={confirmIconStart}
                 onPress={() => { setPressed('confirm'); onConfirm?.() }}
                 variant="primary"
                 size="lg"
@@ -189,6 +220,18 @@ const styles = StyleSheet.create({
   skipLabel: {
     fontSize: FSIZE.sm,
     color: BLACK_STRONG,
+  },
+  noteInput: {
+    marginTop: MD,
+    minHeight: 96,
+    borderWidth: STROKE.thin,
+    borderColor: BLACK_MID,
+    borderRadius: RADIUS,
+    paddingHorizontal: MD,
+    paddingVertical: SM,
+    fontSize: FSIZE.md,
+    lineHeight: lh(FSIZE.md),
+    color: BLACK,
   },
   row: {
     flexDirection: 'row',

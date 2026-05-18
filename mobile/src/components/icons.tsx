@@ -103,6 +103,20 @@ export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps 
   )
 }
 
+// Hamburger menu — three evenly-spaced horizontal lines. Same single-stroke
+// family (STROKE.base, round caps) as the other nav glyphs so it sits next
+// to them consistently. Used as the Settings/Menu glyph (TabStrip menu tab
+// + the page1 button that navigates to preferences).
+export function HamburgerIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="4" y1="7" x2="20" y2="7" />
+      <Line x1="4" y1="12" x2="20" y2="12" />
+      <Line x1="4" y1="17" x2="20" y2="17" />
+    </Svg>
+  )
+}
+
 export function MapPinIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
@@ -142,6 +156,31 @@ export function BlockIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = 
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="12" r="10" />
       <Line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+    </Svg>
+  )
+}
+
+// Shield with an alert mark — the "report / raise a safety concern" glyph.
+// Deliberately a security shield, not a flag: a flag stacked next to the
+// heart read as a second like-style affordance. Same dual-context
+// stroke+halo pattern as CloseBoldIcon (matching its exact halo math, so it
+// reads at the SAME stroke weight as the chat-X it stacks next to in
+// MatchCard's action overlay): pass `stroke` for the haloed on-photo
+// RoundButton variant, omit it for the plain coral dialog icon.
+export function ShieldIcon({ color = BLACK, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
+  const shield = 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {stroke ? (
+        <>
+          <Path d={shield} stroke={stroke} strokeWidth={STROKE.heavy + STROKE.thick} />
+          <Line x1="12" y1="9" x2="12" y2="13" stroke={stroke} strokeWidth={STROKE.heavy + STROKE.thick} />
+          <Line x1="12" y1="16.5" x2="12.01" y2="16.5" stroke={stroke} strokeWidth={STROKE.heavy + STROKE.thick} />
+        </>
+      ) : null}
+      <Path d={shield} stroke={color} strokeWidth={STROKE.heavy} />
+      <Line x1="12" y1="9" x2="12" y2="13" stroke={color} strokeWidth={STROKE.heavy} />
+      <Line x1="12" y1="16.5" x2="12.01" y2="16.5" stroke={color} strokeWidth={STROKE.heavy} />
     </Svg>
   )
 }
@@ -453,6 +492,23 @@ export function QuoteIcon({ color = PRIMARY, size = ICON.xxxl }: IconProps = {})
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <Path d="M2 3 H11 V12 L8 21 H5 V13 H2 Z" />
       <Path d="M13 3 H22 V12 L19 21 H16 V13 H13 Z" />
+    </Svg>
+  )
+}
+
+// ── Stars (the credit currency) ────────────────────────────────────────────
+
+// Filled 5-point star glyph — the app's "stars" currency token, used by the
+// in-button cost badge (CreditCost.tsx), the settings stars field, and the
+// stars indicator above the Menu tab. Filled (not the line-art family) on
+// purpose: a small stroked 5-point star reads as visual noise, while a solid
+// star is the unambiguous, conventional currency/rating mark at any size.
+// Soft joins (strokeLinejoin round, hairline same-color stroke) take the
+// hard edge off the points so it sits comfortably next to text.
+export function StarIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth={STROKE.base} strokeLinejoin="round">
+      <Path d="M12 2 L14.35 8.76 L21.51 8.91 L15.8 13.24 L17.88 20.09 L12 16 L6.12 20.09 L8.2 13.24 L2.49 8.91 L9.65 8.76 Z" />
     </Svg>
   )
 }

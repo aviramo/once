@@ -5,6 +5,8 @@ export default {
   // Auth
   'auth.signInGoogle': 'התחברות עם Google',
   'auth.signInApple': 'התחברות עם Apple',
+  'auth.reviewCodePlaceholder': 'קוד ביקורת',
+  'auth.reviewSubmit': 'כניסה',
   'auth.tagline': 'מפגש אחד בזמן אמת',
   'auth.msg1': 'לא קטלוג. לא צ\'אטים אינסופיים.',
   'auth.msg2': 'מפגש אחד\nבזמן אמת',
@@ -130,6 +132,8 @@ export default {
   'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד.',
   'settings.profile': 'עריכת הפרופיל',
   'settings.account': 'חשבון',
+  'settings.credits': 'כוכבים',
+  'settings.creditsNext': 'מתחדש ב-{when}',
   'settings.preview': 'תצוגה מקדימה',
   'settings.myProfile': 'פרופיל',
   'settings.photo': 'התמונות שלי',
@@ -150,12 +154,15 @@ export default {
   'settings.signOutConfirmTitle': 'התנתקות',
   'settings.signOutConfirmDesc': 'לאחר ההתנתקות לא תקבל התראות. אם מישהו צופה בך כרגע, הוא יקבל התראה שהתנתקת.',
   'settings.signOutYes': 'התנתקות',
-  'settings.ageRange': 'גיל',
+  'settings.ageRange': 'בגילאים',
   'settings.ageFrom': 'מגיל',
   'settings.ageTo': 'עד גיל',
   'settings.save': 'שמור',
   'settings.add': 'הוספה',
-  'settings.range': 'מרחק',
+  'settings.range': 'עד',
+  // Distance-field LABEL when range is unlimited (then the value column is
+  // left empty — the label says it all).
+  'settings.rangeUnlimitedLabel': 'ללא הגבלת מרחק',
   'settings.rangeHere': 'ממש כאן',
   'settings.rangeUnlimited': 'ללא הגבלה',
   'settings.km': 'ק"מ',
@@ -165,6 +172,11 @@ export default {
   'settings.locationCustom': 'כתובת מותאמת',
   'settings.locationHome': 'בית',
   'settings.locationWork': 'עבודה',
+  // Location field LABEL, by the chosen anchor type (the value column shows
+  // the address for home/work, nothing for the device case).
+  'settings.locationFromHome': 'מהבית',
+  'settings.locationFromWork': 'מהמשרד',
+  'settings.locationFromDevice': 'מהמיקום הנוכחי שלי',
   'settings.locationDeviceDesc': 'משתמש במיקום המכשיר',
   'settings.locationCustomDesc': 'כתובת לפי בחירה',
   'settings.locationAddressPrompt': 'הקלד כתובת או שם של עיר',
@@ -260,11 +272,34 @@ export default {
   'family.summaryFreeWeekend': ', פנוי בסופ״ש הקרוב',
   'family.summaryWithKidsWeekend': ', לא פנוי בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
+  // Not-enough-stars popup (shown when an action costs more stars than the
+  // user has). {n} = the action's cost.
+  // Count phrase with correct singular/plural — built by starsText() in
+  // lib/credits.ts and substituted wherever a stars amount is shown in prose.
+  'stars.count.one': 'כוכב אחד',
+  'stars.count.many': '{n} כוכבים',
+  'stars.insufficient.title': 'אין מספיק כוכבים',
+  'stars.insufficient.desc': 'הפעולה הזו עולה {stars} ואין לך מספיק כרגע. הכוכבים מתחדשים בכל יום.',
+  // Stars / package popup (opened from the settings stars row). The
+  // description is assembled in code from these lines (so the renew line can
+  // be dropped when the next-grant time is unknown). Plan names stay Latin.
+  // The {stars}/{tier}/{cap}/{when} tokens are rendered bold in code. {cap}
+  // is the daily ceiling: the grant TOPS UP to it (not additive), so the
+  // tier line says the stars "fill up to {cap}", never "you get {cap}".
+  // Hebrew gendered via genderize() inline {male|female} markers.
+  'stars.popup.title': 'הכוכבים שלך',
+  'stars.popup.line.balance': 'יש לך {stars} כרגע.',
+  'stars.popup.line.tier': 'בחבילת {tier} הכוכבים מתמלאים ל-{cap} בכל יום.',
+  'stars.popup.line.renew': 'הכוכבים שלך יתחדשו ב-{when}.',
+  'stars.popup.line.switch': 'אפשר לשדרג ל-Pro בכל עת.\nמיד עם השדרוג {תקבל|תקבלי} את מקסימום הכוכבים.',
+  'stars.popup.upgrade': 'שדרוג ל-Pro',
+  'stars.popup.downgrade': 'הורדת חבילה',
   'settings.miles': 'מייל',
-  'settings.preferredGender': 'מגדר',
-  'settings.genderM': 'גברים',
-  'settings.genderF': 'נשים',
-  'settings.genderBoth': 'גברים ונשים',
+  // Gendered by the user's own sex via genderize() ({male|female} marker).
+  'settings.preferredGender': '{פנוי|פנויה}',
+  'settings.genderM': 'לגברים',
+  'settings.genderF': 'לנשים',
+  'settings.genderBoth': 'לכולם',
   'settings.kidsLabel': 'מתכנן/ת ילדים?',
   'settings.kidsYes': 'כן',
   'settings.kidsNo': 'לא',
@@ -362,7 +397,9 @@ export default {
   'home.premiumPopup.hide': 'הסתר את הפרופיל',
   'home.premiumPopup.reveal': 'הצג את הפרופיל',
   'home.broadcastConfirmTitle': 'לעבור למצב שידור?',
-  'home.broadcastConfirmDesc': 'במצב שידור הפרופיל שלך יקבל יותר חשיפה למשך חצי שעה, כדי להגדיל את הסיכוי להזמנות מאנשים מתאימים בסביבה.',
+  'home.broadcastConfirmDesc': 'במצב שידור, הפרופיל שלך מקבל חשיפה נוספת למשך 30 דקות, ועוזר ליותר אנשים בקרבת מקום לגלות אותך.',
+  'home.broadcastConfirmDescFree': 'קבלת הזמנות היא בחינם.',
+  'home.broadcastConfirmDescNoStars': 'לא נעשה שימוש בכוכבים כשמישהו מזמין אותך.',
   'home.broadcastConfirmButton': 'שדר אותי',
   'home.exitBroadcastConfirmTitle': 'להפסיק את השידור?',
   'home.exitBroadcastConfirmDesc': 'כעת במצב שידור. אישור יפסיק את השידור.',
@@ -442,6 +479,10 @@ export default {
   // area's launch time) — keep the placeholder.
   'home.geoGate.unavailable': 'האפליקציה לא זמינה באזורך',
   'home.geoGate.notYet': 'נפתח באזורך {date}',
+  // Join-request gate: the user is not in any active group. The center
+  // icon-button itself sends the request (no separate button label).
+  'home.joinGate.requestText': 'הגישה באישור, בקשו להצטרף',
+  'home.joinGate.waitingText': 'הבקשה נשלחה, ממתינים לאישור',
   'home.startNow': 'להתחיל עכשיו',
   'home.readyToContinue': 'מוכן להמשיך?',
   'home.readyToContinue_m': 'מוכן להמשיך?',
@@ -625,7 +666,7 @@ export default {
   'home.replyingReject': 'לדלג',
   'home.chatHeader': 'אתם אחד על אחד',
   'home.leaveTitle': 'סיום צ\'אט',
-  'home.leaveDesc': 'הצ\'אט ייסגר לצמיתות ולא ניתן יהיה לשחזר את השיחה. הצד השני יקבל התראה.',
+  'home.leaveDesc': 'הצ\'אט ייסגר לצמיתות ולא ניתן יהיה לשחזר אותו. הצד השני יקבל התראה.',
   'home.leaveConfirm': 'סיום',
   'chat.empty': 'עוד אין הודעות',
   'chat.inputPlaceholder': 'כתוב הודעה...',
@@ -636,11 +677,12 @@ export default {
   'chat.blockTitle': 'חסימת משתמש',
   'chat.blockDesc': 'המשתמש ייחסם ולא יוכל ליצור איתך קשר שוב. לא ניתן לבטל פעולה זו.',
   'chat.blockConfirm': 'חסימה',
-  'chat.leave': 'סיום שיחה',
+  'chat.leave': 'סיום צ\'אט',
   'chat.report': 'דיווח',
-  'chat.reportTitle': 'דיווח על משתמש',
-  'chat.reportDesc': 'תודה. הדיווח יישלח לבדיקת הצוות שלנו. תכונה זו תופעל בקרוב.',
-  'chat.reportConfirm': 'אישור',
+  'chat.reportTitle': 'דיווח על המשתמש',
+  'chat.reportDesc': 'הדיווח יישלח לצוות שלנו לבדיקה. המשתמש ייחסם ולא תותאמו שוב. כל קשר פעיל ביניכם יסתיים.',
+  'chat.reportPlaceholder': 'מה קרה? אפשר להוסיף פרטים (לא חובה)',
+  'chat.reportConfirm': 'דיווח וחסימה',
   'chat.newMessages': 'הודעות חדשות',
   'chat.attachMenu.image': 'תמונה',
   'chat.attachMenu.location': 'מיקום',
@@ -675,6 +717,9 @@ export default {
   'home.locationUnavailableButton_m': 'שדר מיקום',
   'home.locationUnavailableButton_f': 'שדרי מיקום',
   'home.hiddenHeader2': 'Once',
+  // Broadcast countdown, now shown as a line in the viewers info card
+  // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
+  'home.broadcast.endsIn': '{time} לסיום השידור',
   'home.tabs.home': 'Once',
   'home.tabs.viewers': 'צופים בי',
   'home.tabs.hidden_m': 'מוסתר',

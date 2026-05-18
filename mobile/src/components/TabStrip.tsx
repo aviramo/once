@@ -13,7 +13,7 @@ import {
 } from '../colors'
 import { FONT_SCALE } from '../fonts'
 import { tap } from '../lib/haptics'
-import { SM, LG, RADII, TEXT, WEIGHT, TAB } from '../tokens'
+import { XS, SM, LG, RADII, TEXT, WEIGHT, TAB } from '../tokens'
 
 // Global tab strip used at the top of the home shell. Three tabs (Menu |
 // Home | Side).
@@ -158,6 +158,15 @@ export type TabSpec = {
    * from above) and out with FadeOutUp (lifts back up). Cross-fades with
    * selection state exactly like the label. */
   subLabel?: string
+  /** Optional small glyph rendered just BEFORE the `subLabel` text, inside
+   * the same sub-label cluster, getting the SAME selection active/muted
+   * cross-fade (and the finite `alerting` force) as the text — two stacked
+   * WHITE/WHITE_MID copies, exactly like `renderIndicator`. Used by the Menu
+   * tab to put a star glyph next to the stars balance. Optional; absent =
+   * the sub-label stays text-only and byte-identical to before. Size the
+   * glyph at TAB.timerFontSize so it stays inside the sub-label line-box
+   * (the CHIP_TALL derivation assumes that height). */
+  subLabelIcon?: (color: string) => React.ReactNode
   /** Slow opacity heartbeat applied to the entire sub-label cluster. Used
    * for "live ongoing state" status words (e.g. "בשידור" / "צופים בי")
    * that ride above an icon-only tab — the gentle pulse signals the
@@ -181,6 +190,19 @@ export type TabSpec = {
    * the tab width never reflows as it morphs. Requires `label` too. */
   altLabel?: string
   altProgress?: SharedValue<number>
+  /** Optional alternate for the BASE word: cross-fades the `label` text ⇄
+   * this GLYPH by `pauseProgress` (0 = `label` word, 1 = the glyph). Used by
+   * the Home tab to swap "Once" → a pause icon when game mode is paused. The
+   * glyph is rendered as the same active(WHITE)/muted(WHITE_MID) two-layer
+   * pair as the rest of the label, so it cross-fades with selection too.
+   * Orthogonal to the `altLabel`/`altProgress` morph: it splits ONLY the
+   * base layers (the morph still cross-fades that result ⇄ `altLabel`). The
+   * split partitions the base opacity by `pauseProgress`, so the total of
+   * all rendered layers stays exactly 1 — no flicker, same invariant as the
+   * 4-layer morph. Only meaningful on a morph tab (Home). Absent ⇒ the base
+   * renders as the original single text pair, byte-identical to before. */
+  pauseIcon?: (color: string) => React.ReactNode
+  pauseProgress?: SharedValue<number>
   /** Whole-tab opacity fade driven 1:1 by a shared value (0 = fully visible,
    * 1 = fully hidden). Used to fade the side tab out as the profile-preview
    * sheet rises: the SAME shared value that morphs the Home word and slides
@@ -623,6 +645,45 @@ function TabButton({
     const m = Math.min(1, Math.max(0, altSV.value))
     return { opacity: ((1 - t) * (1 - a)) * (1 - m) }
   }, [altSV])
+  // Base-word PAUSE split. When the tab supplies `pauseLabel`+`pauseProgress`
+  // the base word itself cross-fades `label` ⇄ `pauseLabel` by `p`. This
+  // PARTITIONS the base opacity (it does not add to it): the normal pair is
+  // ×(1−p), the pause pair ×p. normalActive+normalMuted+pauseActive+pauseMuted
+  // = baseActive+baseMuted, so together with the unchanged alt pair the grand
+  // total is still exactly 1 — same no-flicker invariant as the 4-layer
+  // morph, just 6 layers. `pauseProgress` is optional; a stable zero fallback
+  // keeps `p` at 0 so the normal pair equals the original baseActive/baseMuted
+  // exactly and the pause pair is 0 (and is not even rendered — see render).
+  const zeroPause = useSharedValue(0)
+  const pauseSV = spec.pauseProgress ?? zeroPause
+  const baseNormalActiveStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, 1 - Math.abs(progress.value - index))
+    const a = alertActive.value
+    const m = Math.min(1, Math.max(0, altSV.value))
+    const p = Math.min(1, Math.max(0, pauseSV.value))
+    return { opacity: (t + (1 - t) * a) * (1 - m) * (1 - p) }
+  }, [altSV, pauseSV])
+  const baseNormalMutedStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, 1 - Math.abs(progress.value - index))
+    const a = alertActive.value
+    const m = Math.min(1, Math.max(0, altSV.value))
+    const p = Math.min(1, Math.max(0, pauseSV.value))
+    return { opacity: ((1 - t) * (1 - a)) * (1 - m) * (1 - p) }
+  }, [altSV, pauseSV])
+  const basePauseActiveStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, 1 - Math.abs(progress.value - index))
+    const a = alertActive.value
+    const m = Math.min(1, Math.max(0, altSV.value))
+    const p = Math.min(1, Math.max(0, pauseSV.value))
+    return { opacity: (t + (1 - t) * a) * (1 - m) * p }
+  }, [altSV, pauseSV])
+  const basePauseMutedStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, 1 - Math.abs(progress.value - index))
+    const a = alertActive.value
+    const m = Math.min(1, Math.max(0, altSV.value))
+    const p = Math.min(1, Math.max(0, pauseSV.value))
+    return { opacity: ((1 - t) * (1 - a)) * (1 - m) * p }
+  }, [altSV, pauseSV])
   const altActiveStyle = useAnimatedStyle(() => {
     const t = Math.max(0, 1 - Math.abs(progress.value - index))
     const a = alertActive.value
@@ -636,6 +697,9 @@ function TabButton({
     return { opacity: ((1 - t) * (1 - a)) * m }
   }, [altSV])
   const isMorph = spec.altLabel != null && spec.altProgress != null
+  // Only split the base word into normal⇄pause when BOTH are supplied; else
+  // the base renders as the original single pair (byte-identical).
+  const hasPauseSwap = spec.pauseIcon != null && spec.pauseProgress != null
   // Indicator-only variants of activeStyle/mutedStyle that fold the broadcast
   // heartbeat into the same `max(a, …)` force-select blend. `p = 1 - beat`
   // continuously eases 0→1→0 while pulsing-and-unselected, cross-fading the
@@ -707,21 +771,40 @@ function TabButton({
           style={styles.subLabelOuter}
         >
           <Animated.View style={[styles.subLabelRow, subPulseAnim]}>
-            <View style={styles.subLabelStack}>
-              <AnimatedText
-                style={[styles.subLabel, styles.subLabelActive, activeStyle]}
-                numberOfLines={1}
-                maxFontSizeMultiplier={FONT_SCALE.ui}
-              >
-                {spec.subLabel}
-              </AnimatedText>
-              <AnimatedText
-                style={[styles.subLabel, styles.subLabelMuted, styles.labelOverlay, mutedStyle]}
-                numberOfLines={1}
-                maxFontSizeMultiplier={FONT_SCALE.ui}
-              >
-                {spec.subLabel}
-              </AnimatedText>
+            {/* Optional leading glyph (the stars star) + the count, as one
+                horizontal cluster centred above the Menu glyph. The glyph is
+                two-layer active/muted so it cross-fades with selection like
+                the count. There is NO numeric +/- delta element any more — a
+                wallet change is signalled by RECOLOURING the glyph itself
+                (green added / red removed; the colour is decided by the
+                caller's subLabelIcon) plus the finite `alerting` blink. */}
+            <View style={styles.subLabelContent}>
+              {spec.subLabelIcon != null ? (
+                <View style={styles.subLabelStack} pointerEvents="none">
+                  <Animated.View style={activeStyle}>
+                    {spec.subLabelIcon(WHITE)}
+                  </Animated.View>
+                  <Animated.View style={[styles.indicatorOverlay, mutedStyle]}>
+                    {spec.subLabelIcon(WHITE_MID)}
+                  </Animated.View>
+                </View>
+              ) : null}
+              <View style={styles.subLabelStack}>
+                <AnimatedText
+                  style={[styles.subLabel, styles.subLabelActive, activeStyle]}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={FONT_SCALE.ui}
+                >
+                  {spec.subLabel}
+                </AnimatedText>
+                <AnimatedText
+                  style={[styles.subLabel, styles.subLabelMuted, styles.labelOverlay, mutedStyle]}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={FONT_SCALE.ui}
+                >
+                  {spec.subLabel}
+                </AnimatedText>
+              </View>
             </View>
             {spec.renderIndicator != null && spec.label != null ? (
               <View style={[styles.indicatorStack, styles.subLabelSpacer]} pointerEvents="none">
@@ -831,20 +914,61 @@ function TabButton({
           style={[styles.labelMorphBand, styles.labelNudge]}
         >
           <Animated.View style={[styles.morphInner, pulseAnim, pressLabelStyle]}>
-          <AnimatedText
-            style={[styles.label, styles.labelActive, styles.labelOverlay, baseActiveStyle]}
-            numberOfLines={1}
-            maxFontSizeMultiplier={FONT_SCALE.ui}
-          >
-            {spec.label}
-          </AnimatedText>
-          <AnimatedText
-            style={[styles.label, styles.labelMuted, styles.labelOverlay, baseMutedStyle]}
-            numberOfLines={1}
-            maxFontSizeMultiplier={FONT_SCALE.ui}
-          >
-            {spec.label}
-          </AnimatedText>
+          {hasPauseSwap ? (
+            // Base word split into normal⇄pause. The four opacities partition
+            // the base total by `pauseProgress` (see baseNormal*/basePause*),
+            // so the grand total with the alt pair is still exactly 1.
+            <>
+              <AnimatedText
+                style={[styles.label, styles.labelActive, styles.labelOverlay, baseNormalActiveStyle]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={FONT_SCALE.ui}
+              >
+                {spec.label}
+              </AnimatedText>
+              <AnimatedText
+                style={[styles.label, styles.labelMuted, styles.labelOverlay, baseNormalMutedStyle]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={FONT_SCALE.ui}
+              >
+                {spec.label}
+              </AnimatedText>
+              {/* Pause side is a GLYPH, not text — rendered as the same
+                  active(WHITE)/muted(WHITE_MID) two-layer pair, centred in
+                  the band (absolute-fill + center). Opacities are the same
+                  basePause* partition, so the Once-word ⇄ pause-glyph
+                  cross-fade and the no-flicker sum invariant are unchanged. */}
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.labelOverlay, styles.morphIconCenter, basePauseActiveStyle]}
+              >
+                {spec.pauseIcon!(WHITE)}
+              </Animated.View>
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.labelOverlay, styles.morphIconCenter, basePauseMutedStyle]}
+              >
+                {spec.pauseIcon!(WHITE_MID)}
+              </Animated.View>
+            </>
+          ) : (
+            <>
+              <AnimatedText
+                style={[styles.label, styles.labelActive, styles.labelOverlay, baseActiveStyle]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={FONT_SCALE.ui}
+              >
+                {spec.label}
+              </AnimatedText>
+              <AnimatedText
+                style={[styles.label, styles.labelMuted, styles.labelOverlay, baseMutedStyle]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={FONT_SCALE.ui}
+              >
+                {spec.label}
+              </AnimatedText>
+            </>
+          )}
           <AnimatedText
             style={[styles.label, styles.labelActive, styles.labelOverlay, altActiveStyle]}
             numberOfLines={1}
@@ -980,6 +1104,12 @@ const styles = StyleSheet.create({
   morphInner: {
     ...StyleSheet.absoluteFillObject,
   },
+  // Centres the pause glyph inside the absolute-fill morph band so it lands
+  // on the same optical centre the "Once" wordmark uses.
+  morphIconCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Absolute-positioned slot just ABOVE the mainRow, sitting INSIDE the
   // grown pill (no longer a caption floating above it). `bottom = rowHeight
   // + timerGap` places the timer's box a tight timerGap above the name line;
@@ -1010,6 +1140,16 @@ const styles = StyleSheet.create({
   },
   subLabelStack: {
     position: 'relative',
+  },
+  // Horizontal cluster holding the optional star glyph, the count, and the
+  // optional transient delta. A single child of subLabelRow (so it still
+  // centres above the icon exactly like the old lone text stack); the gap
+  // matches CreditCost's glyph↔number gap so the currency reads the same
+  // wherever it appears.
+  subLabelContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: XS,
   },
   subLabelSpacer: {
     opacity: 0,

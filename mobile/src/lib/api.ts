@@ -1,6 +1,8 @@
+import { Image } from 'expo-image'
 import { supabase } from './supabase'
 import { useUserStore } from '../stores/userStore'
 import { getLastKnownLocation } from './location'
+import { matchImageUrls } from './profileImages'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
@@ -66,9 +68,24 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   // on every call. Merge it straight into the store so no component needs to
   // fetch after invoking. Realtime covers the rest (changes from other
   // sources), and both funnels flow through the same applyServerUser entry.
-  // We tag this path as 'invoke' so client-authored fields are skipped —
-  // realtime (post-commit) is the truth source for those.
-  if (fn === 'app' || fn.startsWith('app/')) useUserStore.getState().applyServerUser(data as any, 'invoke')
+  // find/ignore are tagged 'invoke:find' so the store trusts the response's
+  // page1 immediately (no Realtime round-trip wait); every other call stays
+  // 'invoke' so client-authored / game state defers to Realtime.
+  const isFind = fn === 'app/find' || fn === 'app/ignore'
+  if (fn === 'app' || fn.startsWith('app/')) {
+    useUserStore.getState().applyServerUser(data as any, isFind ? 'invoke:find' : 'invoke')
+  }
+  // Look-ahead: app_find/app_ignore return the next 1-2 ranked candidates.
+  // Warm expo-image's disk cache now so the on-arrival prefetch for the
+  // user's NEXT skip is a cache hit. Fire-and-forget, never awaited, never
+  // stored; same exact URLs MatchCard requests (matchImageUrls).
+  if (isFind) {
+    const la = (data as { lookahead?: { user_id: string; images?: any[] }[] } | null)?.lookahead
+    if (Array.isArray(la) && la.length) {
+      const urls = la.flatMap(p => matchImageUrls(p))
+      if (urls.length) Image.prefetch(urls).catch(() => {})
+    }
+  }
   return data
 }
 

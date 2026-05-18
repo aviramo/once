@@ -43,6 +43,33 @@ async function signInWithApple() {
   if (error) throw error
 }
 
+// Store-review sign-in. The app is passwordless and access-gated by group
+// membership, so a reviewer signing up fresh is gated. This fixed
+// email + code hits the `review-login` edge function, which mints a one-time
+// OTP for a dedicated, pre-approved review account (member of the enabled
+// "בדיקה" group). The email is intentionally one a real user would never
+// type; the code gate lives server-side.
+const REVIEW_EMAIL = 'review@once.app'
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
+
+async function signInWithReview(code: string) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/review-login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${SUPABASE_ANON}`,
+    },
+    body: JSON.stringify({ email: REVIEW_EMAIL, code: code.trim() }),
+  })
+  if (!res.ok) throw new Error('review_failed')
+  const { otp } = await res.json()
+  if (!otp) throw new Error('review_failed')
+  const { error } = await supabase.auth.verifyOtp({ email: REVIEW_EMAIL, token: otp, type: 'email' })
+  if (error) throw error
+}
+
 async function sendMagicLink(email: string): Promise<boolean> {
   const { error } = await supabase.auth.signInWithOtp({
     email,
@@ -93,6 +120,10 @@ export default function LoginPage() {
 
   const handleEmail = async (email: string) => sendMagicLink(email)
 
+  const handleReview = async (code: string) => {
+    await signInWithReview(code)
+  }
+
   return (
     <View style={styles.root}>
       {/* Deep-wine PRIMARY surface: the app-wide white status-bar chrome
@@ -117,6 +148,8 @@ export default function LoginPage() {
                 onGoogle={handleGoogle}
                 onApple={handleApple}
                 onEmail={handleEmail}
+                onReview={handleReview}
+                reviewEmail={REVIEW_EMAIL}
                 showApple={Platform.OS === 'ios'}
               />
             </View>

@@ -14,10 +14,10 @@ import { resolveLocationType, type Profile, type LocationType } from '../stores/
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, InfoIcon } from './icons'
+import { HeartIcon, QuoteIcon, InfoIcon, ShieldIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
-import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
+import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatDistance, isDistanceHere } from '../lib/units'
 import { formatLastSeen, isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -287,6 +287,13 @@ type MatchCardProps = {
    * single heart button is rendered (tapping scrolls to the end of the
    * card). The self-profile preview passes [add-photo, add-family]. */
   actions?: CardAction[]
+  /** When provided, a report (flag) RoundButton is appended to the hero
+   * action stack in EVERY state (above whatever primary affordance the state
+   * uses, or as the sole button when there is none). Centralised here so the
+   * report glyph + its placement live once; callers only wire the handler
+   * (open the report confirm for `match`). Omitted for the own-profile
+   * preview / preloader, which never report. */
+  onReport?: () => void
   /** "Wants own (more) kids" preference (`data.family.isForKids`) — only
    * set for the user's own profile preview; remote match snapshots don't
    * carry this. Used by the family card to extend the "No kids" header
@@ -326,6 +333,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   onFamilyTap,
   bioEdit,
   actions,
+  onReport,
   isForKids,
   viewerFamily,
   viewerLocationType,
@@ -688,7 +696,18 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 key: 'like',
                 icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
               }]
-              const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
+              // Report rides as a flag RoundButton in EVERY state — appended
+              // after the state's primary affordance so it sits above it in
+              // the (column-reverse) stack, or stands alone where there's no
+              // primary button. Coral fill + white halo matches the chat-X.
+              const withReport: CardAction[] = onReport
+                ? [...base, {
+                    key: 'report',
+                    icon: <ShieldIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
+                    onPress: onReport,
+                  }]
+                : base
+              const resolved = withReport.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
               return resolved.length > 0 ? <CardActionStack actions={resolved} /> : null
             })()}
           </View>
