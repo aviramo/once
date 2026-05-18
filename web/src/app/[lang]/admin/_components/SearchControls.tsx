@@ -55,7 +55,7 @@ function FilterSelect({
   anyCount?: number;
 }) {
   return (
-    <label className="flex-1 space-y-1 text-sm">
+    <label className="block space-y-1 text-sm">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <select
         value={value}
@@ -192,18 +192,23 @@ export function SearchControls({
       </div>
 
       {open ? (
-        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-muted/30 p-4">
-          {filters.map((f) => (
-            <FilterSelect
-              key={f.key}
-              label={f.label}
-              value={f.value}
-              onChange={f.set}
-              options={f.options}
-              anyLabel={anyLabel}
-              anyCount={anyCount}
-            />
-          ))}
+        <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+          {/* Fixed 2-up grid at every width: never more than 2 filters per
+           * row (incl. desktop), and on a phone each select keeps a usable
+           * width instead of all of them cramming into one unreadable line. */}
+          <div className="grid grid-cols-2 gap-3">
+            {filters.map((f) => (
+              <FilterSelect
+                key={f.key}
+                label={f.label}
+                value={f.value}
+                onChange={f.set}
+                options={f.options}
+                anyLabel={anyLabel}
+                anyCount={anyCount}
+              />
+            ))}
+          </div>
           {activeFilters > 0 ? (
             <button
               type="button"
