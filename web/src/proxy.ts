@@ -58,8 +58,14 @@ export async function proxy(request: NextRequest) {
   const isAdminRoute = pathname.startsWith("/admin");
   const isAdminLogin = pathname === "/admin/login";
   if (isAdminRoute && !isAdminLogin && !user) {
+    // Preserve where they were headed (e.g. the /admin/users/<id> deep-link
+    // from a join-request email) so /auth/callback can bounce them back there
+    // after Google sign-in instead of dumping them on the dashboard.
+    const intended = pathname + request.nextUrl.search;
     const url = request.nextUrl.clone();
     url.pathname = "/admin/login";
+    url.search = "";
+    url.searchParams.set("next", intended);
     return NextResponse.redirect(url);
   }
 

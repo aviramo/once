@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
+import { safeNextPath } from "@/lib/safeNext";
 import { LoginForm } from "./LoginForm";
 
 export default async function AdminLoginPage({
@@ -12,6 +13,9 @@ export default async function AdminLoginPage({
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
   const sp = await searchParams;
+  // Where to land after sign-in (the deep-link the middleware preserved).
+  // Validated to a same-origin path; falls back to the dashboard.
+  const next = safeNextPath(sp.next) ?? "/admin";
   const error =
     typeof sp.error === "string"
       ? sp.error === "not_admin"
@@ -25,7 +29,7 @@ export default async function AdminLoginPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/admin");
+  if (user) redirect(next);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-6">
@@ -46,7 +50,7 @@ export default async function AdminLoginPage({
           </p>
         ) : null}
         <div className="mt-6">
-          <LoginForm dict={dict.admin} />
+          <LoginForm dict={dict.admin} next={next} />
         </div>
       </div>
     </div>

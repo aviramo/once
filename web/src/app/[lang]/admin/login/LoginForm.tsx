@@ -4,9 +4,9 @@ import { useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Dictionary } from "@/i18n/dictionaries";
 
-type Props = { dict: Dictionary["admin"] };
+type Props = { dict: Dictionary["admin"]; next: string };
 
-export function LoginForm({ dict }: Props) {
+export function LoginForm({ dict, next }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -14,7 +14,7 @@ export function LoginForm({ dict }: Props) {
     setError(null);
     startTransition(async () => {
       const supabase = createSupabaseBrowserClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=/admin`;
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },
