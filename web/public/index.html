@@ -57,7 +57,7 @@
         <h1 id="hero-title">הכרויות בזמן אמת, עם אדם אחד בכל פעם</h1>
         <p id="hero-sub">בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.</p>
         <div class="hero-cta">
-          <a class="btn-primary" id="hero-cta-primary" href="#">תעדכנו אותי כשנפתח</a>
+          <a class="btn-primary" id="hero-cta-primary" href="/download">להורדת האפליקציה</a>
         </div>
         <a class="hero-secondary-link" id="hero-cta-secondary" href="#how">איך זה עובד?</a>
         <div class="hero-pills" id="hero-pills">
@@ -210,7 +210,7 @@
         </div>
         <h2 id="cta-title">רוצים להיות בין הראשונים?</h2>
         <p id="cta-sub">Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.</p>
-        <a class="btn-primary" id="cta-button" href="#">תעדכנו אותי כשנפתח</a>
+        <a class="btn-primary" id="cta-button" href="/download">להורדת האפליקציה</a>
         <div class="cta-contact">
           <span id="cta-contact-label">שאלות? פנו אלינו בכתובת</span>
           <a id="cta-contact-link" href="mailto:once.app.support@gmail.com?subject=שאלה%20ל-Once">once.app.support@gmail.com</a>
@@ -251,7 +251,7 @@
           slogan: 'רק אחד עכשיו',
           title: 'הכרויות בזמן אמת, עם אדם אחד בכל פעם',
           sub: 'בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.',
-          ctaPrimary: 'תעדכנו אותי כשנפתח',
+          ctaPrimary: 'להורדת האפליקציה',
           ctaSecondary: 'איך זה עובד?',
           pills: ['אדם אחד', 'בזמן אמת', 'בלי רעשי רקע']
         },
@@ -300,7 +300,7 @@
         cta: {
           title: 'רוצים להיות בין הראשונים?',
           sub: 'Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.',
-          button: 'תעדכנו אותי כשנפתח'
+          button: 'להורדת האפליקציה'
         },
         contact: {
           label: 'שאלות? פנו אלינו בכתובת',
@@ -320,7 +320,7 @@
           slogan: 'Just one. Now.',
           title: 'Real-time dating, one person at a time',
           sub: 'No dozens of open chats. No endless scrolling. Just one meeting, when both of you are really there.',
-          ctaPrimary: 'Let me know when it launches',
+          ctaPrimary: 'Download the app',
           ctaSecondary: 'How it works',
           pills: ['One person', 'Real-time', 'No background noise']
         },
@@ -369,7 +369,7 @@
         cta: {
           title: 'Want to be among the first?',
           sub: 'Once is for people who want to meet in a present, simple, real way.',
-          button: 'Let me know when it launches'
+          button: 'Download the app'
         },
         contact: {
           label: 'Have questions? Contact us at',
@@ -389,7 +389,7 @@
           slogan: 'Только один. Сейчас.',
           title: 'Знакомства в реальном времени, по одному человеку за раз',
           sub: 'Никаких десятков открытых чатов. Никакого бесконечного скролла. Только одна встреча, когда вы оба действительно здесь.',
-          ctaPrimary: 'Сообщите мне, когда откроется',
+          ctaPrimary: 'Скачать приложение',
           ctaSecondary: 'Как это работает',
           pills: ['Один человек', 'В реальном времени', 'Без шума']
         },
@@ -438,7 +438,7 @@
         cta: {
           title: 'Хотите быть среди первых?',
           sub: 'Once создаётся для людей, которые хотят знакомиться по-настоящему, просто и присутствующе.',
-          button: 'Сообщите мне, когда откроется'
+          button: 'Скачать приложение'
         },
         contact: {
           label: 'Есть вопросы? Свяжитесь с нами по адресу',
@@ -520,12 +520,10 @@
       })
     }
 
-    const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdrePIXKQch8L71Y5d0VFURbLiHssdtG6SuAd3zBuASsqCn9A/viewform'
+    const DOWNLOAD_URL = '/download'
     ;['hero-cta-primary', 'cta-button'].forEach(function(id) {
       const btn = document.getElementById(id)
-      btn.href = FORM_URL
-      btn.target = '_blank'
-      btn.rel = 'noopener'
+      btn.href = DOWNLOAD_URL
     })
 
     const langBtn = document.getElementById('lang-btn')
