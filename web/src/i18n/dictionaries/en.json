@@ -223,7 +223,8 @@
       "located": "With location",
       "broadcasting": "Broadcasting",
       "held": "Held credits",
-      "role_gated": "Gated via group"
+      "role_gated": "Gated via group",
+      "join_requested": "Requested to join"
     },
     "narrative": {
       "page1": {
@@ -358,6 +359,11 @@
       "roles": "Groups",
       "rolesHint": "Tick at least one active group so this user can use the app. With no active group they are disabled.",
       "noRoles": "No groups defined in the system.",
+      "joinRequest": "Join request",
+      "joinRequestHint": "The user asked to join and is still gated. Approve them by assigning an active group below, or remove the request (they stay gated and revert to the 'request to join' state in the app).",
+      "joinRequestPending": "Requested to join",
+      "joinRequestRemove": "Remove request",
+      "joinRequestRemoving": "Removing…",
       "summary": "Current status",
       "currentState": "Current state",
       "interactions": "People they interacted with",

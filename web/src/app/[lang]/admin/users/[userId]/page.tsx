@@ -25,7 +25,9 @@ import {
 } from "../../_components/ui";
 import { Disclosure, RevealList } from "../../_components/Disclosure";
 import { UserRolesEditor, type EditorRole } from "./_components/UserGroupsEditor";
+import { JoinRequestCard } from "./_components/JoinRequestCard";
 import { setUserRoleAssignment } from "../../roles/actions";
+import { clearJoinRequest } from "../actions";
 
 type Image = { normal?: string; hash?: string };
 
@@ -53,6 +55,7 @@ type UserRecord = {
       profile?: { user_id?: string; name?: string };
       profiles?: Array<{ user_id?: string; name?: string }>;
     };
+    join_request?: { at?: string } | null;
   } | null;
 };
 
@@ -155,6 +158,7 @@ export default async function UserDetailPage({
   const n2 = page2Narrative(a, u.relations);
   const gender =
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
+  const joinRequestedAt = u.relations?.join_request?.at ?? null;
 
   return (
     <AdminShell dict={a} active="users" backHref="/admin/users">
@@ -220,6 +224,28 @@ export default async function UserDetailPage({
           </div>
         </Card>
       </Section>
+
+      {/* Pending join request — only when the user asked to be let in. Approve
+          via the groups checklist below, or remove the request outright. */}
+      {joinRequestedAt ? (
+        <Section title={d.joinRequest}>
+          <Card>
+            <JoinRequestCard
+              userId={u.user_id}
+              dict={{
+                hint: d.joinRequestHint,
+                pendingText: `${d.joinRequestPending} · ${relativeTime(
+                  joinRequestedAt,
+                  locale,
+                )}`,
+                removeLabel: d.joinRequestRemove,
+                removingLabel: d.joinRequestRemoving,
+              }}
+              action={clearJoinRequest}
+            />
+          </Card>
+        </Section>
+      ) : null}
 
       {/* Roles — multi-select checklist; a disabled role gates the user */}
       <Section title={d.roles}>

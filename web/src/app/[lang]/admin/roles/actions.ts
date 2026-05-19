@@ -98,6 +98,15 @@ export async function setUserRoleAssignment(fd: FormData) {
       .from("user_groups")
       .upsert({ user_id: userId, group_id: roleId }, { onConflict: "user_id,group_id", ignoreDuplicates: true });
     if (error) throw new Error(error.message);
+    // Assigning a user to a group is the admin acting on them — resolve any
+    // pending join request automatically (user request 2026-05-19). Clears
+    // relations.join_request + recomputes availability. Best-effort: a
+    // lingering key is harmless (an available user is already excluded from
+    // the ?seg=join_requested queue), so a cleanup hiccup must not block the
+    // assignment itself; triggerResync below still flips availability.
+    await admin
+      .rpc("app_admin_clear_join_request", { p_user_id: userId })
+      .then(() => undefined, () => undefined);
   } else {
     const { error } = await admin
       .from("user_groups")

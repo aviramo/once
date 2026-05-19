@@ -3,11 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { triggerResync } from "@/lib/resync";
 
 // The middleware rewrites /admin/users -> /[lang]/admin/users, so this is
 // the route segment to revalidate after the reset so the users list
 // reflects the freshly-reset rows.
 const ADMIN_USERS_PATH = "/[lang]/admin/users";
+const USER_PATH = "/[lang]/admin/users/[userId]";
 
 export type ResetResult =
   | { ok: true; users: number }
@@ -38,4 +40,27 @@ export async function resetUsersByRoles(
   revalidatePath(ADMIN_USERS_PATH, "page");
   const users = Number((data as { users?: number } | null)?.users ?? 0);
   return { ok: true, users };
+}
+
+/**
+ * Remove a user's pending join request without approving them. Clears
+ * relations.join_request and recomputes relations.availability via the
+ * app_admin_clear_join_request RPC, so the user drops out of the
+ * ?seg=join_requested queue and — since they stay gated (not in any enabled
+ * group) — their app reverts to the "request to join" CTA (pre-request state).
+ *
+ * triggerResync mirrors the rest of the admin mutations (Realtime + push
+ * reconcile); the cron resync is the safety net if the edge call is slow.
+ */
+export async function clearJoinRequest(userId: string): Promise<void> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  if (!userId) throw new Error("missing_args");
+  const admin = createSupabaseAdmin();
+  const { error } = await admin.rpc("app_admin_clear_join_request", {
+    p_user_id: userId,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath(USER_PATH, "page");
+  revalidatePath(ADMIN_USERS_PATH, "page");
+  await triggerResync();
 }

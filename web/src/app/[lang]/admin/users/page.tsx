@@ -35,6 +35,7 @@ const SEG_VALUES = [
   "broadcasting",
   "held",
   "role_gated",
+  "join_requested",
 ] as const;
 const SELECT = "user_id, name, created_at, last_seen, data, relations";
 // Sentinel role-filter value (can't collide with a uuid) = "users with no role".
@@ -200,6 +201,15 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
         "user_id",
         f.segIds && f.segIds.length ? f.segIds : [NO_MATCH_ID],
       );
+      break;
+    case "join_requested":
+      // Pending "let me into the app" requests. relations.join_request is set
+      // by app_join_request; exclude already-approved (available) users so the
+      // list is the actionable queue (the key is intentionally not cleared on
+      // approval — availability flipping to 'available' drops them here).
+      q = q
+        .not("relations->>join_request", "is", null)
+        .neq("relations->availability->>state", "available");
       break;
   }
   return q;
