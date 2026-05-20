@@ -245,6 +245,13 @@
         "chat": "In a conversation with {name}",
         "chatNoName": "In an active conversation",
         "locked": "Hidden from matches"
+      },
+      "gate": {
+        "group": "Disabled: not in an active group",
+        "push": "Disabled: notifications off",
+        "unavailable": "Disabled: unavailable",
+        "not_yet": "Awaiting area launch",
+        "join_requested": "Requested to join, awaiting approval"
       }
     },
     "outcomes": {

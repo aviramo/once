@@ -1,7 +1,16 @@
 import Log from "../log.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
-import { Notify, PushPresence, PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
+import {
+  ADMIN_USER_URL,
+  EMAIL_FROM,
+  Notify,
+  PushPresence,
+  PushToken,
+  PUSH_BODY,
+  PUSH_TITLE,
+  SUPPORT_EMAIL,
+} from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
 const updatable = ["weekStart", "os", "lang", "push_token", "location_custom", "location_type", "location_label"];
@@ -124,6 +133,29 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
   }
 }
 
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+// A gated user asked to be let into a group. They stay stuck (unavailable)
+// until an admin adds them, so alert the operator with a deep-link to the
+// user's page in the web admin. Fire-and-forget (mirrors firePush): a slow or
+// failed email must never delay or fail the user's request.
+async function sendJoinRequestEmail(log: Log, userId: string, name: string | null) {
+  const displayName = name && name.trim() ? name.trim() : userId;
+  const url = ADMIN_USER_URL(userId);
+  const safeName = escapeHtml(displayName);
+  const subject = `בקשת הצטרפות לקבוצה: ${displayName}`;
+  const html = `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#111">
+  <p><b>${safeName}</b> ביקש/ה להצטרף לקבוצה.</p>
+  <p>לצירוף המשתמש/ת לקבוצה דרך דף הניהול:</p>
+  <p><a href="${url}" style="color:#0a58ca">${url}</a></p>
+</div>`;
+  const entry = log.log("email:join_request", { to: SUPPORT_EMAIL, userId, name: displayName });
+  await Tools.email(entry, { from: EMAIL_FROM, to: SUPPORT_EMAIL, subject, html });
+}
+
 Deno.serve(async (req) => {
   const body = await Tools.getBody(req);
   const segments = new URL(req.url).pathname.split("/").filter(Boolean);
@@ -233,6 +265,25 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "join_request": {
+        // Not-in-any-enabled-group users (server gate reason 'group') ask to
+        // be let in. Records relations.join_request + recomputes availability
+        // (join_requested flips live so the client swaps the "request to
+        // join" CTA for a "waiting for approval" state). Deliberately NOT in
+        // requiresPresence — this is the gated user's only way forward.
+        const result = await Tools.rpc(log, "app_join_request", { me_id: user.user_id });
+        await user.persist(log);
+        if (result?.error) return log.error(key, result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        // Alert the operator so they can approve this user into a group.
+        const jrName = (rpcUser as { name?: string | null } | undefined)?.name
+          ?? (user.db?.new as { name?: string | null } | undefined)?.name
+          ?? null;
+        EdgeRuntime.waitUntil(sendJoinRequestEmail(log, user.user_id, jrName));
+        break;
+      }
+
       case "notif": {
         // Lean notification-permission heartbeat. The client posts this the
         // instant the OS permission changes (foreground poll / return from
@@ -264,9 +315,38 @@ Deno.serve(async (req) => {
       }
 
       case "find": {
-        await user.persist(log);
+        // RPC first, persist (last_seen bump) AFTER — same order as
+        // ignore/cancel/leave/block. Persisting BEFORE app_find broadcast a
+        // Realtime UPDATE whose payload still carried the PRE-find relations
+        // (page1 locked/free). user.persist bumps last_seen while app_find
+        // does not, so that stale event and the app_find event share one
+        // last_seen and the client's strict `ts < lastAppliedLastSeen`
+        // ordering guard cannot drop the stale one — it rolled page1 back to
+        // null for one frame between the trusted invoke:find HTTP result and
+        // the app_find Realtime event, the visible "profile -> empty ->
+        // profile" card flicker on the play button. Running app_find first
+        // means every relations-bearing Realtime event after a find already
+        // reflects the post-find (watching) state.
         const result = await Tools.rpc(log, "app_find", { me_id: user.user_id, force: true, event_key: "find" });
+        await user.persist(log);
         if (result?.error) return log.error("find", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
+      case "skip": {
+        // Per-skip stack advance (new stack-aware client). Idempotent;
+        // app_skip restricts the skipped, splices it out of page1.profiles[],
+        // moves the viewer registration to the new top, and refills when low.
+        // RPC-first then persist — same ordering as `find` (app_skip writes
+        // relations without bumping last_seen; persisting first would
+        // broadcast a stale pre-skip Realtime payload sharing one last_seen).
+        const skipped_id = typeof body.skipped_id === "string" ? body.skipped_id : null;
+        if (!skipped_id) return log.error("skip", "no_skipped_id", 400);
+        const result = await Tools.rpc(log, "app_skip", { me_id: user.user_id, skipped_id });
+        await user.persist(log);
+        if (result?.error) return log.error("skip", result.error, 400);
         rpcUser = result?.user;
         notifyList = result?.notify ?? [];
         break;

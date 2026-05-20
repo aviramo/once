@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext } from 'react'
 import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Platform, TextInput as RNTextInput } from 'react-native'
-import Animated, { SharedValue, useSharedValue, FadeIn, FadeOut } from 'react-native-reanimated'
+import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -13,8 +13,6 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { Button } from '../src/components/Button'
-import { RoundButton } from '../src/components/RoundButton'
-import { Spinner } from '../src/components/Spinner'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
 import { PullContext, type PullCtx } from '../src/components/HomeCard'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
@@ -22,12 +20,12 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SPINNER, lh } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, PlayIcon, PauseIcon, CheckIcon, StarIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, StarIcon } from '../src/components/icons'
 import { creditBalance, formatNextGrant, creditTier, CREDIT_TIER, starsText } from '../src/lib/credits'
-import { visibilityConfirmFor } from '../src/components/visibilityConfirms'
 import { BottomSheet } from '../src/components/BottomSheet'
+import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
@@ -604,7 +602,7 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
         <View style={styles.accountActionRow} {...signOutTap}>
           <SignOutIcon color={BLACK} />
           {/* Wrap label in flex:1 row so the Text auto-flips to the logical
-              start side on iOS RTL. See the note above GameModeCard. */}
+              start side on iOS RTL — more reliable than textAlign alone. */}
           <View style={styles.accountActionTextWrap}>
             <Text style={[styles.accountActionText, { color: BLACK }]} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
           </View>
@@ -637,7 +635,7 @@ function AgeRangePopup({
   const insets = useSafeAreaInsets()
   const [fromText, setFromText] = useState(String(ageMin))
   const [toText, setToText] = useState(String(ageMax))
-  const [kbHeight, setKbHeight] = useState(0)
+  const kbHeight = useKeyboardHeight()
   const fromRef = useRef<RNTextInput>(null)
   const toRef = useRef<RNTextInput>(null)
 
@@ -647,14 +645,6 @@ function AgeRangePopup({
       setToText(String(ageMax))
     }
   }, [visible, ageMin, ageMax])
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const showSub = Keyboard.addListener(showEvent, e => setKbHeight(e.endCoordinates?.height ?? 0))
-    const hideSub = Keyboard.addListener(hideEvent, () => setKbHeight(0))
-    return () => { showSub.remove(); hideSub.remove() }
-  }, [])
 
   const handleDismiss = () => {
     const parsedMin = parseInt(fromText, 10)
@@ -672,8 +662,7 @@ function AgeRangePopup({
     <BottomSheet
       visible={visible}
       onDismiss={handleDismiss}
-      keyboardAvoiding
-      cardWrapStyle={Platform.OS !== 'ios' && kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
+      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
       contentStyle={[agePopupStyles.card, { paddingBottom: Math.max(insets.bottom, SM) + SM }]}
     >
       <View style={agePopupStyles.row}>
@@ -819,8 +808,8 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
     <View {...tapProps}>
       <View style={[selectListStyles.row, pressed && { backgroundColor: BLACK_SOFT }]}>
         {/* labelWrap is flexDirection:'row' so the Text child auto-flips to
-            the logical start side (right in RTL). See the wrap-in-row note
-            above GameModeCard — more reliable on iOS than textAlign alone. */}
+            the logical start side (right in RTL) — more reliable on iOS than
+            textAlign alone. */}
         <View style={selectListStyles.labelWrap}>
           {icon ? <View style={selectListStyles.rowIcon}>{icon}</View> : null}
           <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
@@ -990,10 +979,11 @@ function LocationPopup({
   const [pendingType, setPendingType] = useState<'home' | 'work'>('home')
   const sessionTokenRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
-  // Android keyboard tracking — Modal + statusBarTranslucent prevents the
-  // window-resize-based avoidance from working, so we shrink the sheet height
-  // and add marginBottom to lift it above the keyboard.
-  const [kbHeight, setKbHeight] = useState(0)
+  // Keyboard tracking — Modal + statusBarTranslucent prevents window-resize
+  // avoidance on both platforms (BottomSheet no longer carries a global lift),
+  // so we shrink the sheet height and add marginBottom to lift it above the
+  // keyboard. Applies to iOS and Android alike.
+  const kbHeight = useKeyboardHeight()
 
   // Reset every time the sheet opens.
   useEffect(() => {
@@ -1010,14 +1000,6 @@ function LocationPopup({
     sessionTokenRef.current = ''
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
   }, [visible])
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const showSub = Keyboard.addListener(showEvent, e => setKbHeight(e.endCoordinates?.height ?? 0))
-    const hideSub = Keyboard.addListener(hideEvent, () => setKbHeight(0))
-    return () => { showSub.remove(); hideSub.remove() }
-  }, [])
 
   // Mint a session token on first entry to the address step. The same token
   // covers every keystroke in that session and the final placeDetails call,
@@ -1112,11 +1094,9 @@ function LocationPopup({
     }
   }
 
-  // Compute the effective sheet height. While the keyboard is up on Android
-  // we have to shrink the sheet AND lift it via marginBottom; on iOS the
-  // BottomSheet's KeyboardAvoidingView padding handles the lift, so we just
-  // shrink the height.
-  const isAndroidKb = Platform.OS !== 'ios' && kbHeight > 0
+  // While the keyboard is up we shrink the sheet AND lift it via marginBottom.
+  // BottomSheet no longer carries a global keyboard lift, so this nudge must
+  // apply on iOS too.
   const addressEffectiveH = kbHeight > 0
     ? Math.max(240, addressSheetH - kbHeight)
     : addressSheetH
@@ -1125,10 +1105,9 @@ function LocationPopup({
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      keyboardAvoiding={step === 'address'}
       cardWrapStyle={step === 'address' ? {
         height: addressEffectiveH,
-        ...(isAndroidKb ? { marginBottom: kbHeight } : {}),
+        ...(kbHeight > 0 ? { marginBottom: kbHeight } : {}),
       } : undefined}
       contentStyle={step === 'address' ? locationPopupStyles.addressCard : selectListStyles.card}
     >
@@ -2499,143 +2478,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   )
 }
 
-// Wraps a section label text in a row container so flexDirection:'row'
-// auto-flipping places the label on the logical start side (right in RTL,
-// left in LTR) reliably — textAlign/writingDirection alone proved
-// inconsistent at runtime.
-function GameModeCard() {
-  const profile = useUserStore(s => s.profile)
-  const relations = profile?.relations as {
-    page2State?: 'free' | 'pending' | 'chat' | 'locked'
-    watchers?: Profile[]
-    page2?: unknown
-    page1?: { state?: 'free' | 'watching' | 'waiting' | 'chat' | 'locked'; profile?: Profile }
-    last_add_at?: string
-  } | null | undefined
-
-  const page1State = relations?.page1?.state
-  const page1HasPartner = !!relations?.page1?.profile?.user_id
-  const page2State = relations?.page2State
-  const page2Raw = relations?.page2
-  const page2InviteObj = page2Raw && !Array.isArray(page2Raw) ? page2Raw : null
-  const watchers = Array.isArray(relations?.watchers) ? relations!.watchers! : []
-
-  // Broadcast is "active" while the 30m app_add cooldown is still running
-  // (see home.tsx for the canonical derivation). Pausing while broadcasting
-  // kicks every freshly-pulled candidate — same destructive ripple as
-  // pausing with watchers present — so it must go through the confirm path.
-  const ADD_COOLDOWN_MS = 30 * 60 * 1000
-  const lastAddAtMs = (() => {
-    const raw = relations?.last_add_at
-    if (typeof raw !== 'string') return 0
-    const t = Date.parse(raw)
-    return Number.isFinite(t) ? t : 0
-  })()
-  const broadcastActive = !!lastAddAtMs && (Date.now() - lastAddAtMs) < ADD_COOLDOWN_MS
-
-  // "Pause mode" reads off the canonical pair: both pages locked with no
-  // live partner/profile on either side. Anything else counts as Game mode.
-  const isOff = page1State === 'locked' && page2State === 'locked'
-    && !page1HasPartner && !page2InviteObj
-  // An active invitation (outgoing waiting / incoming pending) or a live chat
-  // on EITHER page is a transient state whose own pane owns the resolution
-  // flow. Hide the toggle entirely while any of those are open — it would be
-  // inert and just clutter the photo.
-  const hidden =
-    page1State === 'waiting' || page1State === 'chat'
-    || page2State === 'pending' || page2State === 'chat'
-  const isActive = !isOff && !hidden
-
-  // Whether switching to pause mode would notify someone: broadcasting in
-  // flight, watchers in page2.profiles[], a pending invite incoming, a
-  // watching/waiting/chat partner on page1. When none of those apply, the
-  // press commits without a confirm prompt.
-  const hasSideEffects = broadcastActive
-    || watchers.length > 0
-    || page2State === 'pending'
-    || (page1HasPartner && page1State !== 'locked' && page1State !== 'free')
-
-  const [busy, setBusy] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-
-  const performToggle = useCallback(async (endpoint: 'app/pause' | 'app/resume') => {
-    setBusy(true)
-    try {
-      await invoke(endpoint, {})
-    } catch (e) {
-      console.error(e)
-    }
-    setBusy(false)
-  }, [])
-
-  const handlePress = useCallback(() => {
-    if (busy) return
-    if (hidden) { tapWarning(); return }
-    tap()
-    if (isOff) {
-      performToggle('app/resume')
-    } else if (!hasSideEffects) {
-      performToggle('app/pause')
-    } else {
-      setConfirmOpen(true)
-    }
-  }, [busy, hidden, isOff, hasSideEffects, performToggle])
-
-  // Currently active → glyph is Pause. Otherwise → Play (invites resume).
-  const showPause = isActive
-
-  // Confirm-popup copy/icon mirrors the visibility-toggle popups: ask the
-  // same question we'd ask if the user reached for the same destructive
-  // ripple via the toggle. The shared resolver returns the broadcast or
-  // hide-profile variant when one applies; otherwise (a watching partner on
-  // page1, etc.) we fall back to the generic pause copy. The confirm action
-  // itself is `app/pause` regardless of which variant is shown — see
-  // onConfirm below.
-  const sharedConfirm = visibilityConfirmFor({ broadcastActive, watchersCount: watchers.length })
-  const confirmTitle = sharedConfirm?.title ?? t('settings.gameMode.offConfirmTitle')
-  const confirmDesc = sharedConfirm?.description ?? tg('settings.gameMode.offConfirmDesc', profile?.is_male)
-  const confirmLabel = sharedConfirm?.confirmLabel ?? t('settings.gameMode.offConfirmButton')
-  const topIcon = sharedConfirm?.topIcon ?? <PauseIcon color={PRIMARY} size={32} />
-
-  // Hidden entirely while a transient interaction (pending invite, outgoing
-  // waiting, in-chat) owns the resolution flow elsewhere. The overlay would
-  // be non-interactive in those states and just clutter the photo. The
-  // ConfirmDialog can only open from the interactive path, so unmounting it
-  // alongside is safe.
-  if (hidden) return null
-
-  return (
-    <>
-      <Animated.View
-        entering={FadeIn}
-        exiting={FadeOut}
-        style={styles.gameModeOverlay}
-      >
-        <RoundButton onPress={handlePress}>
-          {busy ? (
-            <Spinner color={WHITE} size={SPINNER.sizeLg} thickness={SPINNER.thicknessLg} />
-          ) : showPause ? (
-            <PauseIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />
-          ) : (
-            <PlayIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />
-          )}
-        </RoundButton>
-      </Animated.View>
-
-      <ConfirmDialog
-        visible={confirmOpen}
-        title={confirmTitle}
-        description={confirmDesc}
-        confirmLabel={confirmLabel}
-        icon={topIcon}
-        onCancel={() => { if (!busy) setConfirmOpen(false) }}
-        onConfirm={() => { performToggle('app/pause'); setConfirmOpen(false) }}
-        busy={busy}
-        draggable
-      />
-    </>
-  )
-}
 
 type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
 
@@ -2661,34 +2503,31 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
           bounces={false}
           overScrollMode="never"
         >
-          <View style={styles.profileCardWrap}>
-            <Pressable
-              style={styles.profileCard}
-              onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
-            >
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
-              ) : (
-                <View style={styles.profileCardPlaceholder}>
-                  <TabIcon tab="profile" color={BLACK_STRONG} />
-                </View>
-              )}
-              <Svg style={styles.profileCardScrim} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
-                <Defs>
-                  <SvgLinearGradient id="profileScrim" x1="0" y1="0" x2="0" y2="1">
-                    <Stop offset="0" stopColor={BLACK} stopOpacity="0" />
-                    <Stop offset="0.55" stopColor={BLACK} stopOpacity="0.55" />
-                    <Stop offset="1" stopColor={BLACK} stopOpacity="1" />
-                  </SvgLinearGradient>
-                </Defs>
-                <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
-              </Svg>
-              <View style={styles.profileCardCaption} pointerEvents="none">
-                <Text style={styles.profileCardTitle}>{t('settings.profile')}</Text>
+          <Pressable
+            style={styles.profileCard}
+            onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
+          >
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.profileCardPlaceholder}>
+                <TabIcon tab="profile" color={BLACK_STRONG} />
               </View>
-            </Pressable>
-            <GameModeCard />
-          </View>
+            )}
+            <Svg style={styles.profileCardScrim} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
+              <Defs>
+                <SvgLinearGradient id="profileScrim" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={BLACK} stopOpacity="0" />
+                  <Stop offset="0.55" stopColor={BLACK} stopOpacity="0.55" />
+                  <Stop offset="1" stopColor={BLACK} stopOpacity="1" />
+                </SvgLinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
+            </Svg>
+            <View style={styles.profileCardCaption} pointerEvents="none">
+              <Text style={styles.profileCardTitle}>{t('settings.profile')}</Text>
+            </View>
+          </Pressable>
 
           <View style={styles.optionsWrap}>
             <PreferencesContent onOpenSubPage={onOpenSubPage} />
@@ -2788,32 +2627,16 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
     marginBottom: MD,
   },
-  // Relative-positioned wrapper so the GameModeCard overlay anchors to the
-  // photo card's box. Sits flush with the tab strip (no top margin) and
-  // owns no horizontal margin, so the card spans the full screen width.
-  profileCardWrap: {
-    position: 'relative',
-  },
   // 16/9 minimum height (PROFILE_CARD_MIN_HEIGHT). Image, scrim and caption
   // are all absolute fills/bands, so nothing drives layout and the card holds
   // a stable min height. The caption is pinned to the BOTTOM THIRD of the
   // photo and centered within that band ("Edit your profile" sits low on the
-  // image, not dead-center); the pause button stays an absolute top-left
-  // overlay so it never collides.
+  // image, not dead-center). Sits flush with the tab strip (no top margin)
+  // and owns no horizontal margin, so the card spans the full screen width.
   profileCard: {
     width: '100%', minHeight: PROFILE_CARD_MIN_HEIGHT,
     overflow: 'hidden',
     backgroundColor: WHITE_SOFT,
-  },
-
-  // Game-mode toggle — overlay anchored to the profile-card hero image.
-  // The circular button itself is a RoundButton (visual + tap feedback);
-  // this style only positions it.
-  gameModeOverlay: {
-    position: 'absolute',
-    top: MD,
-    left: MD,
-    zIndex: 2,
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },

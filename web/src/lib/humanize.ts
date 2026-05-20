@@ -28,6 +28,15 @@ export type Relations =
         profile?: ProfileMini;
         profiles?: unknown[] | null;
       } | null;
+      /** Availability gate (group-membership / notification-presence / area).
+       * Written by user_availability(); `reason` is set only when gated. */
+      availability?: {
+        state?: string;
+        reason?: string | null;
+      } | null;
+      /** Set by app_join_request when a gated user asks to be let in;
+       * cleared by app_admin_clear_join_request / on group assignment. */
+      join_request?: { at?: string } | null;
     }
   | null
   | undefined;
@@ -108,6 +117,42 @@ export function page1Narrative(d: AdminDict, rel: Relations): Narrative {
   }
 }
 
+/**
+ * The availability gate, as one sentence + tone — or `null` when the user is
+ * NOT gated (available, or no gate computed yet so we genuinely don't know).
+ *
+ * A gated user is out of the matching pool entirely: not in any enabled group,
+ * notifications off, or the covering area hasn't opened. Their seed
+ * `page1.state` stays `'free'`, so without this the list would claim "free,
+ * waiting for a match" for someone who can't be matched at all. The reason is
+ * read straight from `relations.availability.reason` (`'group'` / `'push'`),
+ * with a generic fallback when the reason is absent.
+ *
+ * A pending join request (`relations.join_request`, set when a group-gated user
+ * pressed "let me in") takes over the line — it's an actionable item waiting on
+ * the admin, shown in the `busy` tone so it stands out from the terminal grey
+ * "disabled". It does not apply to the `push` reason (joining a group can't
+ * fix notifications being off).
+ */
+export function availabilityNarrative(
+  d: AdminDict,
+  rel: Relations,
+): Narrative | null {
+  const av = rel?.availability;
+  const state = av?.state;
+  if (!state || state === "available") return null;
+  const g = d.narrative.gate as Record<string, string>;
+  if (state === "not_yet") return { text: g.not_yet, tone: "idle" };
+  if (state === "unavailable") {
+    const reason = av?.reason ?? "";
+    if (reason !== "push" && rel?.join_request?.at != null) {
+      return { text: g.join_requested, tone: "busy" };
+    }
+    return { text: g[reason] ?? g.unavailable, tone: "idle" };
+  }
+  return null;
+}
+
 /** The user's side board (incoming invites / viewers), as one sentence. */
 export function page2Narrative(d: AdminDict, rel: Relations): Narrative {
   const p2 = rel?.page2;
@@ -153,6 +198,12 @@ export function userActivity(d: AdminDict, rel: Relations): Narrative {
       ? page1Narrative(d, rel)
       : page2Narrative(d, rel);
   }
+  // The availability gate is a top-level fact: a gated user is out of the pool
+  // entirely, so "free, waiting for a match" / "not active" would be a lie. It
+  // outranks every non-chat board state. `waiting`/`pending` are teardown-exempt
+  // in-flight interactions (the gate never tears them down) so they still show.
+  const gate = availabilityNarrative(d, rel);
+  if (gate && s1 !== "waiting" && s2 !== "pending") return gate;
   if (s1 === "waiting") return page1Narrative(d, rel);
   if (s2 === "pending") return page2Narrative(d, rel);
   if (s1 === "watching") return page1Narrative(d, rel);

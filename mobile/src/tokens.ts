@@ -131,6 +131,15 @@ export const PAN_FAIL_OFFSET_Y = -8        // upward drag cancels
 // "Once"/Settings the instant the drag reaches the commit point). One
 // constant so the commit point and every consumer can never drift apart.
 export const PULL_COMMIT_FRACTION = 0.5
+// Skip-gesture RESISTANCE (page1 skip / page2 decline only — NOT the profile
+// sheet, which should dismiss freely). The card follows the finger at this
+// fraction of its speed up to the commit point, so the user must drag
+// deliberately far for the card position to reach the half-screen threshold
+// — a stray short drag barely moves it and can't skip a person by accident.
+// Commit is keyed on the RESISTED card position (pullY), so this is also the
+// effective effort gate: required finger travel ≈ commit distance / this.
+// 1 = no resistance (legacy). Lower = firmer. Tune here only (single source).
+export const PULL_RESIST = 0.6
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,
@@ -163,17 +172,28 @@ export const MOTION = {
 // above any legitimate find so it can only fire on a genuine hang.
 export const SEARCH_WATCHDOG_SLACK_MS = 6_000
 
-// ── Shadow gradient stops ──────────────────────────────────────────────────
-// Used to paint a 20-layer translucent-black gradient above bottom sheets so
-// the sheet feels lifted off the screen. All sheets share this exact stack —
-// if you want a different lift, fork via a prop, not by redefining the array.
+// ── page1 candidate stack (Tinder/Bumble) ──────────────────────────────────
+// Server fills relations.page1.profiles[] up to this size; every app/skip
+// pops the front and the SAME call appends one fresh tail card, so the stack
+// stays at STACK_SIZE forever (no separate "near the end" refill request).
+// The client renders stack[0] with stack[1] mounted statically behind it and
+// prefetches the images of the next few. MIRRORED in the SQL helpers
+// (app_find / app_skip / app_find REFILL all hardcode 10) — keep in lockstep,
+// same discipline as the credits / 30-min broadcast constants.
+export const STACK_SIZE = 10
+// How many upcoming stack cards' images to warm in expo-image's disk cache
+// after each skip (the visible card + a small look-ahead). Purely a client
+// prefetch depth; unrelated to the server stack size.
+export const STACK_PREFETCH_AHEAD = 3
 
-export const SHADOW_GRADIENT_STOPS = [
-  0.005, 0.01, 0.012, 0.015, 0.018, 0.02, 0.022, 0.025, 0.028, 0.03,
-  0.032, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075,
-] as const
+// ── Bottom-sheet lift shadow ───────────────────────────────────────────────
+// Soft upward shadow that floats every BottomSheet off the backdrop. A single
+// native boxShadow (the building-native-ui skill: never hand-stack shadow
+// layers — use boxShadow). Replaces the old 20-View SHADOW_GRADIENT_* stack:
+// same gentle lift, 1 node per popup instead of 20. All sheets share this; for
+// a different lift fork via a prop, not by redefining the string.
 
-export const SHADOW_GRADIENT_HEIGHT = 60
+export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
 
 // ── Misc UI dimensions ─────────────────────────────────────────────────────
 

@@ -97,6 +97,12 @@ export default {
   'home.near.wh_m': 'גר ליד העבודה שלך',
   'home.near.wh_f': 'גרה ליד העבודה שלך',
   'home.near.ww': 'שכנים בעבודה',
+  // Merged proximity chip (distance + relative last-seen in one phrase).
+  // prefix rides only on the non-near distance part; join sits between the
+  // distance and time parts; hereNow is the live device device override.
+  'home.prox.prefix': 'במרחק ',
+  'home.prox.join': ' ',
+  'home.prox.hereNow': 'כאן ועכשיו',
 
   // Location
 
@@ -333,6 +339,17 @@ export default {
   'match.daysAgo': 'מחובר לפני {n} ימים',
   'match.daysAgo_m': 'מחובר לפני {n} ימים',
   'match.daysAgo_f': 'מחוברת לפני {n} ימים',
+  // Relative time, genderless and without the "מחובר" prefix: the suffix of
+  // the merged proximity chip (formatAgo). Standalone status keeps match.*Ago.
+  'match.ago.now': 'עכשיו',
+  'match.ago.min': 'לפני דקה',
+  'match.ago.mins': 'לפני {n} דקות',
+  'match.ago.hr': 'לפני שעה',
+  'match.ago.hrs2': 'לפני שעתיים',
+  'match.ago.hrs': 'לפני {n} שעות',
+  'match.ago.day': 'לפני יום',
+  'match.ago.days2': 'לפני יומיים',
+  'match.ago.days': 'לפני {n} ימים',
   'match.connected': 'מחובר',
   'match.connected_m': 'מחובר',
   'match.connected_f': 'מחוברת',
@@ -410,10 +427,12 @@ export default {
   'home.visibility.hidden': 'מוסתר',
   'home.visibility.visible': 'גלוי',
   'home.visibility.broadcast': 'שידור',
-  'home.removeWatcherTitle': 'הסרת צופה',
-  'home.removeWatcherDesc_m': '{name} יוסר מרשימת הצופים ויקבל התראה על כך.',
-  'home.removeWatcherDesc_f': '{name} תוסר מרשימת הצופים ותקבל התראה על כך.',
-  'home.removeWatcherConfirm': 'הסרה',
+  'home.removeWatcherTitle': 'להסיר מהצופים?',
+  'home.removeWatcherDesc_mm': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסיר, הוא לא יוכל להמשיך לצפות בך.',
+  'home.removeWatcherDesc_mf': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסיר, היא לא תוכל להמשיך לצפות בך.',
+  'home.removeWatcherDesc_fm': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסירי, הוא לא יוכל להמשיך לצפות בך.',
+  'home.removeWatcherDesc_ff': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסירי, היא לא תוכל להמשיך לצפות בך.',
+  'home.removeWatcherConfirm': 'להסיר',
 
   // Home — match teaser
   'home.tapForMore': 'בחזרה למשחק',
@@ -629,10 +648,12 @@ export default {
   'home.waitingFirstInLineSubtext_f': 'נעדכן אותך כשהיא תענה.',
   'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
   'home.cancelWaitingBtn': 'ביטול הזמנה',
-  'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. {name} יהיה זמין שוב לאנשים אחרים',
-  'home.cancelWaitingDesc_m': 'ההזמנה תבוטל מיד. {name} יהיה זמין שוב לאנשים אחרים',
-  'home.cancelWaitingDesc_f': 'ההזמנה תבוטל מיד. {name} תהיה זמינה שוב לאנשים אחרים',
-  'home.cancelWaitingConfirm': 'לבטל את ההזמנה',
+  'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין.',
+  'home.cancelWaitingDesc_mm': 'ההזמנה תבוטל מיד. הוא יחזור להיות זמין לאחרים, וגם אתה תוכל להמשיך להזמין.',
+  'home.cancelWaitingDesc_mf': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין.',
+  'home.cancelWaitingDesc_fm': 'ההזמנה תבוטל מיד. הוא יחזור להיות זמין לאחרים, וגם את תוכלי להמשיך להזמין.',
+  'home.cancelWaitingDesc_ff': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם את תוכלי להמשיך להזמין.',
+  'home.cancelWaitingConfirm': 'לבטל הזמנה',
   'home.refuseReplyTitle': 'לדחות את ההזמנה?',
   'home.refuseReplyDesc': 'ההזמנה תיסגר, והצד השני יקבל עדכון',
   'home.refuseReplyDesc_m': 'ההזמנה תיסגר, והצד השני יקבל עדכון',

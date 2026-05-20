@@ -97,6 +97,12 @@ export default {
   'home.near.wh_m': 'he lives right by your work',
   'home.near.wh_f': 'she lives right by your work',
   'home.near.ww': 'work neighbors',
+  // Merged proximity chip (distance + relative last-seen in one phrase).
+  // English needs no distance prefix but a comma join reads better than a
+  // bare space; hereNow is the live device device override.
+  'home.prox.prefix': '',
+  'home.prox.join': ', ',
+  'home.prox.hereNow': 'here, now',
 
   // Location
 
@@ -329,6 +335,17 @@ export default {
   'match.daysAgo': 'Online {n} days ago',
   'match.daysAgo_m': 'Online {n} days ago',
   'match.daysAgo_f': 'Online {n} days ago',
+  // Relative time without the "Online" prefix: the suffix of the merged
+  // proximity chip (formatAgo). Standalone status keeps match.*Ago.
+  'match.ago.now': 'just now',
+  'match.ago.min': '1 min ago',
+  'match.ago.mins': '{n} min ago',
+  'match.ago.hr': '1 hr ago',
+  'match.ago.hrs2': '2 hr ago',
+  'match.ago.hrs': '{n} hr ago',
+  'match.ago.day': '1 day ago',
+  'match.ago.days2': '2 days ago',
+  'match.ago.days': '{n} days ago',
   'match.connected': 'Connected',
   'match.connected_m': 'Connected',
   'match.connected_f': 'Connected',
@@ -391,8 +408,8 @@ export default {
   'home.visibility.hidden': 'Hidden',
   'home.visibility.visible': 'Visible',
   'home.visibility.broadcast': 'Broadcast',
-  'home.removeWatcherTitle': 'Remove watcher',
-  'home.removeWatcherDesc': '{name} will be removed from your watchers list and notified.',
+  'home.removeWatcherTitle': 'Remove watcher?',
+  'home.removeWatcherDesc': 'You can\'t open this profile from here. If you remove them, they won\'t be able to keep watching you.',
   'home.removeWatcherConfirm': 'Remove',
 
   // Home — match teaser
@@ -596,7 +613,11 @@ Just a moment, just the two of you`,
   'home.waitingFirstInLineSubtext_f': 'We\'ll let you know if she responds.',
   'home.cancelWaitingTitle': 'Cancel invitation?',
   'home.cancelWaitingBtn': 'Cancel invitation',
-  'home.cancelWaitingDesc': 'The invitation will be canceled immediately. {name} will be available to others again',
+  'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting.',
+  'home.cancelWaitingDesc_mm': 'Your invitation will be canceled now. He\'ll be available to others again, and you can keep inviting.',
+  'home.cancelWaitingDesc_mf': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting.',
+  'home.cancelWaitingDesc_fm': 'Your invitation will be canceled now. He\'ll be available to others again, and you can keep inviting.',
+  'home.cancelWaitingDesc_ff': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting.',
   'home.cancelWaitingConfirm': 'Cancel invitation',
   'home.refuseReplyTitle': 'Decline invitation?',
   'home.refuseReplyDesc': 'The invitation will be closed, and the other person will be notified',

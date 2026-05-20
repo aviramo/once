@@ -1,6 +1,7 @@
 import { getLocales } from 'expo-localization'
 import { t, tg } from '../i18n'
 import type { LocationType } from '../stores/userStore'
+import { formatAgo, isLastSeenJustNow } from './lastSeen'
 
 // Distance unit system, derived once from the device locale.
 // Countries that use the imperial system for everyday distance.
@@ -54,4 +55,39 @@ export function formatDistance(
       : `${km.toFixed(1)} ${t('settings.km')}`
   }
   return tg(`home.dist.${ab}` as Parameters<typeof tg>[0], isMale).replace('{d}', d)
+}
+
+// Merged proximity chip: ONE phrase combining the anchor-aware distance and
+// the relative last-seen, replacing the old two separate time + distance
+// chips. It reuses formatDistance verbatim (so all 9 viewer×subject anchor
+// combos + the "near" phrasing stay single-sourced) and appends formatAgo's
+// genderless time tail. Shape (Hebrew): "במרחק 20 mi ממך לפני 6 דקות"; the
+// "במרחק" prefix rides only on the non-near distance part, the near phrase
+// ("ממש כאן" / "ממש ליד הבית שלה") stands on its own. True live device↔device
+// proximity collapses both parts into a single "כאן ועכשיו". hideTime (chat /
+// locked-with-message states) drops the time tail; a missing distance drops
+// the distance part — the chip degrades to whichever part exists.
+export function formatProximity(
+  m: number | null | undefined,
+  lastSeenIso: string | null | undefined,
+  isMale?: boolean | null,
+  viewerType: LocationType = 'device',
+  subjectType: LocationType = 'device',
+  hideTime = false,
+): string {
+  const hasDist = m != null && !isNaN(m)
+  const near = isDistanceHere(m)
+  const ab = `${viewerType[0]}${subjectType[0]}`
+  const justNow = !hideTime && isLastSeenJustNow(lastSeenIso)
+  // "Here and now" only reads true for live device↔device proximity; any
+  // fixed anchor on either side keeps the explicit near phrase + time.
+  if (hasDist && near && justNow && ab === 'dd') return t('home.prox.hereNow')
+  const distPart = !hasDist
+    ? ''
+    : near
+      ? formatDistance(m, isMale, viewerType, subjectType)
+      : t('home.prox.prefix') + formatDistance(m, isMale, viewerType, subjectType)
+  const timePart = hideTime ? '' : formatAgo(lastSeenIso)
+  if (distPart && timePart) return distPart + t('home.prox.join') + timePart
+  return distPart || timePart
 }

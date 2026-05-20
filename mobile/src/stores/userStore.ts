@@ -51,7 +51,12 @@ type ServerPage2State = 'free' | 'pending' | 'chat' | 'locked'
 
 interface Page1 {
   state: ServerPage1State
+  /** Single counterpart for waiting/chat/locked, AND the back-compat mirror
+   * of profiles[0] while watching (old builds read this). */
   profile?: Profile
+  /** Candidate STACK, present only while state='watching' (up to STACK_SIZE).
+   * profile === profiles[0] (the visible top). */
+  profiles?: Profile[]
   message?: string
   invited_at?: string
   expires_at?: string
@@ -95,6 +100,10 @@ interface PagesCompat {
   page1?: Page1
   page2: Profile[] | Page2Invite
   match?: Profile | null
+  /** page1 candidate stack (watching only). stack[0] === match. The home
+   * pane renders stack[0] with stack[1] mounted statically behind it. Empty
+   * for every non-watching state. */
+  stack?: Profile[]
   watchers?: Profile[]
   /** Raw v3 page2.state, preserved so UI can branch on `locked` separately
    * from the synthesized legacy shape (which folds locked-no-profile into
@@ -221,12 +230,21 @@ function deriveCompat(relations: Pages | null | undefined) {
     ? (page2.profiles as Profile[])
     : []
 
-  // Match represents the other person whose card the home pane is showing.
-  // After clear1, page1 stays {state: 'locked'} with profile still attached
-  // server-side, but synthesized state goes to null — the card should slide
-  // out. Gating match on state prevents the locked-no-message profile from
-  // keeping the card mounted.
-  const match: Profile | null = state && page1?.profile ? (page1.profile as Profile) : null
+  // Candidate stack — present only while watching. profile is the back-compat
+  // mirror of stack[0]; prefer the array, fall back to the single profile.
+  const stack: Profile[] = page1?.state === 'watching' && Array.isArray(page1.profiles)
+    ? (page1.profiles as Profile[])
+    : []
+
+  // Match represents the other person whose card the home pane is showing
+  // (the top of the stack while watching). After clear1, page1 stays
+  // {state: 'locked'} with profile still attached server-side, but
+  // synthesized state goes to null — the card should slide out. Gating match
+  // on state prevents the locked-no-message profile from keeping the card
+  // mounted.
+  const match: Profile | null = state
+    ? ((stack[0] as Profile | undefined) ?? (page1?.profile as Profile | undefined) ?? null)
+    : null
 
   let legacyPage2: Profile[] | Page2Invite
   if (page2?.state === 'pending' && page2.profile) {
@@ -253,7 +271,7 @@ function deriveCompat(relations: Pages | null | undefined) {
   }
 
   return {
-    state, watchers, match, legacyPage2,
+    state, watchers, match, stack, legacyPage2,
     page2State: (page2?.state ?? 'free') as ServerPage2State,
     page2Message: page2?.message,
   }
@@ -270,6 +288,7 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
   const relationsWithCompat: Record<string, unknown> = { ...(relations ?? {}) }
   relationsWithCompat.watchers = compat.watchers
   relationsWithCompat.match = compat.match
+  relationsWithCompat.stack = compat.stack
   relationsWithCompat.page2 = compat.legacyPage2
   relationsWithCompat.page2State = compat.page2State
   if (compat.page2Message !== undefined) {

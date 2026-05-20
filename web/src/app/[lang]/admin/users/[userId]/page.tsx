@@ -10,6 +10,7 @@ import { fetchPartnerSummaries } from "@/lib/interactions";
 import {
   page1Narrative,
   page2Narrative,
+  availabilityNarrative,
   eventLabel,
   restrictionLabel,
   statusResult,
@@ -55,6 +56,7 @@ type UserRecord = {
       profile?: { user_id?: string; name?: string };
       profiles?: Array<{ user_id?: string; name?: string }>;
     };
+    availability?: { state?: string; reason?: string | null } | null;
     join_request?: { at?: string } | null;
   } | null;
 };
@@ -156,6 +158,7 @@ export default async function UserDetailPage({
   const email = authUser?.user?.email ?? null;
   const n1 = page1Narrative(a, u.relations);
   const n2 = page2Narrative(a, u.relations);
+  const gate = availabilityNarrative(a, u.relations);
   const gender =
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
   const joinRequestedAt = u.relations?.join_request?.at ?? null;
@@ -175,6 +178,9 @@ export default async function UserDetailPage({
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {gate ? (
+              <StatusBadge tone={gate.tone}>{gate.text}</StatusBadge>
+            ) : null}
             <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
             <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
           </div>

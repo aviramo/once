@@ -57,6 +57,40 @@ export default class Tools {
     }
   }
 
+  // Transactional email via Resend. Same fire-and-forget contract as notify():
+  // always called behind EdgeRuntime.waitUntil, never on the critical path; a
+  // failure is logged into the LogEntry and swallowed. RESEND_API_KEY is read
+  // the same inline way as the other env vars in this file.
+  static async email(
+    entry: LogEntry,
+    msg: { from: string; to: string; subject: string; html: string },
+  ) {
+    const apiKey = Deno.env.get("RESEND_API_KEY") ?? "";
+    if (!apiKey) {
+      entry.result("RESEND_API_KEY not set", 500);
+      return { ok: false as const, error: "no_api_key" };
+    }
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(msg),
+        signal: AbortSignal.timeout(5000),
+      });
+      const json = await res.json().catch(() => null);
+      entry.result(json ?? res.statusText, res.status);
+      if (res.ok) return { ok: true as const };
+      return { ok: false as const, error: (json?.message as string) ?? `http_${res.status}` };
+    } catch (err: unknown) {
+      const error = err as Error;
+      entry.result(error.message, 500);
+      return { ok: false as const, error: error.message };
+    }
+  }
+
   static async invoke(
     log: Log,
     task: string,

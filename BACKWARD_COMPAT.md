@@ -79,6 +79,29 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
   - Drop this entry.
 - **Verify before removing:** confirm the live web deploy is the mode-aware build (the `/admin/areas` rows show הפעלה/תזמון/מושבת buttons and the מופעל/בהמתנה/מושבת badge); grep that nothing else selects `areas.enabled`.
 
+### Notification-presence gate — old clients never report `notif_perm` (informational)
+
+- **Added:** 2026-05-18
+- **Reason:** The notification-presence gate (`push_blocked()` folded into `user_availability`/`others()`) is **purely additive** server-side: `push_blocked()` reads only the new `relations.push` key, which is absent on every row written by a pre-gate mobile build, so it returns false and nothing is gated. The `others()`/`user_availability` changes are CREATE OR REPLACE with unchanged signatures (no dependent-RPC breakage). Not a breaking change → no Expand→Contract shim. This entry records the **cross-version behaviour window** only, per the discipline that every cross-version behaviour change is logged here.
+- **Old shape (kept alive):** Nothing. Pre-gate mobile builds never send `notif_perm` in `/app/start` or `/app/focus`, so `relations.push.perm` is never written and those users are **never push-gated** (only `DeviceNotRegistered` from the push pipeline can gate an old-build user, which is correct in any version — their token really is dead). They keep working exactly as before; the gate simply has less signal for them.
+- **New shape (preferred):** Gate-aware mobile build sends `notif_perm` on start/focus so a user who denies / later revokes OS notifications is recorded (`relations.push.perm`) and gated unavailable until they re-enable.
+- **Safe to remove after:** N/A for code (no shim). The phase-3 *tightening* (e.g. also gating on a positively-absent token, or requiring an explicit `granted`) must NOT be shipped until real-device `notif_perm` adoption is confirmed high — gating on missing-token today bricks ~90% of the base (see the `push_presence_gate` migration header / CLAUDE.md "Notification-presence gate"). Until then the conservative positive-evidence gate stays.
+- **How to remove:** Nothing to delete (no shim). Delete this note once the perm-reporting build is the live floor AND any phase-3 tightening decision has been made and recorded.
+- **Verify before removing:** check the live mobile version distribution; confirm the floor build sends `notif_perm` (grep `log` bodies for `notif_perm` on `key='start'`/`'focus'`), and query the share of located+active users with `relations.push.perm` set before considering any stricter rule.
+
+### `page1.profile` mirror of `page1.profiles[0]` (page1 candidate stack)
+
+- **Added:** 2026-05-19
+- **Reason:** page1 moved from a single watched candidate (`relations.page1.profile`) to a STACK (`relations.page1.profiles[]`, Tinder/Bumble; up to `STACK_SIZE`=10) so the client can render the next card already in place and skipping is instant. The deployed mobile build reads `page1.profile` (and `relations.match` derived from it). Removing/renaming it would break every published app. Staged Expand → Migrate → Contract.
+- **Old shape (kept alive):** while `page1.state='watching'` the server writes BOTH `page1.profiles: Profile[]` AND `page1.profile = profiles[0]` (the visible top, back-compat mirror). Old builds read `page1.profile` and skip via `app/ignore`; `app_ignore` now delegates to `app_skip` (advances the single top) so old builds keep working unchanged — they just don't get the stack. `_kick_page1_at`, `app_refresh_snapshots` keep the `page1.profile` mirror in sync with `profiles[0]`.
+- **New shape (preferred):** stack-aware build reads `relations.stack` (= `page1.profiles`), renders `stack[0]` with `stack[1]` statically behind, and skips via `POST /app/skip {skipped_id}` (idempotent; pops the front, 24h-ignores it, moves the viewer registration to the new top, and tops the stack back to 10 in the **same** call — no separate refill request).
+- **Safe to remove after:** mobile version that ships the stack UI (`relations.stack` + `app/skip`) is the floor across live users.
+- **How to remove:**
+  - `app_find` / `app_skip` / `_kick_page1_at` / `app_refresh_snapshots` (live bodies, latest = migration `20260519140000_page1_stack` + `..._skip_topup`) — stop writing/syncing the `page1.profile` mirror while watching; keep `profiles[]` only. Non-watching states keep the single `profile` (unchanged — the stack is watching-only).
+  - `mobile/src/stores/userStore.ts` — `deriveCompat` can drop the `page1.profile` fallback for `match`/`stack` (read `profiles[]` only).
+  - `supabase/functions/app/index.ts` `chat` case reads `page1.profile.user_id` for the partner — that's `chat` state (single profile, NOT the stack) so it is unaffected; no change needed.
+- **Verify before removing:** check the live mobile version distribution; confirm the floor build reads `relations.stack` and calls `app/skip` (grep the `log` table for `key='skip'` vs `key='ignore'` — once `ignore` hits ≈0 the old single-profile readers are gone).
+
 ## Removed (changelog)
 
 _(none yet)_

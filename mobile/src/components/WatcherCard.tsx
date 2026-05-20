@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useCallback } from 'react'
-import { View, StyleSheet, Pressable, I18nManager, Animated, Easing, type GestureResponderEvent } from 'react-native'
+import { useMemo, useRef, useCallback } from 'react'
+import { View, StyleSheet, Pressable, I18nManager, type GestureResponderEvent } from 'react-native'
+import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { Text } from './AppText'
 import { t } from '../i18n'
@@ -24,8 +25,6 @@ function isRecentlyCreated(iso?: string | null) {
 
 type Props = {
   watcher: Profile
-  exiting?: boolean
-  onExited?: () => void
   onPress?: () => void
   /** Viewer's own family data — when set, the kids chip appends the
    * kid-free schedule overlap percentage (same as MatchCard). */
@@ -37,7 +36,7 @@ type Props = {
   viewerLocationType?: LocationType | null
 }
 
-export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily, viewerLocationType }: Props) {
+export function WatcherCard({ watcher, onPress, viewerFamily, viewerLocationType }: Props) {
   const subjectLocationType = resolveLocationType(watcher)
   const viewerType: LocationType = viewerLocationType ?? 'device'
   const distance = formatDistance(watcher.distance ?? undefined, watcher.is_male, viewerType, subjectLocationType)
@@ -50,34 +49,15 @@ export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily,
     [watcher.family, viewerFamily],
   )
 
-  const anim = useRef(new Animated.Value(0)).current
-  const exitedRef = useRef(false)
-
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: MOTION.base,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start()
-  }, [anim])
-
-  useEffect(() => {
-    if (!exiting || exitedRef.current) return
-    exitedRef.current = true
-    Animated.timing(anim, {
-      toValue: 0,
-      duration: MOTION.base,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onExited?.()
-    })
-  }, [exiting, anim, onExited])
-
-  const opacity    = anim
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] })
-  const scale      = anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] })
+  // Mount/unmount choreography lives on the card itself (DRY: a component
+  // owns its own behavior). When the parent list adds a viewer this card
+  // mounts and drops in from above (FadeInDown); when a viewer is removed
+  // React unmounts this card and Reanimated keeps it alive just long enough
+  // to lift it up and out (FadeOutUp); the remaining cards glide to close /
+  // open the gap via LinearTransition. Same FadeInDown/FadeOutUp/
+  // LinearTransition idiom the TabStrip timer uses, so list mutations read
+  // consistently with the rest of the shell. The parent only has to keep the
+  // list container mounted (it does) — no exiting/onExited plumbing.
 
   // Track finger movement to suppress onPress when the user swipes
   const pressOrigin = useRef<{ x: number; y: number } | null>(null)
@@ -102,7 +82,11 @@ export function WatcherCard({ watcher, exiting, onExited, onPress, viewerFamily,
   }, [onPress])
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
+    <Animated.View
+      entering={FadeInDown.duration(MOTION.base)}
+      exiting={FadeOutUp.duration(MOTION.base)}
+      layout={LinearTransition.duration(MOTION.base)}
+    >
       <Pressable
         style={styles.card}
         onPressIn={handlePressIn}

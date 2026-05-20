@@ -3,6 +3,7 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
 import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
@@ -56,9 +57,8 @@ export function ConfirmDialog({
   busy?: boolean
   skipToggle?: { label: string; checked: boolean; onToggle: () => void }
   /** Optional free-text field rendered between the description and the
-   * buttons (same slot pattern as `skipToggle`). When set, the sheet also
-   * enables keyboard avoidance. Used by the report flow so the user can add
-   * a note. The value/handler are owned by the caller. */
+   * buttons (same slot pattern as `skipToggle`). Used by the report flow so
+   * the user can add a note. The value/handler are owned by the caller. */
   noteInput?: { value: string; onChangeText: (s: string) => void; placeholder: string; maxLength?: number }
   cancelFlex?: number
   confirmFlex?: number
@@ -67,6 +67,13 @@ export function ConfirmDialog({
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
   useEffect(() => { if (!busy) setPressed(null) }, [busy])
   useEffect(() => { if (!visible) setPressed(null) }, [visible])
+
+  // When this dialog hosts a text field (`noteInput`, e.g. the report flow),
+  // lift the bottom-anchored sheet by exactly the keyboard height so the
+  // field stays visible. Per-screen nudge — the global BottomSheet lift was
+  // removed (see CLAUDE.md "Keyboard avoidance"); a single per-component
+  // marginBottom does not over-shoot the way the old double-lift did.
+  const kbHeight = useKeyboardHeight()
 
   const dismiss = () => {
     if (busy) return
@@ -81,7 +88,7 @@ export function ConfirmDialog({
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
-      keyboardAvoiding={!!noteInput}
+      cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
       // When draggable, the PRIMARY drag-handle bar (with its own top/bottom
       // margins) already supplies the top breathing room — drop the card's
       // own paddingTop so the gap above the icon isn't doubled up.

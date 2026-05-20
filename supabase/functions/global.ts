@@ -69,7 +69,12 @@ export type Page2State = 'free' | 'pending' | 'chat' | 'locked';
 
 export type Page1 = {
   state: Page1State;
+  // Single counterpart for waiting/chat/locked; while watching it is the
+  // back-compat MIRROR of profiles[0] (the visible top of the stack).
   profile?: Profile;
+  // Candidate STACK, present only while state='watching' (up to STACK_SIZE).
+  // profiles[0] === profile. See "page1 candidate STACK" in CLAUDE.md.
+  profiles?: Profile[];
   message?: string;
   invited_at?: string;
   expires_at?: string;
@@ -86,9 +91,41 @@ export type Page2 = {
   extended?: boolean;
 };
 
+// Credits wallet. Lives at relations.credits (sibling of last_add_at /
+// availability). Mutated atomically inside the same FOR UPDATE transaction as
+// the state transition that spends/refunds it. balance/tier/cap math is the
+// source-of-truth in SQL (_credits_* helpers); this type just describes the
+// shape the client reads. `held` is the amount reserved by an outstanding
+// sent invite (refunded if it's not accepted, unless the sender tore it down).
+export type Credits = {
+  balance: number;
+  tier: "free" | "pro";
+  granted_on?: string | null;
+  next_grant_at?: string | null;
+  held?: number;
+};
+
+// Notification-presence signal. Lives at relations.push (sibling of credits /
+// availability / last_add_at). Drives push_blocked() in SQL: a user POSITIVELY
+// known not to receive notifications (perm 'denied', or a dead Expo token) is
+// gated unavailable, exactly like a geo-/group-gated user. `perm` is
+// client-reported on start/focus/location (absent on old builds => not gated).
+// `dead` is set by app_push_dead when Expo returns DeviceNotRegistered, and
+// cleared when a fresh token re-registers. `token` mirrors whether a usable
+// push_token is on the row (observability only — NOT a gate input: bare
+// missing-token is an unreliable signal, see the push_presence_gate migration).
+export type PushPresence = {
+  perm?: "granted" | "denied" | "undetermined";
+  token?: boolean;
+  dead?: boolean;
+  checked_at?: string;
+};
+
 export type Pages = {
   page1: Page1;
   page2: Page2;
+  credits?: Credits;
+  push?: PushPresence;
 };
 
 export type Notify = { user_id: string; code: string; actor_id?: string };
@@ -167,11 +204,33 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
   },
 };
 
+// Operator alerting. A join-to-group request is emailed here (fire-and-forget
+// from the join_request endpoint) so the admin knows to add the user to a
+// group — the user is otherwise gated and stuck until then. ADMIN_USER_URL is
+// the single source of truth for the deep-link into the web admin. It is
+// LOCALE-LESS on purpose: every internal admin link in the web app is
+// `/admin/...` and the Next middleware (web/src/proxy.ts) adds the locale via
+// rewrite. A `/he/admin/...` form would 404 (double prefix) AND bypass the
+// middleware auth guard (its check is pathname.startsWith("/admin")). If the
+// admin isn't signed in the middleware redirects to /admin/login?next=<this>
+// and bounces back here after Google sign-in.
+export const SUPPORT_EMAIL = "once.app.support@gmail.com";
+// onboarding@resend.dev is Resend's shared sender that needs no domain
+// verification (delivers to the Resend account's own address, which is
+// once.app.support@gmail.com == SUPPORT_EMAIL). Swap to a once.app address
+// once that domain is Resend-verified for a branded from.
+export const EMAIL_FROM = "Once <onboarding@resend.dev>";
+export const ADMIN_USER_URL = (userId: string) =>
+  `https://once-lake.vercel.app/admin/users/${userId}`;
+
 export type RpcResult = {
   user?: Record<string, unknown>;
   notify?: Notify[];
   error?: string;
   processed?: number;
+  /** app_find / app_ignore only: ≤2 next-ranked candidates for client image
+   * prefetch (NOT registered as viewers). See "Skip = find" in CLAUDE.md. */
+  lookahead?: Profile[];
 };
 
 export type PushToken = { type: "expo"; token: string };

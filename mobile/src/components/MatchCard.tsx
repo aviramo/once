@@ -14,12 +14,12 @@ import { resolveLocationType, type Profile, type LocationType } from '../stores/
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, InfoIcon, ShieldIcon } from './icons'
+import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
 import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
-import { formatDistance, isDistanceHere } from '../lib/units'
-import { formatLastSeen, isLastSeenJustNow } from '../lib/lastSeen'
+import { formatProximity, isDistanceHere } from '../lib/units'
+import { isLastSeenJustNow } from '../lib/lastSeen'
 
 // Display-only card for non-resting states. Action buttons live in the
 // home screen's pinned bottom bar so they share spacing + positioning with
@@ -398,13 +398,15 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const overlayBottomOffset = Math.max(safeBottomInset, MD)
   const ready = cardH > 0
   const timeIso = match.last_seen
-  const timeStr = hideTime ? '' : formatLastSeen(timeIso, match.is_male)
-  // Icon = the subject's (B = match) anchor. Text = live only when both the
-  // viewer (A) and the subject are 'device'; any fixed address on either side
-  // makes the number anchored, not live proximity.
+  // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
+  // SINGLE merged phrase: anchor-aware distance + relative last-seen (see
+  // formatProximity) — distance stays live ("ממך") only when both viewer and
+  // subject are 'device', else it reads as anchored to a fixed address.
   const subjectLocationType = resolveLocationType(match)
   const viewerType: LocationType = viewerLocationType ?? 'device'
-  const distStr = formatDistance(match.distance, match.is_male, viewerType, subjectLocationType)
+  const hasDistance = match.distance != null && !isNaN(match.distance)
+  const proximityStr = formatProximity(match.distance, timeIso, match.is_male, viewerType, subjectLocationType, hideTime)
+  const proximityLive = isDistanceHere(match.distance) || (!hideTime && isLastSeenJustNow(timeIso))
   // Age is shown as a small on-photo info chip (the name lives in the home
   // tab, so neither name nor age is overlaid on the photo any more).
   const age = ageFromTitle(match.title)
@@ -648,32 +650,23 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 {ageChipText ? (
                   <View style={styles.chipsLine}>
                     <Chip
-                      renderIcon={c => <InfoIcon color={c} size={ICON.sm} />}
+                      renderIcon={c => <CakeIcon color={c} size={ICON.sm} />}
                       text={ageChipText}
                       tone="neutral"
                       onPhoto
                     />
                   </View>
                 ) : null}
-                {timeStr ? (
+                {proximityStr ? (
                   <View style={styles.chipsLine}>
                     <Chip
-                      renderIcon={c => <ClockIcon color={c} />}
-                      text={timeStr}
+                      renderIcon={c => hasDistance
+                        ? (subjectLocationType === 'work' ? <WorkIcon color={c} /> : subjectLocationType === 'home' ? <HomeIcon color={c} /> : <PinIcon color={c} />)
+                        : <ClockIcon color={c} />}
+                      text={proximityStr}
                       tone="neutral"
                       onPhoto
-                      renderTrailing={isLastSeenJustNow(timeIso) ? () => <PresenceDot /> : undefined}
-                    />
-                  </View>
-                ) : null}
-                {distStr ? (
-                  <View style={styles.chipsLine}>
-                    <Chip
-                      renderIcon={c => subjectLocationType === 'work' ? <WorkIcon color={c} /> : subjectLocationType === 'home' ? <HomeIcon color={c} /> : <PinIcon color={c} />}
-                      text={distStr}
-                      tone="neutral"
-                      onPhoto
-                      renderTrailing={isDistanceHere(match.distance) ? () => <PresenceDot /> : undefined}
+                      renderTrailing={proximityLive ? () => <PresenceDot /> : undefined}
                     />
                   </View>
                 ) : null}
@@ -683,7 +676,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                       renderIcon={c => <KidsIcon color={c} />}
                       text={familyChipText}
                       onPhoto
-                      renderTrailing={() => <PresenceDot color={WHITE} />}
                       onPress={onFamilyTap}
                     />
                   </View>

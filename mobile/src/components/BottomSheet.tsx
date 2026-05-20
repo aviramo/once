@@ -5,8 +5,14 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
-import { BLACK, WHITE, BLACK_MID } from '../colors'
-import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHADOW_GRADIENT_STOPS, SHADOW_GRADIENT_HEIGHT, DRAG_HANDLE } from '../tokens'
+import { WHITE, BLACK_MID } from '../colors'
+import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, DRAG_HANDLE } from '../tokens'
+
+// Off-screen start position for the slide-in. Screen height is guaranteed to
+// exceed any sheet's height, so the sheet always begins fully hidden no matter
+// how tall its content is — unlike the old magic 800, which let a taller sheet
+// peek before it had been measured and made the slide distance feel wrong.
+const SCREEN_H = Dimensions.get('screen').height
 
 // Single source of truth for the bottom-sheet behavior used by every popup
 // in the app: slide-up mount, slide-down dismiss, swipe-to-dismiss gesture,
@@ -31,15 +37,6 @@ type BottomSheetProps = {
   dragHandle?: boolean
   // True → enable swipe-down-to-dismiss gesture. Default true.
   swipeToDismiss?: boolean
-  // True → lift the whole sheet by the keyboard height while it's open, so a
-  // TextInput in the sheet body stays visible. Set this for ANY sheet that
-  // contains a focusable text field. RN's KeyboardAvoidingView does NOT work
-  // here: the sheet lives inside a RN Modal, and on Android a Modal gets its
-  // own window that never receives the activity's adjustResize, so the field
-  // sits behind the keyboard. We instead drive a transform lift off the
-  // Keyboard events (the same approach chat.tsx uses), which works on both
-  // platforms. Single source of truth: fixing it here fixes every popup.
-  keyboardAvoiding?: boolean
   // Disable the backdrop tap → dismiss (e.g. while a network call is in flight).
   // Defaults to allowed.
   disableBackdropDismiss?: boolean
@@ -66,18 +63,21 @@ export function BottomSheet({
   children,
   dragHandle = true,
   swipeToDismiss = true,
-  keyboardAvoiding = false,
   disableBackdropDismiss,
   cardWrapStyle,
   contentStyle,
   scrollableGesture,
   scrollAtTop,
 }: BottomSheetProps) {
-  const translateY = useSharedValue(800)
+  const translateY = useSharedValue(SCREEN_H)
   const dragY = useSharedValue(0)
-  // Keyboard-height lift (see `keyboardAvoiding` doc above). 0 when closed.
-  const keyboardOffset = useSharedValue(0)
-  const cardHeight = useSharedValue(800)
+  const cardHeight = useSharedValue(SCREEN_H)
+  // Armed when an open is requested; the slide-in fires from the sheet's first
+  // onLayout (the earliest moment the content is mounted AND the native Modal
+  // view is attached), instead of a blind requestAnimationFrame that only
+  // guessed when both were ready. Consumed on the first layout so a later
+  // relayout (keyboard, dynamic body) never re-triggers the entrance.
+  const openingRef = useRef(false)
   // Captured at gesture start: was the scrollable child at its top? Drives
   // whether this pan can dismiss the sheet or whether it should yield to the
   // scroll. Default true so non-scrollable sheets behave as before.
@@ -90,13 +90,17 @@ export function BottomSheet({
   useEffect(() => {
     if (visible) {
       dragY.value = 0
-      translateY.value = cardHeight.value
+      // Start fully off-screen and arm the entrance. The slide-in is kicked
+      // from onLayout (view mounted + attached), not a guessed rAF, so it
+      // begins at the earliest correct frame and from a known start.
+      translateY.value = SCREEN_H
+      openingRef.current = true
       setModalVisible(true)
-      requestAnimationFrame(() => {
-        translateY.value = withTiming(0)
-      })
     } else if (modalVisible) {
-      if (keyboardAvoiding) Keyboard.dismiss()
+      openingRef.current = false
+      // Always drop the keyboard when any sheet closes so it never lingers
+      // over the screen behind. No-op when no field was focused.
+      Keyboard.dismiss()
       translateY.value = withTiming(cardHeight.value, undefined, () => {
         runOnJS(setModalVisible)(false)
       })
@@ -117,30 +121,6 @@ export function BottomSheet({
     const raf = requestAnimationFrame(() => onClosed())
     return () => cancelAnimationFrame(raf)
   }, [modalVisible, onClosed])
-
-  // Lift the sheet by the keyboard height while a field in it is focused.
-  // Height is derived from screen geometry (screenH − endCoordinates.screenY)
-  // rather than `endCoordinates.height` — Gboard's clipboard/suggestion strip
-  // isn't always counted in `height`. We listen to *willShow* + *didShow* so
-  // the lift starts in sync with the keyboard on iOS, and still catches the
-  // Android case (no willShow). Mirrors chat.tsx's proven handling.
-  useEffect(() => {
-    if (!keyboardAvoiding) return
-    const onShow = (e: any) => {
-      const screenH = Dimensions.get('screen').height
-      const fromScreenY = screenH - (e.endCoordinates?.screenY ?? screenH)
-      const reportedH = e.endCoordinates?.height ?? 0
-      keyboardOffset.value = withTiming(Math.max(reportedH, fromScreenY))
-    }
-    const onHide = () => { keyboardOffset.value = withTiming(0) }
-    const subs = [
-      Keyboard.addListener('keyboardWillShow', onShow),
-      Keyboard.addListener('keyboardDidShow', onShow),
-      Keyboard.addListener('keyboardWillHide', onHide),
-      Keyboard.addListener('keyboardDidHide', onHide),
-    ]
-    return () => { subs.forEach(s => s.remove()); keyboardOffset.value = 0 }
-  }, [keyboardAvoiding])
 
   const panBase = Gesture.Pan()
     .enabled(swipeToDismiss)
@@ -172,7 +152,7 @@ export function BottomSheet({
     })
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value + dragY.value - keyboardOffset.value }],
+    transform: [{ translateY: translateY.value + dragY.value }],
   }))
 
   const Inner = (
@@ -185,13 +165,18 @@ export function BottomSheet({
         <Animated.View
           style={[styles.cardWrap, cardWrapStyle, animStyle]}
           pointerEvents="box-none"
-          onLayout={e => { cardHeight.value = e.nativeEvent.layout.height }}
+          onLayout={e => {
+            cardHeight.value = e.nativeEvent.layout.height
+            // First layout after an open request = content mounted and the
+            // Modal view attached. Kick the slide-in now (from the off-screen
+            // start) — the earliest correct frame, no blind rAF.
+            if (openingRef.current) {
+              openingRef.current = false
+              translateY.value = SCREEN_H
+              translateY.value = withTiming(0)
+            }
+          }}
         >
-          <View style={styles.shadowGradient} pointerEvents="none">
-            {SHADOW_GRADIENT_STOPS.map((o, i) => (
-              <View key={i} style={[styles.shadowLayer, { opacity: o }]} />
-            ))}
-          </View>
           <View style={[styles.card, contentStyle]}>
             {dragHandle ? <View style={styles.dragHandle} /> : null}
             {children}
@@ -220,10 +205,9 @@ const styles = StyleSheet.create({
   rootView: { flex: 1 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
   cardWrap: {},
-  shadowGradient: { height: SHADOW_GRADIENT_HEIGHT, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: BLACK },
   card: {
     backgroundColor: WHITE,
+    boxShadow: SHEET_SHADOW,
   },
   dragHandle: {
     alignSelf: 'center',

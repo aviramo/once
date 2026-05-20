@@ -36,7 +36,14 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
     body: bodyText,
   };
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
-  await Tools.notify(entry, token, payload);
+  const res = await Tools.notify(entry, token, payload);
+  // Dead Expo token → clear it + recompute availability so the user leaves
+  // every pool immediately (the app requires presence).
+  if (!res.ok && res.error === "DeviceNotRegistered") {
+    EdgeRuntime.waitUntil(
+      Tools.rpc(log, "app_push_dead", { p_user_id: target_user_id }).then(() => {}),
+    );
+  }
 }
 
 function dispatch(log: Log, notify: Array<{ user_id: string; code: string; actor_id?: string }>) {
@@ -62,11 +69,17 @@ async function handleCron(log: Log) {
   // scheduled-launch + self-heal safety net (covers scheduled areas going
   // live, and anything an on-demand resync missed).
   const resync = await Tools.rpc(log, "app_area_resync", {});
+  // Daily credits top-up. app_credits_grant is idempotent per grant day
+  // (20:00 Asia/Jerusalem boundary) — most ticks update 0 rows; the first
+  // tick at/after 20:00 tops every user up to their tier cap. No pushes
+  // (silent top-up), so nothing to dispatch.
+  const grant = await Tools.rpc(log, "app_credits_grant", {});
 
   dispatch(log, [...(expire?.notify ?? []), ...(resync?.notify ?? [])]);
 
   return log.success({
     processed: (expire?.processed ?? 0) + (resync?.processed ?? 0),
+    credits_granted: grant?.processed ?? 0,
   });
 }
 

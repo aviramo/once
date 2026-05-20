@@ -3,7 +3,16 @@ import Tools from "./tools.ts";
 import Log from "./log.ts";
 import { Data, Pages, PushToken } from "./global.ts";
 
-const defaultRelations: Pages = { page1: { state: "locked" }, page2: { state: "free" } };
+// balance 5 == the free tier daily amount (SQL _credits_tier_cfg('free').daily).
+// granted_on / next_grant_at are intentionally omitted: the next /ext/cron tick
+// (≤60s) runs app_credits_grant, which fills both and re-confirms the balance.
+// Keep `5` / `'free'` in sync with the SQL _credits_* helpers and
+// mobile/src/lib/credits.ts (see CLAUDE.md "Credits economy").
+const defaultRelations: Pages = {
+  page1: { state: "locked" },
+  page2: { state: "free" },
+  credits: { balance: 5, tier: "free", held: 0 },
+};
 
 export default class User {
   user_id: string;

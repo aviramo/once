@@ -212,6 +212,44 @@ export type TabSpec = {
    * opacity on a view that also runs a layout animation). Optional; a stable
    * zero fallback keeps every non-dimmed tab byte-identical. */
   dimProgress?: SharedValue<number>
+  /** Pull-synced name VERTICAL SLIDE (Home tab while the page1 deck is being
+   * skipped). `nameSwapProgress` 0→1 tracks the skip pull: the current name
+   * (`label`) slides DOWN out the bottom and `nameSwapNext` (the next
+   * card's name) slides in from the TOP, clipped to the tab — 1:1 with the
+   * finger. Both optional; absent ⇒ p≡0, current at rest, byte-identical. */
+  nameSwapProgress?: SharedValue<number>
+  nameSwapNext?: string
+  /** Rise-synced name slide (Home tab, fresh-search first card). Mirror of
+   * the skip slide, OPPOSITE direction, time-driven (synced to the card's
+   * SlideInDown via the shared MOTION.base). While `nameRiseFrom` is set,
+   * the OLD label (`nameRiseFrom`) slides UP/out and the NEW label
+   * (`nameRiseTo`, the live name — `label` is held to the OLD text by the
+   * caller during the rise so no stray render leaks the new name early)
+   * enters from the BOTTOM, driven by `nameRiseProgress` 0→1. Cleared by
+   * the caller on completion ⇒ seamless fall-back to the resting label.
+   * Optional; absent ⇒ the skip slide path is used. */
+  nameRiseProgress?: SharedValue<number>
+  nameRiseFrom?: string
+  nameRiseTo?: string
+  /** Optional glyph rendered INSIDE the morph band as part of the wordmark,
+   * receiving the SAME active(WHITE)/muted(WHITE_MID) two-layer cross-fade as
+   * the label so its opacity is byte-identical to the name's in every state
+   * (selection, the finite `alerting` blink, the profile-sheet morph fade,
+   * the pause split, press) — it sits in the same `morphInner` wrapper as the
+   * text. Used by the Home tab to host the game-mode pause glyph. Receives
+   * the colour to render in (like `renderIndicator`). `accessoryCenter`
+   * toggles placement: false/absent → directly AFTER the name as ONE centred
+   * [name · glyph] unit (the watching pause affordance); true → centred over
+   * the band, standing in for the wordmark that has faded out via
+   * `pauseProgress` (the paused indicator). When `onAccessoryPress` is set
+   * the WHOLE tab fires it (the glyph itself is non-interactive — the
+   * morph band is `pointerEvents="none"`); the tab's normal navigate-onPress
+   * is replaced by it for as long as the glyph is present. Absent ⇒ no
+   * accessory, the morph band is byte-identical to before. Only meaningful on
+   * a morph tab (requires `altLabel`/`altProgress`). */
+  accessory?: (color: string) => React.ReactNode
+  onAccessoryPress?: () => void
+  accessoryCenter?: boolean
 }
 
 // Continuous gentle "alive" heartbeat: the value eases from 1 down to `lo`
@@ -562,6 +600,45 @@ function TabButton({
     opacity: 1 - Math.min(1, Math.max(0, dimSV.value)),
   }), [dimSV])
 
+  // Pull-synced name VERTICAL SLIDE (Home tab, page1 skip — user: "the old
+  // name slides down inside the tab and the new one replaces it from the
+  // top, a slide like the card but inside the tab"). Same stable-zero
+  // fallback as dimProgress: absent ⇒ swapSV≡0 ⇒ current name at rest
+  // (translateY 0) and next name parked one row ABOVE (clipped, invisible)
+  // — byte-identical for every other tab/state. As swapSV 0→1 the current
+  // name slides DOWN by rowHeight (out the bottom) and the next name slides
+  // from −rowHeight to 0 (in from the top); a `morphNameClip` wrapper with
+  // overflow:hidden clips both to the row so neither bleeds past the tab.
+  // The pause glyph is decoupled (its own fixed side slot) and does NOT
+  // slide — it stays put through the skip.
+  const zeroSwap = useSharedValue(0)
+  const swapSV = spec.nameSwapProgress ?? zeroSwap
+  const nameSlideCurrentStyle = useAnimatedStyle(() => {
+    const p = Math.min(1, Math.max(0, swapSV.value))
+    return { transform: [{ translateY: p * TAB.rowHeight }] }
+  }, [swapSV])
+  const nameSlideNextStyle = useAnimatedStyle(() => {
+    const p = Math.min(1, Math.max(0, swapSV.value))
+    return { transform: [{ translateY: (p - 1) * TAB.rowHeight }] }
+  }, [swapSV])
+  // Rise-synced name slide (mirror of the skip slide, OPPOSITE direction —
+  // time-driven 0→1 on a fresh search, synced to the card's SlideInDown via
+  // the shared MOTION.base). The OLD label (spec.nameRiseFrom) slides UP and
+  // out the top; the NEW label (spec.label) enters from the BOTTOM. Same
+  // `morphNameClip` clip. Rendered only while spec.nameRiseFrom is set
+  // (home clears it on completion ⇒ falls back to the skip pair, which sits
+  // at rest showing spec.label — seamless hand-off).
+  const zeroRise = useSharedValue(0)
+  const riseSV = spec.nameRiseProgress ?? zeroRise
+  const nameRiseOldStyle = useAnimatedStyle(() => {
+    const p = Math.min(1, Math.max(0, riseSV.value))
+    return { transform: [{ translateY: -p * TAB.rowHeight }] }
+  }, [riseSV])
+  const nameRiseNewStyle = useAnimatedStyle(() => {
+    const p = Math.min(1, Math.max(0, riseSV.value))
+    return { transform: [{ translateY: (1 - p) * TAB.rowHeight }] }
+  }, [riseSV])
+
   // The sub-label cluster carries the continuous heartbeat AND must also
   // ride the finite attention pulse from `alerting` so all text in the tab
   // (main label + timer / sub-label) blinks as one unit. Multiplying the two
@@ -700,6 +777,21 @@ function TabButton({
   // Only split the base word into normal⇄pause when BOTH are supplied; else
   // the base renders as the original single pair (byte-identical).
   const hasPauseSwap = spec.pauseIcon != null && spec.pauseProgress != null
+  // Accessory glyph (Home game-mode pause). Two placements:
+  //  • trailing (watching) — rendered AS PART OF the wordmark, directly after
+  //    the name as one centred [name · glyph] unit.
+  //  • centred (paused) — stands in for the wordmark that faded out via
+  //    pauseProgress.
+  // Both live INSIDE the morph band's morphInner, so the glyph inherits the
+  // exact opacity treatment of the label in every state (selection cross-fade,
+  // the finite `alerting` blink, press, nameSwap) — "opacity like the text".
+  const hasTrailingAccessory = spec.accessory != null && !spec.accessoryCenter
+  const hasCenterAccessory = spec.accessory != null && spec.accessoryCenter === true
+  // The base-word opacity styles (already fold in selection × alert × the
+  // profile-sheet morph × the pause split). The adjacent glyph reuses these
+  // verbatim so its opacity is byte-identical to the name's in every state.
+  const baseWordActiveStyle = hasPauseSwap ? baseNormalActiveStyle : baseActiveStyle
+  const baseWordMutedStyle = hasPauseSwap ? baseNormalMutedStyle : baseMutedStyle
   // Indicator-only variants of activeStyle/mutedStyle that fold the broadcast
   // heartbeat into the same `max(a, …)` force-select blend. `p = 1 - beat`
   // continuously eases 0→1→0 while pulsing-and-unselected, cross-fading the
@@ -735,6 +827,13 @@ function TabButton({
             ? { width: fixedWidth }
             : styles.tabFlex,
       ]}
+      // The tab ALWAYS navigates on tap (user: "only a tap on the pause
+      // glyph performs pause, not the whole tab"). The pause action is
+      // wired to a dedicated transparent hit-area overlaid ONLY on the
+      // glyph (rendered below, outside the pointerEvents:none morph band)
+      // so it's the deepest responder there; everywhere else the tap falls
+      // through to this navigate-onPress. Byte-identical for every tab
+      // without an accessory.
       onPress={onPress}
       onPressIn={() => { pressed.value = withTiming(1) }}
       onPressOut={() => { pressed.value = withTiming(0) }}
@@ -895,26 +994,170 @@ function TabButton({
           (the Home tab while the profile-preview sheet exists). Absolutely
           overlaid on the (empty, for this tab) mainRow band: left/right:0
           spans the FULL flex-tab width so the longer word ("My profile")
-          never clips and the tab width never reflows as it morphs. All
-          four text layers fill the band (`styles.label`'s textAlign +
+          never clips and the tab width never reflows as it morphs. Text
+          layers fill the band (`styles.label`'s textAlign +
           lineHeight==rowHeight). pulseAnim + the SAME pressLabelStyle the
           normal label cluster uses make alert/press feel identical AND fold
           in the identical −labelLift nudge, so the morph "Once" lands on the
           EXACT same Y as a normal tab's name (without the shared lift it sat
-          labelLift px lower — the asymmetry bug). */}
+          labelLift px lower — the asymmetry bug).
+
+          The game-mode pause GLYPH lives INSIDE this band but is DECOUPLED
+          from the wordmark: leading → a FIXED slot pinned to the tab's
+          leading side, the name sliding independently beside it (watching);
+          centred → the glyph standing in for the word that faded out via
+          pauseProgress (paused). It still reuses the wordmark's own opacity
+          styles so its opacity is byte-identical to the text in every state.
+          The band is pointerEvents:none; the pause TAP is a separate
+          transparent `morphAccessoryHit` overlaid only on the glyph (the
+          whole tab no longer pauses — user decision), and a tap elsewhere
+          on the tab navigates. */}
       {isMorph ? (
         // Outer = static geometry + STATIC −labelLift nudge
         // (styles.labelNudge), pointerEvents none. Inner = absolute-fill
         // carrying the animated pulse opacity + press scale. Split so the
         // static nudge transform is not clobbered by the worklet transform
-        // (same pattern as the normal label cluster); the four text layers
-        // fill the inner exactly as they filled the band before.
+        // (same pattern as the normal label cluster); the layers fill the
+        // inner exactly as they filled the band before.
         <View
           pointerEvents="none"
           style={[styles.labelMorphBand, styles.labelNudge]}
         >
+          {/* The pause glyph does NOT fade or move during a skip (user: it
+              must STAY — fixed on the SIDE of the tab, decoupled from the
+              name). The names SLIDE vertically inside a clipped window: the
+              current name down/out, the next name in from the top. On
+              promote the deck advances and spec.label becomes the next
+              name (swap resets to 0). */}
           <Animated.View style={[styles.morphInner, pulseAnim, pressLabelStyle]}>
-          {hasPauseSwap ? (
+          {hasTrailingAccessory ? (
+            // Watching: the name SLIDES (current down / next from the top)
+            // inside `morphNameClip` (overflow:hidden, clipped to the row so
+            // a sliding name never bleeds past the tab). The pause glyph is
+            // a SEPARATE fixed slot pinned to the trailing side
+            // (styles.morphSideAccessory) — NOT part of the wordmark and NOT
+            // sliding (user: "the pause must be fixed on the side of the tab
+            // and not attached to the text"). Both name groups still use the
+            // SAME baseWord* opacity as the no-accessory base word, so the
+            // selection cross-fade / finite alerting blink / profile-sheet
+            // morph are unchanged; the glyph reuses it too so its opacity
+            // stays byte-identical to the name in every state. The basePause
+            // glyph slot is replaced by this fixed slot, so spec.pauseIcon
+            // is not drawn here (Home's pauseIcon is ()=>null anyway).
+            <>
+              <View style={styles.morphNameClip}>
+                {spec.nameRiseFrom != null ? (
+                  // RISE pair (fresh-search first card). OLD label
+                  // (nameRiseFrom) slides UP and out the top; NEW label
+                  // (nameRiseTo — the live name; spec.label is held to the
+                  // OLD text by the caller during the rise so no other
+                  // render can leak the new name early) enters from the
+                  // BOTTOM. Exact mirror of the skip slide, synced to the
+                  // card's SlideInDown.
+                  <>
+                    <Animated.View style={[StyleSheet.absoluteFill, nameRiseOldStyle]}>
+                      <AnimatedText
+                        style={[styles.label, styles.labelActive, styles.labelOverlay, baseWordActiveStyle]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={FONT_SCALE.ui}
+                      >
+                        {spec.nameRiseFrom}
+                      </AnimatedText>
+                      <AnimatedText
+                        style={[styles.label, styles.labelMuted, styles.labelOverlay, baseWordMutedStyle]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={FONT_SCALE.ui}
+                      >
+                        {spec.nameRiseFrom}
+                      </AnimatedText>
+                    </Animated.View>
+                    <Animated.View style={[StyleSheet.absoluteFill, nameRiseNewStyle]}>
+                      <AnimatedText
+                        style={[styles.label, styles.labelActive, styles.labelOverlay, baseWordActiveStyle]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={FONT_SCALE.ui}
+                      >
+                        {spec.nameRiseTo ?? spec.label}
+                      </AnimatedText>
+                      <AnimatedText
+                        style={[styles.label, styles.labelMuted, styles.labelOverlay, baseWordMutedStyle]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={FONT_SCALE.ui}
+                      >
+                        {spec.nameRiseTo ?? spec.label}
+                      </AnimatedText>
+                    </Animated.View>
+                  </>
+                ) : (
+                  <>
+                    {/* SKIP pair. current name — slides DOWN (0 → +rowHeight)
+                        out the bottom as the skip pull progresses. */}
+                    <Animated.View style={[StyleSheet.absoluteFill, nameSlideCurrentStyle]}>
+                      <AnimatedText
+                        style={[styles.label, styles.labelActive, styles.labelOverlay, baseWordActiveStyle]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={FONT_SCALE.ui}
+                      >
+                        {spec.label}
+                      </AnimatedText>
+                      <AnimatedText
+                        style={[styles.label, styles.labelMuted, styles.labelOverlay, baseWordMutedStyle]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={FONT_SCALE.ui}
+                      >
+                        {spec.label}
+                      </AnimatedText>
+                    </Animated.View>
+                    {/* next name — parked one row ABOVE at rest (clipped,
+                        invisible) and slides in to 0 from the top
+                        (−rowHeight → 0). Absent ⇒ only the current name. */}
+                    {spec.nameSwapNext != null ? (
+                      <Animated.View style={[StyleSheet.absoluteFill, nameSlideNextStyle]}>
+                        <AnimatedText
+                          style={[styles.label, styles.labelActive, styles.labelOverlay, baseWordActiveStyle]}
+                          numberOfLines={1}
+                          maxFontSizeMultiplier={FONT_SCALE.ui}
+                        >
+                          {spec.nameSwapNext}
+                        </AnimatedText>
+                        <AnimatedText
+                          style={[styles.label, styles.labelMuted, styles.labelOverlay, baseWordMutedStyle]}
+                          numberOfLines={1}
+                          maxFontSizeMultiplier={FONT_SCALE.ui}
+                        >
+                          {spec.nameSwapNext}
+                        </AnimatedText>
+                      </Animated.View>
+                    ) : null}
+                  </>
+                )}
+              </View>
+              {/* Pause glyph — FIXED on the LEADING side of the tab,
+                  vertically centred in the band, sitting on the standard
+                  tab-icon optical line via morphGlyphLine (the SAME line the
+                  centred/paused glyph uses, so the pause symbol is on the
+                  exact same Y in both states). Non-interactive here — the
+                  tap is handled by the separate morphAccessoryHit overlay
+                  (glyph-only pause). Opacity-only entering/exiting on the
+                  OUTER (absolute position is layout, not transform, so it
+                  is never clobbered). */}
+              <Animated.View
+                key="acc"
+                style={styles.morphSideAccessory}
+                entering={FadeIn.duration(TAB.collapseDuration)}
+                exiting={FadeOut.duration(TAB.collapseDuration)}
+              >
+                <View style={[styles.indicatorStack, styles.morphGlyphLine]}>
+                  <Animated.View style={baseWordActiveStyle}>
+                    {spec.accessory!(WHITE)}
+                  </Animated.View>
+                  <Animated.View style={[styles.indicatorOverlay, baseWordMutedStyle]}>
+                    {spec.accessory!(WHITE_MID)}
+                  </Animated.View>
+                </View>
+              </Animated.View>
+            </>
+          ) : hasPauseSwap ? (
             // Base word split into normal⇄pause. The four opacities partition
             // the base total by `pauseProgress` (see baseNormal*/basePause*),
             // so the grand total with the alt pair is still exactly 1.
@@ -969,6 +1212,32 @@ function TabButton({
               </AnimatedText>
             </>
           )}
+          {/* Paused: the glyph stands in for the wordmark that faded out
+              via pauseProgress. Centred over the band, two-layer
+              active/muted so its opacity follows selection exactly like the
+              label would ("opacity like the text"). Non-interactive — the
+              band is pointerEvents none and the whole-tab onPress is a no-op
+              while paused (no onAccessoryPress). */}
+          {hasCenterAccessory ? (
+            <Animated.View
+              key="acc-c"
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+              entering={FadeIn.duration(TAB.collapseDuration)}
+              exiting={FadeOut.duration(TAB.collapseDuration)}
+            >
+              <Animated.View
+                style={[styles.labelOverlay, styles.morphIconCenter, styles.morphGlyphLine, activeStyle]}
+              >
+                {spec.accessory!(WHITE)}
+              </Animated.View>
+              <Animated.View
+                style={[styles.labelOverlay, styles.morphIconCenter, styles.morphGlyphLine, mutedStyle]}
+              >
+                {spec.accessory!(WHITE_MID)}
+              </Animated.View>
+            </Animated.View>
+          ) : null}
           <AnimatedText
             style={[styles.label, styles.labelActive, styles.labelOverlay, altActiveStyle]}
             numberOfLines={1}
@@ -985,6 +1254,22 @@ function TabButton({
           </AnimatedText>
           </Animated.View>
         </View>
+      ) : null}
+      {/* Pause-glyph-ONLY hit area (user: "a tap on the pause glyph
+          performs pause, not the whole tab"). A transparent touch target
+          overlaid exactly on the trailing glyph zone, rendered OUTSIDE the
+          pointerEvents:none morph band (and after it, so it's on top) — it
+          is the deepest responder over the glyph ⇒ tapping there pauses;
+          a tap anywhere else on the tab falls through to the plain
+          navigate-onPress above. Only present while an interactive
+          accessory is wired (the watching pause); the paused/centred glyph
+          passes no onAccessoryPress and stays non-interactive. */}
+      {spec.onAccessoryPress != null ? (
+        <Pressable
+          style={styles.morphAccessoryHit}
+          onPress={spec.onAccessoryPress}
+          hitSlop={SM}
+        />
       ) : null}
     </AnimatedPressable>
   )
@@ -1110,6 +1395,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The morph band carries `labelNudge` (translateY: −labelLift = +|labelLift|
+  // down), tuned for the WORDMARK's optical centre. A GLYPH inside the band
+  // must instead sit on the standard tab-icon optical line (where every
+  // renderIndicator glyph sits: +iconBaselineNudge from the mainRow, which
+  // the band overlays). Net extra it needs ON TOP of the band's labelNudge
+  // is therefore `iconBaselineNudge − (−labelLift)` = `iconBaselineNudge +
+  // labelLift`. Used by BOTH the side (watching) glyph and the centred
+  // (paused) glyph so the pause symbol lands on the EXACT same Y line in
+  // both states (user: "same line in both states"). Replaces the raw
+  // `iconNudge` on the side glyph (that double-counted: band + full
+  // iconNudge ⇒ too low) and is ADDED to the centred glyph (which had no
+  // nudge ⇒ slightly high). Both now resolve to the standard icon line.
+  morphGlyphLine: {
+    transform: [{ translateY: TAB.iconBaselineNudge + TAB.labelLift }],
+  },
   // Absolute-positioned slot just ABOVE the mainRow, sitting INSIDE the
   // grown pill (no longer a caption floating above it). `bottom = rowHeight
   // + timerGap` places the timer's box a tight timerGap above the name line;
@@ -1190,10 +1490,13 @@ const styles = StyleSheet.create({
     // mainRow centre — which is exactly the selected-chip's centre — at any
     // resolution / font scale. A tighter lineHeight (e.g. == fontSize) makes
     // the glyph ride high in a cramped box, so the chip looked like it sat
-    // below the text. No tab ever co-renders a label with a sibling icon
-    // (Menu/collapsed-Side are icon-only; Home/labelled-Side are label-only —
-    // see home.tsx tabSpecs), so this does not affect icon alignment, which
-    // is handled independently via indicatorStack/iconBaselineNudge.
+    // below the text. The Home watching tab co-renders a name with a
+    // side-pinned pause glyph (styles.morphSideAccessory) — they share an
+    // optical line because both centre against THIS rowHeight box (the name
+    // via lineHeight, the glyph via its fixed slot's center + iconNudge).
+    // Every other tab is icon-only (Menu / collapsed-Side) or label-only
+    // (Home base / labelled-Side), so icon alignment elsewhere is still
+    // handled independently via indicatorStack/iconBaselineNudge.
     lineHeight: TAB.rowHeight,
     includeFontPadding: false,
     textAlignVertical: 'center',
@@ -1236,6 +1539,48 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: TAB.rowHeight,
+  },
+  // Clipped name-slide window (the watching accessory). Absolute-fill over
+  // the morph band (same pin as the text layers) so it NEVER changes the
+  // tab's measured width — the iron-rule no-reflow / no-clip guarantee is
+  // intact. overflow:hidden clips the two stacked name groups (current +
+  // next) to exactly the row height: as the skip pull progresses the
+  // current name translates DOWN out the bottom and the next slides in from
+  // the top, neither ever bleeding past the tab. Each group is an
+  // absolute-fill carrying styles.label text (textAlign:center +
+  // lineHeight==rowHeight ⇒ centred), so the name's resting Y is unchanged.
+  morphNameClip: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  // Pause glyph FIXED on the tab's trailing side, DECOUPLED from the name
+  // (user: "fixed on the side of the tab, not attached to the text"). `end`
+  // pins it to the trailing edge (RTL-aware); top/bottom:0 + center keeps it
+  // on the band's vertical centre (the inner stack adds the same
+  // +iconBaselineNudge every glyph uses to sit on the label's optical line).
+  // It does NOT slide during a skip — it stays put.
+  // Pinned to the LEADING side (user: "the pause glyph should be on the
+  // other side of the tab"). `start` is RTL-aware like `end` was.
+  morphSideAccessory: {
+    position: 'absolute',
+    start: SM,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Transparent touch target covering ONLY the leading pause-glyph zone
+  // (sibling of the morph band, in the tab's own coord space). `bottom:0 +
+  // height:rowHeight` matches the band's vertical extent (where the glyph
+  // lives); `start:0 + width` spans the leading region the glyph (at
+  // start:SM) sits in, comfortably wider than the glyph + a SM hitSlop. No
+  // background — purely a hit area; the visible glyph stays in the band.
+  morphAccessoryHit: {
+    position: 'absolute',
+    start: 0,
+    bottom: 0,
+    height: TAB.rowHeight,
+    width: LG * 2,
   },
   // See labelStack/labelNudge: the +TAB.iconBaselineNudge centring nudge is
   // NOT here and NOT in the press worklet anymore — it is a static transform

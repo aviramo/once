@@ -270,6 +270,26 @@ export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+// Age chip on the profile card. A bare number with the generic InfoIcon
+// didn't read as "age"; the candle-cake glyph makes it self-explanatory in
+// every language. Flame dots use the same near-zero round-capped trick as
+// InfoIcon's `12 → 12.01`.
+export function CakeIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8" />
+      <Path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1" />
+      <Line x1="2" y1="21" x2="22" y2="21" />
+      <Line x1="7" y1="8" x2="7" y2="11" />
+      <Line x1="12" y1="8" x2="12" y2="11" />
+      <Line x1="17" y1="8" x2="17" y2="11" />
+      <Line x1="7" y1="4" x2="7.01" y2="4" />
+      <Line x1="12" y1="4" x2="12.01" y2="4" />
+      <Line x1="17" y1="4" x2="17.01" y2="4" />
+    </Svg>
+  )
+}
+
 export function MailIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
