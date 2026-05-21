@@ -43,6 +43,74 @@ export async function resetUsersByRoles(
 }
 
 /**
+ * Single-user reset. The user-detail "danger zone" exposes this alongside
+ * deleteUser. Delegates to the app_admin_reset_user(p_user_id) RPC — the
+ * per-user counterpart of resetUsersByRoles' role-scoped reset: it wipes the
+ * user's chat/log/restrictions and rebuilds relations to a clean slate while
+ * recomputing availability + credits. The user keeps existing (only their
+ * state is wiped), so partners' snapshots stay fresh on their own — no
+ * teardown / resync needed.
+ */
+export async function resetUser(userId: string): Promise<ResetResult> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  if (!userId) throw new Error("missing_args");
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin.rpc("app_admin_reset_user", {
+    p_user_id: userId,
+  });
+  if (error) return { ok: false };
+  revalidatePath(USER_PATH, "page");
+  revalidatePath(ADMIN_USERS_PATH, "page");
+  const users = Number((data as { users?: number } | null)?.users ?? 0);
+  return { ok: true, users };
+}
+
+/**
+ * Permanently delete a user. This is irreversible.
+ *
+ *  1. app_delete_cleanup tears down every live link partners hold on this
+ *     user (kicks their page1/page2-pending, drops them from viewer arrays) —
+ *     mandatory before the row vanishes, otherwise partners point at a
+ *     non-existent user and app_refresh_snapshots can never refresh them.
+ *  2. log rows are removed explicitly — log.user_id has an ON DELETE NO ACTION
+ *     FK, so they would otherwise block the users-row delete.
+ *  3. restrictions (no FK) are cleared both directions so no stale cooldown
+ *     lingers against a deleted account.
+ *  4. Deleting the auth user cascades public.users -> chat + user_groups
+ *     (both ON DELETE CASCADE). reports are intentionally kept (no FK) so the
+ *     moderation record survives account deletion.
+ *
+ * Refuses to delete the acting admin's own account.
+ */
+export async function deleteUser(
+  userId: string,
+): Promise<{ ok: boolean }> {
+  const admin0 = await getAdminUser();
+  if (!admin0) throw new Error("Unauthorized");
+  if (!userId) throw new Error("missing_args");
+  if (admin0.id === userId) throw new Error("cannot_delete_self");
+
+  const admin = createSupabaseAdmin();
+
+  const { error: cleanupError } = await admin.rpc("app_delete_cleanup", {
+    me_id: userId,
+  });
+  if (cleanupError) return { ok: false };
+
+  await admin.from("log").delete().eq("user_id", userId);
+  await admin
+    .from("restrictions")
+    .delete()
+    .or(`user_id.eq.${userId},other_id.eq.${userId}`);
+
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) return { ok: false };
+
+  revalidatePath(ADMIN_USERS_PATH, "page");
+  return { ok: true };
+}
+
+/**
  * Remove a user's pending join request without approving them. Clears
  * relations.join_request and recomputes relations.availability via the
  * app_admin_clear_join_request RPC, so the user drops out of the

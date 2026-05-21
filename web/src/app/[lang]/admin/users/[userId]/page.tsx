@@ -27,8 +27,9 @@ import {
 import { Disclosure, RevealList } from "../../_components/Disclosure";
 import { UserRolesEditor, type EditorRole } from "./_components/UserGroupsEditor";
 import { JoinRequestCard } from "./_components/JoinRequestCard";
+import { UserDangerZone } from "./_components/UserDangerZone";
 import { setUserRoleAssignment } from "../../roles/actions";
-import { clearJoinRequest } from "../actions";
+import { clearJoinRequest, deleteUser, resetUser } from "../actions";
 
 type Image = { normal?: string; hash?: string };
 
@@ -361,6 +362,17 @@ export default async function UserDetailPage({
             })}
           />
         )}
+      </Section>
+
+      {/* Danger zone — irreversible per-user admin controls */}
+      <Section title={d.danger.section}>
+        <UserDangerZone
+          userId={u.user_id}
+          userName={u.name ?? ""}
+          dict={d.danger}
+          resetAction={resetUser}
+          deleteAction={deleteUser}
+        />
       </Section>
     </AdminShell>
   );

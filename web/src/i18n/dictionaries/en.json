@@ -408,7 +408,25 @@
       "attachmentAudio": "Voice message",
       "attachmentLocation": "Location",
       "attachmentSchedule": "Schedule",
-      "systemEvent": "System event"
+      "systemEvent": "System event",
+      "danger": {
+        "section": "Danger zone",
+        "resetTitle": "Reset user",
+        "resetDesc": "Wipe this user's chat, history and game state to a clean slate. Their account, profile and groups are kept.",
+        "resetButton": "Reset user",
+        "resetConfirmTitle": "Reset this user?",
+        "resetConfirmBody": "{name}'s chat messages, activity log, restrictions and game state will be permanently wiped and reset to a clean slate. Their account and profile stay intact. This cannot be undone.",
+        "resetBusy": "Resetting…",
+        "resetDone": "User reset.",
+        "deleteTitle": "Delete user",
+        "deleteDesc": "Permanently delete this account and all of its data. This cannot be undone.",
+        "deleteButton": "Delete user",
+        "deleteConfirmTitle": "Delete this user?",
+        "deleteConfirmBody": "{name}'s account will be permanently deleted, along with their profile, chats and group memberships. Anyone currently interacting with them will be released. This cannot be undone.",
+        "deleteBusy": "Deleting…",
+        "fail": "Something went wrong. Please try again.",
+        "cancel": "Cancel"
+      }
     }
   }
 }
