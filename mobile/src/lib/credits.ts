@@ -9,9 +9,14 @@ import { t } from '../i18n'
 // cost or tier amount changes, change it in all three places in lockstep.
 
 export const CREDIT_COST = {
-  invite: 1,
+  // Inviting is free — the badge on the send-invite button reads "0" so the
+  // user sees it costs nothing. Display-only: there is no SQL `invite` cost.
+  invite: 0,
   approve: 1,
-  broadcast: 2,
+  broadcast: 1,
+  // Cancelling a sent invite costs the inviter 1 heart (user request
+  // 2026-05-22). Inviting is free; the charge is the price of backing out.
+  cancel: 1,
 } as const
 
 export type CreditAction = keyof typeof CREDIT_COST
@@ -22,7 +27,7 @@ export type CreditAction = keyof typeof CREDIT_COST
 // defaultRelations seed in supabase/functions/user.ts (CLAUDE.md "Credits
 // economy"): change all together.
 export const CREDIT_TIER = {
-  free: { daily: 5, cap: 5 },
+  free: { daily: 3, cap: 3 },
   pro: { daily: 10, cap: 10 },
 } as const
 
@@ -33,9 +38,9 @@ export function creditTier(profile: WithCredits): CreditTier {
   return readCredits(profile)?.tier === 'pro' ? 'pro' : 'free'
 }
 
-/** Localized, grammatically-correct "N stars" phrase: singular for 1
- * ("כוכב אחד" / "1 star"), plural otherwise. One source so every prose
- * mention of a stars amount agrees in number. */
+/** Localized, grammatically-correct "N hearts" phrase: singular for 1
+ * ("לב אחד" / "1 heart"), plural otherwise. One source so every prose
+ * mention of a hearts amount agrees in number. */
 export function starsText(n: number): string {
   return n === 1
     ? t('stars.count.one')
@@ -49,7 +54,6 @@ export type CreditsWallet = {
   /** ISO instant of the next 20:00 Asia/Jerusalem grant. Server-computed so
    * the client never does timezone math — it just formats this stamp. */
   next_grant_at?: string | null
-  held?: number
 }
 
 type WithCredits = { relations?: { credits?: CreditsWallet | null } | null } | null | undefined

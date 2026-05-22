@@ -21,6 +21,12 @@ import { BLACK, BLACK_STRONG } from '../colors'
 //
 // Visual axes are props, never a forked second component.
 
+// Standard diameter for every round overlay button (heart / X / add-photo).
+// Exported so callers that want a proportional variant (e.g. MatchCard's
+// half-size report flag) derive from this single source instead of hard-
+// coding a second number that could drift.
+export const ROUND_BUTTON_SIZE = 76
+
 export type RoundButtonProps = {
   size?: number
   bg?: string
@@ -36,7 +42,7 @@ export type RoundButtonProps = {
 }
 
 export function RoundButton({
-  size = 76,
+  size = ROUND_BUTTON_SIZE,
   // Same dark translucent scrim the on-photo Chip uses (Chip's `onPhoto`
   // background = BLACK_STRONG), so round overlay buttons and the profile
   // chips read as one consistent fabric over the photo. Single source: the

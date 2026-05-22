@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
+import React, { useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
 import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, Platform } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { PullScrollView } from './HomeCard'
+import { PullScrollView, PullContext } from './HomeCard'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
@@ -15,9 +15,9 @@ import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon } from './icons'
-import { RoundButton } from './RoundButton'
+import { RoundButton, ROUND_BUTTON_SIZE } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
+import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -287,12 +287,12 @@ type MatchCardProps = {
    * single heart button is rendered (tapping scrolls to the end of the
    * card). The self-profile preview passes [add-photo, add-family]. */
   actions?: CardAction[]
-  /** When provided, a report (flag) RoundButton is appended to the hero
-   * action stack in EVERY state (above whatever primary affordance the state
-   * uses, or as the sole button when there is none). Centralised here so the
-   * report glyph + its placement live once; callers only wire the handler
-   * (open the report confirm for `match`). Omitted for the own-profile
-   * preview / preloader, which never report. */
+  /** When provided, a report (flag) RoundButton is overlaid at the TOP corner
+   * of the hero photo (the chips side), in EVERY state — separate from the
+   * bottom action stack so the report affordance lives in one consistent
+   * place. Centralised here so the report glyph + its placement live once;
+   * callers only wire the handler (open the report confirm for `match`).
+   * Omitted for the own-profile preview / preloader, which never report. */
   onReport?: () => void
   /** "Wants own (more) kids" preference (`data.family.isForKids`) — only
    * set for the user's own profile preview; remote match snapshots don't
@@ -313,6 +313,13 @@ type MatchCardProps = {
   /** First-person rendering for the own-profile preview ("I have 3 kids"
    * vs. the default third-person "Has 3 kids" used on remote match cards). */
   self?: boolean
+  /** Deterministic height of the card area, supplied by callers that already
+   * know it (page1 measures its pane height once on mount). When provided the
+   * hero photo is sized from it on the FIRST render, so the card never needs
+   * to measure-itself-then-reveal — it rises as one solid block instead of
+   * popping into view partway through the slide-up. Callers that omit it fall
+   * back to the self-measured height + the opacity gate. */
+  cardHeight?: number
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -338,6 +345,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   viewerFamily,
   viewerLocationType,
   self = false,
+  cardHeight,
 }: MatchCardProps, ref) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -390,13 +398,17 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     if (loadedCount.current >= photoCount) onReady?.()
   }, [photoCount, onReady])
   const [cardH, setCardH] = useState(0)
-  const photoHeight = Math.max(280, cardH - bottomInset)
+  // Prefer the caller-supplied card height (known on the first render) over
+  // the self-measured one, so the hero is correctly sized before paint and
+  // the `ready` opacity gate below never has to flip mid-slide-up.
+  const effectiveCardH = cardHeight && cardHeight > 0 ? cardHeight : cardH
+  const photoHeight = Math.max(280, effectiveCardH - bottomInset)
   const { bottom: safeBottomInset } = useSafeAreaInsets()
   // The first photo runs to the bottom of the card (callers pass bottomInset=0
   // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
   // must clear the home indicator on its own.
   const overlayBottomOffset = Math.max(safeBottomInset, MD)
-  const ready = cardH > 0
+  const ready = effectiveCardH > 0
   const timeIso = match.last_seen
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
   // SINGLE merged phrase: anchor-aware distance + relative last-seen (see
@@ -429,6 +441,16 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const wasAbsentRef = useRef(false)
   const scrollRef = useAnimatedRef<any>()
   const scrollYRef = useRef(0)
+  // The pull pane (page1/page2) provides this context. `pullEngaged` is a
+  // UI-thread flag, true for the whole life of a pull-down drag; `pullY` is
+  // the live pull offset. While engaged we pin the inner scroll to offset 0
+  // (see the derived value below) so a drag — in particular a down-then-up
+  // "cancel" — can't leak into the scroll content before the JS-thread
+  // scroll-disable lands. Both undefined for callers with no pull frame
+  // (the hidden preloader / the profile sheet).
+  const pullCtx = useContext(PullContext)
+  const pullEngaged = pullCtx?.pullEngaged
+  const pullY = pullCtx?.pullY
 
   // ── Inline-bio keyboard handling ─────────────────────────────────────────
   // The bio bubble is a TextInput inside this scroll view. On focus we scroll
@@ -495,7 +517,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const scrollAnimY = useSharedValue(0)
   const scrollAnimActive = useSharedValue(false)
   useDerivedValue(() => {
-    if (scrollAnimActive.value) scrollTo(scrollRef, 0, scrollAnimY.value, false)
+    if (scrollAnimActive.value) { scrollTo(scrollRef, 0, scrollAnimY.value, false); return }
+    // Reading pullY makes Reanimated re-run this worklet on every frame of a
+    // pull. While the pull is engaged, hold the inner content pinned at the
+    // top every frame — the synchronous UI-thread guard the async
+    // `scrollEnabled` toggle can't provide (without it a fast pull-and-release
+    // sometimes left the card body scrolled a few px down).
+    void pullY?.value
+    if (pullEngaged?.value) scrollTo(scrollRef, 0, 0, false)
   })
   const slowScrollToEnd = useCallback(() => {
     const target = Math.max(0, contentHRef.current - viewportHRef.current)
@@ -638,6 +667,22 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
+          {/* Report (flag) button — overlaid at the TOP corner of the hero
+              photo, on the chips side (start), in every card state. Separate
+              from the bottom action stack so report lives in one consistent
+              place. Rendered at HALF the standard RoundButton diameter (with
+              a proportionally smaller glyph) so it reads as a quiet secondary
+              affordance, not a primary one. box-none so the padding margin
+              falls through to the photo and only the button itself is a tap
+              target. */}
+          {sections[0]?.type === 'photo' && onReport ? (
+            <View pointerEvents="box-none" style={styles.reportOverlay}>
+              <RoundButton size={ROUND_BUTTON_SIZE / 2} onPress={onReport}>
+                <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
+              </RoundButton>
+            </View>
+          ) : null}
+
           {/* Two-column overlay at the bottom of the hero photo: left column
               holds the name + chips stack (flex:1, so a long chip wraps its
               text instead of colliding with the buttons); right column holds
@@ -688,18 +733,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 key: 'like',
                 icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
               }]
-              // Report rides as a flag RoundButton in EVERY state — appended
-              // after the state's primary affordance so it sits above it in
-              // the (column-reverse) stack, or stands alone where there's no
-              // primary button. Coral fill + white halo matches the chat-X.
-              const withReport: CardAction[] = onReport
-                ? [...base, {
-                    key: 'report',
-                    icon: <ShieldIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
-                    onPress: onReport,
-                  }]
-                : base
-              const resolved = withReport.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
+              const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
               return resolved.length > 0 ? <CardActionStack actions={resolved} /> : null
             })()}
           </View>
@@ -800,6 +834,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: MD,
+    padding: MD,
+  },
+  reportOverlay: {
+    position: 'absolute',
+    top: 0,
+    start: 0,
     padding: MD,
   },
   infoLeft: {

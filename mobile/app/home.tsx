@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, I18nManager, type StyleProp, type ViewStyle } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, type StyleProp, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
-import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, LayoutAnimationConfig, SlideInDown, FadeIn, FadeOut, FadeInUp, FadeOutUp, interpolate, interpolateColor, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
+import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withSpring, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, FadeIn, FadeOut, FadeInUp, FadeOutUp, useEvent, useHandler, type SharedValue } from 'react-native-reanimated'
 import PagerView from 'react-native-pager-view'
 
 // PagerView wrapped for Reanimated so onPageScroll events can be handled in a
@@ -36,14 +36,16 @@ import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Tex
 import { invoke, markStartupComplete, publicImageUrl, API_TIMEOUT_MS } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
+import { matchImageUrls } from '../src/lib/profileImages'
 import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, PRIMARY_LIGHT, BLACK_STRONG, BLACK_MID, PREMIUM, BLACK_SOFT, HEADER_PILL_SHADOW, POSITIVE, NEGATIVE, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
-import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, SEARCH_WATCHDOG_SLACK_MS, PULL_COMMIT_FRACTION, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
+import { Spinner } from '../src/components/Spinner'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, HEADER_PILL_SHADOW, ILLUSTRATION_WASH, ILLUSTRATION_CLOUD, ILLUSTRATION_BODY, ILLUSTRATION_LINE, ILLUSTRATION_STRUCT, ILLUSTRATION_ACCENT } from '../src/colors'
+import { XS, SM, MD, LG, XL, RADIUS, RADII, WEIGHT, TEXT, ICON, TAB, MOTION, SEARCH_WATCHDOG_SLACK_MS, PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { WatcherCard } from '../src/components/WatcherCard'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -51,7 +53,8 @@ import { MatchCard } from '../src/components/MatchCard'
 import { RisingCard } from '../src/components/RisingCard'
 import { TabStrip, type TabSpec } from '../src/components/TabStrip'
 import { CreditCost } from '../src/components/CreditCost'
-import { CREDIT_COST, creditBalance, starsText } from '../src/lib/credits'
+import { PresenceDot } from '../src/components/Chip'
+import { CREDIT_COST, creditBalance } from '../src/lib/credits'
 import { PullScrollView, PullContext, type PullCtx } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
@@ -62,9 +65,8 @@ import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { HamburgerIcon, CloseBoldIcon, PauseIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, StarIcon, MailIcon, InboxIcon } from '../src/components/icons'
+import { CloseBoldIcon, PauseIcon, HeartIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, MailIcon, InboxIcon } from '../src/components/icons'
 import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
-import { useGameMode } from '../src/hooks/useGameMode'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -190,16 +192,28 @@ const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H
 // every string we ship today either fits as 1 line or wraps cleanly to 2.
 const SKIP_HINT_PER_CHAR_W = SKIP_HINT_FONT * 0.65 + 2
 
-// Ready-to-find headline pool: the i18n block split into lines (trimmed,
-// blanks dropped, so adding/removing a sentence in i18n is the only edit
-// needed). `pickReadyHeadline(prev)` returns a random index that differs
-// from `prev` when possible, so re-entering the ready state never repeats
-// the sentence it just showed.
+// Safety fallback for the "request to join" spinner: it normally clears the
+// instant Realtime confirms availability.join_requested flipped, but if that
+// update never lands the spinner must not spin forever. Generous — any
+// healthy Realtime delivery arrives far sooner.
+const JOIN_REQUEST_CONFIRM_TIMEOUT_MS = 8000
+
+// Headline pools: each i18n block split into lines (trimmed, blanks dropped,
+// so adding/removing a sentence in i18n is the only edit needed).
+//   READY_HEADLINES — shown in the headline slot above the centre button
+//     while the home pane is in the ready state (no card).
+//   SKIP_HEADLINES  — skip-feedback lines; one is parked in that same slot
+//     behind whatever card is showing (a fresh one per card) and is revealed
+//     when the user pulls the card away to skip (see headlineText +
+//     skipHeadlineIdx).
 const READY_HEADLINES = t('home.readyHeadlines').split('\n').map(s => s.trim()).filter(Boolean)
-function pickReadyHeadline(prev: number): number {
-  if (READY_HEADLINES.length < 2) return 0
+const SKIP_HEADLINES = t('home.skipHeadlines').split('\n').map(s => s.trim()).filter(Boolean)
+// Returns a random index in [0, count) that differs from `prev` when possible,
+// so a pool never repeats the line it just showed.
+function pickHeadline(prev: number, count: number): number {
+  if (count < 2) return 0
   let next = prev
-  while (next === prev) next = Math.floor(Math.random() * READY_HEADLINES.length)
+  while (next === prev) next = Math.floor(Math.random() * count)
   return next
 }
 
@@ -307,27 +321,13 @@ const headlineAreaStyle = StyleSheet.create({
 // The single framed element shared by all three pull-to-dismiss surfaces:
 // page1 (pull-to-skip), page2 (pull-to-decline) and the settings profile
 // preview sheet (swipe-down-to-dismiss). It composes, in one place:
-//   • the solid-PRIMARY "wake" that fills TabStrip → card-top, with a
-//     "לא עכשיו" headline centred in the wake itself that scales 0 → full;
 //   • the GestureDetector + a card wrapper that translates down by `pullY`;
 //   • an optional PullContext.Provider (page1/page2 need it so the card's
 //     inner scroll can coordinate with the pull; the sheet doesn't);
 //   • an optional non-translated `extra` slot (page1's hidden preloader).
 //
-// Wake = a top-anchored block, sibling of (and behind) the card, whose
-// HEIGHT is animated to the live `pullY`. The card translates down by the
-// same `pullY`, so the wake's bottom edge is always exactly the card top —
-// the PRIMARY band length is dynamic with the card-top position. The
-// headline is centred IN that band (`justifyContent:'center'`); the wake's
-// `overflow:'hidden'` keeps it from spilling above while the band is short,
-// and its scale tracks pull depth (grows like the login "Once").
-//
-// Wake OPACITY is driven by `pulling`: visible while the finger is actively
-// pulling, and it FADES OUT the moment the pull ends — whether the card
-// snaps back or commits and slides off-screen. Without this fade the block
-// stays full-height behind the departed card and covers the page underneath
-// (Settings / empty pane). The fade is exactly what reveals that page on
-// dismiss; the card's own SlideOutDown carries it down at the same time.
+// The card translates down by `pullY`, revealing the pane behind it; on
+// release it either snaps back or rides off-screen (see usePullBehavior).
 //
 // The inner RisingCard passed as `children` keeps owning its SlideIn/SlideOut
 // mount motion — the pull transform sits on a separate wrapper so the two
@@ -341,14 +341,12 @@ function PullPane({
   pointerEvents,
   cardStyle,
   pullContext,
-  wakeLabel,
   tutorialPlaying,
   behind,
   extra,
   // When true, PullPane does NOT translate `children` by pullY itself — the
-  // consumer translates the card it wants to follow the finger (so a swap
-  // can keep the incoming card at rest while the outgoing rode off). The
-  // wake + gesture still use pullY. page1's local-deck FRONT passes this.
+  // consumer translates the card it wants to follow the finger. The gesture
+  // still uses pullY.
   cardStatic,
   children,
 }: {
@@ -360,9 +358,6 @@ function PullPane({
   pointerEvents?: 'box-none' | 'none' | 'auto' | 'box-only'
   cardStyle?: StyleProp<ViewStyle>
   pullContext?: PullCtx
-  // Centred headline on the PRIMARY wake (page1/page2 pass "לא עכשיו"). The
-  // profile sheet omits it — its wake is plain. No label → no text node.
-  wakeLabel?: string
   // When the first-time tutorial is playing, lock input so the user can't
   // fight the choreography (page1 only; others never pass it).
   tutorialPlaying?: boolean
@@ -381,72 +376,6 @@ function PullPane({
   const cardTranslate = useAnimatedStyle(() => ({
     transform: [{ translateY: pullY.value }],
   }))
-  // Fade the wake in while pulling, out the instant the pull ends — so on
-  // dismiss it doesn't linger over the page revealed behind the card.
-  const wakeScreenH = Dimensions.get('window').height
-  const commitDist = wakeScreenH * PULL_COMMIT_FRACTION
-  // The wake is a FIXED full-screen PRIMARY panel pinned behind the card —
-  // NOT a per-frame-resized band. Animating `height` to `pullY` every drag
-  // frame forces a Yoga layout pass per frame on this deep tree, which is
-  // the mid-drag stutter (building-native-ui: "avoid animating layout
-  // properties (width, height) — prefer transforms"). The opaque card is
-  // translated down by `pullY` and occludes everything below its top, so
-  // only the top `pullY` strip of the full-screen panel is ever visible —
-  // exactly the old "band" look — with ZERO per-frame layout.
-  //
-  // Opacity is ONE position curve over the WHOLE descent, keyed purely on
-  // pullY (no time fade, no commit-vs-pull split — user choice "the whole
-  // descent together"). The user-specified keyframes over pullY/screenH are
-  // [0, ¼, ½, 1] → [100%, 100%, 0%, 0%]: full through the first quarter of
-  // the card's travel, fading 100→0 over the second quarter, then 0 for the
-  // back half while the card finishes leaving. pullY also drives the card
-  // translate, so panel + headline fade exactly in step with the descent.
-  //
-  // The `pullY ≤ 0 → 0` guard is load-bearing, not cosmetic: in the idle /
-  // empty state (no card to occlude it, or slidOut latched after a skip that
-  // found nobody and pullY reset to 0) the full-screen panel must be fully
-  // transparent or it blacks out the whole empty pane (the reported "no one
-  // around → blank screen"). With a card present, pullY leaves 0 the instant
-  // the drag starts and the card occludes the thin top strip, so the 0→full
-  // step is imperceptible — it reads as "full from the start of the drag".
-  // Height IS the live drag (original band model, restored): the wake's
-  // bottom edge is exactly the card top (the card translates down by the
-  // same pullY), so the headline — laid out by the band's
-  // justifyContent:'center' — sits at the band centre (pullY/2) on the Y
-  // axis exactly where it always was. (The earlier full-screen-panel +
-  // transform restructure shifted the text/pause Y and the panel covered
-  // things; reverted at the user's request.) Opacity is the user's single
-  // position curve over the whole descent (pullY/screenH keyframes
-  // [0,¼,½,1] → [100%,100%,0%,0%]). At rest pullY=0 ⇒ height 0 ⇒ the band
-  // is invisible regardless of opacity (no full-screen panel to black out
-  // the empty pane); the p≤0→0 opacity is kept as harmless defence.
-  const wakeStyle = useAnimatedStyle(() => {
-    const p = pullY.value
-    const opacity = p <= 0
-      ? 0
-      : interpolate(
-          p,
-          [0, wakeScreenH / 4, wakeScreenH / 2, wakeScreenH],
-          [1, 1, 0, 0],
-          'clamp',
-        )
-    return { height: Math.max(0, p), opacity }
-  })
-  // "לא עכשיו" scale-grows 0 → full from rest to the commit point. Its
-  // OPACITY is NOT set here — it inherits the wake band's single position
-  // curve above (band is its parent; RN group-opacity applies it to the
-  // text). Setting opacity here too would multiply the curve by the grow-in
-  // factor, which is why the requested curve "didn't happen in practice".
-  // Band + headline therefore fade together (white text never lands on
-  // white) on exactly the user's [0,¼,½,1]→[100,100,0,0] pullY curve. No
-  // translateY: the band's height=pullY + justifyContent:'center' position
-  // the headline at the original Y (pullY/2); only scale animates here.
-  const wakeTextStyle = useAnimatedStyle(() => {
-    const v = Math.max(0, Math.min(1, pullY.value / commitDist))
-    return {
-      transform: [{ scale: v }],
-    }
-  })
   const card = (
     <GestureDetector gesture={gesture}>
       <Animated.View
@@ -474,18 +403,6 @@ function PullPane({
       {behind ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">{behind}</View>
       ) : null}
-      {/* Solid-PRIMARY wake: a top-anchored band whose HEIGHT is the live
-          drag (bottom edge glued to the card top). The headline is centred
-          IN the band (justifyContent:'center') so it sits at the original Y
-          (pullY/2) and scales 0 → full. Rendered ONLY when a `wakeLabel` is
-          given — the profile sheet omits it (its gap just reveals Settings). */}
-      {wakeLabel ? (
-        <Animated.View style={[pullPaneStyles.wake, wakeStyle]} pointerEvents="none">
-          <AnimatedText style={[pullPaneStyles.wakeText, wakeTextStyle]} numberOfLines={1}>
-            {wakeLabel}
-          </AnimatedText>
-        </Animated.View>
-      ) : null}
       {pullContext ? (
         <PullContext.Provider value={pullContext}>{card}</PullContext.Provider>
       ) : (
@@ -503,29 +420,6 @@ const pullPaneStyles = StyleSheet.create({
   card: {
     flex: 1,
   },
-  // Top-anchored band; height is animated to the live drag (wakeStyle) so
-  // its bottom edge is exactly the card top. Centres the headline in its own
-  // (dynamic) band — that is what puts the text at its original Y (pullY/2);
-  // overflow:hidden keeps it from spilling above the band while it's short.
-  wake: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: PRIMARY,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // One token below the login "Once" logotype (TEXT.xxl, was TEXT.xxxl) /
-  // extrabold / white. Constant size — the wake label no longer scales down.
-  wakeText: {
-    fontSize: TEXT.xxl,
-    fontWeight: WEIGHT.extrabold,
-    color: WHITE,
-    letterSpacing: -1.4,
-    textAlign: 'center',
-  },
 })
 
 // page1 and page2 each need their OWN PullContext value — the two panes can
@@ -538,6 +432,8 @@ function usePullCtx(
   panRef: React.MutableRefObject<GestureType | undefined>,
   scrollAtTopSV: SharedValue<boolean>,
   pulling: boolean,
+  engaged: SharedValue<boolean>,
+  pullY: SharedValue<number>,
 ): PullCtx {
   return useMemo(
     () => ({
@@ -547,9 +443,11 @@ function usePullCtx(
         scrollAtTopSV.value = v
       },
       pulling,
+      pullEngaged: engaged,
+      pullY,
     }),
-    // panRef / scrollAtTopSV are stable (useRef / useSharedValue); only
-    // `pulling` actually changes.
+    // panRef / scrollAtTopSV / engaged / pullY are stable (useRef /
+    // useSharedValue); only `pulling` actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pulling],
   )
@@ -599,9 +497,7 @@ type PullBehavior = {
   // e.g. the sheet's TabStrip morph normalizes by the exact same value.
   commitDistance: number
   // True ONLY once a release committed and the card is riding off-screen
-  // (set in onEnd, cleared on the next onStart). page1's promote reaction
-  // gates on this so a 1:1 drag that passes 95% while the finger is still
-  // down can't pop the deck before release — only the committed ride does.
+  // (set in onEnd, cleared on the next onStart).
   slidOut: SharedValue<boolean>
 }
 // Commit motion is UNIFORM for all three surfaces: ride the card off-screen
@@ -613,13 +509,17 @@ function usePullBehavior(opts: {
   enabled: boolean
   onCommit: () => void
   headerBottom?: SharedValue<number>
-  tutorial?: { ready: boolean; seenFlag: string }
+  tutorial?: { ready: boolean; seenFlag: string; peek?: SharedValue<number> }
 }): PullBehavior {
   const { activation, enabled, onCommit, headerBottom, tutorial } = opts
   const screenH = Dimensions.get('window').height
   const commitDistance = screenH * PULL_COMMIT_FRACTION
 
   const pullY = useSharedValue(0)
+  // Last vertical finger velocity seen during a drag — captured every frame in
+  // onUpdate so the release snap-back (in onFinalize, which has no gesture
+  // event) can seed its spring with it and continue the finger's motion.
+  const pullVelocity = useSharedValue(0)
   const engaged = useSharedValue(false)
   const slidOut = useSharedValue(false)
   const scrollOnly = useSharedValue(false)
@@ -634,7 +534,12 @@ function usePullBehavior(opts: {
   const panRef = useRef<GestureType>(undefined as unknown as GestureType)
 
   const setScrollAtTop = useCallback((v: boolean) => { scrollAtTopSV.value = v }, [scrollAtTopSV])
-  const reset = useCallback(() => { pullY.value = 0 }, [pullY])
+  // Return the pull behavior fully to rest when a fresh card mounts. Clearing
+  // `slidOut` is essential: a button skip (`commit`) latches it true to block a
+  // double-fire during the ride-off, but — unlike a swipe (gesture `onStart`
+  // resets it) — nothing else clears it. Without this the second "not now" tap
+  // hits the `commit` guard and no-ops; the button works exactly once.
+  const reset = useCallback(() => { pullY.value = 0; slidOut.value = false }, [pullY, slidOut])
   // Programmatic commit — the EXACT ride-off the gesture's onEnd performs
   // once the finger crossed commitDistance, so a BUTTON ("not now") skips
   // with the IDENTICAL motion as a swipe (user: "tapping the skip button
@@ -644,21 +549,26 @@ function usePullBehavior(opts: {
   const commit = useCallback(() => {
     if (activation !== 'scrollPan' || !enabled || slidOut.value) return
     slidOut.value = true
-    pullY.value = withTiming(screenH)
+    pullY.value = withTiming(screenH, { easing: Easing.out(Easing.cubic) })
     onCommit()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activation, enabled, onCommit, screenH])
 
   // Called unconditionally (rules of hooks); only handed out for scrollPan.
-  const ctx = usePullCtx(panRef, scrollAtTopSV, pulling)
+  const ctx = usePullCtx(panRef, scrollAtTopSV, pulling, engaged, pullY)
   const pullCtx = activation === 'scrollPan' ? ctx : undefined
 
   // First-time tutorial: choreography + once-ever trigger.
   const [tutorialPlaying, setTutorialPlaying] = useState(false)
   const tutorialTriggeredRef = useRef(false)
+  const tutorialPeek = tutorial?.peek
   const playTutorial = useCallback(() => {
-    // Peek just under commit so the choreography can't trigger a real skip.
-    const peek = screenH * 0.45
+    // Peek so the descending card's top edge lands on the pause-icon centre
+    // (measured into `tutorial.peek`). The tutorial drives `pullY` directly,
+    // not through the gesture's onEnd, so this never commits a real skip
+    // however deep it goes. Falls back to a fixed fraction until measured.
+    const measured = tutorialPeek?.value ?? 0
+    const peek = measured > 0 ? measured : screenH * 0.45
     setPulling(true)
     const finish = () => { setPulling(false); setTutorialPlaying(false) }
     pullY.value = withSequence(
@@ -668,7 +578,7 @@ function usePullBehavior(opts: {
         if (finished) runOnJS(finish)()
       })),
     )
-  }, [pullY, screenH])
+  }, [pullY, screenH, tutorialPeek])
   const tutorialReady = tutorial?.ready ?? false
   const tutorialSeenFlag = tutorial?.seenFlag
   useEffect(() => {
@@ -756,6 +666,7 @@ function usePullBehavior(opts: {
       .onStart(() => {
         'worklet'
         pullY.value = 0
+        pullVelocity.value = 0
         slidOut.value = false
         engaged.value = false
         // Scroll always wins: a gesture that began below the top is
@@ -766,6 +677,7 @@ function usePullBehavior(opts: {
         'worklet'
         if (scrollOnly.value) { pullY.value = 0; return }
         const raw = Math.max(0, e.translationY)
+        pullVelocity.value = e.velocityY
         // NO resistance: the card tracks the finger 1:1 (user: "no
         // resistance, the card slides directly with the finger"). The only
         // guard against an accidental skip is the commit GATE in onEnd
@@ -790,15 +702,24 @@ function usePullBehavior(opts: {
           // card's mount, which made Reanimated intermittently drop the new
           // card's entering — "a card appears suddenly without a rise". This
           // is the proven, reliable timing; the small fall-motion polish is
-          // sacrificed for a card that always animates in.
+          // sacrificed for a card that always animates in. The ride-off uses
+          // an ease-OUT (fast start) so it continues the finger's downward
+          // motion instead of easing in from a dead stop — onCommit still
+          // fires immediately, so the reliable mount timing is untouched.
           slidOut.value = true
-          pullY.value = withTiming(screenH)
+          pullY.value = withTiming(screenH, { easing: Easing.out(Easing.cubic) })
           runOnJS(onCommit)()
         }
       })
       .onFinalize(() => {
         'worklet'
-        if (!slidOut.value) { pullY.value = withTiming(0) }
+        // Released short of commit → spring back to rest, seeded with the
+        // finger's last velocity (captured in onUpdate) so the card carries
+        // the drag's momentum into the snap-back instead of jerking to a stop
+        // then easing in. Critically damped → smooth, no bounce.
+        if (!slidOut.value) {
+          pullY.value = withSpring(0, { velocity: pullVelocity.value, ...PULL_SNAP_SPRING })
+        }
         if (engaged.value) { engaged.value = false; runOnJS(setPulling)(false) }
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1006,7 +927,7 @@ function StatusCardText({ title, description }: { title: string; description: st
 // symmetric page2 incoming-invite clock under the invite tab. Keeping the
 // two countdowns in the same chrome row (instead of one in the button and
 // one in the tab) means both sides of the invitation read the same way.
-function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean }) {
+function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy, disabled }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean; disabled?: boolean }) {
   const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
   const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
 
@@ -1017,8 +938,16 @@ function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetI
         <Button
           label={t('home.cancelWaitingBtn')}
           variant="onPrimary"
+          // The hearts-cost badge rides in-button (same as the page2 accept
+          // CTA) so the user sees cancelling costs 1 heart — including while
+          // the button is disabled, where it doubles as the "why" hint.
+          iconStart={<CreditCost cost={CREDIT_COST.cancel} color={PRIMARY} bg={PRIMARY_BG} />}
           onPress={onCancel}
           loading={busy}
+          // Cancelling costs 1 heart; when the user can't afford it the
+          // button is disabled and does nothing (no explainer popup) — they
+          // stay in `waiting` until the invite expires or is answered.
+          disabled={disabled}
         />
       </Animated.View>
     </View>
@@ -1066,7 +995,6 @@ function ReplyingInviteCard({
   declineLabel,
   costCredits,
   affordable = true,
-  onUnaffordable,
   onAccept,
   onDecline,
   busy,
@@ -1078,13 +1006,12 @@ function ReplyingInviteCard({
   acceptLabel: string
   declineLabel: string
   /** Stars the accept action spends — shown as the in-button cost badge
-   * (star + N) in place of the old decorative icon. */
+   * (heart + N). Reads "0" on the free page1 invite prompt so the user
+   * sees that inviting costs nothing. */
   costCredits: number
   /** False ⇒ the user can't afford the accept. The accept button then
-   * renders disabled (faded) but stays tappable: a tap fires
-   * `onUnaffordable` (the not-enough-stars explainer) instead of accepting. */
+   * renders disabled (faded) and does nothing on press — no explainer. */
   affordable?: boolean
-  onUnaffordable?: () => void
   onAccept: () => void
   onDecline: () => void
   busy?: boolean
@@ -1116,9 +1043,8 @@ function ReplyingInviteCard({
               loading={acceptLoading}
               // Keep the in-flight lockout silent (no gray flicker) exactly
               // as before; but when the block is "can't afford" show the
-              // disabled look and route the tap to the explainer.
+              // disabled look and let the tap do nothing (no explainer).
               silentDisabled={!unaffordable && !acceptLoading}
-              disabledHint={unaffordable && !busy ? onUnaffordable : undefined}
             />
           </View>
         </View>
@@ -1408,6 +1334,11 @@ export default function HomePage() {
   // Unread message count reported by ChatPage — shown as a badge next to the
   // "Chat" title while we're on the home pane.
   const [chatUnread, setChatUnread] = useState(0)
+  // Whether the chat partner is currently online — reported by ChatPage via
+  // its presence channel. Drives the green presence dot beside the chat
+  // (side-tab) icon. Stays whatever it last was after chat ends; the
+  // `chatAvailable` gate on the side-tab spec keeps a stale `true` harmless.
+  const [partnerOnline, setPartnerOnline] = useState(false)
   // SettingsPage reports when the user is editing photos (iOS-style jiggle).
   // While that's active, PagerView scrolling is disabled so dragging a photo
   // to reorder doesn't slide the whole pane.
@@ -1437,6 +1368,11 @@ export default function HomePage() {
   // Measured bottom of the home shell's TabStrip. Used to anchor the profile
   // sheet just below the tabs so the card doesn't slide behind them.
   const tabStripBottom = useSharedValue(0)
+  // Measured height of the page1 pane (the area below the TabStrip that the
+  // match card fills). Handed to MatchCard as `cardHeight` so the hero photo
+  // is correctly sized on its first render — the card then rises as one solid
+  // block instead of measuring-itself-then-revealing partway up the slide.
+  const [paneHeight, setPaneHeight] = useState(0)
   // Same unified pull behaviour as page1/page2, in 'sheet' mode: manual
   // activation with header-vs-scroll arbitration. Threshold/flick/commit
   // motion are all object-owned and identical to the other surfaces (slide
@@ -1651,16 +1587,6 @@ export default function HomePage() {
   const page1Profile = (profile?.relations?.page1 as { profile?: { user_id?: string } } | undefined)?.profile
   const gameModeOff = rawPage1State === 'locked' && page2State === 'locked'
     && !page1Profile?.user_id && !page2InviteObj
-  // Drives the Home-tab base word cross-fade "Once" ⇄ "פאוזה". 0 = normal,
-  // 1 = paused. withTiming (system default duration — DRY, no magic number)
-  // so toggling game mode animates the swap. Fed to TabStrip as the Home
-  // tab's `pauseProgress`; the glyph is intentionally NOT changed (the
-  // settings glyph stays identical in every state — see the Menu tab spec).
-  const pauseProgress = useSharedValue(0)
-  useEffect(() => {
-    pauseProgress.value = withTiming(gameModeOff ? 1 : 0)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameModeOff])
   // Broadcast = the "Show me to people" action: app_add. Server enforces a
   // 30-minute cooldown between presses; the toggle keeps the broadcast
   // segment visually "active" while the cooldown is running. The user can
@@ -1722,17 +1648,12 @@ export default function HomePage() {
   // mount that already has viewers (initial load 0→N) is NOT mistaken for "a
   // viewer just joined" — only a genuine post-baseline rise pulses.
   const prevWatchersCountRef = useRef<number | null>(null)
-  // Stars-balance change → the Menu tab's standard 3-blink `alerting` pulse
-  // AND, for that window, the star glyph is RECOLOURED (no number element):
-  // green when stars were added, red when removed. Same baseline-null +
-  // pulseTimeoutMs coalescing pattern as the viewer-count pulse: a burst of
-  // changes inside the window reads as one pulse, and a cold mount that loads
-  // with a balance (null→N) does NOT pulse. Both flags clear on the timeout
-  // so the glyph returns to its normal white right after the blink.
+  // Stars-balance change → the Menu tab's standard 3-blink `alerting` pulse on
+  // the balance number. Same baseline-null + pulseTimeoutMs coalescing pattern
+  // as the viewer-count pulse: a burst of changes inside the window reads as
+  // one pulse, and a cold mount that loads with a balance (null→N) does NOT
+  // pulse. The flag clears on the timeout right after the blink.
   const [starsAlerting, setStarsAlerting] = useState(false)
-  const [starsChangeActive, setStarsChangeActive] = useState(false)
-  // Sign of the change → green (added) vs red (removed) glyph tint.
-  const [starsChangePositive, setStarsChangePositive] = useState(false)
   const prevStarsBalanceRef = useRef<number | null>(null)
   const starsBalance = creditBalance(profile)
   const page2InviteUserId = page2PendingInvite?.user_id ?? null
@@ -1782,13 +1703,37 @@ export default function HomePage() {
   // "Request to join" — the not-in-any-enabled-group gate's CTA. Records
   // relations.join_request server-side; availability.join_requested flips
   // live (Realtime), swapping this CTA for the "waiting for approval" state.
+  // The button shows a spinner from the tap until that flip lands. The
+  // spinner is held the WHOLE way (not cleared on the HTTP response): the
+  // store strips `relations` from a plain invoke response (game state is
+  // Realtime-owned), so clearing on the response would briefly bounce the
+  // button back to the un-pressed "request to join" look in the gap before
+  // Realtime arrives — exactly the "nothing happens" the user reported.
   const [joinBusy, setJoinBusy] = useState(false)
+  const joinFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const runJoinRequest = async () => {
     if (joinBusy) return
     setJoinBusy(true)
-    try { await invoke('app/join_request', {}) } catch { /* realtime corrects */ }
-    finally { setJoinBusy(false) }
+    try {
+      await invoke('app/join_request', {})
+    } catch {
+      // Request failed — drop the spinner so the CTA is tappable again.
+      setJoinBusy(false)
+      return
+    }
+    // Success: keep spinning until Realtime confirms the gate flipped (the
+    // effect below). Fallback timer guards a missed Realtime update.
+    if (joinFallbackRef.current) clearTimeout(joinFallbackRef.current)
+    joinFallbackRef.current = setTimeout(() => setJoinBusy(false), JOIN_REQUEST_CONFIRM_TIMEOUT_MS)
   }
+  // Realtime confirmed the request landed → drop the spinner; the centerNotice
+  // recomputes to the "waiting for approval" state in the same render.
+  useEffect(() => {
+    if (joinBusy && availability?.join_requested) {
+      setJoinBusy(false)
+      if (joinFallbackRef.current) { clearTimeout(joinFallbackRef.current); joinFallbackRef.current = null }
+    }
+  }, [joinBusy, availability?.join_requested])
 
   const handlePermissionRequest = async () => {
     if (permBusy) return
@@ -2241,144 +2186,8 @@ export default function HomePage() {
   // translate together (both for the layout animation and for the pull
   // gesture below). No transA/transB / slot bookkeeping required.
   const remoteMatch = profile?.relations?.match ?? null
-  // page1 candidate stack (stack[0] is the visible top === match). The card
-  // after the visible one is rendered statically behind it (PullPane
-  // `behind`) so a skip reveals it instantly with no rise. behindMatch is
-  // derived relative to displayedMatch (below) — the FIRST stack entry that
-  // isn't the currently-shown top — so it consistently equals "the card that
-  // will become the next top" across the skip transition (no wrong-card
-  // frame between the store stack shift and displayedMatch catching up).
-  const page1Stack = profile?.relations?.stack ?? null
   const [displayedMatch, setDisplayedMatch] = useState<Profile | null>(remoteMatch)
 
-  // ── page1 LOCAL optimistic deck (Tinder/Bumble) ───────────────────────
-  // While watching, the page1 card pair is driven by this LOCAL deck, NOT
-  // the server-lagged store: a skip pops the deck the instant the ride-off
-  // animation finishes, so the next card is interactive with ZERO
-  // dependency on the app/skip round-trip. The server stack
-  // (relations.stack) reconciles into the deck in the background — it drops
-  // server-removed cards (a non-top person who matched/got kicked
-  // elsewhere) and appends fresh top-ups, but never resurrects a locally
-  // skipped card. deck[0] = interactive top (pull wrapper); deck[1] = next
-  // (static `behind` slot, already in place — no rise).
-  const isWatching = state === 'watching'
-  const [deck, setDeck] = useState<Profile[]>(
-    () => (Array.isArray(page1Stack) ? page1Stack : []),
-  )
-  const deckRef = useRef<Profile[]>(deck)
-  useEffect(() => { deckRef.current = deck }, [deck])
-  // Locally-skipped ids: excluded from server-driven re-append so a skipped
-  // card never comes back, even if app/skip failed (user decision).
-  const skippedIdsRef = useRef<Set<string>>(new Set())
-  // Set at skip-commit, cleared on promote; one-shot gate for the ride-off
-  // promote so it fires exactly once per skip.
-  const pendingSkipRef = useRef<string | null>(null)
-  // The user_id the pull/ride currently applies to (the card being dragged
-  // / flying off). The FRONT wrapper translates by pullY ONLY when it IS
-  // this card; the freshly-promoted next card (a different id) renders at
-  // rest immediately, independent of pullY's async settle — that's what
-  // kills the post-skip flicker. Updated in the layout effect AFTER reset.
-  const liveTopId = useSharedValue('')
-  // One-shot latch for the ride-off promote. The useAnimatedReaction below
-  // runs EVERY UI frame; without this it would `runOnJS(promote)` on every
-  // frame for the whole tail of the ride (pullY ≥ 0.95·screenH until the
-  // re-render), spamming the JS thread right at the end of the gesture —
-  // the "swipe isn't smooth" stutter. Set true the first frame past the
-  // threshold; reset false in the post-slice layout effect (one promote
-  // per skip, frame-driven, zero JS churn after it fires).
-  const promoteFiredSV = useSharedValue(false)
-  // (No rise machinery: per the user the card NEVER rises — neither a fresh
-  // first card nor a skip-advance. It just appears at rest; the FRONT
-  // wrapper forces Reanimated `skipEntering`.)
-  const screenH = Dimensions.get('window').height
-  const frontMatch: Profile | null = isWatching ? (deck[0] ?? null) : null
-  const behindMatch: Profile | null = isWatching ? (deck[1] ?? null) : null
-  // The single FOCUSED counterpart, unified across the live-interaction
-  // states so it is ONE persistent React element keyed by user_id: while
-  // watching it's the deck top; while waiting/chat it's the same person you
-  // committed to. Routing all three through the identical wrapper (below)
-  // means inviting the top does NOT remount the card — MatchCard stays
-  // mounted and animates its topBlock (the invite timer) in via
-  // onTopBlockShown, instead of the card vanishing and reappearing. Ended /
-  // locked "what happened" states are NOT here (focusMatch = null) — they
-  // keep the RisingCard interrupt-slide path.
-  // STICKY focus: while waiting/chat the source is `displayedMatch`, which
-  // the sync effect transiently sets to null on the watching→waiting handoff
-  // (it isn't maintained during watching, so it's stale/null right when the
-  // invite lands). A bare `displayedMatch` there made focusMatch flicker
-  // person→null→person ⇒ the keyed element unmounted+remounted ⇒ the card
-  // "reloads" on invite. Falling back to the last known focus (the SAME
-  // person you just invited — it was the deck top) bridges that one-frame
-  // gap so the element identity (key = user_id) is preserved and MatchCard
-  // only updates props (topBlock = invite timer) — it stays put and scrolls.
-  const stickyFocusRef = useRef<Profile | null>(null)
-  const focusMatch: Profile | null = isWatching
-    ? frontMatch
-    : state === 'waiting' || state === 'chat'
-      ? (displayedMatch ?? stickyFocusRef.current)
-      : null
-  useEffect(() => {
-    if (focusMatch) stickyFocusRef.current = focusMatch
-    else if (!isWatching && state !== 'waiting' && state !== 'chat') {
-      stickyFocusRef.current = null
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMatch?.user_id, isWatching, state])
-  // Gate for the first-card rise. The focus card SlideInDown-rises on every
-  // genuine in-session fresh search (a real mount of a new focus element),
-  // but NOT on the cold-launch first paint (user opened the app already
-  // `watching` — that must be static, both for the documented cold-start
-  // behaviour and to dodge the Fabric mount-race). Starts false; an effect
-  // flips it true AFTER the first commit, so only mounts that happen later
-  // (the user pressing play → app/find) animate in. Skip-advance and
-  // watching→waiting never remount the focus element, so `entering` can't
-  // fire there regardless — this gate is purely the cold-start guard.
-  const firstPaintDoneRef = useRef(false)
-  useEffect(() => { firstPaintDoneRef.current = true }, [])
-
-  // Reconcile the server stack into the local deck (watching only).
-  // Keep the user's local order/position, drop cards the server removed,
-  // append genuinely-new server cards (top-ups) that aren't locally skipped.
-  useEffect(() => {
-    if (!isWatching) {
-      if (deckRef.current.length) setDeck([])
-      skippedIdsRef.current.clear()
-      pendingSkipRef.current = null
-      return
-    }
-    const server = Array.isArray(page1Stack) ? page1Stack : []
-    const serverIds = new Set(server.map(p => p.user_id))
-    // Once the server has dropped a skipped id (app/skip processed) stop
-    // tracking it — its membership is now authoritatively gone.
-    for (const id of [...skippedIdsRef.current]) {
-      if (!serverIds.has(id)) skippedIdsRef.current.delete(id)
-    }
-    const prev = deckRef.current
-    const kept = prev.filter(p => serverIds.has(p.user_id))
-    const keptIds = new Set(kept.map(p => p.user_id))
-    const appended = server.filter(
-      p => !keptIds.has(p.user_id) && !skippedIdsRef.current.has(p.user_id),
-    )
-    const next = [...kept, ...appended]
-    if (
-      next.length === prev.length &&
-      next.every((p, i) => p.user_id === prev[i].user_id)
-    ) return
-    setDeck(next)
-  }, [isWatching, page1Stack])
-
-  // Local promote: pop the skipped top off the deck. Triggered LOCALLY by
-  // the ride-off animation completing (the useAnimatedReaction below) — NOT
-  // by the server. The pull is reset to rest in a layout effect AFTER the
-  // deck slice commits (so the unmounting old top is gone before pullY hits
-  // 0 — no snap-back flash), then the next card is already in place.
-  const promote = useCallback(() => {
-    if (!pendingSkipRef.current) return
-    pendingSkipRef.current = null
-    setDeck(d => (d.length ? d.slice(1) : d))
-  }, [])
-  // (The ride-off promote trigger + the post-slice pull reset are wired
-  // below, right after page1Pull is created — they need its shared value.)
   // Match currently being preloaded into a hidden MatchCard. Once that
   // hidden card reports onReady (all photos painted), it gets promoted to
   // displayedMatch and the visible Animated.View slides in.
@@ -2392,6 +2201,19 @@ export default function HomePage() {
   // keeps the shared-value writes outside render.
   const preloadingMatchRef = useRef<Profile | null>(null)
   useEffect(() => { preloadingMatchRef.current = preloadingMatch }, [preloadingMatch])
+  // skipAbortedRef: set true the instant the center pause button is tapped
+  // mid-skip — it makes every skip-promote path (the remote→displayed sync
+  // effect, startPreload, onPreloadReady) a no-op so a candidate the server
+  // already found never surfaces once the user chose to pause. Reset at the
+  // start of the next find/ignore. inflightSkipRef holds the in-flight
+  // app/find|app/ignore request so the pause can be chained AFTER it (server
+  // then commits app_pause last and page1 ends `locked`, not watching).
+  const skipAbortedRef = useRef(false)
+  const inflightSkipRef = useRef<Promise<unknown> | null>(null)
+  // True only while app/pause (from the skip pause button) is in flight —
+  // drives that button's spinner. Separate from `busy` (already true for the
+  // whole skip, so it can't gate the pause button's own spinner).
+  const [pausing, setPausing] = useState(false)
   // True from the moment runFind/runIgnore is initiated until the new card
   // (if any) has finished its slide-in animation, OR until the empty pane
   // settles after the slide-out (when no new card arrives). Drives the
@@ -2445,35 +2267,116 @@ export default function HomePage() {
     return () => clearTimeout(timer)
   }, [searching])
 
-  // STACK model: a top card NEVER rises (SlideInDown). The next card waits
-  // statically in place behind the current one (PullPane `behind`), so when
-  // the top is skipped off it is simply revealed already there — no rise.
-  // RisingCard is passed animateEnter={false} unconditionally; only its
-  // SlideOutDown exit + the PullPane black "לא עכשיו" wake still animate.
+  // Skip the entering animation only when the session started with a card
+  // already in page1 (app-load instant appearance). If the session started
+  // empty, the first card to arrive (and every subsequent one) animates with
+  // SlideInDown.
+  const matchHasMountedRef = useRef(!remoteMatch)
+  // Whether the page1 watch card has risen at least once since the user last
+  // pressed play. The center circle presents as a PAUSE button only after a
+  // card has been revealed: a play press keeps the PLAY icon through the
+  // find/loading window (no card on screen yet) and flips to pause only as
+  // the card starts rising. A skip leaves it true (a card was already shown);
+  // runFind resets it on a fresh play press (user request 2026-05-22).
+  const [watchCardShown, setWatchCardShown] = useState(!!remoteMatch)
+  useEffect(() => {
+    if (displayedMatch) {
+      matchHasMountedRef.current = true
+      setWatchCardShown(true)
+    }
+  }, [displayedMatch?.user_id])
 
-  // Reset the cached "scroll is at top" gate whenever a new profile is shown.
+  // ── Home-tab name-slide (skip choreography) ──────────────────────────────
+  // During a skip the Home tab's word slides in three beats, driven by ONE
+  // shared value `skipSlide` ∈ [0,2] fed to the tab as `nameSlide`:
+  //   0 → 1  the candidate's name slides DOWN out while "לא עכשיו" enters
+  //          from the TOP — tracked 1:1 with the pull, complete at the commit
+  //          point (clamp(pullY / commitDistance, 0, 1)).
+  //   1      held at "לא עכשיו" while the card rides off-screen.
+  //   1 → 2  the next name rises from BELOW and pushes "לא עכשיו" up and out,
+  //          started in step with the new card's RisingCard slide-up.
+  // `skipPhase` gates which beat owns the value: 'pull' lets the reaction
+  // below mirror the drag; 'hold'/'anim' run their own withTiming and the
+  // reaction stands off (so the post-commit pullY ride-off + reset never move
+  // the word). The reaction mirrors the drag in 'idle' too, purely so the
+  // very first frame of a pull is already tracked (no catch-up jump) — in
+  // 'idle' the tab shows the same name at slide 0 and 2, so the value there
+  // is visually moot.
+  const skipSlide = useSharedValue(0)
+  const skipPhaseSV = useSharedValue(0) // 0 idle · 1 pull · 2 hold · 3 anim
+  const skipPhaseRef = useRef<'idle' | 'pull' | 'hold' | 'anim'>('idle')
+  const [skipPhase, setSkipPhaseState] = useState<'idle' | 'pull' | 'hold' | 'anim'>('idle')
+  // The candidate name frozen at skip start — the word that slides out. Held
+  // for the life of the skip even after `homeTabLabel` flips to the next
+  // candidate, so the outgoing word stays correct while the incoming one
+  // (always the live `homeTabLabel`) loads in behind it.
+  const [skipFromName, setSkipFromName] = useState('')
+  // Index into SKIP_HEADLINES — re-rolled whenever a new card is shown (see
+  // the effect by page1Pull), so each card carries its own random skip line
+  // in the headline slot behind it, revealed when that card is pulled away.
+  const [skipHeadlineIdx, setSkipHeadlineIdx] = useState(() => pickHeadline(-1, SKIP_HEADLINES.length))
+  const setSkipPhase = useCallback((p: 'idle' | 'pull' | 'hold' | 'anim') => {
+    skipPhaseRef.current = p
+    skipPhaseSV.value = p === 'idle' ? 0 : p === 'pull' ? 1 : p === 'hold' ? 2 : 3
+    setSkipPhaseState(p)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // `homeTabLabel` read fresh inside callbacks (runIgnore) without making it a
+  // dependency — runIgnore is `onCommit` for the pull gesture, and churning
+  // its identity per label change would rebuild the gesture.
+  const homeTabLabelRef = useRef('')
+  // The pull depth (in `pullY` units) that lands the descending card's top
+  // edge on the pause-icon centre — consumed by the first-time skip tutorial.
+  // Measured from the home pane's height (see the empty-pane onLayout).
+  const tutorialPeekV = useSharedValue(0)
+
   // ── Pull-to-skip (page1) ─────────────────────────────────────────────
   // The whole pull behaviour — gesture, 1:1 resistance, half-screen commit,
   // the ride-off-screen animation, AND the first-time tutorial choreography
   // + once-ever trigger — lives in usePullBehavior. runIgnore is the commit
   // action (also fired by the skip-hint dialog) so it's declared here.
   const runIgnore = useCallback(() => {
-    // LOCAL optimistic skip. Mark the top skipped and fire app/skip
-    // fire-and-forget — the UI advances entirely locally: the committed card
-    // rides off over the black "לא עכשיו" wake (the gesture's existing
-    // pullY → screenH), then `promote` (fired LOCALLY by the ride-off
-    // animation reaching the bottom, NOT by this round-trip) pops the deck
-    // so the already-in-place next card becomes the interactive top. The
-    // server records the 24h ignore + tops the stack back to 10 and that
-    // reconciles into the deck in the background. No busy gate: the next
-    // card is immediately skippable with zero dependency on the response.
-    const top = deckRef.current[0]
-    if (!top || pendingSkipRef.current === top.user_id) return
+    if (busy || ignoreLoading) return
     tap()
-    skippedIdsRef.current.add(top.user_id)
-    pendingSkipRef.current = top.user_id
-    invoke('app/skip', { skipped_id: top.user_id }).catch(err => console.error(err))
-  }, [])
+    // Home-tab name-slide → "לא עכשיו". A gesture skip arrives here already
+    // in 'pull' (the name is ~slid); a button skip arrives in 'idle', so
+    // freeze the outgoing name and start the slide from 0. Either way settle
+    // on "לא עכשיו" (skipSlide → 1) while the card rides off; the reaction
+    // stops the moment the phase leaves 'pull'.
+    if (skipPhaseRef.current === 'idle') {
+      setSkipFromName(homeTabLabelRef.current)
+      skipSlide.value = 0
+    }
+    setSkipPhase('hold')
+    skipSlide.value = withTiming(1)
+    setBusy(true)
+    setPendingKey('watching-reject')
+    setIgnoreLoading(true)
+    setSearching(true)
+    // Fresh scan starts in the "no candidate yet" phase, not the
+    // image-loading one (matters if a previous skip's loadingProfile
+    // hadn't cleared yet).
+    setLoadingProfile(false)
+    // A fresh skip clears any pause-abort latched by a previous one.
+    skipAbortedRef.current = false
+    // Optimistic exit: clearing displayedMatch unmounts the keyed
+    // Animated.View, which plays SlideOutDown. The pull transform (pullY) is
+    // preserved during the layout exit, so a release at any pulled position
+    // continues smoothly off-screen. Realtime delivers the next match (or
+    // null) and the sync effect clears the loading state.
+    setDisplayedMatch(null)
+    // Keep the request so a pause tapped mid-skip can be chained after it.
+    const ignorePromise = invoke('app/ignore', {})
+    inflightSkipRef.current = ignorePromise
+    ignorePromise.catch(err => {
+      console.error(err)
+      setBusy(false)
+      setPendingKey(null)
+      setIgnoreLoading(false)
+      setSearching(false)
+      setLoadingProfile(false)
+    })
+  }, [busy, ignoreLoading])
   const page1Pull = usePullBehavior({
     activation: 'scrollPan',
     enabled: state === 'watching',
@@ -2484,98 +2387,73 @@ export default function HomePage() {
       ready: state === 'watching' && !!displayedMatch
         && !showNotifOverlay && !showLocOverlay && !locFailed && !showNoInternetOverlay,
       seenFlag: SEEN_FLAGS.homeDemo,
+      peek: tutorialPeekV,
     },
   })
-  // Ride-off promote (LOCAL, no server): when the committed card has slid
-  // ~off-screen (pullY reached the bottom of its withTiming(screenH) ride),
-  // pop the local deck so the already-in-place next card becomes the top.
-  // One-shot per skip via pendingSkipRef; frame-driven so it tracks the
-  // actual animation, not a hardcoded duration.
-  useAnimatedReaction(
-    () => page1Pull.pullY.value,
-    (cur) => {
-      // Gate on slidOut: only the COMMITTED ride-off (onEnd → withTiming
-      // (screenH)) may promote. Without this, the now-1:1 pull (pullY =
-      // raw finger) would hit 0.95·screenH while the finger is still down
-      // on a long drag and pop the deck before release.
-      if (
-        page1Pull.slidOut.value &&
-        cur >= screenH * 0.95 &&
-        !promoteFiredSV.value
-      ) {
-        promoteFiredSV.value = true
-        runOnJS(promote)()
-      }
-    },
-    [screenH],
-  )
-  // Instant pull reset AFTER the deck slice has rendered (layout phase, pre
-  // paint). By now the old top's keyed wrapper is unmounted (plain View, no
-  // exit anim) and the NEW top is mounted in the pull wrapper — still
-  // translated by the leftover pullY≈screenH. Resetting to 0 here (before
-  // paint) lands the new top at rest with no snap-back flash and no rise;
-  // the next card was already sitting in the static `behind` slot.
-  useLayoutEffect(() => {
-    if (!isWatching) return
-    // Order matters: reset the pull FIRST (pullY -> 0), THEN point liveTopId
-    // at the new top. Until liveTopId catches up the new FRONT's self-
-    // translate is 0 (its id !== liveTopId), and once it does catch up pullY
-    // is already 0 — so the new top is at rest the whole time (no flicker).
-    page1Pull.reset()
-    // Clear the committed-ride latch. It is set true by BOTH the gesture's
-    // onEnd AND the button's commit(), but was previously reset ONLY in the
-    // gesture onStart — so after a BUTTON skip it stayed true forever and
-    // the next commit() hit `if (slidOut.value) return` ⇒ the "Not now"
-    // button skipped only once then silently no-op'd ("doesn't always
-    // work"). Resetting here (post-promote, after the ride finished) re-arms
-    // both the button and the swipe for the next skip. Safe: this effect
-    // runs AFTER promote already fired, so it can't abort an in-flight ride.
-    page1Pull.slidOut.value = false
-    promoteFiredSV.value = false
-    liveTopId.value = deck[0]?.user_id ?? ''
-    page1Pull.setScrollAtTop(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deck[0]?.user_id, isWatching])
-  // Self-translate for the page1 FRONT card. PullPane runs in `cardStatic`
-  // mode (it does NOT translate the card itself), so the FRONT follows the
-  // finger ONLY while it IS the live top (the card being dragged / riding
-  // off). A freshly-promoted next card has a different id than liveTopId
-  // until the layout effect above runs (by then pullY is already 0), so it
-  // sits at rest the entire swap — no off-screen frame, no flicker.
-  const frontId = frontMatch?.user_id ?? ''
-  const frontPullStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: frontId !== '' && frontId === liveTopId.value ? page1Pull.pullY.value : 0 },
-    ],
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [frontId])
-  // 0 at rest → 1 at the commit point. Drives the Home-tab name slide 1:1
-  // with the skip pull. GATED by the EXACT same predicate frontPullStyle
-  // uses (`frontId === liveTopId`): the name only slides while the shown
-  // top IS the card being dragged. The instant `promote()` pops the deck,
-  // `spec.label` jumps to the new top but `pullY` is still ≈screenH (the
-  // layout effect hasn't reset it yet) — without this gate the slide would
-  // be at p≈1, rendering `nameSwapNext` (the card AFTER next) while the
-  // screen shows the new top ⇒ the tab shows the WRONG name, compounding
-  // on fast multi-skip ("names get confused"). Gating to 0 there makes the
-  // tab show the new top (spec.label) at rest in LOCKSTEP with the card
-  // (which is also held at rest by the same liveTopId gate).
-  const nameSwapProgress = useDerivedValue(() => {
-    if (frontId === '' || frontId !== liveTopId.value) return 0
-    const c = page1Pull.commitDistance || 1
-    const p = page1Pull.pullY.value / c
-    return p < 0 ? 0 : p > 1 ? 1 : p
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frontId])
   // MatchCard's PullScrollView is the same instance across profile changes;
   // the pull gesture samples scrollAtTop at gesture start. PullScrollView
   // only refreshes it from native onScroll, so without this reset it sticks
   // at `false` (previous card's scrolled-down position) and the first swipe
   // on the new card is routed to scroll-only until the user nudges it.
   useEffect(() => {
-    if (displayedMatch) page1Pull.setScrollAtTop(true)
+    if (displayedMatch) {
+      page1Pull.setScrollAtTop(true)
+      // Fresh random skip line for this card — it sits in the headline slot
+      // behind the card and is revealed, already full, when the card is
+      // pulled away to skip.
+      setSkipHeadlineIdx(prev => pickHeadline(prev, SKIP_HEADLINES.length))
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMatch?.user_id])
+
+  // Mirror the pull into the name-slide while the finger owns it (phase
+  // 'pull'; also 'idle' so the very first frame of a pull is already tracked
+  // — no catch-up jump). 'hold'/'anim' run their own withTiming, so the
+  // reaction stands off then (the post-commit pullY ride-off + reset must not
+  // move the word).
+  const page1CommitDistance = page1Pull.commitDistance
+  useAnimatedReaction(
+    () => page1Pull.pullY.value,
+    (py) => {
+      'worklet'
+      if (skipPhaseSV.value > 1) return
+      skipSlide.value = Math.min(1, Math.max(0, py / page1CommitDistance))
+    },
+    [page1CommitDistance],
+  )
+  // Pull lifecycle for the name-slide. Engage 'pull' (freezing the outgoing
+  // name) when a pull begins; on release WITHOUT a commit (runIgnore would
+  // have advanced the phase to 'hold') ease the word back to the current name
+  // in step with the card's snap-back, then return to idle.
+  const page1Pulling = page1Pull.pulling
+  useEffect(() => {
+    if (page1Pulling) {
+      if (skipPhaseRef.current === 'idle') {
+        setSkipFromName(homeTabLabelRef.current)
+        setSkipPhase('pull')
+      }
+    } else if (skipPhaseRef.current === 'pull') {
+      setSkipPhase('anim')
+      skipSlide.value = withTiming(0, undefined, (fin) => {
+        'worklet'
+        if (fin) runOnJS(setSkipPhase)('idle')
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page1Pulling])
+  // Beat 3 of the name-slide: the next name rises from below and pushes
+  // "לא עכשיו" up and out (skipSlide 1 → 2), started in step with the new
+  // card's slide-up. No-op unless a skip is holding at "לא עכשיו"; called
+  // from every skip-resolution path (new card, no-candidate, abort).
+  const startNameRise = useCallback(() => {
+    if (skipPhaseRef.current !== 'hold') return
+    setSkipPhase('anim')
+    skipSlide.value = withTiming(2, undefined, (fin) => {
+      'worklet'
+      if (fin) runOnJS(setSkipPhase)('idle')
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Sync remote → displayed. The card only rises (mounts with SlideInDown)
   // after its photos have been prefetched, so the user never sees a placeholder
@@ -2590,11 +2468,10 @@ export default function HomePage() {
       initialSyncRef.current = false
       return
     }
-    // While watching, the LOCAL deck owns the page1 card pair (front +
-    // static behind) and its own promote/reset — this preload→rise
-    // choreography must not also drive it (that double-drive was the
-    // reported "old card snaps back, black, then second card" glitch).
-    if (state === 'watching') return
+    // Paused mid-skip: ignore a candidate the server found after the abort.
+    // The chained app/pause brings page1 to `locked` shortly; the !remoteMatch
+    // branch below then resolves the UI to the paused state and clears the flag.
+    if (skipAbortedRef.current && remoteMatch) return
     let cancelled = false
     let searchingTimer: ReturnType<typeof setTimeout> | null = null
     const clearLoading = () => {
@@ -2606,10 +2483,13 @@ export default function HomePage() {
       }
     }
     if (!remoteMatch) {
+      skipAbortedRef.current = false
       setDisplayedMatch(null)
       setPreloadingMatch(null)
       setLoadingProfile(false)
       page1Pull.reset()
+      // Skip found nobody — resolve the name-slide to the (now "Once") label.
+      startNameRise()
       searchingTimer = setTimeout(() => {
         if (!cancelled) setSearching(false)
       }, 420)
@@ -2631,26 +2511,43 @@ export default function HomePage() {
     // clears it: the visible "down→up→down" on cancel.
     if (displayedMatch && displayedMatch.user_id === remoteMatch.user_id) {
       setLoadingProfile(false)
+      startNameRise()
       clearLoading()
       return () => { cancelled = true }
     }
-    // STACK model: a new top (stack[0] changed — a skip resolved, or the
-    // initial find landed). The next card was already mounted statically
-    // behind (PullPane `behind`) and its photos were prefetched by api.ts —
-    // so there is NO preload gate and NO rise. Promote it directly so it
-    // sits at rest in place (RisingCard animateEnter is false). Reset the
-    // pull first: the skipped card rode pullY off-screen, so without this
-    // the freshly-promoted top would mount inside the still-translated
-    // wrapper (off-screen). The old top's keyed RisingCard unmounts and
-    // plays SlideOutDown off-screen (invisible, as before).
-    setPreloadingMatch(null)
-    setLoadingProfile(false)
-    page1Pull.reset()
-    setDisplayedMatch(remoteMatch)
-    searchingTimer = setTimeout(() => {
-      if (!cancelled) setSearching(false)
-    }, 60)
-    clearLoading()
+    // Same exact URLs MatchCard requests (raw filename, no encodeURI) so the
+    // prefetch shares expo-image's disk-cache key — single source of truth in
+    // matchImageUrls.
+    const urls = matchImageUrls(remoteMatch)
+    const startPreload = () => {
+      // skipAbortedRef: the user paused mid-skip — never mount the preloader
+      // for a candidate that must not surface (the Image.prefetch promise
+      // below can resolve after the abort).
+      if (cancelled || skipAbortedRef.current) return
+      // Mount the hidden MatchCard. The card slides up only after that
+      // hidden instance reports onReady (all photos painted from cache).
+      setPreloadingMatch(remoteMatch)
+    }
+    if (urls.length === 0) {
+      // No photos to wait for — promote immediately. No image-loading wait,
+      // so the "Loading profile data" copy never applies here.
+      setLoadingProfile(false)
+      setDisplayedMatch(remoteMatch)
+      page1Pull.reset()
+      // New card mounts now (no photos to wait on) — rise the name with it.
+      startNameRise()
+      searchingTimer = setTimeout(() => {
+        if (!cancelled) setSearching(false)
+      }, 460)
+      clearLoading()
+    } else {
+      // Server has answered with a candidate; from here until the hidden
+      // preloader reports every photo painted we're loading this profile's
+      // images — swap the scanning headline to "Loading profile data".
+      setLoadingProfile(true)
+      // Disk-cache the photos first; once cached, mount the hidden preloader.
+      Image.prefetch(urls).then(startPreload, startPreload)
+    }
     return () => {
       cancelled = true
       if (searchingTimer) clearTimeout(searchingTimer)
@@ -2672,6 +2569,9 @@ export default function HomePage() {
   // MatchCard is still tearing down: we only promote when the user the
   // callback was bound to still matches the current preloadingMatch.
   const onPreloadReady = useCallback((readyUserId: string) => {
+    // Paused mid-skip — never promote (defensive; runPauseFromSkip also nulls
+    // preloadingMatchRef, so `current` is usually already null here).
+    if (skipAbortedRef.current) return
     const current = preloadingMatchRef.current
     if (!current || current.user_id !== readyUserId) return
     // Reset the pull transform first — pull-to-skip leaves pullY at screenH
@@ -2690,6 +2590,8 @@ export default function HomePage() {
     // risen and covered the headline (480ms > the slide-up duration).
     requestAnimationFrame(() => {
       setDisplayedMatch(current)
+      // Rise the next name in step with the card's RisingCard slide-up.
+      startNameRise()
     })
     setTimeout(() => { setSearching(false); setLoadingProfile(false) }, 480)
     if (ignoreLoadingRef.current) {
@@ -2697,7 +2599,7 @@ export default function HomePage() {
       setBusy(false)
       setPendingKey(null)
     }
-  }, [page1Pull.reset])
+  }, [page1Pull.reset, startNameRise])
 
   const watchers = profile?.relations?.watchers
     ? [...profile.relations.watchers].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
@@ -2714,22 +2616,11 @@ export default function HomePage() {
   const profileAvatarUrl = firstProfileImage && profile
     ? publicImageUrl(profile.user_id, 'normal', firstProfileImage)
     : null
-  // The avatar source is chosen in priority order so the circle is never
-  // empty waiting on the network:
-  //   1. localPhotoUriCache — set during a deferred upload from this session
-  //      (instant, but only valid until the cache is cleared post-upload).
-  //   2. selfAvatar — a stable copy on documentDirectory mirrored from
-  //      AsyncStorage; survives cold start and renders synchronously on the
-  //      first frame.
-  //   3. remote URL — fallback for the very first launch on a new device,
-  //      before the sync effect below has copied the photo locally.
-  const localAvatarUri = firstProfileImage ? (localPhotoUriCache.get(firstProfileImage) ?? null) : null
+  // The home center circle no longer renders the user's own avatar (it is
+  // the pause button during a skip — see the page1Profile branch in render).
+  // selfAvatar is still tracked so the persistent on-disk copy other screens
+  // read stays in sync with the user's first photo (sync effect below).
   const selfAvatar = useSelfAvatar()
-  const stableSelfAvatarUri = selfAvatar && selfAvatar.filename === firstProfileImage ? selfAvatar.uri : null
-  const avatarDisplayUrl = localAvatarUri ?? stableSelfAvatarUri ?? profileAvatarUrl
-  const avatarPlaceholder = !localAvatarUri && !stableSelfAvatarUri && firstPhoto?.hash
-    ? { blurhash: firstPhoto.hash }
-    : undefined
 
   useEffect(() => {
     if (profileAvatarUrl) Image.prefetch([profileAvatarUrl], 'memory-disk')
@@ -2751,115 +2642,12 @@ export default function HomePage() {
     }
   }, [firstProfileImage, userId, selfAvatar?.filename])
 
-  // Match name (strip trailing ", age") and gendered invite confirm desc.
-  // While watching, the relevant person is the LOCAL deck front (the card
-  // actually on screen / the one an invite acts on), NOT the server-lagged
-  // relations.match — so the Home-tab name + invite copy update exactly when
-  // the card swaps (on promote), in sync with the visible card.
-  const matchName = nameFromTitle(
-    isWatching && frontMatch ? frontMatch.title : profile?.relations?.match?.title,
-  )
-  // The Home tab's displayed name (single source — the spec.label below and
-  // the rise-from capture both read this).
+  const matchName = nameFromTitle(profile?.relations?.match?.title)
   const homeTabLabel = matchName || t('home.tabs.home')
-  // Rise-synced tab name slide-up (user: "when a card rises, lift the
-  // existing tab text and the new profile's name takes its place — like it
-  // goes down [skip], so it goes up [rise]"). Mirror of the pull-driven
-  // skip slide, but time-driven and in the OPPOSITE direction. `riseSwap`
-  // 0→1 runs on the SAME MOTION.base the card's SlideInDown uses, so the
-  // name slide and the card rise are synced by construction (one duration
-  // source). `riseFrom` is the OLD label captured at rise start; while set,
-  // TabStrip renders the rise pair (old slides up/out, new = spec.label in
-  // from the bottom) instead of the skip pair. Cleared in the timing
-  // completion callback so it falls back to the resting label seamlessly.
-  const riseSwap = useSharedValue(0)
-  const [riseFrom, setRiseFrom] = useState<string | null>(null)
-  // The Home label as it was while NOT watching — i.e. the genuine
-  // pre-search text the tab is showing right before the first card rises
-  // ("Once", or a leftover ended-state name). Updated ONLY while
-  // `!isWatching` (below), so it can NEVER be contaminated by the new
-  // card's name: `matchName` updates reactively from `relations.match`,
-  // which can lead the `isWatching` flip, so a render-trailing capture
-  // would grab the NEW name ⇒ the rise swapped "new→new" / "name got
-  // confused". Reading this at the edge guarantees old = the real old.
-  const lastNonWatchingLabelRef = useRef<string>(homeTabLabel)
-  const riseArmedRef = useRef<boolean>(false)
-  const prevFocusForRiseRef = useRef<string | null>(focusMatch?.user_id ?? null)
-  // ARM the rise SYNCHRONOUSLY during render (NOT in an effect). An effect
-  // runs one render LATE: by then `homeTabLabel` has already flipped to the
-  // new card's name, so for that one frame TabStrip's SKIP branch rendered
-  // the NEW name AT REST, then riseFrom landed and the OLD name abruptly
-  // appeared — exactly the user's "see the new before the rise; the old
-  // suddenly pops". Setting state during render (a documented React escape
-  // hatch — guarded by a ref + convergent, so it can't loop) puts riseFrom
-  // on the SAME commit as the isWatching flip, so the rise branch is active
-  // from the very first frame: no skip-branch gap. riseSwap is NOT touched
-  // here (no shared-value writes during render) — the slide only STARTS
-  // when the card actually mounts (the FIRE effect below).
-  const prevWatchRenderRef = useRef(isWatching)
-  if (prevWatchRenderRef.current !== isWatching) {
-    prevWatchRenderRef.current = isWatching
-    if (isWatching && firstPaintDoneRef.current) {
-      // Fresh in-session search. A deck skip/promote NEVER leaves watching
-      // so this can't retrigger (no "tab goes crazy on fast skip"); cold
-      // launch is excluded by firstPaintDoneRef (+ prevWatchRenderRef init
-      // = isWatching ⇒ no edge on the first render).
-      riseArmedRef.current = true
-      setRiseFrom(lastNonWatchingLabelRef.current || t('home.tabs.home'))
-    } else if (!isWatching) {
-      // Search abandoned / left watching — cancel so the tab returns to
-      // its normal resting label.
-      riseArmedRef.current = false
-      setRiseFrom(null)
-    }
-  }
-  // FIRE the slide when the first card ACTUALLY mounts (focusMatch
-  // null→non-null) while armed — the SAME instant its SlideInDown
-  // (MOTION.base) begins, so the tab-name rise is synced to the card rise
-  // BY CONSTRUCTION (same start, same duration). riseFrom was already set
-  // at arm (rise branch already showing OLD at rest, NEW clipped below);
-  // here we only START the slide. Skip-promote / watching→waiting keep
-  // focusMatch non-null throughout, so they never re-fire this.
-  useEffect(() => {
-    const cur = focusMatch?.user_id ?? null
-    const prev = prevFocusForRiseRef.current
-    prevFocusForRiseRef.current = cur
-    if (cur && !prev && riseArmedRef.current) {
-      riseArmedRef.current = false
-      riseSwap.value = 0
-      riseSwap.value = withTiming(1, { duration: MOTION.base }, (fin) => {
-        'worklet'
-        if (fin) {
-          // Do NOT reset riseSwap to 0 here. Clearing riseFrom is async
-          // (runOnJS → next tick), so a synchronous riseSwap=0 would, for
-          // that tick, leave the rise branch rendered at p=0 ⇒ the OLD
-          // name snaps back to rest and the NEW vanishes ("new up → old
-          // replaces it → new replaces old", the 3-step glitch). Leaving
-          // riseSwap at 1 keeps the ENDED state (new at rest, old gone);
-          // when setRiseFrom(null) lands the SKIP branch shows `label`
-          // (= the new name) at the SAME translateY 0 — seamless. riseSwap
-          // is reset to 0 later, while NOT watching (below), before the
-          // next rise's branch is ever rendered.
-          runOnJS(setRiseFrom)(null)
-        }
-      })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMatch?.user_id])
-  // While NOT watching: (a) track the last pre-search label (the genuine
-  // "old" text the next rise captures — never contaminated by the new
-  // card's name), and (b) park riseSwap at 0 so the NEXT rise's branch
-  // renders OLD at rest / NEW clipped from the very first frame (it is
-  // never the rendered branch while not watching, so this can't flash).
-  useEffect(() => {
-    if (!isWatching) {
-      lastNonWatchingLabelRef.current = homeTabLabel
-      riseSwap.value = 0
-    }
-  })
-  const matchIsMale = isWatching && frontMatch
-    ? frontMatch.is_male
-    : profile?.relations?.match?.is_male
+  // Keep the ref fresh so runIgnore can freeze the outgoing name (button-skip
+  // path) without taking homeTabLabel as a dependency.
+  useEffect(() => { homeTabLabelRef.current = homeTabLabel })
+  const matchIsMale = profile?.relations?.match?.is_male
   const inviteConfirmDesc = tgg('home.inviteConfirmDesc' as any, isMale, matchIsMale)
 
   // The match card surfaces both for live interaction states and for
@@ -2885,10 +2673,6 @@ export default function HomePage() {
   useEffect(() => {
     hasSeenFlag(SEEN_FLAGS.skipHintAck).then(setSkipHintAcked).catch(() => {})
   }, [])
-  // Not-enough-stars explainer. Holds the blocked action's cost (so the
-  // popup can say how many stars it needs); null = hidden. Opened by tapping
-  // an action button the user can't afford (invite / approve / broadcast).
-  const [insufficientCost, setInsufficientCost] = useState<number | null>(null)
   // Drives the watching card's inner scroll back to the top when the user
   // acknowledges the skip hint ("got it"), so the swipe-down-to-skip
   // gesture they were just taught is armed again.
@@ -2920,7 +2704,7 @@ export default function HomePage() {
   // Index into READY_HEADLINES; re-rolled on each entry to the ready state
   // by the effect next to headlineText. Lazy init so the first appearance is
   // already random rather than always the first sentence.
-  const [readyHeadlineIdx, setReadyHeadlineIdx] = useState(() => pickReadyHeadline(-1))
+  const [readyHeadlineIdx, setReadyHeadlineIdx] = useState(() => pickHeadline(-1, READY_HEADLINES.length))
   // Chat-state actions menu (opens from the MatchCard X button in chat
   // state). Exactly two destructive options: end chat (leave) and block.
   // Report is NOT here any more — it moved to a dedicated flag button on
@@ -2943,13 +2727,18 @@ export default function HomePage() {
     setReportTargetId(userId)
   }, [tap])
 
-  const runAction = (endpoint: string, key: string, onDone?: () => void) => {
+  const runAction = (
+    endpoint: string,
+    key: string,
+    onDone?: () => void,
+    body?: Record<string, unknown>,
+  ) => {
     if (busy) return
     tap()
     setBusy(true)
     setPendingKey(key)
     const done = () => { setBusy(false); setPendingKey(null); onDone?.() }
-    invoke(endpoint, {})
+    invoke(endpoint, body ?? {})
       .then(done)
       .catch(err => { console.error(err); done() })
   }
@@ -2971,8 +2760,11 @@ export default function HomePage() {
       if (broadcastActive) setExitBroadcastTarget('visible')
       else runAction('app/free2', 'free2')
     } else {
+      // Broadcast costs 1 heart. Even when the user can't afford it we still
+      // open the confirm popup — its confirm button is disabled there (see
+      // confirmDisabled below), so the popup stays informative (cost badge
+      // visible) but the action can't be taken.
       if (broadcastActive) setExitBroadcastTarget('exit')
-      else if (starsBalance < CREDIT_COST.broadcast) { tap(); setInsufficientCost(CREDIT_COST.broadcast) }
       else setBroadcastConfirmOpen(true)
     }
   }
@@ -2993,6 +2785,11 @@ export default function HomePage() {
   const page2MessageTitle = page2Message ? tgg(`home.locked.page2.${page2Message}.title` as never, isMale, page2OtherMale) : ''
   const page2MessageDesc = page2Message ? tgg(`home.locked.page2.${page2Message}.desc` as never, isMale, page2OtherMale) : ''
 
+  // A find tapped before the app finished booting / refocusing is held here
+  // until startup settles, instead of being swallowed by a `disabled` button.
+  // See `requestFind` + its draining effect below.
+  const [findQueued, setFindQueued] = useState(false)
+
   // Mirrors runIgnore: sets searching=true so the empty pane keeps showing
   // the locating text across the whole round-trip + slide-in. Without this,
   // state flips to 'watching' the moment realtime arrives and the empty pane
@@ -3005,7 +2802,15 @@ export default function HomePage() {
     setSearching(true)
     // Find always starts in the "no candidate yet" scan phase.
     setLoadingProfile(false)
-    invoke('app/find', {})
+    // Fresh play press: keep the center circle showing PLAY until the new
+    // card rises (watchCardShown flips back true once displayedMatch is set).
+    setWatchCardShown(false)
+    // A fresh find clears any pause-abort latched by a previous skip.
+    skipAbortedRef.current = false
+    // Keep the request so a pause tapped mid-skip can be chained after it.
+    const findPromise = invoke('app/find', {})
+    inflightSkipRef.current = findPromise
+    findPromise
       .then(() => {
         setBusy(false)
         setPendingKey(null)
@@ -3018,6 +2823,42 @@ export default function HomePage() {
         setLoadingProfile(false)
       })
   }, [busy])
+
+  // The center pause button shown during a skip (page1Profile branch in
+  // render). Pressing it must STOP the search and never surface a new
+  // profile — even one the server already found (the "Loading profile data"
+  // state). (1) Abort the skip pipeline client-side: skipAbortedRef no-ops
+  // every promote path (the remote→displayed sync effect, startPreload,
+  // onPreloadReady) and the radar / preloader / loading copy are torn down.
+  // (2) Fire app/pause chained AFTER any in-flight app/find|app/ignore so the
+  // server commits app_pause LAST and page1 ends `locked`, not watching.
+  // busy/ignoreLoading/pendingKey are left set so the pull-to-skip gesture
+  // stays blocked until the pause lands (cleared then by the sync effect /
+  // runFind's .then). No confirm dialog — the user asked for an immediate
+  // stop, and pause is recoverable from the center play button.
+  const runPauseFromSkip = useCallback(() => {
+    if (pausing) return
+    tap()
+    skipAbortedRef.current = true
+    preloadingMatchRef.current = null
+    setPreloadingMatch(null)
+    setDisplayedMatch(null)
+    setSearching(false)
+    setLoadingProfile(false)
+    setPausing(true)
+    const after = inflightSkipRef.current ?? Promise.resolve()
+    after
+      .catch(() => {})
+      .then(() => invoke('app/pause', {}))
+      // Release the skip-abort latch once the pause has settled. app/pause is
+      // a trusted self-transition (api.ts), so on success page1 is already
+      // 'locked' here and clearing the latch is redundant-but-safe. On
+      // failure it is the safety net that guarantees the latch can never
+      // outlive the pause — a stuck latch + a stale page1 'watching' would
+      // otherwise deadlock the remote->displayed sync effect forever.
+      .then(() => { skipAbortedRef.current = false; setPausing(false) })
+      .catch(err => { console.error(err); skipAbortedRef.current = false; setPausing(false) })
+  }, [pausing])
 
   // Optimistic exit: clear displayedMatch synchronously so the card slides
   // out carrying its last-rendered props (timer + cancel button intact),
@@ -3116,8 +2957,6 @@ export default function HomePage() {
       acceptLabel={t('home.inviteConfirmOk')}
       declineLabel={t('home.watchingReject')}
       costCredits={CREDIT_COST.invite}
-      affordable={starsBalance >= CREDIT_COST.invite}
-      onUnaffordable={() => { tap(); setInsufficientCost(CREDIT_COST.invite) }}
       onAccept={() => { setStickyInvite(true); runAction('app/invite', 'invite-confirm') }}
       // "Not now": first time → teach via the skip-hint popup; after the
       // user has acknowledged it once ("got it"), skip via the SAME ride-off
@@ -3149,7 +2988,6 @@ export default function HomePage() {
       // (app_approve, same 30m window as broadcastActive).
       costCredits={broadcastActive ? 0 : CREDIT_COST.approve}
       affordable={broadcastActive || starsBalance >= CREDIT_COST.approve}
-      onUnaffordable={() => { tap(); setInsufficientCost(CREDIT_COST.approve) }}
       onAccept={() => runAction('app/approve', 'replying-accept')}
       onDecline={openRefuseConfirm}
       busy={busy}
@@ -3158,7 +2996,10 @@ export default function HomePage() {
   ) : null
 
   // Hero-photo overlay button on the page1 MatchCard:
-  //   - watching → default heart (omit actions → MatchCard falls back).
+  //   - watching → heart only. The heart keeps its default scroll-to-invite
+  //     behaviour (no onPress → MatchCard falls back to slowScrollToEnd).
+  //     Pause is NOT on the card any more (2026-05-22, user request) — the
+  //     only game-mode pause control is the home pane's center circle.
   //   - chat     → X menu (opens end-chat / block / report sheet).
   //   - else (waiting, ended) → no button at all. The relevant action for
   //     those states lives elsewhere (timer's cancel, message-block's
@@ -3167,11 +3008,16 @@ export default function HomePage() {
     state === 'chat'
       ? [{
           key: 'chat-menu',
-          icon: <CloseBoldIcon color={PRIMARY} stroke={WHITE} size={ICON.huge} />,
+          icon: <CloseBoldIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
           onPress: () => { tap(); setChatMenuOpen(true) },
         }]
       : state === 'watching'
-        ? undefined
+        ? [
+            {
+              key: 'like',
+              icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
+            },
+          ]
         : []
 
   const isNetMode = !showNotifOverlay && !showLocOverlay && !locFailed && showNoInternetOverlay
@@ -3197,6 +3043,32 @@ export default function HomePage() {
   // candidates for a gated user anyway, so the button would be a dead end.
   const isReadyToFind = !geoGated && state === null && rawPage1State !== 'free'
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
+
+  // ── Queued find ──────────────────────────────────────────────────────────
+  // The play button must register the very FIRST tap, even while the app is
+  // still booting (app/start in flight, no GPS fix yet) or refocusing
+  // (app/focus in flight). Previously the button was `disabled` through that
+  // whole window, so the tap landed on a dead Pressable and was silently
+  // swallowed — the reported "first tap doesn't always work". Now the tap is
+  // never dropped: if a find can't run yet it is QUEUED (button shows a
+  // spinner) and auto-runs the instant startup settles.
+  const findReady = startupCompleted && !startupInflight && !focusInflight && !locFetching
+  const requestFind = useCallback(() => {
+    if (busy || searching || findQueued) return  // a find is already running/queued
+    if (findReady) { runFind(); return }          // ready → fire immediately
+    tap()                                         // not ready → acknowledge the tap + queue
+    setFindQueued(true)
+  }, [busy, searching, findQueued, findReady, runFind])
+  useEffect(() => {
+    if (!findQueued) return
+    // No longer ready-to-find (a candidate auto-arrived, or the gate
+    // flipped) → the queued find is moot, drop it.
+    if (!isReadyToFind) { setFindQueued(false); return }
+    if (findReady && !busy && !searching) {
+      setFindQueued(false)
+      runFind()
+    }
+  }, [findQueued, isReadyToFind, findReady, busy, searching, runFind])
 
   const permTitle = showNotifOverlay
     ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : state !== null ? tg('home.notifPromptWithMatchTitle', isMale) : t('home.notifPromptTitle'))
@@ -3372,127 +3244,66 @@ export default function HomePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchersCount])
-  // Stars-balance change (grant, spend, refund) → blink the Menu-tab stars
-  // marking 3× (the default `alerting` count) and surface a signed delta
-  // next to the count. ANY change (up or down) is an attention event here,
-  // unlike the increase-only viewer pulse. Baseline-null so the first
-  // observed balance (cold mount) doesn't pulse. Single-dep on the numeric
-  // balance + pulseTimeoutMs coalescing so a burst within the window reads
-  // as one pulse; the cleanup clears the delta so it FadeOuts after the blink.
+  // Stars-balance change (grant, spend, refund) → blink the Menu-tab balance
+  // number 3× (the default `alerting` count). ANY change (up or down) is an
+  // attention event here, unlike the increase-only viewer pulse. Baseline-null
+  // so the first observed balance (cold mount) doesn't pulse. Single-dep on the
+  // numeric balance + pulseTimeoutMs coalescing so a burst within the window
+  // reads as one pulse.
   useEffect(() => {
     const prev = prevStarsBalanceRef.current
     prevStarsBalanceRef.current = starsBalance
     if (prev === null || starsBalance === prev) return
-    const d = starsBalance - prev
-    // No number element: just recolour the star (green added / red removed)
-    // for the blink window, then revert.
-    setStarsChangePositive(d > 0)
-    setStarsChangeActive(true)
     setStarsAlerting(true)
-    const timer = setTimeout(() => {
-      setStarsAlerting(false)
-      setStarsChangeActive(false)
-    }, TAB.pulseTimeoutMs)
-    return () => {
-      clearTimeout(timer)
-      setStarsAlerting(false)
-      setStarsChangeActive(false)
-    }
+    const timer = setTimeout(() => setStarsAlerting(false), TAB.pulseTimeoutMs)
+    return () => { clearTimeout(timer); setStarsAlerting(false) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [starsBalance])
-  // Game-mode pause/resume, now hosted ON the Home tab (the settings button
-  // was removed). The hook is the single source of truth for the
-  // resume/pause/confirm decision (was the settings GameModeCard's inline
-  // logic). While watching a candidate, a pause glyph rides after the name
-  // (tap → app/pause, with the destructive-ripple confirm when one applies);
-  // while paused, the same control becomes a centred resume/play glyph that
-  // stands in for the faded-out "Once" wordmark (tap → app/resume). It is
-  // hidden in every transient state the hook flags inert (outgoing waiting /
-  // incoming pending / live chat) — those panes own their own resolution.
-  const gameMode = useGameMode()
-  const showHomePauseGlyph = gameMode.visible && state === 'watching'
-  const showHomeResumeGlyph = gameMode.visible && gameMode.paused
   const tabSpecsAll: TabSpec[] = [
     // Menu tab is icon-only (no label) — it's chrome, not a destination, so
     // it shrinks to its glyph width and yields the freed flex space to the
     // two content tabs (Home + Side). The settings glyph stays the SAME in
-    // every state, INCLUDING pause (per the user: pause is signalled on the
-    // Home tab word "Once"→"פאוזה", not by morphing this glyph). The only
+    // every state, INCLUDING pause (the paused state recolors the whole
+    // header chrome to BLACK_MID, it is not signalled by this glyph). The only
     // swap is close-X while the profile-preview sheet is open over the menu
     // pane (that is the sheet's close affordance, not a "state").
     {
       renderIndicator: profileSheetOpen
         ? (color) => <CloseBoldIcon color={color} size={ICON.xxl} />
-        : (color) => <HamburgerIcon color={color} size={ICON.xxl} />,
-      // Stars balance rides above the Menu glyph in the EXACT slot the side
-      // tab's viewer-count uses. On a wallet change the star glyph itself
-      // recolours green (added) / red (removed) for the blink window — no
-      // number element. Suppressed while the profile-preview sheet is open
-      // (Menu is then the close-X affordance), change-pulse gated the same.
+        : (color) => <HeartIcon color={color} size={ICON.xxl} />,
+      // Hearts balance rides above the Menu glyph in the EXACT slot the side
+      // tab's viewer-count uses (number only, no glyph — the Menu heart is
+      // itself the hearts mark). A wallet change is signalled by the standard
+      // 3-blink `alerting` pulse, scoped to the balance NUMBER only
+      // (`alertSubLabelOnly`) — the heart glyph stays steady, since the Menu
+      // icon is chrome and a wallet change is news about the hearts, not the
+      // menu. Suppressed while the profile-preview sheet is open (Menu is then
+      // the close-X affordance), change-pulse gated the same.
       subLabel: profileSheetOpen ? undefined : String(starsBalance),
-      subLabelIcon: profileSheetOpen
-        ? undefined
-        : (color) => (
-            <StarIcon
-              color={starsChangeActive ? (starsChangePositive ? POSITIVE : NEGATIVE) : color}
-              size={TAB.timerFontSize}
-            />
-          ),
       alerting: profileSheetOpen ? undefined : starsAlerting,
+      alertSubLabelOnly: true,
     },
-    // Home tab. While the own-profile preview sheet rises it morphs
-    // "Once" → "My profile" and (via tabProgress) the selected-chip slides
-    // onto it from the Menu tab — both driven 1:1 by the sheet's position.
-    // Orthogonally, while game mode is paused the BASE word fades out
-    // (pauseProgress) and the INTERACTIVE resume glyph (accessory below)
-    // takes its place — the profile-sheet morph still applies on top.
+    // Home tab. Always reads "Once" — while the own-profile preview sheet
+    // rises it morphs "Once" → "My profile" and (via tabProgress) the
+    // selected-chip slides onto it from the Menu tab, both driven 1:1 by the
+    // sheet's position. It carries NO game-mode pause glyph (removed
+    // 2026-05-22, user request) — the pause control lives on the home pane's
+    // center circle (see the page1Profile branch in render).
     {
-      // While a rise is active hold the resting label to the OLD text, so
-      // NO render (even a stray skip-branch one) can ever show the new name
-      // at rest — it appears ONLY by sliding up from below (nameRiseTo).
-      // After the rise completes riseFrom clears ⇒ label = homeTabLabel
-      // (the new name) at rest, exactly where the slide ended (seamless).
-      label: riseFrom != null ? riseFrom : homeTabLabel,
-      // Pull-synced name SLIDE: while watching with a next card, the current
-      // name slides DOWN and behindMatch's (the next card's) name slides in
-      // from the TOP 1:1 with the skip pull. nameSwapProgress is page1Pull-
-      // driven so it's 0 unless actively skipping. Cleared automatically
-      // once promoted (pull resets to 0 and label becomes the next name).
-      nameSwapProgress: isWatching && behindMatch ? nameSwapProgress : undefined,
-      nameSwapNext: isWatching && behindMatch ? nameFromTitle(behindMatch.title) : undefined,
-      // Rise-synced name SLIDE (mirror, opposite direction): on a fresh
-      // search the OLD label (nameRiseFrom) slides UP/out and the new name
-      // (nameRiseTo = the live homeTabLabel) enters from the BOTTOM, synced
-      // to the card's SlideInDown. spec.label is held OLD above so the rise
-      // pair is the ONLY place the new name can appear. The timing callback
-      // clears riseFrom ⇒ back to the skip pair at rest.
-      nameRiseProgress: isWatching ? riseSwap : undefined,
-      nameRiseFrom: riseFrom ?? undefined,
-      nameRiseTo: riseFrom != null ? homeTabLabel : undefined,
+      label: homeTabLabel,
       subLabel: homeTabSubLabel,
       altLabel: t('settings.myProfile'),
       altProgress: profileSheetProgress,
-      // The paused wordmark is replaced by the interactive accessory glyph,
-      // so the morph draws NO built-in glyph — it only fades "Once" out as
-      // pauseProgress→1; the centred PauseIcon takes over.
-      pauseIcon: () => null,
-      pauseProgress,
-      // Game-mode glyph hosted on this tab (the settings button was removed).
-      // ALWAYS a PauseIcon, passed as a colour function so TabStrip can give
-      // it the SAME active(WHITE)/muted(WHITE_MID) cross-fade as the name —
-      // its opacity is byte-identical to the wordmark in every state. While
-      // watching it rides directly AFTER the name as one centred unit and the
-      // WHOLE tab is the pause button (onAccessoryPress → hook, with its
-      // confirm when a destructive ripple applies). While paused it's the
-      // centred "you're paused" indicator standing in for the faded-out
-      // "Once" and is deliberately NON-tappable (user decision 2026-05-19):
-      // no onAccessoryPress ⇒ a tap on the tab is a plain navigate no-op.
-      // Absent in every other state.
-      accessory: (showHomePauseGlyph || showHomeResumeGlyph)
-        ? (color) => <PauseIcon color={color} size={ICON.xxl} />
-        : undefined,
-      onAccessoryPress: showHomePauseGlyph ? gameMode.onPress : undefined,
-      accessoryCenter: showHomeResumeGlyph,
+      // Skip name-slide: a 3-word vertical filmstrip [outgoing · "לא עכשיו" ·
+      // incoming]. While idle both ends are the live label, so the resting
+      // value (0, or a leftover 2 from the previous skip) shows the right
+      // name either way; mid-skip the outgoing slot is the frozen name.
+      nameSlide: {
+        words: (skipPhase === 'idle'
+          ? [homeTabLabel, t('home.watchingReject'), homeTabLabel]
+          : [skipFromName, t('home.watchingReject'), homeTabLabel]) as [string, string, string],
+        progress: skipSlide,
+      },
     },
     (() => {
       // The side tab carries a full text label ONLY when slot 2 is dedicated
@@ -3520,6 +3331,14 @@ export default function HomePage() {
           renderIndicator: chatAvailable
             ? (color) => <ChatIcon color={color} size={ICON.xxl} />
             : (color) => <VisibilityTabGlyph color={color} mode={toggleMode} showCaret={showVisibilityCaret} />,
+          // Green presence dot beside the chat icon while the partner is
+          // online (reported by ChatPage's presence channel). `renderLeading`
+          // keeps it a fixed colour — it carries its own meaning and must not
+          // cross-fade with tab selection. Chat-only (the `chatAvailable`
+          // gate); the ambient visibility states have no 1:1 counterpart.
+          renderLeading: chatAvailable && partnerOnline
+            ? () => <PresenceDot />
+            : undefined,
           subLabel: showViewerCount ? String(watchersCount) : undefined,
           alerting: showViewerCount ? viewersAlerting : sideAlerting,
           alertCount: showViewerCount ? TAB.viewerPulseCount : undefined,
@@ -3569,7 +3388,7 @@ export default function HomePage() {
   const prevShowReadyHeadline = useRef(false)
   useEffect(() => {
     if (showReadyHeadline && !prevShowReadyHeadline.current) {
-      setReadyHeadlineIdx(prev => pickReadyHeadline(prev))
+      setReadyHeadlineIdx(prev => pickHeadline(prev, READY_HEADLINES.length))
     }
     prevShowReadyHeadline.current = showReadyHeadline
   }, [showReadyHeadline])
@@ -3577,6 +3396,10 @@ export default function HomePage() {
   // other home-pane line (locating / ready / no-one-nearby). 'not_yet' and
   // 'unavailable' get distinct copy; the find button is already suppressed
   // (isReadyToFind === false) and the side tab removed (tabSpecs below).
+  // `isEmptyHeadline` is the with-a-card state: the slot is behind the card,
+  // so it carries this card's random skip line (SKIP_HEADLINES) — invisible
+  // while the card covers it, revealed already-full the instant the card is
+  // pulled away to skip.
   const headlineText = centerNotice
     ? centerNotice.text
     : isLoadingProfileHeadline
@@ -3584,7 +3407,7 @@ export default function HomePage() {
       : isLocatingHeadline
         ? t('home.locatingDesc')
         : isEmptyHeadline
-          ? ''
+          ? genderize(SKIP_HEADLINES[skipHeadlineIdx] ?? '', isMale)
           : showReadyHeadline
             ? genderize(READY_HEADLINES[readyHeadlineIdx] ?? '', isMale)
             : t('home.noOneNearbyTitle')
@@ -3604,85 +3427,6 @@ export default function HomePage() {
   // on the settings Pause button stays in lockstep on a single edit.
   const exitBroadcastConfig = exitBroadcastConfirm()
   const hideConfirmConfig = hideProfileConfirm()
-
-  // ONE card renderer for the whole live-interaction stack — used for BOTH
-  // the deck's static behind card and the interactive focus card, and across
-  // watching → waiting → chat for the SAME person. The element TREE it
-  // produces is BYTE-IDENTICAL regardless of `interactive` (same wrapper
-  // types, same nesting, the inner pull-wrapper Animated.View ALWAYS present)
-  // — only styles/props differ. That invariance is load-bearing: React
-  // reconciles by key, so the survivor of a deck pop (behind → focus) and a
-  // card whose state advances (watching front → waiting) keep their exact
-  // element identity ⇒ MatchCard does NOT remount ⇒ no image re-decode
-  // flicker, and the invite timer animates IN via MatchCard's own
-  // onTopBlockShown instead of the card vanishing/reappearing. The pull
-  // self-translate is applied ONLY to the interactive card while watching
-  // (liveTopId gates which one actually follows the finger). Behind /
-  // waiting / chat pass no transform (static).
-  //
-  // `animateEnter` controls ONLY the first-mount rise: when true the focus
-  // card SlideInDown-rises (a genuine in-session fresh search). The local
-  // LayoutAnimationConfig overrides the root + stack `skipEntering` (same
-  // documented trick RisingCard uses for the iOS/New-Arch skip leak); when
-  // false it keeps `skipEntering` so the card is static (cold-start first
-  // paint, and the behind card — which must never rise). Because the focus
-  // element is reconciled by key (never remounts on skip-advance or
-  // watching→waiting), `entering` only ever fires on a true fresh mount.
-  const renderStackCard = (
-    m: Profile,
-    interactive: boolean,
-    animateEnter: boolean,
-  ) => (
-    <LayoutAnimationConfig key={m.user_id} skipEntering={!animateEnter}>
-    <Animated.View
-      style={[styles.matchCardWrap, StyleSheet.absoluteFill]}
-      pointerEvents={interactive ? 'box-none' : 'none'}
-      entering={animateEnter ? SlideInDown.duration(MOTION.base) : undefined}
-    >
-      <Animated.View
-        style={[
-          styles.matchCardWrap,
-          interactive && isWatching ? frontPullStyle : undefined,
-        ]}
-      >
-        <View style={styles.matchPhoto}>
-          <MatchCard
-            ref={interactive ? watchingCardRef : undefined}
-            match={m}
-            viewerFamily={profile?.family ?? null}
-            viewerLocationType={resolveLocationType(profile)}
-            bottomInset={0}
-            hideTime={state === 'chat'}
-            actions={interactive ? page1CardActions : undefined}
-            // Report rides on EVERY card, always — exactly like the default
-            // heart (user: "the report button must stay attached to the
-            // card like the heart; it must not pop in only when the card
-            // gets focus"). NOT gated by `interactive`: the behind card
-            // renders it too (it's pointerEvents:none + covered while
-            // behind, so harmless there), so when it promotes to focus the
-            // flag is ALREADY in this same persistent MatchCard's action
-            // stack ⇒ zero pop-in. In watching page1CardActions is
-            // undefined ⇒ both cards' stack is [heart, report], identical
-            // through the promote.
-            onReport={() => openReport(m.user_id)}
-            topBlock={
-              interactive && state === 'waiting' && inviteExpiresAt ? (
-                <InviteTimerCard
-                  targetIsMale={matchIsMale}
-                  userIsMale={isMale}
-                  onCancel={() => { tap(); setCancelConfirmOpen(true) }}
-                />
-              ) : undefined
-            }
-            onTopBlockShown={interactive ? handleTopBlockShown : undefined}
-            footerBlock={interactive ? watchingInviteButton : undefined}
-            footerBg={interactive && watchingInviteButton ? PRIMARY : undefined}
-          />
-        </View>
-      </Animated.View>
-    </Animated.View>
-    </LayoutAnimationConfig>
-  )
 
   return (
     <View style={styles.backdrop}>
@@ -3781,7 +3525,22 @@ export default function HomePage() {
                       during a card transition). */}
                   <View
                     style={StyleSheet.absoluteFill}
-                    pointerEvents={showHiddenPlaceholder ? 'auto' : 'none'}
+                    // 'auto' also while watching so the centre circle behind
+                    // the card is a live pause button the instant a skip
+                    // slides the card off. During a RESTING watch the card on
+                    // top intercepts every tap, so this never shadows it.
+                    pointerEvents={showHiddenPlaceholder || state === 'watching' ? 'auto' : 'none'}
+                    onLayout={e => {
+                      // Pause-icon (centre circle) centre in the pane's own Y
+                      // space — exactly the pullY that lands a descending
+                      // card's top edge on it. permCenterGroup (HeadlineArea +
+                      // MD*4 gap + permAvatarWrap) is flex-centred in the
+                      // pane, so the avatar sits below the pane centre by half
+                      // the headline + gap stacked above it.
+                      const paneH = e.nativeEvent.layout.height
+                      tutorialPeekV.value = paneH / 2 + (SKIP_HINT_AREA_H + MD * 4) / 2
+                      if (paneH > 0 && paneH !== paneHeight) setPaneHeight(paneH)
+                    }}
                   >
                     {/* Empty pane — centers the headline+avatar group in the
                         available area using two flex:1 spacers above and
@@ -3801,7 +3560,7 @@ export default function HomePage() {
                         <HeadlineArea text={headlineText} />
                         <View style={styles.permAvatarWrap}>
                           <AvatarHaloRings />
-                          <RadarRings active={startupCompleted && (focusInflight || searching)} />
+                          <RadarRings active={(startupCompleted && (focusInflight || searching)) || findQueued} />
                           <Pressable
                             onPress={() => {
                               if (centerNotice) {
@@ -3809,40 +3568,64 @@ export default function HomePage() {
                                 return
                               }
                               if (isReadyToFind) {
-                                runFind()
+                                // requestFind never no-ops: it fires now, or
+                                // queues until startup settles, then runs (the
+                                // radar rings cover the wait — no spinner).
+                                requestFind()
+                                return
+                              }
+                              if (page1Profile) {
+                                // During a skip the card has slid off and this
+                                // center circle is the pause button: stop the
+                                // search and pause. runPauseFromSkip aborts the
+                                // skip so a found profile never surfaces.
+                                runPauseFromSkip()
                                 return
                               }
                               tap()
-                              if (page1Profile) {
-                                openProfileSheet()
-                              } else {
-                                goToPreferences()
-                              }
+                              goToPreferences()
                             }}
+                            // The play button is intentionally NOT disabled
+                            // during the startup/focus window — requestFind
+                            // owns that guarding (queue) so the first tap
+                            // always registers.
                             disabled={centerNotice
                               ? (!!centerNotice.disabled || !!centerNotice.busy || !centerNotice.onPress)
-                              : (isReadyToFind && (busy || locFetching || startupInflight || focusInflight || searching || !startupCompleted))}
+                              : false}
                             style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                           >
                             {centerNotice ? (
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                {centerNotice.icon}
+                                {centerNotice.busy
+                                  ? <Spinner color={PRIMARY} size={64} />
+                                  : centerNotice.icon}
                               </View>
-                            ) : isReadyToFind ? (
+                            ) : isReadyToFind || pausing || (page1Profile && !watchCardShown) ? (
+                              // PLAY icon. Shown when ready to find, kept
+                              // through the post-play find/loading window
+                              // (page1Profile set but the card has not risen
+                              // yet — watchCardShown still false) so the icon
+                              // flips to pause only as the card starts rising,
+                              // and shown the instant pause is tapped (pausing)
+                              // so the button reads as play again immediately
+                              // (user request 2026-05-22). Tapping needs no
+                              // spinner — the radar-ring expansion (RadarRings,
+                              // driven by searching/findQueued) is the cue.
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
                                 <Svg width={64} height={64} viewBox="0 0 24 24" fill={PRIMARY}>
                                   <Path d="M8 5v14l11-7z" />
                                 </Svg>
                               </View>
                             ) : page1Profile ? (
-                              avatarDisplayUrl ? (
-                                <Image source={{ uri: avatarDisplayUrl }} placeholder={avatarPlaceholder} style={styles.permAvatar} contentFit="cover" cachePolicy="memory-disk" />
-                              ) : (
-                                <View style={[styles.permAvatar, styles.permAvatarFallback]} />
-                              )
+                              // During a skip the card slides off and this
+                              // center circle is revealed as the pause button
+                              // (user request 2026-05-22). Tap → runPauseFromSkip.
+                              <View style={[styles.permAvatar, styles.permPlayButton]}>
+                                <PauseIcon color={PRIMARY} size={64} />
+                              </View>
                             ) : (
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <HamburgerIcon color={PRIMARY} size={64} />
+                                <HeartIcon color={PRIMARY} size={64} />
                               </View>
                             )}
                           </Pressable>
@@ -3852,29 +3635,19 @@ export default function HomePage() {
                     </View>
                   </View>
 
-                  {/* Pull-to-skip. PullPane frames the coral wake + the
-                      match card on its pull transform; page1 supplies its
-                      PullContext (inner-scroll coordination) and the hidden
-                      preloader as the non-translated `extra` slot. The empty
-                      pane stays a separate sibling behind this. */}
+                  {/* Pull-to-skip. PullPane frames the match card on its pull
+                      transform; page1 supplies its PullContext (inner-scroll
+                      coordination) and the hidden preloader as the
+                      non-translated `extra` slot. The empty pane stays a
+                      separate sibling behind this. */}
                   <PullPane
                     gesture={page1Pull.gesture}
                     pullY={page1Pull.pullY}
                     pulling={page1Pull.pulling}
-                    /* No `wakeLabel` ⇒ PullPane renders NO dynamic full-
-                       screen wake. There is also NO strip above the card
-                       (user: deleted entirely). The only skip feedback is
-                       the card itself sliding down via frontPullStyle — no
-                       background / gradient / banner behind or above it. */
                     tutorialPlaying={page1Pull.tutorialPlaying}
                     pointerEvents={showHiddenPlaceholder ? 'none' : 'box-none'}
                     cardStyle={styles.matchCardWrap}
                     pullContext={page1Pull.pullCtx}
-                    // The local-deck FRONT self-translates (frontPullStyle)
-                    // so a freshly-promoted card stays at rest while the
-                    // outgoing one rides off — PullPane must not also
-                    // translate the card. Wake + gesture still use pullY.
-                    cardStatic
                     extra={preloadingMatch && preloadingMatch.user_id !== displayedMatch?.user_id ? (
                       <View style={styles.preloaderWrap} pointerEvents="none">
                         <View style={styles.matchPhoto}>
@@ -3883,54 +3656,20 @@ export default function HomePage() {
                             viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
+                            cardHeight={paneHeight}
                             onReady={() => onPreloadReady(preloadingMatch.user_id)}
                           />
                         </View>
                       </View>
                     ) : null}
                   >
-                    {/* Unified live-interaction stack. Both cards are keyed
-                        by user_id and produced by the SAME byte-identical
-                        renderStackCard, so a deck pop (behind→focus) and an
-                        invite (watching front → waiting, same person)
-                        preserve element identity ⇒ MatchCard never remounts:
-                        no new-card flicker, and the invite timer animates IN
-                        via MatchCard's own onTopBlockShown instead of the
-                        card vanishing/reappearing. Each card owns its own
-                        LayoutAnimationConfig: the BEHIND card and the cold-
-                        start first focus stay static (skipEntering — also the
-                        documented Fabric mount-race fix); a genuine
-                        in-session fresh-search focus mount SlideInDown-rises
-                        (firstPaintDoneRef gates out the cold start). The
-                        skip-advance / watching→waiting focus never remounts,
-                        so it never re-rises.
-
-                        The BEHIND card is WITHHELD while the first card is
-                        rising (`riseFrom != null` ≡ a fresh-search first
-                        card mid-rise, set on the isWatching edge, cleared at
-                        rise end). Otherwise it mounts statically at full
-                        position simultaneously with the rising focus card
-                        and is briefly VISIBLE behind it ("you see the next
-                        card for a moment, then the first rises"). Suppressed
-                        during the rise ⇒ only the first card rises, covering
-                        the empty pane (headline + big button); the moment it
-                        settles (opaque, full-screen) the behind card mounts
-                        behind it — invisible, ready for the next skip. */}
-                    {isWatching && behindMatch && !noticeOverridesCard && riseFrom == null
-                      ? renderStackCard(behindMatch, false, false)
-                      : null}
-                    {focusMatch && !noticeOverridesCard
-                      ? renderStackCard(focusMatch, true, firstPaintDoneRef.current)
-                      : null}
-                    {/* Ended / locked "what happened" interrupt card — the
-                        only single-card state NOT in the unified stack
-                        (focusMatch is null for it). Keeps RisingCard's
-                        SlideOutDown so the interrupt card slides away on
-                        clear1 (the documented first-card-stale behavior). */}
-                    {!isWatching && !focusMatch && displayedMatch && !noticeOverridesCard ? (
+                    {displayedMatch && !noticeOverridesCard && (
+                      /* RisingCard owns the slide-up / slide-down layout
+                         animations; PullPane's wrapper owns the pull
+                         transform, so the two never clobber each other. */
                       <RisingCard
                         key={displayedMatch.user_id}
-                        animateEnter={false}
+                        animateEnter={matchHasMountedRef.current}
                         style={styles.matchCardWrap}
                       >
                         <View style={styles.matchPhoto}>
@@ -3940,11 +3679,18 @@ export default function HomePage() {
                             viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
-                            hideTime={state === 'chat'}
+                            cardHeight={paneHeight}
                             actions={page1CardActions}
                             onReport={() => openReport(displayedMatch.user_id)}
                             topBlock={
-                              isEndedState && page1MessageTitle ? (
+                              displayedCardMode === 'waiting' && inviteExpiresAt ? (
+                                <InviteTimerCard
+                                  targetIsMale={matchIsMale}
+                                  userIsMale={isMale}
+                                  onCancel={() => { tap(); setCancelConfirmOpen(true) }}
+                                  disabled={starsBalance < CREDIT_COST.cancel}
+                                />
+                              ) : isEndedState && page1MessageTitle ? (
                                 <EventMessageCard
                                   title={page1MessageTitle}
                                   description={page1MessageDesc}
@@ -3959,7 +3705,7 @@ export default function HomePage() {
                           />
                         </View>
                       </RisingCard>
-                    ) : null}
+                    )}
                   </PullPane>
                 </View>
 
@@ -3969,6 +3715,7 @@ export default function HomePage() {
                   title={t('home.cancelWaitingTitle')}
                   description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
                   confirmLabel={t('home.cancelWaitingConfirm')}
+                  confirmIconStart={<CreditCost cost={CREDIT_COST.cancel} color={WHITE} bg={WHITE_SOFT} />}
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={runCancel}
                   busy={busy}
@@ -4017,19 +3764,6 @@ export default function HomePage() {
                   }}
                   busy={busy}
                   draggable
-                />
-
-                {/* Not-enough-stars explainer. Reuses the one ConfirmDialog
-                    component (DRY): star icon, title, cost-aware description,
-                    single "got it" button. Opened by tapping an action the
-                    user can't afford (invite / approve / broadcast). */}
-                <ConfirmDialog
-                  visible={insufficientCost != null}
-                  icon={<StarIcon color={PRIMARY} size={32} />}
-                  title={t('stars.insufficient.title')}
-                  description={t('stars.insufficient.desc').replace('{stars}', starsText(insufficientCost ?? 0))}
-                  confirmLabel={t('common.gotIt')}
-                  onConfirm={() => setInsufficientCost(null)}
                 />
 
                 <ConfirmDialog
@@ -4098,8 +3832,9 @@ export default function HomePage() {
                   title={t('home.leaveTitle')}
                   description={t('home.leaveDesc')}
                   confirmLabel={t('home.leaveConfirm')}
-                  onCancel={() => setChatConfirmAction(null)}
-                  onConfirm={async () => { setChatConfirmAction(null); await invoke('app/leave') }}
+                  onCancel={() => { if (!busy) setChatConfirmAction(null) }}
+                  onConfirm={() => runAction('app/leave', 'leave', () => setChatConfirmAction(null))}
+                  busy={busy && pendingKey === 'leave'}
                   draggable
                 />
                 <ConfirmDialog
@@ -4108,8 +3843,9 @@ export default function HomePage() {
                   title={t('chat.blockTitle')}
                   description={t('chat.blockDesc')}
                   confirmLabel={t('chat.blockConfirm')}
-                  onCancel={() => setChatConfirmAction(null)}
-                  onConfirm={async () => { await invoke('app/block'); setChatConfirmAction(null) }}
+                  onCancel={() => { if (!busy) setChatConfirmAction(null) }}
+                  onConfirm={() => runAction('app/block', 'block', () => setChatConfirmAction(null))}
+                  busy={busy && pendingKey === 'block'}
                   draggable
                 />
                 {/* One shared report confirm for every match-card surface
@@ -4127,14 +3863,19 @@ export default function HomePage() {
                     placeholder: t('chat.reportPlaceholder'),
                   }}
                   confirmLabel={t('chat.reportConfirm')}
-                  onCancel={() => { setReportTargetId(null); setReportNote('') }}
-                  onConfirm={async () => {
+                  onCancel={() => { if (!busy) { setReportTargetId(null); setReportNote('') } }}
+                  onConfirm={() => {
                     const pid = reportTargetId
+                    const closeReport = () => { setReportTargetId(null); setReportNote('') }
+                    if (!pid) { closeReport(); return }
                     const note = reportNote.trim()
-                    setReportTargetId(null)
-                    setReportNote('')
-                    if (pid) await invoke('app/report', { user_id: pid, reason: 'profile', note: note || undefined })
+                    runAction('app/report', 'report', closeReport, {
+                      user_id: pid,
+                      reason: 'profile',
+                      note: note || undefined,
+                    })
                   }}
+                  busy={busy && pendingKey === 'report'}
                   draggable
                 />
 
@@ -4154,6 +3895,7 @@ export default function HomePage() {
                   key={profile?.relations?.match?.user_id ?? 'no-match'}
                   isActive={paneIndex === CHAT_PANE}
                   onUnreadChange={setChatUnread}
+                  onOnlineChange={setPartnerOnline}
                   topInset={0}
                   autoFocusInput={chatJustStarted}
                 />
@@ -4178,7 +3920,9 @@ export default function HomePage() {
                         style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                       >
                         <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                          {centerNotice.icon}
+                          {centerNotice.busy
+                            ? <Spinner color={PRIMARY} size={64} />
+                            : centerNotice.icon}
                         </View>
                       </Pressable>
                     </View>
@@ -4189,8 +3933,8 @@ export default function HomePage() {
                 {/* Base layer — the viewers/visibility screen is ALWAYS
                     mounted so it persists in its exact state (broadcast /
                     visible / hidden) behind any invite card, and is revealed
-                    UNCHANGED once a card is dismissed (after the PRIMARY wake
-                    fades). Mirrors page1's always-mounted empty pane.
+                    UNCHANGED once a card is dismissed. Mirrors page1's
+                    always-mounted empty pane.
                     The 3-segment visibility toggle that used to be anchored
                     here was replaced by the dropdown on the side tab's
                     visibility glyph (see VisibilityMenu + handleVisibilitySelect);
@@ -4241,14 +3985,11 @@ export default function HomePage() {
                   <View style={StyleSheet.absoluteFill}>
                     <View style={styles.matchPhoto}>
                       {/* Pull-to-decline — same PullPane frame as page1, with
-                          page2's own gesture/shared values and PullContext.
-                          The "לא עכשיו" headline is the PullPane wake itself
-                          (via wakeLabel). */}
+                          page2's own gesture/shared values and PullContext. */}
                       <PullPane
                         gesture={page2Pull.gesture}
                         pullY={page2Pull.pullY}
                         pulling={page2Pull.pulling}
-                        wakeLabel={t('home.watchingReject')}
                         tutorialPlaying={page2Pull.tutorialPlaying}
                         cardStyle={StyleSheet.absoluteFill}
                         pullContext={page2Pull.pullCtx}
@@ -4318,9 +4059,9 @@ export default function HomePage() {
           />
         ) : null}
         {/* Profile preview sheet — same PullPane frame as page1/page2.
-            Outer container anchored at the TabStrip bottom (topAnchor) so
-            the wake fills the gap below the tabs; the RisingCard (conditional
-            on open, owning its SlideIn/SlideOut mount motion) rides the
+            Outer container anchored at the TabStrip bottom (topAnchor) so it
+            sits in the gap below the tabs; the RisingCard (conditional on
+            open, owning its SlideIn/SlideOut mount motion) rides the
             swipe-down transform. No PullContext here — the sheet's own
             gesture handles its header-vs-scroll logic. */}
         <PullPane
@@ -4364,6 +4105,10 @@ export default function HomePage() {
           }
           confirmLabel={t('home.broadcastConfirmButton')}
           confirmIconStart={<CreditCost cost={CREDIT_COST.broadcast} color={WHITE} bg={WHITE_SOFT} />}
+          // Broadcast costs 1 heart; when the user can't afford it the popup
+          // still opens (informative, cost badge visible) but the confirm
+          // button is disabled and does nothing on press.
+          confirmDisabled={starsBalance < CREDIT_COST.broadcast}
           onCancel={() => { if (!(busy && pendingKey === 'add')) setBroadcastConfirmOpen(false) }}
           onConfirm={() => runAction('app/add', 'add', () => setBroadcastConfirmOpen(false))}
           busy={busy && pendingKey === 'add'}
@@ -4397,22 +4142,6 @@ export default function HomePage() {
           onCancel={() => { if (!(busy && pendingKey === 'lock2')) setHideConfirmOpen(false) }}
           onConfirm={() => runAction('app/lock2', 'lock2', () => setHideConfirmOpen(false))}
           busy={busy && pendingKey === 'lock2'}
-          draggable
-        />
-        {/* Game-mode pause confirm — fired from the Home-tab pause glyph when
-            pausing would disrupt others (broadcasting / watchers / a pending
-            invite / a watching partner). Copy + icon come from the shared
-            useGameMode hook so it reads identically to the visibility-toggle
-            popups. */}
-        <ConfirmDialog
-          visible={gameMode.confirm.visible}
-          icon={gameMode.confirm.icon}
-          title={gameMode.confirm.title}
-          description={gameMode.confirm.description}
-          confirmLabel={gameMode.confirm.confirmLabel}
-          onCancel={gameMode.confirm.onCancel}
-          onConfirm={gameMode.confirm.onConfirm}
-          busy={gameMode.confirm.busy}
           draggable
         />
       </View>
@@ -4611,10 +4340,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 8,
-  },
-  permAvatarFallback: {
-    backgroundColor: BLACK_SOFT,
-    borderRadius: AVATAR_SIZE / 2,
   },
   permPlayButton: {
     backgroundColor: WHITE,

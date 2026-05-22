@@ -4,7 +4,7 @@ import { Gesture, GestureDetector, ScrollView, type GestureType } from 'react-na
 import type { NativeViewGestureHandlerProps } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withTiming, runOnJS,
+  withTiming, runOnJS, type SharedValue,
 } from 'react-native-reanimated'
 import { SM, RADIUS } from '../tokens'
 import { WHITE } from '../colors'
@@ -16,6 +16,15 @@ export type PullCtx = {
   extraRefs: React.MutableRefObject<GestureType | undefined>[]
   setScrollAtTop: (v: boolean) => void
   pulling: boolean
+  // UI-thread flag, true while the pull pan is actively engaged in a drag.
+  // The inner scroll worklet watches it to pin content at offset 0 for the
+  // duration — a synchronous lock that doesn't depend on the JS-thread
+  // `pulling` re-render landing (see PullScrollView / MatchCard).
+  pullEngaged?: SharedValue<boolean>
+  // Live pull offset (the card's translateY). The inner scroll pin worklet
+  // reads it purely so Reanimated re-runs that worklet on every frame of a
+  // pull — `pullEngaged` alone flips once and would not keep the pin ticking.
+  pullY?: SharedValue<number>
 }
 export const PullContext = createContext<PullCtx | null>(null)
 
@@ -28,10 +37,37 @@ export const PullContext = createContext<PullCtx | null>(null)
 export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestureHandlerProps>(
   (props, ref) => {
     const ctx = useContext(PullContext)
-    const { onScroll, scrollEnabled, ...rest } = props
-    const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { onScroll, onScrollEndDrag, onMomentumScrollEnd, scrollEnabled, ...rest } = props
+    // A freshly-mounted ScrollView is always at offset 0. `onScroll` does NOT
+    // fire for that initial position, and a programmatic scrollTo on a card
+    // swap doesn't reliably fire it either — so without this the pull
+    // gesture's `scrollAtTop` flag could keep a stale `false` carried over
+    // from a previous card the user had scrolled down. That left the new card
+    // un-pullable until the user manually scrolled down and back up to make
+    // `onScroll` fire (`scrollOnly` latched in the pan's onStart). Assert
+    // at-top on mount so every new card is pullable immediately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { ctx?.setScrollAtTop(true) }, [])
+    // `scrollAtTop` gates the card's pull-to-skip gesture. `onScroll` is
+    // throttled, so the LAST event before the content settles can land a few
+    // px short of 0 and leave the flag stuck `false` — the card then silently
+    // refuses to pull until the user scrolls again. onScrollEndDrag (finger
+    // lifted) and onMomentumScrollEnd (momentum settled) report the definitive
+    // resting offset, so the flag is always corrected once a scroll truly ends.
+    const syncAtTop = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       ctx?.setScrollAtTop(e.nativeEvent.contentOffset.y < 8)
+    }
+    const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncAtTop(e)
       onScroll?.(e)
+    }
+    const handleScrollEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncAtTop(e)
+      onScrollEndDrag?.(e)
+    }
+    const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncAtTop(e)
+      onMomentumScrollEnd?.(e)
     }
     const effectiveScrollEnabled = ctx?.pulling ? false : scrollEnabled
     return (
@@ -39,6 +75,8 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
         {...rest}
         ref={ref}
         onScroll={handleScroll}
+        onScrollEndDrag={handleScrollEndDrag}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
         nestedScrollEnabled
         simultaneousHandlers={ctx ? [ctx.panRef, ...ctx.extraRefs].filter(r => r.current) : undefined}
         bounces={false}

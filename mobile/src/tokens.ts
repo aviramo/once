@@ -140,6 +140,14 @@ export const PULL_COMMIT_FRACTION = 0.5
 // effective effort gate: required finger travel ≈ commit distance / this.
 // 1 = no resistance (legacy). Lower = firmer. Tune here only (single source).
 export const PULL_RESIST = 0.6
+// Spring that settles a pulled card back to rest when released short of the
+// commit threshold (page1 skip / page2 decline). Seeded with the finger's
+// release velocity (see usePullBehavior) so the snap-back CONTINUES the drag's
+// motion instead of restarting from a dead stop — the card "flows with the
+// finger" on release rather than jerking. Critically damped (damping =
+// 2*sqrt(stiffness*mass)) → smooth, no bounce. Single source for every pull
+// surface so the release feel can never drift between them.
+export const PULL_SNAP_SPRING = { damping: 40, stiffness: 400, mass: 1 } as const
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,
@@ -171,20 +179,6 @@ export const MOTION = {
 // this slack, which covers Realtime propagation + the card slide-in. Sized far
 // above any legitimate find so it can only fire on a genuine hang.
 export const SEARCH_WATCHDOG_SLACK_MS = 6_000
-
-// ── page1 candidate stack (Tinder/Bumble) ──────────────────────────────────
-// Server fills relations.page1.profiles[] up to this size; every app/skip
-// pops the front and the SAME call appends one fresh tail card, so the stack
-// stays at STACK_SIZE forever (no separate "near the end" refill request).
-// The client renders stack[0] with stack[1] mounted statically behind it and
-// prefetches the images of the next few. MIRRORED in the SQL helpers
-// (app_find / app_skip / app_find REFILL all hardcode 10) — keep in lockstep,
-// same discipline as the credits / 30-min broadcast constants.
-export const STACK_SIZE = 10
-// How many upcoming stack cards' images to warm in expo-image's disk cache
-// after each skip (the visible card + a small look-ahead). Purely a client
-// prefetch depth; unrelated to the server stack size.
-export const STACK_PREFETCH_AHEAD = 3
 
 // ── Bottom-sheet lift shadow ───────────────────────────────────────────────
 // Soft upward shadow that floats every BottomSheet off the backdrop. A single

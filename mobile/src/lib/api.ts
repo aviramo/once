@@ -3,7 +3,6 @@ import { supabase } from './supabase'
 import { useUserStore } from '../stores/userStore'
 import { getLastKnownLocation } from './location'
 import { matchImageUrls } from './profileImages'
-import { STACK_PREFETCH_AHEAD } from '../tokens'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
@@ -69,22 +68,28 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   // on every call. Merge it straight into the store so no component needs to
   // fetch after invoking. Realtime covers the rest (changes from other
   // sources), and both funnels flow through the same applyServerUser entry.
-  // find/ignore/skip are the actor's OWN page1 actions — tag 'invoke:find'
-  // so the store trusts the response's page1 (incl. the candidate stack)
-  // immediately instead of waiting for Realtime to redeliver it. Every other
+  // find / ignore / pause / resume are the actor's OWN deterministic state
+  // transitions — the response IS the authoritative result and carries the
+  // resulting page1, so they are tagged 'invoke:self' and the store trusts
+  // that page1 immediately (no Realtime round-trip wait). pause/resume used
+  // to be plain 'invoke' (page1 deferred to Realtime); a lost or mis-ordered
+  // Realtime event then stranded the client on stale page1 — the reported
+  // "press pause then play -> stuck with a name, no card" bug. Every other
   // call stays 'invoke' so client-authored / game state defers to Realtime.
-  const isFind = fn === 'app/find' || fn === 'app/ignore' || fn === 'app/skip'
+  const isSelfTransition =
+    fn === 'app/find' || fn === 'app/ignore' || fn === 'app/pause' || fn === 'app/resume'
   if (fn === 'app' || fn.startsWith('app/')) {
-    useUserStore.getState().applyServerUser(data as any, isFind ? 'invoke:find' : 'invoke')
+    useUserStore.getState().applyServerUser(data as any, isSelfTransition ? 'invoke:self' : 'invoke')
   }
-  // Warm expo-image's disk cache for the next few cards in the page1 stack
-  // (the visible top + the ones a skip will expose) so they paint instantly.
-  // Fire-and-forget, never awaited; same exact URLs MatchCard requests.
+  // Look-ahead: app_find/app_ignore return the next 1-2 ranked candidates.
+  // Warm expo-image's disk cache now so the on-arrival prefetch for the
+  // user's NEXT skip is a cache hit. Fire-and-forget, never awaited, never
+  // stored; same exact URLs MatchCard requests (matchImageUrls).
+  const isFind = fn === 'app/find' || fn === 'app/ignore'
   if (isFind) {
-    const stack = (data as { relations?: { page1?: { profiles?: { user_id: string; images?: any[] }[] } } } | null)
-      ?.relations?.page1?.profiles
-    if (Array.isArray(stack) && stack.length) {
-      const urls = stack.slice(0, STACK_PREFETCH_AHEAD).flatMap(p => matchImageUrls(p))
+    const la = (data as { lookahead?: { user_id: string; images?: any[] }[] } | null)?.lookahead
+    if (Array.isArray(la) && la.length) {
+      const urls = la.flatMap(p => matchImageUrls(p))
       if (urls.length) Image.prefetch(urls).catch(() => {})
     }
   }

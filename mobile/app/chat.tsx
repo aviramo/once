@@ -21,7 +21,6 @@ import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRON
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
-import { formatLastSeen } from '../src/lib/lastSeen'
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
@@ -122,16 +121,18 @@ type ChatPageProps = {
   // messages only count toward the unread badge when this is false.
   isActive?: boolean
   onUnreadChange?: (count: number) => void
+  // Reports the partner's live online status (from the presence channel) so
+  // the home shell can show a green dot beside the chat tab icon.
+  onOnlineChange?: (online: boolean) => void
   autoFocusInput?: boolean
 }
 
-export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange, autoFocusInput }: ChatPageProps = {}) {
+export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange, onOnlineChange, autoFocusInput }: ChatPageProps = {}) {
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const userId = profile?.user_id ?? ''
   const match = profile?.relations?.match
   const otherId = match?.user_id ?? ''
-  const matchLastSeen = match?.last_seen ?? null
   const isMale = profile?.is_male ?? null
   const matchIsMale = match?.is_male ?? null
   const [messages, setMessagesRaw] = useState<Message[]>([])
@@ -140,9 +141,6 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   const [otherIsTyping, setOtherIsTyping] = useState(false)
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null)
-  // Bump to re-render the last-seen label on an interval without touching
-  // the message list (which would re-animate bubbles).
-  const [, setTick] = useState(0)
 
   // ── Cache helpers ──────────────────────────────────────────────────────
   const cacheKey = otherId ? chatCacheKey(otherId) : ''
@@ -416,11 +414,6 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     }
   }, [previewStatus.playing])
 
-  // ── Last-seen ticker ─────────────────────────────────────────────────────
-  useEffect(() => {
-    const id = setInterval(() => setTick(n => n + 1), 30_000)
-    return () => clearInterval(id)
-  }, [])
   useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
   useEffect(() => { loadingMoreRef.current = loadingMore }, [loadingMore])
 
@@ -439,6 +432,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [unread, setUnread] = useState(0)
   useEffect(() => { if (isActive) setUnread(0) }, [isActive])
   useEffect(() => { onUnreadChange?.(unread) }, [unread, onUnreadChange])
+  // Lift the partner's online status to the home shell (green dot on the
+  // chat tab). On unmount the home shell's `chatAvailable` gate covers the
+  // stale value, so no explicit reset is needed here.
+  useEffect(() => { onOnlineChange?.(otherIsOnline) }, [otherIsOnline, onOnlineChange])
   // Flush the seen-set when the chat pane stops being active, so the next
   // time the user comes back, only messages that arrived *after* they left
   // get the "new messages" separator — not the ones they already viewed.
@@ -1302,8 +1299,6 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     [messages],
   )
 
-  const statusText = otherIsOnline ? tg('match.connected', matchIsMale) : formatLastSeen(matchLastSeen, matchIsMale)
-
   // ── FlatList renderItem ───────────────────────────────────────────────────
   // reversedMessages[0] = newest (shown at bottom in inverted list).
   // prevMsg = older neighbor (index+1), nextMsg = newer neighbor (index-1).
@@ -1431,15 +1426,6 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
   return (
     <View style={[styles.root, { paddingTop: topInset, paddingBottom: Math.max(safeBottom, kbHeight > 0 ? kbHeight + 8 : 0) }]}>
-      <View style={styles.header}>
-        <Text
-          style={[styles.status, otherIsOnline && styles.statusOnline]}
-          numberOfLines={1}
-        >
-          {statusText}
-        </Text>
-      </View>
-
       {/* ── Messages ──
           The body uses a plain View. Keyboard avoidance is driven entirely
           by the bottom spacer below the input row: spacer = kbHeight when
@@ -2505,25 +2491,6 @@ const lbStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: WHITE },
-  header: {
-    height: 56,
-    paddingHorizontal: SM,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: WHITE,
-    zIndex: 2,
-  },
-  status: {
-    fontSize: TEXT.lg,
-    fontWeight: WEIGHT.extrabold,
-    color: BLACK_STRONG,
-    textAlign: 'center',
-    // Android adds ~4px of invisible padding above text metrics that pushes
-    // the visible glyphs below the geometric center of their bounding box.
-    // Disable it so justifyContent:'center' on the wrapper actually centers.
-    includeFontPadding: false,
-  },
-  statusOnline: { color: PRIMARY },
 
   body: { flex: 1 },
   messages: { flex: 1 },

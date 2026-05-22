@@ -89,19 +89,16 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** Nothing to delete (no shim). Delete this note once the perm-reporting build is the live floor AND any phase-3 tightening decision has been made and recorded.
 - **Verify before removing:** check the live mobile version distribution; confirm the floor build sends `notif_perm` (grep `log` bodies for `notif_perm` on `key='start'`/`'focus'`), and query the share of located+active users with `relations.push.perm` set before considering any stricter rule.
 
-### `page1.profile` mirror of `page1.profiles[0]` (page1 candidate stack)
+### `app_cancel` credit precondition — old clients flicker instead of a disabled button (informational)
 
-- **Added:** 2026-05-19
-- **Reason:** page1 moved from a single watched candidate (`relations.page1.profile`) to a STACK (`relations.page1.profiles[]`, Tinder/Bumble; up to `STACK_SIZE`=10) so the client can render the next card already in place and skipping is instant. The deployed mobile build reads `page1.profile` (and `relations.match` derived from it). Removing/renaming it would break every published app. Staged Expand → Migrate → Contract.
-- **Old shape (kept alive):** while `page1.state='watching'` the server writes BOTH `page1.profiles: Profile[]` AND `page1.profile = profiles[0]` (the visible top, back-compat mirror). Old builds read `page1.profile` and skip via `app/ignore`; `app_ignore` now delegates to `app_skip` (advances the single top) so old builds keep working unchanged — they just don't get the stack. `_kick_page1_at`, `app_refresh_snapshots` keep the `page1.profile` mirror in sync with `profiles[0]`.
-- **New shape (preferred):** stack-aware build reads `relations.stack` (= `page1.profiles`), renders `stack[0]` with `stack[1]` statically behind, and skips via `POST /app/skip {skipped_id}` (idempotent; pops the front, 24h-ignores it, moves the viewer registration to the new top, and tops the stack back to 10 in the **same** call — no separate refill request).
-- **Safe to remove after:** mobile version that ships the stack UI (`relations.stack` + `app/skip`) is the floor across live users.
-- **How to remove:**
-  - `app_find` / `app_skip` / `_kick_page1_at` / `app_refresh_snapshots` (live bodies, latest = migration `20260519140000_page1_stack` + `..._skip_topup`) — stop writing/syncing the `page1.profile` mirror while watching; keep `profiles[]` only. Non-watching states keep the single `profile` (unchanged — the stack is watching-only).
-  - `mobile/src/stores/userStore.ts` — `deriveCompat` can drop the `page1.profile` fallback for `match`/`stack` (read `profiles[]` only).
-  - `supabase/functions/app/index.ts` `chat` case reads `page1.profile.user_id` for the partner — that's `chat` state (single profile, NOT the stack) so it is unaffected; no change needed.
-- **Verify before removing:** check the live mobile version distribution; confirm the floor build reads `relations.stack` and calls `app/skip` (grep the `log` table for `key='skip'` vs `key='ignore'` — once `ignore` hits ≈0 the old single-profile readers are gone).
+- **Added:** 2026-05-22
+- **Reason:** `app_cancel` gained a credit precondition — cancelling a sent invite now requires `balance >= _credits_cost('cancel')` (1 heart). This TIGHTENS a precondition the deployed mobile build can currently call successfully (a 0-heart cancel went through, charged 0). It is a breaking change per the CLAUDE.md definition, but it cannot be staged Expand→Contract (you can't add a precondition "alongside" the old one), and the degraded behavior on old builds IS the intended new behavior — so it ships directly. This entry records the cross-version window only.
+- **Old shape (kept alive):** Nothing. A pre-change mobile build has no client-side affordability gate on the waiting-card cancel button, so a 0-heart user can still tap it → `app/cancel` → the new server precondition returns `400 'no_credits'`. The old client's `runCancel` catches the error gracefully (it already optimistically cleared the card, so the card briefly flickers out then Realtime restores it) and the user stays in `waiting` — which is exactly the intended block. The only loss vs. the new build is the brief flicker and the missing disabled-button affordance.
+- **New shape (preferred):** The gate-aware mobile build disables the waiting-card cancel button when `starsBalance < CREDIT_COST.cancel` (the tap does nothing, no explainer popup), so the server precondition is never reached in the normal flow.
+- **Safe to remove after:** the mobile build that ships the disabled cancel button is the live floor.
+- **How to remove:** Nothing to delete in code (no shim). Delete this note once the gate-aware build is the live floor.
+- **Verify before removing:** check the live mobile version distribution; confirm the floor build disables the cancel button on insufficient balance.
 
 ## Removed (changelog)
 
-_(none yet)_
+- **`page1.profile` mirror of `page1.profiles[0]` (page1 candidate stack)** — added 2026-05-19, **reverted 2026-05-22** (migration `20260522000000_revert_page1_stack`) before the stack-aware mobile build ever reached the live floor. The candidate-stack experiment produced a stuck-card bug and the user chose to return to the single-profile model, so the Expand shim never needed a Contract. `page1.profiles[]` / `app_skip` / `_page1_pick` are gone; page1 is back to the single `page1.profile`.

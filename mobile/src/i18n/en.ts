@@ -116,14 +116,6 @@ export default {
   'settings.profileSubtitle': 'Edit your profile',
   'settings.aboutSubtitle': 'Learn more about our approach',
 
-  // Settings — game mode confirmation dialog (triggered from the pause icon on
-  // the Menu tab). The active / paused indicator itself is now icon-only and
-  // has no text label, so 'active' / 'off' strings were removed.
-  'settings.gameMode.offConfirmTitle': 'Switch to pause mode?',
-  'settings.gameMode.offConfirmDesc': 'You will disappear from search, any active interaction will end, and your viewers will be notified.',
-  'settings.gameMode.offConfirmDesc_m': 'You will disappear from search, any active interaction will end, and your viewers will be notified.',
-  'settings.gameMode.offConfirmDesc_f': 'You will disappear from search, any active interaction will end, and your viewers will be notified.',
-  'settings.gameMode.offConfirmButton': 'Pause',
 
   // About page
   'about.heroTitle': 'Real meetings.\nReally close.\nIn real time.',
@@ -138,7 +130,7 @@ export default {
   'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone.",
   'settings.profile': 'Edit your profile',
   'settings.account': 'Account',
-  'settings.credits': 'Stars',
+  'settings.credits': 'Hearts',
   'settings.creditsNext': 'Renews {when}',
   'settings.preview': 'Preview',
   'settings.myProfile': 'Profile',
@@ -274,26 +266,26 @@ export default {
   'family.summaryFreeWeekend': ', free this weekend',
   'family.summaryWithKidsWeekend': ', not free this weekend',
   'common.gotIt': 'Got it',
-  // Not-enough-stars popup (shown when an action costs more stars than the
+  // Not-enough-hearts popup (shown when an action costs more hearts than the
   // user has). {n} = the action's cost.
   // Count phrase with correct singular/plural — built by starsText() in
-  // lib/credits.ts and substituted wherever a stars amount is shown in prose.
-  'stars.count.one': '1 star',
-  'stars.count.many': '{n} stars',
-  'stars.insufficient.title': 'Not enough stars',
-  'stars.insufficient.desc': 'This action costs {stars} and you do not have enough right now. Stars renew every day.',
-  // Stars / package popup (opened from the settings stars row). The
+  // lib/credits.ts and substituted wherever a hearts amount is shown in prose.
+  'stars.count.one': '1 heart',
+  'stars.count.many': '{n} hearts',
+  // Hearts / package popup (opened from the settings hearts row). The
   // description is assembled in code from these lines (so the renew line can
   // be dropped when the next-grant time is unknown). Plan names stay Latin.
-  // The {stars}/{tier}/{cap}/{when} tokens are rendered bold in code. {cap}
-  // is the daily ceiling: the grant TOPS UP to it (not additive), so the
-  // tier line says the stars "top up to {cap}", never "you get {cap}".
+  // The {stars}/{tier}/{cap}/{when}/{proCap} tokens are rendered bold in code.
+  // {cap} is the daily ceiling: the grant TOPS UP to it (not additive), so the
+  // tier line says the hearts "top up to {cap}", never "you get {cap}".
+  // {proCap} is the Pro plan's daily ceiling, used by the switch line to sell
+  // the upgrade to free users.
   // English is non-gendered (genderize() is a no-op without {m|f} markers).
-  'stars.popup.title': 'Your stars',
+  'stars.popup.title': 'Your hearts',
   'stars.popup.line.balance': 'You have {stars} right now.',
-  'stars.popup.line.tier': 'On the {tier} plan, your stars top up to {cap} every day.',
-  'stars.popup.line.renew': 'Your stars will refresh on {when}.',
-  'stars.popup.line.switch': 'You can upgrade to Pro anytime.\nUpgrading immediately gives you the maximum stars.',
+  'stars.popup.line.tier': 'On the {tier} plan, your hearts top up to {cap} every day.',
+  'stars.popup.line.renew': 'Your hearts will refresh on {when}.',
+  'stars.popup.line.switch': 'You can upgrade to Pro anytime. On the Pro plan your hearts top up to {proCap} every day.\nUpgrading immediately gives you the maximum hearts.',
   'stars.popup.upgrade': 'Upgrade to Pro',
   'stars.popup.downgrade': 'Downgrade plan',
   'settings.miles': 'mi',
@@ -397,7 +389,7 @@ export default {
   'home.broadcastConfirmTitle': 'Switch to broadcast mode?',
   'home.broadcastConfirmDesc': 'In broadcast mode, your profile gets extra visibility for 30 minutes, helping more nearby people discover you.',
   'home.broadcastConfirmDescFree': 'Receiving invitations is free.',
-  'home.broadcastConfirmDescNoStars': 'No stars are used when someone invites you.',
+  'home.broadcastConfirmDescNoStars': 'No hearts are used when someone invites you.',
   'home.broadcastConfirmButton': 'Broadcast me',
   'home.exitBroadcastConfirmTitle': 'Stop broadcasting?',
   'home.exitBroadcastConfirmDesc': "You're currently in broadcast mode. Confirming will stop the broadcast.",
@@ -468,6 +460,60 @@ Without escaping to the next option
 To be truly available
 A bond starts when you stop
 Just a moment, just the two of you`,
+  // Skip-feedback headline pool. One line is picked at random when a skip
+  // starts (see home.tsx skipHeadlineIdx) and shown in the headline slot
+  // above the centre button for the duration of that skip. Same newline-block
+  // format as home.readyHeadlines.
+  'home.skipHeadlines': `Moving on
+Not this time
+Maybe next
+Fresh moment
+Next is coming
+Keep looking
+One more look
+Letting go
+Finding connection
+Quietly forward
+Another try
+That's okay
+Staying open
+Maybe soon
+Checking ahead
+All good
+Moving calmly
+Not the one
+Gentle search
+Another possibility
+Moment moves
+Path is open
+Keeping it light
+Next awaits
+Another connection
+No worries
+Swiping on
+Staying open
+Maybe there
+Someone else
+Flowing on
+Clean choice
+Moment passes
+Finding spark
+Staying calm
+Next in line
+Another chance
+Not a fit
+Wide open
+Moving forward
+No pressure
+Another moment
+Maybe now
+Different connection
+Moving ahead
+Small breath
+Keep checking
+Heart knows
+Another chance
+Next may surprise`,
   // Geo-availability gate. Shown in the rotating-headline slot when the
   // server marks the user outside every active area (unavailable) or inside
   // an area that has not opened yet (notYet). While shown, the side tab is

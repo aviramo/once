@@ -3,15 +3,15 @@ import Tools from "./tools.ts";
 import Log from "./log.ts";
 import { Data, Pages, PushToken } from "./global.ts";
 
-// balance 5 == the free tier daily amount (SQL _credits_tier_cfg('free').daily).
+// balance 3 == the free tier daily amount (SQL _credits_tier_cfg('free').daily).
 // granted_on / next_grant_at are intentionally omitted: the next /ext/cron tick
 // (≤60s) runs app_credits_grant, which fills both and re-confirms the balance.
-// Keep `5` / `'free'` in sync with the SQL _credits_* helpers and
+// Keep `3` / `'free'` in sync with the SQL _credits_* helpers and
 // mobile/src/lib/credits.ts (see CLAUDE.md "Credits economy").
 const defaultRelations: Pages = {
   page1: { state: "locked" },
   page2: { state: "free" },
-  credits: { balance: 5, tier: "free", held: 0 },
+  credits: { balance: 3, tier: "free" },
 };
 
 export default class User {
@@ -69,9 +69,14 @@ export default class User {
     this.is_male = is_male;
     this.is_for_male = !is_male;
     this.is_for_female = is_male;
+    // Gendered default age spans: men +5/-10, women -10/+5 (age_from floored
+    // at the legal minimum). age_to is unclamped.
     this.age_from = Math.max(is_male ? age - 10 : age - 5, User.LEGAL);
     this.age_to = is_male ? age + 5 : age + 10;
-    this.range = 20000;
+    // range left unset => NULL = unlimited search distance. others() treats a
+    // NULL range as "no distance filter" (LEAST(me.range, other.range) IS NULL
+    // skips st_dwithin, and the relevance_location factor falls back to 1.0).
+    this.range = undefined;
     this.relations = defaultRelations;
     const { db: _db, ...rest } = this;
     const data = await Tools.invoke(log, "insert", Tools.supabase.from("users").insert(rest).select());

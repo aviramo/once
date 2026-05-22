@@ -31,6 +31,7 @@ export function ConfirmDialog({
   noteInput,
   cancelFlex,
   confirmFlex,
+  confirmDisabled,
   draggable,
 }: {
   visible: boolean
@@ -62,6 +63,11 @@ export function ConfirmDialog({
   noteInput?: { value: string; onChangeText: (s: string) => void; placeholder: string; maxLength?: number }
   cancelFlex?: number
   confirmFlex?: number
+  /** Disables the confirm button (faded look, no-op on press) on top of
+   * `busy`. Used when the action is unavailable, e.g. the user can't afford
+   * its credit cost — the popup stays open and informative (the cost badge
+   * still shows) but the action can't be taken. */
+  confirmDisabled?: boolean
   draggable?: boolean
 }) {
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
@@ -151,9 +157,13 @@ export function ConfirmDialog({
                 onPress={() => { setPressed('confirm'); onConfirm?.() }}
                 variant="primary"
                 size="lg"
-                disabled={busy}
+                disabled={busy || confirmDisabled}
                 loading={busy && pressed === 'confirm'}
-                silentDisabled={pressed !== 'confirm'}
+                // When `confirmDisabled` (e.g. the user can't afford the
+                // action's credit cost) show the faded disabled look and let
+                // the tap do nothing; otherwise keep the in-flight lockout
+                // silent (no gray flicker) exactly as before.
+                silentDisabled={!confirmDisabled && pressed !== 'confirm'}
               />
             </View>
           ) : null}

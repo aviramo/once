@@ -69,12 +69,8 @@ export type Page2State = 'free' | 'pending' | 'chat' | 'locked';
 
 export type Page1 = {
   state: Page1State;
-  // Single counterpart for waiting/chat/locked; while watching it is the
-  // back-compat MIRROR of profiles[0] (the visible top of the stack).
+  // The single watched counterpart (watching / waiting / chat / locked).
   profile?: Profile;
-  // Candidate STACK, present only while state='watching' (up to STACK_SIZE).
-  // profiles[0] === profile. See "page1 candidate STACK" in CLAUDE.md.
-  profiles?: Profile[];
   message?: string;
   invited_at?: string;
   expires_at?: string;
@@ -93,16 +89,14 @@ export type Page2 = {
 
 // Credits wallet. Lives at relations.credits (sibling of last_add_at /
 // availability). Mutated atomically inside the same FOR UPDATE transaction as
-// the state transition that spends/refunds it. balance/tier/cap math is the
+// the state transition that spends it. balance/tier/cap math is the
 // source-of-truth in SQL (_credits_* helpers); this type just describes the
-// shape the client reads. `held` is the amount reserved by an outstanding
-// sent invite (refunded if it's not accepted, unless the sender tore it down).
+// shape the client reads.
 export type Credits = {
   balance: number;
   tier: "free" | "pro";
   granted_on?: string | null;
   next_grant_at?: string | null;
-  held?: number;
 };
 
 // Notification-presence signal. Lives at relations.push (sibling of credits /
@@ -228,9 +222,6 @@ export type RpcResult = {
   notify?: Notify[];
   error?: string;
   processed?: number;
-  /** app_find / app_ignore only: ≤2 next-ranked candidates for client image
-   * prefetch (NOT registered as viewers). See "Skip = find" in CLAUDE.md. */
-  lookahead?: Profile[];
 };
 
 export type PushToken = { type: "expo"; token: string };

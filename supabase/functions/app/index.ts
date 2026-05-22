@@ -335,22 +335,6 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "skip": {
-        // Per-skip stack advance (new stack-aware client). Idempotent;
-        // app_skip restricts the skipped, splices it out of page1.profiles[],
-        // moves the viewer registration to the new top, and refills when low.
-        // RPC-first then persist — same ordering as `find` (app_skip writes
-        // relations without bumping last_seen; persisting first would
-        // broadcast a stale pre-skip Realtime payload sharing one last_seen).
-        const skipped_id = typeof body.skipped_id === "string" ? body.skipped_id : null;
-        if (!skipped_id) return log.error("skip", "no_skipped_id", 400);
-        const result = await Tools.rpc(log, "app_skip", { me_id: user.user_id, skipped_id });
-        await user.persist(log);
-        if (result?.error) return log.error("skip", result.error, 400);
-        rpcUser = result?.user;
-        notifyList = result?.notify ?? [];
-        break;
-      }
       case "cancel":
       case "leave":
       case "block": {

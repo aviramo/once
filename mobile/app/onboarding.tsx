@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
 import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_STRONG, DESTRUCTIVE, PRIMARY, BLACK_MID, BLACK_STRONG } from '../src/colors'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION } from '../src/tokens'
+import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 

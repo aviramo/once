@@ -116,14 +116,6 @@ export default {
   'settings.profileSubtitle': 'עריכת הפרופיל שלך',
   'settings.aboutSubtitle': 'הסיפור שמאחורי האפליקציה',
 
-  // Settings — game mode confirmation dialog (triggered from the pause icon on
-  // the Menu tab). The active / paused indicator itself is now icon-only and
-  // has no text label, so 'active' / 'off' strings were removed.
-  'settings.gameMode.offConfirmTitle': 'לעבור למצב הפסקה?',
-  'settings.gameMode.offConfirmDesc': 'תיעלם מהחיפוש של אחרים, כל אינטראקציה פעילה תסתיים, וצופים יקבלו על כך עדכון.',
-  'settings.gameMode.offConfirmDesc_m': 'תיעלם מהחיפוש של אחרים, כל אינטראקציה פעילה תסתיים, וצופים יקבלו על כך עדכון.',
-  'settings.gameMode.offConfirmDesc_f': 'תיעלמי מהחיפוש של אחרים, כל אינטראקציה פעילה תסתיים, וצופים יקבלו על כך עדכון.',
-  'settings.gameMode.offConfirmButton': 'למצב הפסקה',
 
   // About page
   'about.heroTitle': 'מפגשים אמיתיים.\nממש קרוב.\nבזמן אמת.',
@@ -138,7 +130,7 @@ export default {
   'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד.',
   'settings.profile': 'עריכת הפרופיל',
   'settings.account': 'חשבון',
-  'settings.credits': 'כוכבים',
+  'settings.credits': 'לבבות',
   'settings.creditsNext': 'מתחדש ב-{when}',
   'settings.preview': 'תצוגה מקדימה',
   'settings.myProfile': 'פרופיל',
@@ -278,26 +270,26 @@ export default {
   'family.summaryFreeWeekend': ', פנוי בסופ״ש הקרוב',
   'family.summaryWithKidsWeekend': ', לא פנוי בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
-  // Not-enough-stars popup (shown when an action costs more stars than the
+  // Not-enough-hearts popup (shown when an action costs more hearts than the
   // user has). {n} = the action's cost.
   // Count phrase with correct singular/plural — built by starsText() in
-  // lib/credits.ts and substituted wherever a stars amount is shown in prose.
-  'stars.count.one': 'כוכב אחד',
-  'stars.count.many': '{n} כוכבים',
-  'stars.insufficient.title': 'אין מספיק כוכבים',
-  'stars.insufficient.desc': 'הפעולה הזו עולה {stars} ואין לך מספיק כרגע. הכוכבים מתחדשים בכל יום.',
-  // Stars / package popup (opened from the settings stars row). The
+  // lib/credits.ts and substituted wherever a hearts amount is shown in prose.
+  'stars.count.one': 'לב אחד',
+  'stars.count.many': '{n} לבבות',
+  // Hearts / package popup (opened from the settings hearts row). The
   // description is assembled in code from these lines (so the renew line can
   // be dropped when the next-grant time is unknown). Plan names stay Latin.
-  // The {stars}/{tier}/{cap}/{when} tokens are rendered bold in code. {cap}
-  // is the daily ceiling: the grant TOPS UP to it (not additive), so the
-  // tier line says the stars "fill up to {cap}", never "you get {cap}".
+  // The {stars}/{tier}/{cap}/{when}/{proCap} tokens are rendered bold in code.
+  // {cap} is the daily ceiling: the grant TOPS UP to it (not additive), so the
+  // tier line says the hearts "fill up to {cap}", never "you get {cap}".
+  // {proCap} is the Pro plan's daily ceiling, used by the switch line to sell
+  // the upgrade to free users.
   // Hebrew gendered via genderize() inline {male|female} markers.
-  'stars.popup.title': 'הכוכבים שלך',
+  'stars.popup.title': 'הלבבות שלך',
   'stars.popup.line.balance': 'יש לך {stars} כרגע.',
-  'stars.popup.line.tier': 'בחבילת {tier} הכוכבים מתמלאים ל-{cap} בכל יום.',
-  'stars.popup.line.renew': 'הכוכבים שלך יתחדשו ב-{when}.',
-  'stars.popup.line.switch': 'אפשר לשדרג ל-Pro בכל עת.\nמיד עם השדרוג {תקבל|תקבלי} את מקסימום הכוכבים.',
+  'stars.popup.line.tier': 'בחבילת {tier} הלבבות מתמלאים ל-{cap} בכל יום.',
+  'stars.popup.line.renew': 'הלבבות שלך יתחדשו ב-{when}.',
+  'stars.popup.line.switch': 'אפשר לשדרג ל-Pro בכל עת. בחבילת Pro הלבבות מתמלאים ל-{proCap} בכל יום.\nמיד עם השדרוג {תקבל|תקבלי} את מקסימום הלבבות.',
   'stars.popup.upgrade': 'שדרוג ל-Pro',
   'stars.popup.downgrade': 'הורדת חבילה',
   'settings.miles': 'מייל',
@@ -416,7 +408,7 @@ export default {
   'home.broadcastConfirmTitle': 'לעבור למצב שידור?',
   'home.broadcastConfirmDesc': 'במצב שידור, הפרופיל שלך מקבל חשיפה נוספת למשך 30 דקות, ועוזר ליותר אנשים בקרבת מקום לגלות אותך.',
   'home.broadcastConfirmDescFree': 'קבלת הזמנות היא בחינם.',
-  'home.broadcastConfirmDescNoStars': 'לא נעשה שימוש בכוכבים כשמישהו מזמין אותך.',
+  'home.broadcastConfirmDescNoStars': 'לא נעשה שימוש בלבבות כשמישהו מזמין אותך.',
   'home.broadcastConfirmButton': 'שדר אותי',
   'home.exitBroadcastConfirmTitle': 'להפסיק את השידור?',
   'home.exitBroadcastConfirmDesc': 'כעת במצב שידור. אישור יפסיק את השידור.',
@@ -490,6 +482,60 @@ export default {
 להיות {פנוי|פנויה} באמת
 קשר מתחיל כשעוצרים
 רק רגע, רק אתם`,
+  // Skip-feedback headline pool. One line is picked at random when a skip
+  // starts (see home.tsx skipHeadlineIdx) and shown in the headline slot
+  // above the centre button for the duration of that skip. Same newline-block
+  // format as home.readyHeadlines.
+  'home.skipHeadlines': `ממשיכים הלאה
+לא הפעם
+אולי הבא
+רגע חדש
+הבא בדרך
+ממשיכים לחפש
+עוד מבט
+משחררים בעדינות
+מחפשים חיבור
+קדימה בשקט
+עוד ניסיון
+זה בסדר
+ממשיכים פתוח
+אולי בקרוב
+בודקים הלאה
+הכל טוב
+ממשיכים בנחת
+לא זה
+חיפוש נעים
+עוד אפשרות
+רגע ממשיך
+הדרך פתוחה
+ממשיכים קליל
+הבא מחכה
+עוד חיבור
+לא קרה
+מדפדפים הלאה
+נשארים פתוחים
+אולי שם
+עוד מישהו
+ממשיכים בזרימה
+בחירה נקייה
+רגע עובר
+מחפשים קליק
+ממשיכים רגוע
+הבא בתור
+עוד הזדמנות
+לא מתאים
+הכל פתוח
+ממשיכים קדימה
+בלי לחץ
+עוד רגע
+אולי עכשיו
+חיבור אחר
+עוברים הלאה
+נשימה קטנה
+ממשיכים לבדוק
+הלב יודע
+עוד סיכוי
+הבא יפתיע`,
   // Geo-availability gate. Shown in the rotating-headline slot when the
   // server marks the user outside every active area (unavailable) or inside
   // an area that has not opened yet (notYet). While shown, the side tab is

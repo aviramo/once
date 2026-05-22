@@ -12,7 +12,6 @@ import { useUserStore, resolveLocationType, type LocationType } from '../src/sto
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { Button } from '../src/components/Button'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
 import { PullContext, type PullCtx } from '../src/components/HomeCard'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
@@ -20,9 +19,9 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, RADII, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, StarIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon } from '../src/components/icons'
 import { creditBalance, formatNextGrant, creditTier, CREDIT_TIER, starsText } from '../src/lib/credits'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
@@ -84,10 +83,6 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
     onResponderTerminate: () => onPressStateChange?.(false),
   }
 }
-
-// ── Local aliases for shared icons (keep call sites unchanged) ────────────
-
-const FIELD_ICON_STROKE = BLACK_STRONG
 
 // ── Select Field Types ─────────────────────────────────────────────────────
 
@@ -2381,11 +2376,14 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
     '{tier}': isPro ? 'Pro' : 'Free',
     '{cap}': starsText(CREDIT_TIER[tier].cap),
     '{when}': nextGrant,
+    // The Pro plan's daily ceiling — bolded inside the free-user switch line
+    // so the upgrade pitch states what Pro actually gives.
+    '{proCap}': starsText(CREDIT_TIER.pro.cap),
   }
   let starsEmKey = 0
   const emLine = (template: string) =>
     genderize(template, profile.is_male)
-      .split(/(\{stars\}|\{tier\}|\{cap\}|\{when\})/g)
+      .split(/(\{stars\}|\{tier\}|\{cap\}|\{when\}|\{proCap\})/g)
       .map(p => starsTok[p] !== undefined
         ? <Text key={`em${starsEmKey++}`} style={styles.starsEm}>{starsTok[p]}</Text>
         : p)
@@ -2401,7 +2399,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   // would be misleading.
   const starsDesc = [
     ...starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln])),
-    ...(isPro ? [] : ['\n\n', genderize(t('stars.popup.line.switch'), profile.is_male)]),
+    ...(isPro ? [] : ['\n\n', ...emLine(t('stars.popup.line.switch'))]),
   ]
 
   return (
@@ -2417,11 +2415,11 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           subtitle={nextGrant
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
-          // Value carries the plan name + balance/cap, e.g. "Free 3/5" or
+          // Value carries the plan name + balance/cap, e.g. "Free 2/3" or
           // "Pro 7/10" (the plan label the user asked to live here).
           displayValue={`${isPro ? 'Pro' : 'Free'} ${creditBalance(profile)}/${CREDIT_TIER[tier].cap}`}
           onPress={() => setStarsPopupVisible(true)}
-          icon={<StarIcon color={WHITE} />}
+          icon={<HeartIcon color={WHITE} size={ICON.md} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -2458,14 +2456,14 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         onConfirm={onDeleteConfirmed}
         draggable
       />
-      {/* Stars / package popup. Star icon, assembled explainer, and a single
-          "upgrade to Pro" button for free users (NO star-count badge — it
+      {/* Stars / package popup. Heart icon, assembled explainer, and a single
+          "upgrade to Pro" button for free users (NO heart-count badge — it
           read as a price/cost and confused users). A Pro user gets no button
           at all (one-way switch, user request) — the sheet is then purely
           informational, dismissed by the drag handle / backdrop tap. */}
       <ConfirmDialog
         visible={starsPopupVisible}
-        icon={<StarIcon color={PRIMARY} size={32} />}
+        icon={<HeartIcon color={PRIMARY} size={32} />}
         title={t('stars.popup.title')}
         description={starsDesc}
         confirmLabel={isPro ? undefined : t('stars.popup.upgrade')}
@@ -2482,7 +2480,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
 
 export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
-  const router = useRouter()
   const { profile } = useUserStore()
   const { user } = useAuthStore()
 

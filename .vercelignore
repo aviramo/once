@@ -1,0 +1,10 @@
+# The Vercel project "once" builds only the web/ app (rootDirectory = "web").
+# Exclude the rest of the monorepo from the deployment upload so it stays small.
+/mobile
+/supabase
+/img
+/mask
+/assets
+/store-listing
+*.apk
+*.log

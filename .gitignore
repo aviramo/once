@@ -54,3 +54,5 @@ Thumbs.db
 .mcp.json
 .agents/
 skills-lock.json
+
+.vercel
