@@ -16,33 +16,6 @@ export type ResetResult =
   | { ok: false };
 
 /**
- * Role-scoped admin reset. The users-list control opens a role checklist;
- * ONLY users holding at least one of the selected roles are reset. Delegates
- * to the `app_admin_reset(p_group_ids uuid[])` overload, which clears those
- * users' chat/log/restrictions and rebuilds their relations WHILE recomputing
- * relations.availability via user_availability(user_id, location) — so the geo
- * + role-disable gate stays correct immediately after the reset.
- *
- * Empty selection is a no-op (returns 0); it never falls through to a global
- * reset (the RPC guards this too).
- */
-export async function resetUsersByRoles(
-  roleIds: string[],
-): Promise<ResetResult> {
-  if (!(await getAdminUser())) throw new Error("Unauthorized");
-  const ids = (roleIds ?? []).filter(Boolean);
-  if (ids.length === 0) return { ok: true, users: 0 };
-  const admin = createSupabaseAdmin();
-  const { data, error } = await admin.rpc("app_admin_reset", {
-    p_group_ids: ids,
-  });
-  if (error) return { ok: false };
-  revalidatePath(ADMIN_USERS_PATH, "page");
-  const users = Number((data as { users?: number } | null)?.users ?? 0);
-  return { ok: true, users };
-}
-
-/**
  * Single-user reset. The user-detail "danger zone" exposes this alongside
  * deleteUser. Delegates to the app_admin_reset_user(p_user_id) RPC — the
  * per-user counterpart of resetUsersByRoles' role-scoped reset: it wipes the
@@ -111,24 +84,96 @@ export async function deleteUser(
 }
 
 /**
- * Remove a user's pending join request without approving them. Clears
- * relations.join_request and recomputes relations.availability via the
- * app_admin_clear_join_request RPC, so the user drops out of the
- * ?seg=join_requested queue and — since they stay gated (not in any enabled
- * group) — their app reverts to the "request to join" CTA (pre-request state).
- *
- * triggerResync mirrors the rest of the admin mutations (Realtime + push
- * reconcile); the cron resync is the safety net if the edge call is slow.
+ * Release ONE page of a single user to its default state via the
+ * app_admin_release_page1 / app_admin_release_page2 RPCs — a state-aware
+ * teardown that also repairs the counterparty so no related user is left
+ * orphaned. The sibling page, credits, availability and visibility are
+ * untouched.
  */
-export async function clearJoinRequest(userId: string): Promise<void> {
+export async function releaseUserPage(
+  userId: string,
+  page: 1 | 2,
+): Promise<{ ok: boolean }> {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
   if (!userId) throw new Error("missing_args");
   const admin = createSupabaseAdmin();
-  const { error } = await admin.rpc("app_admin_clear_join_request", {
-    p_user_id: userId,
-  });
-  if (error) throw new Error(error.message);
+  const { data, error } = await admin.rpc(
+    page === 1 ? "app_admin_release_page1" : "app_admin_release_page2",
+    { p_user_id: userId },
+  );
+  if (error) return { ok: false };
   revalidatePath(USER_PATH, "page");
   revalidatePath(ADMIN_USERS_PATH, "page");
-  await triggerResync();
+  return { ok: (data as { ok?: boolean } | null)?.ok === true };
+}
+
+/** A bulk operation requested from the users-list multi-selection. */
+export type BulkAction =
+  | { kind: "reset" }
+  | { kind: "delete" }
+  | { kind: "release"; page: 1 | 2 }
+  | { kind: "assignGroup"; groupId: string };
+
+/**
+ * Apply one action to every selected user. Each user is processed
+ * independently — one failure is skipped, never fatal — and `count` reports
+ * how many succeeded. The acting admin is never removed by a bulk delete. The
+ * users path is revalidated once at the end; a group assignment additionally
+ * resyncs availability (assigning a disabled group gates the user).
+ */
+export async function bulkUserAction(
+  userIds: string[],
+  action: BulkAction,
+): Promise<{ ok: boolean; count: number }> {
+  const admin0 = await getAdminUser();
+  if (!admin0) throw new Error("Unauthorized");
+  const ids = [...new Set((userIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const admin = createSupabaseAdmin();
+  let count = 0;
+
+  for (const id of ids) {
+    try {
+      if (action.kind === "reset") {
+        const { error } = await admin.rpc("app_admin_reset_user", {
+          p_user_id: id,
+        });
+        if (!error) count++;
+      } else if (action.kind === "delete") {
+        if (id === admin0.id) continue; // never delete the acting admin
+        const { error: ce } = await admin.rpc("app_delete_cleanup", {
+          me_id: id,
+        });
+        if (ce) continue;
+        await admin.from("log").delete().eq("user_id", id);
+        await admin
+          .from("restrictions")
+          .delete()
+          .or(`user_id.eq.${id},other_id.eq.${id}`);
+        const { error } = await admin.auth.admin.deleteUser(id);
+        if (!error) count++;
+      } else if (action.kind === "release") {
+        const { error } = await admin.rpc(
+          action.page === 1
+            ? "app_admin_release_page1"
+            : "app_admin_release_page2",
+          { p_user_id: id },
+        );
+        if (!error) count++;
+      } else if (action.kind === "assignGroup") {
+        const { error } = await admin.from("user_groups").upsert(
+          { user_id: id, group_id: action.groupId },
+          { onConflict: "user_id,group_id", ignoreDuplicates: true },
+        );
+        if (!error) count++;
+      }
+    } catch {
+      /* skip this user, continue with the rest */
+    }
+  }
+
+  revalidatePath(ADMIN_USERS_PATH, "page");
+  revalidatePath(USER_PATH, "page");
+  if (action.kind === "assignGroup") await triggerResync();
+  return { ok: true, count };
 }

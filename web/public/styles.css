@@ -1,52 +1,43 @@
 /* === Once shared stylesheet ============================================ */
 
-/* Strict monochrome that follows the browser color scheme.
-   :root = LIGHT (default / "no dark mode"): white page, black content,
-   black drawing on transparent. The dark media query flips every token to
-   the inverse: black page, white content, white drawing on transparent.
-   Every rule below reads these tokens, so the whole site (incl. legal
-   pages) inverts from this one place - single source of truth. The legacy
-   --coral* names are kept only so existing rules keep cascading; they now
-   resolve to the neutral accent, not coral. */
+/* The public site speaks the app's graphic language: a single, fixed
+   all-dark scheme — black page, white content — with NO theme toggle (the
+   app is always black with white text). A flat chrome bar, radius-12 cards
+   and buttons, no gradients and no drop-shadows. Every token below maps to
+   the app's design tokens (PRIMARY #000000, RADIUS 12, the WHITE_* alpha
+   scale). This is the single source of truth for every public page,
+   including the legal pages. The legacy --coral* names are kept only so
+   existing rules keep cascading; they all resolve to neutral white now. */
 :root {
-  --coral: #000000;
-  --coral-deep: #333333;
-  --coral-100: rgba(0, 0, 0, 0.05);
-  --coral-150: rgba(0, 0, 0, 0.10);
-  --coral-border: rgba(0, 0, 0, 0.16);
-  --coral-border-2: rgba(0, 0, 0, 0.28);
-  --bg: #FFFFFF;
-  --text: #000000;
-  --text-2: rgba(0, 0, 0, 0.72);
-  --text-3: rgba(0, 0, 0, 0.45);
-  --hairline: rgba(0, 0, 0, 0.08);
-  --menu-bg: #FFFFFF;
-  --shadow-soft: 0 18px 48px -18px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.06);
-  --shadow-cta: 0 12px 28px -6px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
-  --font: 'Noto Sans Hebrew', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  /* Check glyph for the trust bullets. The bullet is var(--coral), so the
-     glyph must be the page bg colour: white on the black bullet here. */
-  --check-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'><path d='M3 7l3 3 6-6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-}
+  color-scheme: dark;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --coral: #FFFFFF;
-    --coral-deep: #C9C9C9;
-    --coral-100: rgba(255, 255, 255, 0.06);
-    --coral-150: rgba(255, 255, 255, 0.10);
-    --coral-border: rgba(255, 255, 255, 0.16);
-    --coral-border-2: rgba(255, 255, 255, 0.28);
-    --bg: #000000;
-    --text: #FFFFFF;
-    --text-2: rgba(255, 255, 255, 0.72);
-    --text-3: rgba(255, 255, 255, 0.45);
-    --hairline: rgba(255, 255, 255, 0.08);
-    --menu-bg: #0A0A0A;
-    --shadow-soft: 0 18px 48px -18px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.5);
-    --shadow-cta: 0 12px 28px -6px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.5);
-    --check-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'><path d='M3 7l3 3 6-6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  }
+  --coral: #FFFFFF;
+  --coral-deep: #DCDCDC;
+  --coral-100: rgba(255, 255, 255, 0.06);
+  --coral-150: rgba(255, 255, 255, 0.12);
+  --coral-border: rgba(255, 255, 255, 0.14);
+  --coral-border-2: rgba(255, 255, 255, 0.26);
+  --bg: #000000;
+  --text: #FFFFFF;
+  --text-2: rgba(255, 255, 255, 0.70);
+  --text-3: rgba(255, 255, 255, 0.45);
+  --hairline: rgba(255, 255, 255, 0.10);
+  --menu-bg: #1C1C1C;
+
+  /* App radius token: RADIUS = 12 for cards / buttons / inputs / menus.
+     --radius-pill stays 999 for true capsule micro-tags only. */
+  --radius: 12px;
+  --radius-pill: 999px;
+
+  /* The app is flat — no gradients, no drop-shadows on buttons or cards.
+     The ONLY shadow kept is a soft lift under the floating language menu:
+     the web analogue of the app's BottomSheet, which does carry a shadow. */
+  --shadow-menu: 0 14px 38px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.5);
+
+  --font: 'Noto Sans Hebrew', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Check glyph for the trust bullets. The bullet circle is var(--coral)
+     (white), so the glyph is the page bg colour: black on the white bullet. */
+  --check-img: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'><path d='M3 7l3 3 6-6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -66,11 +57,14 @@ button { font: inherit; cursor: pointer; }
 img { max-width: 100%; height: auto; display: block; }
 ::selection { background: var(--coral); color: var(--bg); }
 
-/* === Header (shared on every page) === */
+/* === Header (shared on every page) ===
+   A solid pure-black bar carrying the white "Once" wordmark — the same
+   flat black chrome the app wears at the top (its TabStrip). The whole
+   page is black, so the header is seamless with it: no border and no
+   shadow, exactly like the app. */
 .header {
   position: sticky; top: 0; z-index: 50;
-  background: var(--bg);
-  border-bottom: 1px solid var(--hairline);
+  background: #000000;
 }
 .header-inner {
   max-width: 1080px; margin: 0 auto; padding: 16px 28px;
@@ -78,31 +72,35 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .brand { display: inline-flex; align-items: center; transition: opacity .15s ease; }
 .brand:hover { opacity: 0.75; }
-.brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); }
+.brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #FFFFFF; }
 
+/* Language switcher — white-on-black, the app's white-alpha chrome. */
 .lang-switcher { position: relative; }
 .lang-btn {
-  font-size: 13px; font-weight: 600; color: var(--text-2);
-  background: var(--coral-100);
-  border: 1px solid var(--coral-border); border-radius: 999px;
+  font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.22); border-radius: var(--radius-pill);
   padding: 8px 14px; cursor: pointer; transition: all .15s ease;
   display: inline-flex; align-items: center; gap: 6px;
   font-family: inherit;
 }
 .lang-btn:hover, .lang-btn[aria-expanded="true"] {
-  border-color: var(--coral); color: var(--coral); background: var(--coral-150);
+  border-color: rgba(255, 255, 255, 0.45); color: #FFFFFF; background: rgba(255, 255, 255, 0.16);
 }
 .lang-chevron { transition: transform .15s ease; flex-shrink: 0; }
 .lang-btn[aria-expanded="true"] .lang-chevron { transform: rotate(180deg); }
+/* The dropdown itself is a popover floating over the black page — the web
+   analogue of an app sheet, so it sits on a slightly lifted dark surface
+   with a soft shadow. */
 .lang-menu {
   position: absolute; top: calc(100% + 8px);
   inset-inline-end: 0;
   background: var(--menu-bg);
   border: 1px solid var(--coral-border);
-  border-radius: 14px;
+  border-radius: var(--radius);
   list-style: none; padding: 6px;
   min-width: 160px;
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-menu);
   z-index: 100;
 }
 .lang-menu[hidden] { display: none; }
@@ -152,21 +150,29 @@ h3 {
 }
 p { color: var(--text-2); }
 
-/* === Buttons === */
-.btn-primary {
+/* === Buttons ===
+   Identical to the app's <Button> on a dark surface: 56px tall, radius 12,
+   an 18px label, a flat fill, NO shadow and NO hover lift. primary = a
+   solid white fill with black text (the app's `onPrimary`); secondary = a
+   soft white-alpha wash with a white semibold label (`onPrimaryGhost`). */
+.btn-primary, .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 32px; height: 56px; border-radius: var(--radius);
+  font-weight: 800; font-size: 18px; letter-spacing: -0.2px;
+  border: none; cursor: pointer;
+  transition: background .15s ease, opacity .15s ease;
+}
+.btn-primary {
   background: var(--coral); color: var(--bg);
-  padding: 0 32px; height: 56px; border-radius: 999px;
-  font-weight: 700; font-size: 16px; border: none;
-  box-shadow: var(--shadow-cta);
-  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease, background .15s ease;
 }
-.btn-primary:hover {
-  background: var(--coral-deep);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-cta);
+.btn-primary:hover { opacity: 0.86; }
+.btn-primary:active { opacity: 0.78; }
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.14); color: var(--text);
+  font-weight: 600;
 }
-.btn-primary:active { transform: translateY(0); }
+.btn-secondary:hover { background: rgba(255, 255, 255, 0.22); }
+.btn-secondary:active { background: rgba(255, 255, 255, 0.20); }
 .btn-link {
   display: inline-flex; align-items: center; gap: 6px;
   color: var(--text-2); font-weight: 600; font-size: 15px;
@@ -175,14 +181,14 @@ p { color: var(--text-2); }
 }
 .btn-link:hover { color: var(--coral); }
 
-/* === Pills === */
+/* === Pills (small capsule micro-tags) === */
 .pill {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 600;
   color: var(--coral-deep);
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 9px 16px;
 }
 .pill::before {
@@ -215,6 +221,7 @@ p { color: var(--text-2); }
   margin-top: 36px;
   display: flex; gap: 12px;
   justify-content: center; align-items: center;
+  flex-wrap: wrap;
 }
 .hero-secondary-link {
   display: inline-block;
@@ -254,7 +261,7 @@ p { color: var(--text-2); }
   color: var(--text);
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 14px 22px;
 }
 
@@ -349,11 +356,10 @@ p { color: var(--text-2); }
 }
 
 /* === Illustrations =====================================================
-   Pre-baked transparent WebPs: a black-on-transparent set for light and a
-   white-on-transparent set for dark, swapped per scheme by the <picture>
-   element in markup (no runtime filter/blend). No blur halo and no blob
-   mask, so every image is a clean rectangle of just the drawing.
-   display:contents collapses the <picture> box so the existing
+   Pre-baked transparent WebPs: the white-on-transparent set, drawn for the
+   site's single dark scheme. No blur halo and no blob mask, so every image
+   is a clean rectangle of just the drawing. display:contents collapses the
+   <picture> box so the existing
    .hero-visual/.section-visual/.lead-visual img sizing still applies. */
 .hero-visual picture,
 .section-visual picture,
@@ -377,23 +383,21 @@ p { color: var(--text-2); }
 .how-card {
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
-  border-radius: 28px;
+  border-radius: var(--radius);
   padding: 28px 28px;
-  transition: transform .25s cubic-bezier(.2,.8,.2,1), background .25s ease, border-color .25s ease;
+  transition: background .25s ease, border-color .25s ease;
 }
 .how-card:hover {
-  transform: translateY(-2px);
   background: var(--coral-150);
   border-color: var(--coral-border-2);
 }
 .how-num {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--coral); color: var(--bg);
   font-size: 12px; font-weight: 800;
   margin-bottom: 16px;
-  box-shadow: var(--shadow-cta);
 }
 .how-card h3 { font-size: 19px; margin-bottom: 6px; }
 .how-card p { font-size: 14px; line-height: 1.55; }
@@ -436,12 +440,11 @@ p { color: var(--text-2); }
   padding: 10px 18px;
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 14px; font-weight: 600; color: var(--text);
 }
-/* Single bullet: a coloured circle with the scheme-aware --check-img glyph
-   composited on top. The glyph token flips with the color scheme so it is
-   always the page bg colour against the var(--coral) circle. */
+/* Single bullet: a coloured circle with the --check-img glyph composited
+   on top — always the page bg colour against the var(--coral) circle. */
 .trust-list li::before {
   content: '';
   width: 16px; height: 16px;
@@ -469,7 +472,12 @@ p { color: var(--text-2); }
   margin-top: 22px; max-width: 560px; margin-inline: auto;
   font-size: 19px; line-height: 1.6;
 }
-.cta .btn-primary { margin-top: 40px; height: 60px; padding: 0 36px; font-size: 17px; }
+.cta-actions {
+  margin-top: 40px;
+  display: flex; gap: 12px;
+  justify-content: center; align-items: center;
+  flex-wrap: wrap;
+}
 
 /* === Footer === */
 .footer {
@@ -480,13 +488,12 @@ p { color: var(--text-2); }
 .cta-contact {
   margin: 64px auto 0;
   padding: 22px 28px;
-  border-radius: 28px;
+  border-radius: var(--radius);
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
   font-size: 15px;
   color: var(--text-2);
   line-height: 1.7;
-  box-shadow: var(--shadow-soft);
   display: inline-block;
   max-width: 580px;
 }
@@ -535,7 +542,7 @@ p { color: var(--text-2); }
   padding: 8px 16px;
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 .legal .updated::before {
   content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--coral);
@@ -557,13 +564,12 @@ p { color: var(--text-2); }
 .legal .contact {
   margin-top: 64px;
   padding: 28px 32px;
-  border-radius: 28px;
+  border-radius: var(--radius);
   background: var(--coral-100);
   border: 1px solid var(--coral-border);
   font-size: 16px;
   color: var(--text-2);
   line-height: 1.7;
-  box-shadow: var(--shadow-soft);
 }
 .legal .contact a { color: var(--coral); font-weight: 700; }
 .legal .contact a:hover { color: var(--coral-deep); text-decoration: underline; }
@@ -577,7 +583,7 @@ p { color: var(--text-2); }
   .hero p { font-size: 17px; }
   .hero-pills { gap: 7px; max-width: 360px; }
   .pill { font-size: 12px; padding: 7px 13px; }
-  .how-card { padding: 22px 22px; border-radius: 24px; }
+  .how-card { padding: 22px 22px; }
   .how-num { width: 28px; height: 28px; margin-bottom: 12px; }
   .how-card h3 { font-size: 18px; }
   h1 { font-size: 36px; letter-spacing: -1.2px; }
@@ -603,10 +609,20 @@ p { color: var(--text-2); }
   .how-grid { grid-template-columns: 1fr; }
   .why-grid { grid-template-columns: 1fr; gap: 36px; }
   .cta { padding: 72px 24px; }
+  /* CTAs stack full-width on phones — the app's full-bleed button layout. */
+  .hero-cta, .cta-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 360px;
+    margin-inline: auto;
+  }
+  .hero-cta .btn-primary, .hero-cta .btn-secondary,
+  .cta-actions .btn-primary, .cta-actions .btn-secondary { width: 100%; }
 }
 @media (max-width: 760px) {
   .legal { padding: 48px 24px 72px; }
   .legal h1 { font-size: 36px; letter-spacing: -1.2px; }
   .legal h2 { font-size: 19px; margin-top: 40px; }
-  .legal .contact { padding: 22px 24px; border-radius: 24px; }
+  .legal .contact { padding: 22px 24px; }
 }

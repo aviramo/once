@@ -62,3 +62,34 @@ export function parseUserLocation(raw: unknown): LngLat | null {
 
   return /^[0-9a-fA-F]+$/.test(s) ? parseEwkbPoint(s) : null;
 }
+
+/** Great-circle distance between two points, in kilometres. */
+export function haversineKm(a: LngLat, b: LngLat): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) *
+      Math.cos(toRad(b.lat)) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Locale-aware distance label — metres under 1 km, kilometres above, using
+ * the platform's unit formatting so he/en both read naturally. */
+export function formatDistance(km: number, locale: string): string {
+  if (km < 1) {
+    return new Intl.NumberFormat(locale, {
+      style: "unit",
+      unit: "meter",
+      maximumFractionDigits: 0,
+    }).format(Math.max(0, Math.round(km * 1000)));
+  }
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "kilometer",
+    maximumFractionDigits: km < 10 ? 1 : 0,
+  }).format(km);
+}

@@ -72,7 +72,7 @@ export function RevealList({
   const shown = open ? items : items.slice(0, initial);
   return (
     <div>
-      <ol className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
+      <ol className="divide-y divide-border overflow-hidden rounded-xl border border-border">
         {shown.map((node, i) => (
           <li key={i} className="bg-background">
             {node}

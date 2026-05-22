@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
   <title>Once | רק אחד עכשיו</title>
   <meta name="description" content="אפליקציית הכרויות בזמן אמת שמתמקדת באדם אחד בכל פעם, בלי רעש ובלי שיחות במקביל." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=7" />
@@ -26,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=32" />
+  <link rel="stylesheet" href="styles.css?v=34" />
 </head>
 <body>
   <header class="header">
@@ -58,6 +59,7 @@
         <p id="hero-sub">בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.</p>
         <div class="hero-cta">
           <a class="btn-primary" id="hero-cta-primary" href="https://docs.google.com/forms/d/e/1FAIpQLSd_Y0A1bWvcGI19C536aesf9KybH0RtRS0L8rz2hDih2fNL3g/viewform" target="_blank" rel="noopener">להרשמה לערב החשיפה</a>
+          <a class="btn-secondary" id="hero-cta-download" href="download.html">להורדת האפליקציה</a>
         </div>
         <a class="hero-secondary-link" id="hero-cta-secondary" href="#how">איך זה עובד?</a>
         <div class="hero-pills" id="hero-pills">
@@ -67,8 +69,7 @@
         </div>
         <div class="hero-visual" aria-hidden="true">
           <picture>
-            <source srcset="img/01-hero-one-bubble-w.webp?v=32" media="(prefers-color-scheme: dark)" />
-            <img src="img/01-hero-one-bubble-b.webp?v=32" alt="" loading="eager" class="blob-1" />
+            <img src="img/01-hero-one-bubble-w.webp?v=32" alt="" loading="eager" class="blob-1" />
           </picture>
         </div>
       </div>
@@ -89,8 +90,7 @@
           </div>
           <div class="section-visual" aria-hidden="true">
             <picture>
-              <source srcset="img/02-crowd-noise-focus-w.webp?v=32" media="(prefers-color-scheme: dark)" />
-              <img src="img/02-crowd-noise-focus-b.webp?v=32" alt="" loading="lazy" class="blob-2" />
+              <img src="img/02-crowd-noise-focus-w.webp?v=32" alt="" loading="lazy" class="blob-2" />
             </picture>
           </div>
         </div>
@@ -113,8 +113,7 @@
           </div>
           <div class="section-visual" aria-hidden="true">
             <picture>
-              <source srcset="img/06-two-sides-one-moment-w.webp?v=32" media="(prefers-color-scheme: dark)" />
-              <img src="img/06-two-sides-one-moment-b.webp?v=32" alt="" loading="lazy" class="blob-3" />
+              <img src="img/06-two-sides-one-moment-w.webp?v=32" alt="" loading="lazy" class="blob-3" />
             </picture>
           </div>
         </div>
@@ -144,8 +143,7 @@
         </div>
         <div class="lead-visual" aria-hidden="true">
           <picture>
-            <source srcset="img/04-send-invite-w.webp?v=32" media="(prefers-color-scheme: dark)" />
-            <img src="img/04-send-invite-b.webp?v=32" alt="" loading="lazy" class="blob-4" />
+            <img src="img/04-send-invite-w.webp?v=32" alt="" loading="lazy" class="blob-4" />
           </picture>
         </div>
       </div>
@@ -178,8 +176,7 @@
           </div>
           <div class="section-visual" aria-hidden="true">
             <picture>
-              <source srcset="img/08-real-time-clock-w.webp?v=32" media="(prefers-color-scheme: dark)" />
-              <img src="img/08-real-time-clock-b.webp?v=32" alt="" loading="lazy" class="blob-5" />
+              <img src="img/08-real-time-clock-w.webp?v=32" alt="" loading="lazy" class="blob-5" />
             </picture>
           </div>
         </div>
@@ -204,13 +201,15 @@
       <div class="container">
         <div class="lead-visual" aria-hidden="true">
           <picture>
-            <source srcset="img/06-matchstick-brand-w.webp?v=32" media="(prefers-color-scheme: dark)" />
-            <img src="img/06-matchstick-brand-b.webp?v=32" alt="" loading="lazy" class="blob-6" />
+            <img src="img/06-matchstick-brand-w.webp?v=32" alt="" loading="lazy" class="blob-6" />
           </picture>
         </div>
         <h2 id="cta-title">רוצים להיות בין הראשונים?</h2>
         <p id="cta-sub">Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.</p>
-        <a class="btn-primary" id="cta-button" href="https://docs.google.com/forms/d/e/1FAIpQLSd_Y0A1bWvcGI19C536aesf9KybH0RtRS0L8rz2hDih2fNL3g/viewform" target="_blank" rel="noopener">להרשמה לערב החשיפה</a>
+        <div class="cta-actions">
+          <a class="btn-primary" id="cta-button" href="https://docs.google.com/forms/d/e/1FAIpQLSd_Y0A1bWvcGI19C536aesf9KybH0RtRS0L8rz2hDih2fNL3g/viewform" target="_blank" rel="noopener">להרשמה לערב החשיפה</a>
+          <a class="btn-secondary" id="cta-download" href="download.html">להורדת האפליקציה</a>
+        </div>
         <div class="cta-contact">
           <span id="cta-contact-label">שאלות? פנו אלינו בכתובת</span>
           <a id="cta-contact-link" href="mailto:once.app.support@gmail.com?subject=שאלה%20ל-Once">once.app.support@gmail.com</a>
@@ -247,6 +246,7 @@
       he: {
         title: 'Once | רק אחד עכשיו',
         dir: 'rtl',
+        download: 'להורדת האפליקציה',
         hero: {
           slogan: 'רק אחד עכשיו',
           title: 'הכרויות בזמן אמת, עם אדם אחד בכל פעם',
@@ -316,6 +316,7 @@
       en: {
         title: 'Once | Just one. Now.',
         dir: 'ltr',
+        download: 'Download the app',
         hero: {
           slogan: 'Just one. Now.',
           title: 'Real-time dating, one person at a time',
@@ -385,6 +386,7 @@
       ru: {
         title: 'Once | Только один. Сейчас.',
         dir: 'ltr',
+        download: 'Скачать приложение',
         hero: {
           slogan: 'Только один. Сейчас.',
           title: 'Знакомства в реальном времени, по одному человеку за раз',
@@ -463,6 +465,7 @@
       document.getElementById('hero-title').textContent = t.hero.title
       document.getElementById('hero-sub').textContent = t.hero.sub
       document.getElementById('hero-cta-primary').textContent = t.hero.ctaPrimary
+      document.getElementById('hero-cta-download').textContent = t.download
       document.getElementById('hero-cta-secondary').textContent = t.hero.ctaSecondary
       document.getElementById('hero-pills').innerHTML = (t.hero.pills || [])
         .map(x => '<span class="pill">' + x + '</span>').join('')
@@ -498,6 +501,7 @@
       document.getElementById('cta-title').textContent = t.cta.title
       document.getElementById('cta-sub').textContent = t.cta.sub
       document.getElementById('cta-button').textContent = t.cta.button
+      document.getElementById('cta-download').textContent = t.download
 
       const langSuffix = '?lang=' + lang
       const lp = document.getElementById('link-privacy')

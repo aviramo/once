@@ -15,8 +15,8 @@ import {
   restrictionLabel,
   statusResult,
 } from "@/lib/humanize";
+import { AdminShell } from "../../_components/AdminShell";
 import {
-  AdminShell,
   Section,
   Card,
   Avatar,
@@ -24,12 +24,14 @@ import {
   EmptyState,
   KeyValue,
 } from "../../_components/ui";
+import { RealtimeRefresh } from "../../_components/RealtimeRefresh";
 import { Disclosure, RevealList } from "../../_components/Disclosure";
 import { UserRolesEditor, type EditorRole } from "./_components/UserGroupsEditor";
-import { JoinRequestCard } from "./_components/JoinRequestCard";
 import { UserDangerZone } from "./_components/UserDangerZone";
+import { ReleasePageButton } from "./_components/ReleasePageButton";
+import { UserPhotos } from "./_components/UserPhotos";
 import { setUserRoleAssignment } from "../../roles/actions";
-import { clearJoinRequest, deleteUser, resetUser } from "../actions";
+import { deleteUser, resetUser } from "../actions";
 
 type Image = { normal?: string; hash?: string };
 
@@ -44,6 +46,11 @@ type UserRecord = {
     images?: Image[];
     bio?: string;
     location_label?: string | null;
+    os?: string;
+    lang?: string;
+    /** Stored as an object `{token, type}` on current builds; truthy is all
+     * we need for the notifications-active check. */
+    push_token?: unknown;
   } | null;
   relations: {
     page1?: {
@@ -58,7 +65,7 @@ type UserRecord = {
       profiles?: Array<{ user_id?: string; name?: string }>;
     };
     availability?: { state?: string; reason?: string | null } | null;
-    join_request?: { at?: string } | null;
+    push?: { perm?: string; dead?: boolean; token?: boolean } | null;
   } | null;
 };
 
@@ -112,6 +119,7 @@ export default async function UserDetailPage({
     partners,
     { data: allRoles },
     { data: myRoleRows },
+    { data: storageFiles },
   ] = await Promise.all([
     admin
       .from("users")
@@ -133,6 +141,7 @@ export default async function UserDetailPage({
       .select("id, name, enabled")
       .order("created_at", { ascending: true }),
     admin.from("user_groups").select("group_id").eq("user_id", userId),
+    admin.storage.from("users").list(`${userId}/normal`, { limit: 100 }),
   ]);
 
   const roleCatalog = (allRoles ?? []) as EditorRole[];
@@ -142,6 +151,22 @@ export default async function UserDetailPage({
 
   if (!target) notFound();
   const u = target as UserRecord;
+
+  // Photos: the images currently on the profile, and earlier uploads still in
+  // Storage that are no longer attached to it.
+  const profileImages = (u.data?.images ?? [])
+    .map((img) => img.normal)
+    .filter((n): n is string => !!n);
+  const profileSet = new Set(profileImages);
+  const pastImages = ((storageFiles ?? []) as { name?: string }[])
+    .map((f) => f.name ?? "")
+    .filter((n) => !!n && !n.startsWith(".") && !profileSet.has(n));
+  // Notifications status — "active" iff we have a token, the device isn't
+  // flagged dead, and OS permission isn't denied. Mirrors push_blocked SQL.
+  const notifActive =
+    !!u.data?.push_token &&
+    u.relations?.push?.dead !== true &&
+    u.relations?.push?.perm !== "denied";
 
   const partnerIds = partners.map((p) => p.otherId);
   const { data: partnerProfiles } = partnerIds.length
@@ -162,10 +187,14 @@ export default async function UserDetailPage({
   const gate = availabilityNarrative(a, u.relations);
   const gender =
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
-  const joinRequestedAt = u.relations?.join_request?.at ?? null;
 
   return (
     <AdminShell dict={a} active="users" backHref="/admin/users">
+      <RealtimeRefresh
+        tables="users"
+        channel="admin-user-detail"
+        filter={`user_id=eq.${u.user_id}`}
+      />
       {/* Identity — one compact rectangle: photo, name + email on one row */}
       <Card className="flex items-center gap-4 p-4">
         <Avatar src={photo} name={u.name} size="md" />
@@ -178,12 +207,48 @@ export default async function UserDetailPage({
               {email ?? a.noEmail}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <div className="mt-2 space-y-2">
             {gate ? (
               <StatusBadge tone={gate.tone}>{gate.text}</StatusBadge>
             ) : null}
-            <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
-            <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
+            {/* Each page tag carries its own release-to-default button right
+                under it — the operator sees the state and the action together
+                without scrolling to a separate "current state" block. The
+                button is suppressed when the tag is already `ok` (green): the
+                page is already at the discoverable state release would lead
+                to, so the action is a no-op and showing it just adds noise. */}
+            <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col items-start gap-1.5">
+                <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
+                {n1.tone !== "ok" ? (
+                  <ReleasePageButton
+                    userId={u.user_id}
+                    page={1}
+                    label={a.actions.releasePage1}
+                    busyLabel={a.actions.busy}
+                    confirmText={a.actions.confirmRelease1.replace(
+                      "{target}",
+                      u.name ?? u.user_id.slice(0, 8),
+                    )}
+                  />
+                ) : null}
+              </div>
+              <div className="flex flex-col items-start gap-1.5">
+                <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
+                {n2.tone !== "ok" ? (
+                  <ReleasePageButton
+                    userId={u.user_id}
+                    page={2}
+                    label={a.actions.releasePage2}
+                    busyLabel={a.actions.busy}
+                    confirmText={a.actions.confirmRelease2.replace(
+                      "{target}",
+                      u.name ?? u.user_id.slice(0, 8),
+                    )}
+                  />
+                ) : null}
+              </div>
+            </div>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {d.joinedFull}: {relativeTime(u.created_at, locale)}
@@ -226,33 +291,33 @@ export default async function UserDetailPage({
                   label={d.lastSeenFull}
                   value={dateTime(u.last_seen, locale)}
                 />
+                <KeyValue label={d.os} value={u.data?.os ?? "—"} />
+                <KeyValue label={d.lang} value={u.data?.lang ?? "—"} />
+                <KeyValue
+                  label={d.notif}
+                  value={notifActive ? d.notifActive : d.notifInactive}
+                />
               </dl>
             </Disclosure>
           </div>
         </Card>
       </Section>
 
-      {/* Pending join request — only when the user asked to be let in. Approve
-          via the groups checklist below, or remove the request outright. */}
-      {joinRequestedAt ? (
-        <Section title={d.joinRequest}>
-          <Card>
-            <JoinRequestCard
-              userId={u.user_id}
-              dict={{
-                hint: d.joinRequestHint,
-                pendingText: `${d.joinRequestPending} · ${relativeTime(
-                  joinRequestedAt,
-                  locale,
-                )}`,
-                removeLabel: d.joinRequestRemove,
-                removingLabel: d.joinRequestRemoving,
-              }}
-              action={clearJoinRequest}
-            />
-          </Card>
-        </Section>
-      ) : null}
+      {/* Photos — current profile photos + earlier unassociated uploads */}
+      <Section title={d.photos}>
+        <Card>
+          <UserPhotos
+            userId={u.user_id}
+            profile={profileImages}
+            past={pastImages}
+            dict={{
+              inProfile: d.photosInProfile,
+              past: d.photosPast,
+              empty: d.photosEmpty,
+            }}
+          />
+        </Card>
+      </Section>
 
       {/* Roles — multi-select checklist; a disabled role gates the user */}
       <Section title={d.roles}>
@@ -270,14 +335,6 @@ export default async function UserDetailPage({
             action={setUserRoleAssignment}
           />
         </Card>
-      </Section>
-
-      {/* Current state — the two boards side by side, plain language only */}
-      <Section title={d.summary}>
-        <div className="grid grid-cols-2 gap-3">
-          <StateCard title={a.filterP1} narrative={n1.text} tone={n1.tone} />
-          <StateCard title={a.filterP2} narrative={n2.text} tone={n2.tone} />
-        </div>
       </Section>
 
       {/* People interacted with */}
@@ -378,23 +435,3 @@ export default async function UserDetailPage({
   );
 }
 
-function StateCard({
-  title,
-  narrative,
-  tone,
-}: {
-  title: string;
-  narrative: string;
-  tone: Parameters<typeof StatusBadge>[0]["tone"];
-}) {
-  return (
-    <Card className="p-4">
-      <p className="text-xs font-medium text-muted-foreground">{title}</p>
-      <div className="mt-2">
-        <StatusBadge tone={tone} dot>
-          {narrative}
-        </StatusBadge>
-      </div>
-    </Card>
-  );
-}

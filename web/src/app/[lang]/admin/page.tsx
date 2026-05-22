@@ -1,16 +1,11 @@
 import { redirect } from "next/navigation";
-import { Users, Tags, MapPin, Map } from "lucide-react";
 import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import {
-  AdminShell,
-  Section,
-  CardGrid,
-  NavTile,
-  Stat,
-} from "./_components/ui";
+import { AdminShell } from "./_components/AdminShell";
+import { Section, CardGrid, Stat } from "./_components/ui";
+import { RealtimeRefresh } from "./_components/RealtimeRefresh";
 
 /**
  * The admin home screen: a hub that links to every other admin tab plus a
@@ -114,7 +109,6 @@ const usersUrl = "/admin/users";
 const u = (qs: string) => `/admin/users?${qs}`;
 const aMode = (m: string) => `/admin/areas?mode=${m}`;
 const rolesUrl = "/admin/roles";
-const MAP = "/admin/map";
 
 export default async function AdminDashboard({
   params,
@@ -154,6 +148,10 @@ export default async function AdminDashboard({
 
   return (
     <AdminShell dict={d} active="dashboard" userLabel={userLabel}>
+      <RealtimeRefresh
+        tables="users,areas,groups,user_groups"
+        channel="admin-dashboard"
+      />
       <div>
         <h1 className="text-xl font-bold tracking-tight">{t.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t.subtitle}</p>
@@ -162,89 +160,36 @@ export default async function AdminDashboard({
         </p>
       </div>
 
-      <Section title={t.navTitle}>
-        <CardGrid min="15rem">
-          <NavTile
-            icon={Users}
-            title={t.nav.usersTitle}
-            desc={t.nav.usersDesc}
-            value={fmt(m.users.total)}
-            href={usersUrl}
-          />
-          <NavTile
-            icon={Tags}
-            title={t.nav.rolesTitle}
-            desc={t.nav.rolesDesc}
-            value={fmt(m.groups.total)}
-            href={rolesUrl}
-          />
-          <NavTile
-            icon={MapPin}
-            title={t.nav.areasTitle}
-            desc={t.nav.areasDesc}
-            value={fmt(m.areas.active)}
-            href={aMode("active")}
-          />
-          <NavTile
-            icon={Map}
-            title={t.nav.mapTitle}
-            desc={t.nav.mapDesc}
-            value={fmt(m.users.online_5m)}
-            href={MAP}
-          />
-        </CardGrid>
-      </Section>
-
-      <Section title={t.sections.growth}>
-        <CardGrid min="12rem">
+      <Section title={t.sections.funnel} hint={t.hints.funnel}>
+        <CardGrid min="8.5rem">
           <Stat
-            label={t.metrics.total}
-            value={fmt(m.users.total)}
-            href={usersUrl}
-          />
-          <Stat
-            label={t.metrics.newToday}
-            value={fmt(m.users.new_today)}
+            label={t.metrics.fSignups}
+            value={fmt(m.funnel_7d.signups)}
             accent="ok"
-            href={u("seg=new_today")}
-          />
-          <Stat
-            label={t.metrics.new7d}
-            value={fmt(m.users.new_7d)}
             href={u("seg=new_7d")}
           />
           <Stat
-            label={t.metrics.new30d}
-            value={fmt(m.users.new_30d)}
-            href={u("seg=new_30d")}
+            label={t.metrics.fInvites}
+            value={fmt(m.funnel_7d.invites)}
+            href={u("p1=waiting")}
           />
           <Stat
-            label={t.metrics.online}
-            value={fmt(m.users.online_5m)}
-            hint={t.hints.online}
-            accent="ok"
-            href={u("seg=online")}
+            label={t.metrics.fApproves}
+            value={fmt(m.funnel_7d.approves)}
+            accent="chat"
+            href={u("p1=chat")}
           />
           <Stat
-            label={t.metrics.activeToday}
-            value={fmt(m.users.active_today)}
-            href={u("seg=active_today")}
-          />
-          <Stat
-            label={t.metrics.active7d}
-            value={fmt(m.users.active_7d)}
-            href={u("seg=active_7d")}
-          />
-          <Stat
-            label={t.metrics.withLocation}
-            value={fmt(m.users.with_location)}
-            href={u("seg=located")}
+            label={t.metrics.fMessages}
+            value={fmt(m.funnel_7d.messages)}
+            accent="chat"
+            href={u("p1=chat")}
           />
         </CardGrid>
       </Section>
 
       <Section title={t.sections.engagement}>
-        <CardGrid min="12rem">
+        <CardGrid min="8.5rem">
           <Stat
             label={t.metrics.chat}
             value={fmt(m.engagement.chat)}
@@ -278,8 +223,13 @@ export default async function AdminDashboard({
         </CardGrid>
       </Section>
 
+      {/* "Quick nav" tiles were removed at the user's request: the same counts
+          now ride as info-tone chips on the AdminNav tabs themselves, which
+          beats a dedicated dashboard section since the numbers are then one
+          glance away from every admin screen, not only this one. */}
+
       <Section title={t.sections.availability}>
-        <CardGrid min="12rem">
+        <CardGrid min="8.5rem">
           <Stat
             label={t.metrics.available}
             value={fmt(m.availability.available)}
@@ -306,8 +256,80 @@ export default async function AdminDashboard({
         </CardGrid>
       </Section>
 
+      {/* "Signups" section was removed at the user's request — the 7-day
+          signup count already lives in the Funnel section's first tile
+          (`fSignups`), so a dedicated today/7d/30d trio was redundant. The
+          drill-downs (`seg=new_today|new_7d|new_30d`) are still reachable
+          from the users-list filter dropdown. */}
+
+      <Section title={t.sections.actives}>
+        <CardGrid min="8.5rem">
+          <Stat
+            label={t.metrics.online}
+            value={fmt(m.users.online_5m)}
+            hint={t.hints.online}
+            accent="ok"
+            href={u("seg=online")}
+          />
+          <Stat
+            label={t.metrics.activeToday}
+            value={fmt(m.users.active_today)}
+            href={u("seg=active_today")}
+          />
+          <Stat
+            label={t.metrics.active7d}
+            value={fmt(m.users.active_7d)}
+            href={u("seg=active_7d")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.areas}>
+        <CardGrid min="8.5rem">
+          <Stat
+            label={t.metrics.areasActive}
+            value={fmt(m.areas.active)}
+            accent="ok"
+            href={aMode("active")}
+          />
+          <Stat
+            label={t.metrics.areasScheduled}
+            value={fmt(m.areas.scheduled)}
+            accent="busy"
+            href={aMode("scheduled")}
+          />
+          <Stat
+            label={t.metrics.areasDisabled}
+            value={fmt(m.areas.disabled)}
+            href={aMode("disabled")}
+          />
+        </CardGrid>
+      </Section>
+
+      <Section title={t.sections.groups}>
+        <CardGrid min="8.5rem">
+          <Stat
+            label={t.metrics.rolesTotal}
+            value={fmt(m.groups.total)}
+            href={rolesUrl}
+          />
+          <Stat
+            label={t.metrics.rolesDisabled}
+            value={fmt(m.groups.disabled)}
+            accent="ended"
+            href={`${rolesUrl}?status=disabled`}
+          />
+          <Stat
+            label={t.metrics.rolesGated}
+            value={fmt(m.groups.gated_users)}
+            accent="ended"
+            href={u("seg=role_gated")}
+          />
+        </CardGrid>
+      </Section>
+
       <Section title={t.sections.credits}>
-        <CardGrid min="12rem">
+        <CardGrid min="8.5rem">
           <Stat
             label={t.metrics.balanceTotal}
             value={fmt(m.credits.balance_total)}
@@ -330,73 +352,6 @@ export default async function AdminDashboard({
             hint={t.hints.proShare.replace("{pct}", String(proShare))}
             accent="ok"
             href={u("tier=pro")}
-          />
-        </CardGrid>
-      </Section>
-
-      <Section title={t.sections.catalog}>
-        <CardGrid min="12rem">
-          <Stat
-            label={t.metrics.areasActive}
-            value={fmt(m.areas.active)}
-            accent="ok"
-            href={aMode("active")}
-          />
-          <Stat
-            label={t.metrics.areasScheduled}
-            value={fmt(m.areas.scheduled)}
-            accent="busy"
-            href={aMode("scheduled")}
-          />
-          <Stat
-            label={t.metrics.areasDisabled}
-            value={fmt(m.areas.disabled)}
-            href={aMode("disabled")}
-          />
-          <Stat
-            label={t.metrics.rolesTotal}
-            value={fmt(m.groups.total)}
-            href={rolesUrl}
-          />
-          <Stat
-            label={t.metrics.rolesDisabled}
-            value={fmt(m.groups.disabled)}
-            accent="ended"
-            href={`${rolesUrl}?status=disabled`}
-          />
-          <Stat
-            label={t.metrics.rolesGated}
-            value={fmt(m.groups.gated_users)}
-            accent="ended"
-            href={u("seg=role_gated")}
-          />
-        </CardGrid>
-      </Section>
-
-      <Section title={t.sections.funnel} hint={t.hints.funnel}>
-        <CardGrid min="12rem">
-          <Stat
-            label={t.metrics.fSignups}
-            value={fmt(m.funnel_7d.signups)}
-            accent="ok"
-            href={u("seg=new_7d")}
-          />
-          <Stat
-            label={t.metrics.fInvites}
-            value={fmt(m.funnel_7d.invites)}
-            href={u("p1=waiting")}
-          />
-          <Stat
-            label={t.metrics.fApproves}
-            value={fmt(m.funnel_7d.approves)}
-            accent="chat"
-            href={u("p1=chat")}
-          />
-          <Stat
-            label={t.metrics.fMessages}
-            value={fmt(m.funnel_7d.messages)}
-            accent="chat"
-            href={u("p1=chat")}
           />
         </CardGrid>
       </Section>

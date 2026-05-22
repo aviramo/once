@@ -262,6 +262,27 @@ Deno.serve(async (req) => {
             notifyList = result.notify ?? [];
           }
         }
+        // Seed first viewer: a freshly visible user with an empty viewer list
+        // gets one top-relevance candidate assigned to watch them (B.page1
+        // -> watching A, B's profile appended to A.page2.profiles[]), so the
+        // viewer count is not stuck at 0. RPC is a no-op when the
+        // preconditions don't hold (page2 not free / already has viewers /
+        // gated / no idle candidate), so the guard here is just a cheap
+        // pre-check. Auto-find above never fills A's own viewer list, so it
+        // is safe to run after it.
+        if (availableNow) {
+          const userAfter = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string; profiles?: unknown[] } } };
+          const p2state = userAfter.relations?.page2?.state ?? "free";
+          const profiles = userAfter.relations?.page2?.profiles;
+          const noViewers = !Array.isArray(profiles) || profiles.length === 0;
+          if (p2state === "free" && noViewers) {
+            const seedResult = await Tools.rpc(log, "app_seed_viewer", { me_id: user.user_id });
+            if (seedResult && !seedResult.error) {
+              rpcUser = seedResult.user;
+              notifyList = [...notifyList, ...(seedResult.notify ?? [])];
+            }
+          }
+        }
         break;
       }
 

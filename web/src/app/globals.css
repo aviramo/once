@@ -1,22 +1,38 @@
 @import "tailwindcss";
 
+/*
+ * Admin panel colour language — "Indigo / Slate".
+ * One calm, confident primary (indigo) over a neutral slate scale. Replaces the
+ * previous coral. Semantic accents (success / warning / danger) are applied via
+ * Tailwind's emerald/amber/rose in the shared design system, never hard-coded.
+ */
+
 :root {
+  color-scheme: light dark;
+
   --background: #ffffff;
-  --foreground: #0a0a0a;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --border: #e4e4e7;
-  --primary: #f97362;
+  --foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --border: #e2e8f0;
+  --primary: #4f46e5;
   --primary-foreground: #ffffff;
+
+  /* Page canvas behind the cards — one notch cooler than a card. */
+  --canvas: #f6f7fb;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #fafafa;
-    --muted: #18181b;
-    --muted-foreground: #a1a1aa;
-    --border: #27272a;
+    --background: #111725;
+    --foreground: #e8edf6;
+    --muted: #1b2335;
+    --muted-foreground: #94a3b8;
+    --border: #28324a;
+    --primary: #818cf8;
+    --primary-foreground: #0b1020;
+
+    --canvas: #0a0e18;
   }
 }
 
@@ -28,9 +44,71 @@
   --color-border: var(--border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-canvas: var(--canvas);
   --font-sans: var(--font-sans);
 }
 
 * {
   border-color: var(--border);
+}
+
+/* Tabular numerals everywhere a metric is shown read straighter; the design
+ * system opts specific elements in via `tabular-nums`, this is just the safe
+ * default for the panel's number-heavy surfaces. */
+body {
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One subtle, fast reveal on each admin screen load — "alive" without taxing a
+ * tool that reloads all day. Applied once to the admin <main>. Opacity only:
+ * a `transform` here would make <main> a containing block for every
+ * position:fixed descendant (the bottom sheet, the bulk bar) and anchor them
+ * to <main> instead of the viewport. */
+@keyframes admin-rise {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.admin-rise {
+  animation: admin-rise 0.4s cubic-bezier(0.22, 0.68, 0.24, 1) both;
+}
+
+/* Bottom-sheet entrance: backdrop fades, panel slides up from the edge. */
+@keyframes admin-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes admin-sheet {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.admin-fade {
+  animation: admin-fade 0.18s ease-out both;
+}
+
+.admin-sheet {
+  animation: admin-sheet 0.26s cubic-bezier(0.22, 0.68, 0.24, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-rise,
+  .admin-fade,
+  .admin-sheet {
+    animation: none;
+  }
 }

@@ -3,10 +3,17 @@ import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import { AdminShell, Section, Card, EmptyState } from "../_components/ui";
+import { AdminShell } from "../_components/AdminShell";
+import { Section, Card, EmptyState } from "../_components/ui";
+import { RealtimeRefresh } from "../_components/RealtimeRefresh";
 import { Disclosure } from "../_components/Disclosure";
 import { RolesManager, RoleAddForm, type RoleRow } from "./_components/RolesManager";
-import { createRole, renameRole, setRoleEnabled, deleteRole } from "./actions";
+import {
+  createRole,
+  setRoleEnabled,
+  setGroupsEnabled,
+  resetGroupMembers,
+} from "./actions";
 
 type RoleQueryRow = {
   id: string;
@@ -49,6 +56,7 @@ export default async function RolesPage({
 
   return (
     <AdminShell dict={dict.admin} active="roles">
+      <RealtimeRefresh tables="groups,user_groups" channel="admin-roles" />
       <Section title={r.title} count={roles.length} hint={r.subtitle}>
         <div className="space-y-6">
           <Card>
@@ -63,9 +71,9 @@ export default async function RolesPage({
             <RolesManager
               roles={roles}
               dict={r}
-              renameAction={renameRole}
               setEnabledAction={setRoleEnabled}
-              deleteAction={deleteRole}
+              setGroupsEnabledAction={setGroupsEnabled}
+              resetGroupMembersAction={resetGroupMembers}
             />
           )}
         </div>

@@ -1,81 +1,17 @@
 import Link from "next/link";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, CSSProperties, ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import type { Dictionary } from "@/i18n/dictionaries";
 import type { Tone } from "@/lib/humanize";
 import { cn } from "@/lib/utils";
-import { AdminNav } from "./AdminNav";
 
 /**
- * The single admin design system. Every admin screen composes these — no page
- * re-implements a card, badge, avatar, section header or shell. Flat surfaces
- * only (no gradients), logical properties so RTL/LTR both work.
+ * The admin panel design system — one "operations console" language: flat
+ * solid surfaces (no gradients), crisp 1px borders, restrained elevation,
+ * indigo as the single accent, tabular numerals for every metric. Every admin
+ * screen composes these primitives; no page re-implements a card, stat, badge,
+ * section or shell. Logical properties throughout so RTL (Hebrew) and LTR both
+ * work.
  */
-
-/* ---------------------------------------------------------------- Shell -- */
-
-type ShellProps = {
-  dict: Dictionary["admin"];
-  active: "dashboard" | "users" | "roles" | "reports" | "areas" | "map";
-  children: ReactNode;
-  /** Sub-page back link target (omitted on the top-level list pages). */
-  backHref?: string;
-  userLabel?: string;
-};
-
-export function AdminShell({
-  dict,
-  active,
-  children,
-  backHref,
-  userLabel,
-}: ShellProps) {
-  return (
-    // overflow-x-clip (not hidden) guards every admin page against a child
-    // that's momentarily wider than the viewport — a long unbroken email/name,
-    // an input's intrinsic width — without introducing a scroll container
-    // (sticky header keeps working) or a horizontal scrollbar.
-    <div className="min-h-screen overflow-x-clip bg-muted/30">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        {/* Wraps to a second line on narrow screens (no fixed height) so the
-            header never forces the document wider than the viewport. */}
-        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 sm:flex-nowrap sm:gap-6 sm:px-5 sm:py-0">
-          <Link href="/admin" className="flex items-baseline gap-2">
-            <span className="text-lg font-bold tracking-tight">Once</span>
-            <span className="text-sm text-muted-foreground">
-              {dict.dashboardTitle}
-            </span>
-          </Link>
-          <AdminNav
-            active={active}
-            labels={{
-              dashboard: dict.nav.dashboard,
-              users: dict.nav.users,
-              roles: dict.nav.roles,
-              reports: dict.nav.reports,
-              areas: dict.nav.areas,
-              map: dict.nav.map,
-              site: dict.nav.site,
-              signOut: dict.signOut,
-            }}
-            userLabel={userLabel}
-          />
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-5 sm:py-8">
-        {backHref ? (
-          <Link
-            href={backHref}
-            className="mb-5 inline-block text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {dict.back}
-          </Link>
-        ) : null}
-        {children}
-      </main>
-    </div>
-  );
-}
 
 /* --------------------------------------------------------------- Section -- */
 
@@ -86,6 +22,7 @@ export function Section({
   action,
   children,
   className,
+  style,
 }: {
   title: string;
   count?: number;
@@ -93,26 +30,31 @@ export function Section({
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  style?: CSSProperties;
 }) {
   return (
-    <section className={cn("mt-10 first:mt-0", className)}>
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-base font-semibold">
-            {title}
+    <section className={cn("mt-8 first:mt-0", className)} style={style}>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+            <span
+              className="h-3.5 w-1 shrink-0 rounded-full bg-primary"
+              aria-hidden
+            />
+            <span className="truncate">{title}</span>
             {typeof count === "number" ? (
-              <span className="ms-2 text-sm font-normal text-muted-foreground">
+              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
                 {count}
               </span>
             ) : null}
           </h2>
           {hint ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+            <p className="mt-1 ps-3 text-xs text-muted-foreground">{hint}</p>
           ) : null}
         </div>
-        {action}
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className="mt-3.5">{children}</div>
     </section>
   );
 }
@@ -129,12 +71,16 @@ export function Card({
   className?: string;
 }) {
   const base =
-    "rounded-2xl border border-border bg-background p-5 transition-colors";
+    "rounded-xl border border-border bg-background p-5 shadow-sm";
   if (href) {
     return (
       <Link
         href={href}
-        className={cn(base, "block hover:border-primary/40 hover:bg-muted/30", className)}
+        className={cn(
+          base,
+          "block transition-all hover:border-primary/40 hover:shadow-md",
+          className,
+        )}
       >
         {children}
       </Link>
@@ -146,14 +92,13 @@ export function Card({
 /* -------------------------------------------------------------- CardGrid -- */
 
 /**
- * The one responsive grid every dashboard cluster uses. `auto-fill` +
- * `minmax` so a section reflows to fit its tiles at any width without per
- * page breakpoint juggling; `min` is the only knob (nav tiles want a wider
- * minimum than stat tiles).
+ * The one responsive grid every dashboard / list cluster uses. `auto-fill` +
+ * `minmax` reflows to fit at any width; `min` is the only knob — a smaller
+ * `min` packs more tiles per row (denser on a phone).
  */
 export function CardGrid({
   children,
-  min = "14rem",
+  min = "13rem",
   className,
 }: {
   children: ReactNode;
@@ -162,7 +107,7 @@ export function CardGrid({
 }) {
   return (
     <div
-      className={cn("grid gap-3", className)}
+      className={cn("grid gap-2.5", className)}
       style={{
         gridTemplateColumns: `repeat(auto-fill, minmax(min(${min}, 100%), 1fr))`,
       }}
@@ -177,9 +122,9 @@ export function CardGrid({
 type IconType = ComponentType<{ className?: string }>;
 
 /**
- * A prominent navigation card for the dashboard hub: icon + title +
- * description, with a headline metric and a direction-aware arrow. Composes
- * <Card> so hover/href behaviour is never re-implemented.
+ * A module entry card for the dashboard hub — compact: an icon tile and the
+ * headline count on one row, then title + description. Composes <Card> so
+ * hover / href behaviour is never re-implemented.
  */
 export function NavTile({
   icon: Icon,
@@ -195,30 +140,30 @@ export function NavTile({
   href: string;
 }) {
   return (
-    <Card href={href} className="group flex flex-col gap-4 p-5">
-      <div className="flex items-start justify-between gap-3">
-        <span className="inline-flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+    <Card href={href} className="group p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Icon className="size-5" />
         </span>
-        <ArrowLeft className="size-4 text-muted-foreground transition-colors group-hover:text-foreground ltr:-scale-x-100" />
+        {value != null ? (
+          <span className="text-2xl font-bold tabular-nums tracking-tight">
+            {value}
+          </span>
+        ) : null}
       </div>
-      <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p>
-      </div>
-      {value != null ? (
-        <p className="mt-auto text-2xl font-bold tabular-nums tracking-tight">
-          {value}
-        </p>
-      ) : null}
+      <h3 className="mt-3 text-sm font-semibold">{title}</h3>
+      <p className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="truncate">{desc}</span>
+        <ArrowLeft className="size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-primary ltr:-scale-x-100" />
+      </p>
     </Card>
   );
 }
 
 /* ------------------------------------------------------------------ Stat -- */
 
-/** Accent tints for a Stat's value — semantic, drawn from the shared Tone
- * palette so the dashboard never invents its own colours. */
+/** Accent tint for a Stat's value — semantic, from the shared Tone palette so
+ * the dashboard never invents its own colours. */
 const STAT_ACCENT: Record<Tone, string> = {
   ok: "text-emerald-600 dark:text-emerald-400",
   busy: "text-amber-600 dark:text-amber-400",
@@ -228,9 +173,8 @@ const STAT_ACCENT: Record<Tone, string> = {
 };
 
 /**
- * A single KPI tile: label, big value, optional hint. Clickable when `href`
- * is given (deep-links to the filtered screen that owns the metric) —
- * composes <Card> so the link/hover treatment stays DRY.
+ * A single KPI tile: quiet label, loud value, optional hint. Clickable when
+ * `href` is given (deep-links to the filtered screen that owns the metric).
  */
 export function Stat({
   label,
@@ -246,18 +190,22 @@ export function Stat({
   accent?: Tone;
 }) {
   return (
-    <Card href={href} className="flex flex-col gap-1 p-4">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <Card href={href} className="p-3.5">
+      <span className="block text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
       <span
         className={cn(
-          "text-3xl font-bold tabular-nums tracking-tight",
+          "mt-1.5 block text-[26px] font-bold leading-none tabular-nums tracking-tight",
           STAT_ACCENT[accent],
         )}
       >
         {value}
       </span>
       {hint ? (
-        <span className="mt-0.5 text-xs text-muted-foreground">{hint}</span>
+        <span className="mt-2 block text-[11px] leading-tight text-muted-foreground">
+          {hint}
+        </span>
       ) : null}
     </Card>
   );
@@ -266,10 +214,10 @@ export function Stat({
 /* ---------------------------------------------------------------- Avatar -- */
 
 const AVATAR_SIZE: Record<string, string> = {
-  sm: "size-10 text-sm",
-  md: "size-14 text-lg",
-  lg: "size-20 text-2xl",
-  xl: "size-28 text-4xl",
+  sm: "size-9 text-xs",
+  md: "size-11 text-sm",
+  lg: "size-16 text-xl",
+  xl: "size-24 text-3xl",
 };
 
 export function Avatar({
@@ -281,7 +229,6 @@ export function Avatar({
   src: string | null;
   name: string | null;
   size?: "sm" | "md" | "lg" | "xl";
-  /** Round (map marker / pin) instead of the default squircle. */
   circle?: boolean;
 }) {
   const cls = AVATAR_SIZE[size] ?? AVATAR_SIZE.md;
@@ -289,7 +236,7 @@ export function Avatar({
     <div
       className={cn(
         "shrink-0 overflow-hidden bg-muted",
-        circle ? "rounded-full" : "rounded-2xl",
+        circle ? "rounded-full" : "rounded-xl",
         cls,
       )}
     >
@@ -313,12 +260,11 @@ export function Avatar({
 /* ------------------------------------------------------------ StatusBadge -- */
 
 const TONE: Record<Tone, string> = {
-  ok: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  busy: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  chat: "bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
-  idle: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  ended:
-    "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+  ok: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  busy: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  chat: "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+  idle: "bg-muted text-muted-foreground",
+  ended: "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
 };
 
 const TONE_DOT: Record<Tone, string> = {
@@ -350,7 +296,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium",
         TONE[tone],
       )}
     >
@@ -364,9 +310,9 @@ export function StatusBadge({
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+    <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
       {children}
-    </p>
+    </div>
   );
 }
 

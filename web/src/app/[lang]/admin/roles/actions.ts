@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { triggerResync } from "@/lib/resync";
+import type { ResetResult } from "../users/actions";
 
 // The middleware rewrites /admin/roles → /[lang]/admin/roles, so this is the
 // route segment to revalidate after a mutation. User-detail revalidation uses
 // the parameterised users segment (same convention as the rest of admin).
 const ROLES_PATH = "/[lang]/admin/roles";
+const GROUP_DETAIL_PATH = "/[lang]/admin/roles/[groupId]";
 const USER_PATH = "/[lang]/admin/users/[userId]";
 
 // Postgres unique_violation — surfaced to the client as a typed reason so the
@@ -98,15 +100,6 @@ export async function setUserRoleAssignment(fd: FormData) {
       .from("user_groups")
       .upsert({ user_id: userId, group_id: roleId }, { onConflict: "user_id,group_id", ignoreDuplicates: true });
     if (error) throw new Error(error.message);
-    // Assigning a user to a group is the admin acting on them — resolve any
-    // pending join request automatically (user request 2026-05-19). Clears
-    // relations.join_request + recomputes availability. Best-effort: a
-    // lingering key is harmless (an available user is already excluded from
-    // the ?seg=join_requested queue), so a cleanup hiccup must not block the
-    // assignment itself; triggerResync below still flips availability.
-    await admin
-      .rpc("app_admin_clear_join_request", { p_user_id: userId })
-      .then(() => undefined, () => undefined);
   } else {
     const { error } = await admin
       .from("user_groups")
@@ -117,5 +110,105 @@ export async function setUserRoleAssignment(fd: FormData) {
   }
   revalidatePath(USER_PATH, "page");
   revalidatePath(ROLES_PATH, "page");
+  revalidatePath(GROUP_DETAIL_PATH, "page");
   await triggerResync();
+}
+
+/**
+ * Bulk enable/disable for a set of groups, triggered from the groups list
+ * multi-selection. Collapsed to one UPDATE so a 10-group flip is one round
+ * trip. Resync runs once at the end (any enable/disable can change member
+ * availability — same reason single-group setRoleEnabled resyncs).
+ */
+export async function setGroupsEnabled(
+  groupIds: string[],
+  enabled: boolean,
+): Promise<{ ok: boolean; count: number }> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const ids = [...new Set((groupIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const admin = createSupabaseAdmin();
+  const { error } = await admin
+    .from("groups")
+    .update({ enabled })
+    .in("id", ids);
+  if (error) return { ok: false, count: 0 };
+  revalidatePath(ROLES_PATH, "page");
+  await triggerResync();
+  return { ok: true, count: ids.length };
+}
+
+/**
+ * Reset every user that belongs to any of the selected groups. Resolves
+ * member ids server-side, dedupes (a user in two selected groups is reset
+ * once), then loops app_admin_reset_user per id — the per-user RPC the
+ * user-detail "danger zone" uses (wipes chat/log/restrictions + relations
+ * to a clean slate, recomputes availability + credits). One failure is
+ * skipped, never fatal; `users` reports how many actually succeeded.
+ * No resync needed: a reset rebuilds availability from scratch.
+ */
+export async function resetGroupMembers(
+  groupIds: string[],
+): Promise<ResetResult> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const ids = [...new Set((groupIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return { ok: true, users: 0 };
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
+    .from("user_groups")
+    .select("user_id")
+    .in("group_id", ids);
+  if (error) return { ok: false };
+  const userIds = [
+    ...new Set(((data ?? []) as { user_id: string }[]).map((r) => r.user_id)),
+  ];
+  let users = 0;
+  for (const uid of userIds) {
+    const { error: rpcError } = await admin.rpc("app_admin_reset_user", {
+      p_user_id: uid,
+    });
+    if (!rpcError) users++;
+  }
+  revalidatePath(ROLES_PATH, "page");
+  revalidatePath(USER_PATH, "page");
+  return { ok: true, users };
+}
+
+/**
+ * Find users matching `q` who are NOT already in the given group — feeds the
+ * "add members" search on the group detail page. Returns lightweight rows.
+ */
+export async function searchUsersForGroup(
+  groupId: string,
+  q: string,
+): Promise<{ user_id: string; name: string | null; image: string | null }[]> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const query = q.trim();
+  if (!query || !groupId) return [];
+  const admin = createSupabaseAdmin();
+  const [{ data: memberRows }, { data: users }] = await Promise.all([
+    admin.from("user_groups").select("user_id").eq("group_id", groupId),
+    admin
+      .from("users")
+      .select("user_id, name, data")
+      .ilike("name", `%${query}%`)
+      .limit(30),
+  ]);
+  const members = new Set(
+    ((memberRows ?? []) as { user_id: string }[]).map((r) => r.user_id),
+  );
+  return (
+    (users ?? []) as {
+      user_id: string;
+      name: string | null;
+      data: { images?: { normal?: string }[] } | null;
+    }[]
+  )
+    .filter((u) => !members.has(u.user_id))
+    .slice(0, 20)
+    .map((u) => ({
+      user_id: u.user_id,
+      name: u.name,
+      image: u.data?.images?.[0]?.normal ?? null,
+    }));
 }

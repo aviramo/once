@@ -34,9 +34,6 @@ export type Relations =
         state?: string;
         reason?: string | null;
       } | null;
-      /** Set by app_join_request when a gated user asks to be let in;
-       * cleared by app_admin_clear_join_request / on group assignment. */
-      join_request?: { at?: string } | null;
     }
   | null
   | undefined;
@@ -127,12 +124,6 @@ export function page1Narrative(d: AdminDict, rel: Relations): Narrative {
  * waiting for a match" for someone who can't be matched at all. The reason is
  * read straight from `relations.availability.reason` (`'group'` / `'push'`),
  * with a generic fallback when the reason is absent.
- *
- * A pending join request (`relations.join_request`, set when a group-gated user
- * pressed "let me in") takes over the line — it's an actionable item waiting on
- * the admin, shown in the `busy` tone so it stands out from the terminal grey
- * "disabled". It does not apply to the `push` reason (joining a group can't
- * fix notifications being off).
  */
 export function availabilityNarrative(
   d: AdminDict,
@@ -145,9 +136,6 @@ export function availabilityNarrative(
   if (state === "not_yet") return { text: g.not_yet, tone: "idle" };
   if (state === "unavailable") {
     const reason = av?.reason ?? "";
-    if (reason !== "push" && rel?.join_request?.at != null) {
-      return { text: g.join_requested, tone: "busy" };
-    }
     return { text: g[reason] ?? g.unavailable, tone: "idle" };
   }
   return null;
@@ -183,39 +171,46 @@ export function page2Narrative(d: AdminDict, rel: Relations): Narrative {
   }
 }
 
+/** The user-list activity line, plus which board it was sourced from
+ * (`page` is `null` for facts that belong to neither board — the availability
+ * gate, "free", or a fully-empty locked state). */
+export type Activity = Narrative & { page: 1 | 2 | null };
+
 /**
  * The single "what is this person doing right now" line for the user list.
- * Collapses both boards into the one most informative sentence.
+ * Collapses both boards into the one most informative sentence, and reports
+ * which board (`page`) that sentence came from so the card can label it.
  */
-export function userActivity(d: AdminDict, rel: Relations): Narrative {
+export function userActivity(d: AdminDict, rel: Relations): Activity {
   const p1 = rel?.page1;
   const p2 = rel?.page2;
   const s1 = p1?.state ?? "locked";
   const s2 = p2?.state ?? "locked";
 
-  if (s1 === "chat" || s2 === "chat") {
-    return s1 === "chat"
-      ? page1Narrative(d, rel)
-      : page2Narrative(d, rel);
-  }
+  if (s1 === "chat") return { ...page1Narrative(d, rel), page: 1 };
+  if (s2 === "chat") return { ...page2Narrative(d, rel), page: 2 };
   // The availability gate is a top-level fact: a gated user is out of the pool
-  // entirely, so "free, waiting for a match" / "not active" would be a lie. It
-  // outranks every non-chat board state. `waiting`/`pending` are teardown-exempt
-  // in-flight interactions (the gate never tears them down) so they still show.
+  // entirely, so "free, waiting for a match" would be a lie. It outranks every
+  // non-chat board state. `waiting`/`pending` are teardown-exempt in-flight
+  // interactions (the gate never tears them down) so they still show.
   const gate = availabilityNarrative(d, rel);
-  if (gate && s1 !== "waiting" && s2 !== "pending") return gate;
-  if (s1 === "waiting") return page1Narrative(d, rel);
-  if (s2 === "pending") return page2Narrative(d, rel);
-  if (s1 === "watching") return page1Narrative(d, rel);
+  if (gate && s1 !== "waiting" && s2 !== "pending") {
+    return { ...gate, page: null };
+  }
+  if (s1 === "waiting") return { ...page1Narrative(d, rel), page: 1 };
+  if (s2 === "pending") return { ...page2Narrative(d, rel), page: 2 };
+  if (s1 === "watching") return { ...page1Narrative(d, rel), page: 1 };
   if (s2 === "free" && Array.isArray(p2?.profiles) && p2.profiles.length > 0) {
-    return page2Narrative(d, rel);
+    return { ...page2Narrative(d, rel), page: 2 };
   }
   if (s1 === "locked" && p1?.message) {
-    return { text: outcomeLabel(d, p1.message)!, tone: "ended" };
+    return { text: outcomeLabel(d, p1.message)!, tone: "ended", page: 1 };
   }
   if (s2 === "locked" && p2?.message) {
-    return { text: outcomeLabel(d, p2.message)!, tone: "ended" };
+    return { text: outcomeLabel(d, p2.message)!, tone: "ended", page: 2 };
   }
-  if (s1 === "free") return { text: d.narrative.page1.free, tone: "ok" };
-  return { text: d.narrative.page1.locked, tone: "idle" };
+  if (s1 === "free") {
+    return { text: d.narrative.page1.free, tone: "ok", page: null };
+  }
+  return { text: d.narrative.page1.locked, tone: "idle", page: null };
 }

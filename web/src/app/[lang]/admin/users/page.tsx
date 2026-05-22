@@ -4,12 +4,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import { AdminShell, Section, EmptyState } from "../_components/ui";
+import { AdminShell } from "../_components/AdminShell";
+import { Section, EmptyState } from "../_components/ui";
 import { SearchControls } from "../_components/SearchControls";
 import type { UserRow } from "../_components/UserCard";
 import { UsersRealtime } from "../_components/UsersRealtime";
-import { ResetAllButton } from "../_components/ResetAllButton";
-import { resetUsersByRoles } from "./actions";
+import { parseUserLocation, haversineKm } from "@/lib/userLocation";
 
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
@@ -35,9 +35,12 @@ const SEG_VALUES = [
   "broadcasting",
   "held",
   "role_gated",
-  "join_requested",
 ] as const;
-const SELECT = "user_id, name, created_at, last_seen, data, relations";
+// Sort modes for the users list. `recent` = the server's last_seen order;
+// `distance` / `relevance` re-sort in JS relative to the admin's own location.
+const SORT_VALUES = ["recent", "distance", "relevance"] as const;
+const SELECT =
+  "user_id, name, created_at, last_seen, data, relations, location";
 // Sentinel role-filter value (can't collide with a uuid) = "users with no role".
 const ROLE_NONE = "__none__";
 // No row will ever carry this user_id — used to force an empty result when a
@@ -71,6 +74,38 @@ async function loadEmailMap(
 
 function lastSeenSort(a: UserRow, b: UserRow): number {
   return (b.last_seen ?? "").localeCompare(a.last_seen ?? "");
+}
+
+/**
+ * Re-order the fetched page by distance / relevance to the admin's location.
+ * `recent` keeps the server's last_seen order. Relevance combines distance and
+ * last-login only (lower score = more relevant) — the two signals others()
+ * ranks on. Module-level so the impure Date.now() is not called in the page
+ * component body.
+ */
+function sortByMode(
+  rows: UserRow[],
+  sort: string,
+  adminLoc: ReturnType<typeof parseUserLocation>,
+): UserRow[] {
+  if (sort === "recent" || !adminLoc) return rows;
+  const now = Date.now();
+  const scoreOf = (r: UserRow): number => {
+    const loc = parseUserLocation(r.location);
+    const distKm = loc
+      ? haversineKm(adminLoc, loc)
+      : Number.POSITIVE_INFINITY;
+    if (sort === "distance") return distKm;
+    const proximity = Number.isFinite(distKm) ? Math.min(distKm / 100, 1) : 1;
+    const ageH = r.last_seen
+      ? (now - Date.parse(r.last_seen)) / 3_600_000
+      : Number.POSITIVE_INFINITY;
+    const staleness = Number.isFinite(ageH)
+      ? Math.min(ageH / (30 * 24), 1)
+      : 1;
+    return proximity * 0.5 + staleness * 0.5;
+  };
+  return [...rows].sort((a, b) => scoreOf(a) - scoreOf(b));
 }
 
 /** ISO instant for 00:00 today in Asia/Jerusalem (the product home tz, the
@@ -202,15 +237,6 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
         f.segIds && f.segIds.length ? f.segIds : [NO_MATCH_ID],
       );
       break;
-    case "join_requested":
-      // Pending "let me into the app" requests. relations.join_request is set
-      // by app_join_request; exclude already-approved (available) users so the
-      // list is the actionable queue (the key is intentionally not cleared on
-      // approval — availability flipping to 'available' drops them here).
-      q = q
-        .not("relations->>join_request", "is", null)
-        .neq("relations->availability->>state", "available");
-      break;
   }
   return q;
 }
@@ -232,6 +258,7 @@ export default async function AdminUsers({
   const avail = pick(sp.avail, AVAIL_VALUES);
   const tier = pick(sp.tier, TIER_VALUES);
   const seg = pick(sp.seg, SEG_VALUES);
+  const sort = pick(sp.sort, SORT_VALUES) || "recent";
   const roleRaw = typeof sp.role === "string" ? sp.role : "";
 
   const supabase = await createSupabaseServerClient();
@@ -251,7 +278,11 @@ export default async function AdminUsers({
   const [emailMap, meRes, { data: roleCatalogData }, { data: facetsData }] =
     await Promise.all([
       loadEmailMap(admin),
-      admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
+      admin
+        .from("users")
+        .select("name, location")
+        .eq("user_id", user.id)
+        .maybeSingle(),
       admin
         .from("groups")
         .select("id, name, enabled")
@@ -384,6 +415,13 @@ export default async function AdminUsers({
   }
   rows = rows.map((r) => ({ ...r, roles: rolesByUser.get(r.user_id) ?? [] }));
 
+  // Distance / relevance sorting is relative to the admin's own location (the
+  // person operating the panel); the fetched page is re-sorted in JS.
+  const adminLoc = parseUserLocation(
+    (meRes.data as { location?: unknown } | null)?.location,
+  );
+  rows = sortByMode(rows, sort, adminLoc);
+
   // Filter options carry the global "(n)" count and are ordered by it
   // descending (the "any" sentinel stays pinned first inside SearchControls).
   const byCountDesc = <T extends { count: number }>(a: T, b: T) =>
@@ -425,6 +463,11 @@ export default async function AdminUsers({
     label: (d.segStates as Record<string, string>)[v],
     count: facets.seg?.[v] ?? 0,
   }));
+  const sortOptions = [
+    { value: "recent", label: d.sortRecent },
+    { value: "distance", label: d.sortDistance },
+    { value: "relevance", label: d.sortRelevance },
+  ];
 
   const meName = (meRes.data as { name?: string } | null)?.name;
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
@@ -434,28 +477,6 @@ export default async function AdminUsers({
       <Section
         title={d.users}
         hint={d.resultsCount.replace("{count}", String(rows.length))}
-        action={
-          <ResetAllButton
-            action={resetUsersByRoles}
-            roles={roleCatalog}
-            dict={{
-              label: d.resetAll,
-              confirm: d.resetAllConfirm,
-              busy: d.resetAllBusy,
-              done: d.resetAllDone,
-              fail: d.resetAllFail,
-              title: d.resetAllTitle,
-              hint: d.resetAllHint,
-              selectAll: d.resetSelectAll,
-              deselectAll: d.resetDeselectAll,
-              noRoles: d.resetNoRoles,
-              noneSelected: d.resetNoneSelected,
-              apply: d.resetApply,
-              cancel: d.resetCancel,
-              disabledTag: d.roles.statusDisabled,
-            }}
-          />
-        }
       >
         <div className="space-y-6">
           <SearchControls
@@ -470,6 +491,8 @@ export default async function AdminUsers({
             segLabel={d.filterSeg}
             anyLabel={d.filterAny}
             anyCount={facets.total ?? 0}
+            sortLabel={d.sortLabel}
+            sortOptions={sortOptions}
             p1States={p1Options}
             p2States={p2Options}
             roleOptions={roleOptions}
@@ -487,6 +510,8 @@ export default async function AdminUsers({
               }))}
               dict={d}
               locale={locale}
+              adminLoc={adminLoc}
+              groups={roleCatalog}
             />
           )}
         </div>

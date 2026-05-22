@@ -27,8 +27,6 @@ type Dict = {
   save: string;
   cancel: string;
   add: string;
-  mapUnavailable: string;
-  mapHint: string;
 };
 
 type Prediction = { place_id: string; description: string };
@@ -49,56 +47,6 @@ function toLocalInput(iso: string): string {
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// Map preview as its own component so the `key={lat,lng,radius}` remount gives
-// a fresh error state per location (no setState-in-effect to reset it). On any
-// staticmap failure (key lacks Maps Static API, upstream error) the <img>
-// onError flips to an explanatory placeholder instead of a silent empty box.
-function MapPreview({
-  lat,
-  lng,
-  radius,
-  lang,
-  label,
-  dict,
-}: {
-  lat: string;
-  lng: string;
-  radius: string;
-  lang: string;
-  label: string;
-  dict: Dict;
-}) {
-  const [errored, setErrored] = useState(false);
-  // 4:3 landscape, centred and width-capped — bigger than the old thin strip
-  // without dominating the form on wide screens.
-  const frame = "mx-auto w-full max-w-xl aspect-[4/3]";
-  if (errored) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center ${frame}`}
-      >
-        <span className="text-sm font-medium text-foreground">
-          {dict.mapUnavailable}
-        </span>
-        <span className="text-xs text-muted-foreground">{dict.mapHint}</span>
-      </div>
-    );
-  }
-  return (
-    <div className={`overflow-hidden rounded-xl border border-border ${frame}`}>
-      {/* Server-proxied dynamic endpoint, not a static asset — next/image
-          would need a custom loader for no real benefit in an admin tool. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/staticmap?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&r=${encodeURIComponent(radius || "0")}&lang=${encodeURIComponent(lang)}`}
-        alt={label || `${lat}, ${lng}`}
-        className="block size-full object-cover"
-        onError={() => setErrored(true)}
-      />
-    </div>
-  );
 }
 
 export function AreaForm({
@@ -304,18 +252,6 @@ export function AreaForm({
           )}
         </div>
       </label>
-
-      {lat && lng ? (
-        <MapPreview
-          key={`${lat},${lng},${radius}`}
-          lat={lat}
-          lng={lng}
-          radius={radius}
-          lang={lang}
-          label={label}
-          dict={dict}
-        />
-      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-sm">

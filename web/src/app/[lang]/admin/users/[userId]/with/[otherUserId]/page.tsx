@@ -12,8 +12,8 @@ import {
   statusResult,
   type Tone,
 } from "@/lib/humanize";
+import { AdminShell } from "../../../../_components/AdminShell";
 import {
-  AdminShell,
   Section,
   Card,
   Avatar,

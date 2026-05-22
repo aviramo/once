@@ -3,7 +3,9 @@ import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
-import { AdminShell, Section, Card, EmptyState } from "../_components/ui";
+import { AdminShell } from "../_components/AdminShell";
+import { Section, Card, EmptyState } from "../_components/ui";
+import { RealtimeRefresh } from "../_components/RealtimeRefresh";
 import { Disclosure } from "../_components/Disclosure";
 import { AreaForm, type AreaMode } from "./_components/AreaForm";
 import { AreasBoard } from "./_components/AreasBoard";
@@ -60,8 +62,6 @@ export default async function AreasPage({
     save: a.save,
     cancel: a.cancel,
     add: a.add,
-    mapUnavailable: a.mapUnavailable,
-    mapHint: a.mapHint,
   };
   const rowDict = {
     edit: a.edit,
@@ -76,19 +76,9 @@ export default async function AreasPage({
     confirmDelete: a.confirmDelete,
     form: formDict,
   };
-  const mapDict = {
-    mapUnavailable: a.mapUnavailable,
-    mapHint: a.mapHint,
-    statusActive: a.statusActive,
-    statusWaiting: a.statusWaiting,
-    statusDisabled: a.statusDisabled,
-    zoomIn: a.zoomIn,
-    zoomOut: a.zoomOut,
-    fit: a.fit,
-  };
-
   return (
     <AdminShell dict={dict.admin} active="areas">
+      <RealtimeRefresh tables="areas" channel="admin-areas" />
       <Section title={a.title} count={areas.length} hint={a.subtitle}>
         <div className="space-y-6">
           <Card>
@@ -103,7 +93,6 @@ export default async function AreasPage({
             <AreasBoard
               areas={areas}
               rowDict={rowDict}
-              mapDict={mapDict}
               lang={locale}
               updateAction={updateArea}
               deleteAction={deleteArea}
