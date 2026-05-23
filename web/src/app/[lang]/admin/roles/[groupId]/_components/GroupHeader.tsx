@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { Card, StatusBadge } from "../../../_components/ui";
 
 export type GroupHeaderDict = {
@@ -36,6 +36,7 @@ export function GroupHeader({
   dict,
   renameAction,
   setEnabledAction,
+  extraActions,
 }: {
   groupId: string;
   initialName: string;
@@ -44,6 +45,10 @@ export function GroupHeader({
   dict: GroupHeaderDict;
   renameAction: (fd: FormData) => Promise<void>;
   setEnabledAction: (fd: FormData) => Promise<void>;
+  /** Extra actions appended to the rename/enable button row — e.g. a compact
+   * delete button so it sits with the other group-level controls instead of
+   * in a separate Danger section. */
+  extraActions?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -146,6 +151,7 @@ export function GroupHeader({
           >
             {enabled ? dict.disable : dict.enable}
           </button>
+          {extraActions}
         </div>
       ) : null}
 

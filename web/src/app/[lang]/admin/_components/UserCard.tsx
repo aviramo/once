@@ -177,9 +177,9 @@ export function UserCard({
           {email ?? dict.noEmail}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
-          {/* The page badges are interactive: tap to open a small confirm
-              popover and release that page. The ⋯ menu no longer carries
-              per-page release for a single user (it stays for the BULK sheet). */}
+          {/* The page badges are interactive: tap to REVEAL a one-tap
+              "release" button right next to the badge (no popup, no confirm
+              text). Click anywhere outside the badge + button to dismiss. */}
           <PageReleaseBadge
             userId={row.user_id}
             page={1}
@@ -187,12 +187,7 @@ export function UserCard({
             text={n1.text}
             onOpenChange={setBadgePopoverOpen}
             dict={{
-              confirmText: dict.actions.confirmRelease1.replace(
-                "{target}",
-                row.name ?? row.user_id.slice(0, 8),
-              ),
-              cancel: dict.actions.cancel,
-              confirm: dict.actions.confirm,
+              release: dict.actions.release,
               busy: dict.actions.busy,
               done: dict.actions.done,
               fail: dict.actions.fail,
@@ -205,12 +200,7 @@ export function UserCard({
             text={n2.text}
             onOpenChange={setBadgePopoverOpen}
             dict={{
-              confirmText: dict.actions.confirmRelease2.replace(
-                "{target}",
-                row.name ?? row.user_id.slice(0, 8),
-              ),
-              cancel: dict.actions.cancel,
-              confirm: dict.actions.confirm,
+              release: dict.actions.release,
               busy: dict.actions.busy,
               done: dict.actions.done,
               fail: dict.actions.fail,

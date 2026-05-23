@@ -175,6 +175,59 @@ export async function resetGroupMembers(
 }
 
 /**
+ * Bulk move members from one group to another. `fromGroupId` (optional) bounds
+ * the removal so only assignments in that specific group are dropped — if the
+ * user holds other groups, those stay. When `fromGroupId` is null we only add
+ * to the target (no removal step). One UPSERT for adds + one DELETE for the
+ * source removals; both honour the same idempotency the per-user toggle uses.
+ * Resync runs once at the end since changing group membership can flip the
+ * availability gate of any affected user (an enabled→disabled-only switch
+ * goes gated; the reverse goes available — same path as setUserRoleAssignment).
+ */
+export async function moveUsersToGroup(
+  userIds: string[],
+  targetGroupId: string,
+  fromGroupId: string | null,
+): Promise<{ ok: boolean; moved: number }> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const ids = [...new Set((userIds ?? []).filter(Boolean))];
+  if (ids.length === 0 || !targetGroupId)
+    return { ok: true, moved: 0 };
+  const admin = createSupabaseAdmin();
+
+  // 1. Add to the target group (idempotent — a user already there is fine).
+  const insertRows = ids.map((uid) => ({
+    user_id: uid,
+    group_id: targetGroupId,
+  }));
+  const { error: insertErr } = await admin
+    .from("user_groups")
+    .upsert(insertRows, {
+      onConflict: "user_id,group_id",
+      ignoreDuplicates: true,
+    });
+  if (insertErr) return { ok: false, moved: 0 };
+
+  // 2. Remove from the source group (when one was given AND it's not the
+  // target — moving onto themselves is a no-op for step 2). Bounded to the
+  // selected user set so unrelated members aren't touched.
+  if (fromGroupId && fromGroupId !== targetGroupId) {
+    const { error: deleteErr } = await admin
+      .from("user_groups")
+      .delete()
+      .eq("group_id", fromGroupId)
+      .in("user_id", ids);
+    if (deleteErr) return { ok: false, moved: 0 };
+  }
+
+  revalidatePath(ROLES_PATH, "page");
+  revalidatePath(GROUP_DETAIL_PATH, "page");
+  revalidatePath(USER_PATH, "page");
+  await triggerResync();
+  return { ok: true, moved: ids.length };
+}
+
+/**
  * Find users matching `q` who are NOT already in the given group — feeds the
  * "add members" search on the group detail page. Returns lightweight rows.
  */

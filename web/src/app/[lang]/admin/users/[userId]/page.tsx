@@ -1,35 +1,34 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { relativeTime, dateTime } from "@/lib/relativeTime";
 import { userImageUrl } from "@/lib/userImage";
-import { fetchPartnerSummaries } from "@/lib/interactions";
 import {
   page1Narrative,
   page2Narrative,
   availabilityNarrative,
-  eventLabel,
-  restrictionLabel,
-  statusResult,
 } from "@/lib/humanize";
+import { buildEventCards } from "@/lib/eventCards";
 import { AdminShell } from "../../_components/AdminShell";
 import {
   Section,
   Card,
   Avatar,
   StatusBadge,
-  EmptyState,
   KeyValue,
 } from "../../_components/ui";
 import { RealtimeRefresh } from "../../_components/RealtimeRefresh";
-import { Disclosure, RevealList } from "../../_components/Disclosure";
+import { Disclosure } from "../../_components/Disclosure";
 import { UserRolesEditor, type EditorRole } from "./_components/UserGroupsEditor";
 import { UserDangerZone } from "./_components/UserDangerZone";
 import { ReleasePageButton } from "./_components/ReleasePageButton";
 import { UserPhotos } from "./_components/UserPhotos";
+import {
+  UnifiedActivity,
+  type UnifiedPartner,
+} from "./_components/UnifiedActivity";
 import { setUserRoleAssignment } from "../../roles/actions";
 import { deleteUser, resetUser } from "../actions";
 
@@ -78,9 +77,11 @@ type PartnerMini = {
 type LogRow = {
   id: string;
   created_at: string;
+  user_id: string | null;
   key: string;
   status: number;
-  run_ms: number;
+  log: unknown;
+  user: unknown;
 };
 
 function calcAge(birthDate: string | null): number | null {
@@ -116,10 +117,10 @@ export default async function UserDetailPage({
     { data: target },
     { data: authUser },
     { data: logRows },
-    partners,
     { data: allRoles },
     { data: myRoleRows },
     { data: storageFiles },
+    { data: authListing },
   ] = await Promise.all([
     admin
       .from("users")
@@ -129,19 +130,14 @@ export default async function UserDetailPage({
       .eq("user_id", userId)
       .maybeSingle(),
     admin.auth.admin.getUserById(userId),
-    admin
-      .from("log")
-      .select("id, created_at, key, status, run_ms")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(50),
-    fetchPartnerSummaries(admin, userId),
+    admin.rpc("admin_log_for_user", { p_user_id: userId, p_limit: 300 }),
     admin
       .from("groups")
       .select("id, name, enabled")
       .order("created_at", { ascending: true }),
     admin.from("user_groups").select("group_id").eq("user_id", userId),
     admin.storage.from("users").list(`${userId}/normal`, { limit: 100 }),
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ]);
 
   const roleCatalog = (allRoles ?? []) as EditorRole[];
@@ -168,16 +164,43 @@ export default async function UserDetailPage({
     u.relations?.push?.dead !== true &&
     u.relations?.push?.perm !== "denied";
 
-  const partnerIds = partners.map((p) => p.otherId);
+  // Build merged event-card feed: one card per log row, enriched with the
+  // partners involved. The RPC also returns rows from OTHER users where this
+  // user's id appears in the payload — so "X invited you", "X removed you"
+  // surface here, not just things this user initiated.
+  const rawLog = (logRows ?? []) as LogRow[];
+  const entries = buildEventCards(rawLog, u.user_id, a, a.profileChanges);
+
+  // All partner IDs referenced anywhere in the feed → fetch profiles + emails
+  // in one batch for the affected-users chips and the search filter. Drop any
+  // UUIDs in the payload that don't actually correspond to a user row.
+  const partnerIdSet = new Set<string>();
+  for (const e of entries) {
+    for (const a of e.affected) partnerIdSet.add(a.id);
+    if (e.byOther && e.actorId) partnerIdSet.add(e.actorId);
+  }
+  const partnerIds = [...partnerIdSet];
+
   const { data: partnerProfiles } = partnerIds.length
     ? await admin
         .from("users")
         .select("user_id, name, data")
         .in("user_id", partnerIds)
     : { data: [] };
-  const partnerMap = new Map(
-    ((partnerProfiles ?? []) as PartnerMini[]).map((p) => [p.user_id, p]),
-  );
+
+  const partnerMap: Record<string, UnifiedPartner> = {};
+  const emailByLower = new Map<string, string>();
+  for (const au of authListing?.users ?? []) {
+    if (au.id && au.email) emailByLower.set(au.id.toLowerCase(), au.email);
+  }
+  for (const p of (partnerProfiles ?? []) as PartnerMini[]) {
+    const key = p.user_id.toLowerCase();
+    partnerMap[key] = {
+      name: p.name,
+      email: emailByLower.get(key) ?? null,
+      photo: userImageUrl(p.user_id, p.data?.images?.[0]?.normal),
+    };
+  }
 
   const photo = userImageUrl(u.user_id, u.data?.images?.[0]?.normal);
   const age = calcAge(u.birth_date);
@@ -195,66 +218,81 @@ export default async function UserDetailPage({
         channel="admin-user-detail"
         filter={`user_id=eq.${u.user_id}`}
       />
-      {/* Identity — one compact rectangle: photo, name + email on one row */}
-      <Card className="flex items-center gap-4 p-4">
-        <Avatar src={photo} name={u.name} size="md" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <h1 className="text-lg font-bold leading-tight">
-              {u.name ?? "—"}
-            </h1>
-            <span className="min-w-0 truncate text-sm text-muted-foreground">
-              {email ?? a.noEmail}
-            </span>
-          </div>
-          <div className="mt-2 space-y-2">
-            {gate ? (
-              <StatusBadge tone={gate.tone}>{gate.text}</StatusBadge>
-            ) : null}
-            {/* Each page tag carries its own release-to-default button right
-                under it — the operator sees the state and the action together
-                without scrolling to a separate "current state" block. The
-                button is suppressed when the tag is already `ok` (green): the
-                page is already at the discoverable state release would lead
-                to, so the action is a no-op and showing it just adds noise. */}
-            <div className="flex flex-wrap gap-3">
-              <div className="flex flex-col items-start gap-1.5">
-                <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
-                {n1.tone !== "ok" ? (
-                  <ReleasePageButton
-                    userId={u.user_id}
-                    page={1}
-                    label={a.actions.releasePage1}
-                    busyLabel={a.actions.busy}
-                    confirmText={a.actions.confirmRelease1.replace(
-                      "{target}",
-                      u.name ?? u.user_id.slice(0, 8),
-                    )}
-                  />
-                ) : null}
+      {/* Identity card — photo + name/email + state badges + (compact)
+          danger zone. The irreversible per-user controls are two small buttons
+          next to the identity so they're reachable without scrolling, without
+          dominating the layout. */}
+      <Card className="p-4">
+        <div className="flex items-start gap-4">
+          <Avatar src={photo} name={u.name} size="md" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <h1 className="text-lg font-bold leading-tight">
+                  {u.name ?? "—"}
+                </h1>
+                <span className="min-w-0 truncate text-sm text-muted-foreground">
+                  {email ?? a.noEmail}
+                </span>
               </div>
-              <div className="flex flex-col items-start gap-1.5">
-                <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
-                {n2.tone !== "ok" ? (
-                  <ReleasePageButton
-                    userId={u.user_id}
-                    page={2}
-                    label={a.actions.releasePage2}
-                    busyLabel={a.actions.busy}
-                    confirmText={a.actions.confirmRelease2.replace(
-                      "{target}",
-                      u.name ?? u.user_id.slice(0, 8),
-                    )}
-                  />
-                ) : null}
+              <UserDangerZone
+                userId={u.user_id}
+                userName={u.name ?? ""}
+                dict={d.danger}
+                resetAction={resetUser}
+                deleteAction={deleteUser}
+                compact
+              />
+            </div>
+            <div className="mt-2 space-y-2">
+              {gate ? (
+                <StatusBadge tone={gate.tone}>{gate.text}</StatusBadge>
+              ) : null}
+              {/* Each page tag carries its own release-to-default button right
+                  under it — the operator sees the state and the action together
+                  without scrolling to a separate "current state" block. The
+                  button is suppressed when the tag is already `ok` (green): the
+                  page is already at the discoverable state release would lead
+                  to, so the action is a no-op and showing it just adds noise. */}
+              <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col items-start gap-1.5">
+                  <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
+                  {n1.tone !== "ok" ? (
+                    <ReleasePageButton
+                      userId={u.user_id}
+                      page={1}
+                      label={a.actions.releasePage1}
+                      busyLabel={a.actions.busy}
+                      confirmText={a.actions.confirmRelease1.replace(
+                        "{target}",
+                        u.name ?? u.user_id.slice(0, 8),
+                      )}
+                    />
+                  ) : null}
+                </div>
+                <div className="flex flex-col items-start gap-1.5">
+                  <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
+                  {n2.tone !== "ok" ? (
+                    <ReleasePageButton
+                      userId={u.user_id}
+                      page={2}
+                      label={a.actions.releasePage2}
+                      busyLabel={a.actions.busy}
+                      confirmText={a.actions.confirmRelease2.replace(
+                        "{target}",
+                        u.name ?? u.user_id.slice(0, 8),
+                      )}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {d.joinedFull}: {relativeTime(u.created_at, locale)}
+              {" · "}
+              {d.lastSeenFull}: {relativeTime(u.last_seen, locale)}
+            </p>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {d.joinedFull}: {relativeTime(u.created_at, locale)}
-            {" · "}
-            {d.lastSeenFull}: {relativeTime(u.last_seen, locale)}
-          </p>
         </div>
       </Card>
 
@@ -337,101 +375,18 @@ export default async function UserDetailPage({
         </Card>
       </Section>
 
-      {/* People interacted with */}
-      <Section title={d.interactions} count={partners.length}>
-        {partners.length === 0 ? (
-          <EmptyState>{d.noInteractions}</EmptyState>
-        ) : (
-          <RevealList
-            initial={6}
-            moreLabel={a.showMore}
-            lessLabel={a.showLess}
-            items={partners.map((p) => {
-              const profile = partnerMap.get(p.otherId);
-              const partnerPhoto = userImageUrl(
-                p.otherId,
-                profile?.data?.images?.[0]?.normal,
-              );
-              const bits: string[] = [];
-              if (p.chatCount > 0)
-                bits.push(`${p.chatCount} ${d.messagesLabel}`);
-              for (const k of p.restrictOut)
-                bits.push(restrictionLabel(a, k));
-              for (const k of p.restrictIn)
-                bits.push(`${d.restrictionIn}: ${restrictionLabel(a, k)}`);
-              return (
-                <Link
-                  key={p.otherId}
-                  href={`/admin/users/${userId}/with/${p.otherId}`}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
-                >
-                  <Avatar
-                    src={partnerPhoto}
-                    name={profile?.name ?? null}
-                    size="sm"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {profile?.name ?? p.otherId.slice(0, 8)}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {relativeTime(p.lastAt, locale)}
-                      {bits.length ? ` · ${bits.join(" · ")}` : ""}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs text-primary">
-                    {d.viewHistory}
-                  </span>
-                </Link>
-              );
-            })}
-          />
-        )}
-      </Section>
-
-      {/* What the user did — pure business language, no codes */}
-      <Section title={d.activity} hint={d.activityHint}>
-        {(logRows ?? []).length === 0 ? (
-          <EmptyState>{d.noActivity}</EmptyState>
-        ) : (
-          <RevealList
-            initial={8}
-            moreLabel={a.showMore}
-            lessLabel={a.showLess}
-            items={((logRows ?? []) as LogRow[]).map((row) => {
-              const res = statusResult(a, row.status);
-              return (
-                <div
-                  key={row.id}
-                  className="flex items-center justify-between gap-4 px-4 py-3 text-sm"
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <StatusBadge tone={res.ok ? "ok" : "ended"} dot>
-                      {res.label}
-                    </StatusBadge>
-                    <span className="truncate">{eventLabel(a, row.key)}</span>
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {relativeTime(row.created_at, locale)}
-                  </span>
-                </div>
-              );
-            })}
-          />
-        )}
-      </Section>
-
-      {/* Danger zone — irreversible per-user admin controls */}
-      <Section title={d.danger.section}>
-        <UserDangerZone
-          userId={u.user_id}
-          userName={u.name ?? ""}
-          dict={d.danger}
-          resetAction={resetUser}
-          deleteAction={deleteUser}
+      {/* Merged event log — one card per server action (including events
+          others initiated that affected this user), with a name/email search
+          above. Replaces the old separate "interactions" + "activity" sections. */}
+      <Section title={d.eventsLog.title} hint={d.eventsLog.hint}>
+        <UnifiedActivity
+          selfId={u.user_id}
+          entries={entries}
+          partners={partnerMap}
+          dict={d.eventsLog.feed}
+          locale={locale}
         />
       </Section>
     </AdminShell>
   );
 }
-

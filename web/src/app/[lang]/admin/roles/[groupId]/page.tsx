@@ -15,6 +15,7 @@ import {
   renameRole,
   setRoleEnabled,
   deleteRole,
+  moveUsersToGroup,
 } from "../actions";
 
 // Typed manually rather than via PageProps<…>: the Next typed-routes registry
@@ -35,19 +36,29 @@ export default async function GroupDetailPage({
   if (!user) redirect("/admin/login");
 
   const admin = createSupabaseAdmin();
-  const [{ data: group }, { data: memberRows }] = await Promise.all([
-    admin
-      .from("groups")
-      .select("id, name, enabled")
-      .eq("id", groupId)
-      .maybeSingle(),
-    admin
-      .from("user_groups")
-      .select("user_id, users(user_id, name, data)")
-      .eq("group_id", groupId),
-  ]);
+  const [{ data: group }, { data: memberRows }, { data: allGroups }] =
+    await Promise.all([
+      admin
+        .from("groups")
+        .select("id, name, enabled")
+        .eq("id", groupId)
+        .maybeSingle(),
+      admin
+        .from("user_groups")
+        .select("user_id, users(user_id, name, data)")
+        .eq("group_id", groupId),
+      admin
+        .from("groups")
+        .select("id, name, enabled")
+        .order("name", { ascending: true }),
+    ]);
   if (!group) notFound();
   const g = group as { id: string; name: string; enabled: boolean };
+  const groupCatalog = (allGroups ?? []) as {
+    id: string;
+    name: string;
+    enabled: boolean;
+  }[];
 
   type UserMini = {
     user_id: string;
@@ -63,6 +74,18 @@ export default async function GroupDetailPage({
       name: u.name,
       image: u.data?.images?.[0]?.normal ?? null,
     }));
+
+  const dangerDict = {
+    deleteTitle: d.deleteTitle,
+    deleteDesc: d.deleteDesc,
+    deleteButton: r.delete,
+    deleteBlocked: d.deleteBlocked,
+    deleteConfirmTitle: d.deleteConfirmTitle,
+    deleteConfirmBody: d.deleteConfirmBody,
+    deleteBusy: d.deleteBusy,
+    fail: d.fail,
+    cancel: r.cancel,
+  };
 
   return (
     <AdminShell dict={dict.admin} active="roles" backHref="/admin/roles">
@@ -89,12 +112,23 @@ export default async function GroupDetailPage({
         }}
         renameAction={renameRole}
         setEnabledAction={setRoleEnabled}
+        extraActions={
+          <GroupDangerZone
+            groupId={g.id}
+            groupName={g.name}
+            members={members.length}
+            dict={dangerDict}
+            deleteAction={deleteRole}
+            compact
+          />
+        }
       />
 
       <Section title={d.members} count={members.length}>
         <GroupMembers
           groupId={g.id}
           members={members}
+          allGroups={groupCatalog}
           dict={{
             noMembers: d.noMembers,
             remove: d.remove,
@@ -103,29 +137,19 @@ export default async function GroupDetailPage({
             searching: d.searching,
             noResults: d.noResults,
             add: d.add,
+            bulkSelectedCount: d.bulkSelectedCount,
+            bulkClear: d.bulkClear,
+            bulkMoveLabel: d.bulkMoveLabel,
+            bulkMoveChoose: d.bulkMoveChoose,
+            bulkMoveButton: d.bulkMoveButton,
+            bulkMoveBusy: d.bulkMoveBusy,
+            bulkMoveDone: d.bulkMoveDone,
+            bulkMoveFail: d.bulkMoveFail,
+            groupDisabledTag: r.statusDisabled,
           }}
           assignAction={setUserRoleAssignment}
           searchAction={searchUsersForGroup}
-        />
-      </Section>
-
-      <Section title={d.dangerSection}>
-        <GroupDangerZone
-          groupId={g.id}
-          groupName={g.name}
-          members={members.length}
-          dict={{
-            deleteTitle: d.deleteTitle,
-            deleteDesc: d.deleteDesc,
-            deleteButton: r.delete,
-            deleteBlocked: d.deleteBlocked,
-            deleteConfirmTitle: d.deleteConfirmTitle,
-            deleteConfirmBody: d.deleteConfirmBody,
-            deleteBusy: d.deleteBusy,
-            fail: d.fail,
-            cancel: r.cancel,
-          }}
-          deleteAction={deleteRole}
+          moveAction={moveUsersToGroup}
         />
       </Section>
     </AdminShell>

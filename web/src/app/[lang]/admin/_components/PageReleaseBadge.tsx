@@ -7,10 +7,8 @@ import { StatusBadge } from "./ui";
 import { releaseUserPage } from "../users/actions";
 
 type Dict = {
-  /** Already-interpolated confirm prompt — the caller fills {target}. */
-  confirmText: string;
-  cancel: string;
-  confirm: string;
+  /** Single-word action label on the revealed button — e.g. "שחרור". */
+  release: string;
   busy: string;
   done: string;
   fail: string;
@@ -18,19 +16,18 @@ type Dict = {
 
 /**
  * A status badge that doubles as the trigger for "release this page". Clicking
- * the badge opens a small confirm popover anchored to it; confirming calls
- * `releaseUserPage(userId, page)` (the same state-aware teardown RPC the
- * user-detail screen uses). Used on the users-list card so an operator can
- * release a single page directly from the badge — no detour through the ⋯
- * actions menu (which keeps release only for the BULK sheet).
+ * the badge REVEALS a single "release" button next to it; clicking that button
+ * runs `releaseUserPage(userId, page)` (the same state-aware teardown RPC the
+ * user-detail screen uses). Clicking anywhere outside the badge + revealed
+ * button collapses the button back (no popup, no confirm dialog — the reveal
+ * itself is the confirmation step).
  *
  * Exception: when `tone === "ok"` the page is already discoverable (page1 free,
  * or page2 free) so there is nothing meaningful to release — the badge then
- * renders inert (no button, no popover) per the user's "green = hands off" rule.
+ * renders inert (no button, no reveal) per the user's "green = hands off" rule.
  *
- * `onOpenChange` lets the parent card lift its z-index while the popover is
- * open, so sibling cards' avatars never paint over it (the popover lives inside
- * the card's local stacking context).
+ * `onOpenChange` lets the parent card lift its z-index while the button is
+ * revealed, so sibling cards' avatars never paint over it.
  */
 type BadgeProps = {
   userId: string;
@@ -41,10 +38,6 @@ type BadgeProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-/** Outer gate: green tone means the page is already discoverable, so release
- * would be a no-op — render an inert badge with no hooks at all. Otherwise
- * mount the interactive variant. Split this way (instead of an early return
- * before the hooks) so the hook order stays stable across renders. */
 export function PageReleaseBadge(props: BadgeProps) {
   if (props.tone === "ok") {
     return <StatusBadge tone={props.tone}>{props.text}</StatusBadge>;
@@ -61,24 +54,21 @@ function InteractiveBadge({
   onOpenChange,
 }: BadgeProps) {
   const [open, setOpen] = useState(false);
-  const [dropUp, setDropUp] = useState(false);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<"ok" | "fail" | null>(null);
-  const btnRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
 
-  // Notify the parent card so it can lift its z-index while we're open.
   useEffect(() => {
     onOpenChange?.(open);
   }, [open, onOpenChange]);
 
+  // Click outside the whole wrapper (badge + revealed button) collapses it,
+  // just like a popup would dismiss on outside-click. Escape closes too.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (!panelRef.current?.contains(t) && !btnRef.current?.contains(t)) {
-        setOpen(false);
-      }
+      if (!wrapRef.current?.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -94,30 +84,20 @@ function InteractiveBadge({
   function toggle(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    // Open upward when the trigger is near the viewport bottom (decided once
-    // at open time, so the panel never flickers after mount).
-    const r = btnRef.current?.getBoundingClientRect();
-    if (r) {
-      const below = window.innerHeight - r.bottom;
-      setDropUp(below < 180 && r.top > below);
-    }
     setResult(null);
-    setOpen(true);
+    setOpen((v) => !v);
   }
 
   function run(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (pending) return;
     startTransition(async () => {
       try {
         const res = await releaseUserPage(userId, page);
         setResult(res.ok ? "ok" : "fail");
         if (res.ok) {
-          // Brief success flash, then dismiss — Realtime updates the card.
+          // Brief success flash, then collapse — Realtime updates the badge.
           setTimeout(() => setOpen(false), 700);
         }
       } catch {
@@ -127,9 +107,11 @@ function InteractiveBadge({
   }
 
   return (
-    <span className="pointer-events-auto relative inline-flex">
+    <span
+      ref={wrapRef}
+      className="pointer-events-auto relative inline-flex items-center gap-1.5"
+    >
       <button
-        ref={btnRef}
         type="button"
         onClick={toggle}
         aria-expanded={open}
@@ -138,51 +120,27 @@ function InteractiveBadge({
         <StatusBadge tone={tone}>{text}</StatusBadge>
       </button>
       {open ? (
-        <div
-          ref={panelRef}
-          onClick={(e) => e.stopPropagation()}
+        <button
+          type="button"
+          onClick={run}
+          disabled={pending}
           className={cn(
-            "absolute end-0 z-40 w-64 rounded-xl border border-border bg-background p-3 shadow-xl",
-            dropUp ? "bottom-full mb-1" : "top-full mt-1",
+            "shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold shadow-sm transition-opacity disabled:opacity-50",
+            result === "ok"
+              ? "bg-emerald-600 text-white"
+              : result === "fail"
+                ? "bg-rose-600 text-white"
+                : "bg-rose-600 text-white hover:opacity-90",
           )}
         >
-          <p className="text-xs leading-relaxed">{dict.confirmText}</p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setOpen(false);
-              }}
-              disabled={pending}
-              className="flex-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
-            >
-              {dict.cancel}
-            </button>
-            <button
-              type="button"
-              onClick={run}
-              disabled={pending}
-              className={cn(
-                "flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity disabled:opacity-50",
-                result === "ok"
-                  ? "bg-emerald-600 text-white"
-                  : result === "fail"
-                    ? "bg-rose-600 text-white"
-                    : "bg-primary text-primary-foreground hover:opacity-90",
-              )}
-            >
-              {pending
-                ? dict.busy
-                : result === "ok"
-                  ? dict.done
-                  : result === "fail"
-                    ? dict.fail
-                    : dict.confirm}
-            </button>
-          </div>
-        </div>
+          {pending
+            ? dict.busy
+            : result === "ok"
+              ? dict.done
+              : result === "fail"
+                ? dict.fail
+                : dict.release}
+        </button>
       ) : null}
     </span>
   );

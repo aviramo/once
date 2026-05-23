@@ -43,12 +43,17 @@ export function UserDangerZone({
   dict,
   resetAction,
   deleteAction,
+  compact = false,
 }: {
   userId: string;
   userName: string;
   dict: DangerZoneDict;
   resetAction: (userId: string) => Promise<ResetResult>;
   deleteAction: (userId: string) => Promise<{ ok: boolean }>;
+  /** When true, render only the two destructive buttons inline (no rose-bordered
+   * card, no title/description rows). Used when the zone sits inside the identity
+   * card at the top of the page. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [modal, setModal] = useState<Mode | null>(null);
@@ -94,6 +99,77 @@ export function UserDangerZone({
   const modalBusyLabel =
     modal === "delete" ? dict.deleteBusy : dict.resetBusy;
 
+  const modalRoot = modal ? (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !pending) setModal(null);
+      }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-background p-5 shadow-xl">
+        <h2 className="text-base font-semibold">{modalTitle}</h2>
+        <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+          {modalBody}
+        </p>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setModal(null)}
+            disabled={pending}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted/60 disabled:opacity-50"
+          >
+            {dict.cancel}
+          </button>
+          <button
+            type="button"
+            onClick={run}
+            disabled={pending}
+            className="rounded-lg border border-rose-300 bg-rose-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-rose-700 disabled:cursor-default disabled:opacity-60 dark:border-rose-900"
+          >
+            {pending ? modalBusyLabel : modalConfirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setMsg(null);
+            setModal("reset");
+          }}
+          disabled={pending}
+          className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-default disabled:opacity-60 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/40"
+        >
+          {dict.resetButton}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMsg(null);
+            setModal("delete");
+          }}
+          disabled={pending}
+          className="rounded-lg border border-rose-300 bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-700 disabled:cursor-default disabled:opacity-60 dark:border-rose-900"
+        >
+          {dict.deleteButton}
+        </button>
+        {msg && !msg.ok ? (
+          <span className="text-xs text-rose-600 dark:text-rose-400">
+            {msg.text}
+          </span>
+        ) : null}
+        {modalRoot}
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-rose-200 dark:border-rose-900/60">
       <DangerRow
@@ -117,7 +193,6 @@ export function UserDangerZone({
         }}
         disabled={pending}
       />
-
       {msg ? (
         <p
           className={
@@ -129,42 +204,7 @@ export function UserDangerZone({
           {msg.text}
         </p>
       ) : null}
-
-      {modal ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !pending) setModal(null);
-          }}
-        >
-          <div className="w-full max-w-md rounded-2xl border border-border bg-background p-5 shadow-xl">
-            <h2 className="text-base font-semibold">{modalTitle}</h2>
-            <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
-              {modalBody}
-            </p>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                disabled={pending}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted/60 disabled:opacity-50"
-              >
-                {dict.cancel}
-              </button>
-              <button
-                type="button"
-                onClick={run}
-                disabled={pending}
-                className="rounded-lg border border-rose-300 bg-rose-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-rose-700 disabled:cursor-default disabled:opacity-60 dark:border-rose-900"
-              >
-                {pending ? modalBusyLabel : modalConfirmLabel}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {modalRoot}
     </div>
   );
 }
