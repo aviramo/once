@@ -21,9 +21,10 @@ import {
 } from "../../_components/ui";
 import { RealtimeRefresh } from "../../_components/RealtimeRefresh";
 import { Disclosure } from "../../_components/Disclosure";
-import { UserRolesEditor, type EditorRole } from "./_components/UserGroupsEditor";
+import { PageReleaseBadge } from "../../_components/PageReleaseBadge";
+import { type EditorRole } from "./_components/UserGroupsEditor";
+import { UserGroupsChips } from "./_components/UserGroupsChips";
 import { UserDangerZone } from "./_components/UserDangerZone";
-import { ReleasePageButton } from "./_components/ReleasePageButton";
 import { UserPhotos } from "./_components/UserPhotos";
 import {
   UnifiedActivity,
@@ -169,7 +170,13 @@ export default async function UserDetailPage({
   // user's id appears in the payload — so "X invited you", "X removed you"
   // surface here, not just things this user initiated.
   const rawLog = (logRows ?? []) as LogRow[];
-  const entries = buildEventCards(rawLog, u.user_id, a, a.profileChanges);
+  const entries = buildEventCards(
+    rawLog,
+    u.user_id,
+    a,
+    a.profileChanges,
+    a.accountChanges,
+  );
 
   // All partner IDs referenced anywhere in the feed → fetch profiles + emails
   // in one batch for the affected-users chips and the search filter. Drop any
@@ -244,48 +251,51 @@ export default async function UserDetailPage({
                 compact
               />
             </div>
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               {gate ? (
                 <StatusBadge tone={gate.tone}>{gate.text}</StatusBadge>
               ) : null}
-              {/* Each page tag carries its own release-to-default button right
-                  under it — the operator sees the state and the action together
-                  without scrolling to a separate "current state" block. The
-                  button is suppressed when the tag is already `ok` (green): the
-                  page is already at the discoverable state release would lead
-                  to, so the action is a no-op and showing it just adds noise. */}
-              <div className="flex flex-wrap gap-3">
-                <div className="flex flex-col items-start gap-1.5">
-                  <StatusBadge tone={n1.tone}>{n1.text}</StatusBadge>
-                  {n1.tone !== "ok" ? (
-                    <ReleasePageButton
-                      userId={u.user_id}
-                      page={1}
-                      label={a.actions.releasePage1}
-                      busyLabel={a.actions.busy}
-                      confirmText={a.actions.confirmRelease1.replace(
-                        "{target}",
-                        u.name ?? u.user_id.slice(0, 8),
-                      )}
-                    />
-                  ) : null}
-                </div>
-                <div className="flex flex-col items-start gap-1.5">
-                  <StatusBadge tone={n2.tone}>{n2.text}</StatusBadge>
-                  {n2.tone !== "ok" ? (
-                    <ReleasePageButton
-                      userId={u.user_id}
-                      page={2}
-                      label={a.actions.releasePage2}
-                      busyLabel={a.actions.busy}
-                      confirmText={a.actions.confirmRelease2.replace(
-                        "{target}",
-                        u.name ?? u.user_id.slice(0, 8),
-                      )}
-                    />
-                  ) : null}
-                </div>
-              </div>
+              {/* The page badges double as release triggers — clicking one
+                  reveals a single "שחרור" button next to it (same pattern as
+                  the users-list cards). Green/ok badges stay inert. */}
+              <PageReleaseBadge
+                userId={u.user_id}
+                page={1}
+                tone={n1.tone}
+                text={n1.text}
+                dict={{
+                  release: a.actions.release,
+                  busy: a.actions.busy,
+                  done: a.actions.done,
+                  fail: a.actions.fail,
+                }}
+              />
+              <PageReleaseBadge
+                userId={u.user_id}
+                page={2}
+                tone={n2.tone}
+                text={n2.text}
+                dict={{
+                  release: a.actions.release,
+                  busy: a.actions.busy,
+                  done: a.actions.done,
+                  fail: a.actions.fail,
+                }}
+              />
+              <UserGroupsChips
+                userId={u.user_id}
+                roles={roleCatalog}
+                assigned={assignedRoleIds}
+                emptyLabel={d.groupsEmpty}
+                manageLabel={d.groupsManage}
+                dict={{
+                  roles: d.roles,
+                  rolesHint: d.rolesHint,
+                  noRoles: d.noRoles,
+                  disabledTag: a.roles.statusDisabled,
+                }}
+                action={setUserRoleAssignment}
+              />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               {d.joinedFull}: {relativeTime(u.created_at, locale)}
@@ -357,27 +367,10 @@ export default async function UserDetailPage({
         </Card>
       </Section>
 
-      {/* Roles — multi-select checklist; a disabled role gates the user */}
-      <Section title={d.roles}>
-        <Card>
-          <UserRolesEditor
-            userId={u.user_id}
-            roles={roleCatalog}
-            assigned={assignedRoleIds}
-            dict={{
-              roles: d.roles,
-              rolesHint: d.rolesHint,
-              noRoles: d.noRoles,
-              disabledTag: a.roles.statusDisabled,
-            }}
-            action={setUserRoleAssignment}
-          />
-        </Card>
-      </Section>
-
       {/* Merged event log — one card per server action (including events
           others initiated that affected this user), with a name/email search
-          above. Replaces the old separate "interactions" + "activity" sections. */}
+          above. Group assignment moved into the identity card chips (popover);
+          the standalone Roles section is gone. */}
       <Section title={d.eventsLog.title} hint={d.eventsLog.hint}>
         <UnifiedActivity
           selfId={u.user_id}

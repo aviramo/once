@@ -388,6 +388,27 @@
       "yes": "Yes",
       "no": "No"
     },
+    "accountChanges": {
+      "ageRange": "Age range",
+      "ageFrom": "Min age",
+      "ageTo": "Max age",
+      "distance": "Distance",
+      "distanceUnit": "km",
+      "preferMale": "Includes men",
+      "preferFemale": "Includes women",
+      "preferYes": "Yes",
+      "preferNo": "No",
+      "weekStart": "Week starts on",
+      "lang": "Language",
+      "locationLabel": "Location label",
+      "locationType": "Location type",
+      "locationCustomOn": "Manual location enabled",
+      "locationCustomOff": "Manual location disabled",
+      "notifGranted": "Notifications granted",
+      "notifDenied": "Notifications denied",
+      "notifUndetermined": "Notifications undetermined",
+      "pushTokenChanged": "Push token updated"
+    },
     "areas": {
       "title": "Availability areas",
       "navLink": "Availability areas",
@@ -488,6 +509,8 @@
       "roles": "Groups",
       "rolesHint": "Tick at least one active group so this user can use the app. With no active group they are disabled.",
       "noRoles": "No groups defined in the system.",
+      "groupsEmpty": "No groups",
+      "groupsManage": "Manage groups",
       "joinRequest": "Join request",
       "joinRequestHint": "The user asked to join and is still gated. Approve them by assigning an active group below, or remove the request (they stay gated and revert to the 'request to join' state in the app).",
       "joinRequestPending": "Requested to join",
@@ -523,13 +546,8 @@
           "byActorPrefix": "Initiated by:",
           "page1Tag": "Page 1",
           "page2Tag": "Page 2",
-          "page1StateLabel": "Page 1 state",
-          "page2StateLabel": "Page 2 state",
-          "noStateAvailable": "No state snapshot for this event",
-          "locationUpdated": "Location updated to:",
           "locationCleared": "Location cleared",
-          "openInMaps": "Open in Google Maps",
-          "profileUpdated": "Updated fields:"
+          "openInMaps": "Open in Google Maps"
         }
       },
       "email": "Email",

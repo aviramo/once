@@ -388,6 +388,27 @@
       "yes": "כן",
       "no": "לא"
     },
+    "accountChanges": {
+      "ageRange": "טווח גילאים",
+      "ageFrom": "גיל מינימום",
+      "ageTo": "גיל מקסימום",
+      "distance": "טווח מרחק",
+      "distanceUnit": "ק״מ",
+      "preferMale": "כולל גברים",
+      "preferFemale": "כולל נשים",
+      "preferYes": "כן",
+      "preferNo": "לא",
+      "weekStart": "תחילת שבוע",
+      "lang": "שפה",
+      "locationLabel": "תווית מיקום",
+      "locationType": "סוג מיקום",
+      "locationCustomOn": "מיקום ידני הופעל",
+      "locationCustomOff": "מיקום ידני בוטל",
+      "notifGranted": "התראות מאושרות",
+      "notifDenied": "התראות נדחו",
+      "notifUndetermined": "התראות לא הוגדרו",
+      "pushTokenChanged": "טוקן נוטיפיקציות עודכן"
+    },
     "areas": {
       "title": "אזורי זמינות",
       "navLink": "אזורי זמינות",
@@ -488,6 +509,8 @@
       "roles": "קבוצות",
       "rolesHint": "כדי שהמשתמש יוכל להשתמש באפליקציה סמנו לפחות קבוצה פעילה אחת. בלי אף קבוצה פעילה הוא מושבת.",
       "noRoles": "לא הוגדרו קבוצות במערכת.",
+      "groupsEmpty": "אין קבוצות",
+      "groupsManage": "ניהול קבוצות",
       "joinRequest": "בקשת הצטרפות",
       "joinRequestHint": "המשתמש ביקש להצטרף ועדיין חסום. אשרו אותו על ידי שיוך לקבוצה פעילה למטה, או הסירו את הבקשה (הוא יישאר חסום ויחזור באפליקציה למצב 'בקשו להצטרף').",
       "joinRequestPending": "ביקש/ה להצטרף",
@@ -523,13 +546,8 @@
           "byActorPrefix": "נעשה על ידי:",
           "page1Tag": "דף 1",
           "page2Tag": "דף 2",
-          "page1StateLabel": "מצב עמוד 1",
-          "page2StateLabel": "מצב עמוד 2",
-          "noStateAvailable": "לא נשמר תצלום מצב עבור אירוע זה",
-          "locationUpdated": "מיקום עודכן ל:",
           "locationCleared": "המיקום נמחק",
-          "openInMaps": "פתח במפות גוגל",
-          "profileUpdated": "שדות שעודכנו:"
+          "openInMaps": "פתח במפות גוגל"
         }
       },
       "email": "אימייל",

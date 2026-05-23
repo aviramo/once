@@ -10,55 +10,53 @@ import type { Locale } from "@/i18n/locales";
 import { cn } from "@/lib/utils";
 
 /**
- * Merged server-log + interactions feed for a single user. One chronological
- * list of "event cards" (one per server action) with a name/email search above
- * that filters cards by the partners involved.
+ * Merged events log for a single admin user. One chronological list of focused
+ * "event cards" with a name/email search above that filters by counterpart.
  *
- * Each card shows:
- *   - header: event name, time, an "ended" badge ONLY when the call failed
- *     (success is the common case — silence is louder than a green tag)
- *   - "Initiated by" chip for events SOMEONE ELSE did that affected this user
- *   - affected users: one chip per counterpart with a small page-1/page-2
- *     suffix telling which slot of the actor's relations they sit in after
- *     the event (or no suffix when the action removed them)
- *   - post-event page1 / page2 state badges (only when the actor IS this user,
- *     since the log snapshots the actor's row)
- *   - event-specific detail block: location updates show coords + Google Maps
- *     link; profile updates show a Hebrew breakdown of what changed
+ * Each card carries: the event name, time, a `Maps` link when the row updated
+ * location, a tight Hebrew breakdown of data fields touched in the request
+ * body (profile / account / preferences), and the affected counterparts as
+ * clickable chips. A chip's `page 1 / page 2` suffix marks where that user
+ * sits in the actor's relations right now — null suffix means the event
+ * removed them. Events that don't touch a counterpart (location/profile/
+ * account/...) show no chip; events that don't touch data don't render a
+ * data block — both are silent when there's nothing to say.
  */
 
-export type Narrative = { text: string; tone: Tone };
-
 export type LocationDetail = {
-  cleared: boolean; // true if location was set to null
+  cleared: boolean;
   lat?: number;
   lng?: number;
 };
 
 export type ProfileChange = {
-  label: string; // Hebrew label of the field that changed
-  detail?: string; // optional short preview of the new value
+  label: string;
+  detail?: string;
 };
 
-/** One counterpart involved in an event. `page` is where they currently sit
- * in the actor's relations snapshot — 1 / 2 / null (no longer present, e.g.
- * the target of a `remove` / `decline` / `leave`). */
+/** A generic key / value pair pulled out of an account / preferences body
+ * update — same render shape as profile changes but a separate type so the
+ * server helper can populate the two independently. */
+export type DataChange = {
+  label: string;
+  detail?: string;
+};
+
 export type AffectedUser = { id: string; page: 1 | 2 | null };
 
 export type UnifiedEntry = {
   id: string;
   at: string;
-  action: string; // humanized event key
-  rawKey: string; // raw key (start, find, ...)
+  action: string;
+  rawKey: string;
   ok: boolean;
   statusLabel: string;
-  actorId: string | null; // actor of the row; null on unauthenticated rows
-  byOther: boolean; // true if the actor is NOT the user being viewed
-  affected: AffectedUser[]; // counterparts with their current page placement
-  page1State: Narrative | null;
-  page2State: Narrative | null;
+  actorId: string | null;
+  byOther: boolean;
+  affected: AffectedUser[];
   location?: LocationDetail;
   profileChanges?: ProfileChange[];
+  accountChanges?: DataChange[];
 };
 
 export type UnifiedPartner = {
@@ -76,15 +74,10 @@ export type UnifiedDict = {
   showLess: string;
   unknownPartner: string;
   byActorPrefix: string;
-  page1Tag: string; // "page 1" — small suffix on a chip
-  page2Tag: string; // "page 2"
-  page1StateLabel: string;
-  page2StateLabel: string;
-  noStateAvailable: string;
-  locationUpdated: string;
+  page1Tag: string;
+  page2Tag: string;
   locationCleared: string;
   openInMaps: string;
-  profileUpdated: string;
 };
 
 export function UnifiedActivity({
@@ -130,7 +123,7 @@ export function UnifiedActivity({
   const shown = open ? filtered : filtered.slice(0, initial);
 
   return (
-    <div>
+    <div className="mx-auto max-w-2xl">
       <div className="relative mb-4">
         <Search
           aria-hidden
@@ -219,11 +212,13 @@ function EventCard({
   formatExact: (iso: string) => string;
 }) {
   const actor = entry.byOther && entry.actorId ? partners[entry.actorId] : null;
-  const showStateRow = entry.page1State || entry.page2State;
+  const dataChanges = [
+    ...(entry.profileChanges ?? []),
+    ...(entry.accountChanges ?? []),
+  ];
+  const hasLocation = !!entry.location;
+  const hasData = dataChanges.length > 0;
   const hasParties = !!actor || entry.affected.length > 0;
-  const hasDetail =
-    !!entry.location ||
-    (entry.profileChanges && entry.profileChanges.length > 0);
 
   return (
     <div className="rounded-xl border border-border bg-background shadow-sm">
@@ -233,6 +228,7 @@ function EventCard({
           {!entry.ok ? (
             <StatusBadge tone="ended">{entry.statusLabel}</StatusBadge>
           ) : null}
+          {hasLocation ? <LocationInline detail={entry.location!} dict={dict} /> : null}
         </div>
         <span
           className="shrink-0 text-xs text-muted-foreground"
@@ -241,6 +237,24 @@ function EventCard({
           {formatTime(entry.at)}
         </span>
       </header>
+
+      {hasData ? (
+        <div className="border-t border-border px-4 py-2.5 text-xs">
+          <ul className="space-y-1">
+            {dataChanges.map((c, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground" />
+                <span>
+                  <span className="font-medium">{c.label}</span>
+                  {c.detail ? (
+                    <span className="text-muted-foreground">: {c.detail}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {hasParties ? (
         <div className="space-y-1.5 border-t border-border px-4 py-2.5">
@@ -279,33 +293,37 @@ function EventCard({
           ) : null}
         </div>
       ) : null}
-
-      {hasDetail ? (
-        <div className="border-t border-border">
-          {entry.location ? (
-            <LocationBlock detail={entry.location} dict={dict} />
-          ) : null}
-          {entry.profileChanges && entry.profileChanges.length > 0 ? (
-            <ProfileBlock changes={entry.profileChanges} dict={dict} />
-          ) : null}
-        </div>
-      ) : null}
-
-      {showStateRow ? (
-        <div className="grid gap-3 border-t border-border px-4 py-2.5 sm:grid-cols-2">
-          <StateLine
-            label={dict.page1StateLabel}
-            narrative={entry.page1State}
-            fallback={dict.noStateAvailable}
-          />
-          <StateLine
-            label={dict.page2StateLabel}
-            narrative={entry.page2State}
-            fallback={dict.noStateAvailable}
-          />
-        </div>
-      ) : null}
     </div>
+  );
+}
+
+/** Compact location line in the card header. Coordinates are intentionally
+ * NOT rendered — the user wants the link, not the numbers. A `cleared`
+ * marker is shown as muted text instead of a link. */
+function LocationInline({
+  detail,
+  dict,
+}: {
+  detail: LocationDetail;
+  dict: UnifiedDict;
+}) {
+  if (detail.cleared) {
+    return (
+      <span className="text-xs text-muted-foreground">{dict.locationCleared}</span>
+    );
+  }
+  if (detail.lat == null || detail.lng == null) return null;
+  const url = `https://www.google.com/maps?q=${detail.lat},${detail.lng}`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+    >
+      <MapPin className="size-3.5" aria-hidden />
+      {dict.openInMaps}
+    </a>
   );
 }
 
@@ -341,93 +359,5 @@ function PartnerChip({
         </span>
       ) : null}
     </Link>
-  );
-}
-
-function StateLine({
-  label,
-  narrative,
-  fallback,
-}: {
-  label: string;
-  narrative: Narrative | null;
-  fallback: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-muted-foreground">
-        {label}
-      </span>
-      {narrative ? (
-        <StatusBadge tone={narrative.tone}>{narrative.text}</StatusBadge>
-      ) : (
-        <span className="text-xs text-muted-foreground">{fallback}</span>
-      )}
-    </div>
-  );
-}
-
-function LocationBlock({
-  detail,
-  dict,
-}: {
-  detail: LocationDetail;
-  dict: UnifiedDict;
-}) {
-  if (detail.cleared) {
-    return (
-      <div className="px-4 py-2.5 text-xs text-muted-foreground">
-        {dict.locationCleared}
-      </div>
-    );
-  }
-  if (detail.lat == null || detail.lng == null) return null;
-  const coords = `${detail.lat.toFixed(6)}, ${detail.lng.toFixed(6)}`;
-  const mapsUrl = `https://www.google.com/maps?q=${detail.lat},${detail.lng}`;
-  return (
-    <div className="px-4 py-2.5 text-xs">
-      <span className="font-medium text-muted-foreground">
-        {dict.locationUpdated}
-      </span>{" "}
-      <span className="tabular-nums">{coords}</span>
-      <a
-        href={mapsUrl}
-        target="_blank"
-        rel="noreferrer noopener"
-        className="ms-2 inline-flex items-center gap-1 font-medium text-primary hover:underline"
-      >
-        <MapPin className="size-3.5" aria-hidden />
-        {dict.openInMaps}
-      </a>
-    </div>
-  );
-}
-
-function ProfileBlock({
-  changes,
-  dict,
-}: {
-  changes: ProfileChange[];
-  dict: UnifiedDict;
-}) {
-  return (
-    <div className="px-4 py-2.5 text-xs">
-      <span className="font-medium text-muted-foreground">
-        {dict.profileUpdated}
-      </span>
-      <ul className="mt-1.5 space-y-1">
-        {changes.map((c, i) => (
-          <li key={i} className="flex items-start gap-1.5">
-            <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground" />
-            <span>
-              <span className="font-medium">{c.label}</span>
-              {c.detail ? (
-                <span className="text-muted-foreground">: {c.detail}</span>
-              ) : null}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
