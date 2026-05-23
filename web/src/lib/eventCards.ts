@@ -43,12 +43,28 @@ function isSystemKey(key: string): boolean {
 }
 
 type ProfileEntry = { user_id?: string; name?: string };
+type Page1Snapshot = {
+  state?: string | null;
+  message?: string | null;
+  profile?: ProfileEntry | null;
+} | null;
+type Page2Snapshot = {
+  state?: string | null;
+  message?: string | null;
+  profile?: ProfileEntry | null;
+  profiles?: ProfileEntry[] | null;
+} | null;
 type SnapshotRelations = {
-  page1?: { profile?: ProfileEntry | null } | null;
-  page2?: {
-    profile?: ProfileEntry | null;
-    profiles?: ProfileEntry[] | null;
-  } | null;
+  page1?: Page1Snapshot;
+  page2?: Page2Snapshot;
+};
+
+/** Fingerprint of one counterpart inside the actor's snapshot. Two
+ * fingerprints with the same fields collapse to "no change" between rows. */
+type PartnerSlot = {
+  page: 1 | 2;
+  state: string | null;
+  message: string | null;
 };
 
 export type ProfileChangeDict = {
@@ -246,90 +262,67 @@ function buildAccountChanges(
   return out.length > 0 ? out : undefined;
 }
 
-/**
- * Per-event partner list — only counterparts the action ACTUALLY touched.
- * Snapshot-fishing (the previous "everyone who appears in the post-event
- * relations" model) wrongly attached every viewer to events like `ignore`,
- * which mostly act on the page1 candidate. This switch encodes each event's
- * real surface so a skip / ignore card shows only the new page1 candidate,
- * not the unrelated page2 viewers.
- */
-function buildAffected(
-  rawKey: string,
-  body: AnyRecord | null,
-  user: unknown,
-  byOther: boolean,
-): AffectedUser[] {
-  if (byOther) return [];
-  const rel = (user as { relations?: SnapshotRelations } | null | undefined)
-    ?.relations;
-  const bodyTarget =
-    typeof body?.user_id === "string" ? body.user_id.toLowerCase() : null;
-  const p1 = rel?.page1?.profile?.user_id?.toLowerCase() ?? null;
-
-  switch (rawKey) {
-    case "find":
-    case "ignore":
-    case "extend":
-      // Single new (or current) page1 candidate.
-      return p1 ? [{ id: p1, page: 1 }] : [];
-
-    case "invite":
-    case "approve":
-      // Body target — currently on page1 if the action succeeded.
-      if (bodyTarget) {
-        return [{ id: bodyTarget, page: bodyTarget === p1 ? 1 : null }];
-      }
-      return p1 ? [{ id: p1, page: 1 }] : [];
-
-    case "chat":
-      // Chat message recipient — the active page1 chat partner.
-      if (bodyTarget) {
-        return [{ id: bodyTarget, page: bodyTarget === p1 ? 1 : null }];
-      }
-      return p1 ? [{ id: p1, page: 1 }] : [];
-
-    case "decline":
-    case "cancel":
-    case "remove":
-    case "leave":
-    case "block":
-      // Body target — the action removed them from this user's relations.
-      return bodyTarget ? [{ id: bodyTarget, page: null }] : [];
-
-    case "add": {
-      // The viewers seeded onto page2.profiles by the broadcast.
-      const viewers = rel?.page2?.profiles ?? [];
-      return viewers
-        .map((v) => v.user_id?.toLowerCase())
-        .filter((id): id is string => !!id)
-        .map((id) => ({ id, page: 2 as const }));
-    }
-
-    case "start":
-    case "focus":
-    case "location": {
-      // These heartbeats trigger side-effects (auto-find on the server when
-      // page1 is free, app_seed_viewer adding to page2 when visible with no
-      // viewers). The action didn't *target* a counterpart, but it CAN
-      // produce one — so show the current snapshot's page1.profile + every
-      // page2 viewer, each tagged with its page. If neither was added the
-      // arrays are empty and no chip renders.
-      const out: AffectedUser[] = [];
-      if (p1) out.push({ id: p1, page: 1 });
-      for (const v of rel?.page2?.profiles ?? []) {
-        const id = v.user_id?.toLowerCase();
-        if (id && id !== p1) out.push({ id, page: 2 });
-      }
-      return out;
-    }
-
-    default:
-      // pause / resume / free2 / lock2 / clear1 / clear2 / cancel_add /
-      // profile / account / etc. — no partner is semantically tied to the
-      // action.
-      return [];
+/** Take a snapshot of every counterpart in the actor's relations. The
+ * fingerprint per id captures the page placement plus the state/message of
+ * that page — the three signals the user explicitly wants treated as
+ * "change worth showing". `page2.profiles[]` viewers carry no state/message
+ * of their own, so they fingerprint as bare-page entries (presence/absence
+ * is the change there). */
+function snapshotPartners(
+  rel: SnapshotRelations | undefined,
+): Map<string, PartnerSlot> {
+  const m = new Map<string, PartnerSlot>();
+  const p1 = rel?.page1;
+  const p1Id = p1?.profile?.user_id?.toLowerCase();
+  if (p1Id) {
+    m.set(p1Id, {
+      page: 1,
+      state: p1?.state ?? null,
+      message: p1?.message ?? null,
+    });
   }
+  const p2 = rel?.page2;
+  const p2Id = p2?.profile?.user_id?.toLowerCase();
+  if (p2Id && !m.has(p2Id)) {
+    m.set(p2Id, {
+      page: 2,
+      state: p2?.state ?? null,
+      message: p2?.message ?? null,
+    });
+  }
+  for (const v of p2?.profiles ?? []) {
+    const id = v.user_id?.toLowerCase();
+    if (id && !m.has(id)) {
+      m.set(id, { page: 2, state: null, message: null });
+    }
+  }
+  return m;
+}
+
+/** Diff two consecutive snapshots: a partner is "affected" by this row only
+ * if they joined, left, switched page, changed state, or changed message
+ * since the previous by-self row. Steady-state heartbeats (location/focus
+ * with no side-effect) produce an empty diff and no chips. */
+function diffPartners(
+  prev: Map<string, PartnerSlot>,
+  curr: Map<string, PartnerSlot>,
+): AffectedUser[] {
+  const out: AffectedUser[] = [];
+  for (const [id, slot] of curr) {
+    const before = prev.get(id);
+    if (
+      !before ||
+      before.page !== slot.page ||
+      before.state !== slot.state ||
+      before.message !== slot.message
+    ) {
+      out.push({ id, page: slot.page });
+    }
+  }
+  for (const [id] of prev) {
+    if (!curr.has(id)) out.push({ id, page: null });
+  }
+  return out;
 }
 
 /**
@@ -347,13 +340,45 @@ export function buildEventCards(
   accountDict: AccountChangeDict,
 ): UnifiedEntry[] {
   const selfLower = selfId.toLowerCase();
-  const built = rows
+  // Walk chronologically (oldest first) so each row can diff against the
+  // previous by-self snapshot. We reverse back to DESC at the end for
+  // display.
+  const chronological = rows
     .filter((row) => !isSystemKey(row.key))
-    .map((row) => {
+    .slice()
+    .reverse();
+
+  let prevPartners = new Map<string, PartnerSlot>();
+  let haveBaseline = false;
+  const built: UnifiedEntry[] = chronological.map((row) => {
     const actorId = row.user_id ? row.user_id.toLowerCase() : null;
     const byOther = !!actorId && actorId !== selfLower;
     const body = readBody(row.log);
-    const affected = buildAffected(row.key, body, row.user, byOther);
+
+    let affected: AffectedUser[] = [];
+    if (!byOther) {
+      const rel = (row.user as { relations?: SnapshotRelations } | null | undefined)
+        ?.relations;
+      const curr = snapshotPartners(rel);
+      // Skip the diff for the very first by-self row in the window — without
+      // a "before" snapshot every existing counterpart would falsely read as
+      // "newly added". The first row sets the baseline only.
+      if (haveBaseline) affected = diffPartners(prevPartners, curr);
+      prevPartners = curr;
+      haveBaseline = true;
+
+      // Explicit body target still surfaces even when the relations diff is
+      // empty (e.g. `chat` to the active partner, `extend` re-arming the
+      // timer with same state/message). Look up the target's current page
+      // from the post-event snapshot — falls to `null` if the action also
+      // removed them.
+      const bodyTarget =
+        typeof body?.user_id === "string" ? body.user_id.toLowerCase() : null;
+      if (bodyTarget && !affected.some((a) => a.id === bodyTarget)) {
+        const slot = curr.get(bodyTarget);
+        affected.push({ id: bodyTarget, page: slot?.page ?? null });
+      }
+    }
 
     const ok = row.status < 400;
     const res = statusResult(dict, row.status);
@@ -393,13 +418,17 @@ export function buildEventCards(
   // no location update, no profile/account changes, no actor-other note.
   // These are start/focus heartbeats that arrived from the mobile client and
   // are pure no-ops as far as the admin is concerned (the user "did nothing").
-  return built.filter((e) => {
-    if (!e.ok) return true; // failures are always interesting
-    if (e.byOther) return true; // by-other rows are inherently "something happened to you"
-    if (e.affected.length > 0) return true;
-    if (e.location) return true;
-    if (e.profileChanges && e.profileChanges.length > 0) return true;
-    if (e.accountChanges && e.accountChanges.length > 0) return true;
-    return false;
-  });
+  // Reverse back to DESC (newest first) for display — the diff above needed
+  // chronological order.
+  return built
+    .filter((e) => {
+      if (!e.ok) return true; // failures are always interesting
+      if (e.byOther) return true; // by-other rows are inherently "something happened to you"
+      if (e.affected.length > 0) return true;
+      if (e.location) return true;
+      if (e.profileChanges && e.profileChanges.length > 0) return true;
+      if (e.accountChanges && e.accountChanges.length > 0) return true;
+      return false;
+    })
+    .reverse();
 }
