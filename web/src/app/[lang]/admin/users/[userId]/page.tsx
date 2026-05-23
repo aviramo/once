@@ -229,11 +229,15 @@ export default async function UserDetailPage({
           actor. The substring-search side ("things others did to me") still
           surfaces via the users-table subscription above — those rows mutate
           relations through the same RPC transaction, which fires a users
-          UPDATE that this page already refreshes on. */}
+          UPDATE that this page already refreshes on.
+          A 10s polling fallback catches any Realtime delivery hiccup
+          (publication just added, WebSocket dropped, etc.) so the events
+          log stays fresh end-to-end. */}
       <RealtimeRefresh
         tables="log"
         channel="admin-user-detail-log"
         filter={`user_id=eq.${u.user_id}`}
+        pollMs={10000}
       />
       {/* Identity card — photo + name/email + state badges + (compact)
           danger zone. The irreversible per-user controls are two small buttons

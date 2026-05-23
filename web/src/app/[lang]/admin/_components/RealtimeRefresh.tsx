@@ -18,6 +18,12 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
  * single row — the user-detail screen uses it so it only refreshes for its own
  * user, not every users-table change.
  *
+ * `pollMs` (optional) adds an interval-based fallback refresh. Some Realtime
+ * deployments take a while to pick up a freshly-added publication / RLS
+ * change, and some networks drop the WebSocket. Polling guarantees the page
+ * still catches new rows on a bounded delay even if the live channel never
+ * fires. Use sparingly — only on screens where missing an update is bad.
+ *
  * Realtime only delivers rows the browser may SELECT under RLS; the admin-read
  * policies (migration admin_realtime_read_policies) are what make this work.
  */
@@ -25,10 +31,12 @@ export function RealtimeRefresh({
   tables,
   channel,
   filter,
+  pollMs,
 }: {
   tables: string;
   channel: string;
   filter?: string;
+  pollMs?: number;
 }) {
   const router = useRouter();
   useEffect(() => {
@@ -60,11 +68,21 @@ export function RealtimeRefresh({
     }
     ch.subscribe();
 
+    // Belt-and-suspenders polling fallback. Only enabled when caller opts in
+    // — most admin screens are fine with pure realtime. setInterval timer
+    // runs independently of the channel; even if the channel never connects,
+    // the page refetches on schedule.
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    if (pollMs && pollMs > 0) {
+      pollTimer = setInterval(() => router.refresh(), pollMs);
+    }
+
     return () => {
       if (timer) clearTimeout(timer);
+      if (pollTimer) clearInterval(pollTimer);
       void supabase.removeChannel(ch);
     };
-  }, [tables, channel, filter, router]);
+  }, [tables, channel, filter, pollMs, router]);
 
   return null;
 }
