@@ -160,18 +160,15 @@ export function UnifiedActivity({
         <EmptyState>{dict.noMatches}</EmptyState>
       ) : (
         <>
-          <ol
-            className="grid gap-2.5"
-            style={{
-              // Responsive auto-fill grid: cards stay readable at ~22rem and
-              // multiple fit per row as the viewport grows. Mirrors the
-              // CardGrid pattern used by the rest of the admin dashboards.
-              gridTemplateColumns:
-                "repeat(auto-fill, minmax(min(22rem, 100%), 1fr))",
-            }}
-          >
+          {/* Masonry-style layout: cards flow top-to-bottom in each column,
+              then column-to-column. Variable card heights pack together with
+              no gaps (a CSS-grid + auto-fill would leave holes under short
+              cards next to tall ones — exactly the bug the user flagged).
+              In RTL the first column is the rightmost, so the newest card
+              sits top-right and you read down each column. */}
+          <ol className="columns-1 gap-2.5 [column-fill:_balance] sm:columns-2 lg:columns-3">
             {shown.map((e) => (
-              <li key={e.id}>
+              <li key={e.id} className="mb-2.5 break-inside-avoid">
                 <EventCard
                   entry={e}
                   selfId={selfId}
