@@ -46,10 +46,13 @@ function fill(template: string, vars: Record<string, string | number>): string {
   );
 }
 
-/** Server action key (`find`, `invite`, `approve`, …) → business phrase. */
+/** Server action key (`find`, `invite`, `approve`, …) → business phrase.
+ * If the key isn't mapped, return the raw key so an admin sees `report` /
+ * `join_request` etc. instead of an opaque generic "פעולה" — that hid the
+ * actual event identity and made unmapped rows indistinguishable. */
 export function eventLabel(d: AdminDict, key: string): string {
   const map = d.events as Record<string, string>;
-  return map[key] ?? map.unknown ?? key;
+  return map[key] ?? key;
 }
 
 /** Restriction key (`ignore`, `block`, …) → business phrase. */

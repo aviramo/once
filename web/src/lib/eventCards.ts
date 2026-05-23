@@ -30,6 +30,18 @@ type LogRow = {
 
 type AnyRecord = Record<string, unknown>;
 
+/** System / maintenance keys that surface in `admin_log_for_user` because the
+ * cron run touched (or just snapshotted) this user — `ext/cron`, `ext/resync`,
+ * the bare `options` / `api` rejection paths, etc. They aren't user actions
+ * and surfacing them as generic "פעולה" rows clutters the log. Drop them at
+ * the build step so they never reach the UI. */
+const SYSTEM_KEYS = new Set<string>(["options", "api", "ok"]);
+function isSystemKey(key: string): boolean {
+  if (SYSTEM_KEYS.has(key)) return true;
+  if (key.startsWith("ext/")) return true;
+  return false;
+}
+
 type ProfileEntry = { user_id?: string; name?: string };
 type SnapshotRelations = {
   page1?: { profile?: ProfileEntry | null } | null;
@@ -319,7 +331,9 @@ export function buildEventCards(
   accountDict: AccountChangeDict,
 ): UnifiedEntry[] {
   const selfLower = selfId.toLowerCase();
-  return rows.map((row) => {
+  return rows
+    .filter((row) => !isSystemKey(row.key))
+    .map((row) => {
     const actorId = row.user_id ? row.user_id.toLowerCase() : null;
     const byOther = !!actorId && actorId !== selfLower;
     const body = readBody(row.log);

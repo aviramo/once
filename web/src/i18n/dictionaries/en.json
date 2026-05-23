@@ -361,6 +361,10 @@
       "ok": "Confirmed an action",
       "options": "Connectivity check",
       "api": "System call",
+      "report": "Reported a user",
+      "join_request": "Requested to join a group",
+      "notif": "Updated notification permission",
+      "set_tier": "Switched plan",
       "unknown": "Action"
     },
     "restrictionsMap": {
