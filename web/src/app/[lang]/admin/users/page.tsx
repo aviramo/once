@@ -20,9 +20,12 @@ const AVAIL_VALUES = [
   "unknown",
 ] as const;
 const TIER_VALUES = ["free", "pro"] as const;
+const GENDER_VALUES = ["male", "female"] as const;
+const OS_VALUES = ["ios", "android"] as const;
 // Single multi-purpose "segment" param: recency windows + boolean-ish
 // subsets that don't fit a simple state enum. Every dashboard tile that
-// isn't a page1/page2/role/availability/tier subset deep-links via ?seg=.
+// isn't a page1/page2/role/availability/tier/gender/os subset deep-links
+// via ?seg=.
 const SEG_VALUES = [
   "online",
   "active_today",
@@ -35,6 +38,7 @@ const SEG_VALUES = [
   "broadcasting",
   "held",
   "role_gated",
+  "no_notif",
 ] as const;
 // Sort modes for the users list. `recent` = the server's last_seen order;
 // `distance` / `relevance` re-sort in JS relative to the admin's own location.
@@ -174,6 +178,8 @@ type Secondary = {
   roleNotInIds: string[] | null;
   avail: string;
   tier: string;
+  gender: string;
+  os: string;
   seg: string;
   segIds: string[] | null;
 };
@@ -195,6 +201,11 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
     q = q.or(
       "relations->credits->>tier.is.null,relations->credits->>tier.eq.free",
     );
+
+  if (f.gender === "male") q = q.eq("is_male", "true");
+  else if (f.gender === "female") q = q.eq("is_male", "false");
+
+  if (f.os) q = q.eq("data->>os", f.os);
 
   switch (f.seg) {
     case "online":
@@ -237,6 +248,15 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
         f.segIds && f.segIds.length ? f.segIds : [NO_MATCH_ID],
       );
       break;
+    case "no_notif":
+      // Mirror of public.push_blocked(uid): a located user with the
+      // notification gate signalling positively-known non-delivery.
+      q = q
+        .not("location", "is", null)
+        .or(
+          "relations->push->>perm.eq.denied,relations->push->>dead.eq.true",
+        );
+      break;
   }
   return q;
 }
@@ -257,6 +277,8 @@ export default async function AdminUsers({
   const p2 = pick(sp.p2, P2_VALUES);
   const avail = pick(sp.avail, AVAIL_VALUES);
   const tier = pick(sp.tier, TIER_VALUES);
+  const gender = pick(sp.gender, GENDER_VALUES);
+  const os = pick(sp.os, OS_VALUES);
   const seg = pick(sp.seg, SEG_VALUES);
   const sort = pick(sp.sort, SORT_VALUES) || "recent";
   const roleRaw = typeof sp.role === "string" ? sp.role : "";
@@ -302,6 +324,8 @@ export default async function AdminUsers({
     groups?: Record<string, number>;
     avail?: Record<string, number>;
     tier?: Record<string, number>;
+    gender?: Record<string, number>;
+    os?: Record<string, number>;
     seg?: Record<string, number>;
   };
   const facets = (facetsData ?? {}) as Facets;
@@ -351,6 +375,8 @@ export default async function AdminUsers({
     roleNotInIds,
     avail,
     tier,
+    gender,
+    os,
     seg,
     segIds,
   };
@@ -458,6 +484,16 @@ export default async function AdminUsers({
     label: (d.tierStates as Record<string, string>)[v],
     count: facets.tier?.[v] ?? 0,
   }));
+  const genderOptions = GENDER_VALUES.map((v) => ({
+    value: v,
+    label: (d.genderStates as Record<string, string>)[v],
+    count: facets.gender?.[v] ?? 0,
+  }));
+  const osOptions = OS_VALUES.map((v) => ({
+    value: v,
+    label: (d.osStates as Record<string, string>)[v],
+    count: facets.os?.[v] ?? 0,
+  }));
   const segOptions = SEG_VALUES.map((v) => ({
     value: v,
     label: (d.segStates as Record<string, string>)[v],
@@ -488,6 +524,8 @@ export default async function AdminUsers({
             roleLabel={d.filterRole}
             availLabel={d.filterAvail}
             tierLabel={d.filterTier}
+            genderLabel={d.filterGender}
+            osLabel={d.filterOs}
             segLabel={d.filterSeg}
             anyLabel={d.filterAny}
             anyCount={facets.total ?? 0}
@@ -498,6 +536,8 @@ export default async function AdminUsers({
             roleOptions={roleOptions}
             availOptions={availOptions}
             tierOptions={tierOptions}
+            genderOptions={genderOptions}
+            osOptions={osOptions}
             segOptions={segOptions}
           />
           {rows.length === 0 ? (

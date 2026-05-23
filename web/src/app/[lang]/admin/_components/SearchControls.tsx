@@ -21,6 +21,8 @@ type Props = {
   roleLabel: string;
   availLabel: string;
   tierLabel: string;
+  genderLabel: string;
+  osLabel: string;
   segLabel: string;
   anyLabel: string;
   /** Total user count shown next to the "any" (no-filter) option. */
@@ -32,6 +34,8 @@ type Props = {
   roleOptions: StateOption[];
   availOptions: StateOption[];
   tierOptions: StateOption[];
+  genderOptions: StateOption[];
+  osOptions: StateOption[];
   segOptions: StateOption[];
 };
 
@@ -84,6 +88,8 @@ export function SearchControls({
   roleLabel,
   availLabel,
   tierLabel,
+  genderLabel,
+  osLabel,
   segLabel,
   anyLabel,
   anyCount,
@@ -94,6 +100,8 @@ export function SearchControls({
   roleOptions,
   availOptions,
   tierOptions,
+  genderOptions,
+  osOptions,
   segOptions,
 }: Props) {
   const router = useRouter();
@@ -105,6 +113,8 @@ export function SearchControls({
   const [role, setRole] = useState(sp.get("role") ?? "");
   const [avail, setAvail] = useState(sp.get("avail") ?? "");
   const [tier, setTier] = useState(sp.get("tier") ?? "");
+  const [gender, setGender] = useState(sp.get("gender") ?? "");
+  const [os, setOs] = useState(sp.get("os") ?? "");
   const [seg, setSeg] = useState(sp.get("seg") ?? "");
   const [sort, setSort] = useState(sp.get("sort") ?? "recent");
   const [, startTransition] = useTransition();
@@ -135,6 +145,20 @@ export function SearchControls({
       options: tierOptions,
     },
     {
+      key: "gender",
+      label: genderLabel,
+      value: gender,
+      set: setGender,
+      options: genderOptions,
+    },
+    {
+      key: "os",
+      label: osLabel,
+      value: os,
+      set: setOs,
+      options: osOptions,
+    },
+    {
       key: "seg",
       label: segLabel,
       value: seg,
@@ -146,7 +170,7 @@ export function SearchControls({
   const activeFilters = filters.reduce((n, f) => n + (f.value ? 1 : 0), 0);
   const [open, setOpen] = useState(activeFilters > 0);
 
-  // One URL owner for q + the six filters + sort, so no control clobbers
+  // One URL owner for q + the eight filters + sort, so no control clobbers
   // another's param.
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -157,6 +181,8 @@ export function SearchControls({
       if (role) params.set("role", role);
       if (avail) params.set("avail", avail);
       if (tier) params.set("tier", tier);
+      if (gender) params.set("gender", gender);
+      if (os) params.set("os", os);
       if (seg) params.set("seg", seg);
       if (sort && sort !== "recent") params.set("sort", sort);
       const qs = params.toString();
@@ -165,7 +191,7 @@ export function SearchControls({
       });
     }, 200);
     return () => clearTimeout(handle);
-  }, [q, p1, p2, role, avail, tier, seg, sort, pathname, router]);
+  }, [q, p1, p2, role, avail, tier, gender, os, seg, sort, pathname, router]);
 
   return (
     <div className="space-y-2.5">

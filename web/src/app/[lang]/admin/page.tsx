@@ -19,6 +19,13 @@ import { RealtimeRefresh } from "./_components/RealtimeRefresh";
  */
 
 type Metrics = {
+  demographics: {
+    men: number;
+    women: number;
+    avg_age: number;
+    os_ios: number;
+    os_android: number;
+  };
   users: {
     total: number;
     new_today: number;
@@ -42,6 +49,7 @@ type Metrics = {
     unavailable: number;
     not_yet: number;
     unknown: number;
+    no_notif: number;
   };
   credits: {
     balance_total: number;
@@ -61,10 +69,13 @@ type Metrics = {
     invites: number;
     approves: number;
     messages: number;
+    logouts: number;
+    deletes: number;
   };
 };
 
 const EMPTY: Metrics = {
+  demographics: { men: 0, women: 0, avg_age: 0, os_ios: 0, os_android: 0 },
   users: {
     total: 0,
     new_today: 0,
@@ -77,11 +88,24 @@ const EMPTY: Metrics = {
     with_location: 0,
   },
   engagement: { chat: 0, waiting: 0, watching: 0, pending: 0, broadcasting: 0 },
-  availability: { available: 0, unavailable: 0, not_yet: 0, unknown: 0 },
+  availability: {
+    available: 0,
+    unavailable: 0,
+    not_yet: 0,
+    unknown: 0,
+    no_notif: 0,
+  },
   credits: { balance_total: 0, held_total: 0, tier_free: 0, tier_pro: 0 },
   areas: { total: 0, active: 0, scheduled: 0, disabled: 0 },
   groups: { total: 0, disabled: 0, gated_users: 0 },
-  funnel_7d: { signups: 0, invites: 0, approves: 0, messages: 0 },
+  funnel_7d: {
+    signups: 0,
+    invites: 0,
+    approves: 0,
+    messages: 0,
+    logouts: 0,
+    deletes: 0,
+  },
 };
 
 /**
@@ -160,6 +184,35 @@ export default async function AdminDashboard({
         </p>
       </div>
 
+      <Section title={t.sections.demographics}>
+        <CardGrid min="8.5rem">
+          <Stat
+            label={t.metrics.men}
+            value={fmt(m.demographics.men)}
+            href={u("gender=male")}
+          />
+          <Stat
+            label={t.metrics.women}
+            value={fmt(m.demographics.women)}
+            href={u("gender=female")}
+          />
+          <Stat
+            label={t.metrics.avgAge}
+            value={fmt(m.demographics.avg_age)}
+          />
+          <Stat
+            label={t.metrics.osIos}
+            value={fmt(m.demographics.os_ios)}
+            href={u("os=ios")}
+          />
+          <Stat
+            label={t.metrics.osAndroid}
+            value={fmt(m.demographics.os_android)}
+            href={u("os=android")}
+          />
+        </CardGrid>
+      </Section>
+
       <Section title={t.sections.funnel} hint={t.hints.funnel}>
         <CardGrid min="8.5rem">
           <Stat
@@ -184,6 +237,15 @@ export default async function AdminDashboard({
             value={fmt(m.funnel_7d.messages)}
             accent="chat"
             href={u("p1=chat")}
+          />
+          <Stat
+            label={t.metrics.fLogouts}
+            value={fmt(m.funnel_7d.logouts)}
+          />
+          <Stat
+            label={t.metrics.fDeletes}
+            value={fmt(m.funnel_7d.deletes)}
+            accent="ended"
           />
         </CardGrid>
       </Section>
@@ -253,6 +315,12 @@ export default async function AdminDashboard({
             value={fmt(m.availability.unknown)}
             href={u("avail=unknown")}
           />
+          <Stat
+            label={t.metrics.noNotif}
+            value={fmt(m.availability.no_notif)}
+            accent="ended"
+            href={u("seg=no_notif")}
+          />
         </CardGrid>
       </Section>
 
@@ -262,27 +330,9 @@ export default async function AdminDashboard({
           drill-downs (`seg=new_today|new_7d|new_30d`) are still reachable
           from the users-list filter dropdown. */}
 
-      <Section title={t.sections.actives}>
-        <CardGrid min="8.5rem">
-          <Stat
-            label={t.metrics.online}
-            value={fmt(m.users.online_5m)}
-            hint={t.hints.online}
-            accent="ok"
-            href={u("seg=online")}
-          />
-          <Stat
-            label={t.metrics.activeToday}
-            value={fmt(m.users.active_today)}
-            href={u("seg=active_today")}
-          />
-          <Stat
-            label={t.metrics.active7d}
-            value={fmt(m.users.active_7d)}
-            href={u("seg=active_7d")}
-          />
-        </CardGrid>
-      </Section>
+      {/* "Active users" (online_5m / active_today / active_7d) was removed at
+          the user's request — the recency segs are still reachable from the
+          users-list filter dropdown (?seg=online|active_today|active_7d). */}
 
       <Section title={t.sections.areas}>
         <CardGrid min="8.5rem">

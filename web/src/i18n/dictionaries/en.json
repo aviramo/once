@@ -104,8 +104,8 @@
         "mapDesc": "Active users on the map, in real time"
       },
       "sections": {
+        "demographics": "Demographics",
         "signups": "Signups",
-        "actives": "Active users",
         "engagement": "Live engagement",
         "availability": "Availability",
         "credits": "Credits economy",
@@ -118,11 +118,12 @@
         "newToday": "Signed up today",
         "new7d": "Signed up in 7 days",
         "new30d": "Signed up in 30 days",
-        "online": "Online now",
-        "activeToday": "Active today",
-        "active7d": "Active in 7 days",
-        "active30d": "Active in 30 days",
         "withLocation": "With location",
+        "men": "Men",
+        "women": "Women",
+        "avgAge": "Average age",
+        "osIos": "iPhone",
+        "osAndroid": "Android",
         "chat": "In active chat",
         "waiting": "Waiting for reply",
         "watching": "Viewing a profile",
@@ -132,6 +133,7 @@
         "unavailable": "Gated (area/group)",
         "notYet": "Awaiting area launch",
         "unknownAvail": "No location yet",
+        "noNotif": "Without notifications",
         "balanceTotal": "Total credit balance",
         "heldTotal": "Held credits",
         "tierFree": "Free tier",
@@ -145,10 +147,11 @@
         "fSignups": "Signups",
         "fInvites": "Invites sent",
         "fApproves": "Invites approved",
-        "fMessages": "Chat messages"
+        "fMessages": "Chat messages",
+        "fLogouts": "Logged out",
+        "fDeletes": "Deleted account"
       },
       "hints": {
-        "online": "Activity in the last 5 minutes",
         "funnel": "Total over the last 7 days",
         "proShare": "{pct}% of users on the Pro tier"
       },
@@ -194,6 +197,8 @@
     "filterRoleNone": "No group",
     "filterAvail": "Availability",
     "filterTier": "Tier",
+    "filterGender": "Gender",
+    "filterOs": "OS",
     "filterSeg": "Segment",
     "filterAny": "All",
     "sortLabel": "Sort",
@@ -272,6 +277,14 @@
       "free": "Free",
       "pro": "Pro"
     },
+    "genderStates": {
+      "male": "Men",
+      "female": "Women"
+    },
+    "osStates": {
+      "ios": "iPhone",
+      "android": "Android"
+    },
     "segStates": {
       "online": "Online now",
       "active_today": "Active today",
@@ -284,7 +297,8 @@
       "broadcasting": "Broadcasting",
       "held": "Held credits",
       "role_gated": "Gated via group",
-      "join_requested": "Requested to join"
+      "join_requested": "Requested to join",
+      "no_notif": "Without notifications"
     },
     "narrative": {
       "page1": {
@@ -494,6 +508,16 @@
         "deleteConfirmBody": "The group \"{name}\" will be permanently deleted. This cannot be undone.",
         "deleteBusy": "Deleting…",
         "fail": "Action failed"
+      }
+    },
+    "permissions": {
+      "title": "Permissions",
+      "hint": "A group's permissions grant capabilities to its members. Tick the permissions that everyone in this group should receive.",
+      "ownerOnlyHint": "Only members of a group with the 'owner' permission can grant or revoke permissions. You are viewing the current state in read-only mode.",
+      "noPermissions": "No permissions defined in the system.",
+      "labels": {
+        "admin": "Admin",
+        "owner": "Owner"
       }
     },
     "userDetail": {

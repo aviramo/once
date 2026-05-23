@@ -104,8 +104,8 @@
         "mapDesc": "משתמשים פעילים על המפה בזמן אמת"
       },
       "sections": {
+        "demographics": "פילוח משתמשים",
         "signups": "נרשמים",
-        "actives": "פעילים",
         "engagement": "מעורבות פעילה",
         "availability": "זמינות",
         "credits": "כלכלת קרדיטים",
@@ -118,11 +118,12 @@
         "newToday": "נרשמו היום",
         "new7d": "נרשמו ב-7 ימים",
         "new30d": "נרשמו ב-30 יום",
-        "online": "מחוברים עכשיו",
-        "activeToday": "פעילים היום",
-        "active7d": "פעילים ב-7 ימים",
-        "active30d": "פעילים ב-30 יום",
         "withLocation": "עם מיקום",
+        "men": "גברים",
+        "women": "נשים",
+        "avgAge": "ממוצע גילאים",
+        "osIos": "iPhone",
+        "osAndroid": "Android",
         "chat": "בצ׳אט פעיל",
         "waiting": "ממתינים לתשובה",
         "watching": "צופים בפרופיל",
@@ -132,6 +133,7 @@
         "unavailable": "חסומים מחוץ לאזור/קבוצה",
         "notYet": "ממתינים לפתיחת אזור",
         "unknownAvail": "ללא מיקום עדיין",
+        "noNotif": "ללא התראות",
         "balanceTotal": "סך יתרת קרדיטים",
         "heldTotal": "קרדיטים בהקפאה",
         "tierFree": "מסלול חינמי",
@@ -145,10 +147,11 @@
         "fSignups": "הרשמות",
         "fInvites": "הזמנות שנשלחו",
         "fApproves": "הזמנות שאושרו",
-        "fMessages": "הודעות צ׳אט"
+        "fMessages": "הודעות צ׳אט",
+        "fLogouts": "התנתקויות",
+        "fDeletes": "מחקו חשבון"
       },
       "hints": {
-        "online": "פעילות ב-5 הדקות האחרונות",
         "funnel": "סך הכל ב-7 הימים האחרונים",
         "proShare": "{pct}% מהמשתמשים במסלול פרו"
       },
@@ -194,6 +197,8 @@
     "filterRoleNone": "ללא קבוצה",
     "filterAvail": "זמינות",
     "filterTier": "מסלול",
+    "filterGender": "מין",
+    "filterOs": "מערכת הפעלה",
     "filterSeg": "פלח",
     "filterAny": "הכל",
     "sortLabel": "מיון",
@@ -272,6 +277,14 @@
       "free": "חינמי",
       "pro": "פרו"
     },
+    "genderStates": {
+      "male": "גברים",
+      "female": "נשים"
+    },
+    "osStates": {
+      "ios": "iPhone",
+      "android": "Android"
+    },
     "segStates": {
       "online": "מחוברים עכשיו",
       "active_today": "פעילים היום",
@@ -284,7 +297,8 @@
       "broadcasting": "משדרים את עצמם",
       "held": "קרדיטים בהקפאה",
       "role_gated": "חסומים דרך קבוצה",
-      "join_requested": "ביקשו להצטרף"
+      "join_requested": "ביקשו להצטרף",
+      "no_notif": "ללא התראות"
     },
     "narrative": {
       "page1": {
@@ -494,6 +508,16 @@
         "deleteConfirmBody": "הקבוצה \"{name}\" תימחק לצמיתות. בלתי הפיך.",
         "deleteBusy": "מוחק…",
         "fail": "הפעולה נכשלה"
+      }
+    },
+    "permissions": {
+      "title": "הרשאות",
+      "hint": "הרשאות הקבוצה מקנות יכולות לחבריה. סמנו את ההרשאות שיינתנו לכל מי שמשויך לקבוצה הזו.",
+      "ownerOnlyHint": "רק חברים בקבוצה עם הרשאת 'בעלים' יכולים להעניק או להסיר הרשאות. אתם רואים את המצב הנוכחי בלבד.",
+      "noPermissions": "לא הוגדרו הרשאות במערכת.",
+      "labels": {
+        "admin": "אדמין",
+        "owner": "בעלים"
       }
     },
     "userDetail": {
