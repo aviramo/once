@@ -124,7 +124,7 @@ export function UnifiedActivity({
 
   return (
     <div>
-      <div className="relative mb-4 mx-auto max-w-2xl">
+      <div className="relative mb-4">
         <Search
           aria-hidden
           className="pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground ltr:left-3 rtl:right-3"
@@ -160,16 +160,16 @@ export function UnifiedActivity({
         <EmptyState>{dict.noMatches}</EmptyState>
       ) : (
         <>
-          {/* Masonry-style layout: cards flow top-to-bottom in each column,
-              then column-to-column. Variable card heights pack together with
-              no gaps (a CSS-grid + auto-fill would leave holes under short
-              cards next to tall ones — exactly the bug the user flagged).
-              In RTL the first column is the rightmost, so the newest card
-              sits top-right and you read down each column. */}
-          <ol className="columns-1 gap-2.5 [column-fill:_balance] sm:columns-2 lg:columns-3">
+          {/* One row per event — full width, vertically stacked, with a
+              dividing border between rows. Reads like a real log: time on the
+              leading edge, event name next, then any inline chips
+              (location / partner / data fields). Replaces the earlier
+              card-grid / masonry layouts (both produced visual gaps with
+              variable-height content). */}
+          <ol className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {shown.map((e) => (
-              <li key={e.id} className="mb-2.5 break-inside-avoid">
-                <EventCard
+              <li key={e.id} className="bg-background">
+                <EventRow
                   entry={e}
                   selfId={selfId}
                   partners={partners}
@@ -202,7 +202,14 @@ export function UnifiedActivity({
   );
 }
 
-function EventCard({
+/**
+ * One log row. Single horizontal flex line: event name (lead), inline chips
+ * for status / location / partners / data changes (truncated where they'd
+ * push the time off), and the relative time on the trailing edge. Long data
+ * blocks are joined to a single short text — if an operator needs the full
+ * breakdown they hover for the `title`.
+ */
+function EventRow({
   entry,
   selfId,
   partners,
@@ -222,83 +229,60 @@ function EventCard({
     ...(entry.profileChanges ?? []),
     ...(entry.accountChanges ?? []),
   ];
-  const hasLocation = !!entry.location;
-  const hasData = dataChanges.length > 0;
-  const hasParties = !!actor || entry.affected.length > 0;
+  const dataSummary = dataChanges
+    .map((c) => (c.detail ? `${c.label}: ${c.detail}` : c.label))
+    .join(" · ");
 
   return (
-    <div className="rounded-xl border border-border bg-background shadow-sm">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h3 className="text-sm font-semibold">{entry.action}</h3>
-          {!entry.ok ? (
-            <StatusBadge tone="ended">{entry.statusLabel}</StatusBadge>
-          ) : null}
-          {hasLocation ? <LocationInline detail={entry.location!} dict={dict} /> : null}
-        </div>
-        <span
-          className="shrink-0 text-xs text-muted-foreground"
-          title={formatExact(entry.at)}
-        >
-          {formatTime(entry.at)}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+      <span className="shrink-0 font-medium">{entry.action}</span>
+      {!entry.ok ? (
+        <StatusBadge tone="ended">{entry.statusLabel}</StatusBadge>
+      ) : null}
+      {entry.location ? (
+        <LocationInline detail={entry.location} dict={dict} />
+      ) : null}
+      {actor && entry.actorId ? (
+        <span className="inline-flex items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">{dict.byActorPrefix}</span>
+          <PartnerChip
+            id={entry.actorId}
+            partner={actor}
+            fallback={dict.unknownPartner}
+            selfId={selfId}
+          />
         </span>
-      </header>
-
-      {hasData ? (
-        <div className="border-t border-border px-4 py-2.5 text-xs">
-          <ul className="space-y-1">
-            {dataChanges.map((c, i) => (
-              <li key={i} className="flex items-start gap-1.5">
-                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground" />
-                <span>
-                  <span className="font-medium">{c.label}</span>
-                  {c.detail ? (
-                    <span className="text-muted-foreground">: {c.detail}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
       ) : null}
-
-      {hasParties ? (
-        <div className="space-y-1.5 border-t border-border px-4 py-2.5">
-          {actor && entry.actorId ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-medium text-muted-foreground">
-                {dict.byActorPrefix}
-              </span>
-              <PartnerChip
-                id={entry.actorId}
-                partner={actor}
-                fallback={dict.unknownPartner}
-                selfId={selfId}
-              />
-            </div>
-          ) : null}
-          {entry.affected.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {entry.affected.map((a) => (
-                <PartnerChip
-                  key={a.id}
-                  id={a.id}
-                  partner={partners[a.id] ?? null}
-                  fallback={dict.unknownPartner}
-                  selfId={selfId}
-                  pageTag={
-                    a.page === 1
-                      ? dict.page1Tag
-                      : a.page === 2
-                        ? dict.page2Tag
-                        : null
-                  }
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
+      {entry.affected.map((a) => (
+        <PartnerChip
+          key={a.id}
+          id={a.id}
+          partner={partners[a.id] ?? null}
+          fallback={dict.unknownPartner}
+          selfId={selfId}
+          pageTag={
+            a.page === 1
+              ? dict.page1Tag
+              : a.page === 2
+                ? dict.page2Tag
+                : null
+          }
+        />
+      ))}
+      {dataSummary ? (
+        <span
+          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+          title={dataSummary}
+        >
+          {dataSummary}
+        </span>
       ) : null}
+      <time
+        className="shrink-0 text-xs text-muted-foreground ms-auto"
+        title={formatExact(entry.at)}
+      >
+        {formatTime(entry.at)}
+      </time>
     </div>
   );
 }
