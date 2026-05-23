@@ -123,8 +123,8 @@ export function UnifiedActivity({
   const shown = open ? filtered : filtered.slice(0, initial);
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="relative mb-4">
+    <div>
+      <div className="relative mb-4 mx-auto max-w-2xl">
         <Search
           aria-hidden
           className="pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground ltr:left-3 rtl:right-3"
@@ -160,7 +160,16 @@ export function UnifiedActivity({
         <EmptyState>{dict.noMatches}</EmptyState>
       ) : (
         <>
-          <ol className="flex flex-col gap-2.5">
+          <ol
+            className="grid gap-2.5"
+            style={{
+              // Responsive auto-fill grid: cards stay readable at ~22rem and
+              // multiple fit per row as the viewport grows. Mirrors the
+              // CardGrid pattern used by the rest of the admin dashboards.
+              gridTemplateColumns:
+                "repeat(auto-fill, minmax(min(22rem, 100%), 1fr))",
+            }}
+          >
             {shown.map((e) => (
               <li key={e.id}>
                 <EventCard
@@ -297,9 +306,9 @@ function EventCard({
   );
 }
 
-/** Compact location line in the card header. Coordinates are intentionally
- * NOT rendered — the user wants the link, not the numbers. A `cleared`
- * marker is shown as muted text instead of a link. */
+/** Compact location indicator in the card header — a single pin icon link
+ * to Google Maps (no coordinates, no label text). Hover/title carries the
+ * "open in maps" hint for discoverability. `cleared` shows muted text. */
 function LocationInline({
   detail,
   dict,
@@ -319,10 +328,11 @@ function LocationInline({
       href={url}
       target="_blank"
       rel="noreferrer noopener"
-      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      title={dict.openInMaps}
+      aria-label={dict.openInMaps}
+      className="inline-flex items-center rounded p-0.5 text-primary transition-colors hover:bg-primary/10"
     >
-      <MapPin className="size-3.5" aria-hidden />
-      {dict.openInMaps}
+      <MapPin className="size-4" aria-hidden />
     </a>
   );
 }
