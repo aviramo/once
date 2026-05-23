@@ -222,7 +222,17 @@ export default async function UserDetailPage({
     <AdminShell dict={a} active="users" backHref="/admin/users">
       <RealtimeRefresh
         tables="users"
-        channel="admin-user-detail"
+        channel="admin-user-detail-users"
+        filter={`user_id=eq.${u.user_id}`}
+      />
+      {/* Live events feed: subscribe to log inserts where this user was the
+          actor. The substring-search side ("things others did to me") still
+          surfaces via the users-table subscription above — those rows mutate
+          relations through the same RPC transaction, which fires a users
+          UPDATE that this page already refreshes on. */}
+      <RealtimeRefresh
+        tables="log"
+        channel="admin-user-detail-log"
         filter={`user_id=eq.${u.user_id}`}
       />
       {/* Identity card — photo + name/email + state badges + (compact)

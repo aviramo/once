@@ -306,10 +306,28 @@ function buildAffected(
         .map((id) => ({ id, page: 2 as const }));
     }
 
+    case "start":
+    case "focus":
+    case "location": {
+      // These heartbeats trigger side-effects (auto-find on the server when
+      // page1 is free, app_seed_viewer adding to page2 when visible with no
+      // viewers). The action didn't *target* a counterpart, but it CAN
+      // produce one — so show the current snapshot's page1.profile + every
+      // page2 viewer, each tagged with its page. If neither was added the
+      // arrays are empty and no chip renders.
+      const out: AffectedUser[] = [];
+      if (p1) out.push({ id: p1, page: 1 });
+      for (const v of rel?.page2?.profiles ?? []) {
+        const id = v.user_id?.toLowerCase();
+        if (id && id !== p1) out.push({ id, page: 2 });
+      }
+      return out;
+    }
+
     default:
       // pause / resume / free2 / lock2 / clear1 / clear2 / cancel_add /
-      // start / location / focus / profile / account / etc. — no partner is
-      // semantically tied to the action.
+      // profile / account / etc. — no partner is semantically tied to the
+      // action.
       return [];
   }
 }
