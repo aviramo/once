@@ -408,10 +408,8 @@
       "locationType": "סוג מיקום",
       "locationCustomOn": "מיקום ידני הופעל",
       "locationCustomOff": "מיקום ידני בוטל",
-      "notifGranted": "התראות מאושרות",
       "notifDenied": "התראות נדחו",
-      "notifUndetermined": "התראות לא הוגדרו",
-      "pushTokenChanged": "טוקן נוטיפיקציות עודכן"
+      "notifUndetermined": "התראות לא הוגדרו"
     },
     "areas": {
       "title": "אזורי זמינות",

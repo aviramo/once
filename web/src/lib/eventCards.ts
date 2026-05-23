@@ -89,10 +89,8 @@ export type AccountChangeDict = {
   locationType: string;
   locationCustomOn: string; // "מיקום ידני הופעל"
   locationCustomOff: string; // "מיקום ידני בוטל"
-  notifGranted: string;
   notifDenied: string;
   notifUndetermined: string;
-  pushTokenChanged: string; // "טוקן נוטיפיקציות עודכן"
 };
 
 function fill(t: string, vars: Record<string, string | number>): string {
@@ -233,18 +231,18 @@ function buildAccountChanges(
     });
   }
   if ("notif_perm" in body) {
+    // 'granted' is the default state that the mobile build re-reports on
+    // every start/focus heartbeat — surfacing it would mark every heartbeat
+    // as a "change". Only 'denied' / 'undetermined' are admin-actionable
+    // (the user turned notifications off, or hasn't been prompted yet).
     const v = body.notif_perm;
-    const label =
-      v === "granted"
-        ? d.notifGranted
-        : v === "denied"
-          ? d.notifDenied
-          : d.notifUndetermined;
-    out.push({ label });
+    if (v === "denied") out.push({ label: d.notifDenied });
+    else if (v === "undetermined") out.push({ label: d.notifUndetermined });
   }
-  if ("push_token" in body) {
-    out.push({ label: d.pushTokenChanged });
-  }
+  // push_token is intentionally NOT surfaced as a data change — the client
+  // re-sends it on every start/focus, which would mark every heartbeat as
+  // having a "data change" and defeat the "events that did something"
+  // filter. A real token rotation is rare and not admin-actionable.
   return out.length > 0 ? out : undefined;
 }
 
@@ -331,7 +329,7 @@ export function buildEventCards(
   accountDict: AccountChangeDict,
 ): UnifiedEntry[] {
   const selfLower = selfId.toLowerCase();
-  return rows
+  const built = rows
     .filter((row) => !isSystemKey(row.key))
     .map((row) => {
     const actorId = row.user_id ? row.user_id.toLowerCase() : null;
@@ -371,5 +369,19 @@ export function buildEventCards(
       profileChanges,
       accountChanges,
     };
+  });
+
+  // Drop rows that have NOTHING to say — succeeded with no partners touched,
+  // no location update, no profile/account changes, no actor-other note.
+  // These are start/focus heartbeats that arrived from the mobile client and
+  // are pure no-ops as far as the admin is concerned (the user "did nothing").
+  return built.filter((e) => {
+    if (!e.ok) return true; // failures are always interesting
+    if (e.byOther) return true; // by-other rows are inherently "something happened to you"
+    if (e.affected.length > 0) return true;
+    if (e.location) return true;
+    if (e.profileChanges && e.profileChanges.length > 0) return true;
+    if (e.accountChanges && e.accountChanges.length > 0) return true;
+    return false;
   });
 }

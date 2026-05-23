@@ -408,10 +408,8 @@
       "locationType": "Location type",
       "locationCustomOn": "Manual location enabled",
       "locationCustomOff": "Manual location disabled",
-      "notifGranted": "Notifications granted",
       "notifDenied": "Notifications denied",
-      "notifUndetermined": "Notifications undetermined",
-      "pushTokenChanged": "Push token updated"
+      "notifUndetermined": "Notifications undetermined"
     },
     "areas": {
       "title": "Availability areas",
