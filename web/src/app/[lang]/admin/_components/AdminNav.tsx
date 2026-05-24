@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
   Users,
   Layers,
   MapPin,
   Flag,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { SignOutButton } from "./SignOutButton";
 
 /**
@@ -94,6 +98,37 @@ function NavBadge({
   );
 }
 
+/** A bottom-bar cell shaped like a nav tab but it signs out instead of
+ * navigating. Lives next to the nav tabs so it's reachable by the same thumb
+ * grip as everything else on the bar — operators kept missing the small
+ * sign-out icon up in the header. The leading border + rose tone keep it
+ * visually distinct from a navigation destination. */
+function BottomSignOut({ label }: { label: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  function onClick() {
+    startTransition(async () => {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      router.replace("/admin/login");
+      router.refresh();
+    });
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      className="flex flex-1 flex-col items-center gap-1 border-s border-border pb-1.5 pt-2 text-[10px] font-medium text-rose-600 transition-opacity disabled:opacity-50 dark:text-rose-400"
+    >
+      <span className="flex h-7 w-14 items-center justify-center rounded-full">
+        <LogOut className="size-[18px]" />
+      </span>
+      {label}
+    </button>
+  );
+}
+
 const NAV_ITEMS: { key: NavKey; href: string; icon: LucideIcon }[] = [
   { key: "dashboard", href: "/admin", icon: LayoutGrid },
   { key: "users", href: "/admin/users", icon: Users },
@@ -140,12 +175,18 @@ export function AdminNav({ active, labels, userLabel, badges }: Props) {
         <SignOutButton label={labels.signOut} />
       </div>
 
-      {/* Mobile: compact sign-out in the header (nav lives in the bottom bar) */}
+      {/* Mobile: labelled sign-out in the header so it's discoverable (nav
+          lives in the bottom bar). An icon-only square blends into the chrome
+          and operators couldn't find it. */}
       <div className="ms-auto sm:hidden">
-        <SignOutButton label={labels.signOut} compact />
+        <SignOutButton label={labels.signOut} />
       </div>
 
-      {/* Mobile: fixed bottom tab bar */}
+      {/* Mobile: fixed bottom tab bar.
+          Last cell is a sign-out action (not a navigation link), styled with a
+          leading border separator and rose accent so it never reads as another
+          tab. Operators reported the header sign-out was too easy to miss on
+          mobile, so the action is duplicated here within thumb reach. */}
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur sm:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -177,6 +218,7 @@ export function AdminNav({ active, labels, userLabel, badges }: Props) {
               {labels[key]}
             </Link>
           ))}
+          <BottomSignOut label={labels.signOut} />
         </div>
       </nav>
     </>
