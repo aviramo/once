@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAdminUser } from "@/lib/admin-auth";
+import { getAdminUser, getOwnerUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { triggerResync } from "@/lib/resync";
 import type { ResetResult } from "../users/actions";
@@ -225,6 +225,45 @@ export async function moveUsersToGroup(
   revalidatePath(USER_PATH, "page");
   await triggerResync();
   return { ok: true, moved: ids.length };
+}
+
+/**
+ * Per-group permission checklist toggle. Assigns or unassigns a permission to
+ * a group. The permissions catalog is code-coupled (seeded via migration);
+ * this only manages the many-to-many assignments. Idempotent: assign uses
+ * upsert (ignore-dup), unassign deletes. No resync — permissions don't gate
+ * availability (they're a separate concept the admin gate / other code will
+ * consume in follow-up work).
+ *
+ * Gated on `getOwnerUser` (NOT `getAdminUser`): only owners may grant or
+ * revoke permissions, so an admin can't promote themselves to owner. User
+ * decision 2026-05-24: "בעלים הוא היחיד שיכול להעניק הרשאות או להסירן".
+ */
+export async function setGroupPermission(fd: FormData) {
+  if (!(await getOwnerUser())) throw new Error("Unauthorized");
+  const groupId = String(fd.get("groupId") ?? "");
+  const key = String(fd.get("key") ?? "");
+  const assigned = String(fd.get("assigned") ?? "") === "true";
+  if (!groupId || !key) throw new Error("missing_args");
+  const admin = createSupabaseAdmin();
+  if (assigned) {
+    const { error } = await admin
+      .from("group_permissions")
+      .upsert(
+        { group_id: groupId, permission_key: key },
+        { onConflict: "group_id,permission_key", ignoreDuplicates: true },
+      );
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await admin
+      .from("group_permissions")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("permission_key", key);
+    if (error) throw new Error(error.message);
+  }
+  revalidatePath(GROUP_DETAIL_PATH, "page");
+  revalidatePath(ROLES_PATH, "page");
 }
 
 /**
