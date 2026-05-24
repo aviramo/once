@@ -29,7 +29,18 @@ export default async function AdminLoginPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect(next);
+  if (user) {
+    // Verify the signed-in account actually has admin role before bouncing
+    // them to `next`. Without this check a non-admin sign-in loops forever:
+    // every admin page redirects unauthed/non-admin users back here, and we
+    // would redirect them back to the admin page — bounce, bounce, bounce.
+    // Sign the session out so the form is usable again on the next attempt.
+    const role =
+      (user.app_metadata as { role?: string } | undefined)?.role;
+    if (role === "admin") redirect(next);
+    await supabase.auth.signOut();
+    redirect("/admin/login?error=not_admin");
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-6">
