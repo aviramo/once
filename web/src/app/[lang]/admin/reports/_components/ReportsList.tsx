@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Avatar, StatusBadge } from "../../_components/ui";
 
 export type ReportItem = {
@@ -128,9 +130,15 @@ function ReporterCard({
   dict: ReportsDict;
   action: (fd: FormData) => Promise<void>;
 }) {
+  // Collapsed by default: cards are dense once a reporter has more than a few
+  // entries, and operators want to scan the board at a glance to spot serial
+  // reporters before drilling in. The count chip already conveys the magnitude
+  // — clicking the chevron (or the trailing area) reveals the entries.
+  const [open, setOpen] = useState(false);
+  const panelId = `reporter-${reporter.id}`;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
-      <div className="flex items-center gap-3 border-b border-border p-4">
+      <div className="flex items-center gap-3 p-4">
         <Link
           href={`/admin/users/${reporter.id}`}
           className="shrink-0"
@@ -151,15 +159,35 @@ function ReporterCard({
             </p>
           ) : null}
         </div>
-        <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
-          {fill(dict.reportCount, { count: reporter.reports.length })}
-        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        >
+          <span className="rounded-md bg-muted px-2 py-0.5 font-semibold tabular-nums">
+            {fill(dict.reportCount, { count: reporter.reports.length })}
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform duration-200",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </button>
       </div>
-      <ul className="divide-y divide-border">
-        {reporter.reports.map((r) => (
-          <ReportRow key={r.id} row={r} dict={dict} action={action} />
-        ))}
-      </ul>
+      {open ? (
+        <ul
+          id={panelId}
+          className="divide-y divide-border border-t border-border"
+        >
+          {reporter.reports.map((r) => (
+            <ReportRow key={r.id} row={r} dict={dict} action={action} />
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
