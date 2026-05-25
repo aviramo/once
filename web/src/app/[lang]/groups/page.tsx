@@ -12,6 +12,7 @@ import { createGroup, resetGroupMembers } from "./actions";
 type GroupQueryRow = {
   id: string;
   name: string;
+  invite_code: string;
   user_groups: { count: number }[];
 };
 
@@ -29,7 +30,7 @@ export default async function RolesPage({
   const admin = createSupabaseAdmin();
   let rolesQ = admin
     .from("groups")
-    .select("id, name, user_groups(count)")
+    .select("id, name, invite_code, user_groups(count)")
     .order("created_at", { ascending: true });
   // Group managers only see groups they manage.
   if (scope.kind === "manager") {
@@ -43,6 +44,7 @@ export default async function RolesPage({
   const groups: GroupRow[] = ((data ?? []) as GroupQueryRow[]).map((row) => ({
     id: row.id,
     name: row.name,
+    inviteCode: row.invite_code,
     members: row.user_groups?.[0]?.count ?? 0,
   }));
 

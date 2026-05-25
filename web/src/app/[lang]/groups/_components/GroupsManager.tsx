@@ -8,6 +8,7 @@ import { CardGrid } from "../../_components/ui";
 export type GroupRow = {
   id: string;
   name: string;
+  inviteCode: string;
   members: number;
 };
 
@@ -141,6 +142,12 @@ function GroupTile({
             <span className="text-[11px] tabular-nums text-muted-foreground">
               {group.members} {dict.members}
             </span>
+            <span
+              dir="ltr"
+              className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums tracking-[0.15em] text-foreground select-all"
+            >
+              {group.inviteCode}
+            </span>
           </div>
         </div>
       </div>
@@ -224,7 +231,11 @@ export function GroupsManager({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return groups;
-    return groups.filter((r) => r.name.toLowerCase().includes(q));
+    return groups.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.inviteCode.toLowerCase().includes(q),
+    );
   }, [groups, query]);
 
   // Selection is scoped to the *visible* tiles: select-all ticks every
