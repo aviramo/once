@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getAdminUser } from "@/lib/admin-auth";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
@@ -36,8 +35,8 @@ export default async function RolesPage({
   const status =
     sp.status === "enabled" || sp.status === "disabled" ? sp.status : "";
 
-  const user = await getAdminUser();
-  if (!user) redirect("/admin/login");
+  const scope = await requireViewerScope();
+  const isAdmin = scope.kind === "admin";
 
   const admin = createSupabaseAdmin();
   let rolesQ = admin
@@ -45,6 +44,13 @@ export default async function RolesPage({
     .select("id, name, enabled, user_groups(count)")
     .order("created_at", { ascending: true });
   if (status) rolesQ = rolesQ.eq("enabled", status === "enabled");
+  // Group managers only see groups they manage.
+  if (scope.kind === "manager") {
+    rolesQ = rolesQ.in(
+      "id",
+      scope.groupIds.length ? scope.groupIds : ["00000000-0000-0000-0000-000000000000"],
+    );
+  }
   const { data } = await rolesQ;
 
   const roles: RoleRow[] = ((data ?? []) as RoleQueryRow[]).map((row) => ({
@@ -59,11 +65,13 @@ export default async function RolesPage({
       <RealtimeRefresh tables="groups,user_groups" channel="admin-roles" />
       <Section title={r.title} count={roles.length} hint={r.subtitle}>
         <div className="space-y-6">
-          <Card>
-            <Disclosure label={r.add} tone="button">
-              <RoleAddForm action={createRole} dict={r} />
-            </Disclosure>
-          </Card>
+          {isAdmin ? (
+            <Card>
+              <Disclosure label={r.add} tone="button">
+                <RoleAddForm action={createRole} dict={r} />
+              </Disclosure>
+            </Card>
+          ) : null}
 
           {roles.length === 0 ? (
             <EmptyState>{r.none}</EmptyState>
@@ -71,6 +79,7 @@ export default async function RolesPage({
             <RolesManager
               roles={roles}
               dict={r}
+              readOnly={!isAdmin}
               setEnabledAction={setRoleEnabled}
               setGroupsEnabledAction={setGroupsEnabled}
               resetGroupMembersAction={resetGroupMembers}

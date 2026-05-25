@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAdminUser, getOwnerUser } from "@/lib/admin-auth";
+import { getAdminUser, getViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { triggerResync } from "@/lib/resync";
 import type { ResetResult } from "../users/actions";
@@ -228,42 +228,59 @@ export async function moveUsersToGroup(
 }
 
 /**
- * Per-group permission checklist toggle. Assigns or unassigns a permission to
- * a group. The permissions catalog is code-coupled (seeded via migration);
- * this only manages the many-to-many assignments. Idempotent: assign uses
- * upsert (ignore-dup), unassign deletes. No resync — permissions don't gate
- * availability (they're a separate concept the admin gate / other code will
- * consume in follow-up work).
+ * Promote a fellow group member to group_manager. Allowed by admins
+ * (anywhere) and by an existing manager of the SAME group (they can grow
+ * their managing team). The group_managers row carries a `granted_at`
+ * timestamp that drives the management-seniority ordering on the member
+ * list. Idempotent: a re-promotion of an existing manager is a no-op (the
+ * granted_at stays — never reset, so seniority is stable).
  *
- * Gated on `getOwnerUser` (NOT `getAdminUser`): only owners may grant or
- * revoke permissions, so an admin can't promote themselves to owner. User
- * decision 2026-05-24: "בעלים הוא היחיד שיכול להעניק הרשאות או להסירן".
+ * The BEFORE-INSERT trigger on group_managers also enforces "must be a
+ * member first", so a forged form submission for a non-member fails
+ * server-side.
  */
-export async function setGroupPermission(fd: FormData) {
-  if (!(await getOwnerUser())) throw new Error("Unauthorized");
+export async function promoteGroupManager(fd: FormData) {
+  const scope = await getViewerScope();
+  if (!scope) throw new Error("Unauthorized");
   const groupId = String(fd.get("groupId") ?? "");
-  const key = String(fd.get("key") ?? "");
-  const assigned = String(fd.get("assigned") ?? "") === "true";
-  if (!groupId || !key) throw new Error("missing_args");
-  const admin = createSupabaseAdmin();
-  if (assigned) {
-    const { error } = await admin
-      .from("group_permissions")
-      .upsert(
-        { group_id: groupId, permission_key: key },
-        { onConflict: "group_id,permission_key", ignoreDuplicates: true },
-      );
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await admin
-      .from("group_permissions")
-      .delete()
-      .eq("group_id", groupId)
-      .eq("permission_key", key);
-    if (error) throw new Error(error.message);
+  const userId = String(fd.get("userId") ?? "");
+  if (!groupId || !userId) throw new Error("missing_args");
+  // Managers may only act within groups they themselves manage.
+  if (
+    scope.kind === "manager" &&
+    !scope.groupIds.includes(groupId)
+  ) {
+    throw new Error("forbidden_group");
   }
+  const admin = createSupabaseAdmin();
+  const { error } = await admin
+    .from("group_managers")
+    .upsert(
+      { user_id: userId, group_id: groupId },
+      { onConflict: "user_id,group_id", ignoreDuplicates: true },
+    );
+  if (error) throw new Error(error.message);
   revalidatePath(GROUP_DETAIL_PATH, "page");
-  revalidatePath(ROLES_PATH, "page");
+}
+
+/**
+ * Demote a group_manager back to plain member. Admin-only by design — the
+ * user explicitly excluded peer demotion to avoid power struggles inside a
+ * group ("מנהל קבוצה יכול לגרום…" only grants promote, never demote).
+ */
+export async function demoteGroupManager(fd: FormData) {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const groupId = String(fd.get("groupId") ?? "");
+  const userId = String(fd.get("userId") ?? "");
+  if (!groupId || !userId) throw new Error("missing_args");
+  const admin = createSupabaseAdmin();
+  const { error } = await admin
+    .from("group_managers")
+    .delete()
+    .eq("group_id", groupId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  revalidatePath(GROUP_DETAIL_PATH, "page");
 }
 
 /**
@@ -273,7 +290,17 @@ export async function setGroupPermission(fd: FormData) {
 export async function searchUsersForGroup(
   groupId: string,
   q: string,
-): Promise<{ user_id: string; name: string | null; image: string | null }[]> {
+): Promise<
+  {
+    user_id: string;
+    name: string | null;
+    image: string | null;
+    /** Search results are non-members of the target group, so they cannot be
+     * managers yet — always null. Present in the type so `Member` consumers
+     * have a uniform shape. */
+    managerSince: null;
+  }[]
+> {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
   const query = q.trim();
   if (!query || !groupId) return [];
@@ -302,5 +329,6 @@ export async function searchUsersForGroup(
       user_id: u.user_id,
       name: u.name,
       image: u.data?.images?.[0]?.normal ?? null,
+      managerSince: null,
     }));
 }

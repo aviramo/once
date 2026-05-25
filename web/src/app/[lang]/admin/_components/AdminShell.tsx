@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { AdminNav } from "./AdminNav";
 import { RealtimeRefresh } from "./RealtimeRefresh";
 
@@ -32,6 +33,12 @@ export async function AdminShell({
   backHref,
   userLabel,
 }: ShellProps) {
+  // Resolve viewer scope so the nav can hide tabs a manager can't reach.
+  // Admins see every tab; managers see only users + roles (the two screens
+  // that are scope-aware). The per-page guards still apply — this is a UX
+  // affordance, not the security gate.
+  const scope = await requireViewerScope();
+  const isAdmin = scope.kind === "admin";
   // Per-tab badges in the nav. Fetched here (not per-page) so every admin
   // screen carries them.
   //   - `reports` (alert / rose): how many reports need handling — user
@@ -97,6 +104,11 @@ export async function AdminShell({
           </Link>
           <AdminNav
             active={active}
+            visibleKeys={
+              isAdmin
+                ? ["dashboard", "users", "roles", "areas", "reports"]
+                : ["users", "roles"]
+            }
             labels={{
               dashboard: dict.nav.dashboard,
               users: dict.nav.users,

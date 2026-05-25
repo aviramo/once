@@ -33,6 +33,7 @@ export function GroupHeader({
   initialName,
   enabled,
   members,
+  readOnly = false,
   dict,
   renameAction,
   setEnabledAction,
@@ -42,6 +43,9 @@ export function GroupHeader({
   initialName: string;
   enabled: boolean;
   members: number;
+  /** Manager view: render the name + status as static text and hide the
+   * rename / enable-disable / danger-zone actions. */
+  readOnly?: boolean;
   dict: GroupHeaderDict;
   renameAction: (fd: FormData) => Promise<void>;
   setEnabledAction: (fd: FormData) => Promise<void>;
@@ -133,7 +137,7 @@ export function GroupHeader({
         </div>
       </div>
 
-      {!editing ? (
+      {!editing && !readOnly ? (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <button
             type="button"

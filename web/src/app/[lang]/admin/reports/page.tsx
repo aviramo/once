@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getAdminUser } from "@/lib/admin-auth";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
@@ -70,8 +70,9 @@ export default async function ReportsPage({
     ? (sp.sort as string)
     : "newest";
 
-  const user = await getAdminUser();
-  if (!user) redirect("/admin/login");
+  // Reports moderation is admin-only (managers don't act on UGC reports).
+  const scope = await requireViewerScope();
+  if (scope.kind !== "admin") redirect("/admin/users");
 
   const admin = createSupabaseAdmin();
   let query = admin

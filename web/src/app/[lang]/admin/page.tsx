@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAdminUser } from "@/lib/admin-auth";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
@@ -143,8 +143,11 @@ export default async function AdminDashboard({
   const d = dict.admin;
   const t = d.dashboard;
 
-  const user = await getAdminUser();
-  if (!user) redirect("/admin/login");
+  // Dashboard is admin-only: the KPIs are global and not scoped per group.
+  // Group managers land on /admin/users (the screen they own) instead.
+  const scope = await requireViewerScope();
+  if (scope.kind !== "admin") redirect("/admin/users");
+  const user = scope.user;
 
   const admin = createSupabaseAdmin();
   const [{ data: metricsData }, meRes] = await Promise.all([

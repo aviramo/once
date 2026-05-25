@@ -297,7 +297,6 @@
       "broadcasting": "Broadcasting",
       "held": "Held credits",
       "role_gated": "Gated via group",
-      "join_requested": "Requested to join",
       "no_notif": "Without notifications"
     },
     "narrative": {
@@ -324,8 +323,7 @@
         "group": "Disabled: not in an active group",
         "push": "Disabled: notifications off",
         "unavailable": "Disabled: unavailable",
-        "not_yet": "Awaiting area launch",
-        "join_requested": "Requested to join, awaiting approval"
+        "not_yet": "Awaiting area launch"
       }
     },
     "outcomes": {
@@ -376,7 +374,6 @@
       "options": "Connectivity check",
       "api": "System call",
       "report": "Reported a user",
-      "join_request": "Requested to join a group",
       "notif": "Updated notification permission",
       "set_tier": "Switched plan",
       "unknown": "Action"
@@ -500,6 +497,9 @@
         "bulkMoveBusy": "Moving…",
         "bulkMoveDone": "Moved {count} users to {name}",
         "bulkMoveFail": "Move failed",
+        "managerBadge": "Group manager",
+        "promote": "Make manager",
+        "demote": "Revoke manager",
         "dangerSection": "Danger zone",
         "deleteTitle": "Delete this group",
         "deleteDesc": "Permanently delete. Only allowed when the group has no members. Irreversible.",
@@ -508,16 +508,6 @@
         "deleteConfirmBody": "The group \"{name}\" will be permanently deleted. This cannot be undone.",
         "deleteBusy": "Deleting…",
         "fail": "Action failed"
-      }
-    },
-    "permissions": {
-      "title": "Permissions",
-      "hint": "A group's permissions grant capabilities to its members. Tick the permissions that everyone in this group should receive.",
-      "ownerOnlyHint": "Only members of a group with the 'owner' permission can grant or revoke permissions. You are viewing the current state in read-only mode.",
-      "noPermissions": "No permissions defined in the system.",
-      "labels": {
-        "admin": "Admin",
-        "owner": "Owner"
       }
     },
     "userDetail": {
@@ -533,15 +523,10 @@
       "notifActive": "Active",
       "notifInactive": "Inactive",
       "roles": "Groups",
-      "rolesHint": "Tick at least one active group so this user can use the app. With no active group they are disabled.",
+      "rolesHint": "Assign groups to organise this user. Membership is optional — a user with no groups is available; only being in groups that are ALL disabled gates them.",
       "noRoles": "No groups defined in the system.",
       "groupsEmpty": "No groups",
       "groupsManage": "Manage groups",
-      "joinRequest": "Join request",
-      "joinRequestHint": "The user asked to join and is still gated. Approve them by assigning an active group below, or remove the request (they stay gated and revert to the 'request to join' state in the app).",
-      "joinRequestPending": "Requested to join",
-      "joinRequestRemove": "Remove request",
-      "joinRequestRemoving": "Removing…",
       "summary": "Current status",
       "currentState": "Current state",
       "interactions": "People they interacted with",

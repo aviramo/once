@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { getAdminUser, userHasPermission } from "@/lib/admin-auth";
+import { notFound } from "next/navigation";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
@@ -10,17 +10,14 @@ import { GroupMembers } from "./_components/GroupMembers";
 import { GroupHeader } from "./_components/GroupHeader";
 import { GroupDangerZone } from "./_components/GroupDangerZone";
 import {
-  GroupPermissions,
-  type PermissionRow,
-} from "./_components/GroupPermissions";
-import {
   setUserRoleAssignment,
   searchUsersForGroup,
   renameRole,
   setRoleEnabled,
   deleteRole,
   moveUsersToGroup,
-  setGroupPermission,
+  promoteGroupManager,
+  demoteGroupManager,
 } from "../actions";
 
 // Typed manually rather than via PageProps<…>: the Next typed-routes registry
@@ -37,17 +34,20 @@ export default async function GroupDetailPage({
   const r = dict.admin.roles;
   const d = r.detail;
 
-  const user = await getAdminUser();
-  if (!user) redirect("/admin/login");
-  const isOwner = await userHasPermission(user.id, "owner");
+  // Admin + group-managers of THIS group can see the detail. A manager
+  // viewing a group they don't manage gets 404.
+  const scope = await requireViewerScope();
+  const isAdmin = scope.kind === "admin";
+  const canPromote =
+    isAdmin || (scope.kind === "manager" && scope.groupIds.includes(groupId));
+  if (!canPromote) notFound();
 
   const admin = createSupabaseAdmin();
   const [
     { data: group },
     { data: memberRows },
     { data: allGroups },
-    { data: permissionRows },
-    { data: groupPermRows },
+    { data: managerRows },
   ] = await Promise.all([
     admin
       .from("groups")
@@ -63,12 +63,8 @@ export default async function GroupDetailPage({
       .select("id, name, enabled")
       .order("name", { ascending: true }),
     admin
-      .from("permissions")
-      .select("key")
-      .order("created_at", { ascending: true }),
-    admin
-      .from("group_permissions")
-      .select("permission_key")
+      .from("group_managers")
+      .select("user_id, granted_at")
       .eq("group_id", groupId),
   ]);
   if (!group) notFound();
@@ -85,6 +81,14 @@ export default async function GroupDetailPage({
     data: { images?: { normal?: string }[] } | null;
   };
   type Row = { user_id: string; users: UserMini | UserMini[] | null };
+
+  // Manager-since map: keyed by user_id, value is the ISO grant timestamp.
+  const managerSinceById = new Map<string, string>(
+    ((managerRows ?? []) as { user_id: string; granted_at: string }[]).map(
+      (m) => [m.user_id, m.granted_at],
+    ),
+  );
+
   const members = ((memberRows ?? []) as Row[])
     .map((row) => (Array.isArray(row.users) ? row.users[0] : row.users))
     .filter((u): u is UserMini => !!u)
@@ -92,20 +96,19 @@ export default async function GroupDetailPage({
       user_id: u.user_id,
       name: u.name,
       image: u.data?.images?.[0]?.normal ?? null,
+      managerSince: managerSinceById.get(u.user_id) ?? null,
     }));
 
-  const permissionLabels = (
-    dict.admin.permissions?.labels ?? {}
-  ) as Record<string, string>;
-  const permCatalog: PermissionRow[] = (
-    (permissionRows ?? []) as { key: string }[]
-  ).map((p) => ({
-    key: p.key,
-    label: permissionLabels[p.key] ?? null,
-  }));
-  const assignedKeys = (
-    (groupPermRows ?? []) as { permission_key: string }[]
-  ).map((p) => p.permission_key);
+  // Sort: managers first by management seniority (oldest grant first), then
+  // non-managers by name ascending. Per user 2026-05-25 — managers lead the
+  // list, ordered by how long they have been managers.
+  members.sort((a, b) => {
+    if (a.managerSince && !b.managerSince) return -1;
+    if (!a.managerSince && b.managerSince) return 1;
+    if (a.managerSince && b.managerSince)
+      return a.managerSince.localeCompare(b.managerSince);
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  });
 
   const dangerDict = {
     deleteTitle: d.deleteTitle,
@@ -122,7 +125,7 @@ export default async function GroupDetailPage({
   return (
     <AdminShell dict={dict.admin} active="roles" backHref="/admin/roles">
       <RealtimeRefresh
-        tables="user_groups,groups,group_permissions"
+        tables="user_groups,groups,group_managers"
         channel="admin-group-detail"
       />
       <GroupHeader
@@ -130,6 +133,7 @@ export default async function GroupDetailPage({
         initialName={g.name}
         enabled={g.enabled}
         members={members.length}
+        readOnly={!isAdmin}
         dict={{
           members: r.members,
           statusActive: r.statusActive,
@@ -145,42 +149,28 @@ export default async function GroupDetailPage({
         renameAction={renameRole}
         setEnabledAction={setRoleEnabled}
         extraActions={
-          <GroupDangerZone
-            groupId={g.id}
-            groupName={g.name}
-            members={members.length}
-            dict={dangerDict}
-            deleteAction={deleteRole}
-            compact
-          />
+          isAdmin ? (
+            <GroupDangerZone
+              groupId={g.id}
+              groupName={g.name}
+              members={members.length}
+              dict={dangerDict}
+              deleteAction={deleteRole}
+              compact
+            />
+          ) : null
         }
       />
 
-      <Section
-        title={dict.admin.permissions?.title ?? "Permissions"}
-        count={assignedKeys.length}
-      >
-        <GroupPermissions
-          groupId={g.id}
-          catalog={permCatalog}
-          assignedKeys={assignedKeys}
-          readOnly={!isOwner}
-          dict={{
-            hint: dict.admin.permissions?.hint ?? "",
-            ownerOnlyHint: dict.admin.permissions?.ownerOnlyHint ?? "",
-            noPermissions:
-              dict.admin.permissions?.noPermissions ?? "No permissions",
-            fail: d.fail,
-          }}
-          assignAction={setGroupPermission}
-        />
-      </Section>
 
       <Section title={d.members} count={members.length}>
         <GroupMembers
           groupId={g.id}
           members={members}
           allGroups={groupCatalog}
+          canMutate={isAdmin}
+          canPromote={canPromote}
+          canDemote={isAdmin}
           dict={{
             noMembers: d.noMembers,
             remove: d.remove,
@@ -198,10 +188,15 @@ export default async function GroupDetailPage({
             bulkMoveDone: d.bulkMoveDone,
             bulkMoveFail: d.bulkMoveFail,
             groupDisabledTag: r.statusDisabled,
+            managerBadge: d.managerBadge,
+            promote: d.promote,
+            demote: d.demote,
           }}
           assignAction={setUserRoleAssignment}
           searchAction={searchUsersForGroup}
           moveAction={moveUsersToGroup}
+          promoteAction={promoteGroupManager}
+          demoteAction={demoteGroupManager}
         />
       </Section>
     </AdminShell>

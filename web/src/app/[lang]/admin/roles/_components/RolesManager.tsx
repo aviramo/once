@@ -107,11 +107,14 @@ function GroupTile({
   role,
   selected,
   onToggle,
+  readOnly,
   dict,
 }: {
   role: RoleRow;
   selected: boolean;
   onToggle: () => void;
+  /** Hides the row's checkbox (manager view: no mutations). */
+  readOnly?: boolean;
   dict: RolesDict;
 }) {
   return (
@@ -124,13 +127,15 @@ function GroupTile({
       ].join(" ")}
     >
       <div className="flex items-start gap-2.5">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggle}
-          aria-label={role.name}
-          className="mt-0.5 size-4 shrink-0 accent-primary"
-        />
+        {readOnly ? null : (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            aria-label={role.name}
+            className="mt-0.5 size-4 shrink-0 accent-primary"
+          />
+        )}
         <div className="min-w-0 flex-1">
           <Link
             href={`/admin/roles/${role.id}`}
@@ -164,12 +169,17 @@ function GroupTile({
 export function RolesManager({
   roles,
   dict,
+  readOnly = false,
   setEnabledAction,
   setGroupsEnabledAction,
   resetGroupMembersAction,
 }: {
   roles: RoleRow[];
   dict: RolesDict;
+  /** Manager view: render the listing but hide every mutation (per-row
+   * checkbox, bulk action bar). The select-all toggle and BulkActionBar are
+   * suppressed by ensuring `selected` stays empty. */
+  readOnly?: boolean;
   setEnabledAction: (fd: FormData) => Promise<void>;
   setGroupsEnabledAction: (
     groupIds: string[],
@@ -286,14 +296,16 @@ export function RolesManager({
           placeholder={dict.searchPlaceholder}
           className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
-        <button
-          type="button"
-          onClick={allVisibleSelected ? deselectAll : selectAll}
-          disabled={visibleIds.length === 0}
-          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted/60 disabled:opacity-40"
-        >
-          {allVisibleSelected ? dict.deselectAll : dict.selectAll}
-        </button>
+        {readOnly ? null : (
+          <button
+            type="button"
+            onClick={allVisibleSelected ? deselectAll : selectAll}
+            disabled={visibleIds.length === 0}
+            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted/60 disabled:opacity-40"
+          >
+            {allVisibleSelected ? dict.deselectAll : dict.selectAll}
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -308,6 +320,7 @@ export function RolesManager({
               role={role}
               selected={selected.has(role.id)}
               onToggle={() => toggle(role.id)}
+              readOnly={readOnly}
               dict={dict}
             />
           ))}

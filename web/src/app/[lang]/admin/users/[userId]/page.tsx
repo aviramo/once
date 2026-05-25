@@ -1,6 +1,6 @@
-import { notFound, redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { relativeTime, dateTime } from "@/lib/relativeTime";
@@ -101,17 +101,13 @@ export default async function UserDetailPage({
   const a = dict.admin;
   const d = a.userDetail;
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/admin/login");
-  const isAdmin =
-    (user.app_metadata as { role?: string } | undefined)?.role === "admin";
-  if (!isAdmin) {
-    await supabase.auth.signOut();
-    redirect("/admin/login?error=not_admin");
-  }
+  // Admin sees every user; group managers only the union of their managed
+  // groups' members. 404 (not redirect) when a manager opens an out-of-scope
+  // deep-link so the URL stays canonical for the admin who shared it.
+  const scope = await requireViewerScope();
+  const user = scope.user;
+  const isAdmin = scope.kind === "admin";
+  if (scope.kind === "manager" && !scope.userIds.includes(userId)) notFound();
 
   const admin = createSupabaseAdmin();
   const [
@@ -256,14 +252,16 @@ export default async function UserDetailPage({
                   {email ?? a.noEmail}
                 </span>
               </div>
-              <UserDangerZone
-                userId={u.user_id}
-                userName={u.name ?? ""}
-                dict={d.danger}
-                resetAction={resetUser}
-                deleteAction={deleteUser}
-                compact
-              />
+              {isAdmin ? (
+                <UserDangerZone
+                  userId={u.user_id}
+                  userName={u.name ?? ""}
+                  dict={d.danger}
+                  resetAction={resetUser}
+                  deleteAction={deleteUser}
+                  compact
+                />
+              ) : null}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {gate ? (
@@ -271,12 +269,15 @@ export default async function UserDetailPage({
               ) : null}
               {/* The page badges double as release triggers — clicking one
                   reveals a single "שחרור" button next to it (same pattern as
-                  the users-list cards). Green/ok badges stay inert. */}
+                  the users-list cards). Green/ok badges stay inert. For
+                  managers the badges still show but the release action is
+                  hidden, so they read as plain status. */}
               <PageReleaseBadge
                 userId={u.user_id}
                 page={1}
                 tone={n1.tone}
                 text={n1.text}
+                readOnly={!isAdmin}
                 dict={{
                   release: a.actions.release,
                   busy: a.actions.busy,
@@ -289,6 +290,7 @@ export default async function UserDetailPage({
                 page={2}
                 tone={n2.tone}
                 text={n2.text}
+                readOnly={!isAdmin}
                 dict={{
                   release: a.actions.release,
                   busy: a.actions.busy,
@@ -302,6 +304,7 @@ export default async function UserDetailPage({
                 assigned={assignedRoleIds}
                 emptyLabel={d.groupsEmpty}
                 manageLabel={d.groupsManage}
+                readOnly={!isAdmin}
                 dict={{
                   roles: d.roles,
                   rolesHint: d.rolesHint,

@@ -2,11 +2,19 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, Search, UserPlus, X } from "lucide-react";
+import { ArrowRight, Search, ShieldCheck, UserPlus, X } from "lucide-react";
 import { userImageUrl } from "@/lib/userImage";
-import { Avatar } from "../../../_components/ui";
+import { Avatar, StatusBadge } from "../../../_components/ui";
 
-type Member = { user_id: string; name: string | null; image: string | null };
+type Member = {
+  user_id: string;
+  name: string | null;
+  image: string | null;
+  /** ISO grant timestamp if this member is a manager of THIS group; null
+   * otherwise. Server-side, the list is already sorted with managers first
+   * by earliest grant — the client preserves that order. */
+  managerSince: string | null;
+};
 
 type GroupOption = { id: string; name: string; enabled: boolean };
 
@@ -28,6 +36,10 @@ type Dict = {
   bulkMoveDone: string; // "הועברו {count} משתמשים ל{name}"
   bulkMoveFail: string; // "ההעברה נכשלה"
   groupDisabledTag: string; // "מושבת"
+  // Group-manager actions
+  managerBadge: string; // "מנהל"
+  promote: string; // "מינוי כמנהל"
+  demote: string; // "ביטול ניהול"
 };
 
 /**
@@ -42,14 +54,27 @@ export function GroupMembers({
   members: initialMembers,
   allGroups,
   dict,
+  canMutate,
+  canPromote,
+  canDemote,
   assignAction,
   searchAction,
   moveAction,
+  promoteAction,
+  demoteAction,
 }: {
   groupId: string;
   members: Member[];
   allGroups: GroupOption[];
   dict: Dict;
+  /** Admin only: enables add-members, per-row remove, bulk select / move. */
+  canMutate: boolean;
+  /** Admin OR a manager of THIS group: can promote a fellow member to
+   * group_manager. */
+  canPromote: boolean;
+  /** Admin only: can demote a manager back to plain member (the user
+   * deliberately scoped demote to admin to avoid peer power struggles). */
+  canDemote: boolean;
   assignAction: (fd: FormData) => Promise<void>;
   searchAction: (groupId: string, q: string) => Promise<Member[]>;
   moveAction: (
@@ -57,12 +82,15 @@ export function GroupMembers({
     targetGroupId: string,
     fromGroupId: string | null,
   ) => Promise<{ ok: boolean; moved: number }>;
+  promoteAction: (fd: FormData) => Promise<void>;
+  demoteAction: (fd: FormData) => Promise<void>;
 }) {
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Member[]>([]);
   const [searching, setSearching] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [mgrBusyId, setMgrBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [target, setTarget] = useState<string>("");
   const [moveMsg, setMoveMsg] = useState<{ ok: boolean; text: string } | null>(
@@ -70,6 +98,7 @@ export function GroupMembers({
   );
   const [moving, startMove] = useTransition();
   const [, startTransition] = useTransition();
+  const [, startMgrTransition] = useTransition();
 
   useEffect(() => {
     const query = q.trim();
@@ -137,6 +166,52 @@ export function GroupMembers({
     });
   }
 
+  /**
+   * Optimistic promote/demote. On promote, stamp `managerSince` with now() and
+   * re-sort so the new manager slides up under the existing managers (they
+   * land at the end of the manager run since their grant is the latest).
+   * On demote, clear `managerSince` and re-sort. Server-side the order is the
+   * source of truth and a re-fetch via Realtime will reconcile any drift.
+   */
+  function setManager(user: Member, on: boolean) {
+    setMgrBusyId(user.user_id);
+    setMembers((m) => {
+      const stamped = m.map((x) =>
+        x.user_id === user.user_id
+          ? { ...x, managerSince: on ? new Date().toISOString() : null }
+          : x,
+      );
+      stamped.sort((a, b) => {
+        if (a.managerSince && !b.managerSince) return -1;
+        if (!a.managerSince && b.managerSince) return 1;
+        if (a.managerSince && b.managerSince)
+          return a.managerSince.localeCompare(b.managerSince);
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      });
+      return stamped;
+    });
+    const action = on ? promoteAction : demoteAction;
+    startMgrTransition(async () => {
+      try {
+        const fd = new FormData();
+        fd.set("groupId", groupId);
+        fd.set("userId", user.user_id);
+        await action(fd);
+      } catch {
+        // Roll back the optimistic flip on failure.
+        setMembers((m) =>
+          m.map((x) =>
+            x.user_id === user.user_id
+              ? { ...x, managerSince: on ? null : user.managerSince }
+              : x,
+          ),
+        );
+      } finally {
+        setMgrBusyId(null);
+      }
+    });
+  }
+
   function toggleSelected(userId: string) {
     setSelected((s) => {
       const n = new Set(s);
@@ -186,8 +261,9 @@ export function GroupMembers({
 
   return (
     <div className="space-y-5">
-      {/* Bulk action bar — visible only when at least one member is ticked. */}
-      {selected.size > 0 ? (
+      {/* Bulk action bar — visible only when at least one member is ticked.
+          Managers don't see the per-row checkbox, so `selected` never grows. */}
+      {canMutate && selected.size > 0 ? (
         <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5 shadow-sm backdrop-blur">
           <span className="text-sm font-semibold">
             {dict.bulkSelectedCount.replace(
@@ -241,7 +317,9 @@ export function GroupMembers({
         </p>
       ) : null}
 
-      {/* Add members */}
+      {/* Add members — admin only. Managers don't add or remove members;
+          they only promote existing members to fellow managers. */}
+      {canMutate ? (
       <div>
         <p className="mb-2 text-xs font-medium text-muted-foreground">
           {dict.addTitle}
@@ -302,6 +380,26 @@ export function GroupMembers({
           </div>
         ) : null}
       </div>
+      ) : null}
+
+      {/* Managers (and only managers) get a name-search filter for the member
+          list — the admin search input above doubles as a member filter, so
+          we only add a standalone search bar when that input is hidden. */}
+      {!canMutate ? (
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute inset-y-0 my-auto ms-3 size-4 text-muted-foreground"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={dict.searchPlaceholder}
+            className="w-full rounded-lg border border-border bg-background py-2.5 ps-9 pe-3 text-sm outline-none transition-colors focus:border-primary"
+          />
+        </div>
+      ) : null}
 
       {/* Current members */}
       {members.length === 0 ? (
@@ -312,18 +410,22 @@ export function GroupMembers({
         <ul className="space-y-1.5">
           {visibleMembers.map((m) => {
             const checked = selected.has(m.user_id);
+            const isManager = m.managerSince != null;
+            const mgrBusy = mgrBusyId === m.user_id;
             return (
               <li
                 key={m.user_id}
                 className="flex items-center gap-3 rounded-xl border border-border bg-background p-2.5 transition-colors hover:border-primary/40"
               >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleSelected(m.user_id)}
-                  aria-label={m.name ?? m.user_id}
-                  className="size-4 shrink-0 accent-primary"
-                />
+                {canMutate ? (
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleSelected(m.user_id)}
+                    aria-label={m.name ?? m.user_id}
+                    className="size-4 shrink-0 accent-primary"
+                  />
+                ) : null}
                 <Link
                   href={`/admin/users/${m.user_id}`}
                   className="flex min-w-0 flex-1 items-center gap-3"
@@ -336,16 +438,48 @@ export function GroupMembers({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">
                     {m.name ?? "—"}
                   </span>
+                  {isManager ? (
+                    <StatusBadge tone="chat">
+                      <span className="inline-flex items-center gap-1">
+                        <ShieldCheck className="size-3" aria-hidden />
+                        {dict.managerBadge}
+                      </span>
+                    </StatusBadge>
+                  ) : null}
                 </Link>
-                <button
-                  type="button"
-                  disabled={pendingId === m.user_id}
-                  onClick={() => assign(m, false)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-rose-300 hover:text-rose-600 disabled:opacity-50 dark:hover:border-rose-900"
-                >
-                  <X className="size-3.5" />
-                  {dict.remove}
-                </button>
+                {canPromote && !isManager ? (
+                  <button
+                    type="button"
+                    disabled={mgrBusy}
+                    onClick={() => setManager(m, true)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-sky-300 hover:text-sky-700 disabled:opacity-50 dark:hover:border-sky-900"
+                  >
+                    <ShieldCheck className="size-3.5" />
+                    {dict.promote}
+                  </button>
+                ) : null}
+                {canDemote && isManager ? (
+                  <button
+                    type="button"
+                    disabled={mgrBusy}
+                    onClick={() => setManager(m, false)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-amber-300 hover:text-amber-700 disabled:opacity-50 dark:hover:border-amber-900"
+                  >
+                    <X className="size-3.5" />
+                    {dict.demote}
+                  </button>
+                ) : null}
+                {canMutate ? (
+                  <button
+                    type="button"
+                    disabled={pendingId === m.user_id}
+                    onClick={() => assign(m, false)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-rose-300 hover:text-rose-600 disabled:opacity-50 dark:hover:border-rose-900"
+                  >
+                    <X className="size-3.5" />
+                    {dict.remove}
+                  </button>
+                ) : null}
               </li>
             );
           })}

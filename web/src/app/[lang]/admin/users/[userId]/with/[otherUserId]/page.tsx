@@ -1,7 +1,7 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { relativeTime, dateTime } from "@/lib/relativeTime";
@@ -99,16 +99,16 @@ export default async function InteractionHistoryPage({
   const a = dict.admin;
   const d = a.userDetail;
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/admin/login");
-  const isAdmin =
-    (user.app_metadata as { role?: string } | undefined)?.role === "admin";
-  if (!isAdmin) {
-    await supabase.auth.signOut();
-    redirect("/admin/login?error=not_admin");
+  // Both users must be in the manager's scope to see their interaction
+  // history; otherwise 404 (keeps URLs canonical for the admin who shared
+  // the deep-link).
+  const scope = await requireViewerScope();
+  if (
+    scope.kind === "manager" &&
+    (!scope.userIds.includes(userId) ||
+      !scope.userIds.includes(otherUserId))
+  ) {
+    notFound();
   }
 
   const admin = createSupabaseAdmin();

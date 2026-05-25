@@ -65,7 +65,7 @@ import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { CloseBoldIcon, PauseIcon, HeartIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, MailIcon, InboxIcon } from '../src/components/icons'
+import { CloseBoldIcon, PauseIcon, HeartIcon, MegaphoneIcon, EyeOffIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon } from '../src/components/icons'
 import { exitBroadcastConfirm, hideProfileConfirm } from '../src/components/visibilityConfirms'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
@@ -191,12 +191,6 @@ const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H
 // used to decide whether a string needs wrapping. Conservative enough that
 // every string we ship today either fits as 1 line or wraps cleanly to 2.
 const SKIP_HINT_PER_CHAR_W = SKIP_HINT_FONT * 0.65 + 2
-
-// Safety fallback for the "request to join" spinner: it normally clears the
-// instant Realtime confirms availability.join_requested flipped, but if that
-// update never lands the spinner must not spin forever. Generous — any
-// healthy Realtime delivery arrives far sooner.
-const JOIN_REQUEST_CONFIRM_TIMEOUT_MS = 8000
 
 // Headline pools: each i18n block split into lines (trimmed, blanks dropped,
 // so adding/removing a sentence in i18n is the only edit needed).
@@ -1455,7 +1449,7 @@ export default function HomePage() {
   // Scoped to the idle world: an active chat is never gated (a user who
   // matched before being geo-gated keeps their conversation — tearing it
   // down would be destructive, and the gate UI is the discovery screen).
-  const availability = (profile?.relations as { availability?: { state?: string; starts_at?: string; reason?: 'group' | 'push'; join_requested?: boolean } } | undefined)?.availability
+  const availability = (profile?.relations as { availability?: { state?: string; starts_at?: string; reason?: 'group' | 'push' } } | undefined)?.availability
   const availStartsAt = availability?.starts_at ? Date.parse(availability.starts_at) : 0
   // 'not_yet' lifts itself the moment its start time passes; tick locally so
   // the gate clears without waiting for the next server round-trip (the next
@@ -1699,41 +1693,6 @@ export default function HomePage() {
   // /app/location pushes. The popup in settings owns every location write
   // for these users (and may still flip back to device mode at any time).
   const customLoc = profile?.location_custom === true
-
-  // "Request to join" — the not-in-any-enabled-group gate's CTA. Records
-  // relations.join_request server-side; availability.join_requested flips
-  // live (Realtime), swapping this CTA for the "waiting for approval" state.
-  // The button shows a spinner from the tap until that flip lands. The
-  // spinner is held the WHOLE way (not cleared on the HTTP response): the
-  // store strips `relations` from a plain invoke response (game state is
-  // Realtime-owned), so clearing on the response would briefly bounce the
-  // button back to the un-pressed "request to join" look in the gap before
-  // Realtime arrives — exactly the "nothing happens" the user reported.
-  const [joinBusy, setJoinBusy] = useState(false)
-  const joinFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const runJoinRequest = async () => {
-    if (joinBusy) return
-    setJoinBusy(true)
-    try {
-      await invoke('app/join_request', {})
-    } catch {
-      // Request failed — drop the spinner so the CTA is tappable again.
-      setJoinBusy(false)
-      return
-    }
-    // Success: keep spinning until Realtime confirms the gate flipped (the
-    // effect below). Fallback timer guards a missed Realtime update.
-    if (joinFallbackRef.current) clearTimeout(joinFallbackRef.current)
-    joinFallbackRef.current = setTimeout(() => setJoinBusy(false), JOIN_REQUEST_CONFIRM_TIMEOUT_MS)
-  }
-  // Realtime confirmed the request landed → drop the spinner; the centerNotice
-  // recomputes to the "waiting for approval" state in the same render.
-  useEffect(() => {
-    if (joinBusy && availability?.join_requested) {
-      setJoinBusy(false)
-      if (joinFallbackRef.current) { clearTimeout(joinFallbackRef.current); joinFallbackRef.current = null }
-    }
-  }, [joinBusy, availability?.join_requested])
 
   const handlePermissionRequest = async () => {
     if (permBusy) return
@@ -3106,13 +3065,12 @@ export default function HomePage() {
               // notif perm IS granted but the server still push-gates (dead
               // Expo token): nudge the user to re-enable / reopen.
               ? { text: t('home.notifPromptTitle'), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
-              : availability?.join_requested
-                ? { text: t('home.joinGate.waitingText'), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true }
-                : availability?.reason === 'group'
-                  ? { text: t('home.joinGate.requestText'), icon: <MailIcon color={PRIMARY} size={64} />, onPress: runJoinRequest, busy: joinBusy }
-                  // old server (no reason) / any other unavailable → keep the
-                  // pre-existing geo copy, no action.
-                  : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true })
+              // Any other unavailable state (geo / membership in disabled-only
+              // groups) renders the static "not available" message. The
+              // request-to-join CTA + waiting-for-approval state were retired
+              // 2026-05-25 with the no-group=available rule — no more "ask the
+              // operator" prompts surface to users.
+              : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true })
         : null
 
   // Tab strip content — single source of truth for the three pane titles

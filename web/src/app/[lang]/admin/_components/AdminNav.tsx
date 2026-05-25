@@ -40,6 +40,10 @@ export type BadgeSpec = number | { count: number; tone?: "alert" | "info" };
 
 type Props = {
   active: NavKey;
+  /** Which tabs to render. Admins see them all; group managers only see the
+   * tabs that are scope-aware (users + roles). Defaults to "all" for older
+   * callers. */
+  visibleKeys?: readonly NavKey[];
   labels: Labels;
   userLabel?: string;
   /** Per-tab live counts. A positive count paints a small badge on that tab
@@ -137,12 +141,14 @@ const NAV_ITEMS: { key: NavKey; href: string; icon: LucideIcon }[] = [
   { key: "reports", href: "/admin/reports", icon: Flag },
 ];
 
-export function AdminNav({ active, labels, userLabel, badges }: Props) {
+export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Props) {
+  const visible = visibleKeys ? new Set(visibleKeys) : null;
+  const items = NAV_ITEMS.filter((i) => !visible || visible.has(i.key));
   return (
     <>
       {/* Desktop: inline icon+label pills */}
       <nav className="hidden items-center gap-0.5 sm:flex">
-        {NAV_ITEMS.map(({ key, href, icon: Icon }) => (
+        {items.map(({ key, href, icon: Icon }) => (
           <Link
             key={key}
             href={href}
@@ -192,7 +198,7 @@ export function AdminNav({ active, labels, userLabel, badges }: Props) {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="mx-auto flex max-w-lg items-stretch">
-          {NAV_ITEMS.map(({ key, href, icon: Icon }) => (
+          {items.map(({ key, href, icon: Icon }) => (
             <Link
               key={key}
               href={href}

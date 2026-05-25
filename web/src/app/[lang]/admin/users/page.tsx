@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell } from "../_components/AdminShell";
@@ -182,9 +181,21 @@ type Secondary = {
   os: string;
   seg: string;
   segIds: string[] | null;
+  /** Group-manager scope: when set, every query is intersected with this
+   * set of user_ids. Empty set => no rows. Admin viewers pass null. */
+  scopeUserIds: string[] | null;
 };
 
 function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
+  // Manager scope is the FIRST gate: it strictly bounds the visible user
+  // set regardless of any other filter (admin pass-through is null). An
+  // empty managed set returns zero rows by passing NO_MATCH_ID so a search
+  // still returns "no users" rather than degenerating into "everyone".
+  if (f.scopeUserIds)
+    q = q.in(
+      "user_id",
+      f.scopeUserIds.length ? f.scopeUserIds : [NO_MATCH_ID],
+    );
   if (f.p1) q = q.eq("relations->page1->>state", f.p1);
   if (f.p2) q = q.eq("relations->page2->>state", f.p2);
   if (f.roleInIds)
@@ -283,17 +294,12 @@ export default async function AdminUsers({
   const sort = pick(sp.sort, SORT_VALUES) || "recent";
   const roleRaw = typeof sp.role === "string" ? sp.role : "";
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/admin/login");
-  const isAdmin =
-    (user.app_metadata as { role?: string } | undefined)?.role === "admin";
-  if (!isAdmin) {
-    await supabase.auth.signOut();
-    redirect("/admin/login?error=not_admin");
-  }
+  // Admin sees everyone. Group managers see only the union of members across
+  // the groups they manage — every query below is intersected with that set
+  // via `secondary.scopeUserIds` (built further down).
+  const scope = await requireViewerScope();
+  const user = scope.user;
+  const isAdmin = scope.kind === "admin";
 
   const admin = createSupabaseAdmin();
 
@@ -311,11 +317,17 @@ export default async function AdminUsers({
         .order("created_at", { ascending: true }),
       admin.rpc("admin_user_facet_counts"),
     ]);
-  const roleCatalog = (roleCatalogData ?? []) as {
+  let roleCatalog = (roleCatalogData ?? []) as {
     id: string;
     name: string;
     enabled: boolean;
   }[];
+  // Group managers only see the groups they manage — both as filter options
+  // and as catalog input for the userIds intersection below.
+  if (scope.kind === "manager") {
+    const managed = new Set(scope.groupIds);
+    roleCatalog = roleCatalog.filter((g) => managed.has(g.id));
+  }
   type Facets = {
     total?: number;
     groups_none?: number;
@@ -379,6 +391,7 @@ export default async function AdminUsers({
     os,
     seg,
     segIds,
+    scopeUserIds: scope.kind === "manager" ? scope.userIds : null,
   };
 
   let rows: UserRow[];

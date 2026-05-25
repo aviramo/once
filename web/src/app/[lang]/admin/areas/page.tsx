@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAdminUser } from "@/lib/admin-auth";
+import { requireViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
@@ -38,8 +38,11 @@ export default async function AreasPage({
       ? (sp.mode as AreaMode)
       : "";
 
-  const user = await getAdminUser();
-  if (!user) redirect("/admin/login");
+  // Areas are global / geo-level config — admin-only. Managers redirected
+  // back to the screen they own.
+  const scope = await requireViewerScope();
+  if (scope.kind !== "admin") redirect("/admin/users");
+  const user = scope.user;
 
   const admin = createSupabaseAdmin();
   let areasQ = admin

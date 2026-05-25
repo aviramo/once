@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getViewerScope } from "@/lib/admin-auth";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { safeNextPath } from "@/lib/safeNext";
@@ -30,16 +31,19 @@ export default async function AdminLoginPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    // Verify the signed-in account actually has admin role before bouncing
-    // them to `next`. Without this check a non-admin sign-in loops forever:
-    // every admin page redirects unauthed/non-admin users back here, and we
-    // would redirect them back to the admin page — bounce, bounce, bounce.
-    // Sign the session out so the form is usable again on the next attempt.
-    const role =
-      (user.app_metadata as { role?: string } | undefined)?.role;
-    if (role === "admin") redirect(next);
-    await supabase.auth.signOut();
-    redirect("/admin/login?error=not_admin");
+    // Resolve the panel scope (admin OR group manager) before bouncing to
+    // `next`. Without this check, a non-admin/non-manager sign-in loops
+    // forever (every admin screen redirects them back here, login redirects
+    // them back to the screen). For a manager whose intended next is an
+    // admin-only screen we override to /admin/users (the screen they CAN
+    // reach), so they don't bounce off a forbidden destination.
+    const scope = await getViewerScope();
+    if (!scope) {
+      await supabase.auth.signOut();
+      redirect("/admin/login?error=not_admin");
+    }
+    if (scope.kind === "admin") redirect(next);
+    redirect("/admin/users");
   }
 
   return (

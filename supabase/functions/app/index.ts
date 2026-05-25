@@ -2,14 +2,11 @@ import Log from "../log.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
 import {
-  ADMIN_USER_URL,
-  EMAIL_FROM,
   Notify,
   PushPresence,
   PushToken,
   PUSH_BODY,
   PUSH_TITLE,
-  SUPPORT_EMAIL,
 } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
@@ -131,29 +128,6 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
       Tools.rpc(log, "app_push_dead", { p_user_id: target_user_id }).then(() => {}),
     );
   }
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
-
-// A gated user asked to be let into a group. They stay stuck (unavailable)
-// until an admin adds them, so alert the operator with a deep-link to the
-// user's page in the web admin. Fire-and-forget (mirrors firePush): a slow or
-// failed email must never delay or fail the user's request.
-async function sendJoinRequestEmail(log: Log, userId: string, name: string | null) {
-  const displayName = name && name.trim() ? name.trim() : userId;
-  const url = ADMIN_USER_URL(userId);
-  const safeName = escapeHtml(displayName);
-  const subject = `בקשת הצטרפות לקבוצה: ${displayName}`;
-  const html = `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#111">
-  <p><b>${safeName}</b> ביקש/ה להצטרף לקבוצה.</p>
-  <p>לצירוף המשתמש/ת לקבוצה דרך דף הניהול:</p>
-  <p><a href="${url}" style="color:#0a58ca">${url}</a></p>
-</div>`;
-  const entry = log.log("email:join_request", { to: SUPPORT_EMAIL, userId, name: displayName });
-  await Tools.email(entry, { from: EMAIL_FROM, to: SUPPORT_EMAIL, subject, html });
 }
 
 Deno.serve(async (req) => {
@@ -286,24 +260,10 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "join_request": {
-        // Not-in-any-enabled-group users (server gate reason 'group') ask to
-        // be let in. Records relations.join_request + recomputes availability
-        // (join_requested flips live so the client swaps the "request to
-        // join" CTA for a "waiting for approval" state). Deliberately NOT in
-        // requiresPresence — this is the gated user's only way forward.
-        const result = await Tools.rpc(log, "app_join_request", { me_id: user.user_id });
-        await user.persist(log);
-        if (result?.error) return log.error(key, result.error, 400);
-        rpcUser = result?.user;
-        notifyList = result?.notify ?? [];
-        // Alert the operator so they can approve this user into a group.
-        const jrName = (rpcUser as { name?: string | null } | undefined)?.name
-          ?? (user.db?.new as { name?: string | null } | undefined)?.name
-          ?? null;
-        EdgeRuntime.waitUntil(sendJoinRequestEmail(log, user.user_id, jrName));
-        break;
-      }
+      // /app/join_request retired 2026-05-25: the no-group=available rule
+      // makes the request-to-join state unreachable. Old mobile builds that
+      // still call this endpoint get a 404 here, which is harmless (the
+      // request was a no-op under the new gate anyway).
 
       case "notif": {
         // Lean notification-permission heartbeat. The client posts this the

@@ -28,6 +28,7 @@ export function UserGroupsChips({
   dict,
   emptyLabel,
   manageLabel,
+  readOnly = false,
   action,
 }: {
   userId: string;
@@ -39,6 +40,9 @@ export function UserGroupsChips({
   emptyLabel: string;
   /** Sub-label on the "+" affordance / popover header — e.g. "ניהול קבוצות". */
   manageLabel: string;
+  /** When true the chips render as inert badges with no popover / add
+   * affordance — used in read-only contexts (group-manager view). */
+  readOnly?: boolean;
   action: (fd: FormData) => Promise<void>;
 }) {
   const assignedSet = new Set(assigned);
@@ -46,6 +50,35 @@ export function UserGroupsChips({
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  if (readOnly) {
+    const tag =
+      "inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium";
+    if (assignedRoles.length === 0) {
+      return (
+        <span className={cn(tag, "bg-muted text-muted-foreground")}>
+          {emptyLabel}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        {assignedRoles.map((r) => (
+          <span
+            key={r.id}
+            className={cn(
+              tag,
+              r.enabled
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground line-through",
+            )}
+          >
+            {r.name}
+          </span>
+        ))}
+      </span>
+    );
+  }
 
   useEffect(() => {
     if (!open) return;

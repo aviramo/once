@@ -35,11 +35,14 @@ type BadgeProps = {
   tone: Tone;
   text: string;
   dict: Dict;
+  /** When true the badge renders as a static StatusBadge with no reveal /
+   * action — used in read-only contexts (e.g. group-manager view). */
+  readOnly?: boolean;
   onOpenChange?: (open: boolean) => void;
 };
 
 export function PageReleaseBadge(props: BadgeProps) {
-  if (props.tone === "ok") {
+  if (props.tone === "ok" || props.readOnly) {
     return <StatusBadge tone={props.tone}>{props.text}</StatusBadge>;
   }
   return <InteractiveBadge {...props} />;
