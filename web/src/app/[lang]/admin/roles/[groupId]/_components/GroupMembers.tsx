@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, Search, ShieldCheck, UserPlus, X } from "lucide-react";
+import { Search, ShieldCheck, UserPlus, X } from "lucide-react";
 import { userImageUrl } from "@/lib/userImage";
 import { Avatar, StatusBadge } from "../../../_components/ui";
 
@@ -16,8 +16,6 @@ type Member = {
   managerSince: string | null;
 };
 
-type GroupOption = { id: string; name: string; enabled: boolean };
-
 type Dict = {
   noMembers: string;
   remove: string;
@@ -26,16 +24,6 @@ type Dict = {
   searching: string;
   noResults: string;
   add: string;
-  // Multi-select / bulk move
-  bulkSelectedCount: string; // "{count} נבחרו"
-  bulkClear: string; // "ניקוי"
-  bulkMoveLabel: string; // "העברה לקבוצה"
-  bulkMoveChoose: string; // "בחר קבוצת יעד…"
-  bulkMoveButton: string; // "העבר"
-  bulkMoveBusy: string; // "מעביר…"
-  bulkMoveDone: string; // "הועברו {count} משתמשים ל{name}"
-  bulkMoveFail: string; // "ההעברה נכשלה"
-  groupDisabledTag: string; // "מושבת"
   // Group-manager actions
   managerBadge: string; // "מנהל"
   promote: string; // "מינוי כמנהל"
@@ -52,22 +40,19 @@ type Dict = {
 export function GroupMembers({
   groupId,
   members: initialMembers,
-  allGroups,
   dict,
   canMutate,
   canPromote,
   canDemote,
   assignAction,
   searchAction,
-  moveAction,
   promoteAction,
   demoteAction,
 }: {
   groupId: string;
   members: Member[];
-  allGroups: GroupOption[];
   dict: Dict;
-  /** Admin only: enables add-members, per-row remove, bulk select / move. */
+  /** Admin only: enables add-members + per-row remove. */
   canMutate: boolean;
   /** Admin OR a manager of THIS group: can promote a fellow member to
    * group_manager. */
@@ -77,11 +62,6 @@ export function GroupMembers({
   canDemote: boolean;
   assignAction: (fd: FormData) => Promise<void>;
   searchAction: (groupId: string, q: string) => Promise<Member[]>;
-  moveAction: (
-    userIds: string[],
-    targetGroupId: string,
-    fromGroupId: string | null,
-  ) => Promise<{ ok: boolean; moved: number }>;
   promoteAction: (fd: FormData) => Promise<void>;
   demoteAction: (fd: FormData) => Promise<void>;
 }) {
@@ -91,12 +71,6 @@ export function GroupMembers({
   const [searching, setSearching] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [mgrBusyId, setMgrBusyId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [target, setTarget] = useState<string>("");
-  const [moveMsg, setMoveMsg] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  );
-  const [moving, startMove] = useTransition();
   const [, startTransition] = useTransition();
   const [, startMgrTransition] = useTransition();
 
@@ -133,21 +107,11 @@ export function GroupMembers({
       )
     : members;
 
-  // Other groups available as a move target (this group can't be its own
-  // destination).
-  const moveTargets = allGroups.filter((g) => g.id !== groupId);
-
   function assign(user: Member, add: boolean) {
     setPendingId(user.user_id);
     if (add) setMembers((m) => [user, ...m]);
     else {
       setMembers((m) => m.filter((u) => u.user_id !== user.user_id));
-      setSelected((s) => {
-        if (!s.has(user.user_id)) return s;
-        const n = new Set(s);
-        n.delete(user.user_id);
-        return n;
-      });
     }
     startTransition(async () => {
       try {
@@ -212,110 +176,10 @@ export function GroupMembers({
     });
   }
 
-  function toggleSelected(userId: string) {
-    setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(userId)) n.delete(userId);
-      else n.add(userId);
-      return n;
-    });
-  }
-
-  function clearSelection() {
-    setSelected(new Set());
-    setMoveMsg(null);
-  }
-
-  function runMove() {
-    if (moving || selected.size === 0 || !target) return;
-    const ids = [...selected];
-    const targetGroup = moveTargets.find((g) => g.id === target);
-    if (!targetGroup) return;
-    const movedUsers = members.filter((m) => ids.includes(m.user_id));
-    // Optimistic removal — the move strips them from this group.
-    setMembers((m) => m.filter((u) => !ids.includes(u.user_id)));
-    setMoveMsg(null);
-    startMove(async () => {
-      try {
-        const res = await moveAction(ids, target, groupId);
-        if (res.ok) {
-          setMoveMsg({
-            ok: true,
-            text: dict.bulkMoveDone
-              .replace("{count}", String(res.moved))
-              .replace("{name}", targetGroup.name),
-          });
-          setSelected(new Set());
-          setTarget("");
-        } else {
-          // Roll back the optimistic removal.
-          setMembers((m) => [...movedUsers, ...m]);
-          setMoveMsg({ ok: false, text: dict.bulkMoveFail });
-        }
-      } catch {
-        setMembers((m) => [...movedUsers, ...m]);
-        setMoveMsg({ ok: false, text: dict.bulkMoveFail });
-      }
-    });
-  }
-
   return (
     <div className="space-y-5">
-      {/* Bulk action bar — visible only when at least one member is ticked.
-          Managers don't see the per-row checkbox, so `selected` never grows. */}
-      {canMutate && selected.size > 0 ? (
-        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5 shadow-sm backdrop-blur">
-          <span className="text-sm font-semibold">
-            {dict.bulkSelectedCount.replace(
-              "{count}",
-              String(selected.size),
-            )}
-          </span>
-          <button
-            type="button"
-            onClick={clearSelection}
-            className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {dict.bulkClear}
-          </button>
-          <span className="ms-2 text-xs text-muted-foreground">
-            {dict.bulkMoveLabel}
-          </span>
-          <select
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-primary"
-          >
-            <option value="">{dict.bulkMoveChoose}</option>
-            {moveTargets.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-                {!g.enabled ? ` (${dict.groupDisabledTag})` : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={runMove}
-            disabled={moving || !target}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-50"
-          >
-            <ArrowRight className="size-3.5 ltr:-scale-x-100" />
-            {moving ? dict.bulkMoveBusy : dict.bulkMoveButton}
-          </button>
-        </div>
-      ) : null}
-      {moveMsg ? (
-        <p
-          className={
-            moveMsg.ok
-              ? "text-xs text-emerald-600 dark:text-emerald-400"
-              : "text-xs text-rose-600 dark:text-rose-400"
-          }
-        >
-          {moveMsg.text}
-        </p>
-      ) : null}
+      {/* Bulk move was removed 2026-05-25 (user request) — multi-select +
+          assign/remove is now done from the /admin/users screen instead. */}
 
       {/* Add members — admin only. Managers don't add or remove members;
           they only promote existing members to fellow managers. */}
@@ -409,7 +273,6 @@ export function GroupMembers({
       ) : (
         <ul className="space-y-1.5">
           {visibleMembers.map((m) => {
-            const checked = selected.has(m.user_id);
             const isManager = m.managerSince != null;
             const mgrBusy = mgrBusyId === m.user_id;
             return (
@@ -417,15 +280,6 @@ export function GroupMembers({
                 key={m.user_id}
                 className="flex items-center gap-3 rounded-xl border border-border bg-background p-2.5 transition-colors hover:border-primary/40"
               >
-                {canMutate ? (
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleSelected(m.user_id)}
-                    aria-label={m.name ?? m.user_id}
-                    className="size-4 shrink-0 accent-primary"
-                  />
-                ) : null}
                 <Link
                   href={`/admin/users/${m.user_id}`}
                   className="flex min-w-0 flex-1 items-center gap-3"

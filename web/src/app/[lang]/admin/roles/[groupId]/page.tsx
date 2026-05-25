@@ -13,9 +13,7 @@ import {
   setUserRoleAssignment,
   searchUsersForGroup,
   renameRole,
-  setRoleEnabled,
   deleteRole,
-  moveUsersToGroup,
   promoteGroupManager,
   demoteGroupManager,
 } from "../actions";
@@ -46,12 +44,11 @@ export default async function GroupDetailPage({
   const [
     { data: group },
     { data: memberRows },
-    { data: allGroups },
     { data: managerRows },
   ] = await Promise.all([
     admin
       .from("groups")
-      .select("id, name, enabled")
+      .select("id, name")
       .eq("id", groupId)
       .maybeSingle(),
     admin
@@ -59,21 +56,12 @@ export default async function GroupDetailPage({
       .select("user_id, users(user_id, name, data)")
       .eq("group_id", groupId),
     admin
-      .from("groups")
-      .select("id, name, enabled")
-      .order("name", { ascending: true }),
-    admin
       .from("group_managers")
       .select("user_id, granted_at")
       .eq("group_id", groupId),
   ]);
   if (!group) notFound();
-  const g = group as { id: string; name: string; enabled: boolean };
-  const groupCatalog = (allGroups ?? []) as {
-    id: string;
-    name: string;
-    enabled: boolean;
-  }[];
+  const g = group as { id: string; name: string };
 
   type UserMini = {
     user_id: string;
@@ -114,7 +102,6 @@ export default async function GroupDetailPage({
     deleteTitle: d.deleteTitle,
     deleteDesc: d.deleteDesc,
     deleteButton: r.delete,
-    deleteBlocked: d.deleteBlocked,
     deleteConfirmTitle: d.deleteConfirmTitle,
     deleteConfirmBody: d.deleteConfirmBody,
     deleteBusy: d.deleteBusy,
@@ -131,15 +118,10 @@ export default async function GroupDetailPage({
       <GroupHeader
         groupId={g.id}
         initialName={g.name}
-        enabled={g.enabled}
         members={members.length}
         readOnly={!isAdmin}
         dict={{
           members: r.members,
-          statusActive: r.statusActive,
-          statusDisabled: r.statusDisabled,
-          enable: r.enable,
-          disable: r.disable,
           rename: r.rename,
           save: r.save,
           cancel: r.cancel,
@@ -147,7 +129,6 @@ export default async function GroupDetailPage({
           fail: d.fail,
         }}
         renameAction={renameRole}
-        setEnabledAction={setRoleEnabled}
         extraActions={
           isAdmin ? (
             <GroupDangerZone
@@ -162,12 +143,10 @@ export default async function GroupDetailPage({
         }
       />
 
-
       <Section title={d.members} count={members.length}>
         <GroupMembers
           groupId={g.id}
           members={members}
-          allGroups={groupCatalog}
           canMutate={isAdmin}
           canPromote={canPromote}
           canDemote={isAdmin}
@@ -179,22 +158,12 @@ export default async function GroupDetailPage({
             searching: d.searching,
             noResults: d.noResults,
             add: d.add,
-            bulkSelectedCount: d.bulkSelectedCount,
-            bulkClear: d.bulkClear,
-            bulkMoveLabel: d.bulkMoveLabel,
-            bulkMoveChoose: d.bulkMoveChoose,
-            bulkMoveButton: d.bulkMoveButton,
-            bulkMoveBusy: d.bulkMoveBusy,
-            bulkMoveDone: d.bulkMoveDone,
-            bulkMoveFail: d.bulkMoveFail,
-            groupDisabledTag: r.statusDisabled,
             managerBadge: d.managerBadge,
             promote: d.promote,
             demote: d.demote,
           }}
           assignAction={setUserRoleAssignment}
           searchAction={searchUsersForGroup}
-          moveAction={moveUsersToGroup}
           promoteAction={promoteGroupManager}
           demoteAction={demoteGroupManager}
         />

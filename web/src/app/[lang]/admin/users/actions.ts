@@ -112,7 +112,8 @@ export type BulkAction =
   | { kind: "reset" }
   | { kind: "delete" }
   | { kind: "release"; page: 1 | 2 }
-  | { kind: "assignGroup"; groupId: string };
+  | { kind: "assignGroup"; groupId: string }
+  | { kind: "removeGroup"; groupId: string };
 
 /**
  * Apply one action to every selected user. Each user is processed
@@ -166,6 +167,13 @@ export async function bulkUserAction(
           { onConflict: "user_id,group_id", ignoreDuplicates: true },
         );
         if (!error) count++;
+      } else if (action.kind === "removeGroup") {
+        const { error } = await admin
+          .from("user_groups")
+          .delete()
+          .eq("user_id", id)
+          .eq("group_id", action.groupId);
+        if (!error) count++;
       }
     } catch {
       /* skip this user, continue with the rest */
@@ -174,6 +182,10 @@ export async function bulkUserAction(
 
   revalidatePath(ADMIN_USERS_PATH, "page");
   revalidatePath(USER_PATH, "page");
-  if (action.kind === "assignGroup") await triggerResync();
+  // Group membership flips can change a user's availability gate (assigning
+  // a disabled group gates them; removing the last group flips them back to
+  // available under the no-group=available rule). Resync covers both directions.
+  if (action.kind === "assignGroup" || action.kind === "removeGroup")
+    await triggerResync();
   return { ok: true, count };
 }

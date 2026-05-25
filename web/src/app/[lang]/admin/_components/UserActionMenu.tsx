@@ -7,6 +7,7 @@ import {
   RotateCcw,
   Trash2,
   FolderPlus,
+  FolderMinus,
   Eraser,
   ExternalLink,
   ChevronLeft,
@@ -128,9 +129,9 @@ export function UserActionMenu({
   onClose,
   onDone,
 }: Props) {
-  const [step, setStep] = useState<"menu" | "confirm" | "group" | "result">(
-    initialAction ? "confirm" : "menu",
-  );
+  const [step, setStep] = useState<
+    "menu" | "confirm" | "group" | "groupRemove" | "result"
+  >(initialAction ? "confirm" : "menu");
   const [pendingAction, setPendingAction] = useState<BulkAction | null>(
     initialAction ?? null,
   );
@@ -182,6 +183,13 @@ export function UserActionMenu({
           desc={dict.assignGroupDesc}
           chevron
           onClick={() => setStep("group")}
+        />
+        <ActionRow
+          icon={FolderMinus}
+          label={dict.removeGroup}
+          desc={dict.removeGroupDesc}
+          chevron
+          onClick={() => setStep("groupRemove")}
         />
         {/* Per-page release belongs on the page BADGES for a single user (one
             tap, in context). The bulk sheet keeps it because there's no per-
@@ -267,7 +275,8 @@ export function UserActionMenu({
     );
   }
 
-  if (step === "group") {
+  if (step === "group" || step === "groupRemove") {
+    const removing = step === "groupRemove";
     return (
       <div className="space-y-2">
         <button
@@ -279,7 +288,7 @@ export function UserActionMenu({
           {dict.back}
         </button>
         <p className="text-xs font-medium text-muted-foreground">
-          {dict.pickGroup}
+          {removing ? dict.pickGroupRemove : dict.pickGroup}
         </p>
         {groups.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -292,10 +301,20 @@ export function UserActionMenu({
                 <button
                   type="button"
                   disabled={running}
-                  onClick={() => run({ kind: "assignGroup", groupId: g.id })}
+                  onClick={() =>
+                    run(
+                      removing
+                        ? { kind: "removeGroup", groupId: g.id }
+                        : { kind: "assignGroup", groupId: g.id },
+                    )
+                  }
                   className="flex w-full items-center gap-2 rounded-xl border border-border bg-background p-3 text-start text-sm font-medium transition-colors hover:border-primary/40 hover:bg-muted/40 disabled:opacity-50"
                 >
-                  <FolderPlus className="size-4 shrink-0 text-primary" />
+                  {removing ? (
+                    <FolderMinus className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  ) : (
+                    <FolderPlus className="size-4 shrink-0 text-primary" />
+                  )}
                   <span className="min-w-0 flex-1 truncate">{g.name}</span>
                   {!g.enabled ? (
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
