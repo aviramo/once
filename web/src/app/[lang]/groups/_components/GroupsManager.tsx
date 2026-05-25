@@ -148,18 +148,62 @@ function GroupTile({
   );
 }
 
+/* ----------------------------------------------------------- NoGroupTile -- */
+
+/**
+ * Virtual "ללא קבוצה" tile that links to the existing users-list filter
+ * (`/users?group=__none__`). Same visual language as `GroupTile`, but no
+ * checkbox / selection — it isn't a real group, so bulk actions don't apply.
+ * Dashed border distinguishes it from real groups at a glance.
+ */
+function NoGroupTile({
+  label,
+  count,
+  href,
+  membersLabel,
+}: {
+  label: string;
+  count: number;
+  href: string;
+  membersLabel: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative block rounded-xl border border-dashed border-border bg-background p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
+    >
+      <div className="min-w-0">
+        <span className="block min-w-0 truncate text-sm font-semibold text-muted-foreground transition-colors group-hover:text-primary">
+          {label}
+        </span>
+        <div className="mt-1.5">
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {count} {membersLabel}
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 /* -------------------------------------------------------------- Manager -- */
 
 /**
  * Groups listing. Compact card grid with per-card selection; the bottom
  * sticky bar surfaces the group-scoped bulk reset. Rename and delete moved
  * to the group detail page; this screen no longer carries them.
+ *
+ * The optional `noGroup` prop appends a virtual "ללא קבוצה" tile at the end
+ * of the grid — clicking it opens the existing users-list filter for users
+ * with no group memberships. Not a real DB row; not selectable; not part of
+ * any bulk action.
  */
 export function GroupsManager({
   groups,
   dict,
   readOnly = false,
   resetGroupMembersAction,
+  noGroup,
 }: {
   groups: GroupRow[];
   dict: RolesDict;
@@ -168,6 +212,9 @@ export function GroupsManager({
    * suppressed by ensuring `selected` stays empty. */
   readOnly?: boolean;
   resetGroupMembersAction: (groupIds: string[]) => Promise<ResetResult>;
+  /** Virtual "no group" tile (admin only). When set, appended after the
+   * real groups. Links to the users-list with the no-group filter applied. */
+  noGroup?: { count: number; label: string; href: string };
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -261,7 +308,7 @@ export function GroupsManager({
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && !noGroup ? (
         <p className="rounded-xl border border-dashed border-border px-6 py-8 text-center text-sm text-muted-foreground">
           {dict.noSearchResults}
         </p>
@@ -277,6 +324,14 @@ export function GroupsManager({
               dict={dict}
             />
           ))}
+          {noGroup ? (
+            <NoGroupTile
+              label={noGroup.label}
+              count={noGroup.count}
+              href={noGroup.href}
+              membersLabel={dict.members}
+            />
+          ) : null}
         </CardGrid>
       )}
 

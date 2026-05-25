@@ -46,6 +46,20 @@ export default async function RolesPage({
     members: row.user_groups?.[0]?.count ?? 0,
   }));
 
+  // Virtual "ללא קבוצה" tile (admin-only) — surfaces the count of users with
+  // zero group memberships and links to the existing users-list filter
+  // `?group=__none__`. Computed via `admin_user_facet_counts.groups_none` so
+  // the page reuses the single facet RPC instead of duplicating the COUNT
+  // query. Managers don't see this tile (they only see their managed groups
+  // and have no "uncategorised" view to drill into).
+  let noGroupCount: number | undefined;
+  if (isAdmin) {
+    const { data: facets } = await admin.rpc("admin_user_facet_counts");
+    noGroupCount = Number(
+      (facets as { groups_none?: number | string } | null)?.groups_none ?? 0,
+    );
+  }
+
   return (
     <AdminShell dict={dict.admin} active="groups">
       <RealtimeRefresh tables="groups,user_groups" channel="admin-groups" />
@@ -59,7 +73,7 @@ export default async function RolesPage({
             </Card>
           ) : null}
 
-          {groups.length === 0 ? (
+          {groups.length === 0 && noGroupCount === undefined ? (
             <EmptyState>{r.none}</EmptyState>
           ) : (
             <GroupsManager
@@ -67,6 +81,15 @@ export default async function RolesPage({
               dict={r}
               readOnly={!isAdmin}
               resetGroupMembersAction={resetGroupMembers}
+              noGroup={
+                noGroupCount !== undefined
+                  ? {
+                      count: noGroupCount,
+                      label: dict.admin.filterGroupNone,
+                      href: "/users?group=__none__",
+                    }
+                  : undefined
+              }
             />
           )}
         </div>
