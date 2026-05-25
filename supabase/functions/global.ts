@@ -215,7 +215,7 @@ export const SUPPORT_EMAIL = "once.app.support@gmail.com";
 // once that domain is Resend-verified for a branded from.
 export const EMAIL_FROM = "Once <onboarding@resend.dev>";
 export const ADMIN_USER_URL = (userId: string) =>
-  `https://once-lake.vercel.app/admin/users/${userId}`;
+  `https://once-lake.vercel.app/users/${userId}`;
 
 export type RpcResult = {
   user?: Record<string, unknown>;

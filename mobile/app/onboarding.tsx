@@ -10,6 +10,7 @@ import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
+import { INVITE_CODE_LEN } from '../src/lib/groups'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
@@ -17,7 +18,7 @@ import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_STRONG, DESTRUCTIVE, PRIMARY, BLACK_MID, BLACK_STRONG } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION } from '../src/tokens'
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
 // Delay before auto-focusing a step's input after navigating to it. The step
 // transition slides the pager over MOTION.base; focusing an input that is
@@ -129,6 +130,13 @@ export default function OnboardingPage() {
   const [bioSubmitting, setBioSubmitting] = useState(false)
   const [totalPhotoCount, setTotalPhotoCount] = useState(profile?.images?.length ?? 0)
   const photoEditorRef = useRef<PhotoEditorRef>(null)
+  // Step 6: optional group invite code. Digits-only, length 6 (see
+  // INVITE_CODE_LEN). Held in local state until the final step submits — the
+  // server isn't touched on step 5 anymore so the user can still get to step 6
+  // (and to onboarding generally on app relaunch) until the whole flow lands.
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const codeInputRef = useRef<RNTextInput | null>(null)
 
   // Estimate the pager height for first paint so the initial step renders
   // immediately (rather than flashing an empty background until onLayout fires).
@@ -144,7 +152,7 @@ export default function OnboardingPage() {
   useEffect(() => { stepRef.current = step }, [step])
   useEffect(() => { containerHRef.current = containerH }, [containerH])
 
-  const canGoBack = (s: number) => s === 2 || s === 3 || s === 5
+  const canGoBack = (s: number) => s === 2 || s === 3 || s === 5 || s === 6
   const goBack = () => setStep(s => canGoBack(s) ? s - 1 : s)
   const overlayY = useRef(new Animated.Value(initialStep === 5 ? 0 : initialPagerH)).current
 
@@ -326,6 +334,10 @@ export default function OnboardingPage() {
       const id = setTimeout(() => bioInputRef.current?.focus(), STEP_FOCUS_DELAY_MS)
       return () => clearTimeout(id)
     }
+    if (step === 6) {
+      const id = setTimeout(() => codeInputRef.current?.focus(), STEP_FOCUS_DELAY_MS)
+      return () => clearTimeout(id)
+    }
     Keyboard.dismiss()
   }, [step])
 
@@ -346,12 +358,16 @@ export default function OnboardingPage() {
   const dateValid = age !== null && age >= 18 && age <= 120
   const bioRemaining = BIO_MAX - bio.length
   const bioValid = bio.trim().length >= BIO_MIN
+  // Step 6 invite code: legal lengths are 0 (skip) or 6 (redeem). Any other
+  // length leaves Continue disabled — there is no "incomplete" partial action.
+  const codeValid = code.length === 0 || code.length === INVITE_CODE_LEN
   const canContinue =
     step === 1 ? isMale !== null :
     step === 2 ? nameValid :
     step === 3 ? dateValid && !submitting :
     step === 4 ? totalPhotoCount >= 2 :
-    step === 5 ? bioValid && !bioSubmitting :
+    step === 5 ? bioValid :
+    step === 6 ? codeValid && !bioSubmitting :
     false
 
   const submitAccount = async () => {
@@ -376,11 +392,29 @@ export default function OnboardingPage() {
     setStep(s => Math.min(TOTAL_STEPS, s + 1))
   }
 
-  const submitBio = async () => {
+  // Final onboarding submit, fired from step 6. Optionally redeems the invite
+  // code first (so the group membership is in place when the bio save's
+  // server-side auto-find runs), then awaits the photo flush, saves the bio,
+  // and finally flips the local userStore.bio — which is what `_layout.tsx`
+  // watches to redirect to /home. Holding bio in local state through step 6
+  // keeps onboarding self-contained: if anything in here fails, the user is
+  // still on /onboarding because the persisted profile still has no bio.
+  const finishOnboarding = async () => {
     if (bioSubmittingRef.current) return
     bioSubmittingRef.current = true
     setBioSubmitting(true)
+    setCodeError(null)
     try {
+      if (code.length === INVITE_CODE_LEN) {
+        try {
+          await invoke('app/redeem_invite', { code })
+        } catch {
+          setCodeError(t('ob.inviteInvalid'))
+          bioSubmittingRef.current = false
+          setBioSubmitting(false)
+          return
+        }
+      }
       if (flushPromiseRef.current) {
         await flushPromiseRef.current
         flushPromiseRef.current = null
@@ -405,7 +439,7 @@ export default function OnboardingPage() {
     if (step !== 2) Keyboard.dismiss()
     if (step === 3) { submitAccount(); return }
     if (step === 4) { saveImagesAndContinue(); return }
-    if (step === 5) { submitBio(); return }
+    if (step === 6) { finishOnboarding(); return }
     setStep(s => Math.min(TOTAL_STEPS, s + 1))
   }
   const renderStep = (s: number) => {
@@ -603,6 +637,53 @@ export default function OnboardingPage() {
               label={t('bio.submit')}
               onPress={onContinue}
               disabled={!bioValid}
+              variant="primary"
+              tone="positive"
+              size="lg"
+            />
+          </View>
+        </View>
+      )
+    }
+
+    if (s === 6) {
+      // Optional group invite-code step. Digits-only, length 0 (skip) or 6.
+      // The Continue button shape-shifts: when the input is empty it reads
+      // "Skip" — pressing it submits the bio with no group attached; when
+      // 6 digits are entered it reads "Join" — pressing it redeems first.
+      const isEmpty = code.length === 0
+      return (
+        <View style={styles.page}>
+          <Text style={styles.title}>{t('ob.inviteTitle')}</Text>
+          <Text style={styles.subtitle}>{t('ob.inviteHint')}</Text>
+
+          <View style={styles.inputWrap}>
+            <TextInput
+              ref={codeInputRef}
+              style={[styles.input, styles.codeInput]}
+              value={code}
+              onChangeText={(v) => {
+                const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
+                setCode(digits)
+                if (codeError) setCodeError(null)
+              }}
+              keyboardType="number-pad"
+              maxLength={INVITE_CODE_LEN}
+              placeholder={t('ob.invitePlaceholder')}
+              placeholderTextColor={BLACK_MID}
+              autoComplete="off"
+              textContentType="none"
+              editable={!bioSubmitting}
+            />
+          </View>
+
+          {codeError ? <Text style={styles.errorText}>{codeError}</Text> : null}
+
+          <View style={styles.ctaWrap}>
+            <Button
+              label={isEmpty ? t('ob.inviteSkip') : t('ob.inviteJoin')}
+              onPress={onContinue}
+              disabled={!canContinue}
               loading={bioSubmitting}
               variant="primary"
               tone="positive"
@@ -638,7 +719,7 @@ export default function OnboardingPage() {
         >
           {containerH > 0 && (
             <Animated.View style={{ transform: [{ translateY: slideY }] }}>
-              {[1, 2, 3, 4, 5].map(s => (
+              {[1, 2, 3, 4, 5, 6].map(s => (
                 <View key={String(s)} style={{ height: containerH }}>
                   {s !== 5 && renderedSteps.has(s) ? renderStep(s) : null}
                 </View>
@@ -750,6 +831,11 @@ const styles = StyleSheet.create({
     color: BLACK,
     textAlign: 'center',
     padding: 0,
+  },
+  codeInput: {
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.extrabold,
+    letterSpacing: 8,
   },
 
   dateRow: {

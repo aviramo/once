@@ -5,7 +5,7 @@ import type {
   LocationDetail,
   ProfileChange,
   UnifiedEntry,
-} from "@/app/[lang]/admin/users/[userId]/_components/UnifiedActivity";
+} from "@/app/[lang]/users/[userId]/_components/UnifiedActivity";
 
 /**
  * Server-side helpers that turn raw `log` rows into rich `UnifiedEntry` cards.

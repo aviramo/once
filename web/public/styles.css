@@ -68,11 +68,24 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .header-inner {
   max-width: 1080px; margin: 0 auto; padding: 16px 28px;
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  display: flex; align-items: center; gap: 16px;
 }
-.brand { display: inline-flex; align-items: center; transition: opacity .15s ease; }
+.brand { display: inline-flex; align-items: center; transition: opacity .15s ease; margin-inline-end: auto; }
 .brand:hover { opacity: 0.75; }
 .brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #FFFFFF; }
+/* Login link in the header — same chip language as the lang switcher so the
+   two read as one cluster on the right. */
+.header-link {
+  font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.22); border-radius: var(--radius-pill);
+  padding: 8px 14px; transition: all .15s ease;
+  text-decoration: none;
+  display: inline-flex; align-items: center;
+}
+.header-link:hover {
+  border-color: rgba(255, 255, 255, 0.45); color: #FFFFFF; background: rgba(255, 255, 255, 0.16);
+}
 
 /* Language switcher — white-on-black, the app's white-alpha chrome. */
 .lang-switcher { position: relative; }

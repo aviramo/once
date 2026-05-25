@@ -35,6 +35,7 @@
       <a class="brand" href="./" aria-label="Once home">
         <span class="brand-name">Once</span>
       </a>
+      <a class="header-link" id="login-link" href="/login">התחברות</a>
       <div class="lang-switcher">
         <button class="lang-btn" id="lang-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Language">
           <span id="lang-label">HE</span>
@@ -247,6 +248,7 @@
         title: 'Once | רק אחד עכשיו',
         dir: 'rtl',
         download: 'להורדת האפליקציה',
+        login: 'התחברות',
         hero: {
           slogan: 'רק אחד עכשיו',
           title: 'הכרויות בזמן אמת, עם אדם אחד בכל פעם',
@@ -317,6 +319,7 @@
         title: 'Once | Just one. Now.',
         dir: 'ltr',
         download: 'Download the app',
+        login: 'Login',
         hero: {
           slogan: 'Just one. Now.',
           title: 'Real-time dating, one person at a time',
@@ -387,6 +390,7 @@
         title: 'Once | Только один. Сейчас.',
         dir: 'ltr',
         download: 'Скачать приложение',
+        login: 'Войти',
         hero: {
           slogan: 'Только один. Сейчас.',
           title: 'Знакомства в реальном времени, по одному человеку за раз',
@@ -502,6 +506,7 @@
       document.getElementById('cta-sub').textContent = t.cta.sub
       document.getElementById('cta-button').textContent = t.cta.button
       document.getElementById('cta-download').textContent = t.download
+      document.getElementById('login-link').textContent = t.login
 
       const langSuffix = '?lang=' + lang
       const lp = document.getElementById('link-privacy')

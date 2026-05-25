@@ -5,7 +5,7 @@
  * else (full URL, non-string, empty) → null.
  *
  * Single source of truth for the post-login redirect chain — the middleware
- * (writes `?next=`), the /admin/login page (honors it when already signed in
+ * (writes `?next=`), the /login page (honors it when already signed in
  * and forwards it to the form), and /auth/callback (final redirect target)
  * all validate through this. None re-implement the check.
  */

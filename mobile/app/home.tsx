@@ -2602,7 +2602,13 @@ export default function HomePage() {
   }, [firstProfileImage, userId, selfAvatar?.filename])
 
   const matchName = nameFromTitle(profile?.relations?.match?.title)
-  const homeTabLabel = matchName || t('home.tabs.home')
+  // Only name the tab when the card is actually on screen. A blocking notice
+  // (notif/location/network overlay) or an in-flight preload after a Realtime
+  // delivery would otherwise leave the tab advertising a candidate the user
+  // can't see (the post-onboarding first-entry bug).
+  const homeTabLabel = matchName && !noticeOverridesCard && !!displayedMatch
+    ? matchName
+    : t('home.tabs.home')
   // Keep the ref fresh so runIgnore can freeze the outgoing name (button-skip
   // path) without taking homeTabLabel as a dependency.
   useEffect(() => { homeTabLabelRef.current = homeTabLabel })
@@ -3029,10 +3035,14 @@ export default function HomePage() {
     }
   }, [findQueued, isReadyToFind, findReady, busy, searching, runFind])
 
+  // Permission notice headline: a SINGLE explanatory line per kind, telling
+  // the user WHY the access is required. Notif is gendered (תפספס / תפספסי);
+  // location is gender-neutral. locFailed (GPS fix failed despite permission)
+  // and noInternet keep their own dedicated titles since the cause is different.
   const permTitle = showNotifOverlay
-    ? (notifPerm === 'denied' ? t('home.emptyNotifBlockedTitle') : state !== null ? tg('home.notifPromptWithMatchTitle', isMale) : t('home.notifPromptTitle'))
+    ? tg('home.notifAccessRequired', isMale)
     : showLocOverlay
-      ? (locPerm === 'services-off' ? t('home.locationUnavailableTitle') : locPerm === 'denied' ? t('home.emptyLocationBlockedTitle') : state !== null ? t('home.locationPromptWithMatchTitle') : t('home.locationPromptTitle'))
+      ? (locPerm === 'services-off' ? t('home.locationUnavailableTitle') : t('home.locationAccessRequired'))
       : locFailed
         ? t('home.locationUnavailableTitle')
         : t('home.noInternetTitle')
@@ -3063,8 +3073,11 @@ export default function HomePage() {
             ? { text: t('home.geoGate.notYet').replace('{date}', gateWhenStr), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true }
             : availability?.reason === 'push'
               // notif perm IS granted but the server still push-gates (dead
-              // Expo token): nudge the user to re-enable / reopen.
-              ? { text: t('home.notifPromptTitle'), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
+              // Expo token): nudge the user to re-enable / reopen. Same copy
+              // as the device-side notif overlay so the headline reads
+              // identically whether the gate comes from device perm or a dead
+              // server-side token.
+              ? { text: tg('home.notifAccessRequired', isMale), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
               // Any other unavailable state (geo / membership in disabled-only
               // groups) renders the static "not available" message. The
               // request-to-join CTA + waiting-for-approval state were retired
@@ -3321,10 +3334,27 @@ export default function HomePage() {
       } satisfies TabSpec
     })(),
   ]
-  // While geo-gated, drop the side tab entirely so page2/chat has no entry
-  // point. Indices 0/1 still map to Menu/Home (TabStrip onSelect(i) →
-  // goToPane(i)), so the remaining tabs keep working unchanged.
-  const tabSpecs: TabSpec[] = geoGated ? tabSpecsAll.slice(0, 2) : tabSpecsAll
+  // Side slot is gated whenever the user must fix something on the home pane
+  // before page2/chat is usable: the server availability gate (geoGated), OR
+  // a missing device permission (no notifications / no location / GPS failed
+  // / no internet — collapsed into isPermMode). In both cases we drop the
+  // side tab entirely so page2/chat has no entry point. Indices 0/1 still map
+  // to Menu/Home (TabStrip onSelect(i) → goToPane(i)), so the remaining tabs
+  // keep working unchanged.
+  const sideGated = geoGated || isPermMode
+  // Companion to the geoGated snap-back useEffect (defined earlier with only
+  // `geoGated` in scope): when a missing-permission state flips on while the
+  // user is on the side slot, pull them back to Home so the now-unrendered
+  // slot 2 can't stay on screen.
+  useEffect(() => {
+    if (isPermMode && paneIndexRef.current === PAGE2_PANE) {
+      paneIndexRef.current = HOME_PANE
+      setPaneIndex(HOME_PANE)
+      pagerRef.current?.setPageWithoutAnimation(HOME_PANE)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPermMode])
+  const tabSpecs: TabSpec[] = sideGated ? tabSpecsAll.slice(0, 2) : tabSpecsAll
 
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
@@ -3448,7 +3478,7 @@ export default function HomePage() {
           // Clamp the seed page when gated: the side slot doesn't exist while
           // gated (2-child pager), so a stale chat/page2 notification must not
           // try to seat the pager on a non-existent index 2.
-          initialPage={geoGated ? Math.min(initialPane, HOME_PANE) : initialPane}
+          initialPage={sideGated ? Math.min(initialPane, HOME_PANE) : initialPane}
           // Geo-gated: the pager stays swipeable so Home<->Menu(settings) keeps
           // working by swipe (the user must still reach settings while waiting
           // for launch). The side slot is made unreachable by NOT rendering it
@@ -3841,12 +3871,13 @@ export default function HomePage() {
             </View>,
 
             // Slot 2: side — page2 or chat depending on chatAvailable.
-            // While geo-gated this slot is NOT rendered at all: the pager has
-            // only [settings, home] children, so page2/chat is physically
-            // unreachable by swipe (not bounced back after it's already shown)
-            // while Home<->Menu keeps working. Spread an empty array, never a
-            // falsy child — see the React-19 array-children note above.
-            ...(geoGated ? [] : [
+            // Whenever the side is gated (server availability OR a missing
+            // device permission — sideGated), this slot is NOT rendered at
+            // all: the pager has only [settings, home] children, so page2/chat
+            // is physically unreachable by swipe while Home<->Menu keeps
+            // working. Spread an empty array, never a falsy child — see the
+            // React-19 array-children note above.
+            ...(sideGated ? [] : [
             <View key="side" style={{ flex: 1 }}>
               {chatAvailable ? (
                 <ChatPage
@@ -3857,36 +3888,6 @@ export default function HomePage() {
                   topInset={0}
                   autoFocusInput={chatJustStarted}
                 />
-              ) : (centerNotice && !page2PendingInvite) ? (
-                /* Page2 display-hidden: a permission notice is active and
-                   page2 isn't a pending incoming invite (those are kept).
-                   Non-destructive — NO app_lock2 (no watcher kick / no
-                   restriction); the viewers list is just suppressed behind
-                   the same notice as page1 (identical text/icon/action via
-                   the shared centerNotice). Auto-reverts the instant the
-                   permission is granted (centerNotice → null). geoGated
-                   never reaches here (the side slot is dropped entirely),
-                   so this is the permission cases only. */
-                <View style={styles.root}>
-                  <View style={styles.permScreen}>
-                    <View style={styles.permFlexSpacer} />
-                    <View pointerEvents="box-none" style={styles.permCenterGroup}>
-                      <HeadlineArea text={centerNotice.text} />
-                      <Pressable
-                        onPress={() => { if (!centerNotice.disabled && !centerNotice.busy) centerNotice.onPress?.() }}
-                        disabled={!!centerNotice.disabled || !!centerNotice.busy || !centerNotice.onPress}
-                        style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
-                      >
-                        <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                          {centerNotice.busy
-                            ? <Spinner color={PRIMARY} size={64} />
-                            : centerNotice.icon}
-                        </View>
-                      </Pressable>
-                    </View>
-                    <View style={styles.permFlexSpacer} />
-                  </View>
-                </View>
               ) : <View style={styles.root}>
                 {/* Base layer — the viewers/visibility screen is ALWAYS
                     mounted so it persists in its exact state (broadcast /

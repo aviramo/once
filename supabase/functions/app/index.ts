@@ -152,6 +152,11 @@ Deno.serve(async (req) => {
 
     let rpcUser: Record<string, unknown> | undefined;
     let notifyList: Notify[] = [];
+    // Sidecar list of the caller's current group memberships. Set by the
+    // group-related RPCs (redeem_invite, leave_group, my_groups) so the
+    // settings sheet can render an up-to-date list without an extra round
+    // trip after a mutation. Merged into the response body via log.success.
+    let rpcGroups: unknown | undefined;
 
     // Presence gate (symmetric direction). others() already drops a gated
     // user from everyone's pool; this stops a gated user from actively
@@ -384,6 +389,51 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "redeem_invite": {
+        // Per-group 6-digit invite code: user joins the matching enabled
+        // group atomically. Additive — never removes existing memberships.
+        // Not in requiresPresence: a gated (all-disabled-groups) user must
+        // be able to redeem a code that flips them back to available.
+        const code = typeof body.code === "string" ? body.code.trim() : "";
+        if (!code) return log.error("redeem_invite", "no_code", 400);
+        const result = await Tools.rpc(log, "app_redeem_invite", { me_id: user.user_id, p_code: code });
+        await user.persist(log);
+        if (result?.error) return log.error("redeem_invite", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        rpcGroups = result?.groups;
+        break;
+      }
+
+      case "leave_group": {
+        // User-initiated leave of a single group. Idempotent (leaving a
+        // group you're not in is a no-op success). Cascade trigger
+        // _gm_cascade_on_membership_remove also clears any group_managers
+        // grant tied to this membership.
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("leave_group", "no_group_id", 400);
+        const result = await Tools.rpc(log, "app_leave_group", { me_id: user.user_id, p_group_id: group_id });
+        await user.persist(log);
+        if (result?.error) return log.error("leave_group", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        rpcGroups = result?.groups;
+        break;
+      }
+
+      case "my_groups": {
+        // Read-only: list the caller's current group memberships, used to
+        // populate the settings "My groups" sheet. The user row is returned
+        // alongside so applyServerUser keeps the rest of the client state
+        // fresh in the same call.
+        const result = await Tools.rpc(log, "app_my_groups", { me_id: user.user_id });
+        await user.persist(log);
+        if (result?.error) return log.error("my_groups", result.error, 400);
+        rpcUser = result?.user;
+        rpcGroups = result?.groups;
+        break;
+      }
+
       case "extend": {
         const minutes = Number(body.minutes);
         if (!Number.isFinite(minutes)) return log.error("extend", "bad_minutes", 400);
@@ -574,7 +624,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    return log.success(rpcUser ?? user.db.new);
+    const responseUser = rpcUser ?? user.db.new;
+    const responseBody = rpcGroups !== undefined
+      ? { ...(responseUser as Record<string, unknown>), groups: rpcGroups }
+      : responseUser;
+    return log.success(responseBody);
   } catch (err) {
     const msg = (err as Error)?.message ?? "unknown";
     return log.error("handler", msg, 500);

@@ -1,23 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { defaultLocale, hasLocale } from "@/i18n/locales";
 import { updateSupabaseSession } from "@/lib/supabase/proxy";
+import { createSupabaseAdmin } from "@/lib/supabase/admin";
 
 const PUBLIC_FILE_RE = /\.(.*)$/;
 
-// Clean URL -> static marketing file in /public. This Vercel deployment is
-// now the only site (the GitHub Pages once-app copy is retired): the
-// deployed mobile app links to the extensionless /privacy and /terms (with
-// ?lang=), so those paths must keep resolving here. /download is the
-// store-redirect landing; both the slashless and trailing-slash forms map
-// to it (skipTrailingSlashRedirect keeps /download/ from being stripped).
+// Clean URL -> static marketing file in /public. The deployed mobile app
+// links to the extensionless /privacy and /terms (with ?lang=), so those
+// paths must keep resolving here. /download is the store-redirect landing;
+// both the slashless and trailing-slash forms map to it
+// (skipTrailingSlashRedirect keeps /download/ from being stripped).
+//
+// `/` is a special case: it shows the static marketing site for visitors
+// who are signed OUT, and the admin dashboard (the Next-rendered page) for
+// visitors who are signed IN. So `/` is NOT in STATIC_PAGES — the middleware
+// auth-checks first and only rewrites to /index.html when the user is
+// signed out.
 const STATIC_PAGES: Record<string, string> = {
-  "/": "/index.html",
   "/privacy": "/privacy.html",
   "/terms": "/terms.html",
   "/child-safety": "/child-safety.html",
   "/download": "/download.html",
   "/download/": "/download.html",
 };
+
+// Paths that REQUIRE an authenticated session. The root `/` is auth-aware
+// (handled separately below); these are the panel sub-routes. A signed-out
+// visit redirects to /login with `?next=<intended>` so the deep-link
+// survives the auth round-trip.
+const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/map"];
 
 function pickLocale(request: NextRequest): string {
   const cookie = request.cookies.get("NEXT_LOCALE")?.value;
@@ -34,10 +45,7 @@ function pickLocale(request: NextRequest): string {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Marketing landing + legal pages: serve the static files from /public,
-  // preserving the query string (the pages read ?lang= client-side).
-  // /admin/* stays the dynamic dashboard; *.html requests fall through
-  // PUBLIC_FILE_RE below and are served straight from /public.
+  // Legal / store-redirect static pages: serve straight from /public.
   const staticTarget = STATIC_PAGES[pathname];
   if (staticTarget) {
     const url = request.nextUrl.clone();
@@ -53,17 +61,55 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Already-localized URL (`/he/...`, `/en/...`, or bare `/he` / `/en`): the
+  // browser hit the internal rewrite target directly, so don't run the locale
+  // prefix again (would double to `/he/he`). Let Next render `[lang]/...` as-is.
+  const firstSeg = pathname.split("/", 2)[1] ?? "";
+  if (hasLocale(firstSeg)) {
+    return NextResponse.next();
+  }
+
   const { response: sessionResponse, user } = await updateSupabaseSession(request);
 
-  const isAdminRoute = pathname.startsWith("/admin");
-  const isAdminLogin = pathname === "/admin/login";
-  if (isAdminRoute && !isAdminLogin && !user) {
-    // Preserve where they were headed (e.g. the /admin/users/<id> deep-link
-    // from a join-request email) so /auth/callback can bounce them back there
-    // after Google sign-in instead of dumping them on the dashboard.
+  // Root `/`: only privileged viewers (admin OR group-manager) see the panel
+  // dashboard here. Everyone else — signed-out visitors AND signed-in plain
+  // users — gets the static marketing site. User decision 2026-05-25.
+  //
+  // The admin role lives in the JWT (`app_metadata.role='admin'`) so checking
+  // it is free; the manager check requires a DB roundtrip via the
+  // SECURITY-DEFINER helper. The query runs only at root and only when the
+  // visitor is signed in but not a JWT admin — most marketing-site traffic
+  // pays zero DB cost.
+  if (pathname === "/") {
+    let hasPanelAccess = false;
+    if (user) {
+      const role = (user.app_metadata as { role?: string } | undefined)?.role;
+      if (role === "admin") {
+        hasPanelAccess = true;
+      } else {
+        const admin = createSupabaseAdmin();
+        const { data } = await admin.rpc("is_group_manager", {
+          p_user_id: user.id,
+        });
+        hasPanelAccess = data === true;
+      }
+    }
+    if (!hasPanelAccess) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/index.html";
+      return NextResponse.rewrite(url);
+    }
+  }
+
+  // Auth-gate the panel sub-routes. /login is intentionally public so an
+  // unauthenticated user can reach it; /auth/* is the OAuth callback path.
+  const isProtected = PROTECTED_PREFIXES.some((p) =>
+    pathname === p || pathname.startsWith(p + "/"),
+  );
+  if (isProtected && !user) {
     const intended = pathname + request.nextUrl.search;
     const url = request.nextUrl.clone();
-    url.pathname = "/admin/login";
+    url.pathname = "/login";
     url.search = "";
     url.searchParams.set("next", intended);
     return NextResponse.redirect(url);
@@ -71,7 +117,10 @@ export async function proxy(request: NextRequest) {
 
   const locale = pickLocale(request);
   const url = request.nextUrl.clone();
-  url.pathname = `/${locale}${pathname}`;
+  // Strip a bare "/" from the suffix so the rewrite target is `/he` instead
+  // of `/he/` — with `skipTrailingSlashRedirect: true` (next.config.ts) Next
+  // would otherwise treat `/he/` as a distinct, un-routed path and 404.
+  url.pathname = pathname === "/" ? `/${locale}` : `/${locale}${pathname}`;
   const rewrite = NextResponse.rewrite(url);
   for (const c of sessionResponse.cookies.getAll()) rewrite.cookies.set(c);
   return rewrite;

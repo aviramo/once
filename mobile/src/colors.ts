@@ -50,14 +50,20 @@ export const HEADER_PILL_BORDER = 'rgba(255,255,255,0.38)'
 export const HEADER_PILL_SHADOW = '0px 4px 14px rgba(0,0,0,0.22)'
 
 // ── Photo-caption legibility ──────────────────────────────────────────────
-// White text laid directly over a user photo can vanish on a bright or white
-// image. This soft dark drop-shadow keeps it readable on any background.
-// Shared by every "white title on a photo" surface (watcher card, the
-// settings profile-card hero) so they never drift apart.
+// White text or white SVG strokes laid directly over a user photo can vanish
+// on a bright or white image. A dark drop-shadow keeps them readable on any
+// background. Shared by every "white title on a photo" surface (watcher card,
+// the settings profile-card hero) so they never drift apart.
 export const PHOTO_TEXT_SHADOW = {
-  textShadowColor: BLACK_STRONG,
+  textShadowColor: BLACK,
   textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 6,
+  textShadowRadius: 8,
+}
+// Same shadow geometry expressed as a CSS-style filter so it applies to SVG
+// content (textShadow only reaches Text). Wrap an icon in a View with this
+// style to give its strokes a matching dark halo.
+export const PHOTO_ICON_SHADOW = {
+  filter: [{ dropShadow: { offsetX: 0, offsetY: 1, standardDeviation: 4, color: BLACK } }],
 }
 
 // ── Destructive ──────────────────────────────────────────────────────────

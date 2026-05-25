@@ -5,7 +5,7 @@ import { safeNextPath } from "@/lib/safeNext";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = safeNextPath(searchParams.get("next")) ?? "/admin";
+  const next = safeNextPath(searchParams.get("next")) ?? "/";
 
   if (code) {
     const supabase = await createSupabaseServerClient();
@@ -13,6 +13,6 @@ export async function GET(request: NextRequest) {
     if (!error) return NextResponse.redirect(`${origin}${next}`);
   }
 
-  return NextResponse.redirect(`${origin}/admin/login?error=oauth`);
+  return NextResponse.redirect(`${origin}/login?error=oauth`);
 }
 

@@ -20,20 +20,24 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon } from '../src/components/icons'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW, PHOTO_ICON_SHADOW } from '../src/colors'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon } from '../src/components/icons'
 import { creditBalance, formatNextGrant, creditTier, CREDIT_TIER, starsText } from '../src/lib/credits'
 import { BottomSheet } from '../src/components/BottomSheet'
+import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
+import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
-// 16/9 floor for the profile card. The card is flush with the screen edges,
-// so its width equals the screen width.
-const PROFILE_CARD_MIN_HEIGHT = Math.round(Dimensions.get('window').width * 9 / 16)
+// Profile card is sized like a regular menu row, just at 2× the height. A
+// grouped row is `ICON.xxl + 2*MD` tall (the icon + its vertical padding), so
+// double that. The card keeps the photo as its background but reads as one of
+// the menu buttons rather than a hero.
+const PROFILE_CARD_HEIGHT = (ICON.xxl + MD * 2) * 2
 
 // Provided by the shell (home.tsx) so section pages can share their inner
 // sub-page slide animation with the shell. The shell hosts the SharedValue
@@ -615,6 +619,183 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     </BottomSheet>
   )
 }
+
+// ── Groups Popup ───────────────────────────────────────────────────────────
+
+/**
+ * "My groups" sheet. Lists the caller's current group memberships with a
+ * per-row leave button, plus an input to redeem a 6-digit invite code at the
+ * bottom. Both actions speak to /app/leave_group and /app/redeem_invite,
+ * whose responses carry a fresh `groups` sidecar so the list updates in one
+ * round trip per mutation.
+ */
+function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+  const insets = useSafeAreaInsets()
+  const kbHeight = useKeyboardHeight()
+  const codeInputRef = useRef<RNTextInput>(null)
+
+  const [groups, setGroups] = useState<Group[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [leavingId, setLeavingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!visible) return
+    let cancelled = false
+    setLoaded(false)
+    setCode('')
+    setCodeError(null)
+    invoke<{ groups?: Group[] }>('app/my_groups')
+      .then(data => {
+        if (cancelled) return
+        setGroups(data?.groups ?? [])
+        setLoaded(true)
+      })
+      .catch(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [visible])
+
+  const onJoin = async () => {
+    if (code.length !== INVITE_CODE_LEN || submitting) return
+    tap()
+    Keyboard.dismiss()
+    setSubmitting(true)
+    setCodeError(null)
+    try {
+      const result = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
+      if (result?.groups) setGroups(result.groups)
+      setCode('')
+    } catch {
+      setCodeError(t('settings.groupsInviteInvalid'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const onLeave = async (id: string) => {
+    if (leavingId) return
+    tapWarning()
+    setLeavingId(id)
+    try {
+      const result = await invoke<{ groups?: Group[] }>('app/leave_group', { group_id: id })
+      if (result?.groups) setGroups(result.groups)
+      else setGroups(prev => prev.filter(g => g.id !== id))
+    } catch {
+      // Silently fail; the row stays. User can retry.
+    } finally {
+      setLeavingId(null)
+    }
+  }
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
+      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
+    >
+      <View style={groupsPopupStyles.section}>
+        <Text style={groupsPopupStyles.heading}>{t('settings.groupsMine')}</Text>
+        {!loaded ? (
+          <ActivityIndicator color={BLACK_MID} style={{ marginVertical: MD }} />
+        ) : groups.length === 0 ? (
+          <Text style={groupsPopupStyles.empty}>{t('settings.groupsEmpty')}</Text>
+        ) : (
+          <View style={groupsPopupStyles.list}>
+            {groups.map((g, i) => (
+              <View key={g.id}>
+                <View style={groupsPopupStyles.row}>
+                  <View style={groupsPopupStyles.rowText}>
+                    <Text style={groupsPopupStyles.rowLabel} numberOfLines={1}>{g.name}</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => onLeave(g.id)}
+                    disabled={leavingId !== null}
+                    hitSlop={TAP_SLOP}
+                    style={({ pressed }) => [groupsPopupStyles.rowAction, pressed ? { opacity: 0.5 } : null]}
+                  >
+                    {leavingId === g.id
+                      ? <ActivityIndicator color={BLACK_MID} size="small" />
+                      : <TrashIcon color={BLACK_MID} />
+                    }
+                  </Pressable>
+                </View>
+                {i < groups.length - 1 ? <View style={groupsPopupStyles.divider} /> : null}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      <View style={groupsPopupStyles.section}>
+        <Text style={groupsPopupStyles.heading}>{t('settings.groupsJoinTitle')}</Text>
+        <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
+        <View style={groupsPopupStyles.inputWrap}>
+          <TextInput
+            ref={codeInputRef}
+            style={groupsPopupStyles.input}
+            value={code}
+            onChangeText={(v) => {
+              const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
+              setCode(digits)
+              if (codeError) setCodeError(null)
+            }}
+            keyboardType="number-pad"
+            maxLength={INVITE_CODE_LEN}
+            placeholder={t('settings.groupsCodePlaceholder')}
+            placeholderTextColor={BLACK_MID}
+            autoComplete="off"
+            textContentType="none"
+            editable={!submitting}
+          />
+        </View>
+        {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
+        <View style={{ marginTop: SM }}>
+          <Button
+            label={t('settings.groupsJoinAction')}
+            onPress={onJoin}
+            disabled={code.length !== INVITE_CODE_LEN || submitting}
+            loading={submitting}
+            variant="primary"
+            size="lg"
+          />
+        </View>
+      </View>
+    </BottomSheet>
+  )
+}
+
+const groupsPopupStyles = StyleSheet.create({
+  section: { paddingHorizontal: MD, paddingTop: MD },
+  heading: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS },
+  empty: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: MD, marginBottom: SM, textAlign: 'center' },
+  list: { marginTop: SM, borderRadius: RADIUS, backgroundColor: WHITE_SOFT, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: MD, paddingVertical: SM, gap: SM },
+  rowText: { flex: 1, minWidth: 0 },
+  rowLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
+  rowAction: { padding: SM },
+  divider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
+  inputWrap: {
+    marginTop: SM,
+    backgroundColor: WHITE_SOFT,
+    borderRadius: RADIUS,
+    paddingHorizontal: MD,
+    paddingVertical: MD,
+  },
+  input: {
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.extrabold,
+    color: BLACK,
+    textAlign: 'center',
+    letterSpacing: 8,
+    padding: 0,
+  },
+  error: { marginTop: XS, fontSize: TEXT.sm, color: DESTRUCTIVE, textAlign: 'center' },
+})
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
@@ -2304,6 +2485,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
+  const [groupsPopupVisible, setGroupsPopupVisible] = useState(false)
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -2428,12 +2610,23 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           onPress={() => setAccountPopupVisible(true)}
           icon={<UserIcon color={WHITE} />}
         />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={t('settings.groups')}
+          onPress={() => setGroupsPopupVisible(true)}
+          icon={<GroupsIcon color={WHITE} />}
+        />
       </View>
       <AccountPopup
         visible={accountPopupVisible}
         onDismiss={() => setAccountPopupVisible(false)}
         onSignOutPress={() => setSignOutDialog(true)}
         onDeletePress={() => setDeleteDialog(true)}
+      />
+      <GroupsPopup
+        visible={groupsPopupVisible}
+        onDismiss={() => setGroupsPopupVisible(false)}
       />
       <ConfirmDialog
         visible={signOutDialog}
@@ -2511,18 +2704,23 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
                 <TabIcon tab="profile" color={BLACK_STRONG} />
               </View>
             )}
+            {/* Symmetric top + bottom vignette — darkens the edges so the
+                center-aligned label rides over a clean transparent middle. */}
             <Svg style={styles.profileCardScrim} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
               <Defs>
                 <SvgLinearGradient id="profileScrim" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={BLACK} stopOpacity="0" />
-                  <Stop offset="0.55" stopColor={BLACK} stopOpacity="0.55" />
-                  <Stop offset="1" stopColor={BLACK} stopOpacity="1" />
+                  <Stop offset="0" stopColor={BLACK} stopOpacity="0.85" />
+                  <Stop offset="0.5" stopColor={BLACK} stopOpacity="0" />
+                  <Stop offset="1" stopColor={BLACK} stopOpacity="0.85" />
                 </SvgLinearGradient>
               </Defs>
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
             </Svg>
-            <View style={styles.profileCardCaption} pointerEvents="none">
-              <Text style={styles.profileCardTitle}>{t('settings.profile')}</Text>
+            <View style={styles.profileCardRow} pointerEvents="none">
+              <View style={styles.profileCardIconShadow}>
+                <PencilIcon color={WHITE} size={ICON.xxl} />
+              </View>
+              <Text style={styles.profileCardLabel} numberOfLines={1} ellipsizeMode="tail">{t('settings.profile')}</Text>
             </View>
           </Pressable>
 
@@ -2624,32 +2822,33 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
     marginBottom: MD,
   },
-  // 16/9 minimum height (PROFILE_CARD_MIN_HEIGHT). Image, scrim and caption
-  // are all absolute fills/bands, so nothing drives layout and the card holds
-  // a stable min height. The caption is pinned to the BOTTOM THIRD of the
-  // photo and centered within that band ("Edit your profile" sits low on the
-  // image, not dead-center). Sits flush with the tab strip (no top margin)
-  // and owns no horizontal margin, so the card spans the full screen width.
+  // Profile card reads as a menu row (icon + start-aligned label) at 2× the
+  // height of a regular row, with the user's photo as the background. The
+  // image fills the card, a soft scrim keeps the label legible, and the row
+  // content matches the visual language of the other `accountLinksCard`
+  // entries below it.
   profileCard: {
-    width: '100%', minHeight: PROFILE_CARD_MIN_HEIGHT,
+    width: '100%', height: PROFILE_CARD_HEIGHT,
     overflow: 'hidden',
     backgroundColor: WHITE_SOFT,
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Tall bottom fade ending in solid BLACK: the photo reads as cut off below
-  // the fold, inviting a tap to open the full profile card.
-  profileCardScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
-  // Absolute band over the bottom third of the hero, contents centered on
-  // both axes → the title reads centered horizontally and sits in the lower
-  // third. A centered title reads identically in RTL and LTR, so the old
-  // flexDirection:'row' start-side trick is no longer needed. (The 1/3 height
-  // is a one-off layout fraction local to this hero, like the scrim's 60%.)
-  profileCardCaption: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, height: '33.333%',
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: MD,
+  // Symmetric top + bottom vignette over the full card, so the centered
+  // icon + label sit on the cleaner transparent middle band.
+  profileCardScrim: { ...StyleSheet.absoluteFillObject },
+  // Icon at the start, label after it, gap MD. Fills the card and centers
+  // the row on the image's vertical midline (alignItems on the cross axis).
+  profileCardRow: {
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+    flexDirection: 'row', alignItems: 'center', gap: MD,
+    paddingHorizontal: MD,
   },
-  profileCardTitle: { color: WHITE, fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, textAlign: 'center', ...PHOTO_TEXT_SHADOW },
+  profileCardIconShadow: { ...PHOTO_ICON_SHADOW },
+  profileCardLabel: {
+    flexShrink: 1, fontSize: TEXT.lg, lineHeight: lh(TEXT.lg),
+    color: WHITE, fontWeight: WEIGHT.semibold, ...PHOTO_TEXT_SHADOW,
+  },
   // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
   // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
   accentCard: { backgroundColor: PRIMARY },

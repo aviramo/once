@@ -251,6 +251,30 @@ export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+// Two silhouettes — the "members of a group" mark used by the settings
+// "my groups" row. Visually distinct from UserIcon (single silhouette) so
+// the two adjacent rows in the account card don't read as the same icon.
+// Pencil glyph — "edit" affordance (settings profile card).
+export function PencilIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </Svg>
+  )
+}
+
+export function GroupsIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M17 21v-2a4 4 0 0 0-3-3.87" />
+      <Path d="M13 3.13a4 4 0 0 1 0 7.75" />
+      <Path d="M15 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <Circle cx="8" cy="7" r="4" />
+    </Svg>
+  )
+}
+
 // Age chip on the profile card. A bare number with the generic InfoIcon
 // didn't read as "age"; the candle-cake glyph makes it self-explanatory in
 // every language. Flame dots use the same near-zero round-capped trick as

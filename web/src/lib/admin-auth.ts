@@ -82,8 +82,8 @@ export async function getViewerScope(): Promise<ViewerScope | null> {
  * every screen that managers must not reach. */
 export async function requireAdminUser(): Promise<User> {
   const scope = await getViewerScope();
-  if (!scope) redirect("/admin/login");
-  if (scope.kind !== "admin") redirect("/admin/login?error=not_admin");
+  if (!scope) redirect("/login");
+  if (scope.kind !== "admin") redirect("/login?error=not_admin");
   return scope.user;
 }
 
@@ -91,6 +91,6 @@ export async function requireAdminUser(): Promise<User> {
  * otherwise. Use at the top of every screen managers are allowed to see. */
 export async function requireViewerScope(): Promise<ViewerScope> {
   const scope = await getViewerScope();
-  if (!scope) redirect("/admin/login");
+  if (!scope) redirect("/login");
   return scope;
 }

@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react'
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { WHITE, WHITE_SOFT, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
+import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary/destructive action goes
 // through this component so the appearance and disabled state stay identical
@@ -59,10 +59,11 @@ export function Button({
   silentDisabled?: boolean
   // "Disabled but explainable": when the button is `disabled` (and not
   // `loading`) AND this is set, the button KEEPS the disabled look (the
-  // 0.45 fade — do not also pass `silentDisabled`) but stays pressable, and
-  // a tap fires this instead of `onPress`. Used for the action buttons that
-  // can't be afforded (not enough stars): the real action is blocked, the
-  // tap opens an explainer popup. Same intent as SelectFieldRow's `locked`.
+  // variant's disabled style, or the global 0.45 fade — do not also pass
+  // `silentDisabled`) but stays pressable, and a tap fires this instead of
+  // `onPress`. Used for the action buttons that can't be afforded (not enough
+  // stars): the real action is blocked, the tap opens an explainer popup.
+  // Same intent as SelectFieldRow's `locked`.
   disabledHint?: () => void
   iconStart?: ReactNode
   // Optional strip docked to the bottom edge of the button, full width,
@@ -87,10 +88,20 @@ export function Button({
   // secondary/destructive the tone is ignored — they already carry their
   // own semantic color.
   const toneSkin = variant === 'primary' && tone ? TONE[tone] : null
-  const textColor = skin.text.color
+  // Variants on dark surfaces (onPrimary) look muddy under the global
+  // opacity:0.45 disabled fade — white-at-45% on pure-black is a dingy grey.
+  // When a variant ships its own disabledBtn/disabledText, we use those
+  // instead and skip the global fade. Re-tints iconStart to the disabled
+  // label color so the icon doesn't fight the new fill.
+  const useVariantDisabled = disabled && !loading && !silentDisabled && !!skin.disabledBtn
+  const textColor = useVariantDisabled && skin.disabledText ? skin.disabledText.color : skin.text.color
   // While loading, swap the start-position icon (or insert one if none was
   // provided) with a spinner in the label color. End-position icons stay.
-  const startIcon = loading ? <Spinner color={textColor} /> : iconStart
+  const startIcon = loading
+    ? <Spinner color={textColor} />
+    : useVariantDisabled && isValidElement(iconStart)
+      ? cloneElement(iconStart as ReactElement<{ color?: string }>, { color: textColor })
+      : iconStart
 
   return (
     <View
@@ -100,7 +111,7 @@ export function Button({
         base.btn,
         skin.btn,
         toneSkin?.btn,
-        disabled && !loading && !silentDisabled && styles.disabled,
+        useVariantDisabled ? skin.disabledBtn : (disabled && !loading && !silentDisabled && styles.disabled),
         footer ? styles.btnWithFooter : null,
         style,
       ]}
@@ -118,7 +129,7 @@ export function Button({
           <View style={styles.labelRow}>
             {startIcon ? <View>{startIcon}</View> : null}
             <Text
-              style={[styles.text, base.text, skin.text]}
+              style={[styles.text, base.text, skin.text, useVariantDisabled && skin.disabledText]}
               numberOfLines={multiline ? 2 : 1}
               adjustsFontSizeToFit={!multiline}
               minimumFontScale={0.85}
@@ -196,7 +207,15 @@ const TONE: Record<Tone, { btn: object }> = {
   },
 }
 
-const VARIANT: Record<Variant, { btn: object; text: { color: string; fontWeight?: string } }> = {
+const VARIANT: Record<Variant, {
+  btn: object
+  text: { color: string; fontWeight?: string }
+  // Per-variant disabled overrides. When present, replace the global
+  // opacity:0.45 fade — used by variants whose default fill turns muddy
+  // under low alpha on a dark surface.
+  disabledBtn?: object
+  disabledText?: { color: string }
+}> = {
   primary: {
     btn: { backgroundColor: PRIMARY },
     text: { color: WHITE },
@@ -223,9 +242,14 @@ const VARIANT: Record<Variant, { btn: object; text: { color: string; fontWeight?
   },
   // White button sized for placement on top of a PRIMARY-colored surface.
   // The white fill keeps the CTA legible against the coral background.
+  // Disabled state swaps to a soft white wash + bright muted text so the
+  // button reads as "waiting on input" instead of the muddy grey blob
+  // produced by white-at-45%-opacity on pure-black.
   onPrimary: {
     btn: { backgroundColor: WHITE },
     text: { color: PRIMARY },
+    disabledBtn: { backgroundColor: WHITE_SOFT },
+    disabledText: { color: WHITE_STRONG },
   },
   // Recessive companion to `onPrimary`: the secondary action when the
   // surface is PRIMARY-colored. Mirrors `secondary` (soft fill + muted
