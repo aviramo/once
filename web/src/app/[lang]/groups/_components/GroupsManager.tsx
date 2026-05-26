@@ -9,6 +9,7 @@ export type GroupRow = {
   id: string;
   name: string;
   inviteCode: string;
+  enabled: boolean;
   members: number;
 };
 
@@ -36,6 +37,15 @@ export type RolesDict = {
   bulkResetDone: string;
   /** Generic fail message for bulk actions. */
   bulkFail: string;
+  /** Enable/disable status badges + toggle buttons. */
+  statusEnabled: string;
+  statusDisabled: string;
+  enableButton: string;
+  disableButton: string;
+  enableBusy: string;
+  disableBusy: string;
+  disableConfirm: string;
+  enableConfirm: string;
 };
 
 function reason(err: unknown, dict: RolesDict): string {
@@ -104,14 +114,38 @@ function GroupTile({
   onToggle,
   readOnly,
   dict,
+  setEnabledAction,
 }: {
   group: GroupRow;
   selected: boolean;
   onToggle: () => void;
-  /** Hides the row's checkbox (manager view: no mutations). */
+  /** Hides the row's checkbox + the enable/disable toggle (manager view). */
   readOnly?: boolean;
   dict: RolesDict;
+  /** Optional admin-only enable/disable handler. When absent, the toggle is
+   * suppressed (read-only listing). */
+  setEnabledAction?: (fd: FormData) => Promise<void>;
 }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function flipEnabled() {
+    if (!setEnabledAction || pending) return;
+    const confirmMsg = group.enabled ? dict.disableConfirm : dict.enableConfirm;
+    if (!window.confirm(confirmMsg.replace("{name}", group.name))) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("id", group.id);
+    fd.set("enabled", group.enabled ? "false" : "true");
+    startTransition(async () => {
+      try {
+        await setEnabledAction(fd);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
   return (
     <div
       className={[
@@ -119,6 +153,7 @@ function GroupTile({
         selected
           ? "border-primary/60 ring-2 ring-primary/40"
           : "border-border hover:border-primary/40 hover:shadow-md",
+        group.enabled ? "" : "opacity-70",
       ].join(" ")}
     >
       <div className="flex items-start gap-2.5">
@@ -132,12 +167,24 @@ function GroupTile({
           />
         )}
         <div className="min-w-0 flex-1">
-          <Link
-            href={`/groups/${group.id}`}
-            className="block min-w-0 truncate text-sm font-semibold underline-offset-2 transition-colors hover:text-primary hover:underline"
-          >
-            {group.name}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/groups/${group.id}`}
+              className="block min-w-0 flex-1 truncate text-sm font-semibold underline-offset-2 transition-colors hover:text-primary hover:underline"
+            >
+              {group.name}
+            </Link>
+            <span
+              className={[
+                "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                group.enabled
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400"
+                  : "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-400",
+              ].join(" ")}
+            >
+              {group.enabled ? dict.statusEnabled : dict.statusDisabled}
+            </span>
+          </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[11px] tabular-nums text-muted-foreground">
               {group.members} {dict.members}
@@ -149,6 +196,34 @@ function GroupTile({
               {group.inviteCode}
             </span>
           </div>
+          {!readOnly && setEnabledAction ? (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={flipEnabled}
+                disabled={pending}
+                className={[
+                  "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-60",
+                  group.enabled
+                    ? "border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                    : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-950/40",
+                ].join(" ")}
+              >
+                {pending
+                  ? group.enabled
+                    ? dict.disableBusy
+                    : dict.enableBusy
+                  : group.enabled
+                    ? dict.disableButton
+                    : dict.enableButton}
+              </button>
+              {error ? (
+                <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400">
+                  {error}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -210,6 +285,7 @@ export function GroupsManager({
   dict,
   readOnly = false,
   resetGroupMembersAction,
+  setGroupEnabledAction,
   noGroup,
 }: {
   groups: GroupRow[];
@@ -219,6 +295,9 @@ export function GroupsManager({
    * suppressed by ensuring `selected` stays empty. */
   readOnly?: boolean;
   resetGroupMembersAction: (groupIds: string[]) => Promise<ResetResult>;
+  /** Admin-only enable/disable handler. Absent for managers — the toggle is
+   * suppressed by `GroupTile` when undefined. */
+  setGroupEnabledAction?: (fd: FormData) => Promise<void>;
   /** Virtual "no group" tile (admin only). When set, appended after the
    * real groups. Links to the users-list with the no-group filter applied. */
   noGroup?: { count: number; label: string; href: string };
@@ -333,6 +412,7 @@ export function GroupsManager({
               onToggle={() => toggle(group.id)}
               readOnly={readOnly}
               dict={dict}
+              setEnabledAction={setGroupEnabledAction}
             />
           ))}
           {noGroup ? (

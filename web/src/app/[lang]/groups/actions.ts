@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAdminUser, getViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { triggerResync } from "@/lib/resync";
 import type { ResetResult } from "../users/actions";
 
 // The middleware rewrites /groups → /[lang]/groups, so this is the
@@ -57,8 +58,9 @@ export async function renameGroup(fd: FormData) {
 // Deleting a group also detaches every member (no destructive cascade to the
 // users themselves). The user_groups rows go first — the FK on user_groups is
 // ON DELETE RESTRICT, so the group row only drops once nobody points at it.
-// Membership is organisational with no gate attached, so detaching doesn't
-// change availability for anyone.
+// Membership IS a gate input (disabled-only groups → unavailable), so a
+// detach can flip a user from unavailable back to available (their only
+// disabled group is gone) — triggerResync propagates that.
 export async function deleteGroup(fd: FormData) {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
   const id = String(fd.get("id") ?? "");
@@ -71,13 +73,37 @@ export async function deleteGroup(fd: FormData) {
   if (clearErr) throw new Error(clearErr.message);
   const { error } = await admin.from("groups").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  void triggerResync();
   revalidatePath(GROUPS_PATH, "page");
   revalidatePath(USER_PATH, "page");
 }
 
-// Per-user checklist toggle. Membership is purely organisational — it doesn't
-// change availability — so no resync is needed. Idempotent: assign uses upsert
-// (ignore-dup), unassign deletes.
+// Flip a group's enabled flag. Disabling means its members become
+// `unavailable` UNLESS they also hold ≥1 other enabled group (the
+// `group_blocked` SQL predicate). A user with no group memberships at all is
+// unaffected. Fires triggerResync so every affected user's
+// `relations.availability` is recomputed immediately (Realtime → open apps;
+// per-minute cron is the safety net).
+export async function setGroupEnabled(fd: FormData) {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  const id = String(fd.get("id") ?? "");
+  const enabled = String(fd.get("enabled") ?? "") === "true";
+  if (!id) throw new Error("missing_id");
+  const admin = createSupabaseAdmin();
+  const { error } = await admin.from("groups").update({ enabled }).eq("id", id);
+  if (error) throw new Error(error.message);
+  // Fire-and-forget — same pattern as area mutations. The web action returns
+  // immediately; the edge call propagates the gate change in the background.
+  void triggerResync();
+  revalidatePath(GROUPS_PATH, "page");
+  revalidatePath(GROUP_DETAIL_PATH, "page");
+  revalidatePath(USER_PATH, "page");
+}
+
+// Per-user checklist toggle. Membership IS now a gate input (a user in
+// disabled-only groups becomes unavailable), so changing assignments fires
+// triggerResync — Realtime delivers any flip to the affected user instantly.
+// Idempotent: assign uses upsert (ignore-dup), unassign deletes.
 export async function setUserGroupAssignment(fd: FormData) {
   if (!(await getAdminUser())) throw new Error("Unauthorized");
   const userId = String(fd.get("userId") ?? "");
@@ -98,6 +124,7 @@ export async function setUserGroupAssignment(fd: FormData) {
       .eq("group_id", groupId);
     if (error) throw new Error(error.message);
   }
+  void triggerResync();
   revalidatePath(USER_PATH, "page");
   revalidatePath(GROUPS_PATH, "page");
   revalidatePath(GROUP_DETAIL_PATH, "page");

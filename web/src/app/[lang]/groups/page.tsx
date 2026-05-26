@@ -7,12 +7,13 @@ import { Section, Card, EmptyState } from "../_components/ui";
 import { RealtimeRefresh } from "../_components/RealtimeRefresh";
 import { Disclosure } from "../_components/Disclosure";
 import { GroupsManager, GroupAddForm, type GroupRow } from "./_components/GroupsManager";
-import { createGroup, resetGroupMembers } from "./actions";
+import { createGroup, resetGroupMembers, setGroupEnabled } from "./actions";
 
 type GroupQueryRow = {
   id: string;
   name: string;
   invite_code: string;
+  enabled: boolean;
   user_groups: { count: number }[];
 };
 
@@ -30,7 +31,7 @@ export default async function RolesPage({
   const admin = createSupabaseAdmin();
   let rolesQ = admin
     .from("groups")
-    .select("id, name, invite_code, user_groups(count)")
+    .select("id, name, invite_code, enabled, user_groups(count)")
     .order("created_at", { ascending: true });
   // Group managers only see groups they manage.
   if (scope.kind === "manager") {
@@ -45,6 +46,7 @@ export default async function RolesPage({
     id: row.id,
     name: row.name,
     inviteCode: row.invite_code,
+    enabled: row.enabled,
     members: row.user_groups?.[0]?.count ?? 0,
   }));
 
@@ -83,6 +85,7 @@ export default async function RolesPage({
               dict={r}
               readOnly={!isAdmin}
               resetGroupMembersAction={resetGroupMembers}
+              setGroupEnabledAction={setGroupEnabled}
               noGroup={
                 noGroupCount !== undefined
                   ? {
