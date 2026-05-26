@@ -30,17 +30,28 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (user) {
     // Already signed in. If they have admin/manager scope, send them to
-    // their requested destination; otherwise (plain signed-in user) drop
-    // them at the marketing root — there's no panel for them.
+    // their requested destination. Otherwise this session is stuck — the
+    // dashboard would just bounce them back here, and there is no panel
+    // for them. Sign that session out and fall through to the OAuth init
+    // so the click on "Login" leads to a real account picker instead of
+    // an infinite /login → / → /login loop.
     const scope = await getViewerScope();
     if (scope) return NextResponse.redirect(`${origin}${next}`);
-    return NextResponse.redirect(`${origin}/`);
+    await supabase.auth.signOut();
   }
 
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo, skipBrowserRedirect: true },
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+      // Force Google's account chooser every time. Without this, the
+      // browser silently reuses the last Google session, so a user who
+      // signed in with the wrong account can never pick a different one
+      // by clicking "Login" again.
+      queryParams: { prompt: "select_account" },
+    },
   });
   if (error || !data?.url) {
     // OAuth init failed — bounce to the marketing root with an error flag
