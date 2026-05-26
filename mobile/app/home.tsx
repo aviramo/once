@@ -187,6 +187,13 @@ const SKIP_HINT_HPAD = MD * 2
 // avatar below stays at the same position whether the text is 1 line or 2.
 const SKIP_HINT_LINE_H = 30
 const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H
+
+// Viewer-list grid: 2 cards per row. Width derived from the list's own
+// horizontal padding (WATCHERS_HPAD) and inter-card gap (WATCHERS_GAP) so
+// changing either token reshapes the cells without manual sync.
+const WATCHERS_HPAD = SM
+const WATCHERS_GAP = SM
+const WATCHER_CARD_WIDTH = Math.floor((Dimensions.get('window').width - WATCHERS_HPAD * 2 - WATCHERS_GAP) / 2)
 // Estimated rest-state pixel width per character at SKIP_HINT_FONT extrabold,
 // used to decide whether a string needs wrapping. Conservative enough that
 // every string we ship today either fits as 1 line or wraps cleanly to 2.
@@ -1867,28 +1874,58 @@ export default function HomePage() {
   // resolves to false do we show the overlay (avoids a startup flash).
   const [netReachable, setNetReachable] = useState<boolean | null>(null)
   const [netBusy, setNetBusy] = useState(false)
+  // OR-of-trues: treat as reachable when EITHER signal is positively true.
+  // `isInternetReachable` is a slower OS-level reachability check that can
+  // stick at `false` for a while after connectivity returns (or fail to flip
+  // back on certain devices/networks), so a strict priority chain
+  // (`isInternetReachable ?? isConnected`) left the overlay stuck on long
+  // after wifi/data was back. Only when both report explicit `false`, or
+  // `isConnected` is explicit false alone, do we treat as offline. An
+  // unknown signal (null) is never treated as offline, so we don't flash
+  // the overlay before the first real reading.
+  const computeReachable = (s: { isConnected?: boolean | null; isInternetReachable?: boolean | null }) => {
+    if (s.isInternetReachable === true || s.isConnected === true) return true
+    if (s.isConnected === false) return false
+    return true
+  }
   useEffect(() => {
     let mounted = true
     Network.getNetworkStateAsync()
-      .then(s => { if (mounted) setNetReachable(s.isInternetReachable ?? s.isConnected ?? true) })
+      .then(s => { if (mounted) setNetReachable(computeReachable(s)) })
       .catch(() => { if (mounted) setNetReachable(true) })
-    const sub = Network.addNetworkStateListener(({ isConnected, isInternetReachable }) => {
-      setNetReachable(isInternetReachable ?? isConnected ?? true)
+    const sub = Network.addNetworkStateListener(s => {
+      setNetReachable(computeReachable(s))
     })
     return () => { mounted = false; sub.remove() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const handleNetRetry = async () => {
     if (netBusy) return
     setNetBusy(true)
     try {
       const s = await Network.getNetworkStateAsync()
-      setNetReachable(s.isInternetReachable ?? s.isConnected ?? true)
+      setNetReachable(computeReachable(s))
     } catch {
     } finally {
       setNetBusy(false)
     }
   }
   const showNoInternetOverlay = netReachable === false
+  // Poll while offline. The OS listener can miss the false→true transition
+  // (sticky `isInternetReachable`, lost subscription, certain captive-portal
+  // unwinds), which left the overlay frozen after connectivity returned.
+  // A 3s poll while the overlay is up is cheap (a single async call) and
+  // self-cancels the moment the overlay dismisses.
+  useEffect(() => {
+    if (!showNoInternetOverlay) return
+    const id = setInterval(() => {
+      Network.getNetworkStateAsync()
+        .then(s => setNetReachable(computeReachable(s)))
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showNoInternetOverlay])
 
   // A blocking center-notice will be shown (missing notif/location/internet
   // permission, or the server availability gate). This is exactly when
@@ -2217,13 +2254,40 @@ export default function HomePage() {
   // request ceiling plus Realtime/slide-in slack, so if `searching` is still
   // true past that bound, force it off so the pane re-resolves to ready /
   // no-one-nearby instead of hanging. Re-armed each time `searching` flips on.
+  //
+  // Recovery, beyond clearing `searching`: if the request actually landed
+  // server-side (page1 already changed) but the response/Realtime never
+  // propagated, the local store stays stale and the home pane sticks on
+  // PAUSE + "Not now" tab + skip headline forever (page1Profile truthy,
+  // displayedMatch null, skipPhase 'hold'). Force a fresh fetch (bypasses
+  // the last_seen ordering guard), ease the skip animation back to idle
+  // if it stayed in 'hold', and clear the optimistic skip flags so the
+  // user can press play again instead of being stranded.
   useEffect(() => {
     if (!searching) return
     const timer = setTimeout(
-      () => { setSearching(false); setLoadingProfile(false) },
+      () => {
+        setSearching(false)
+        setLoadingProfile(false)
+        const uid = useUserStore.getState().profile?.user_id
+        if (uid) void useUserStore.getState().fetch(uid)
+        if (skipPhaseRef.current === 'hold') {
+          setSkipPhase('anim')
+          skipSlide.value = withTiming(0, undefined, (fin) => {
+            'worklet'
+            if (fin) runOnJS(setSkipPhase)('idle')
+          })
+        }
+        if (ignoreLoadingRef.current) {
+          setIgnoreLoading(false)
+          setBusy(false)
+          setPendingKey(null)
+        }
+      },
       API_TIMEOUT_MS + SEARCH_WATCHDOG_SLACK_MS,
     )
     return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searching])
 
   // Skip the entering animation only when the session started with a card
@@ -2334,6 +2398,21 @@ export default function HomePage() {
       setIgnoreLoading(false)
       setSearching(false)
       setLoadingProfile(false)
+      // Recovery: the request was lost or timed out; the optimistic
+      // displayedMatch=null + skipPhase='hold' state leaves the home pane
+      // stuck on PAUSE + "Not now" until something else moves it. Resync
+      // the user from the server so the sync effect re-runs against fresh
+      // page1, and ease the skip animation back to idle if it remained in
+      // 'hold' (no candidate to rise into).
+      const uid = useUserStore.getState().profile?.user_id
+      if (uid) void useUserStore.getState().fetch(uid)
+      if (skipPhaseRef.current === 'hold') {
+        setSkipPhase('anim')
+        skipSlide.value = withTiming(0, undefined, (fin) => {
+          'worklet'
+          if (fin) runOnJS(setSkipPhase)('idle')
+        })
+      }
     })
   }, [busy, ignoreLoading])
   const page1Pull = usePullBehavior({
@@ -2786,6 +2865,10 @@ export default function HomePage() {
         setPendingKey(null)
         setSearching(false)
         setLoadingProfile(false)
+        // Recovery from a dropped invoke (matches runIgnore's .catch path):
+        // refetch the user so the sync effect re-runs against fresh page1.
+        const uid = useUserStore.getState().profile?.user_id
+        if (uid) void useUserStore.getState().fetch(uid)
       })
   }, [busy])
 
@@ -3928,6 +4011,7 @@ export default function HomePage() {
                           viewerFamily={profile?.family ?? null}
                           viewerLocationType={resolveLocationType(profile)}
                           onPress={() => { tap(); setRemoveWatcherTarget(w) }}
+                          style={{ width: WATCHER_CARD_WIDTH }}
                         />
                       ))}
                     </View>
@@ -4192,10 +4276,12 @@ const styles = StyleSheet.create({
   },
   watchersList: {
     paddingVertical: SM,
-    paddingHorizontal: SM,
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: SM,
+    paddingHorizontal: WATCHERS_HPAD,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    columnGap: WATCHERS_GAP,
+    rowGap: WATCHERS_GAP,
   },
   watchingMeSubtitle: {
     fontSize: TEXT.md,

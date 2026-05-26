@@ -52,7 +52,7 @@ export default {
 
   // Onboarding photo
   'photo.title': 'תמונות פרופיל',
-  'photo.sub': 'הוסף 2-4 תמונות',
+  'photo.sub': 'הוסף 2-6 תמונות',
   'photo.confirm': 'אישור והמשך',
   'photo.almostDone': 'עוד צעד אחד ומסיימים',
 
@@ -828,8 +828,8 @@ export default {
   'chat.inputPlaceholder_f': 'כתבי הודעה...',
   'ob.howOld_m': 'בן כמה אתה?',
   'ob.howOld_f': 'בת כמה את?',
-  'photo.sub_m': 'הוסף 2-4 תמונות',
-  'photo.sub_f': 'הוסיפי 2-4 תמונות',
+  'photo.sub_m': 'הוסף 2-6 תמונות',
+  'photo.sub_f': 'הוסיפי 2-6 תמונות',
 
   // Gender-aware: watcher/subject gender
   'home.notifOff_m': 'לא מקבל התראות',

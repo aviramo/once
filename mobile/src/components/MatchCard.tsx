@@ -14,7 +14,7 @@ import { resolveLocationType, type Profile, type LocationType } from '../stores/
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon } from './icons'
+import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton, ROUND_BUTTON_SIZE } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
 import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
@@ -683,6 +683,22 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </View>
           ) : null}
 
+          {/* Group chip — overlaid at the TOP corner of the hero photo on the
+              side opposite the report flag, only when the snapshot carries a
+              shared-group name (server embeds it via make_profile when viewer
+              and subject share any group). Same on-photo Chip styling as the
+              bottom info chips, custom GroupsIcon to read as "same group". */}
+          {sections[0]?.type === 'photo' && match.group_name ? (
+            <View pointerEvents="box-none" style={styles.groupOverlay}>
+              <Chip
+                renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                text={match.group_name}
+                tone="neutral"
+                onPhoto
+              />
+            </View>
+          ) : null}
+
           {/* Two-column overlay at the bottom of the hero photo: left column
               holds the name + chips stack (flex:1, so a long chip wraps its
               text instead of colliding with the buttons); right column holds
@@ -840,6 +856,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     start: 0,
+    padding: MD,
+  },
+  groupOverlay: {
+    position: 'absolute',
+    top: 0,
+    end: 0,
     padding: MD,
   },
   infoLeft: {

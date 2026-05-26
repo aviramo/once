@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, I18nManager } from 'react-native'
+import { View, StyleSheet, Pressable, I18nManager, Platform } from 'react-native'
 import Animated, {
   useAnimatedStyle, useSharedValue,
   withRepeat, withSequence, withTiming,
   FadeInDown, FadeOutUp, FadeIn, FadeOut, LinearTransition,
   type SharedValue,
 } from 'react-native-reanimated'
+import { BlurView } from 'expo-blur'
 import { Text } from './AppText'
 import {
   WHITE, WHITE_MID, HEADER_TEXT_SHADOW,
-  HEADER_PILL_FILL, HEADER_PILL_BORDER, HEADER_PILL_SHADOW,
+  HEADER_PILL_TINT, HEADER_PILL_INTENSITY, HEADER_PILL_SHADOW,
 } from '../colors'
 import { FONT_SCALE } from '../fonts'
 import { tap } from '../lib/haptics'
@@ -459,7 +460,14 @@ export function TabStrip({
             resize + slide. pointerEvents none; first child so it paints
             behind the tab labels/icons. */}
         <View pointerEvents="none" style={styles.chipOverlay}>
-          <Animated.View style={[styles.indicator, chipStyle]} />
+          <Animated.View style={[styles.indicator, chipStyle]}>
+            <BlurView
+              style={StyleSheet.absoluteFillObject}
+              tint={HEADER_PILL_TINT}
+              intensity={HEADER_PILL_INTENSITY}
+              experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
+            />
+          </Animated.View>
         </View>
         {tabs.map((spec, i) => (
           <TabButton
@@ -1017,9 +1025,10 @@ const styles = StyleSheet.create({
     bottom: -TAB.indicatorPadV - TAB.chipBaselineNudge,
     // width / height / borderRadius are animated by chipStyle.
     borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: HEADER_PILL_BORDER,
-    backgroundColor: HEADER_PILL_FILL,
+    // Borderless glass: the BlurView child supplies the material; only the
+    // shadow gives depth. overflow:'hidden' clips the BlurView to the
+    // animated borderRadius set by chipStyle so the corners curve.
+    overflow: 'hidden',
     boxShadow: HEADER_PILL_SHADOW,
   },
   // Fixed-height tab: only mainRow is in the natural flow, so the tab's

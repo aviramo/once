@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import Svg, { Circle, Path, Polyline, Rect } from 'react-native-svg'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
+import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
@@ -196,6 +197,15 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [attachVisible, setAttachVisible] = useState(false)
   const [attachConfirm, setAttachConfirm] = useState<'location' | 'schedule' | null>(null)
   const [inputWrapWidth, setInputWrapWidth] = useState(0)
+  // True while the OS image picker is loading. Keeps the attach menu's image
+  // tile visibly "picking" so the user gets immediate feedback during the
+  // launchImageLibraryAsync cold-start window instead of a blank screen.
+  const [pickingImage, setPickingImage] = useState(false)
+
+  // Warm up the image picker once on chat mount: a no-op permission read
+  // initializes the native bridge so the first launchImageLibraryAsync after
+  // this is dramatically faster.
+  useEffect(() => { ImagePicker.getMediaLibraryPermissionsAsync().catch(() => {}) }, [])
   const attachAnim = useSharedValue(0)
   useEffect(() => {
     if (attachMenuOpen) {
@@ -872,11 +882,14 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   }, [])
 
   const handlePickImage = useCallback(async () => {
-    setAttachMenuOpen(false)
-    const ImagePicker = await import('expo-image-picker')
+    if (pickingImage) return
+    setPickingImage(true)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
+    }).finally(() => {
+      setPickingImage(false)
+      setAttachMenuOpen(false)
     })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
@@ -921,7 +934,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ? { ...m, _pending: false, _failed: true } : m
       ))
     }
-  }, [userId, otherId])
+  }, [userId, otherId, pickingImage])
 
   const handleRetryImage = useCallback(async (failedMsg: Message) => {
     const key = failedMsg.image_key
@@ -1528,13 +1541,18 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                     <View style={styles.attachBarItems}>
                       <Pressable
                         onPress={handlePickImage}
+                        disabled={pickingImage}
                         accessibilityLabel={t('chat.attachMenu.image')}
                         style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
                       >
-                        <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                          <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
-                          <Circle cx={12} cy={14} r={3.5} />
-                        </Svg>
+                        {pickingImage ? (
+                          <ActivityIndicator size="small" color={WHITE} />
+                        ) : (
+                          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                            <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
+                            <Circle cx={12} cy={14} r={3.5} />
+                          </Svg>
+                        )}
                       </Pressable>
                       <View style={styles.attachBarDivider} />
                       <Pressable
@@ -2527,15 +2545,15 @@ const styles = StyleSheet.create({
   bubbleMineLast: { borderBottomEndRadius: 4 },
   bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: BLACK_SOFT },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
-  bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md) },
+  bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), flexShrink: 1 },
   bubbleTextMine: { color: WHITE },
   bubbleTextTheirs: { color: BLACK },
 
   inlineTime: { fontSize: TEXT.xs, lineHeight: lh(TEXT.xs), letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
   inlineTimeTheirs: { color: BLACK_MID },
-  bubbleTextRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' },
-  textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginStart: 'auto' as any, paddingStart: XS, marginEnd: -SM },
+  bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
+  textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginEnd: -SM },
 
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: MD, paddingHorizontal: MD },
   typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: BLACK_STRONG },

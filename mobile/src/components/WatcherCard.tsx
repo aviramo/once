@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback } from 'react'
-import { View, StyleSheet, Pressable, I18nManager, type GestureResponderEvent } from 'react-native'
+import { View, StyleSheet, Pressable, I18nManager, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { Text } from './AppText'
@@ -34,9 +34,13 @@ type Props = {
    * when both sides are 'device', else the passive "from the set location".
    * Pass resolveLocationType(ownProfile). */
   viewerLocationType?: LocationType | null
+  /** Style on the outer Animated.View. Used by the parent grid to set the
+   * card's width (must live on the Animated.View itself, not a wrapper, so
+   * Reanimated can keep the node alive for the FadeOutUp exit). */
+  style?: StyleProp<ViewStyle>
 }
 
-export function WatcherCard({ watcher, onPress, viewerFamily, viewerLocationType }: Props) {
+export function WatcherCard({ watcher, onPress, viewerFamily, viewerLocationType, style }: Props) {
   const subjectLocationType = resolveLocationType(watcher)
   const viewerType: LocationType = viewerLocationType ?? 'device'
   const distance = formatDistance(watcher.distance ?? undefined, watcher.is_male, viewerType, subjectLocationType)
@@ -86,6 +90,7 @@ export function WatcherCard({ watcher, onPress, viewerFamily, viewerLocationType
       entering={FadeInDown.duration(MOTION.base)}
       exiting={FadeOutUp.duration(MOTION.base)}
       layout={LinearTransition.duration(MOTION.base)}
+      style={style}
     >
       <Pressable
         style={styles.card}
@@ -155,6 +160,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
+    aspectRatio: 3 / 4,
   },
   newBadge: {
     backgroundColor: PRIMARY,
@@ -169,8 +175,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   infoOverlay: {
+    flex: 1,
     paddingHorizontal: SM,
     paddingVertical: MD,
+    justifyContent: 'space-between',
     gap: SM,
   },
   titleRow: {
@@ -188,7 +196,6 @@ const styles = StyleSheet.create({
   },
   chipsStack: {
     flexDirection: 'column',
-    alignItems: 'flex-start',
     gap: SM,
   },
   chipsLine: {

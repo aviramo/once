@@ -5,6 +5,7 @@ import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
+import * as ImagePicker from 'expo-image-picker'
 import Svg, { Path, Line, Circle, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
@@ -696,8 +697,11 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
       contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
     >
-      <View style={groupsPopupStyles.section}>
-        <Text style={groupsPopupStyles.heading}>{t('settings.groupsMine')}</Text>
+      <View style={groupsPopupStyles.header}>
+        <Text style={groupsPopupStyles.title}>{t('settings.groupsMine')}</Text>
+      </View>
+
+      <View style={groupsPopupStyles.mineSection}>
         {!loaded ? (
           <ActivityIndicator color={BLACK_MID} style={{ marginVertical: MD }} />
         ) : groups.length === 0 ? (
@@ -729,8 +733,10 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
         )}
       </View>
 
-      <View style={groupsPopupStyles.section}>
-        <Text style={groupsPopupStyles.heading}>{t('settings.groupsJoinTitle')}</Text>
+      <View style={groupsPopupStyles.sectionDivider} />
+
+      <View style={groupsPopupStyles.joinSection}>
+        <Text style={groupsPopupStyles.subheading}>{t('settings.groupsJoinTitle')}</Text>
         <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
         <View style={groupsPopupStyles.inputWrap}>
           <TextInput
@@ -768,30 +774,34 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
 }
 
 const groupsPopupStyles = StyleSheet.create({
-  section: { paddingHorizontal: MD, paddingTop: MD },
-  heading: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
-  hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS },
-  empty: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: MD, marginBottom: SM, textAlign: 'center' },
-  list: { marginTop: SM, borderRadius: RADIUS, backgroundColor: WHITE_SOFT, overflow: 'hidden' },
+  header: { paddingHorizontal: MD, paddingTop: SM, paddingBottom: XS },
+  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK },
+  mineSection: { paddingHorizontal: MD, paddingBottom: MD },
+  joinSection: { paddingHorizontal: MD, paddingTop: MD },
+  subheading: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS, lineHeight: lh(TEXT.sm) },
+  empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM },
+  list: { borderRadius: RADIUS, backgroundColor: WHITE_SOFT, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: MD, paddingVertical: SM, gap: SM },
   rowText: { flex: 1, minWidth: 0 },
   rowLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
   rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
   rowAction: { padding: SM },
   divider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
+  sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   inputWrap: {
-    marginTop: SM,
+    marginTop: MD,
     backgroundColor: WHITE_SOFT,
     borderRadius: RADIUS,
     paddingHorizontal: MD,
-    paddingVertical: MD,
+    paddingVertical: SM,
   },
   input: {
-    fontSize: TEXT.xl,
+    fontSize: TEXT.lg,
     fontWeight: WEIGHT.extrabold,
     color: BLACK,
     textAlign: 'center',
-    letterSpacing: 8,
+    letterSpacing: 6,
     padding: 0,
   },
   error: { marginTop: XS, fontSize: TEXT.sm, color: DESTRUCTIVE, textAlign: 'center' },
@@ -2008,12 +2018,13 @@ const familyStyles = StyleSheet.create({
 // from '../src/components/icons'.
 
 function PhotoOptionsPopup({
-  visible, canMoveUp, canMoveDown, canDelete, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
+  visible, canMoveUp, canMoveDown, canDelete, replacing, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
 }: {
   visible: boolean
   canMoveUp: boolean
   canMoveDown: boolean
   canDelete: boolean
+  replacing: boolean
   onDismiss: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -2049,10 +2060,12 @@ function PhotoOptionsPopup({
       </View>
 
       <Pressable
-        style={photoOptionsStyles.fullRow}
-        onPress={() => { tap(); onReplace() }}
+        style={[photoOptionsStyles.fullRow, replacing && photoOptionsStyles.tileDisabled]}
+        onPress={() => { if (!replacing) { tap(); onReplace() } }}
       >
-        <PhotoReplaceIcon color={BLACK} />
+        {replacing
+          ? <ActivityIndicator color={BLACK} />
+          : <PhotoReplaceIcon color={BLACK} />}
         <Text style={photoOptionsStyles.fullRowLabel}>{t('settings.photoEditReplace')}</Text>
       </Pressable>
 
@@ -2155,10 +2168,23 @@ export function PreviewFieldPage({
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
   const [familySaving, setFamilySaving] = useState(false)
   const [bioSaving, setBioSaving] = useState(false)
-  // True while the OS image picker is launching from the profile-card round
-  // button. launchImageLibraryAsync has a cold-start delay; swap the
-  // add-photo glyph for a spinner until the native picker is up.
+  // True while the OS image picker is launching. launchImageLibraryAsync has a
+  // cold-start delay (especially the very first time it loads the native
+  // bridge). Drive a spinner in whichever UI initiated the pick so the user
+  // gets immediate visual feedback while the picker dialog comes up.
   const [photoPicking, setPhotoPicking] = useState(false)
+  // True while the picker is loading specifically for the Replace flow inside
+  // PhotoOptionsPopup — keeps the popup open with a spinner on the Replace
+  // tile, so the user sees what's loading instead of a blank screen between
+  // popup-close and picker-open.
+  const [photoReplacing, setPhotoReplacing] = useState(false)
+
+  // Warm up the image picker on mount: getMediaLibraryPermissionsAsync()
+  // initializes the native bridge so the first launchImageLibraryAsync after
+  // this point is dramatically faster. Cheap (no permission prompt — read-only
+  // status check), safe (errors swallowed), and runs in parallel with the rest
+  // of the screen mount.
+  useEffect(() => { ImagePicker.getMediaLibraryPermissionsAsync().catch(() => {}) }, [])
   // Tracks deferred uploads in flight so persistImages can await them before
   // invoking app/profile (preventing the server from receiving a filename
   // whose upload has not yet landed in storage).
@@ -2274,7 +2300,6 @@ export function PreviewFieldPage({
   // invoking app/profile.
   const handleAddPhoto = async () => {
     if (!user || !profile || photoPicking) return
-    const ImagePicker = await import('expo-image-picker')
     setPhotoPicking(true)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -2316,13 +2341,15 @@ export function PreviewFieldPage({
   }
 
   const handleReplace = async () => {
-    if (photoPopupImageIndex == null || !user || !profile?.images) return
+    if (photoPopupImageIndex == null || !user || !profile?.images || photoReplacing) return
     const targetIndex = photoPopupImageIndex
-    setPhotoPopupImageIndex(null)
-    const ImagePicker = await import('expo-image-picker')
+    setPhotoReplacing(true)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
+    }).finally(() => {
+      setPhotoReplacing(false)
+      setPhotoPopupImageIndex(null)
     })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
@@ -2456,7 +2483,8 @@ export function PreviewFieldPage({
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
         canDelete={photoCount > 2}
-        onDismiss={() => setPhotoPopupImageIndex(null)}
+        replacing={photoReplacing}
+        onDismiss={() => { if (!photoReplacing) setPhotoPopupImageIndex(null) }}
         onMoveUp={handleMoveUp}
         onMoveDown={handleMoveDown}
         onReplace={handleReplace}

@@ -40,14 +40,20 @@ export const PRIMARY_LIGHT = '#FFE9E0'
 // header. Tracks selection because it's only on the active cross-fade layer
 // — the wordmark gains a faint emboss exactly as its tab becomes selected.
 export const HEADER_TEXT_SHADOW = 'rgba(0,0,0,0.30)'
-// Selected-tab gliding "lozenge": a flat translucent-white chip (NO
-// gradient) that slides and resizes behind the active tab, tracking the
-// pager swipe. A crisp hairline rim and a soft dark lift make it read as a
-// chip floating on the deep-wine header. The typography cross-fade rides on
-// top of it.
-export const HEADER_PILL_FILL = 'rgba(255,255,255,0.18)'
-export const HEADER_PILL_BORDER = 'rgba(255,255,255,0.38)'
-export const HEADER_PILL_SHADOW = '0px 4px 14px rgba(0,0,0,0.22)'
+// Selected-tab gliding "lozenge": a borderless glass chip that slides and
+// resizes behind the active tab, tracking the pager swipe. A native
+// BlurView (expo-blur) provides the frosted-glass material; a soft drop
+// shadow gives it depth. No border, no gradient. The typography cross-fade
+// rides on top of it.
+//   • HEADER_PILL_TINT — the BlurView `tint`. `light` reads as a luminous
+//     frosted overlay on the solid PRIMARY (black) header; on iOS it adapts
+//     to the system material; on Android with `experimentalBlurMethod` the
+//     BlurView blurs whatever lives behind it (today: solid black, but the
+//     chip becomes "real" the moment the header ever goes translucent).
+//   • HEADER_PILL_INTENSITY — 0..100. Higher = more material visible.
+export const HEADER_PILL_TINT = 'light' as const
+export const HEADER_PILL_INTENSITY = 55
+export const HEADER_PILL_SHADOW = '0px 6px 18px rgba(0,0,0,0.32)'
 
 // ── Photo-caption legibility ──────────────────────────────────────────────
 // White text or white SVG strokes laid directly over a user photo can vanish

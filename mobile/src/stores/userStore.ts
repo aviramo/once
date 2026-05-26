@@ -29,6 +29,12 @@ export interface Profile {
    * 'work'. Drives the distance chip icon (pin/home/work). Absent on
    * snapshots from a pre-typed build — use resolveLocationType(). */
   location_type?: LocationType | null
+  /** Name of a group the viewer and this profile's subject both belong to,
+   * NULL when none. Server embeds it in make_profile when the snapshot is
+   * written into a single-counterpart slot (page1.profile / page2.profile)
+   * and the pair shares any group. Drives the on-photo group chip. Slim
+   * viewer-list entries strip this. */
+  group_name?: string | null
 }
 
 export type LocationType = 'device' | 'home' | 'work'

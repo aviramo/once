@@ -169,7 +169,7 @@ export interface PhotoEditorRef {
 }
 
 function PhotoCell({
-  uri, localUri, hash, onRemove, onReplace, onLoaded, canRemove, dragging, highlighted, onLayout,
+  uri, localUri, hash, onRemove, onReplace, onLoaded, canRemove, dragging, highlighted, replacing, onLayout,
 }: {
   uri: string
   localUri?: string
@@ -180,13 +180,14 @@ function PhotoCell({
   canRemove: boolean
   dragging?: boolean
   highlighted?: boolean
+  replacing?: boolean
   onLayout?: (e: any) => void
 }) {
   return (
     <Pressable
       style={photoStyles.cell}
       onLayout={onLayout}
-      onPress={onReplace ? () => { tap(); onReplace() } : undefined}
+      onPress={onReplace && !replacing ? () => { tap(); onReplace() } : undefined}
     >
       <ExpoImage
         source={uri}
@@ -198,6 +199,11 @@ function PhotoCell({
         onLoad={() => onLoaded?.()}
       />
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
+      {replacing && (
+        <View pointerEvents="none" style={photoStyles.replacingOverlay}>
+          <ActivityIndicator size="large" color={WHITE} />
+        </View>
+      )}
       {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
           <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={BLACK} strokeWidth={3} strokeLinecap="round">
@@ -212,7 +218,7 @@ function PhotoCell({
 
 // Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
-  photos, urlFor, hashFor, onRemove, onReplace, onLoaded, onReorder, canRemove, uploads,
+  photos, urlFor, hashFor, onRemove, onReplace, onLoaded, onReorder, canRemove, uploads, replacingFilename,
   additionalChildren, onDragStateChange,
 }: {
   photos: string[]
@@ -224,6 +230,7 @@ function PhotoGrid({
   onReorder: (from: number, to: number) => void
   canRemove: boolean
   uploads: { id: string; uri: string; filename?: string }[]
+  replacingFilename?: string | null
   additionalChildren?: React.ReactNode
   onDragStateChange?: (dragging: boolean) => void
 }) {
@@ -324,6 +331,7 @@ function PhotoGrid({
             canRemove={canRemove}
             dragging={dragIdx === i}
             highlighted={hoverIdx === i}
+            replacing={replacingFilename === filename}
             onLayout={(e) => { layouts.current[i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
           />
         )
@@ -412,6 +420,16 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   // launchImageLibraryAsync has a noticeable cold-start delay; show a spinner
   // in the tapped "+" slot until the native picker is up (promise resolves).
   const [pickingAddIdx, setPickingAddIdx] = useState<number | null>(null)
+  // Filename of the photo currently being replaced (picker open). Drives a
+  // spinner overlay on the cell so the user sees what's loading instead of
+  // a blank tap while the picker cold-starts.
+  const [replacingFilename, setReplacingFilename] = useState<string | null>(null)
+
+  // Warm up the image picker on mount: getMediaLibraryPermissionsAsync()
+  // initializes the native bridge so the first launchImageLibraryAsync after
+  // this is dramatically faster. Cheap (status read, no permission prompt),
+  // errors swallowed.
+  useEffect(() => { ImagePicker.getMediaLibraryPermissionsAsync().catch(() => {}) }, [])
 
   const storeImages = profile?.images ?? []
   const photos = storeImages.map(e => e.normal ?? '')
@@ -615,14 +633,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const replacePhoto = async (oldFilename: string) => {
-    if (!user) return
+    if (!user || replacingFilename) return
     const idx = storeImages.findIndex(e => e.normal === oldFilename)
     if (idx < 0) return
 
+    setReplacingFilename(oldFilename)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    })
+    }).finally(() => setReplacingFilename(null))
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
 
@@ -700,6 +719,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         onReorder={reorderPhotos}
         canRemove={photos.length > 2}
         uploads={uploads}
+        replacingFilename={replacingFilename}
         onDragStateChange={onDragStateChange}
         additionalChildren={
           (() => {
@@ -777,6 +797,12 @@ const photoStyles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: WHITE_MID,
     borderRadius: RADIUS,
+  },
+  replacingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: BLACK_STRONG,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   spinnerBadge: {
     position: 'absolute',

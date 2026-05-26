@@ -52,7 +52,7 @@ export default {
 
   // Onboarding photo
   'photo.title': 'Profile Photos',
-  'photo.sub': 'Add 2-4 photos',
+  'photo.sub': 'Add 2-6 photos',
   'photo.confirm': 'Confirm & Continue',
   'photo.almostDone': 'One more step and we are done',
 
@@ -787,8 +787,8 @@ Next may surprise`,
   'chat.inputPlaceholder_f': 'Write a message...',
   'ob.howOld_m': 'How old are you?',
   'ob.howOld_f': 'How old are you?',
-  'photo.sub_m': 'Add 2-4 photos',
-  'photo.sub_f': 'Add 2-4 photos',
+  'photo.sub_m': 'Add 2-6 photos',
+  'photo.sub_f': 'Add 2-6 photos',
 
   // Gender-aware: watcher/subject gender
   'home.notifOff_m': 'Not receiving notifications',
