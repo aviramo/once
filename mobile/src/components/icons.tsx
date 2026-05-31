@@ -254,10 +254,13 @@ export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 // Two silhouettes — the "members of a group" mark used by the settings
 // "my groups" row. Visually distinct from UserIcon (single silhouette) so
 // the two adjacent rows in the account card don't read as the same icon.
-// Pencil glyph — "edit" affordance (settings profile card).
-export function PencilIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+// Pencil glyph — "edit" affordance (settings profile card). Accepts an
+// optional strokeWidth so callers can render a wider dark copy behind a
+// thinner white copy to fake a halo (the cross-platform replacement for the
+// filter:dropShadow that rendered as a filled square on iOS).
+export function PencilIcon({ color = BLACK, size = ICON.md, strokeWidth = STROKE.base }: IconProps & { strokeWidth?: number } = {}) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </Svg>

@@ -49,8 +49,8 @@ export function WatcherCard({ watcher, onPress, viewerFamily, viewerLocationType
   const isNew = isRecentlyCreated(watcher.created_at)
   const hash = watcher.images?.[0]?.hash
   const familyChipText = useMemo(
-    () => buildFamilyChipText(watcher.family, undefined, false, viewerFamily),
-    [watcher.family, viewerFamily],
+    () => buildFamilyChipText(watcher.family, undefined, false, viewerFamily, watcher.is_male),
+    [watcher.family, viewerFamily, watcher.is_male],
   )
 
   // Mount/unmount choreography lives on the card itself (DRY: a component

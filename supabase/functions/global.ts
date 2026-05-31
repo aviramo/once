@@ -95,6 +95,9 @@ export type Page2 = {
 export type Credits = {
   balance: number;
   tier: "free" | "pro";
+  // Reserved against a live waiting invite. `app_invite` moves 1 from balance
+  // to held; non-cancel exits refund it back, cancel forfeits it.
+  held?: number;
   granted_on?: string | null;
   next_grant_at?: string | null;
 };

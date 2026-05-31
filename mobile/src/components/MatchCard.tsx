@@ -425,8 +425,8 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const ageChipText = age ? tg('home.ageChip', match.is_male).replace('{age}', age) : ''
 
   const familyChipText = useMemo(
-    () => buildFamilyChipText(match.family, isForKids, self, viewerFamily),
-    [match.family, isForKids, self, viewerFamily],
+    () => buildFamilyChipText(match.family, isForKids, self, viewerFamily, match.is_male),
+    [match.family, isForKids, self, viewerFamily, match.is_male],
   )
 
   const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'

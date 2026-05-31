@@ -11,6 +11,7 @@ import { Text } from './AppText'
 import {
   WHITE, WHITE_MID, HEADER_TEXT_SHADOW,
   HEADER_PILL_TINT, HEADER_PILL_INTENSITY, HEADER_PILL_SHADOW,
+  HEADER_PILL_IOS_BASE,
 } from '../colors'
 import { FONT_SCALE } from '../fonts'
 import { tap } from '../lib/haptics'
@@ -219,6 +220,11 @@ export type TabSpec = {
    * opacity on a view that also runs a layout animation). Optional; a stable
    * zero fallback keeps every non-dimmed tab byte-identical. */
   dimProgress?: SharedValue<number>
+  /** Makes the tab inert: the Pressable is `disabled`, so it never fires
+   * `onPress` (no haptic, no navigation). Used by the gated-state spacer tab
+   * in home.tsx — it reserves the side-icon's width so Home doesn't drift,
+   * but is not a destination. Layout / measurement / chip math is unaffected. */
+  disabled?: boolean
 }
 
 // Continuous gentle "alive" heartbeat: the value eases from 1 down to `lo`
@@ -462,7 +468,18 @@ export function TabStrip({
         <View pointerEvents="none" style={styles.chipOverlay}>
           <Animated.View style={[styles.indicator, chipStyle]}>
             <BlurView
-              style={StyleSheet.absoluteFillObject}
+              style={[
+                StyleSheet.absoluteFillObject,
+                // iOS: UIVisualEffectView with `tint='light'` over the solid
+                // PRIMARY (black) header has no translucent content behind it
+                // to blur and renders near-invisible. A translucent white base
+                // BENEATH the system blur material gives the chip a visible
+                // body on iOS while the system blur still composites on top
+                // (still reads as glass). Android keeps its proven
+                // `dimezisBlurView` path with no base — the real blur there
+                // already shows the chip clearly.
+                Platform.OS === 'ios' && { backgroundColor: HEADER_PILL_IOS_BASE },
+              ]}
               tint={HEADER_PILL_TINT}
               intensity={HEADER_PILL_INTENSITY}
               experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
@@ -748,6 +765,7 @@ function TabButton({
       onLayout={e => onWidth(index, e.nativeEvent.layout.width)}
       hitSlop={SM}
       layout={LinearTransition.duration(TAB.collapseDuration)}
+      disabled={spec.disabled === true}
     >
       {/* Sub-label is rendered ABSOLUTELY above the mainRow so the tab's
           natural layout flow (and therefore every wrapper above it) stays at

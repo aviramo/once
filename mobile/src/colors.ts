@@ -46,14 +46,23 @@ export const HEADER_TEXT_SHADOW = 'rgba(0,0,0,0.30)'
 // shadow gives it depth. No border, no gradient. The typography cross-fade
 // rides on top of it.
 //   • HEADER_PILL_TINT — the BlurView `tint`. `light` reads as a luminous
-//     frosted overlay on the solid PRIMARY (black) header; on iOS it adapts
-//     to the system material; on Android with `experimentalBlurMethod` the
-//     BlurView blurs whatever lives behind it (today: solid black, but the
-//     chip becomes "real" the moment the header ever goes translucent).
+//     frosted overlay; on iOS it adapts to the system material; on Android
+//     with `experimentalBlurMethod='dimezisBlurView'` the BlurView blurs
+//     whatever lives behind it (the solid PRIMARY black) and renders a
+//     visible frosted chip on its own.
 //   • HEADER_PILL_INTENSITY — 0..100. Higher = more material visible.
+//   • HEADER_PILL_IOS_BASE — iOS-only translucent white base laid BENEATH
+//     the BlurView. The header is opaque PRIMARY (black), so on iOS the
+//     `UIVisualEffectView` has nothing translucent to blur and renders
+//     near-invisible (the original design assumed the header would
+//     eventually turn translucent — it never did). The base gives the chip
+//     a visible body on iOS while the system blur still composites on top
+//     (still reads as glass). Android keeps the proven `dimezisBlurView`
+//     path with no base, so its chip is byte-identical to before.
 export const HEADER_PILL_TINT = 'light' as const
 export const HEADER_PILL_INTENSITY = 55
 export const HEADER_PILL_SHADOW = '0px 6px 18px rgba(0,0,0,0.32)'
+export const HEADER_PILL_IOS_BASE = 'rgba(255,255,255,0.18)'
 
 // ── Photo-caption legibility ──────────────────────────────────────────────
 // White text or white SVG strokes laid directly over a user photo can vanish
@@ -65,13 +74,6 @@ export const PHOTO_TEXT_SHADOW = {
   textShadowOffset: { width: 0, height: 1 },
   textShadowRadius: 8,
 }
-// Same shadow geometry expressed as a CSS-style filter so it applies to SVG
-// content (textShadow only reaches Text). Wrap an icon in a View with this
-// style to give its strokes a matching dark halo.
-export const PHOTO_ICON_SHADOW = {
-  filter: [{ dropShadow: { offsetX: 0, offsetY: 1, standardDeviation: 4, color: BLACK } }],
-}
-
 // ── Destructive ──────────────────────────────────────────────────────────
 // Warm gold/amber. The app surface is now the deep-wine PRIMARY everywhere,
 // and the old red (#D96B6B) sat muddily on wine (red-on-red, low separation).

@@ -928,7 +928,7 @@ function StatusCardText({ title, description }: { title: string; description: st
 // symmetric page2 incoming-invite clock under the invite tab. Keeping the
 // two countdowns in the same chrome row (instead of one in the button and
 // one in the tab) means both sides of the invitation read the same way.
-function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy, disabled }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean; disabled?: boolean }) {
+function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean }) {
   const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
   const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
 
@@ -939,16 +939,8 @@ function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy, disabled }:
         <Button
           label={t('home.cancelWaitingBtn')}
           variant="onPrimary"
-          // The hearts-cost badge rides in-button (same as the page2 accept
-          // CTA) so the user sees cancelling costs 1 heart — including while
-          // the button is disabled, where it doubles as the "why" hint.
-          iconStart={<CreditCost cost={CREDIT_COST.cancel} color={PRIMARY} bg={PRIMARY_BG} />}
           onPress={onCancel}
           loading={busy}
-          // Cancelling costs 1 heart; when the user can't afford it the
-          // button is disabled and does nothing (no explainer popup) — they
-          // stay in `waiting` until the invite expires or is answered.
-          disabled={disabled}
         />
       </Animated.View>
     </View>
@@ -1066,6 +1058,11 @@ function ViewersStatusCard({
   hasWatchers,
   userIsMale,
   broadcastTimer,
+  onBroadcast,
+  onGoVisible,
+  broadcastAffordable,
+  busyBroadcast,
+  busyGoVisible,
 }: {
   isHidden: boolean
   broadcastActive: boolean
@@ -1075,6 +1072,18 @@ function ViewersStatusCard({
   // card description as a readable line ("03:45 לסיום השידור") — this is
   // where the old toggle's broadcast-segment countdown moved to.
   broadcastTimer?: string | null
+  // Optional in-card CTAs. The empty-visible state gets a "broadcast me"
+  // button with the heart-cost badge (opens the broadcast confirm popup, same
+  // route as the side-tab dropdown picks broadcast); the hidden state gets a
+  // "switch to visible" button (calls app/free2 directly, same as the side-
+  // tab dropdown picks visible while not broadcasting).
+  onBroadcast?: () => void
+  onGoVisible?: () => void
+  // Disable the broadcast button when the user can't afford the cost; the
+  // cost badge stays visible so it reads as informative, not hidden.
+  broadcastAffordable?: boolean
+  busyBroadcast?: boolean
+  busyGoVisible?: boolean
 }) {
   // 5-state matrix: hidden wins over broadcast; then watched vs empty.
   const [title, description] = (() => {
@@ -1090,9 +1099,41 @@ function ViewersStatusCard({
     ? `${description}\n${t('home.broadcast.endsIn').replace('{time}', broadcastTimer)}`
     : description
 
+  // In-card CTA: hidden → switch-to-visible; empty-visible (not broadcasting,
+  // no watchers) → broadcast-me with heart cost. The other three states
+  // (broadcast-on, visible-with-watchers) carry no button — the side-tab
+  // dropdown remains the way to change mode there.
+  const showGoVisibleBtn = isHidden && onGoVisible != null
+  const showBroadcastBtn = !isHidden && !broadcastActive && !hasWatchers && onBroadcast != null
+  const broadcastDisabled = broadcastAffordable === false
+
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={fullDescription} />
+      {showGoVisibleBtn ? (
+        <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
+          <Button
+            label={t('home.watchingMeHiddenGoVisibleBtn')}
+            variant="onPrimary"
+            onPress={onGoVisible!}
+            loading={busyGoVisible}
+            silentDisabled
+          />
+        </Animated.View>
+      ) : null}
+      {showBroadcastBtn ? (
+        <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
+          <Button
+            label={t('home.broadcastConfirmButton')}
+            variant="onPrimary"
+            iconStart={<CreditCost cost={CREDIT_COST.broadcast} color={PRIMARY} bg={PRIMARY_BG} />}
+            onPress={onBroadcast!}
+            disabled={busyBroadcast || broadcastDisabled}
+            loading={busyBroadcast}
+            silentDisabled={!broadcastDisabled && !busyBroadcast}
+          />
+        </Animated.View>
+      ) : null}
     </View>
   )
 }
@@ -3004,7 +3045,10 @@ export default function HomePage() {
       description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
       acceptLabel={t('home.inviteConfirmOk')}
       declineLabel={t('home.watchingReject')}
+      // Sending an invite costs 1 heart, held server-side until the invite
+      // ends; the heart returns on every non-cancel exit, cancel forfeits it.
       costCredits={CREDIT_COST.invite}
+      affordable={starsBalance >= CREDIT_COST.invite}
       onAccept={() => { setStickyInvite(true); runAction('app/invite', 'invite-confirm') }}
       // "Not now": first time → teach via the skip-hint popup; after the
       // user has acknowledged it once ("got it"), skip via the SAME ride-off
@@ -3139,7 +3183,13 @@ export default function HomePage() {
   // renders play/avatar/hamburger) becomes the action surface. Priority
   // matches the old isPermMode precedence (permission first — you must fix
   // it regardless), then the server availability gate. null = normal home.
-  const centerNotice: { text: string; icon: ReactNode; onPress?: () => void; busy?: boolean; disabled?: boolean } | null =
+  // For the geo/group gated branches the center icon is the user's OWN profile
+  // photo and a tap opens the profile-preview sheet — the only useful action
+  // left in a "you can't play right now" state is review/edit your profile.
+  // Falls back to the InboxIcon ONLY if the user has no avatar resolved yet
+  // (fresh install before the first photo finishes downloading).
+  const gateAvatarUri = selfAvatar?.uri ?? profileAvatarUrl ?? null
+  const centerNotice: { text: string; icon: ReactNode; onPress?: () => void; busy?: boolean; disabled?: boolean; avatarUri?: string | null } | null =
     isPermMode
       ? {
           text: permTitle,
@@ -3152,21 +3202,25 @@ export default function HomePage() {
           busy: permBusyState,
         }
       : geoGated
-        ? (availability?.state === 'not_yet'
-            ? { text: t('home.geoGate.notYet').replace('{date}', gateWhenStr), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true }
-            : availability?.reason === 'push'
-              // notif perm IS granted but the server still push-gates (dead
-              // Expo token): nudge the user to re-enable / reopen. Same copy
-              // as the device-side notif overlay so the headline reads
-              // identically whether the gate comes from device perm or a dead
-              // server-side token.
-              ? { text: tg('home.notifAccessRequired', isMale), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
+        ? (availability?.reason === 'push'
+            // notif perm IS granted but the server still push-gates (dead
+            // Expo token): nudge the user to re-enable / reopen. Same copy
+            // as the device-side notif overlay so the headline reads
+            // identically whether the gate comes from device perm or a dead
+            // server-side token. Stays a bell icon — the call to action is
+            // re-enable notifications, not view your profile.
+            ? { text: tg('home.notifAccessRequired', isMale), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
+            : availability?.state === 'not_yet'
+              // Scheduled-future area: still a geo state, treat it like the
+              // other geo-gated branches — show the user's avatar, tap opens
+              // the profile sheet. (Was an inert InboxIcon before.)
+              ? { text: t('home.geoGate.notYet').replace('{date}', gateWhenStr), icon: <InboxIcon color={PRIMARY} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet }
               // Any other unavailable state (geo / membership in disabled-only
-              // groups) renders the static "not available" message. The
-              // request-to-join CTA + waiting-for-approval state were retired
-              // 2026-05-25 with the no-group=available rule — no more "ask the
-              // operator" prompts surface to users.
-              : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, disabled: true })
+              // groups) — render the user's own avatar; tap opens the profile
+              // preview sheet so they can review/edit their profile while they
+              // wait for the gate to lift. Static InboxIcon is the fallback
+              // for a fresh install where the avatar hasn't been resolved yet.
+              : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet })
         : null
 
   // Tab strip content — single source of truth for the three pane titles
@@ -3437,7 +3491,23 @@ export default function HomePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPermMode])
-  const tabSpecs: TabSpec[] = sideGated ? tabSpecsAll.slice(0, 2) : tabSpecsAll
+  // Gated layout: keep three tabs but replace the side tab with an INERT
+  // spacer whose measured width matches the ambient side icon (ICON.xxl in a
+  // compact-tab padding). Renders a transparent HeartIcon so the layout
+  // engine measures the SAME width an ambient icon-only side tab would
+  // (broadcast / visible / chat all use ICON.xxl), keeping Menu at its end
+  // and Home in its natural position — Home does NOT shift sideways when the
+  // gate flips on or off. `disabled` makes the tab inert (no haptic / no nav
+  // on accidental tap). User decision 2026-05-31: "להשאיר מקום ריק שאין
+  // טאב2 שיהיה בגודל של הסמל שאמור להיות שם".
+  const sideSpacerSpec: TabSpec = {
+    // Empty box sized like a tab glyph (ICON.xxl square) so the compact-tab
+    // padding wraps it to the SAME measured width as an ambient icon-only
+    // side tab. No icon drawn — pure spacer.
+    renderIndicator: () => <View style={{ width: ICON.xxl, height: ICON.xxl }} />,
+    disabled: true,
+  }
+  const tabSpecs: TabSpec[] = sideGated ? [tabSpecsAll[0], tabSpecsAll[1], sideSpacerSpec] : tabSpecsAll
 
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
@@ -3666,10 +3736,17 @@ export default function HomePage() {
                             style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                           >
                             {centerNotice ? (
-                              <View style={[styles.permAvatar, styles.permSlidersButton]}>
+                              // When the gate is geo/group we render the user's
+                              // OWN profile photo edge-to-edge inside the
+                              // circle (no white background, no inner icon).
+                              // Otherwise (perm/push/loading/notYet-without-avatar)
+                              // fall back to the centered icon-on-white tile.
+                              <View style={[styles.permAvatar, centerNotice.avatarUri && !centerNotice.busy ? null : styles.permSlidersButton]}>
                                 {centerNotice.busy
                                   ? <Spinner color={PRIMARY} size={64} />
-                                  : centerNotice.icon}
+                                  : centerNotice.avatarUri
+                                    ? <Image source={{ uri: centerNotice.avatarUri }} style={styles.permAvatarImage} contentFit="cover" cachePolicy="memory-disk" />
+                                    : centerNotice.icon}
                               </View>
                             ) : isReadyToFind || pausing || (page1Profile && !watchCardShown) ? (
                               // PLAY icon. Shown when ready to find, kept
@@ -3759,7 +3836,6 @@ export default function HomePage() {
                                   targetIsMale={matchIsMale}
                                   userIsMale={isMale}
                                   onCancel={() => { tap(); setCancelConfirmOpen(true) }}
-                                  disabled={starsBalance < CREDIT_COST.cancel}
                                 />
                               ) : isEndedState && page1MessageTitle ? (
                                 <EventMessageCard
@@ -3786,7 +3862,6 @@ export default function HomePage() {
                   title={t('home.cancelWaitingTitle')}
                   description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
                   confirmLabel={t('home.cancelWaitingConfirm')}
-                  confirmIconStart={<CreditCost cost={CREDIT_COST.cancel} color={WHITE} bg={WHITE_SOFT} />}
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={runCancel}
                   busy={busy}
@@ -4002,6 +4077,11 @@ export default function HomePage() {
                       hasWatchers={watchers.length > 0}
                       userIsMale={isMale}
                       broadcastTimer={broadcastActive ? addCooldownLabel : null}
+                      onBroadcast={() => { tap(); setBroadcastConfirmOpen(true) }}
+                      onGoVisible={() => runAction('app/free2', 'free2')}
+                      broadcastAffordable={starsBalance >= CREDIT_COST.broadcast}
+                      busyBroadcast={busy && pendingKey === 'add'}
+                      busyGoVisible={busy && pendingKey === 'free2'}
                     />
                     <View style={styles.watchersList}>
                       {watchers.map((w) => (
@@ -4390,6 +4470,14 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Edge-to-edge avatar inside permAvatar (which clips with overflow:'hidden'
+  // to the rounded outline). Used by the gated centerNotice variants
+  // (geo/group/not_yet) to show the user's own profile photo as the central
+  // action surface. No background — the image covers the full circle.
+  permAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   permSlidersButton: {
     backgroundColor: WHITE,

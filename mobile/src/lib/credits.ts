@@ -9,14 +9,15 @@ import { t } from '../i18n'
 // cost or tier amount changes, change it in all three places in lockstep.
 
 export const CREDIT_COST = {
-  // Inviting is free — the badge on the send-invite button reads "0" so the
-  // user sees it costs nothing. Display-only: there is no SQL `invite` cost.
-  invite: 0,
+  // Sending an invite costs 1 heart, held server-side until the invite ends.
+  // Every non-cancel exit (decline / expire / approve / match / kicked /
+  // logout) refunds the heart; cancel forfeits it (user request 2026-05-31).
+  invite: 1,
   approve: 1,
   broadcast: 1,
-  // Cancelling a sent invite costs the inviter 1 heart (user request
-  // 2026-05-22). Inviting is free; the charge is the price of backing out.
-  cancel: 1,
+  // Cancelling forfeits the held heart instead of charging an additional
+  // one. The cost was paid on send, so the cancel button shows no badge.
+  cancel: 0,
 } as const
 
 export type CreditAction = keyof typeof CREDIT_COST
@@ -50,6 +51,9 @@ export function starsText(n: number): string {
 export type CreditsWallet = {
   balance: number
   tier: 'free' | 'pro'
+  /** Reserved against a live waiting invite (server-side accounting). Not
+   * displayed; the spend already left `balance` when the invite was sent. */
+  held?: number
   granted_on?: string | null
   /** ISO instant of the next 20:00 Asia/Jerusalem grant. Server-computed so
    * the client never does timezone math — it just formats this stamp. */

@@ -21,7 +21,7 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW, PHOTO_ICON_SHADOW } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon } from '../src/components/icons'
 import { creditBalance, formatNextGrant, creditTier, CREDIT_TIER, starsText } from '../src/lib/credits'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -630,13 +630,20 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
  * whose responses carry a fresh `groups` sidecar so the list updates in one
  * round trip per mutation.
  */
-function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
+  visible: boolean
+  onDismiss: () => void
+  // Lifted up to AppInlineContent so the settings menu row can render the
+  // chained group names alongside this sheet, sharing one source of truth.
+  // null = not yet loaded (initial fetch in flight); [] = loaded, empty.
+  groups: Group[] | null
+  setGroups: (g: Group[]) => void
+}) {
   const insets = useSafeAreaInsets()
   const kbHeight = useKeyboardHeight()
   const codeInputRef = useRef<RNTextInput>(null)
 
-  const [groups, setGroups] = useState<Group[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(groups != null)
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -645,7 +652,7 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
   useEffect(() => {
     if (!visible) return
     let cancelled = false
-    setLoaded(false)
+    setLoaded(groups != null)
     setCode('')
     setCodeError(null)
     invoke<{ groups?: Group[] }>('app/my_groups')
@@ -656,6 +663,7 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
       })
       .catch(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
   const onJoin = async () => {
@@ -682,7 +690,7 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
     try {
       const result = await invoke<{ groups?: Group[] }>('app/leave_group', { group_id: id })
       if (result?.groups) setGroups(result.groups)
-      else setGroups(prev => prev.filter(g => g.id !== id))
+      else setGroups((groups ?? []).filter(g => g.id !== id))
     } catch {
       // Silently fail; the row stays. User can retry.
     } finally {
@@ -702,7 +710,7 @@ function GroupsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () =
       </View>
 
       <View style={groupsPopupStyles.mineSection}>
-        {!loaded ? (
+        {!loaded || groups == null ? (
           <ActivityIndicator color={BLACK_MID} style={{ marginVertical: MD }} />
         ) : groups.length === 0 ? (
           <Text style={groupsPopupStyles.empty}>{t('settings.groupsEmpty')}</Text>
@@ -2514,6 +2522,17 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const { signOut } = useAuthStore()
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
   const [groupsPopupVisible, setGroupsPopupVisible] = useState(false)
+  // Lifted from GroupsPopup so the menu row can render the chained group
+  // names from the same fetched list — one source of truth shared between
+  // the row label and the popup. null = initial fetch in flight.
+  const [groups, setGroups] = useState<Group[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    invoke<{ groups?: Group[] }>('app/my_groups')
+      .then(data => { if (!cancelled) setGroups(data?.groups ?? []) })
+      .catch(() => { if (!cancelled) setGroups([]) })
+    return () => { cancelled = true }
+  }, [])
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -2612,6 +2631,19 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
     ...(isPro ? [] : ['\n\n', ...emLine(t('stars.popup.line.switch'))]),
   ]
 
+  // Menu row label: chained group names (up to 3) with "more..." overflow,
+  // or the "no groups" message when loaded-empty. While the initial fetch
+  // is in flight (groups === null) we render a single space so the row
+  // layout stays stable without exposing a misleading "no groups" flash.
+  const GROUPS_ROW_MAX = 3
+  const groupsRowLabel = groups == null
+    ? ' '
+    : groups.length === 0
+      ? t('settings.groupsNone')
+      : groups.length <= GROUPS_ROW_MAX
+        ? groups.map(g => g.name).join(', ')
+        : groups.slice(0, GROUPS_ROW_MAX).map(g => g.name).join(', ') + ', ' + t('settings.groupsMore')
+
   return (
     <>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
@@ -2641,7 +2673,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          label={t('settings.groups')}
+          label={groupsRowLabel}
           onPress={() => setGroupsPopupVisible(true)}
           icon={<GroupsIcon color={WHITE} />}
         />
@@ -2655,6 +2687,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       <GroupsPopup
         visible={groupsPopupVisible}
         onDismiss={() => setGroupsPopupVisible(false)}
+        groups={groups}
+        setGroups={setGroups}
       />
       <ConfirmDialog
         visible={signOutDialog}
@@ -2745,7 +2779,16 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
             </Svg>
             <View style={styles.profileCardRow} pointerEvents="none">
+              {/* Dual-layer halo: wider BLACK stroke behind, WHITE stroke on
+                  top. Cross-platform replacement for filter:dropShadow, which
+                  rendered as a filled black square on iOS (the layer compositor
+                  treated the SVG view's bounds as opaque before applying the
+                  filter). The BLACK pencil stays inside the WHITE one's bounds
+                  because both viewBox/size are equal — only the stroke is wider. */}
               <View style={styles.profileCardIconShadow}>
+                <View style={StyleSheet.absoluteFill}>
+                  <PencilIcon color={BLACK} size={ICON.xxl} strokeWidth={STROKE.base * 3} />
+                </View>
                 <PencilIcon color={WHITE} size={ICON.xxl} />
               </View>
               <Text style={styles.profileCardLabel} numberOfLines={1} ellipsizeMode="tail">{t('settings.profile')}</Text>
@@ -2872,7 +2915,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD,
   },
-  profileCardIconShadow: { ...PHOTO_ICON_SHADOW },
+  // Sized to ICON.xxl so the absolutely-positioned halo layer (the wider
+  // BLACK PencilIcon) has the same bounds as the WHITE PencilIcon stacked on
+  // top of it. No filter — the legibility halo is the BLACK pencil rendered
+  // underneath (see profileCardRow JSX).
+  profileCardIconShadow: { width: ICON.xxl, height: ICON.xxl },
   profileCardLabel: {
     flexShrink: 1, fontSize: TEXT.lg, lineHeight: lh(TEXT.lg),
     color: WHITE, fontWeight: WEIGHT.semibold, ...PHOTO_TEXT_SHADOW,
@@ -2939,7 +2986,11 @@ const styles = StyleSheet.create({
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
   selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
-  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS },
+  // Force start-aligned ('left' under explicit writingDirection becomes
+  // physically right in RTL after auto-flip). Without the explicit
+  // writingDirection, iOS did not pick the container's RTL direction and the
+  // subtitle ended up physically left under the hearts row.
+  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
   // Bold emphasis span inside the stars-popup description (the dynamic
   // values). Sits in ConfirmDialog's centered desc <Text>, so it inherits
   // size/line-height and only overrides weight + (darker) colour.

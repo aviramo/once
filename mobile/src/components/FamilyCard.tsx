@@ -1,4 +1,4 @@
-import { t, lang } from '../i18n'
+import { t, tg, lang } from '../i18n'
 import { familyScheduleOverlap, familyWeekendKidStatus, type FamilyData } from '../lib/family'
 
 // Header line: count is folded into the title so the card reads as one
@@ -52,11 +52,15 @@ function familyHeaderTitle(
 //   - `self`: first-person phrasing for the own-profile preview.
 //   - `viewerFamily`: viewer's family for schedule-overlap suffix; pass
 //     `null`/`undefined` to skip the suffix (own preview / no kids).
+//   - `isMale`: the rendered profile's gender; used to gender the weekend
+//     status suffix in Hebrew ("פנוי"/"פנויה", "לא פנוי"/"לא פנויה"). Null/
+//     undefined falls back to masculine, matching `tg`'s convention.
 export function buildFamilyChipText(
   family: FamilyData | null | undefined,
   isForKids: boolean | null | undefined,
   self: boolean,
   viewerFamily: FamilyData | null | undefined,
+  isMale: boolean | null | undefined,
 ): string {
   if (!family) return ''
   const kids = family.kids ?? []
@@ -75,7 +79,7 @@ export function buildFamilyChipText(
   // reads after the overlap percentage when both are present.
   const weekend = familyWeekendKidStatus(family.schedule, lang)
   const weekendSuffix = weekend
-    ? t(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend')
+    ? tg(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend', isMale)
     : ''
   if (overlap == null) return base + weekendSuffix
   const pct = Math.round(overlap * 100)
