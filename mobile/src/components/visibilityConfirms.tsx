@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { t } from '../i18n'
+import { t, tg } from '../i18n'
 import { PRIMARY } from '../colors'
 import { MegaphoneOffIcon, EyeOffIcon } from './icons'
 
@@ -27,11 +27,13 @@ export type VisibilityConfirmConfig = {
 }
 
 /** "You're broadcasting — stop?" Used when a destination press would end an
- * in-flight broadcast (kicking the candidates pulled into page2.profiles). */
-export function exitBroadcastConfirm(): VisibilityConfirmConfig {
+ * in-flight broadcast (kicking the candidates pulled into page2.profiles).
+ * The description body is gendered (אתה / את + matching verb forms) and is
+ * picked via `tg(_m/_f)` against the caller's `userIsMale`. */
+export function exitBroadcastConfirm(userIsMale?: boolean | null): VisibilityConfirmConfig {
   return {
     title: t('home.exitBroadcastConfirmTitle'),
-    description: t('home.exitBroadcastConfirmDesc'),
+    description: tg('home.exitBroadcastConfirmDesc', userIsMale ?? null),
     confirmLabel: t('home.exitBroadcastConfirmButton'),
     topIcon: <MegaphoneOffIcon color={PRIMARY} size={32} />,
   }
@@ -56,11 +58,13 @@ export function hideProfileConfirm(): VisibilityConfirmConfig {
 export function visibilityConfirmFor({
   broadcastActive,
   watchersCount,
+  userIsMale,
 }: {
   broadcastActive: boolean
   watchersCount: number
+  userIsMale?: boolean | null
 }): VisibilityConfirmConfig | null {
-  if (broadcastActive) return exitBroadcastConfirm()
+  if (broadcastActive) return exitBroadcastConfirm(userIsMale)
   if (watchersCount > 0) return hideProfileConfirm()
   return null
 }

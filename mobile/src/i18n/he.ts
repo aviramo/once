@@ -139,6 +139,9 @@ export default {
   'settings.profile': 'עריכת הפרופיל',
   'settings.account': 'חשבון',
   'settings.credits': 'לבבות',
+  // Suffix word in the hearts-row value when the user has extras, e.g.
+  // "1/3 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.
+  'settings.creditsExtraSuffix': 'אקסטרה',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'הקבוצות שלי',
   'settings.groupsMine': 'הקבוצות שלי',
@@ -151,7 +154,8 @@ export default {
   'settings.groupsCodePlaceholder': '6 ספרות',
   'settings.groupsJoinAction': 'הצטרפות',
   'settings.groupsInviteInvalid': 'הקוד שגוי או לא פעיל',
-  'settings.creditsNext': 'מתחדש ב-{when}',
+  // {when} now self-carries "היום ב-HH:MM" / "מחר ב-HH:MM" — no leading "ב-".
+  'settings.creditsNext': 'מתחדש {when}',
   'settings.preview': 'תצוגה מקדימה',
   'settings.myProfile': 'פרופיל',
   'settings.photo': 'התמונות שלי',
@@ -292,28 +296,39 @@ export default {
   'family.summaryWithKidsWeekend_m': ', לא פנוי בסופ״ש הקרוב',
   'family.summaryWithKidsWeekend_f': ', לא פנויה בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
-  // Not-enough-hearts popup (shown when an action costs more hearts than the
-  // user has). {n} = the action's cost.
-  // Count phrase with correct singular/plural — built by starsText() in
-  // lib/credits.ts and substituted wherever a hearts amount is shown in prose.
+  // Count phrase with correct singular/plural, built by starsText() in
+  // lib/credits.ts. Used wherever a hearts amount is shown in prose.
   'stars.count.one': 'לב אחד',
   'stars.count.many': '{n} לבבות',
-  // Hearts / package popup (opened from the settings hearts row). The
-  // description is assembled in code from these lines (so the renew line can
-  // be dropped when the next-grant time is unknown). Plan names stay Latin.
-  // The {stars}/{tier}/{cap}/{when}/{proCap} tokens are rendered bold in code.
-  // {cap} is the daily ceiling: the grant TOPS UP to it (not additive), so the
-  // tier line says the hearts "fill up to {cap}", never "you get {cap}".
-  // {proCap} is the Pro plan's daily ceiling, used by the switch line to sell
-  // the upgrade to free users.
+  // Hearts popup (opened from the settings hearts row). The description is
+  // assembled in code from these lines (so the renew line can be dropped
+  // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
+  // render bold in code. {balance} = the daily pool, {extra} = the
+  // purchased pool, {cap} = daily ceiling (currently 3).
   // Hebrew gendered via genderize() inline {male|female} markers.
   'stars.popup.title': 'הלבבות שלך',
-  'stars.popup.line.balance': 'יש לך {stars} כרגע.',
-  'stars.popup.line.tier': 'בחבילת {tier} הלבבות מתמלאים ל-{cap} בכל יום.',
-  'stars.popup.line.renew': 'הלבבות שלך יתחדשו ב-{when}.',
-  'stars.popup.line.switch': 'אפשר לשדרג ל-Pro בכל עת. בחבילת Pro הלבבות מתמלאים ל-{proCap} בכל יום.\nמיד עם השדרוג {תקבל|תקבלי} את מקסימום הלבבות.',
-  'stars.popup.upgrade': 'שדרוג ל-Pro',
-  'stars.popup.downgrade': 'הורדת חבילה',
+  'stars.popup.line.balance': 'יש לך {balance} בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
+  // Variant for the balance=0 case — reads "your hearts ran out" instead of
+  // the literal "you have 0 hearts" (user request 2026-06-01).
+  'stars.popup.line.balanceEmpty': 'נגמרו לך הלבבות בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
+  // {extra} expands via starsText → "5 לבבות" / "לב אחד" (carries the noun
+  // already). Template must NOT repeat the noun, just append "אקסטרה".
+  'stars.popup.line.extra': 'בנוסף יש לך {extra} אקסטרה.',
+  // {when} carries its own "היום/מחר ב-HH:MM" — no leading "ב-" in the template.
+  'stars.popup.line.renew': 'החבילה היומית תתחדש {when}.',
+  // Relative next-grant day. Returned from formatNextGrant() — replaces the
+  // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
+  'stars.grant.today': 'היום ב-{time}',
+  'stars.grant.tomorrow': 'מחר ב-{time}',
+  'stars.popup.buyExtra': 'קניית לבבות אקסטרה',
+  // Buy-extra picker (5/10/50 options, all "Free" for now, only 5 enabled).
+  'stars.buy.title': 'קניית לבבות אקסטרה',
+  'stars.buy.desc': 'הלבבות שתקנה יתווספו ללבבות שיש לך כבר, ולא יתבטלו עם הזמן.',
+  'stars.buy.priceFree': 'חינם',
+  'stars.buy.comingSoon': 'בקרוב',
+  // Shown on the active (3-hearts) option when the user already used today's
+  // buy slot — the once-per-grant-day gate.
+  'stars.buy.alreadyBoughtToday': 'כבר נקנה היום',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',
@@ -399,7 +414,19 @@ export default {
   'home.watchingMeHiddenTitle_f': 'את מחוץ לרדאר',
   'home.watchingMeHiddenSubtitle_m': 'אף אחד לא רואה אותך כרגע. כשתרצה לחזור, אפשר להיפתח להזמנות.',
   'home.watchingMeHiddenSubtitle_f': 'אף אחד לא רואה אותך כרגע. כשתרצי לחזור, אפשר להיפתח להזמנות.',
-  'home.watchingMeHiddenGoVisibleBtn': 'לעבור למצב גלוי',
+  'home.watchingMeHiddenGoVisibleBtn': 'מעבר למצב גלוי',
+  // In-card trigger that opens the broadcast confirm popup. Reads as a
+  // mode-switch (parallel to the go-visible label), NOT as the action verb;
+  // the confirm popup's button (home.broadcastConfirmButton) keeps the
+  // "broadcast me" wording.
+  'home.watchingMeVisibleBroadcastBtn': 'מעבר למצב שידור',
+  // Out-of-hearts auto-hide variant (balance + extra = 0): the user is hidden
+  // because they have no hearts left to accept invites. The "go visible"
+  // button is replaced by a buy-extra CTA (stars.popup.buyExtra label).
+  'home.watchingMeNoHeartsTitle_m': 'נגמרו לך הלבבות',
+  'home.watchingMeNoHeartsTitle_f': 'נגמרו לך הלבבות',
+  'home.watchingMeNoHeartsSubtitle_m': 'בלי לבבות אי אפשר לקבל הזמנות. אפשר לקנות לבבות אקסטרה כדי לחזור למשחק.',
+  'home.watchingMeNoHeartsSubtitle_f': 'בלי לבבות אי אפשר לקבל הזמנות. אפשר לקנות לבבות אקסטרה כדי לחזור למשחק.',
   'home.watchingMeBroadcastEmptyTitle_m': 'אתה באוויר',
   'home.watchingMeBroadcastEmptyTitle_f': 'את באוויר',
   'home.watchingMeBroadcastEmptySubtitle_m': 'השידור פעיל ואתה מקבל יותר חשיפה. כשמישהו יצפה בך, הוא יופיע כאן.',
@@ -417,7 +444,9 @@ export default {
   'home.broadcastConfirmDescNoStars': 'לא נעשה שימוש בלבבות כשמישהו מזמין אותך.',
   'home.broadcastConfirmButton': 'שדר אותי',
   'home.exitBroadcastConfirmTitle': 'להפסיק את השידור?',
-  'home.exitBroadcastConfirmDesc': 'כעת במצב שידור. אישור יפסיק את השידור.',
+  // Gendered (אתה / את). Picked via tg(_m/_f) against the caller's is_male.
+  'home.exitBroadcastConfirmDesc_m': 'אתה כעת במצב שידור, הפסקת השידור תסיר את היתרון היחסי שיש לך על משתמשים אחרים.',
+  'home.exitBroadcastConfirmDesc_f': 'את כעת במצב שידור, הפסקת השידור תסיר את היתרון היחסי שיש לך על משתמשים אחרים.',
   'home.exitBroadcastConfirmButton': 'הפסקת שידור',
   'home.hideConfirmTitle': 'להסתיר את הפרופיל?',
   'home.hideConfirmDesc': 'כל הצופים בך יוסרו ויקבלו על כך התראה.',

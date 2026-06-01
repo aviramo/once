@@ -25,13 +25,14 @@ import { PageReleaseBadge } from "../../_components/PageReleaseBadge";
 import { type EditorGroup } from "./_components/UserGroupsEditor";
 import { UserGroupsChips } from "./_components/UserGroupsChips";
 import { UserDangerZone } from "./_components/UserDangerZone";
+import { UserHeartsEditor } from "./_components/UserHeartsEditor";
 import { UserPhotos } from "./_components/UserPhotos";
 import {
   UnifiedActivity,
   type UnifiedPartner,
 } from "./_components/UnifiedActivity";
 import { setUserGroupAssignment } from "../../groups/actions";
-import { deleteUser, resetUser } from "../actions";
+import { deleteUser, resetUser, setUserHearts } from "../actions";
 
 type Image = { normal?: string; hash?: string };
 
@@ -66,6 +67,11 @@ type UserRecord = {
     };
     availability?: { state?: string; reason?: string | null } | null;
     push?: { perm?: string; dead?: boolean; token?: boolean } | null;
+    credits?: {
+      balance?: number | string;
+      extra?: number | string;
+      held?: number | string;
+    } | null;
   } | null;
 };
 
@@ -377,6 +383,24 @@ export default async function UserDetailPage({
           </div>
         </Card>
       </Section>
+
+      {/* Hearts — admin-only direct override of the wallet (balance / extra).
+          The other credit fields (held / granted_on / next_grant_at /
+          bought_on) are preserved by the RPC, so changing these doesn't
+          disturb the daily-grant or once-per-day buy throttles. */}
+      {isAdmin ? (
+        <Section title={d.hearts.title}>
+          <Card className="p-4">
+            <UserHeartsEditor
+              userId={u.user_id}
+              initialBalance={Number(u.relations?.credits?.balance ?? 0)}
+              initialExtra={Number(u.relations?.credits?.extra ?? 0)}
+              dict={d.hearts}
+              action={setUserHearts}
+            />
+          </Card>
+        </Section>
+      ) : null}
 
       {/* Photos — current profile photos + earlier unassociated uploads */}
       <Section title={d.photos}>

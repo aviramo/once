@@ -20,7 +20,6 @@ type Props = {
   p2Label: string;
   groupLabel: string;
   availLabel: string;
-  tierLabel: string;
   genderLabel: string;
   osLabel: string;
   segLabel: string;
@@ -33,7 +32,6 @@ type Props = {
   p2States: StateOption[];
   roleOptions: StateOption[];
   availOptions: StateOption[];
-  tierOptions: StateOption[];
   genderOptions: StateOption[];
   osOptions: StateOption[];
   segOptions: StateOption[];
@@ -87,7 +85,6 @@ export function SearchControls({
   p2Label,
   groupLabel,
   availLabel,
-  tierLabel,
   genderLabel,
   osLabel,
   segLabel,
@@ -99,7 +96,6 @@ export function SearchControls({
   p2States,
   roleOptions,
   availOptions,
-  tierOptions,
   genderOptions,
   osOptions,
   segOptions,
@@ -112,7 +108,6 @@ export function SearchControls({
   const [p2, setP2] = useState(sp.get("p2") ?? "");
   const [role, setRole] = useState(sp.get("group") ?? "");
   const [avail, setAvail] = useState(sp.get("avail") ?? "");
-  const [tier, setTier] = useState(sp.get("tier") ?? "");
   const [gender, setGender] = useState(sp.get("gender") ?? "");
   const [os, setOs] = useState(sp.get("os") ?? "");
   const [seg, setSeg] = useState(sp.get("seg") ?? "");
@@ -136,13 +131,6 @@ export function SearchControls({
       value: avail,
       set: setAvail,
       options: availOptions,
-    },
-    {
-      key: "tier",
-      label: tierLabel,
-      value: tier,
-      set: setTier,
-      options: tierOptions,
     },
     {
       key: "gender",
@@ -180,7 +168,6 @@ export function SearchControls({
       if (p2) params.set("p2", p2);
       if (role) params.set("group", role);
       if (avail) params.set("avail", avail);
-      if (tier) params.set("tier", tier);
       if (gender) params.set("gender", gender);
       if (os) params.set("os", os);
       if (seg) params.set("seg", seg);
@@ -191,7 +178,7 @@ export function SearchControls({
       });
     }, 200);
     return () => clearTimeout(handle);
-  }, [q, p1, p2, role, avail, tier, gender, os, seg, sort, pathname, router]);
+  }, [q, p1, p2, role, avail, gender, os, seg, sort, pathname, router]);
 
   return (
     <div className="space-y-2.5">

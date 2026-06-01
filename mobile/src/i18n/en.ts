@@ -139,6 +139,9 @@ export default {
   'settings.profile': 'Edit your profile',
   'settings.account': 'Account',
   'settings.credits': 'Hearts',
+  // Suffix word in the hearts-row value when the user has extras, e.g.
+  // "1/3 + 5 extra". Distinct word so "+ 5" doesn't read as math.
+  'settings.creditsExtraSuffix': 'extra',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'My groups',
   'settings.groupsMine': 'My groups',
@@ -286,28 +289,39 @@ export default {
   'family.summaryFreeWeekend': ', free this weekend',
   'family.summaryWithKidsWeekend': ', not free this weekend',
   'common.gotIt': 'Got it',
-  // Not-enough-hearts popup (shown when an action costs more hearts than the
-  // user has). {n} = the action's cost.
-  // Count phrase with correct singular/plural — built by starsText() in
-  // lib/credits.ts and substituted wherever a hearts amount is shown in prose.
+  // Count phrase with correct singular/plural, built by starsText() in
+  // lib/credits.ts. Used wherever a hearts amount is shown in prose.
   'stars.count.one': '1 heart',
   'stars.count.many': '{n} hearts',
-  // Hearts / package popup (opened from the settings hearts row). The
-  // description is assembled in code from these lines (so the renew line can
-  // be dropped when the next-grant time is unknown). Plan names stay Latin.
-  // The {stars}/{tier}/{cap}/{when}/{proCap} tokens are rendered bold in code.
-  // {cap} is the daily ceiling: the grant TOPS UP to it (not additive), so the
-  // tier line says the hearts "top up to {cap}", never "you get {cap}".
-  // {proCap} is the Pro plan's daily ceiling, used by the switch line to sell
-  // the upgrade to free users.
+  // Hearts popup (opened from the settings hearts row). The description is
+  // assembled in code from these lines (so the renew line can be dropped
+  // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
+  // render bold in code. {balance} = the daily pool, {extra} = the
+  // purchased pool, {cap} = daily ceiling (currently 3).
   // English is non-gendered (genderize() is a no-op without {m|f} markers).
   'stars.popup.title': 'Your hearts',
-  'stars.popup.line.balance': 'You have {stars} right now.',
-  'stars.popup.line.tier': 'On the {tier} plan, your hearts top up to {cap} every day.',
-  'stars.popup.line.renew': 'Your hearts will refresh on {when}.',
-  'stars.popup.line.switch': 'You can upgrade to Pro anytime. On the Pro plan your hearts top up to {proCap} every day.\nUpgrading immediately gives you the maximum hearts.',
-  'stars.popup.upgrade': 'Upgrade to Pro',
-  'stars.popup.downgrade': 'Downgrade plan',
+  'stars.popup.line.balance': 'You have {balance} in your daily allowance, which refills to {cap} every day.',
+  // Variant for the balance=0 case — reads "your hearts ran out" instead of
+  // the literal "you have 0 hearts" (user request 2026-06-01).
+  'stars.popup.line.balanceEmpty': 'Your hearts ran out in your daily allowance, which refills to {cap} every day.',
+  // {extra} expands via starsText → "5 hearts" / "1 heart" (carries the noun
+  // already). Template must NOT repeat "hearts", just append "extra".
+  'stars.popup.line.extra': 'You also have {extra} extra.',
+  // {when} carries its own "today at HH:MM" — no leading preposition in the template.
+  'stars.popup.line.renew': 'Your daily allowance refreshes {when}.',
+  // Relative next-grant day. Returned from formatNextGrant() — replaces the
+  // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
+  'stars.grant.today': 'today at {time}',
+  'stars.grant.tomorrow': 'tomorrow at {time}',
+  'stars.popup.buyExtra': 'Buy extra hearts',
+  // Buy-extra picker (5/10/50 options, all "Free" for now, only 5 enabled).
+  'stars.buy.title': 'Buy extra hearts',
+  'stars.buy.desc': 'Hearts you buy are added on top of your daily allowance and never expire.',
+  'stars.buy.priceFree': 'Free',
+  'stars.buy.comingSoon': 'Coming soon',
+  // Shown on the active (3-hearts) option when the user already used today's
+  // buy slot — the once-per-grant-day gate.
+  'stars.buy.alreadyBoughtToday': 'Already bought today',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',
@@ -387,6 +401,16 @@ export default {
   'home.watchingMeHiddenTitle': "You're off the radar",
   'home.watchingMeHiddenSubtitle': "No one can see you right now. When you want to come back, you can open up to invitations.",
   'home.watchingMeHiddenGoVisibleBtn': 'Switch to visible',
+  // In-card trigger that opens the broadcast confirm popup. Reads as a
+  // mode-switch (parallel to the go-visible label), NOT as the action verb;
+  // the confirm popup's button (home.broadcastConfirmButton) keeps the
+  // "broadcast me" wording.
+  'home.watchingMeVisibleBroadcastBtn': 'Switch to broadcast',
+  // Out-of-hearts auto-hide variant: shown when the user runs out of hearts
+  // (balance + extra = 0). The "go visible" button is replaced by the
+  // buy-extra CTA (stars.popup.buyExtra label).
+  'home.watchingMeNoHeartsTitle': 'You ran out of hearts',
+  'home.watchingMeNoHeartsSubtitle': "Without hearts you can't accept invitations. Buy extra hearts to get back into the game.",
   'home.watchingMeBroadcastEmptyTitle': "You're on the air",
   'home.watchingMeBroadcastEmptySubtitle': "Broadcast is live and you're getting extra exposure. When someone starts watching you, they'll appear here.",
   'home.watchingMeBroadcastWatchedTitle': "You're in the spotlight",
@@ -400,7 +424,8 @@ export default {
   'home.broadcastConfirmDescNoStars': 'No hearts are used when someone invites you.',
   'home.broadcastConfirmButton': 'Broadcast me',
   'home.exitBroadcastConfirmTitle': 'Stop broadcasting?',
-  'home.exitBroadcastConfirmDesc': "You're currently in broadcast mode. Confirming will stop the broadcast.",
+  // English is non-gendered (single form); tg picks the same string for either is_male.
+  'home.exitBroadcastConfirmDesc': "You're currently broadcasting. Stopping will give up the visibility boost you currently have over other users.",
   'home.exitBroadcastConfirmButton': 'Stop broadcast',
   'home.hideConfirmTitle': 'Hide your profile?',
   'home.hideConfirmDesc': 'All your watchers will be removed and notified.',

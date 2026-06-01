@@ -29,6 +29,23 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 
 ## Open entries
 
+### `app/set_tier` endpoint + `credits.tier` reads on the deployed mobile build
+
+- **Added:** 2026-06-01
+- **Reason:** Tier model (free/pro) retired in favour of purchasable extra hearts (`relations.credits.extra`). The new mobile UI has no tier-switch button — it offers a `BuyExtraPopup` that posts `/app/buy_extra` instead. But the deployed mobile build (≤ 1.0.3) still reads `relations.credits.tier` (falls back to 'free' when absent, so this is benign) AND wires a `"Upgrade to Pro"` button in the settings hearts popup that posts `/app/set_tier { tier: 'pro' }`. Dropping the endpoint would surface a server error to those users; dropping the column read would not (the fallback to 'free' kicks in).
+- **Old shape (kept alive):**
+  - `public.app_set_tier(me_id, new_tier)` exists as a NO-OP that returns the current user row (no wallet mutation). The edge dispatcher's `case "set_tier"` still routes to it. Old mobile builds tap "Upgrade to Pro" → see no error and no balance change (silent ignore).
+  - The credits-wallet JSON shape has `extra: 0` on every row. Old readers ignore the unknown key. They keep reading `balance`, which is unchanged.
+- **New shape (preferred):**
+  - `relations.credits = { balance:0..3, extra:0..N, held:0..N, granted_on?, next_grant_at? }` — no `tier` field. Total spendable = balance + extra; charging deducts balance first, refund overflow lands in `extra`.
+  - `public.app_buy_extra(me_id, p_count)` + `/app/buy_extra { count: 5|10|50 }`.
+- **Safe to remove after:** mobile version where the BuyExtraPopup ships and the deprecated "Upgrade to Pro" button is gone is the floor across live users. Once `log` shows no recent `key='set_tier'` rows, both the endpoint case and the SQL function can be dropped.
+- **How to remove:**
+  - Remove the `case "set_tier":` block from `supabase/functions/app/index.ts`.
+  - `DROP FUNCTION public.app_set_tier(uuid, text);` in a follow-up migration.
+  - Drop the `"set_tier": "Switched plan"` entries from `web/src/i18n/dictionaries/{he,en}.json` activity map (now obsolete).
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'set_tier' AND created_at > now() - interval '14 days'`. Zero hits = safe.
+
 ### `app/units` endpoint and `data.units` field
 
 - **Added:** 2026-05-11

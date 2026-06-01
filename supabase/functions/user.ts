@@ -3,17 +3,17 @@ import Tools from "./tools.ts";
 import Log from "./log.ts";
 import { Data, Pages, PushToken } from "./global.ts";
 
-// balance 3 == the free tier daily amount (SQL _credits_tier_cfg('free').daily).
-// held 0 == nothing reserved against a live waiting invite (the SQL hold/refund
-// invariant). granted_on / next_grant_at are intentionally omitted: the next
-// /ext/cron tick (≤60s) runs app_credits_grant, which fills both and
-// re-confirms the balance. Keep `3` / `'free'` / `0` in sync with the SQL
-// _credits_* helpers and mobile/src/lib/credits.ts (see CLAUDE.md "Credits
-// economy").
+// balance 3 == the daily pool's cap (SQL _credits_cap()). extra 0 / held 0 ==
+// nothing purchased, nothing reserved against a live waiting invite.
+// granted_on / next_grant_at are intentionally omitted: the next /ext/cron
+// tick (≤60s) runs app_credits_grant, which fills both and re-confirms
+// balance. Keep `3` / `0` / `0` in sync with the SQL _credits_* helpers
+// (_credits_cap, _credits_default) and mobile/src/lib/credits.ts (see
+// CLAUDE.md "Credits economy").
 const defaultRelations: Pages = {
   page1: { state: "locked" },
   page2: { state: "free" },
-  credits: { balance: 3, tier: "free", held: 0 },
+  credits: { balance: 3, extra: 0, held: 0 },
 };
 
 export default class User {

@@ -54,7 +54,8 @@ import { RisingCard } from '../src/components/RisingCard'
 import { TabStrip, type TabSpec } from '../src/components/TabStrip'
 import { CreditCost } from '../src/components/CreditCost'
 import { PresenceDot } from '../src/components/Chip'
-import { CREDIT_COST, creditBalance } from '../src/lib/credits'
+import { CREDIT_COST, creditBalance, creditExtra, creditTotal } from '../src/lib/credits'
+import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullScrollView, PullContext, type PullCtx } from '../src/components/HomeCard'
 import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
@@ -990,6 +991,7 @@ function ReplyingInviteCard({
   affordable = true,
   onAccept,
   onDecline,
+  onUnaffordable,
   busy,
   acceptLoading,
   footerInset,
@@ -1002,16 +1004,29 @@ function ReplyingInviteCard({
    * (heart + N). Reads "0" on the free page1 invite prompt so the user
    * sees that inviting costs nothing. */
   costCredits: number
-  /** False ⇒ the user can't afford the accept. The accept button then
-   * renders disabled (faded) and does nothing on press — no explainer. */
+  /** False ⇒ the user can't afford the accept. When `onUnaffordable` is
+   * also set, the accept button stays styled as a normal white CTA but its
+   * press fires `onUnaffordable` (typically opens the buy-extra popup)
+   * instead of `onAccept`. Without `onUnaffordable` the button falls back
+   * to the legacy faded-disabled look + silent no-op. */
   affordable?: boolean
   onAccept: () => void
   onDecline: () => void
+  /** Tapped when the user is unaffordable. Routes to the buy-extra popup
+   * so the user has a one-tap recovery path. When unset, the button silently
+   * dims and does nothing on press. */
+  onUnaffordable?: () => void
   busy?: boolean
   acceptLoading?: boolean
   footerInset?: number
 }) {
   const unaffordable = affordable === false
+  const hasFallback = unaffordable && onUnaffordable != null
+  // Disabled visually + functionally only when actually unactionable: busy,
+  // or unaffordable WITHOUT a fallback path. With a fallback the button is
+  // a clickable white CTA whose tap opens the buy-extra popup.
+  const acceptDisabled = busy || (unaffordable && !hasFallback)
+  const handleAccept = hasFallback ? onUnaffordable! : onAccept
   return (
     <View style={[statusCardStyles.container, footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null]}>
       <StatusCardText title={title} description={description} />
@@ -1031,12 +1046,13 @@ function ReplyingInviteCard({
               variant="onPrimary"
               label={acceptLabel}
               iconStart={<CreditCost cost={costCredits} color={PRIMARY} bg={PRIMARY_BG} />}
-              onPress={onAccept}
-              disabled={busy || unaffordable}
+              onPress={handleAccept}
+              disabled={acceptDisabled}
               loading={acceptLoading}
               // Keep the in-flight lockout silent (no gray flicker) exactly
-              // as before; but when the block is "can't afford" show the
-              // disabled look and let the tap do nothing (no explainer).
+              // as before; the legacy "can't afford and no fallback" path
+              // still shows the faded look. With a fallback we never hit
+              // the unaffordable-disabled branch.
               silentDisabled={!unaffordable && !acceptLoading}
             />
           </View>
@@ -1059,7 +1075,10 @@ function ViewersStatusCard({
   userIsMale,
   broadcastTimer,
   onBroadcast,
+  onBroadcastUnaffordable,
   onGoVisible,
+  onBuyExtra,
+  outOfHearts,
   broadcastAffordable,
   busyBroadcast,
   busyGoVisible,
@@ -1076,9 +1095,21 @@ function ViewersStatusCard({
   // button with the heart-cost badge (opens the broadcast confirm popup, same
   // route as the side-tab dropdown picks broadcast); the hidden state gets a
   // "switch to visible" button (calls app/free2 directly, same as the side-
-  // tab dropdown picks visible while not broadcasting).
+  // tab dropdown picks visible while not broadcasting). When `outOfHearts`
+  // and isHidden, the go-visible button is REPLACED by a buy-extra CTA
+  // routed to onBuyExtra (user request 2026-06-01: a user auto-hidden by
+  // running out of hearts sees a "buy extra" prompt instead).
   onBroadcast?: () => void
+  /** Tapped when the user is in the visible-empty state but can't afford
+   * the 1-heart broadcast cost. Same pattern as ReplyingInviteCard's
+   * onUnaffordable: the button stays styled as a white CTA, the tap opens
+   * the buy-extra popup instead of dimming the button. */
+  onBroadcastUnaffordable?: () => void
   onGoVisible?: () => void
+  onBuyExtra?: () => void
+  // True iff the wallet's total (balance + extra) is 0. Drives the
+  // hidden-state copy + button swap.
+  outOfHearts?: boolean
   // Disable the broadcast button when the user can't afford the cost; the
   // cost badge stays visible so it reads as informative, not hidden.
   broadcastAffordable?: boolean
@@ -1086,7 +1117,12 @@ function ViewersStatusCard({
   busyGoVisible?: boolean
 }) {
   // 5-state matrix: hidden wins over broadcast; then watched vs empty.
+  // Hidden has TWO copy variants — the normal manual-hide explainer and a
+  // dedicated out-of-hearts explainer (auto-hide on zero credits).
   const [title, description] = (() => {
+    if (isHidden && outOfHearts) {
+      return [tg('home.watchingMeNoHeartsTitle', userIsMale), tg('home.watchingMeNoHeartsSubtitle', userIsMale)]
+    }
     if (isHidden) return [tg('home.watchingMeHiddenTitle', userIsMale), tg('home.watchingMeHiddenSubtitle', userIsMale)]
     if (broadcastActive && hasWatchers) return [tg('home.watchingMeBroadcastWatchedTitle', userIsMale), tg('home.watchingMeBroadcastWatchedSubtitle', userIsMale)]
     if (broadcastActive) return [tg('home.watchingMeBroadcastEmptyTitle', userIsMale), tg('home.watchingMeBroadcastEmptySubtitle', userIsMale)]
@@ -1095,21 +1131,41 @@ function ViewersStatusCard({
   })()
   // Append the broadcast countdown as its own readable line under the
   // description while broadcasting (replaces the toggle's segment timer).
+  // The no-hearts "wait" caption was removed (user request 2026-06-01) —
+  // the buy button is now always shown and the popup itself communicates
+  // when the daily slot is unavailable.
   const fullDescription = broadcastActive && broadcastTimer
     ? `${description}\n${t('home.broadcast.endsIn').replace('{time}', broadcastTimer)}`
     : description
 
-  // In-card CTA: hidden → switch-to-visible; empty-visible (not broadcasting,
-  // no watchers) → broadcast-me with heart cost. The other three states
-  // (broadcast-on, visible-with-watchers) carry no button — the side-tab
-  // dropdown remains the way to change mode there.
-  const showGoVisibleBtn = isHidden && onGoVisible != null
+  // In-card CTA. Three branches that share the slot, mutually exclusive:
+  //   - hidden + outOfHearts → "buy extra hearts" (replaces go-visible).
+  //   - hidden + has hearts  → "switch to visible".
+  //   - empty-visible (not broadcasting, no watchers) → "broadcast me" with
+  //     the heart-cost badge.
+  // The other states (broadcast-on, visible-with-watchers) carry no button
+  // — the side-tab dropdown remains the way to change mode there.
+  const showBuyExtraBtn = isHidden && outOfHearts && onBuyExtra != null
+  const showGoVisibleBtn = isHidden && !outOfHearts && onGoVisible != null
   const showBroadcastBtn = !isHidden && !broadcastActive && !hasWatchers && onBroadcast != null
-  const broadcastDisabled = broadcastAffordable === false
+  const broadcastUnaffordable = broadcastAffordable === false
+  const broadcastHasFallback = broadcastUnaffordable && onBroadcastUnaffordable != null
+  const broadcastBtnDisabled = busyBroadcast || (broadcastUnaffordable && !broadcastHasFallback)
+  const handleBroadcastPress = broadcastHasFallback ? onBroadcastUnaffordable! : onBroadcast!
 
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={fullDescription} />
+      {showBuyExtraBtn ? (
+        <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
+          <Button
+            label={t('stars.popup.buyExtra')}
+            variant="onPrimary"
+            iconStart={<HeartIcon color={PRIMARY} size={ICON.sm} />}
+            onPress={onBuyExtra!}
+          />
+        </Animated.View>
+      ) : null}
       {showGoVisibleBtn ? (
         <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
           <Button
@@ -1124,13 +1180,16 @@ function ViewersStatusCard({
       {showBroadcastBtn ? (
         <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
           <Button
-            label={t('home.broadcastConfirmButton')}
+            label={t('home.watchingMeVisibleBroadcastBtn')}
             variant="onPrimary"
-            iconStart={<CreditCost cost={CREDIT_COST.broadcast} color={PRIMARY} bg={PRIMARY_BG} />}
-            onPress={onBroadcast!}
-            disabled={busyBroadcast || broadcastDisabled}
-            loading={busyBroadcast}
-            silentDisabled={!broadcastDisabled && !busyBroadcast}
+            // With a fallback the button stays a white CTA; the tap opens
+            // the buy-extra popup instead of routing to the broadcast confirm.
+            // `silentDisabled`: while busy / locked-out the button is
+            // tap-blocked but visually stays white (no fade) — the dialog
+            // above already shows the in-flight state.
+            onPress={handleBroadcastPress}
+            disabled={broadcastBtnDisabled}
+            silentDisabled
           />
         </Animated.View>
       ) : null}
@@ -1697,7 +1756,12 @@ export default function HomePage() {
   // pulse. The flag clears on the timeout right after the blink.
   const [starsAlerting, setStarsAlerting] = useState(false)
   const prevStarsBalanceRef = useRef<number | null>(null)
-  const starsBalance = creditBalance(profile)
+  // Affordability: total spendable = balance + extra. Charging deducts
+  // balance first, but the user can spend any heart they have. Display
+  // splits balance vs extra (see the menu tab subLabel below).
+  const starsBalance = creditTotal(profile)
+  const starsDailyBalance = creditBalance(profile)
+  const starsExtra = creditExtra(profile)
   const page2InviteUserId = page2PendingInvite?.user_id ?? null
   const prevPage2InviteUserIdRef = useRef<string | null | undefined>(undefined)
 
@@ -2765,6 +2829,10 @@ export default function HomePage() {
   const [removeWatcherTarget, setRemoveWatcherTarget] = useState<Profile | null>(null)
   const [removeWatcherBusy, setRemoveWatcherBusy] = useState(false)
   const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false)
+  // Out-of-hearts auto-hide flow: the hidden-state ViewersStatusCard
+  // surfaces a "buy extra hearts" button (replaces "go visible") when
+  // balance + extra is 0. Tapping opens this picker (5 / 10 / 50 options).
+  const [buyExtraOpen, setBuyExtraOpen] = useState(false)
   // While broadcasting, any toggle tap that would change mode opens a
   // confirm popup first ("you're broadcasting — stop?"). The target tracks
   // which destination button was tapped so the confirm callback can run
@@ -3050,6 +3118,10 @@ export default function HomePage() {
       costCredits={CREDIT_COST.invite}
       affordable={starsBalance >= CREDIT_COST.invite}
       onAccept={() => { setStickyInvite(true); runAction('app/invite', 'invite-confirm') }}
+      // Tap-while-unaffordable opens the buy-extra picker instead of the
+      // legacy faded-disabled no-op. The button stays styled as a normal
+      // white CTA so the user sees it as actionable (user request 2026-06-01).
+      onUnaffordable={() => { tap(); setBuyExtraOpen(true) }}
       // "Not now": first time → teach via the skip-hint popup; after the
       // user has acknowledged it once ("got it"), skip via the SAME ride-off
       // as a swipe (page1Pull.commit → pullY rides to screenH, the card
@@ -3082,6 +3154,9 @@ export default function HomePage() {
       affordable={broadcastActive || starsBalance >= CREDIT_COST.approve}
       onAccept={() => runAction('app/approve', 'replying-accept')}
       onDecline={openRefuseConfirm}
+      // Same as the invite card: unaffordable accept opens the buy-extra
+      // popup instead of dimming the button.
+      onUnaffordable={() => { tap(); setBuyExtraOpen(true) }}
       busy={busy}
       acceptLoading={busy && pendingKey === 'replying-accept'}
     />
@@ -3381,12 +3456,16 @@ export default function HomePage() {
         : (color) => <HeartIcon color={color} size={ICON.xxl} />,
       // Hearts balance rides above the Menu glyph in the EXACT slot the side
       // tab's viewer-count uses (number only, no glyph — the Menu heart is
-      // itself the hearts mark). A wallet change is signalled by the standard
-      // 3-blink `alerting` pulse, scoped to the balance NUMBER only
-      // (`alertSubLabelOnly`) — the heart glyph stays steady, since the Menu
-      // icon is chrome and a wallet change is news about the hearts, not the
-      // menu. Suppressed while the profile-preview sheet is open (Menu is then
-      // the close-X affordance), change-pulse gated the same.
+      // itself the hearts mark). Shows the TOTAL spendable (balance + extra)
+      // as a single number — the tab is tight chrome, the daily/purchased
+      // split lives in the settings hearts row where there's room for the
+      // "X + Y" notation (user feedback 2026-06-01). A wallet change is
+      // signalled by the standard 3-blink `alerting` pulse, scoped to the
+      // balance NUMBER only (`alertSubLabelOnly`) — the heart glyph stays
+      // steady, since the Menu icon is chrome and a wallet change is news
+      // about the hearts, not the menu. Suppressed while the profile-preview
+      // sheet is open (Menu is then the close-X affordance), change-pulse
+      // gated the same.
       subLabel: profileSheetOpen ? undefined : String(starsBalance),
       alerting: profileSheetOpen ? undefined : starsAlerting,
       alertSubLabelOnly: true,
@@ -3566,7 +3645,7 @@ export default function HomePage() {
   // Confirm-popup configs for the two visibility-toggle popups, sourced
   // from the shared `visibilityConfirms` module so the equivalent popup
   // on the settings Pause button stays in lockstep on a single edit.
-  const exitBroadcastConfig = exitBroadcastConfirm()
+  const exitBroadcastConfig = exitBroadcastConfirm(isMale)
   const hideConfirmConfig = hideProfileConfirm()
 
   return (
@@ -4078,7 +4157,13 @@ export default function HomePage() {
                       userIsMale={isMale}
                       broadcastTimer={broadcastActive ? addCooldownLabel : null}
                       onBroadcast={() => { tap(); setBroadcastConfirmOpen(true) }}
+                      onBroadcastUnaffordable={() => { tap(); setBuyExtraOpen(true) }}
                       onGoVisible={() => runAction('app/free2', 'free2')}
+                      // Always available — the BuyExtraPopup itself gates
+                      // the 3-hearts option on canBuyExtra (e.g. dimmed +
+                      // "כבר נקנה היום" when the daily slot was used).
+                      onBuyExtra={() => { tap(); setBuyExtraOpen(true) }}
+                      outOfHearts={starsBalance === 0}
                       broadcastAffordable={starsBalance >= CREDIT_COST.broadcast}
                       busyBroadcast={busy && pendingKey === 'add'}
                       busyGoVisible={busy && pendingKey === 'free2'}
@@ -4228,12 +4313,21 @@ export default function HomePage() {
           }
           confirmLabel={t('home.broadcastConfirmButton')}
           confirmIconStart={<CreditCost cost={CREDIT_COST.broadcast} color={WHITE} bg={WHITE_SOFT} />}
-          // Broadcast costs 1 heart; when the user can't afford it the popup
-          // still opens (informative, cost badge visible) but the confirm
-          // button is disabled and does nothing on press.
-          confirmDisabled={starsBalance < CREDIT_COST.broadcast}
+          // Broadcast costs 1 heart. When the user can't afford it the
+          // confirm button stays styled as a normal white CTA (no disabled
+          // state) — its tap closes this dialog and opens the buy-extra
+          // picker so the user has a one-tap recovery path (user request
+          // 2026-06-01).
           onCancel={() => { if (!(busy && pendingKey === 'add')) setBroadcastConfirmOpen(false) }}
-          onConfirm={() => runAction('app/add', 'add', () => setBroadcastConfirmOpen(false))}
+          onConfirm={() => {
+            if (starsBalance < CREDIT_COST.broadcast) {
+              setBroadcastConfirmOpen(false)
+              tap()
+              setBuyExtraOpen(true)
+              return
+            }
+            runAction('app/add', 'add', () => setBroadcastConfirmOpen(false))
+          }}
           busy={busy && pendingKey === 'add'}
           draggable
         />
@@ -4266,6 +4360,10 @@ export default function HomePage() {
           onConfirm={() => runAction('app/lock2', 'lock2', () => setHideConfirmOpen(false))}
           busy={busy && pendingKey === 'lock2'}
           draggable
+        />
+        <BuyExtraPopup
+          visible={buyExtraOpen}
+          onDismiss={() => setBuyExtraOpen(false)}
         />
       </View>
     </View>

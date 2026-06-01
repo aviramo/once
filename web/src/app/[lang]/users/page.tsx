@@ -18,13 +18,13 @@ const AVAIL_VALUES = [
   "not_yet",
   "unknown",
 ] as const;
-const TIER_VALUES = ["free", "pro"] as const;
 const GENDER_VALUES = ["male", "female"] as const;
 const OS_VALUES = ["ios", "android"] as const;
 // Single multi-purpose "segment" param: recency windows + boolean-ish
 // subsets that don't fit a simple state enum. Every dashboard tile that
-// isn't a page1/page2/role/availability/tier/gender/os subset deep-links
-// via ?seg=.
+// isn't a page1/page2/role/availability/gender/os subset deep-links
+// via ?seg=. `extra` covers "users with extra-hearts > 0" (added when the
+// tier model retired 2026-06-01 in favour of purchasable extra hearts).
 const SEG_VALUES = [
   "online",
   "active_today",
@@ -36,6 +36,7 @@ const SEG_VALUES = [
   "located",
   "broadcasting",
   "held",
+  "extra",
   "no_notif",
 ] as const;
 // Sort modes for the users list. `recent` = the server's last_seen order;
@@ -175,7 +176,6 @@ type Secondary = {
   groupInIds: string[] | null;
   groupNotInIds: string[] | null;
   avail: string;
-  tier: string;
   gender: string;
   os: string;
   seg: string;
@@ -204,12 +204,6 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
   if (f.avail === "unknown")
     q = q.is("relations->availability->>state", null);
   else if (f.avail) q = q.eq("relations->availability->>state", f.avail);
-
-  if (f.tier === "pro") q = q.eq("relations->credits->>tier", "pro");
-  else if (f.tier === "free")
-    q = q.or(
-      "relations->credits->>tier.is.null,relations->credits->>tier.eq.free",
-    );
 
   if (f.gender === "male") q = q.eq("is_male", "true");
   else if (f.gender === "female") q = q.eq("is_male", "false");
@@ -251,6 +245,14 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
         .not("relations->credits->>held", "is", null)
         .neq("relations->credits->>held", "0");
       break;
+    case "extra":
+      // Users holding purchased extra hearts (relations.credits.extra > 0).
+      // Replaces the dropped `tier=pro` filter as the "paying / engaged"
+      // proxy after the tier model retired 2026-06-01.
+      q = q
+        .not("relations->credits->>extra", "is", null)
+        .neq("relations->credits->>extra", "0");
+      break;
     case "no_notif":
       // Mirror of public.push_blocked(uid): a located user with the
       // notification gate signalling positively-known non-delivery.
@@ -279,7 +281,6 @@ export default async function AdminUsers({
   const p1 = pick(sp.p1, P1_VALUES);
   const p2 = pick(sp.p2, P2_VALUES);
   const avail = pick(sp.avail, AVAIL_VALUES);
-  const tier = pick(sp.tier, TIER_VALUES);
   const gender = pick(sp.gender, GENDER_VALUES);
   const os = pick(sp.os, OS_VALUES);
   const seg = pick(sp.seg, SEG_VALUES);
@@ -326,7 +327,6 @@ export default async function AdminUsers({
     p2?: Record<string, number>;
     groups?: Record<string, number>;
     avail?: Record<string, number>;
-    tier?: Record<string, number>;
     gender?: Record<string, number>;
     os?: Record<string, number>;
     seg?: Record<string, number>;
@@ -363,7 +363,6 @@ export default async function AdminUsers({
     groupInIds,
     groupNotInIds,
     avail,
-    tier,
     gender,
     os,
     seg,
@@ -459,19 +458,14 @@ export default async function AdminUsers({
     })),
     { value: GROUP_NONE, label: d.filterGroupNone, count: facets.groups_none ?? 0 },
   ].sort(byCountDesc);
-  // avail / tier / seg now carry global "(n)" facet counts too (every
+  // avail / seg now carry global "(n)" facet counts too (every
   // dropdown + every option shows a count). Unlike p1/p2/groups these keep
   // their declared order — the seg recency buckets (online → 30d) read
-  // better chronologically than count-sorted, and avail/tier are tiny.
+  // better chronologically than count-sorted, and avail is tiny.
   const availOptions = AVAIL_VALUES.map((v) => ({
     value: v,
     label: (d.availStates as Record<string, string>)[v],
     count: facets.avail?.[v] ?? 0,
-  }));
-  const tierOptions = TIER_VALUES.map((v) => ({
-    value: v,
-    label: (d.tierStates as Record<string, string>)[v],
-    count: facets.tier?.[v] ?? 0,
   }));
   const genderOptions = GENDER_VALUES.map((v) => ({
     value: v,
@@ -512,7 +506,6 @@ export default async function AdminUsers({
             p2Label={d.filterP2}
             groupLabel={d.filterGroup}
             availLabel={d.filterAvail}
-            tierLabel={d.filterTier}
             genderLabel={d.filterGender}
             osLabel={d.filterOs}
             segLabel={d.filterSeg}
@@ -524,7 +517,6 @@ export default async function AdminUsers({
             p2States={p2Options}
             roleOptions={roleOptions}
             availOptions={availOptions}
-            tierOptions={tierOptions}
             genderOptions={genderOptions}
             osOptions={osOptions}
             segOptions={segOptions}

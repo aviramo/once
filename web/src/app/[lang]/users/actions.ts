@@ -107,6 +107,35 @@ export async function releaseUserPage(
   return { ok: (data as { ok?: boolean } | null)?.ok === true };
 }
 
+/**
+ * Admin-only direct override of a user's hearts wallet. Routes to
+ * `app_admin_set_credits(p_user_id, p_balance, p_extra)` which validates
+ * non-negative ints under FOR UPDATE and preserves the other credits
+ * fields (held / granted_on / next_grant_at / bought_on). Used by the
+ * user-detail page's hearts editor — group managers don't see it.
+ */
+export async function setUserHearts(
+  userId: string,
+  balance: number,
+  extra: number,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  if (!userId) throw new Error("missing_args");
+  if (!Number.isInteger(balance) || balance < 0) return { ok: false, error: "bad_balance" };
+  if (!Number.isInteger(extra)   || extra   < 0) return { ok: false, error: "bad_extra" };
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin.rpc("app_admin_set_credits", {
+    p_user_id: userId,
+    p_balance: balance,
+    p_extra:   extra,
+  });
+  if (error) return { ok: false, error: error.message };
+  const result = data as { ok?: boolean; error?: string } | null;
+  if (result?.error) return { ok: false, error: result.error };
+  revalidatePath(USER_PATH, "page");
+  return { ok: result?.ok === true };
+}
+
 /** A bulk operation requested from the users-list multi-selection. */
 export type BulkAction =
   | { kind: "reset" }

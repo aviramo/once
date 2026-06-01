@@ -108,7 +108,7 @@
         "signups": "Signups",
         "engagement": "Live engagement",
         "availability": "Availability",
-        "credits": "Credits economy",
+        "credits": "Hearts economy",
         "areas": "Areas",
         "groups": "Groups",
         "funnel": "7-day funnel"
@@ -134,10 +134,10 @@
         "notYet": "Awaiting area launch",
         "unknownAvail": "No location yet",
         "noNotif": "Without notifications",
-        "balanceTotal": "Total credit balance",
-        "heldTotal": "Held credits",
-        "tierFree": "Free tier",
-        "tierPro": "Pro tier",
+        "balanceTotal": "Total heart balance",
+        "heldTotal": "Held hearts",
+        "extraTotal": "Total extra hearts",
+        "withExtra": "Users with extra hearts",
         "areasActive": "Active areas",
         "areasScheduled": "Scheduled areas",
         "areasDisabled": "Disabled areas",
@@ -151,7 +151,7 @@
       },
       "hints": {
         "funnel": "Total over the last 7 days",
-        "proShare": "{pct}% of users on the Pro tier"
+        "extraShare": "{pct}% of users hold extra hearts"
       },
       "viewAll": "All users →"
     },
@@ -194,7 +194,6 @@
     "filterGroup": "Group",
     "filterGroupNone": "No group",
     "filterAvail": "Availability",
-    "filterTier": "Tier",
     "filterGender": "Gender",
     "filterOs": "OS",
     "filterSeg": "Segment",
@@ -274,10 +273,6 @@
       "not_yet": "Awaiting area launch",
       "unknown": "No location yet"
     },
-    "tierStates": {
-      "free": "Free",
-      "pro": "Pro"
-    },
     "genderStates": {
       "male": "Men",
       "female": "Women"
@@ -296,7 +291,8 @@
       "new_30d": "Signed up in 30 days",
       "located": "With location",
       "broadcasting": "Broadcasting",
-      "held": "Held credits",
+      "held": "Held hearts",
+      "extra": "Holding extra hearts",
       "no_notif": "Without notifications"
     },
     "narrative": {
@@ -375,6 +371,7 @@
       "report": "Reported a user",
       "notif": "Updated notification permission",
       "set_tier": "Switched plan",
+      "buy_extra": "Bought extra hearts",
       "unknown": "Action"
     },
     "restrictionsMap": {
@@ -593,6 +590,17 @@
       "attachmentLocation": "Location",
       "attachmentSchedule": "Schedule",
       "systemEvent": "System event",
+      "hearts": {
+        "title": "Hearts",
+        "balanceLabel": "Daily allowance",
+        "extraLabel": "Extra",
+        "hint": "The daily allowance is capped at 3 and refills at 20:00. Extra has no cap. The other credit fields (held, granted_on, next_grant_at, bought_on) are preserved.",
+        "save": "Save",
+        "saving": "Saving…",
+        "done": "Saved.",
+        "fail": "Save failed.",
+        "invalid": "Invalid values — enter non-negative integers."
+      },
       "danger": {
         "section": "Danger zone",
         "resetTitle": "Reset user",

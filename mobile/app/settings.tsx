@@ -23,7 +23,8 @@ import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startO
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon } from '../src/components/icons'
-import { creditBalance, formatNextGrant, creditTier, CREDIT_TIER, starsText } from '../src/lib/credits'
+import { creditBalance, creditExtra, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
+import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
@@ -2536,29 +2537,17 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  // Stars / package popup. Explains the balance, the renewal time and the
-  // current plan, and offers a free<->pro switch (anytime, no limit; the
-  // switch never changes the balance — see app_set_tier).
+  // Hearts popup: explains balance + extra + next grant, and opens the
+  // buy-extra picker. The tier model retired 2026-06-01, so there is no
+  // free/pro switch here any more.
   const [starsPopupVisible, setStarsPopupVisible] = useState(false)
-  const [tierBusy, setTierBusy] = useState(false)
+  const [buyExtraOpen, setBuyExtraOpen] = useState(false)
 
-  const onSwitchTier = useCallback(async () => {
-    if (tierBusy) return
-    // One-way switch: free → Pro only (no downgrade — user request). Read
-    // the freshest tier off the store so a stale closure can't fire this
-    // for an already-Pro user; invoke() merges the returned user back in,
-    // so the row + popup reflect the new plan immediately.
-    if (creditTier(useUserStore.getState().profile) === 'pro') {
-      setStarsPopupVisible(false)
-      return
-    }
+  const onOpenBuyExtra = useCallback(() => {
     tap()
-    setTierBusy(true)
-    try { await invoke('app/set_tier', { tier: 'pro' }) }
-    catch (e) { console.error(e) }
-    setTierBusy(false)
     setStarsPopupVisible(false)
-  }, [tierBusy])
+    setBuyExtraOpen(true)
+  }, [])
 
   const finishAndGoToLogin = useCallback(async () => {
     // See AccountFieldPage.finishAndGoToLogin for the ordering rationale.
@@ -2585,51 +2574,41 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Stars / package popup content. The plan switch is now one-way: a free
-  // user can upgrade to Pro; a Pro user has no downgrade action (user
-  // request — Pro is a one-way switch). Description is assembled so the
-  // renew line drops cleanly when the next-grant time isn't known yet.
-  const tier = creditTier(profile)
-  const isPro = tier === 'pro'
+  // Hearts popup content. Two lines: current balance + extra, and the next
+  // grant time (dropped when unknown). The "buy more" button opens the
+  // BuyExtraPopup with 5/10/50 options. {balance} is the daily-pool count
+  // (refilled to CREDIT_CAP every 20:00 Asia/Jerusalem); {extra} is the
+  // purchased pool (no cap). Both render BOLD inside the otherwise-regular
+  // text. Hebrew verb gender resolved via genderize() inline markers.
+  const heartsBalance = creditBalance(profile)
+  const heartsExtra = creditExtra(profile)
   const nextGrant = formatNextGrant(profile)
-  // Rich, gendered description. The dynamic values ({stars}/{tier}/{cap}/
-  // {when}) render BOLD inside the otherwise-regular text; Hebrew verb
-  // gender is resolved via genderize() inline {male|female} markers (no-op
-  // on English). {cap} is the per-tier daily ceiling: the grant is a
-  // top-up TO this number (LEAST(cap, balance+daily)), NOT an additive
-  // "+cap every day" — the copy must say "tops up to {cap}", not "you get
-  // {cap}". The renew line drops when the next-grant time is unknown; the
-  // "switch plan" sentence is its own paragraph (blank line above).
   const starsTok: Record<string, string> = {
-    '{stars}': starsText(creditBalance(profile)),
-    '{tier}': isPro ? 'Pro' : 'Free',
-    '{cap}': starsText(CREDIT_TIER[tier].cap),
+    '{balance}': starsText(heartsBalance),
+    '{extra}': starsText(heartsExtra),
+    '{cap}': starsText(CREDIT_CAP),
     '{when}': nextGrant,
-    // The Pro plan's daily ceiling — bolded inside the free-user switch line
-    // so the upgrade pitch states what Pro actually gives.
-    '{proCap}': starsText(CREDIT_TIER.pro.cap),
   }
   let starsEmKey = 0
   const emLine = (template: string) =>
     genderize(template, profile.is_male)
-      .split(/(\{stars\}|\{tier\}|\{cap\}|\{when\}|\{proCap\})/g)
+      .split(/(\{balance\}|\{extra\}|\{cap\}|\{when\})/g)
       .map(p => starsTok[p] !== undefined
         ? <Text key={`em${starsEmKey++}`} style={styles.starsEm}>{starsTok[p]}</Text>
         : p)
+  // Skip the "extra" line entirely when there are no extras — saying
+  // "you also have 0 extra hearts" reads as noise. The balance line swaps
+  // to a dedicated "you have NO hearts" copy at 0 instead of the literal
+  // "you have 0 hearts" (user feedback 2026-06-01).
+  const balanceLineKey = heartsBalance === 0
+    ? 'stars.popup.line.balanceEmpty'
+    : 'stars.popup.line.balance'
   const starsBodyLines = [
-    emLine(t('stars.popup.line.balance')),
-    emLine(t('stars.popup.line.tier')),
+    emLine(t(balanceLineKey)),
+    ...(heartsExtra > 0 ? [emLine(t('stars.popup.line.extra'))] : []),
     ...(nextGrant ? [emLine(t('stars.popup.line.renew'))] : []),
   ]
-  // Balance + plan + renew flow as ONE wrapping paragraph (space-joined, no
-  // forced line breaks — user request); the "you can change your plan"
-  // sentence stays its own paragraph below (blank line above). It is shown
-  // only to free users — Pro has no switch action now, so promising one
-  // would be misleading.
-  const starsDesc = [
-    ...starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln])),
-    ...(isPro ? [] : ['\n\n', ...emLine(t('stars.popup.line.switch'))]),
-  ]
+  const starsDesc = starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln]))
 
   // Menu row label: chained group names (up to 3) with "more..." overflow,
   // or the "no groups" message when loaded-empty. While the initial fetch
@@ -2652,14 +2631,19 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         <SelectFieldRow
           grouped
           label={t('settings.credits')}
-          // Subtitle is now ONLY the "renews {when}" note (plan name moved
-          // into the value); dropped entirely when the time is unknown.
+          // Subtitle is the "renews {when}" note; dropped entirely when the
+          // time is unknown (e.g. between rollout and the first cron tick).
           subtitle={nextGrant
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
-          // Value carries the plan name + balance/cap, e.g. "Free 2/3" or
-          // "Pro 7/10" (the plan label the user asked to live here).
-          displayValue={`${isPro ? 'Pro' : 'Free'} ${creditBalance(profile)}/${CREDIT_TIER[tier].cap}`}
+          // Value: "{balance}/{cap} + {extra} אקסטרה" so the daily pool reads
+          // as a fraction of its cap (it's the replenishable pool) and the
+          // extras carry an explicit label (otherwise "+ 5" reads as math,
+          // not "five extra"). Drop the extras tail when there are none —
+          // steady-state shows just "1/3" (user feedback 2026-06-01).
+          displayValue={heartsExtra > 0
+            ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
+            : `${heartsBalance}/${CREDIT_CAP}`}
           onPress={() => setStarsPopupVisible(true)}
           icon={<HeartIcon color={WHITE} size={ICON.md} />}
         />
@@ -2711,25 +2695,28 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         onConfirm={onDeleteConfirmed}
         draggable
       />
-      {/* Stars / package popup. Heart icon, assembled explainer, and a single
-          "upgrade to Pro" button for free users (NO heart-count badge — it
-          read as a price/cost and confused users). A Pro user gets no button
-          at all (one-way switch, user request) — the sheet is then purely
-          informational, dismissed by the drag handle / backdrop tap. */}
+      {/* Hearts popup. Heart icon, balance + extra + renew explainer. The
+          "buy extra" button is shown only when canBuyExtra (= wallet empty
+          AND not already bought this grant cycle, user request 2026-06-01);
+          otherwise the sheet is purely informational. */}
       <ConfirmDialog
         visible={starsPopupVisible}
         icon={<HeartIcon color={PRIMARY} size={32} />}
         title={t('stars.popup.title')}
         description={starsDesc}
-        confirmLabel={isPro ? undefined : t('stars.popup.upgrade')}
-        busy={tierBusy}
-        onCancel={() => { if (!tierBusy) setStarsPopupVisible(false) }}
-        onConfirm={onSwitchTier}
+        confirmLabel={canBuyExtra(profile) ? t('stars.popup.buyExtra') : undefined}
+        onCancel={() => setStarsPopupVisible(false)}
+        onConfirm={onOpenBuyExtra}
         draggable
+      />
+      <BuyExtraPopup
+        visible={buyExtraOpen}
+        onDismiss={() => setBuyExtraOpen(false)}
       />
     </>
   )
 }
+
 
 
 type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }

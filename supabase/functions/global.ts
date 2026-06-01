@@ -89,14 +89,21 @@ export type Page2 = {
 
 // Credits wallet. Lives at relations.credits (sibling of last_add_at /
 // availability). Mutated atomically inside the same FOR UPDATE transaction as
-// the state transition that spends it. balance/tier/cap math is the
+// the state transition that spends it. The balance/extra/cap math is the
 // source-of-truth in SQL (_credits_* helpers); this type just describes the
-// shape the client reads.
+// shape the client reads. Tier model retired 2026-06-01: there is no
+// `tier` field; total spendable = balance + extra and charging always
+// deducts balance first.
 export type Credits = {
+  // Daily pool. Refilled to _credits_cap() == 3 every 20:00 Asia/Jerusalem.
   balance: number;
-  tier: "free" | "pro";
+  // Purchased pool, no daily cap. Bought via app_buy_extra (5/10/50). Charge
+  // order is balance FIRST, then extra. Refund overflow lands here so a
+  // hold + refund cycle never loses a heart.
+  extra: number;
   // Reserved against a live waiting invite. `app_invite` moves 1 from balance
-  // to held; non-cancel exits refund it back, cancel forfeits it.
+  // to held (extra if balance was empty); non-cancel exits refund it back,
+  // cancel forfeits it.
   held?: number;
   granted_on?: string | null;
   next_grant_at?: string | null;

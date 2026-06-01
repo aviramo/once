@@ -108,7 +108,7 @@
         "signups": "נרשמים",
         "engagement": "מעורבות פעילה",
         "availability": "זמינות",
-        "credits": "כלכלת קרדיטים",
+        "credits": "כלכלת לבבות",
         "areas": "אזורים",
         "groups": "קבוצות",
         "funnel": "משפך 7 ימים"
@@ -134,10 +134,10 @@
         "notYet": "ממתינים לפתיחת אזור",
         "unknownAvail": "ללא מיקום עדיין",
         "noNotif": "ללא התראות",
-        "balanceTotal": "סך יתרת קרדיטים",
-        "heldTotal": "קרדיטים בהקפאה",
-        "tierFree": "מסלול חינמי",
-        "tierPro": "מסלול פרו",
+        "balanceTotal": "סך יתרת לבבות",
+        "heldTotal": "לבבות בהקפאה",
+        "extraTotal": "סך לבבות אקסטרה",
+        "withExtra": "משתמשים עם לבבות אקסטרה",
         "areasActive": "אזורים פעילים",
         "areasScheduled": "אזורים מתוזמנים",
         "areasDisabled": "אזורים מושבתים",
@@ -151,7 +151,7 @@
       },
       "hints": {
         "funnel": "סך הכל ב-7 הימים האחרונים",
-        "proShare": "{pct}% מהמשתמשים במסלול פרו"
+        "extraShare": "{pct}% מהמשתמשים עם לבבות אקסטרה"
       },
       "viewAll": "לכל המשתמשים →"
     },
@@ -194,7 +194,6 @@
     "filterGroup": "קבוצה",
     "filterGroupNone": "ללא קבוצה",
     "filterAvail": "זמינות",
-    "filterTier": "מסלול",
     "filterGender": "מין",
     "filterOs": "מערכת הפעלה",
     "filterSeg": "פלח",
@@ -274,10 +273,6 @@
       "not_yet": "ממתין לפתיחת אזור",
       "unknown": "ללא מיקום עדיין"
     },
-    "tierStates": {
-      "free": "חינמי",
-      "pro": "פרו"
-    },
     "genderStates": {
       "male": "גברים",
       "female": "נשים"
@@ -296,7 +291,8 @@
       "new_30d": "נרשמו ב-30 יום",
       "located": "עם מיקום",
       "broadcasting": "משדרים את עצמם",
-      "held": "קרדיטים בהקפאה",
+      "held": "לבבות בהקפאה",
+      "extra": "עם לבבות אקסטרה",
       "no_notif": "ללא התראות"
     },
     "narrative": {
@@ -375,6 +371,7 @@
       "report": "דיווח על משתמש",
       "notif": "עדכן הרשאת נוטיפיקציות",
       "set_tier": "החליף חבילה",
+      "buy_extra": "קנה לבבות אקסטרה",
       "unknown": "פעולה"
     },
     "restrictionsMap": {
@@ -593,6 +590,17 @@
       "attachmentLocation": "מיקום",
       "attachmentSchedule": "לוח זמנים",
       "systemEvent": "אירוע מערכת",
+      "hearts": {
+        "title": "לבבות",
+        "balanceLabel": "חבילה יומית",
+        "extraLabel": "אקסטרה",
+        "hint": "החבילה היומית מוגבלת ל-3 ומתחדשת ב-20:00. אקסטרה אינה מוגבלת. שאר שדות הקרדיט (held, granted_on, next_grant_at, bought_on) נשמרים.",
+        "save": "שמירה",
+        "saving": "שומר…",
+        "done": "נשמר.",
+        "fail": "השמירה נכשלה.",
+        "invalid": "ערכים לא תקינים — יש להזין מספרים שלמים גדולים או שווים ל-0."
+      },
       "danger": {
         "section": "אזור מסוכן",
         "resetTitle": "איפוס משתמש",

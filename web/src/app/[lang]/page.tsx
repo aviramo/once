@@ -11,7 +11,7 @@ import { RealtimeRefresh } from "./_components/RealtimeRefresh";
  * real-time product/business KPI snapshot for managers and the board. Every
  * card is a deep link to the **filtered list** that owns the number — the
  * quick-nav tiles to each tab, and every stat to the exact subset
- * (`/users?p1=…|p2=…|role=…|avail=…|tier=…|seg=…`, `/areas?mode=`,
+ * (`/users?p1=…|p2=…|role=…|avail=…|seg=…`, `/areas?mode=`,
  * `/groups?status=`). All figures come from one RPC
  * (admin_dashboard_metrics), same service-role + SECURITY DEFINER pattern as
  * admin_user_facet_counts.
@@ -53,8 +53,8 @@ type Metrics = {
   credits: {
     balance_total: number;
     held_total: number;
-    tier_free: number;
-    tier_pro: number;
+    extra_total: number;
+    with_extra: number;
   };
   areas: {
     total: number;
@@ -94,7 +94,7 @@ const EMPTY: Metrics = {
     unknown: 0,
     no_notif: 0,
   },
-  credits: { balance_total: 0, held_total: 0, tier_free: 0, tier_pro: 0 },
+  credits: { balance_total: 0, held_total: 0, extra_total: 0, with_extra: 0 },
   areas: { total: 0, active: 0, scheduled: 0, disabled: 0 },
   groups: { total: 0 },
   funnel_7d: {
@@ -165,9 +165,9 @@ export default async function AdminDashboard({
 
   const nf = new Intl.NumberFormat(locale);
   const fmt = (n: number) => nf.format(n ?? 0);
-  const proShare =
+  const extraShare =
     m.users.total > 0
-      ? Math.round((m.credits.tier_pro / m.users.total) * 100)
+      ? Math.round((m.credits.with_extra / m.users.total) * 100)
       : 0;
   const updatedTime = new Intl.DateTimeFormat(locale, {
     day: "2-digit",
@@ -394,16 +394,16 @@ export default async function AdminDashboard({
             href={u("seg=held")}
           />
           <Stat
-            label={t.metrics.tierFree}
-            value={fmt(m.credits.tier_free)}
-            href={u("tier=free")}
+            label={t.metrics.extraTotal}
+            value={fmt(m.credits.extra_total)}
+            accent="ok"
+            href={u("seg=extra")}
           />
           <Stat
-            label={t.metrics.tierPro}
-            value={fmt(m.credits.tier_pro)}
-            hint={t.hints.proShare.replace("{pct}", String(proShare))}
-            accent="ok"
-            href={u("tier=pro")}
+            label={t.metrics.withExtra}
+            value={fmt(m.credits.with_extra)}
+            hint={t.hints.extraShare.replace("{pct}", String(extraShare))}
+            href={u("seg=extra")}
           />
         </CardGrid>
       </Section>
