@@ -62,6 +62,9 @@
     .hint { margin-top: 14px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(255, 255, 255, 0.62); }
     .hint strong { color: #ffffff; }
     .choices-ios { margin-top: 20px; }
+    .ios-note { display: none; margin-top: 18px; font-size: 14px; font-weight: 600; line-height: 1.5; color: rgba(255, 255, 255, 0.62); }
+    .ios-note a { color: #ffffff; }
+    .show .ios-note { display: block; }
     /* The choosers are hidden until JS decides which one this device needs. */
     .choices { display: none; }
     .ios-steps { display: none; }
@@ -80,6 +83,7 @@
       <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">הורדה ל&#8209;Android</a>
       <a class="btn secondary" id="ios" href="https://testflight.apple.com/join/dZw9a3wv">הורדה ל&#8209;iPhone&nbsp;(TestFlight)</a>
     </div>
+    <div class="ios-note" id="iosNote">משתמשי iPhone צריכים קודם את אפליקציית <a href="https://apps.apple.com/app/testflight/id899247664">TestFlight</a> של Apple, ורק אז לפתוח את ההזמנה.</div>
     <!-- iOS-specific guided step: shown only on iPhone/iPad. TestFlight's join
          page auto-opens the itms-beta:// scheme, which Safari rejects with
          "the address is invalid" when the TestFlight app isn't installed. So
