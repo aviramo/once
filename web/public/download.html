@@ -59,10 +59,17 @@
       color: #ffffff;
       font-weight: 600;
     }
-    /* The chooser is hidden until JS decides this device needs it (desktop / unknown). */
+    .hint { margin-top: 14px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(255, 255, 255, 0.62); }
+    .hint strong { color: #ffffff; }
+    .choices-ios { margin-top: 20px; }
+    /* The choosers are hidden until JS decides which one this device needs. */
     .choices { display: none; }
+    .ios-steps { display: none; }
     .no-js .choices, .show .choices { display: flex; }
-    .no-js .msg, .show .msg { display: none; }
+    .show-ios .ios-steps { display: block; }
+    .no-js .msg, .show .msg, .show-ios .msg { display: none; }
+    /* On the iOS guided screen, hide the generic two-store chooser. */
+    .show-ios .choices { display: none; }
   </style>
 </head>
 <body class="no-js">
@@ -72,6 +79,18 @@
     <div class="choices">
       <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">הורדה ל&#8209;Android</a>
       <a class="btn secondary" id="ios" href="https://testflight.apple.com/join/dZw9a3wv">הורדה ל&#8209;iPhone&nbsp;(TestFlight)</a>
+    </div>
+    <!-- iOS-specific guided step: shown only on iPhone/iPad. TestFlight's join
+         page auto-opens the itms-beta:// scheme, which Safari rejects with
+         "the address is invalid" when the TestFlight app isn't installed. So
+         on iOS we guide the user to install TestFlight first, then open the
+         invite, instead of redirecting blindly into that error. -->
+    <div class="ios-steps" id="iosSteps">
+      <div class="hint">כדי להצטרף לגרסת הביתא ל&#8209;iPhone צריך קודם את אפליקציית <strong>TestFlight</strong> של Apple. בלעדיה Safari יציג שגיאת "הכתובת אינה תקינה".</div>
+      <div class="choices choices-ios">
+        <a class="btn" id="tf" href="https://apps.apple.com/app/testflight/id899247664">1. התקנת TestFlight</a>
+        <a class="btn secondary" id="join" href="https://testflight.apple.com/join/dZw9a3wv">2. פתיחת ההזמנה ל&#8209;Once</a>
+      </div>
     </div>
   </div>
 
@@ -92,7 +111,10 @@
       if (isAndroid) {
         location.replace(ANDROID);
       } else if (isIOS) {
-        location.replace(IOS);
+        // Don't redirect blindly into the TestFlight join page: if TestFlight
+        // isn't installed, its itms-beta:// auto-launch makes Safari throw
+        // "the address is invalid". Show a guided install-then-open screen.
+        document.body.className = "show-ios";
       } else {
         // Desktop / unknown: no single right answer, show both.
         document.body.className = "show";
