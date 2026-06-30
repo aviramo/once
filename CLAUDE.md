@@ -21,48 +21,11 @@ Claude has blanket upfront permission for every action it can perform locally or
 
 **Don't ask for confirmation as a courtesy.** "Ready to proceed?" / "Should I run X?" / "Do you want me to also do Y?" are time-tax on the user. Just do it and report.
 
-## Project task queue (Trello)
+## Project task queue — DISABLED
 
-The canonical queue of every actionable request from the user lives on the Trello board **Once Dev** (`https://trello.com/b/3PkwSFiR/once-dev`). `TODO.md` has been retired — Trello is now the only source of truth. **All card content, list names, and labels are in Hebrew.** Proper product/service names (Apple, Sign in with Apple, Google Play, Supabase, TestFlight, etc.) stay in their original Latin form inside Hebrew sentences.
+Trello integration was disabled at the user's request (2026-06-01). Do **not** create cards, comment, sweep, attach images, or otherwise touch Trello for actionable requests. The `trello.ps1` helper and `.claude/secrets/trello.json` are left in place for possible future re-enablement; do not invoke them.
 
-- **Order of operations: Trello first, work second.** When the user gives an actionable request, the very first thing Claude does is create the Trello card (in `לעשות`, or `בתהליך` once work begins) — *before* reading files, planning, editing code, or running tools to solve the task. This guarantees the queue captures the request even if the session is interrupted mid-solve, and gives the user a visible record of what Claude is about to work on. Only after the card exists does Claude start on the solution. The single exception is the "work already complete inline" path below: trivial fixes that resolve in one or two tool calls may be solved first and then logged to `בדיקות` in the same response — but the moment a request looks like it needs more than that, create the card first.
-- **Every actionable request the user makes becomes a new Trello card** — large features, small chores, bugs, deployment milestones. Do this automatically, without being asked. The list the card lands in depends on whether the work is already done by the time the card is created:
-  - **If the work is still pending** (not yet started, or in progress) → create in `לעשות`.
-  - **If the work is already complete in the same response** (typical for small fixes Claude resolves inline) → create directly in `בדיקות` so the user knows it's ready for manual verification, not still on the queue. Pass `-List 'בדיקות'` to `create-card`.
-  Pure questions and information lookups ("what files do we have?") don't count. The `בתכנון` list is a user-managed parking lot for ideas not yet promoted to active work; do **not** drop new tasks there unless the user explicitly asks.
-- **One topic = one card. Follow-ups in the same conversation are comments, not new cards.** As long as the user keeps talking about the same topic — refinements, corrections, additional details, "also do X" tied to the same goal, retries after a bug, related sub-asks — do **not** open another card. Instead, append a Hebrew comment to the existing card via `& .\.claude\scripts\trello.ps1 comment -Id <cardId> -Text "<עדכון בעברית>"`. Remember the `cardId` from the create call (or the most recent comment) for the rest of the conversation. Only open a **new** card when the user pivots to a genuinely different topic (different bug, different feature, different surface). When in doubt — if the new ask shares a noun with the previous one (same screen, same flow, same fix) — comment. Why: the board fragments into duplicate cards otherwise, and the conversation history about a task lives on the card it belongs to, not scattered across siblings.
-- **New cards land at the top of the list** (`pos = 'top'`). Most-recent request appears first when the user opens the board, so the queue reads newest-first. The `trello.ps1 create-card` helper applies this automatically — do not override.
-- **Every card MUST carry all three labels, chosen by Claude.** Never create a card without labels. The `trello.ps1 create-card` helper enforces this and refuses to create an untagged card; if you ever see a card on the board with zero labels, that's a bug to fix immediately by attaching the right three (Claude's responsibility, not the user's). One label per axis. Label names are in Hebrew with a Hebrew prefix:
-  - `טכני:<תחום>` — the technical area touched. Examples: `שרת`, `מסד-נתונים`, `מובייל`, `אימות`, `הפצה`, `תשתית`, `נוטיפיקציות`, `צ'אט`, `i18n`, `קונפיג`. Blue.
-  - `חוויה:<משטח>` — the product surface the user encounters. Examples: `התחברות`, `אונבורדינג`, `התאמות`, `צ'אט`, `פרופיל`, `בטיחות`, `זמינות`, `גילוי`, `רגולציה`, `נוטיפיקציות`. Green.
-  - `עסקי:<ערך>` — the user value the task delivers. Examples: `אמון` (user confidence in safety/integrity), `מעורבות` (gets users using the app more), `איכות-התאמה` (improves who-meets-who outcomes), `בטיחות` (protects users from harm/abuse), `שימור` (keeps existing users coming back), `רכישה` (lets new users find/install), `הכנסות` (revenue). Orange.
-
-  The lists are seeds — add new labels when none fit. The helper auto-creates missing labels (blue for `טכני:*`, green for `חוויה:*`, orange for `עסקי:*`).
-- **Card description format (Hebrew):** lead with `**נוסף:** YYYY-MM-DD`, then `**למה:** <user value or trigger>`, then `**הערות:** <links, file paths, blocked-by, follow-ups>`.
-- **Attach user-sent images to the card.** Any image the user pastes or sends in the same message that produces a card must be attached to that card. Do this automatically right after `create-card`, without asking. Images are usually the bug evidence or the design reference — losing them defeats the point of the card.
-
-  **Pasted images (Ctrl+V in the chat) are NOT files on disk.** Claude Code embeds them as base64 inside the current session log at `~\.claude\projects\<project-key>\<sessionId>.jsonl`. The `attach-file -Path` form will not work for them — Claude has no path to pass. Use the dedicated verb that reads the most-recent user message from the session log, decodes every base64 image found there, and uploads each one to the card:
-
-  `& .\.claude\scripts\trello.ps1 attach-pasted -Id <cardId>`
-
-  Run it **once per card**, immediately after `create-card`. It handles multi-image messages automatically (one upload per image). Decoded files land in `%TEMP%\trello-pasted\` so they're inspectable if the upload fails.
-
-  For images the user provided as a literal file path (e.g., a screenshot they saved to `c:\tmp\foo.png` and named in the message), keep using the path-based form, once per image:
-
-  `& .\.claude\scripts\trello.ps1 attach-file -Id <cardId> -Path <imagePath>`
-- **Status = list:** `בתכנון` = parking lot (user-managed), `לעשות` = open, `בתהליך` = in progress, `בדיקות` = manual testing/review state. Move cards between lists with `trello.ps1 move-card -Id <id> -List <name>`. **Two archive triggers:**
-  1. **Explicit close** — the user says "סגור" / "נסגר" / "מאשר" / "close it" / "done" / "approved". Archive immediately via `trello.ps1 archive-card -Id <id>`.
-  2. **Due-complete checkmark** — the user marks the card's due-date checkbox (green ✓ on the board). This is their own explicit "I'm done with this" signal. Archive it on sight.
-  Do not auto-archive on your own judgement that the work looks finished; only the two signals above qualify. Archived cards stay in Trello's archive (recoverable), no separate "Done" list.
-- **Ongoing sweep:** every time you touch Trello (any verb other than `ping`/`lists`/`labels`), first run `& .\.claude\scripts\trello.ps1 sweep-complete` so any due-complete card the user ticked since the last interaction gets archived. The sweep is idempotent and cheap — one board-cards GET plus one PUT per complete card. Don't skip it.
-- **Session start:** no auto-listing of open tasks at session start. The user does not want a status dump on every conversation; Claude only fetches tasks via `trello.ps1 list-open` when the user explicitly asks ("מה במשימות", "show me the queue", etc.) or when context requires it.
-- **Helper CLI:** `.claude/scripts/trello.ps1` with verbs `list-open`, `create-card`, `move-card`, `archive-card`, `comment`, `attach-file`, `attach-pasted`, `sweep-complete`, `recent-activity`, `get-card`, `lists`, `labels`, `ping`. Examples:
-  - Create a new task: `& .\.claude\scripts\trello.ps1 create-card -Name "<כותרת>" -Desc "<גוף>" -Labels @('טכני:שרת','חוויה:פרופיל','עסקי:איכות-התאמה')`
-  - Comment on the active card (same-topic follow-up): `& .\.claude\scripts\trello.ps1 comment -Id <cardId> -Text "<עדכון בעברית>"`
-  - Move to In progress: `& .\.claude\scripts\trello.ps1 move-card -Id <cardId> -List 'בתהליך'`
-  - Close: `& .\.claude\scripts\trello.ps1 archive-card -Id <cardId>`
-- **PowerShell 5.1 + Hebrew gotcha:** PS 5.1 reads `.ps1` files without a UTF-8 BOM as Windows-1252, so Hebrew string literals embedded directly in script source get mangled. When new Hebrew content is needed at script time (e.g., bulk card create/update), write the Hebrew strings to a JSON data file and have the PS script read it via `[System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))` and `ConvertFrom-Json`. The `trello.ps1` helper itself uses Unicode escape sequences (`[char]0x05D8`...) for the Hebrew prefixes so it stays ASCII-safe in source.
-- **Credentials:** API key + token live in `.claude/secrets/trello.json` (gitignored via `.claude/` blanket rule). Template at `.claude/secrets/trello.json.example`.
+Treat actionable requests directly — read files, plan, edit, run tools — without any queue step. There is no task queue for this project.
 
 ## Server-side code (supabase/functions/ and database)
 
@@ -711,7 +674,7 @@ Admin-managed group system. Managed from the web admin (`/groups` for the catalo
 | `id` | uuid | primary key, default `gen_random_uuid()` |
 | `created_at` | timestamptz | default `now()` |
 | `name` | text | **unique**, not null |
-| `invite_code` | text | not null, unique. 6-digit code shared by managers / admins; users redeem via `/app/redeem_invite` (`app_redeem_invite`) to join, regenerated via `app_regenerate_invite_code`. |
+| `invite_code` | text | not null, unique. 6-digit code shared by managers / admins; users redeem via `/app/redeem_invite` (`app_redeem_invite`) to join, regenerated via `app_regenerate_invite_code`. Auto-filled on insert by the `groups_fill_invite_code` BEFORE INSERT trigger (`_group_fill_invite_code()` → `_group_generate_invite_code()`) when null/blank, so a plain `INSERT (name)` from the web admin `createGroup` action gets a code without the caller supplying one (an explicitly-passed code still wins). Added 2026-06-04 (migration `groups_auto_invite_code`) — before it, `createGroup` failed the NOT NULL constraint and the admin "add group" form surfaced a Server Components render error. |
 | `enabled` | boolean | not null default `true`. Gate input: a user whose ALL groups are disabled becomes `unavailable`. A user in 0 groups is unaffected (the no-group escape hatch still holds). See "Group-membership gate" below. |
 
 > **`groups.enabled` was REINTRODUCED 2026-05-26** (migration `20260526020000_restore_group_disable_gate`) after a brief stint as a purely-organisational concept. The original removal (`20260525050000_drop_group_disable` 2026-05-25) is preserved in history; this migration reverses it. Admin can flip the column from the web panel (`/groups` list — per-tile status badge + Enable/Disable button; `/groups/[groupId]` — status badge + button in the header). The toggle calls `setGroupEnabled` which fires `triggerResync` so the gate change propagates to every affected user immediately (Realtime + per-minute cron safety net). Deleting a group still detaches every member first; `setUserGroupAssignment` now also fires `triggerResync` (membership is a gate input again). The `in_enabled_group(uid)` + `group_blocked(uid)` SQL helpers are restored — `group_blocked` ⇒ TRUE iff the user has ≥1 group AND no enabled-group row.

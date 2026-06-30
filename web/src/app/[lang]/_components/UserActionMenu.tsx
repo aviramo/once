@@ -9,6 +9,7 @@ import {
   FolderPlus,
   FolderMinus,
   Eraser,
+  Maximize2,
   ExternalLink,
   ChevronLeft,
   type LucideIcon,
@@ -51,6 +52,8 @@ function confirmTextFor(
       action.page === 1 ? dict.confirmRelease1 : dict.confirmRelease2,
       { target },
     );
+  if (action.kind === "expandFilters")
+    return fill(dict.confirmExpandFilters, { target });
   return fill(dict.confirmReset, { target });
 }
 
@@ -174,6 +177,17 @@ export function UserActionMenu({
             askConfirm(
               { kind: "reset" },
               fill(dict.confirmReset, { target: targetLabel }),
+            )
+          }
+        />
+        <ActionRow
+          icon={Maximize2}
+          label={dict.expandFilters}
+          desc={dict.expandFiltersDesc}
+          onClick={() =>
+            askConfirm(
+              { kind: "expandFilters" },
+              fill(dict.confirmExpandFilters, { target: targetLabel }),
             )
           }
         />

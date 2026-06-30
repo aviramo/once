@@ -142,7 +142,8 @@ export type BulkAction =
   | { kind: "delete" }
   | { kind: "release"; page: 1 | 2 }
   | { kind: "assignGroup"; groupId: string }
-  | { kind: "removeGroup"; groupId: string };
+  | { kind: "removeGroup"; groupId: string }
+  | { kind: "expandFilters" };
 
 /**
  * Apply one action to every selected user. Each user is processed
@@ -161,6 +162,22 @@ export async function bulkUserAction(
   if (ids.length === 0) return { ok: true, count: 0 };
   const admin = createSupabaseAdmin();
   let count = 0;
+
+  // "Expand filters" is a single set-based UPDATE for the whole selection
+  // (widen distance to unlimited + age range to the per-user app bounds +
+  // clear family/kids settings), so it short-circuits the per-user loop.
+  if (action.kind === "expandFilters") {
+    const { data, error } = await admin.rpc("app_admin_expand_filters", {
+      p_user_ids: ids,
+    });
+    if (error) return { ok: false, count: 0 };
+    revalidatePath(ADMIN_USERS_PATH, "page");
+    revalidatePath(USER_PATH, "page");
+    return {
+      ok: true,
+      count: Number((data as { users?: number } | null)?.users ?? 0),
+    };
+  }
 
   for (const id of ids) {
     try {
