@@ -57,6 +57,14 @@ export type UnifiedEntry = {
   location?: LocationDetail;
   profileChanges?: ProfileChange[];
   accountChanges?: DataChange[];
+  /** Number of consecutive identical events collapsed into this one card
+   * (>= 2 when a run was grouped, absent/1 for a standalone event). The
+   * representative row is the NEWEST in the run — its details (time,
+   * location, data changes) are the ones shown. */
+  count?: number;
+  /** Earliest `at` in the collapsed run — the run spans `untilAt … at`.
+   * Only set when `count > 1`. */
+  untilAt?: string;
 };
 
 export type UnifiedPartner = {
@@ -78,6 +86,9 @@ export type UnifiedDict = {
   page2Tag: string;
   locationCleared: string;
   openInMaps: string;
+  /** Tooltip on the ×N badge, e.g. "{n} events in a row". Optional — when
+   * absent the badge carries no title. `{n}` is substituted with the count. */
+  groupedTitle?: string;
 };
 
 export function UnifiedActivity({
@@ -233,9 +244,19 @@ function EventRow({
     .map((c) => (c.detail ? `${c.label}: ${c.detail}` : c.label))
     .join(" · ");
 
+  const grouped = (entry.count ?? 1) > 1;
+
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
       <span className="shrink-0 font-medium">{entry.action}</span>
+      {grouped ? (
+        <span
+          className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground tabular-nums"
+          title={dict.groupedTitle ? dict.groupedTitle.replace("{n}", String(entry.count)) : undefined}
+        >
+          ×{entry.count}
+        </span>
+      ) : null}
       {!entry.ok ? (
         <StatusBadge tone="ended">{entry.statusLabel}</StatusBadge>
       ) : null}
@@ -279,7 +300,11 @@ function EventRow({
       ) : null}
       <time
         className="shrink-0 text-xs text-muted-foreground ms-auto"
-        title={formatExact(entry.at)}
+        title={
+          grouped && entry.untilAt
+            ? `${formatExact(entry.untilAt)} – ${formatExact(entry.at)}`
+            : formatExact(entry.at)
+        }
       >
         {formatTime(entry.at)}
       </time>

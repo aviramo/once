@@ -420,7 +420,7 @@ export function buildEventCards(
   // are pure no-ops as far as the admin is concerned (the user "did nothing").
   // Reverse back to DESC (newest first) for display — the diff above needed
   // chronological order.
-  return built
+  const display = built
     .filter((e) => {
       if (!e.ok) return true; // failures are always interesting
       if (e.byOther) return true; // by-other rows are inherently "something happened to you"
@@ -431,4 +431,48 @@ export function buildEventCards(
       return false;
     })
     .reverse();
+
+  return collapseRuns(display);
+}
+
+/**
+ * Collapse a run of consecutive identical events into one card carrying a
+ * `count` badge. Two adjacent rows merge only when they are the SAME action
+ * (`rawKey`), same success status, from the SAME actor (`actorId` — so
+ * "location by Ayala" never merges with "location by Dan", and a by-other run
+ * stays separate from the viewed user's own run), and touch NO counterpart
+ * (`affected.length === 0`). This covers both the viewed user's own heartbeat
+ * families (location / start / focus / my_groups / profile / preference edits)
+ * AND the by-other heartbeats that surface in the merged feed because this
+ * user sits in the actor's snapshot (Ayala opened the app / moved while
+ * watching Yonatan). Anything that touched a counterpart (find / invite /
+ * approve / a page-tagged partner) carries a chip, fails the `affected` guard,
+ * and stays an individual card — collapsing it would hide which person each
+ * row acted on. By-other rows always have empty `affected` (the builder skips
+ * the partner diff for them), so they group purely by actor + action.
+ *
+ * The list arrives newest-first (DESC). The kept representative is the NEWEST
+ * row of the run (its time + details are shown); `untilAt` records the oldest
+ * row's time so the tooltip can show the span.
+ */
+function collapseRuns(list: UnifiedEntry[]): UnifiedEntry[] {
+  const out: UnifiedEntry[] = [];
+  for (const e of list) {
+    const last = out[out.length - 1];
+    const mergeable =
+      !!last &&
+      last.rawKey === e.rawKey &&
+      last.ok === e.ok &&
+      last.byOther === e.byOther &&
+      last.actorId === e.actorId &&
+      last.affected.length === 0 &&
+      e.affected.length === 0;
+    if (mergeable) {
+      last.count = (last.count ?? 1) + 1;
+      last.untilAt = e.at; // e is older (DESC), extends the run backward
+      continue;
+    }
+    out.push({ ...e, count: 1 });
+  }
+  return out;
 }

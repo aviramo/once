@@ -568,7 +568,8 @@
           "page1Tag": "Page 1",
           "page2Tag": "Page 2",
           "locationCleared": "Location cleared",
-          "openInMaps": "Open in Google Maps"
+          "openInMaps": "Open in Google Maps",
+          "groupedTitle": "{n} events in a row"
         }
       },
       "email": "Email",

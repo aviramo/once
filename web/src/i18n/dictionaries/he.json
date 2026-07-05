@@ -568,7 +568,8 @@
           "page1Tag": "דף 1",
           "page2Tag": "דף 2",
           "locationCleared": "המיקום נמחק",
-          "openInMaps": "פתח במפות גוגל"
+          "openInMaps": "פתח במפות גוגל",
+          "groupedTitle": "{n} אירועים רצופים"
         }
       },
       "email": "אימייל",
