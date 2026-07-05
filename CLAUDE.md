@@ -11,7 +11,7 @@ Claude has blanket upfront permission for every action it can perform locally or
 - Edit/write any file in the repo, including config (`app.json`, `eas.json`, `package.json`, `CLAUDE.md`).
 - Run `npm install` / `npm uninstall` / dependency upgrades.
 - Run `eas build` / `eas submit` / `eas env:*` / `eas credentials` (interactive prompts, route via terminal as last resort).
-- **Publish / release on demand.** If the user says "פרסם" / "תפרסם" / "release" / "publish" / "upload" / "ship it" or any equivalent (with or without naming a platform), run the release command yourself — do not hand back instructions. Default is both platforms via `cd mobile; npm run release` (= `eas build --platform all --profile production --auto-submit --non-interactive --no-wait`). For a single platform, use `npm run release:android` or `npm run release:ios`. The configured submit targets are TestFlight (iOS) and the **`production`** track (Android — public Play Store; flipped from Closed testing `alpha` on 2026-05-18 for the public launch). After kicking off, report the build + submission URLs and stop — do not poll or wait.
+- **Publish / release on demand.** If the user says "פרסם" / "תפרסם" / "release" / "publish" / "upload" / "ship it" or any equivalent (with or without naming a platform), run the release command yourself — do not hand back instructions. **Currently we publish to ANDROID ONLY (user directive 2026-07-05).** So when a release is requested without naming a platform, run `cd mobile; npm run release:android` — do NOT build/submit iOS unless the user explicitly asks for iOS this time. The `npm run release` (both platforms) and `npm run release:ios` commands still exist and are correct, but are not the default right now. Revert this Android-only default only on an explicit user instruction. The configured submit targets are TestFlight (iOS) and the **`production`** track (Android — public Play Store; flipped from Closed testing `alpha` on 2026-05-18 for the public launch). After kicking off, report the build + submission URLs and stop — do not poll or wait.
 - Run any git operation except destructive ones called out below.
 - Apply Supabase migrations and deploy edge functions (see "Server-side autonomy" below for the full list).
 - Hit any REST API with credentials Claude already has access to.
@@ -286,6 +286,7 @@ A brand-new user starts at `page1.state = locked, page2.state = locked` with no 
 For `find` to pick candidate P for actor A, P is findable iff:
 - `P.page1.state ≠ chat`
 - `P.page2.state ∉ {locked, pending}`
+- **P's profile is onboarding-complete** — `P.data.images` has ≥1 element AND `P.data.bio` is non-empty (migration `20260706030000_require_complete_profile_others`). This is an explicit clause in `others(only_available)`, so it also covers `app_add` and `app_seed_viewer` (both pick candidates via `others(me, true)`). Before it, half-onboarded users were kept out of the pool only incidentally — `location` stays NULL through onboarding (written solely by `/app/start|location|focus`, which run only from `/home`, reachable only after a bio exists) and `others(only_available)` already drops NULL-location candidates. That was a side effect, not a guarantee: any future path that writes `location` before the profile is finished would have surfaced a blank card (name+age, empty `images`, no bio). The guard mirrors the app's own completion gate (onboarding step 4 requires ≥2 photos, step 5 requires a bio, `_layout.tsx` routes to `/home` only when `bio` is set), so no legitimately-complete user is excluded. Internal-only / not breaking.
 
 ### Auto-find behavior
 
@@ -630,6 +631,27 @@ One row per message. Either `text` or `image_key` must be non-null (enforced in 
 | `is_event` | boolean, nullable | true for system event rows |
 
 Storage bucket: `chat-images` (images). Storage bucket: `chat-audio` (voice messages, 10 MB limit, m4a/mp4/aac/mpeg). Both private; same upload/read policy pattern as chat-images. (private, 5 MB limit, jpeg/png/webp). Upload policy: authenticated users may only write to their own folder (`storage.foldername(name)[1] = auth.uid()`). Read policy: uploader or any user referenced in `chat.user_id`/`chat.other_id` for that key.
+
+### `chat_reads` (durable read receipts; migration `20260705000000_chat_reads.sql`)
+
+Durable per-(reader, peer) read-receipt store — the async backstop for the ✓✓ "read" indicator, which until now travelled **only** over ephemeral Supabase Realtime Presence. The sender could observe the receipt **only if subscribed to the presence channel at the exact moment the reader read**; nothing was persisted, so if the two users were never online in the chat simultaneously after the read, the receipt was lost and the sender's messages stayed at single-✓ "sent" forever even though the recipient genuinely read them (the app opens straight onto the chat). Presence remains the live fast-path; this table survives disconnection.
+
+A row means: **`reader_id` has read `peer_id`'s messages up to `last_read_at`.**
+
+| Column | Type | Notes |
+|---|---|---|
+| `reader_id` | uuid | who did the reading (`auth.uid()` on write) |
+| `peer_id` | uuid | whose messages were read (the partner) |
+| `last_read_at` | timestamptz | newest partner-message timestamp the reader has seen |
+| `updated_at` | timestamptz | default `now()`; stamped by the monotonic trigger |
+
+Primary key `(reader_id, peer_id)`. Index `chat_reads_peer_idx on (peer_id)` (the sender-side "who has read MY messages" lookup, `peer_id = me`).
+
+- **Monotonic clamp:** BEFORE INSERT/UPDATE trigger `chat_reads_monotonic` (`_chat_reads_monotonic()`) — a regressing `last_read_at` on UPDATE is clamped to the stored value, so out-of-order writes (races between presence retrack, the foreground poll, and the durable upsert) can never move the ✓✓ boundary backward. Also stamps `updated_at = now()`.
+- **RLS (enabled):** three `to authenticated` policies. SELECT `reader_id = auth.uid() OR peer_id = auth.uid()` (a user reads their own read-state or rows where someone read **their** messages — the `peer_id = auth.uid()` branch is what authorizes the sender's Realtime subscription and drives the sender's ✓✓). INSERT / UPDATE `reader_id = auth.uid()` (a user may only assert their **own** reads). anon has no policy ⇒ fully blocked. Grants reset to the minimum (anon: none; authenticated: select/insert/update), matching the `chat` table's anon revoke.
+- **Realtime:** in the `supabase_realtime` publication. The sender subscribes `postgres_changes` INSERT/UPDATE filtered `peer_id=eq.<self>`, checks `reader_id === partner`, and max-merges `last_read_at` into the ✓✓ boundary.
+- **Client (mobile [chat.tsx](mobile/app/chat.tsx)):** the reader fire-and-forget upserts `{reader_id, peer_id, last_read_at}` (onConflict `reader_id,peer_id`) whenever the latest partner-message timestamp advances while the chat is active (independent of presence readiness); the sender seeds the boundary from the partner's row on open (`select … where reader_id=partner and peer_id=self`) and keeps it live via the Realtime subscription. All merges are monotonic-max, so presence and the durable path compose without conflict.
+- **Additive / not breaking.** New table + new client code. Old mobile builds never read/write it and keep using presence-only (unchanged degraded behaviour, same as before). No server contract changed ⇒ no BACKWARD_COMPAT entry. A new-build sender paired with an old-build reader simply gets no durable receipts from that reader until they update — identical to today.
 
 ### `areas` (geo-availability zones; admin-managed)
 
