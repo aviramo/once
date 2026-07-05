@@ -12,12 +12,7 @@ import { parseUserLocation, haversineKm } from "@/lib/userLocation";
 
 const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
 const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
-const AVAIL_VALUES = [
-  "available",
-  "unavailable",
-  "not_yet",
-  "unknown",
-] as const;
+const AVAIL_VALUES = ["available", "unavailable", "unknown"] as const;
 const GENDER_VALUES = ["male", "female"] as const;
 const OS_VALUES = ["ios", "android"] as const;
 // Single multi-purpose "segment" param: recency windows + boolean-ish

@@ -28,7 +28,7 @@ export type Relations =
         profile?: ProfileMini;
         profiles?: unknown[] | null;
       } | null;
-      /** Availability gate (group-membership / notification-presence / area).
+      /** Availability gate (group-membership / notification-presence).
        * Written by user_availability(); `reason` is set only when gated. */
       availability?: {
         state?: string;
@@ -122,11 +122,11 @@ export function page1Narrative(d: AdminDict, rel: Relations): Narrative {
  * NOT gated (available, or no gate computed yet so we genuinely don't know).
  *
  * A gated user is out of the matching pool entirely: not in any enabled group,
- * notifications off, or the covering area hasn't opened. Their seed
- * `page1.state` stays `'free'`, so without this the list would claim "free,
- * waiting for a match" for someone who can't be matched at all. The reason is
- * read straight from `relations.availability.reason` (`'group'` / `'push'`),
- * with a generic fallback when the reason is absent.
+ * or notifications off. Their seed `page1.state` stays `'free'`, so without
+ * this the list would claim "free, waiting for a match" for someone who can't
+ * be matched at all. The reason is read straight from
+ * `relations.availability.reason` (`'group'` / `'push'`), with a generic
+ * fallback when the reason is absent.
  */
 export function availabilityNarrative(
   d: AdminDict,
@@ -136,7 +136,6 @@ export function availabilityNarrative(
   const state = av?.state;
   if (!state || state === "available") return null;
   const g = d.narrative.gate as Record<string, string>;
-  if (state === "not_yet") return { text: g.not_yet, tone: "idle" };
   if (state === "unavailable") {
     const reason = av?.reason ?? "";
     return { text: g[reason] ?? g.unavailable, tone: "idle" };

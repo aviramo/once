@@ -154,6 +154,17 @@ export default {
   'settings.groupsCodePlaceholder': '6 ספרות',
   'settings.groupsJoinAction': 'הצטרפות',
   'settings.groupsInviteInvalid': 'הקוד שגוי או לא פעיל',
+  // Report a bug: row in the account card + the bug-report sheet.
+  'settings.bugReport': 'דיווח על תקלה',
+  'bugReport.title': 'דיווח על תקלה',
+  'bugReport.desc': 'נתקלת בבעיה? ספרו לנו מה קרה ונטפל בזה.',
+  'bugReport.placeholder': 'תארו את התקלה...',
+  'bugReport.attach': 'צירוף תמונה',
+  'bugReport.attachChange': 'החלפת תמונה',
+  'bugReport.attachRemove': 'הסרה',
+  'bugReport.submit': 'שליחה',
+  'bugReport.thanks': 'תודה! הדיווח נשלח.',
+  'bugReport.error': 'השליחה נכשלה, נסו שוב.',
   // {when} now self-carries "היום ב-HH:MM" / "מחר ב-HH:MM" — no leading "ב-".
   'settings.creditsNext': 'מתחדש {when}',
   'settings.preview': 'תצוגה מקדימה',

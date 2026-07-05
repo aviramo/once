@@ -48,9 +48,9 @@
       "dashboard": "Overview",
       "users": "Users",
       "groups": "Groups",
-      "areas": "Availability areas",
       "map": "Map",
       "reports": "Reporters",
+      "bugs": "Bugs",
       "site": "Site"
     },
     "reports": {
@@ -88,6 +88,24 @@
         "unknown": "No active link"
       }
     },
+    "bugs": {
+      "title": "Bugs",
+      "subtitle": "Bugs reported by users from inside the app.",
+      "none": "No bugs.",
+      "when": "When",
+      "unhandled": "Open",
+      "handledTab": "Handled",
+      "markHandled": "Mark handled",
+      "handled": "Handled",
+      "unknownUser": "Unknown user",
+      "searchPlaceholder": "Search by name or email",
+      "sortLabel": "Sort",
+      "sortNewest": "Newest first",
+      "sortOldest": "Oldest first",
+      "attachment": "Attachment",
+      "openAttachment": "Open image",
+      "noText": "(no text)"
+    },
     "dashboard": {
       "title": "Admin overview",
       "subtitle": "A real-time view of product and business health. Every card is clickable and opens the relevant screen.",
@@ -98,8 +116,6 @@
         "usersDesc": "Search, filter and inspect every user",
         "rolesTitle": "Groups",
         "rolesDesc": "Manage groups and availability gating",
-        "areasTitle": "Availability areas",
-        "areasDesc": "Where the app is live",
         "mapTitle": "Map",
         "mapDesc": "Active users on the map, in real time"
       },
@@ -109,7 +125,6 @@
         "engagement": "Live engagement",
         "availability": "Availability",
         "credits": "Hearts economy",
-        "areas": "Areas",
         "groups": "Groups",
         "funnel": "7-day funnel"
       },
@@ -130,17 +145,13 @@
         "pending": "Pending invite",
         "broadcasting": "Broadcasting",
         "available": "Available",
-        "unavailable": "Gated (area/group)",
-        "notYet": "Awaiting area launch",
+        "unavailable": "Gated (group)",
         "unknownAvail": "No location yet",
         "noNotif": "Without notifications",
         "balanceTotal": "Total heart balance",
         "heldTotal": "Held hearts",
         "extraTotal": "Total extra hearts",
         "withExtra": "Users with extra hearts",
-        "areasActive": "Active areas",
-        "areasScheduled": "Scheduled areas",
-        "areasDisabled": "Disabled areas",
         "rolesTotal": "Groups",
         "fSignups": "Signups",
         "fInvites": "Invites sent",
@@ -273,7 +284,6 @@
     "availStates": {
       "available": "Available",
       "unavailable": "Gated",
-      "not_yet": "Awaiting area launch",
       "unknown": "No location yet"
     },
     "genderStates": {
@@ -320,8 +330,7 @@
       },
       "gate": {
         "push": "Disabled: notifications off",
-        "unavailable": "Disabled: unavailable",
-        "not_yet": "Awaiting area launch"
+        "unavailable": "Disabled: unavailable"
       }
     },
     "outcomes": {
@@ -420,36 +429,6 @@
       "locationCustomOff": "Manual location disabled",
       "notifDenied": "Notifications denied",
       "notifUndetermined": "Notifications undetermined"
-    },
-    "areas": {
-      "title": "Availability areas",
-      "navLink": "Availability areas",
-      "subtitle": "The app is available only to a user inside an active area. With no active area at their location, the app is not available to them.",
-      "add": "Add area",
-      "edit": "Edit",
-      "delete": "Delete",
-      "save": "Save",
-      "cancel": "Cancel",
-      "modeActive": "Activate",
-      "modeScheduled": "Scheduled",
-      "modeDisabled": "Disable",
-      "menu": "Actions",
-      "statusActive": "Active",
-      "statusWaiting": "Waiting",
-      "statusDisabled": "Disabled",
-      "label": "Name or address",
-      "search": "Search an address or place",
-      "searching": "Searching...",
-      "noResults": "No results",
-      "radius": "Radius (meters)",
-      "startsAt": "Start date",
-      "mapUnavailable": "Map preview unavailable",
-      "mapHint": "Enable the Maps Static API for the Google key in the GCP console",
-      "zoomIn": "Zoom in",
-      "zoomOut": "Zoom out",
-      "fit": "Fit to view",
-      "none": "No areas defined. With no active area the app is not available to any user (except sign-up and profile setup).",
-      "confirmDelete": "Delete this area?"
     },
     "groups": {
       "title": "Groups",

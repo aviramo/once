@@ -28,7 +28,7 @@ const STATIC_PAGES: Record<string, string> = {
 // (handled separately below); these are the panel sub-routes. A signed-out
 // visit redirects to /login with `?next=<intended>` so the deep-link
 // survives the auth round-trip.
-const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/map"];
+const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/bugs", "/map"];
 
 function pickLocale(request: NextRequest): string {
   const cookie = request.cookies.get("NEXT_LOCALE")?.value;

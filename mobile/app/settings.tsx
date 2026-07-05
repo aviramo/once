@@ -22,9 +22,10 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon } from '../src/components/icons'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
+import { BugReportPopup } from '../src/components/BugReportPopup'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
@@ -2523,6 +2524,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const { signOut } = useAuthStore()
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
   const [groupsPopupVisible, setGroupsPopupVisible] = useState(false)
+  const [bugReportVisible, setBugReportVisible] = useState(false)
   // Lifted from GroupsPopup so the menu row can render the chained group
   // names from the same fetched list — one source of truth shared between
   // the row label and the popup. null = initial fetch in flight.
@@ -2661,6 +2663,13 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           onPress={() => setGroupsPopupVisible(true)}
           icon={<GroupsIcon color={WHITE} />}
         />
+        <View style={styles.accountActionDivider} />
+        <SelectFieldRow
+          grouped
+          label={t('settings.bugReport')}
+          onPress={() => setBugReportVisible(true)}
+          icon={<BugIcon color={WHITE} />}
+        />
       </View>
       <AccountPopup
         visible={accountPopupVisible}
@@ -2673,6 +2682,10 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         onDismiss={() => setGroupsPopupVisible(false)}
         groups={groups}
         setGroups={setGroups}
+      />
+      <BugReportPopup
+        visible={bugReportVisible}
+        onDismiss={() => setBugReportVisible(false)}
       />
       <ConfirmDialog
         visible={signOutDialog}

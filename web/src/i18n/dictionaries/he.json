@@ -48,9 +48,9 @@
       "dashboard": "סקירה",
       "users": "משתמשים",
       "groups": "קבוצות",
-      "areas": "אזורי זמינות",
       "map": "מפה",
       "reports": "מדווחים",
+      "bugs": "תקלות",
       "site": "לאתר"
     },
     "reports": {
@@ -87,6 +87,24 @@
         "watching": "צופה בפרופיל",
         "unknown": "אין קשר פעיל"
       }
+    },
+    "bugs": {
+      "title": "תקלות",
+      "subtitle": "באגים שדווחו על ידי משתמשים מתוך האפליקציה.",
+      "none": "אין תקלות.",
+      "when": "מתי",
+      "unhandled": "פתוחות",
+      "handledTab": "טופלו",
+      "markHandled": "סמן כטופל",
+      "handled": "טופל",
+      "unknownUser": "משתמש לא ידוע",
+      "searchPlaceholder": "חיפוש לפי שם או אימייל",
+      "sortLabel": "מיון",
+      "sortNewest": "החדשים ראשונים",
+      "sortOldest": "הוותיקים ראשונים",
+      "attachment": "צירוף",
+      "openAttachment": "פתיחת התמונה",
+      "noText": "(ללא טקסט)"
     },
     "dashboard": {
       "title": "סקירת ניהול",

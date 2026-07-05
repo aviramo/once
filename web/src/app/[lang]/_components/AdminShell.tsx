@@ -15,7 +15,7 @@ import { RealtimeRefresh } from "./RealtimeRefresh";
  * file that client components import — ui.tsx is one of those.
  */
 
-type Active = "dashboard" | "users" | "groups" | "reports" | "areas";
+type Active = "dashboard" | "users" | "groups" | "reports" | "bugs";
 
 type ShellProps = {
   dict: Dictionary["admin"];
@@ -47,9 +47,9 @@ export async function AdminShell({
   const managerGroupIds = scope.kind === "manager" ? scope.groupIds : null;
   // Per-tab badges in the nav. Fetched here (not per-page) so every admin
   // screen carries them. `users` / `roles` badges are scoped to the manager
-  // when applicable; `reports` and `areas` are admin-only metrics (their
-  // tabs are hidden from managers via `visibleKeys`, so skipping the query
-  // is both correct and saves the round trip).
+  // when applicable; `reports` is an admin-only metric (its tab is hidden
+  // from managers via `visibleKeys`, so skipping the query is both correct
+  // and saves the round trip).
   const admin = createSupabaseAdmin();
   const usersQuery = managerUserIds === null
     ? admin.from("users").select("user_id", { count: "exact", head: true })
@@ -65,27 +65,31 @@ export async function AdminShell({
         .from("groups")
         .select("id", { count: "exact", head: true })
         .in("id", managerGroupIds);
-  const [usersResult, groupsResult, pendingReportsResult, areasActiveResult] =
-    await Promise.all([
-      usersQuery ?? Promise.resolve({ count: 0 }),
-      groupsQuery,
-      isAdmin
-        ? admin
-            .from("reports")
-            .select("id", { count: "exact", head: true })
-            .eq("handled", false)
-        : Promise.resolve({ count: 0 }),
-      isAdmin
-        ? admin
-            .from("areas")
-            .select("id", { count: "exact", head: true })
-            .eq("mode", "active")
-        : Promise.resolve({ count: 0 }),
-    ]);
+  const [
+    usersResult,
+    groupsResult,
+    pendingReportsResult,
+    pendingBugsResult,
+  ] = await Promise.all([
+    usersQuery ?? Promise.resolve({ count: 0 }),
+    groupsQuery,
+    isAdmin
+      ? admin
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .eq("handled", false)
+      : Promise.resolve({ count: 0 }),
+    isAdmin
+      ? admin
+          .from("bug_reports")
+          .select("id", { count: "exact", head: true })
+          .eq("handled", false)
+      : Promise.resolve({ count: 0 }),
+  ]);
   const usersTotal = usersResult.count ?? 0;
   const groupsTotal = groupsResult.count ?? 0;
   const pendingReports = pendingReportsResult.count ?? 0;
-  const areasActive = areasActiveResult.count ?? 0;
+  const pendingBugs = pendingBugsResult.count ?? 0;
 
   return (
     // overflow-x-clip guards against a child momentarily wider than the
@@ -98,7 +102,7 @@ export async function AdminShell({
           router refresh constantly; the users count re-reads on every nav
           anyway (server component) which is fresh enough. */}
       <RealtimeRefresh
-        tables="reports,groups,areas"
+        tables="reports,bug_reports,groups"
         channel="admin-shell-counts"
       />
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
@@ -118,7 +122,7 @@ export async function AdminShell({
             active={active}
             visibleKeys={
               isAdmin
-                ? ["dashboard", "users", "groups", "areas", "reports"]
+                ? ["dashboard", "users", "groups", "reports", "bugs"]
                 : ["dashboard", "users", "groups"]
             }
             labels={{
@@ -126,15 +130,15 @@ export async function AdminShell({
               users: dict.nav.users,
               groups: dict.nav.groups,
               reports: dict.nav.reports,
-              areas: dict.nav.areas,
+              bugs: dict.nav.bugs,
               signOut: dict.signOut,
             }}
             userLabel={userLabel}
             badges={{
               reports: pendingReports,
+              bugs: pendingBugs,
               users: { count: usersTotal, tone: "info" },
               groups: { count: groupsTotal, tone: "info" },
-              areas: { count: areasActive, tone: "info" },
             }}
           />
         </div>

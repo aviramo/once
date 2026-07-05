@@ -7,8 +7,8 @@ import {
   LayoutGrid,
   Users,
   Layers,
-  MapPin,
   Flag,
+  Bug,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
@@ -29,12 +29,12 @@ import { SignOutButton } from "./SignOutButton";
  * Adding a tab is a single NAV_ITEMS entry.
  */
 
-type NavKey = "dashboard" | "users" | "groups" | "reports" | "areas";
+type NavKey = "dashboard" | "users" | "groups" | "reports" | "bugs";
 
 type Labels = Record<NavKey, string> & { signOut: string };
 
 /** A nav-tab badge: either an "alert" (rose; reports queue) or an "info"
- * (muted; catalog counts — users / groups / areas — surfaced here instead of
+ * (muted; catalog counts — users / groups — surfaced here instead of
  * the former dashboard "quick nav" section). Plain number = alert (legacy). */
 export type BadgeSpec = number | { count: number; tone?: "alert" | "info" };
 
@@ -137,8 +137,8 @@ const NAV_ITEMS: { key: NavKey; href: string; icon: LucideIcon }[] = [
   { key: "dashboard", href: "/", icon: LayoutGrid },
   { key: "users", href: "/users", icon: Users },
   { key: "groups", href: "/groups", icon: Layers },
-  { key: "areas", href: "/areas", icon: MapPin },
   { key: "reports", href: "/reports", icon: Flag },
+  { key: "bugs", href: "/bugs", icon: Bug },
 ];
 
 export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Props) {

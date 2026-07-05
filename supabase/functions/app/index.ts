@@ -536,6 +536,23 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "bug_report": {
+        // User-submitted bug report: free text + one optional attachment key
+        // (image already uploaded to the private `bug-attachments` bucket by
+        // the client). Pure insert via app_bug_report — does NOT touch
+        // relations / credits / any game state. Surfaced in the web admin.
+        const bug_text = typeof body.text === "string" ? body.text : "";
+        const attachment_key = typeof body.attachment_key === "string" ? body.attachment_key : null;
+        const result = await Tools.rpc(log, "app_bug_report", {
+          me_id: user.user_id, p_text: bug_text, p_attachment_key: attachment_key,
+        });
+        await user.persist(log);
+        if (result?.error) return log.error("bug_report", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
       case "chat": {
         const chatBody = body.chat as { text?: unknown; image_key?: unknown; location?: unknown; audio_key?: unknown; audio_bars?: unknown; audio_duration_ms?: unknown; schedule?: unknown; created_at?: unknown } | undefined;
         const text = typeof chatBody?.text === "string" && chatBody.text.trim() !== "" ? chatBody.text.trim() : null;

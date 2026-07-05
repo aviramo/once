@@ -11,8 +11,8 @@ import { RealtimeRefresh } from "./_components/RealtimeRefresh";
  * real-time product/business KPI snapshot for managers and the board. Every
  * card is a deep link to the **filtered list** that owns the number — the
  * quick-nav tiles to each tab, and every stat to the exact subset
- * (`/users?p1=…|p2=…|role=…|avail=…|seg=…`, `/areas?mode=`,
- * `/groups?status=`). All figures come from one RPC
+ * (`/users?p1=…|p2=…|role=…|avail=…|seg=…`, `/groups?status=`). All
+ * figures come from one RPC
  * (admin_dashboard_metrics), same service-role + SECURITY DEFINER pattern as
  * admin_user_facet_counts.
  */
@@ -46,7 +46,6 @@ type Metrics = {
   availability: {
     available: number;
     unavailable: number;
-    not_yet: number;
     unknown: number;
     no_notif: number;
   };
@@ -55,12 +54,6 @@ type Metrics = {
     held_total: number;
     extra_total: number;
     with_extra: number;
-  };
-  areas: {
-    total: number;
-    active: number;
-    scheduled: number;
-    disabled: number;
   };
   groups: { total: number };
   funnel_7d: {
@@ -90,12 +83,10 @@ const EMPTY: Metrics = {
   availability: {
     available: 0,
     unavailable: 0,
-    not_yet: 0,
     unknown: 0,
     no_notif: 0,
   },
   credits: { balance_total: 0, held_total: 0, extra_total: 0, with_extra: 0 },
-  areas: { total: 0, active: 0, scheduled: 0, disabled: 0 },
   groups: { total: 0 },
   funnel_7d: {
     signups: 0,
@@ -127,10 +118,9 @@ function normalize(raw: unknown): Metrics {
 }
 
 // Deep-link builders — every tile resolves to a filtered list of exactly the
-// users/areas/roles the number counts.
+// users/roles the number counts.
 const usersUrl = "/users";
 const u = (qs: string) => `/users?${qs}`;
-const aMode = (m: string) => `/areas?mode=${m}`;
 const groupsUrl = "/groups";
 
 export default async function AdminDashboard({
@@ -147,7 +137,6 @@ export default async function AdminDashboard({
   // `p_user_ids` filters every users-related subquery (chat / log too); when
   // null the RPC computes the global picture.
   const scope = await requireViewerScope();
-  const isAdmin = scope.kind === "admin";
   const user = scope.user;
   const scopedUserIds = scope.kind === "manager" ? scope.userIds : null;
 
@@ -183,7 +172,7 @@ export default async function AdminDashboard({
   return (
     <AdminShell dict={d} active="dashboard" userLabel={userLabel}>
       <RealtimeRefresh
-        tables="users,areas,groups,user_groups"
+        tables="users,groups,user_groups"
         channel="admin-dashboard"
       />
       <div>
@@ -315,12 +304,6 @@ export default async function AdminDashboard({
             href={u("avail=unavailable")}
           />
           <Stat
-            label={t.metrics.notYet}
-            value={fmt(m.availability.not_yet)}
-            accent="busy"
-            href={u("avail=not_yet")}
-          />
-          <Stat
             label={t.metrics.unknownAvail}
             value={fmt(m.availability.unknown)}
             href={u("avail=unknown")}
@@ -343,32 +326,6 @@ export default async function AdminDashboard({
       {/* "Active users" (online_5m / active_today / active_7d) was removed at
           the user's request — the recency segs are still reachable from the
           users-list filter dropdown (?seg=online|active_today|active_7d). */}
-
-      {/* Areas catalog — admin-only. Managers don't manage availability
-          areas (it's a global config), so the section is hidden for them. */}
-      {isAdmin ? (
-        <Section title={t.sections.areas}>
-          <CardGrid min="8.5rem">
-            <Stat
-              label={t.metrics.areasActive}
-              value={fmt(m.areas.active)}
-              accent="ok"
-              href={aMode("active")}
-            />
-            <Stat
-              label={t.metrics.areasScheduled}
-              value={fmt(m.areas.scheduled)}
-              accent="busy"
-              href={aMode("scheduled")}
-            />
-            <Stat
-              label={t.metrics.areasDisabled}
-              value={fmt(m.areas.disabled)}
-              href={aMode("disabled")}
-            />
-          </CardGrid>
-        </Section>
-      ) : null}
 
       <Section title={t.sections.groups}>
         <CardGrid min="8.5rem">

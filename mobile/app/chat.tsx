@@ -181,6 +181,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const presenceChannelRef = useRef<any>(null)
   const lastReadSentRef = useRef<string | null>(null)
+  // Newest partner-message ts we've persisted to the durable `chat_reads`
+  // backstop (separate from lastReadSentRef, which tracks the ephemeral
+  // presence broadcast — the two paths dedup independently).
+  const lastReadPersistedRef = useRef<string | null>(null)
   const retrackRef = useRef<(() => void) | null>(null)
   const [presenceReady, setPresenceReady] = useState(false)
 
@@ -509,6 +513,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     oldestLoadedAtRef.current = null
     setOtherLastRead(null)
     lastReadSentRef.current = null
+    lastReadPersistedRef.current = null
     setHasMore(false)
     hasMoreRef.current = false
     if (!cacheKey || !userId || !otherId) return
@@ -544,6 +549,28 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     if (!readReceiptKey || !otherLastRead) return
     AsyncStorage.setItem(readReceiptKey, otherLastRead).catch(() => {})
   }, [readReceiptKey, otherLastRead])
+
+  // ── Durable read receipt: seed from server on open ───────────────────────
+  // Presence only carries the partner's read state while both are connected
+  // at the same moment. The `chat_reads` row is the async backstop: on open,
+  // pull the partner's latest read timestamp so a receipt they sent while we
+  // were offline is reflected immediately (max-merge, never regresses).
+  useEffect(() => {
+    if (!userId || !otherId) return
+    let cancelled = false
+    supabase
+      .from('chat_reads')
+      .select('last_read_at')
+      .eq('reader_id', otherId)
+      .eq('peer_id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const v = (data as { last_read_at?: string } | null)?.last_read_at
+        if (cancelled || !v) return
+        setOtherLastRead(prev => !prev || Date.parse(v) > Date.parse(prev) ? v : prev)
+      }, () => {})
+    return () => { cancelled = true }
+  }, [userId, otherId])
 
   // ── Initial history load ─────────────────────────────────────────────────
   useEffect(() => {
@@ -601,6 +628,19 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
           clearTimeout(typingTimerRef.current)
           setOtherIsTyping(false)
+        }
+      )
+      // Durable read receipts: the partner upserts a `chat_reads` row when
+      // they read our messages. Even offline-then-online, this UPDATE/INSERT
+      // arrives over Realtime and advances the ✓✓ boundary (max-merge).
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'chat_reads', filter: `peer_id=eq.${userId}` },
+        (payload: any) => {
+          const row = payload?.new as { reader_id?: string; last_read_at?: string } | undefined
+          if (!row || row.reader_id !== otherId || !row.last_read_at) return
+          const next = row.last_read_at
+          setOtherLastRead(prev => !prev || Date.parse(next) > Date.parse(prev) ? next : prev)
         }
       )
       .subscribe()
@@ -682,6 +722,28 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       retrackRef.current?.()
     }
   }, [isActive, presenceReady, messages, userId, otherId])
+
+  // ── Persist read receipt to the durable backstop ─────────────────────────
+  // Independent of presence (no presenceReady gate) so it lands even when the
+  // socket isn't up. Fire-and-forget upsert; a BEFORE trigger clamps
+  // last_read_at monotonically forward server-side, so out-of-order writes
+  // can't regress it.
+  useEffect(() => {
+    if (!isActive || !userId || !otherId) return
+    const latest = messages
+      .filter(m => m.user_id === otherId)
+      .reduce((max, m) => m.created_at > max ? m.created_at : max, '')
+    if (latest && latest !== lastReadPersistedRef.current) {
+      lastReadPersistedRef.current = latest
+      supabase
+        .from('chat_reads')
+        .upsert(
+          { reader_id: userId, peer_id: otherId, last_read_at: latest },
+          { onConflict: 'reader_id,peer_id' },
+        )
+        .then(undefined, () => {})
+    }
+  }, [isActive, messages, userId, otherId])
 
   // Track the latest message timestamp for gap-fill queries.
   useEffect(() => {
