@@ -116,8 +116,6 @@
         "usersDesc": "חיפוש, סינון וצפייה בכל המשתמשים",
         "rolesTitle": "קבוצות",
         "rolesDesc": "ניהול קבוצות וחסימת זמינות",
-        "areasTitle": "אזורי זמינות",
-        "areasDesc": "היכן האפליקציה פעילה",
         "mapTitle": "מפה",
         "mapDesc": "משתמשים פעילים על המפה בזמן אמת"
       },
@@ -127,7 +125,6 @@
         "engagement": "מעורבות פעילה",
         "availability": "זמינות",
         "credits": "כלכלת לבבות",
-        "areas": "אזורים",
         "groups": "קבוצות",
         "funnel": "משפך 7 ימים"
       },
@@ -149,16 +146,12 @@
         "broadcasting": "משדרים את עצמם",
         "available": "זמינים",
         "unavailable": "חסומים זמנית",
-        "notYet": "ממתינים לפתיחת אזור",
         "unknownAvail": "ללא מיקום עדיין",
         "noNotif": "ללא התראות",
         "balanceTotal": "סך יתרת לבבות",
         "heldTotal": "לבבות בהקפאה",
         "extraTotal": "סך לבבות אקסטרה",
         "withExtra": "משתמשים עם לבבות אקסטרה",
-        "areasActive": "אזורים פעילים",
-        "areasScheduled": "אזורים מתוזמנים",
-        "areasDisabled": "אזורים מושבתים",
         "rolesTotal": "קבוצות",
         "fSignups": "הרשמות",
         "fInvites": "הזמנות שנשלחו",
@@ -291,7 +284,6 @@
     "availStates": {
       "available": "זמין",
       "unavailable": "חסום",
-      "not_yet": "ממתין לפתיחת אזור",
       "unknown": "ללא מיקום עדיין"
     },
     "genderStates": {
@@ -338,8 +330,7 @@
       },
       "gate": {
         "push": "מושבת: ללא קבלת נוטיפיקציות",
-        "unavailable": "מושבת: לא זמין כרגע",
-        "not_yet": "ממתין לפתיחת אזור"
+        "unavailable": "מושבת: לא זמין כרגע"
       }
     },
     "outcomes": {
@@ -438,36 +429,6 @@
       "locationCustomOff": "מיקום ידני בוטל",
       "notifDenied": "התראות נדחו",
       "notifUndetermined": "התראות לא הוגדרו"
-    },
-    "areas": {
-      "title": "אזורי זמינות",
-      "navLink": "אזורי זמינות",
-      "subtitle": "האפליקציה זמינה אך ורק למשתמש שנמצא בתוך אזור פעיל. ללא אזור פעיל במיקומו, האפליקציה לא זמינה לו.",
-      "add": "הוספת אזור",
-      "edit": "עריכה",
-      "delete": "מחיקה",
-      "save": "שמירה",
-      "cancel": "ביטול",
-      "modeActive": "הפעלה",
-      "modeScheduled": "מתוזמן",
-      "modeDisabled": "השבתה",
-      "menu": "פעולות",
-      "statusActive": "מופעל",
-      "statusWaiting": "בהמתנה",
-      "statusDisabled": "מושבת",
-      "label": "שם או כתובת",
-      "search": "חיפוש כתובת או מקום",
-      "searching": "מחפש...",
-      "noResults": "אין תוצאות",
-      "radius": "רדיוס (מטרים)",
-      "startsAt": "תאריך התחלה",
-      "mapUnavailable": "תצוגת מפה לא זמינה",
-      "mapHint": "יש להפעיל Maps Static API למפתח Google בקונסולת GCP",
-      "zoomIn": "התקרבות",
-      "zoomOut": "התרחקות",
-      "fit": "התאמת תצוגה",
-      "none": "לא הוגדרו אזורים. ללא אזור פעיל, האפליקציה לא זמינה לאף משתמש (פרט להרשמה והקמת פרופיל).",
-      "confirmDelete": "למחוק את האזור?"
     },
     "groups": {
       "title": "קבוצות",
