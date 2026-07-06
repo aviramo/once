@@ -472,6 +472,19 @@ Not user-initiated, so it costs no credits and does not touch `last_add_at` (no 
 
 Wired in [supabase/functions/app/index.ts](supabase/functions/app/index.ts) in the `start`/`location`/`focus` case, after the auto-find block. Skipped automatically when not `available` or when `page2` already has viewers; the inner RPC re-verifies under lock so two concurrent calls (e.g. `start` + `focus` arriving milliseconds apart) cannot seed twice.
 
+#### Re-seed-on-skip (2026-07-06)
+
+Same `app_seed_viewer` mechanism, second trigger: **when a skip empties the skipped user's viewer list, reseed them one fresh viewer** — so a visible user is never left with zero viewers after the one watching them moves on. The rule in one line: *someone skips me and I'm left with no viewers → the server auto-seeds one new viewer, and pushes `candidate` to that viewer* (the newly-seeded viewer, actor = me).
+
+Wired in the dispatcher (`app/index.ts`), NOT in SQL — no `app_find`/`app_ignore` change, no new migration:
+- **Capture** (right after the `requiresPresence` gate): `skipReleased` = the caller's pre-skip `page1.profile.user_id`, set only when `key ∈ {find, ignore}` AND the caller's `page1.state === 'watching'` (a real skip releases a watched user; pressing play from free/locked releases nobody).
+- **Fire** (right after the `notifyList` push loop, behind `EdgeRuntime.waitUntil` — a third party's surface, never the caller's critical path): `app_seed_viewer(skipReleased)`, then `firePush` each returned notify entry with `actor_id = n.actor_id` (= `skipReleased`), **not** the caller — so it can't ride the normal `notifyList` loop (which fires with actor = caller). Only reached on a successful skip: both find/ignore error paths `return` before the loop.
+
+Why it's safe / self-limiting:
+- The **"was the only viewer" condition is `app_seed_viewer`'s own precondition** (`page2.profiles[]` empty) — no extra check in the dispatcher. If the skipped user still has other viewers, the seed no-ops.
+- The skipper is **never re-seeded onto the same user**: `app_ignore` writes a synchronous `B→A` `ignore` restriction, and `others()` filters restrictions **bidirectionally**, so `others(A)` excludes B on A's very next candidate pick. (Even on a raw `find` skip with no restriction, B has just moved to `watching` a new target, and `app_seed_viewer` only picks candidates whose `page1.state IN ('free','locked')` — so B is excluded anyway.)
+- **Naturally rate-limited**: one seed + one `candidate` push per "last viewer left" event, bounded by the real skip rate. One skip → one seed, no runaway loop, no cron, no throttle.
+
 ### Client / mobile assumptions
 
 - Realtime is wired: the mobile app subscribes to its own `users` row and re-renders when `relations` changes. Server endpoints should not echo state into the HTTP response as a synchronization mechanism — Realtime is the channel. (Echoing for convenience is fine, but the client treats Realtime as truth.)

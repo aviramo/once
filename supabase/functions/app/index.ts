@@ -220,6 +220,21 @@ Deno.serve(async (req) => {
       return log.error(key, "unavailable", 403);
     }
 
+    // Re-seed-on-skip: when a skip (find / ignore) detaches the caller from the
+    // user they were watching, that user may drop to zero viewers. Capture them
+    // now (pre-skip page1 target) so we can seed one fresh viewer for them after
+    // the skip commits — see the app_seed_viewer call near the push loop.
+    // app_seed_viewer no-ops unless that user is visible with an EMPTY viewer
+    // list, so the seed fires only when the skipper was their last viewer.
+    // Only a real skip (was 'watching' someone) qualifies — pressing play from
+    // free/locked has no released target. The ignore path writes a synchronous
+    // B->A restriction, and others() excludes restrictions bidirectionally, so
+    // the freshly seeded viewer is never the skipper.
+    const skipReleased: string | null =
+      (key === "find" || key === "ignore") && user.relations?.page1?.state === "watching"
+        ? (user.relations?.page1?.profile?.user_id ?? null)
+        : null;
+
     switch (key) {
       case "account": {
         if (typeof body.name === "string" && typeof body.birth_date === "string" && typeof body.is_male === "boolean") {
@@ -710,6 +725,22 @@ Deno.serve(async (req) => {
     for (const n of notifyList) {
       if (!n.user_id || n.user_id === user.user_id) continue;
       EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, user.user_id));
+    }
+
+    // Re-seed-on-skip (see skipReleased capture above). A skip that emptied the
+    // watched user's viewer list gets them one fresh viewer. Fire-and-forget:
+    // it's a third party's surface, never the caller's critical path. The
+    // 'candidate' push goes to the newly seeded viewer with the watched user as
+    // the actor (n.actor_id), NOT the caller — so it can't use the notifyList
+    // loop above (which fires with actor = caller).
+    if (skipReleased) {
+      EdgeRuntime.waitUntil((async () => {
+        const seed = await Tools.rpc(log, "app_seed_viewer", { me_id: skipReleased });
+        if (!seed || seed.error) return;
+        for (const n of (seed.notify ?? []) as Notify[]) {
+          if (n.user_id && n.actor_id) await firePush(log, n.user_id, n.code, n.actor_id);
+        }
+      })());
     }
 
     // Propagate fresh last_seen / location into snapshots inside other users'
