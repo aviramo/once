@@ -14,7 +14,7 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
-import { PullContext, type PullCtx } from '../src/components/HomeCard'
+import { PullContext, type PullCtx } from '../src/components/PullPane'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from '../src/components/PhotoEditor'
 import { supabase } from '../src/lib/supabase'
@@ -2370,15 +2370,24 @@ export function PreviewFieldPage({
 
     const { filename, uploaded } = processAndUploadPhotoDeferred(asset.uri, userId, token)
 
+    // Kept so a failed upload can put the previous photo BACK (see the catch
+    // below). The old file is still in storage and still valid -- only the
+    // reference is being swapped here.
     const current = useUserStore.getState().profile
+    const oldEntry = current?.images?.[targetIndex]
     if (current?.images) {
-      const oldFilename = current.images[targetIndex]?.normal
+      // Swap the slot optimistically -- processAndUploadPhotoDeferred already
+      // primed localPhotoUriCache with the picked URI, so the new photo renders
+      // straight away. The OLD photo's local cache + deferred marker are
+      // deliberately NOT torn down here: until the new upload lands, the old
+      // photo is still the one we fall back to. Tearing its state down eagerly
+      // meant a failed replace restored an entry with no local cache (visible
+      // flash), and -- worse -- replacing a photo that was ITSELF still
+      // uploading un-marked it from pendingDeferred, letting persistImages()
+      // write it to the server before its upload had landed. Both cleanups now
+      // live on the success path below.
       const next = [...current.images]
       next[targetIndex] = { normal: filename, hash: '' }
-      if (oldFilename) {
-        localPhotoUriCache.delete(oldFilename)
-        pendingDeferred.delete(oldFilename)
-      }
       useUserStore.getState().update({ images: next })
     }
 
@@ -2391,12 +2400,30 @@ export function PreviewFieldPage({
         const next = [...latest.images]
         next[idx] = { normal: filename, hash }
         useUserStore.getState().update({ images: next })
+        // The new photo is in storage now, so the old one is finally redundant.
+        // (Its file is left in storage: removes never delete, same as elsewhere.)
+        const oldFilename = oldEntry?.normal
+        if (oldFilename && !next.some(img => img.normal === oldFilename)) {
+          localPhotoUriCache.delete(oldFilename)
+          pendingDeferred.delete(oldFilename)
+        }
       })
       .catch(e => {
         console.error('Photo replace upload error:', e)
         const latest = useUserStore.getState().profile
         if (!latest) return
-        useUserStore.getState().update({ images: latest.images.filter(img => img.normal !== filename) })
+        // RESTORE the previous photo rather than just dropping the failed one.
+        // Filtering it out left the array one entry SHORTER, which is the one
+        // way to get below the 2-photo floor that handleDelete enforces: two
+        // failed replaces took a profile to zero photos, persistImages() wrote
+        // that to the server, and others(only_available) then dropped the user
+        // from everyone's pool with no indication anything had gone wrong.
+        const idx = latest.images.findIndex(img => img.normal === filename)
+        if (idx < 0) return
+        const next = [...latest.images]
+        if (oldEntry) next[idx] = oldEntry
+        else next.splice(idx, 1)
+        useUserStore.getState().update({ images: next })
       })
     inFlightUploads.current.add(tracker)
     tracker.finally(() => inFlightUploads.current.delete(tracker))

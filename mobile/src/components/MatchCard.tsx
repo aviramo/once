@@ -3,7 +3,7 @@ import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, Platform } fr
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { PullScrollView, PullContext } from './HomeCard'
+import { PullScrollView, PullContext } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
