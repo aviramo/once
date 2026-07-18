@@ -83,6 +83,32 @@ export function CloseBoldIcon({ color = BLACK, stroke, size = ICON.xxl }: IconPr
   )
 }
 
+// Hamburger. The floating menu affordance on the home screen: three even
+// rounded rules at the same STROKE.base weight as CloseIcon, so the open glyph
+// and the close glyph of the menu sheet read as one pair.
+export function HamburgerIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round">
+      <Line x1="4" y1="7" x2="20" y2="7" />
+      <Line x1="4" y1="12" x2="20" y2="12" />
+      <Line x1="4" y1="17" x2="20" y2="17" />
+    </Svg>
+  )
+}
+
+// Vertical ellipsis. Opens an actions menu from a header row (the chat sheet's
+// leave / block menu). Filled dots rather than stroked circles so it stays
+// legible at small sizes.
+export function DotsVerticalIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Circle cx="12" cy="5" r="1.8" />
+      <Circle cx="12" cy="12" r="1.8" />
+      <Circle cx="12" cy="19" r="1.8" />
+    </Svg>
+  )
+}
+
 // ── Field / list-row icons (gray stroke by default) ────────────────────────
 
 export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {

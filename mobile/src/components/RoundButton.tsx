@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
 import { BLACK, BLACK_STRONG } from '../colors'
+import { ROUND_BUTTON_SIZE } from '../tokens'
 
 // Round icon-button primitive. Single source of truth for every circular tap
 // target in the app:
@@ -20,12 +21,6 @@ import { BLACK, BLACK_STRONG } from '../colors'
 // of the ScrollView avoids both pitfalls.
 //
 // Visual axes are props, never a forked second component.
-
-// Standard diameter for every round overlay button (heart / X / add-photo).
-// Exported so callers that want a proportional variant (e.g. MatchCard's
-// half-size report flag) derive from this single source instead of hard-
-// coding a second number that could drift.
-export const ROUND_BUTTON_SIZE = 76
 
 export type RoundButtonProps = {
   size?: number

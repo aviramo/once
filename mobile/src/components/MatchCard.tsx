@@ -15,8 +15,8 @@ import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
-import { RoundButton, ROUND_BUTTON_SIZE } from './RoundButton'
-import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
+import { RoundButton } from './RoundButton'
+import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -320,6 +320,13 @@ type MatchCardProps = {
    * popping into view partway through the slide-up. Callers that omit it fall
    * back to the self-measured height + the opacity gate. */
   cardHeight?: number
+  /** Vertical space to reserve at the card's top-START corner for SHELL chrome
+   * painted above the card (home's floating hamburger, an OverlaySheet's close
+   * X). Both live at top-start, which is exactly where the report flag sits, so
+   * the flag drops below the reserved band instead of colliding. Pass
+   * `chromeReserve(topInset)` from OverlaySheet. 0 / omitted = nothing above
+   * the card (the hidden preloader, the own-profile preview). */
+  topStartInset?: number
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -346,6 +353,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   viewerLocationType,
   self = false,
   cardHeight,
+  topStartInset = 0,
 }: MatchCardProps, ref) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -676,8 +684,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               falls through to the photo and only the button itself is a tap
               target. */}
           {sections[0]?.type === 'photo' && onReport ? (
-            <View pointerEvents="box-none" style={styles.reportOverlay}>
-              <RoundButton size={ROUND_BUTTON_SIZE / 2} onPress={onReport}>
+            <View
+              pointerEvents="box-none"
+              style={[styles.reportOverlay, topStartInset > 0 && { paddingTop: MD + topStartInset }]}
+            >
+              <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
                 <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
               </RoundButton>
             </View>

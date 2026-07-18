@@ -197,6 +197,37 @@ export const DRAG_HANDLE = {
   radius: 2,
 } as const
 
+// ── Round button diameters ─────────────────────────────────────────────────
+// Standard diameter for every round overlay button (heart / X / add-photo).
+// Lives here rather than in RoundButton.tsx because the overlay chrome below
+// derives from it, and a token file must not import a component.
+
+export const ROUND_BUTTON_SIZE = 76
+// Quiet secondary round button: the on-card report flag, and every piece of
+// floating shell chrome (home's hamburger, a sheet's close X, chat's 3-dot
+// menu). Half the hero diameter so the two read as a deliberate primary /
+// secondary pair. Derived, never a second literal.
+export const ROUND_BUTTON_SIZE_SM = ROUND_BUTTON_SIZE / 2
+
+// ── Overlay sheets ─────────────────────────────────────────────────────────
+// The app is one screen (page1) with everything else rising over it as a
+// full-screen sheet. See OverlaySheet.tsx.
+
+export const OVERLAY = {
+  // Gap between the safe-area top inset and floating chrome (the home
+  // hamburger, a sheet's close X). Consumed via chromeReserve() so the card
+  // underneath reserves exactly the room the chrome occupies.
+  chromeGap: SM,
+  // Paint order. Menu sits above everything on purpose: it is the one surface
+  // that stays reachable while the availability gate is on.
+  z: {
+    invite: 10,
+    chat: 20,
+    menu: 30,
+    subPage: 40,
+  },
+} as const
+
 // ── Tab strip ──────────────────────────────────────────────────────────────
 // All TabStrip-specific dimensions and motion values. `rowHeight` is the
 // fixed height of the main label/icon/chip row. The label has NO
