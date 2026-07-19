@@ -139,7 +139,6 @@ export default {
   'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone.",
   'settings.profile': 'Edit your profile',
   'settings.account': 'Account',
-  'settings.visibility': 'Visibility',
   'settings.visibilityVisible': 'Visible',
   'settings.visibilityHidden': 'Hidden',
   'settings.visibilityHiddenNoHearts': 'You are out of hearts. You need hearts to be visible again.',

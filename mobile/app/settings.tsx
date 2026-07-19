@@ -32,6 +32,7 @@ import { BottomSheet } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
+import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
 import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
@@ -2564,15 +2565,27 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const [bugReportVisible, setBugReportVisible] = useState(false)
   // Lifted from GroupsPopup so the menu row can render the chained group
   // names from the same fetched list — one source of truth shared between
-  // the row label and the popup. null = initial fetch in flight.
-  const [groups, setGroups] = useState<Group[] | null>(null)
+  // the row label and the popup.
+  //
+  // Seeded from the persisted cache so the row paints its names with the
+  // screen rather than popping in when `app/my_groups` lands; the response
+  // then overwrites both. A failed fetch keeps the cached names (falling back
+  // to "no groups" only when there is nothing cached to show).
+  const cachedGroups = useCachedGroups()
+  const [fetchedGroups, setFetchedGroups] = useState<Group[] | null>(null)
+  const [groupsFetchFailed, setGroupsFetchFailed] = useState(false)
+  const groups = fetchedGroups ?? cachedGroups ?? (groupsFetchFailed ? [] : null)
+  const setGroups = useCallback((g: Group[]) => {
+    setFetchedGroups(g)
+    setCachedGroups(g)
+  }, [])
   useEffect(() => {
     let cancelled = false
     invoke<{ groups?: Group[] }>('app/my_groups')
       .then(data => { if (!cancelled) setGroups(data?.groups ?? []) })
-      .catch(() => { if (!cancelled) setGroups([]) })
+      .catch(() => { if (!cancelled) setGroupsFetchFailed(true) })
     return () => { cancelled = true }
-  }, [])
+  }, [setGroups])
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -2696,10 +2709,11 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
         {/* Visibility FIRST: it is a game-state control, not an account
             detail, and it is the only path back to being discoverable. */}
+        {/* The state IS the label: "Visibility  Hidden" says the same thing
+            twice, and the eye glyph already names the field. */}
         <SelectFieldRow
           grouped
-          label={t('settings.visibility')}
-          displayValue={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
           subtitle={isHidden && outOfHearts ? t('settings.visibilityHiddenNoHearts') : undefined}
           onPress={onVisibilityPress}
           icon={isHidden ? <EyeOffIcon color={WHITE} size={ICON.md} /> : <EyeOpenIcon color={WHITE} size={ICON.md} />}
@@ -2902,7 +2916,10 @@ export default function SettingsPage({
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
             </Svg>
             <View style={styles.profileCardRow} pointerEvents="none">
-              <PencilIcon color={WHITE} size={ICON.xxl} />
+              {/* ICON.md, same as every settings row icon: sharing the start
+                  column is not enough on its own, since a wider glyph puts its
+                  ink outside a narrower one's even from the same origin. */}
+              <PencilIcon color={WHITE} size={ICON.md} />
               <Text style={styles.profileCardLabel} numberOfLines={1} ellipsizeMode="tail">{t('settings.profile')}</Text>
             </View>
           </Pressable>

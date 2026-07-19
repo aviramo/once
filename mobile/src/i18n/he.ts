@@ -139,7 +139,6 @@ export default {
   'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד.',
   'settings.profile': 'עריכת הפרופיל',
   'settings.account': 'חשבון',
-  'settings.visibility': 'נראות',
   'settings.visibilityVisible': 'גלוי',
   'settings.visibilityHidden': 'מוסתר',
   'settings.visibilityHiddenNoHearts': 'נגמרו הלבבות, צריך לבבות כדי לחזור להיות גלוי',
