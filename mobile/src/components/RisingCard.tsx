@@ -1,10 +1,25 @@
 import type { ReactNode } from 'react'
-import type { StyleProp, ViewStyle } from 'react-native'
+import { I18nManager, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
   LayoutAnimationConfig,
   SlideInDown,
   SlideOutDown,
+  SlideInLeft,
+  SlideOutLeft,
+  SlideInRight,
+  SlideOutRight,
 } from 'react-native-reanimated'
+
+/** Which edge the card travels from and back to.
+ *  'up'   — from the bottom. Every card-like surface uses this.
+ *  'side' — from the START edge (left in LTR, right in RTL). The menu only:
+ *           it is a drawer opened by the hamburger, which sits at top-START,
+ *           so it arrives from the same edge as its own button. */
+export type RiseFrom = 'up' | 'side'
+
+const SIDE = I18nManager.isRTL
+  ? { entering: SlideInRight, exiting: SlideOutRight }
+  : { entering: SlideInLeft,  exiting: SlideOutLeft }
 
 // Shared "rises from the bottom, falls back down" wrapper used by every
 // card-like surface that mounts/unmounts on top of the home shell: the page1
@@ -21,6 +36,7 @@ export function RisingCard({
   children,
   style,
   animateEnter = true,
+  from = 'up',
 }: {
   children: ReactNode
   style?: StyleProp<ViewStyle>
@@ -28,7 +44,11 @@ export function RisingCard({
   // card is already in its rest position visually (e.g. the home pane's first
   // card on app launch — sliding it in would feel like a UI glitch).
   animateEnter?: boolean
+  from?: RiseFrom
 }) {
+  const { entering, exiting } = from === 'side'
+    ? SIDE
+    : { entering: SlideInDown, exiting: SlideOutDown }
   // The app root wraps everything in `<LayoutAnimationConfig skipEntering>`
   // (_layout.tsx) to dodge a Fabric cold-start mount race. That guard is
   // meant to skip entering only on the first paint, but on iOS + New
@@ -43,8 +63,8 @@ export function RisingCard({
   return (
     <LayoutAnimationConfig skipEntering={false}>
       <Animated.View
-        entering={animateEnter ? SlideInDown : undefined}
-        exiting={SlideOutDown}
+        entering={animateEnter ? entering : undefined}
+        exiting={exiting}
         style={style}
         collapsable={false}
       >

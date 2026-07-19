@@ -22,7 +22,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { useSharedValue, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
-import { PullPane, usePullBehavior, type PullActivation } from './PullPane'
+import { PullPane, usePullBehavior, type PullActivation, type PullAxis } from './PullPane'
 import { RisingCard } from './RisingCard'
 import { RoundButton } from './RoundButton'
 import { CloseIcon } from './icons'
@@ -60,6 +60,11 @@ export type OverlaySheetProps = {
    *  FlatList is inverted, so without this every drag in the message list
    *  would be stolen by the dismiss pan. */
   dragFrom?: 'header' | 'anywhere'
+  /** 'y' (default) rises from the bottom and closes downward. 'x' is a DRAWER:
+   *  it slides in from the START edge and closes back toward it, and the
+   *  dismiss drag becomes horizontal. The menu is the only 'x' sheet, because
+   *  it is opened by the hamburger that sits on that same edge. */
+  axis?: PullAxis
   /** False while another sheet is stacked above this one. Disables this
    *  sheet's pan so the two never arbitrate against each other (a swipe on the
    *  settings sub-page must not also close the menu underneath it). */
@@ -87,6 +92,7 @@ export function OverlaySheet({
   commit = 'dismiss',
   activation = 'sheet',
   dragFrom = 'anywhere',
+  axis = 'y',
   isTop = true,
   chromeless,
   floatingHeader,
@@ -111,6 +117,7 @@ export function OverlaySheet({
     activation,
     enabled: open && isTop,
     commit: commit === 'confirm' ? 'snapBack' : 'slideOff',
+    axis,
     onCommit: requestClose,
     headerBottom: activation === 'sheet' ? headerBottom : undefined,
   })
@@ -151,12 +158,13 @@ export function OverlaySheet({
       gesture={pull.gesture}
       pullY={pull.pullY}
       pulling={pull.pulling}
+      axis={axis}
       style={[StyleSheet.absoluteFill, zIndex != null ? { zIndex } : null]}
       pointerEvents={open ? 'box-none' : 'none'}
       pullContext={pull.pullCtx}
     >
       {open ? (
-        <RisingCard style={[styles.card, cardStyle]}>
+        <RisingCard from={axis === 'x' ? 'side' : 'up'} style={[styles.card, cardStyle]}>
           {floatingHeader ? (
             <>
               <View style={styles.body}>

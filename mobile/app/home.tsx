@@ -1888,7 +1888,7 @@ export default function HomePage() {
   // Out-of-hearts auto-hide flow: the settings visibility row surfaces a "buy
   // extra hearts" prompt instead of "go visible" when balance + extra is 0
   // (the server would re-hide immediately otherwise). Tapping opens this
-  // picker (5 / 10 / 50 options).
+  // picker (3 / 10 / 50 options).
   const [buyExtraOpen, setBuyExtraOpen] = useState(false)
   // Index into READY_HEADLINES; re-rolled on each entry to the ready state
   // by the effect next to headlineText. Lazy init so the first appearance is
@@ -2864,6 +2864,10 @@ export default function HomePage() {
           open={menuOpen}
           onClose={() => closeOverlay('menu')}
           isTop={!profileSheetOpen}
+          // The one drawer: it slides in from the START edge, where its own
+          // hamburger sits, and closes back toward it. Every other sheet rises
+          // from the bottom.
+          axis="x"
           zIndex={OVERLAY.z.menu}
           title={t('settings.settings')}
           closeAccessibilityLabel={t('home.a11y.closeMenu')}

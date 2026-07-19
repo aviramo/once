@@ -26,8 +26,20 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSpring, withSequence, withDelay,
   Easing, runOnJS, type SharedValue,
 } from 'react-native-reanimated'
+import { I18nManager } from 'react-native'
 import { PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY } from '../tokens'
 import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
+
+/** Which way a surface is dragged away.
+ *  'y' — down, off the bottom. Every card surface and every sheet.
+ *  'x' — sideways, off the START edge (left in LTR, right in RTL). The menu
+ *        drawer only: it enters from that edge, so it must leave by it. */
+export type PullAxis = 'y' | 'x'
+
+// A horizontal surface closes toward the START edge, so its translateX is
+// negative in LTR and positive in RTL. Declared once, here, because this is the
+// only place that turns the drag magnitude back into a direction.
+const AXIS_X_SIGN = I18nManager.isRTL ? 1 : -1
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
 
@@ -127,6 +139,7 @@ export function PullPane({
   gesture,
   pullY,
   pulling,
+  axis = 'y',
   topAnchor,
   style,
   pointerEvents,
@@ -144,6 +157,8 @@ export function PullPane({
   gesture: GestureType
   pullY: SharedValue<number>
   pulling: boolean
+  /** Which way the surface travels. See PullAxis. */
+  axis?: PullAxis
   topAnchor?: SharedValue<number>
   style?: StyleProp<ViewStyle>
   pointerEvents?: 'box-none' | 'none' | 'auto' | 'box-only'
@@ -164,9 +179,14 @@ export function PullPane({
   const outerTopStyle = useAnimatedStyle(() => ({
     top: topAnchor ? topAnchor.value : 0,
   }))
-  const cardTranslate = useAnimatedStyle(() => ({
-    transform: [{ translateY: pullY.value }],
-  }))
+  // `pullY` is the drag MAGNITUDE along the axis, always >= 0 in the closing
+  // direction. Only this transform knows which physical direction that is, so
+  // the gesture and every consumer stay direction-agnostic.
+  const cardTranslate = useAnimatedStyle(() => (
+    axis === 'x'
+      ? { transform: [{ translateX: pullY.value * AXIS_X_SIGN }] }
+      : { transform: [{ translateY: pullY.value }] }
+  ))
   const card = (
     <GestureDetector gesture={gesture}>
       <Animated.View
@@ -302,12 +322,18 @@ export function usePullBehavior(opts: {
   onCommit: () => void
   /** What crossing the threshold does. Defaults to 'slideOff'. */
   commit?: PullCommit
+  /** Which way the surface is dragged away. Defaults to 'y'. 'x' is only
+   *  meaningful with activation 'sheet' (the menu drawer). */
+  axis?: PullAxis
   headerBottom?: SharedValue<number>
   tutorial?: { ready: boolean; seenFlag: string; peek?: SharedValue<number> }
 }): PullBehavior {
-  const { activation, enabled, onCommit, commit: commitMode = 'slideOff', headerBottom, tutorial } = opts
-  const screenH = Dimensions.get('window').height
-  const commitDistance = screenH * PULL_COMMIT_FRACTION
+  const { activation, enabled, onCommit, commit: commitMode = 'slideOff', axis = 'y', headerBottom, tutorial } = opts
+  const { height: screenH, width: screenW } = Dimensions.get('window')
+  // The surface leaves along its own axis, so the travel it must cover to be
+  // gone (and the fraction of it that commits) is measured on that axis.
+  const screenSpan = axis === 'x' ? screenW : screenH
+  const commitDistance = screenSpan * PULL_COMMIT_FRACTION
 
   const pullY = useSharedValue(0)
   // Last vertical finger velocity seen during a drag — captured every frame in
@@ -422,27 +448,38 @@ export function usePullBehavior(opts: {
           // tracking the finger continuously (no mid-drag fail/snap-back
           // when the inner scroll momentarily reports not-at-top).
           if (activated.value) return
-          const inHeader = headerBottom ? swipeStart.value.y <= headerBottom.value : false
-          if (!scrollAtTopSV.value && !inHeader) { manager.fail(); return }
           const tch = e.allTouches[0]
           if (!tch) return
           const dx = tch.absoluteX - swipeStart.value.x
           const dy = tch.absoluteY - swipeStart.value.y
           if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
+          if (axis === 'x') {
+            // No scrollAtTop gate here: a horizontal drag never competes with
+            // a vertical scroll, so the body scrolls freely at any offset and
+            // only a sideways-dominant drag takes the surface.
+            const toward = dx * AXIS_X_SIGN
+            if (toward > 0 && Math.abs(dx) > Math.abs(dy) * 0.8) { activated.value = true; manager.activate(); return }
+            manager.fail()
+            return
+          }
+          const inHeader = headerBottom ? swipeStart.value.y <= headerBottom.value : false
+          if (!scrollAtTopSV.value && !inHeader) { manager.fail(); return }
           if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 0.8) { activated.value = true; manager.activate(); return }
           manager.fail()
         })
         .onUpdate(e => {
           'worklet'
-          const drag = e.translationY
+          const drag = axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY
           if (drag <= 0) return
           pullY.value = drag
           if (!engaged.value) { engaged.value = true; runOnJS(setPulling)(true) }
         })
         .onEnd(e => {
           'worklet'
-          const past = e.translationY >= commitDistance
-          const flick = e.velocityY > SWIPE_DISMISS_VELOCITY
+          const travel = axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY
+          const speed = axis === 'x' ? e.velocityX * AXIS_X_SIGN : e.velocityY
+          const past = travel >= commitDistance
+          const flick = speed > SWIPE_DISMISS_VELOCITY
           if (past || flick) {
             if (commitMode === 'snapBack') {
               // The surface STAYS. Fire the request, spring home.
@@ -451,7 +488,7 @@ export function usePullBehavior(opts: {
             } else {
               // Uniform commit motion: ride off-screen, then onCommit.
               slidOut.value = true
-              pullY.value = withTiming(screenH)
+              pullY.value = withTiming(screenSpan)
               runOnJS(onCommit)()
             }
           } else {
@@ -533,7 +570,7 @@ export function usePullBehavior(opts: {
         if (engaged.value) { engaged.value = false; runOnJS(setPulling)(false) }
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activation, gestureEnabled, commitMode, commitDistance, screenH, onCommit, headerBottom])
+  }, [activation, gestureEnabled, commitMode, axis, commitDistance, screenSpan, screenH, onCommit, headerBottom])
 
   return { gesture, pullY, pulling, pullCtx, panRef, setScrollAtTop, reset, commit, tutorialPlaying, commitDistance, slidOut }
 }
