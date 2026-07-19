@@ -667,8 +667,10 @@ export default function HomePage() {
   // reachable while the availability gate is on.
   type Overlay = 'menu' | 'chat' | 'profile'
   const [overlays, setOverlays] = useState<Overlay[]>([])
+  // Assigned during render, NOT in an effect: the BackHandler is registered
+  // once with [] deps and reads this ref, so it must never lag a render.
   const overlaysRef = useRef(overlays)
-  useEffect(() => { overlaysRef.current = overlays }, [overlays])
+  overlaysRef.current = overlays
   const menuOpen = overlays.includes('menu')
   const chatOpen = overlays.includes('chat')
   const profileSheetOpen = overlays.includes('profile')
@@ -2869,13 +2871,18 @@ export default function HomePage() {
         </OverlaySheet>
 
         {/* Profile preview, stacked ON TOP of the menu it was opened from —
-            swiping it down returns to the menu, not to home. chromeless:
-            PreviewFieldPage draws its own back header. */}
+            swiping it down returns to the menu, not to home.
+            floatingHeader: PreviewFieldPage takes an `onBack` but renders no
+            control for it (its close affordance used to be the Menu TAB
+            rendered as an X), so the sheet must supply the X itself. The body
+            is a full-bleed photo card, so the X floats over it. */}
         <OverlaySheet
           open={profileSheetOpen}
           onClose={closeProfileSheet}
-          chromeless
+          floatingHeader
           zIndex={OVERLAY.z.subPage}
+          cardStyle={styles.overlayCardBare}
+          closeAccessibilityLabel={t('home.a11y.closeProfile')}
         >
           {ctx => (
             <PreviewFieldPage

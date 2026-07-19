@@ -844,6 +844,7 @@ export default {
   'home.a11y.menu': 'פתיחת התפריט',
   'home.a11y.closeMenu': 'סגירת התפריט',
   'home.a11y.closeInvite': 'סגירת ההזמנה',
+  'home.a11y.closeProfile': 'סגירת הפרופיל',
   'home.tabs.home': 'Once',
   'home.tabs.viewers': 'צופים בי',
   'home.tabs.hidden_m': 'מוסתר',
