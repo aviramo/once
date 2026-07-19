@@ -31,6 +31,16 @@ import { tap } from '../lib/haptics'
 import { SM, MD, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { PRIMARY, WHITE, BLACK } from '../colors'
 
+/** Distance from the top of the screen to the bottom of a piece of floating
+ *  chrome — home's hamburger, or a sheet's close X. Anything a card draws at
+ *  its own top edge (today: MatchCard's topBlock status card) must start below
+ *  this band or the chrome lands on top of it. Single source, so the hamburger
+ *  and every sheet reserve the identical amount. Feed it to
+ *  `MatchCard.topBlockInset`. */
+export function chromeReserve(topInset: number) {
+  return topInset + OVERLAY.chromeGap + ROUND_BUTTON_SIZE_SM
+}
+
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
  *  the sheet's dismiss pan instead of fighting it. This is exactly the prop
  *  set PreviewFieldPage already takes, so that page satisfies the contract

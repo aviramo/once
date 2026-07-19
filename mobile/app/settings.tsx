@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
 import * as ImagePicker from 'expo-image-picker'
-import Svg, { Path, Line, Circle, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
+import Svg, { Path, Line, Circle, Rect, Defs, RadialGradient, Stop } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore, resolveLocationType, selectIsHidden, type LocationType } from '../src/stores/userStore'
@@ -22,7 +22,7 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
 import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -2868,31 +2868,33 @@ export default function SettingsPage({
                 <TabIcon tab="profile" color={BLACK_STRONG} />
               </View>
             )}
-            {/* Symmetric top + bottom vignette — darkens the edges so the
-                center-aligned label rides over a clean transparent middle. */}
+            {/* Legibility scrim: a soft dark band centred on the row, fading to
+                fully transparent well before the card's edges, so the photo
+                stays a photo. It replaces the per-element tricks the label and
+                the pencil each carried (a blurred text shadow vs. a hard
+                dual-stroke halo) — those are invented per element type and
+                never match, which is exactly how they read. One backdrop is
+                uniform by construction.
+
+                It is RADIAL, not linear, because the darkening has to be local
+                on BOTH axes: a linear gradient can only fade along one, so it
+                would either band the full width or the full height. The centre
+                sits on the row's start corner (flipped in RTL) and everything
+                past the caption fades to nothing, so the rest of the photo is
+                untouched. Anchored at cy 0.5 because profileCardRow is
+                vertically centred; move the row and this must move with it. */}
             <Svg style={styles.profileCardScrim} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
               <Defs>
-                <SvgLinearGradient id="profileScrim" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={BLACK} stopOpacity="0.85" />
-                  <Stop offset="0.5" stopColor={BLACK} stopOpacity="0" />
-                  <Stop offset="1" stopColor={BLACK} stopOpacity="0.85" />
-                </SvgLinearGradient>
+                <RadialGradient id="profileScrim" cx={isRTL ? '0.7' : '0.3'} cy="0.5" r="0.5">
+                  <Stop offset="0" stopColor={BLACK} stopOpacity="0.75" />
+                  <Stop offset="0.55" stopColor={BLACK} stopOpacity="0.4" />
+                  <Stop offset="1" stopColor={BLACK} stopOpacity="0" />
+                </RadialGradient>
               </Defs>
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
             </Svg>
             <View style={styles.profileCardRow} pointerEvents="none">
-              {/* Dual-layer halo: wider BLACK stroke behind, WHITE stroke on
-                  top. Cross-platform replacement for filter:dropShadow, which
-                  rendered as a filled black square on iOS (the layer compositor
-                  treated the SVG view's bounds as opaque before applying the
-                  filter). The BLACK pencil stays inside the WHITE one's bounds
-                  because both viewBox/size are equal — only the stroke is wider. */}
-              <View style={styles.profileCardIconShadow}>
-                <View style={StyleSheet.absoluteFill}>
-                  <PencilIcon color={BLACK} size={ICON.xxl} strokeWidth={STROKE.base * 3} />
-                </View>
-                <PencilIcon color={WHITE} size={ICON.xxl} />
-              </View>
+              <PencilIcon color={WHITE} size={ICON.xxl} />
               <Text style={styles.profileCardLabel} numberOfLines={1} ellipsizeMode="tail">{t('settings.profile')}</Text>
             </View>
           </Pressable>
@@ -3011,8 +3013,10 @@ const styles = StyleSheet.create({
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Symmetric top + bottom vignette over the full card, so the centered
-  // icon + label sit on the cleaner transparent middle band.
+  // Spans the card, but the gradient inside it is only dark around the middle
+  // band where the row sits — the single legibility mechanism for everything
+  // drawn on this card. A FLAT full-card scrim was tried first and washed the
+  // photo out; the darkening has to be local to the caption.
   profileCardScrim: { ...StyleSheet.absoluteFillObject },
   // Icon at the start, label after it, gap MD. Fills the card and centers
   // the row on the image's vertical midline (alignItems on the cross axis).
@@ -3021,14 +3025,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD,
   },
-  // Sized to ICON.xxl so the absolutely-positioned halo layer (the wider
-  // BLACK PencilIcon) has the same bounds as the WHITE PencilIcon stacked on
-  // top of it. No filter — the legibility halo is the BLACK pencil rendered
-  // underneath (see profileCardRow JSX).
-  profileCardIconShadow: { width: ICON.xxl, height: ICON.xxl },
   profileCardLabel: {
     flexShrink: 1, fontSize: TEXT.lg, lineHeight: lh(TEXT.lg),
-    color: WHITE, fontWeight: WEIGHT.semibold, ...PHOTO_TEXT_SHADOW,
+    color: WHITE, fontWeight: WEIGHT.semibold,
   },
   // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
   // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.

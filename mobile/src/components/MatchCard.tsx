@@ -17,7 +17,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
+import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -325,6 +325,12 @@ type MatchCardProps = {
    * popping into view partway through the slide-up. Callers that omit it fall
    * back to the self-measured height + the opacity gate. */
   cardHeight?: number
+  /** Vertical space to reserve above the topBlock for SHELL chrome painted over
+   * the card (home's floating hamburger, an OverlaySheet's close X). Without it
+   * the status card starts at the card's top edge and the chrome lands on its
+   * text. Pass `chromeReserve(topInset)` from OverlaySheet. 0 / omitted = no
+   * chrome above the card. */
+  topBlockInset?: number
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -351,6 +357,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   viewerLocationType,
   self = false,
   cardHeight,
+  topBlockInset = 0,
 }: MatchCardProps, ref) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -644,7 +651,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 if (h > 0 && h !== topBlockHeight) setTopBlockHeight(h)
               }}
             >
-              {effectiveTopBlock}
+              {/* The reserved band is painted PRIMARY, not left transparent:
+                  every topBlock the app renders is a status card on PRIMARY, so
+                  a transparent gap would expose the backdrop as a stripe above
+                  it. If a topBlock ever ships a different background this needs
+                  to become a prop alongside `footerBg`. */}
+              <View style={topBlockInset > 0 ? { paddingTop: topBlockInset, backgroundColor: PRIMARY } : undefined}>
+                {effectiveTopBlock}
+              </View>
             </Animated.View>
             <Animated.View key="top-spacer" pointerEvents="none" style={animatedSpacerStyle} />
           </>

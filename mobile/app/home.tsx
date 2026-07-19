@@ -22,7 +22,7 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { RisingCard } from '../src/components/RisingCard'
-import { OverlaySheet } from '../src/components/OverlaySheet'
+import { OverlaySheet, chromeReserve } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
 import { PresenceDot } from '../src/components/Chip'
@@ -2386,6 +2386,10 @@ export default function HomePage() {
     return true
   }
 
+  // Space the floating chrome (hamburger here, the close X on a sheet) occupies
+  // at the top of the screen. The card's topBlock starts below it.
+  const cardChromeReserve = chromeReserve(topInset)
+
   return (
     <View style={styles.backdrop}>
       {/* Paused recolors the status bar to flat BLACK_MID so the chrome reads
@@ -2570,6 +2574,7 @@ export default function HomePage() {
                             cardHeight={paneHeight}
                             actions={page1CardActions}
                             onReport={() => openReport(displayedMatch.user_id)}
+                            topBlockInset={cardChromeReserve}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
                                 <InviteTimerCard
@@ -2795,6 +2800,7 @@ export default function HomePage() {
               viewerFamily={profile?.family ?? null}
               viewerLocationType={resolveLocationType(profile)}
               bottomInset={0}
+              topBlockInset={cardChromeReserve}
               onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
               topBlock={page2PendingInvite
                 ? replyingInviteCard

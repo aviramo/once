@@ -66,14 +66,15 @@ export const HEADER_PILL_IOS_BASE = 'rgba(255,255,255,0.18)'
 
 // ── Photo-caption legibility ──────────────────────────────────────────────
 // White text or white SVG strokes laid directly over a user photo can vanish
-// on a bright or white image. A dark drop-shadow keeps them readable on any
-// background. Shared by every "white title on a photo" surface (watcher card,
-// the settings profile-card hero) so they never drift apart.
-export const PHOTO_TEXT_SHADOW = {
-  textShadowColor: BLACK,
-  textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 8,
-}
+// on a bright image. The mechanism is a BLACK_STRONG scrim behind them, never
+// a per-element shadow or halo: an element-level trick has to be re-invented
+// for each element type (text takes textShadow, an SVG glyph does not), and
+// the two never end up matching. A shared backdrop is uniform by construction.
+//
+// Retired 2026-07-19: PHOTO_TEXT_SHADOW, a blurred text shadow whose last
+// consumer was the settings profile-card label, sitting next to a pencil icon
+// that faked the same effect with a wider black stroke underneath. They read
+// as two different weights. Don't reintroduce per-element legibility.
 // ── Destructive ──────────────────────────────────────────────────────────
 // Warm gold/amber. The app surface is now the deep-wine PRIMARY everywhere,
 // and the old red (#D96B6B) sat muddily on wine (red-on-red, low separation).
