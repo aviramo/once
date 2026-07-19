@@ -44,6 +44,14 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 // the menu buttons rather than a hero.
 const PROFILE_CARD_HEIGHT = (ICON.xxl + MD * 2) * 2
 
+// Distance from the screen edge to the start of every row icon in this page,
+// so they form one column. A settings row reaches it additively — `optionsWrap`
+// pads by SM, `selectRow*` by MD inside that — but the profile card is
+// full-bleed and sits outside `optionsWrap`, so it has to state the sum. The
+// sheet's close X lands on the same column via its own geometry (MD padding
+// plus the RoundButton's centring of a smaller glyph).
+const ROW_ICON_INSET = SM + MD
+
 // Provided by the shell (home.tsx) so section pages can share their inner
 // sub-page slide animation with the shell. The shell hosts the SharedValue
 // (so its swipe-back gesture worklet can drive it) and offers callbacks
@@ -3023,7 +3031,7 @@ const styles = StyleSheet.create({
   profileCardRow: {
     position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
     flexDirection: 'row', alignItems: 'center', gap: MD,
-    paddingHorizontal: MD,
+    paddingHorizontal: ROW_ICON_INSET,
   },
   profileCardLabel: {
     flexShrink: 1, fontSize: TEXT.lg, lineHeight: lh(TEXT.lg),
