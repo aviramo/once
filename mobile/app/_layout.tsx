@@ -28,6 +28,7 @@ import { useUserStore } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
+import { clearCachedGroups } from '../src/lib/groupsCache'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
 import { PRIMARY } from '../src/colors'
 
@@ -145,6 +146,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         unsubscribeFromUserChanges()
         unregisterPushNotifications()
         clearSelfAvatar().catch(() => {})
+        clearCachedGroups().catch(() => {})
       }
     })
 

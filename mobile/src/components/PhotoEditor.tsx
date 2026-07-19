@@ -449,6 +449,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     const run = async () => {
       const entries = Array.from(pendingUploads.current.values())
       if (entries.length === 0) return
+      const failed: string[] = []
 
       const userId = user?.id
       if (!userId) return
@@ -472,6 +473,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
           }
         } catch (e) {
           console.error('Deferred upload error:', e)
+          failed.push(lp.normalFilename)
           pendingDeferred.delete(lp.normalFilename)
           const state = useUserStore.getState().profile
           if (state) {
@@ -482,8 +484,18 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         localPhotoUriCache.delete(lp.normalFilename)
       }
 
+      // Persist whatever DID land, then surface the failure to the caller.
+      // Both of these used to be swallowed (`.catch(console.error)`), and that
+      // is how photo-less accounts got created: a failed upload drops the photo
+      // from the store (above), onboarding still saved the bio, and
+      // _layout.tsx gates the /home redirect on bio ALONE. The user landed in
+      // /home with `images: []` and never returned to onboarding, while
+      // others(only_available) requires >= 1 image, so they were permanently
+      // unmatchable. Callers that genuinely don't care (the unmount safety net)
+      // catch this themselves.
       const finalState = useUserStore.getState().profile
-      if (finalState) await invoke('app/profile', { images: finalState.images }).catch(console.error)
+      if (finalState) await invoke('app/profile', { images: finalState.images })
+      if (failed.length > 0) throw new Error(`photo upload failed (${failed.length})`)
     }
     const p = run().finally(() => { inFlightFlush.current = null })
     inFlightFlush.current = p

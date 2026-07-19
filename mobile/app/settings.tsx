@@ -1803,6 +1803,15 @@ export function FamilyKidsPopup({
     setPickerTarget(null)
   }
 
+  // The toggle label states the count back to the user, so the row doubles as
+  // the answer ("I have 2 kids") instead of just the question. Zero kids keeps
+  // the plain phrasing — the toggle can be on before any kid has been added.
+  const hasKidsLabel = kids.length === 0
+    ? t('family.hasKidsYes')
+    : kids.length === 1
+      ? t('family.hasKidsYesOne')
+      : t('family.hasKidsYesMany').replace('{count}', String(kids.length))
+
   const pickerTitle = !pickerTarget
     ? ''
     : t('family.kidLabel').replace('{n}', String(pickerTarget.index + 1))
@@ -1831,7 +1840,7 @@ export function FamilyKidsPopup({
                     row below). */}
                 <View>
                   <FamilyToggleRow
-                    label={t('family.hasKidsYes')}
+                    label={hasKidsLabel}
                     value={hasKids}
                     onValueChange={setHasKids}
                   />
@@ -2032,12 +2041,15 @@ const familyStyles = StyleSheet.create({
   kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
   kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
   kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
+  // "+ Add kid" is the only ACTION among the kid chips (the rest are values
+  // you edit), so it is a solid filled pill rather than a dashed outline: the
+  // dashed version read as a placeholder slot, not as something you press.
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: 999,
-    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
+    backgroundColor: PRIMARY,
   },
-  kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipAddLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE },
 
   // + Add kid / + Add week button.
   addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },

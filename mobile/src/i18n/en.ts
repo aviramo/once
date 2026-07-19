@@ -245,6 +245,8 @@ export default {
   'family.optional': 'optional',
   'family.hasKidsQuestion': 'Do you have kids?',
   'family.hasKidsYes': 'I have kids',
+  'family.hasKidsYesOne': 'I have one kid',
+  'family.hasKidsYesMany': 'I have {count} kids',
   'family.hasKidsNo': 'No kids',
   'family.isForKids': 'Interested in kids',
   'family.isForKidsMore': 'Interested in more kids',

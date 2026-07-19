@@ -10,7 +10,6 @@ import { GroupMembers } from "./_components/GroupMembers";
 import { GroupHeader } from "./_components/GroupHeader";
 import { GroupDangerZone } from "./_components/GroupDangerZone";
 import { GroupInviteCode } from "./_components/GroupInviteCode";
-import { GroupEnableToggle } from "./_components/GroupEnableToggle";
 import {
   setUserGroupAssignment,
   searchUsersForGroup,
@@ -19,7 +18,6 @@ import {
   promoteGroupManager,
   demoteGroupManager,
   regenerateInviteCode,
-  setGroupEnabled,
 } from "../actions";
 
 // Typed manually rather than via PageProps<…>: the Next typed-routes registry
@@ -52,7 +50,7 @@ export default async function GroupDetailPage({
   ] = await Promise.all([
     admin
       .from("groups")
-      .select("id, name, invite_code, enabled")
+      .select("id, name, invite_code")
       .eq("id", groupId)
       .maybeSingle(),
     admin
@@ -69,7 +67,6 @@ export default async function GroupDetailPage({
     id: string;
     name: string;
     invite_code: string;
-    enabled: boolean;
   };
 
   type UserMini = {
@@ -159,33 +156,14 @@ export default async function GroupDetailPage({
         }
         extraActions={
           isAdmin ? (
-            <>
-              <GroupEnableToggle
-                groupId={g.id}
-                groupName={g.name}
-                enabled={g.enabled}
-                dict={{
-                  statusEnabled: r.statusEnabled,
-                  statusDisabled: r.statusDisabled,
-                  enableButton: r.enableButton,
-                  disableButton: r.disableButton,
-                  enableBusy: r.enableBusy,
-                  disableBusy: r.disableBusy,
-                  disableConfirm: r.disableConfirm,
-                  enableConfirm: r.enableConfirm,
-                  fail: d.fail,
-                }}
-                action={setGroupEnabled}
-              />
-              <GroupDangerZone
-                groupId={g.id}
-                groupName={g.name}
-                members={members.length}
-                dict={dangerDict}
-                deleteAction={deleteGroup}
-                compact
-              />
-            </>
+            <GroupDangerZone
+              groupId={g.id}
+              groupName={g.name}
+              members={members.length}
+              dict={dangerDict}
+              deleteAction={deleteGroup}
+              compact
+            />
           ) : null
         }
       />

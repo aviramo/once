@@ -7,6 +7,7 @@
 export const STORAGE = {
   pushToken: 'once_push_token',
   selfAvatar: 'self-avatar-filename',
+  groups: 'my_groups',
   seenFlags: 'seen_flags',
 } as const
 

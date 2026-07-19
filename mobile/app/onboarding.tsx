@@ -10,7 +10,8 @@ import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
-import { INVITE_CODE_LEN } from '../src/lib/groups'
+import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
+import { setCachedGroups } from '../src/lib/groupsCache'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { CountBadge } from '../src/components/CountBadge'
@@ -129,6 +130,10 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
   const [totalPhotoCount, setTotalPhotoCount] = useState(profile?.images?.length ?? 0)
+  // Set when the deferred photo upload fails at submit time and the flow is
+  // bounced back to step 4. Rendered on the photo step (where the user acts on
+  // it), cleared as soon as they pick a photo again.
+  const [photoError, setPhotoError] = useState<string | null>(null)
   const photoEditorRef = useRef<PhotoEditorRef>(null)
   // Step 6: optional group invite code. Digits-only, length 6 (see
   // INVITE_CODE_LEN). Held in local state until the final step submits — the
@@ -388,8 +393,28 @@ export default function OnboardingPage() {
   const flushPromiseRef = useRef<Promise<void> | null>(null)
   const saveImagesAndContinue = () => {
     const p = photoEditorRef.current?.flush()
-    if (p) flushPromiseRef.current = p.catch(e => { console.error('storage upload failed', e) })
+    if (p) {
+      // Keep the REJECTION intact on the stored promise so finishOnboarding can
+      // block on it. The extra no-op catch only silences the unhandled-rejection
+      // warning for the steps in between; it is a SEPARATE branch, not the
+      // stored one. (Storing `p.catch(...)` is what used to swallow the failure
+      // and let a photo-less profile finish onboarding.)
+      p.catch(() => {})
+      flushPromiseRef.current = p
+    }
     setStep(s => Math.min(TOTAL_STEPS, s + 1))
+  }
+
+  // Send the user back to the photo step with an explanation. Used for both
+  // failure modes below — an outright upload error and an upload that "succeeds"
+  // into an empty list. Step 4's own `totalPhotoCount < 2` guard re-engages on
+  // its own (PhotoEditor reports the count via onTotalCountChange), so the user
+  // simply re-picks and continues.
+  const failToPhotoStep = () => {
+    setPhotoError(t('photo.uploadFailed'))
+    setStep(4)
+    bioSubmittingRef.current = false
+    setBioSubmitting(false)
   }
 
   // Final onboarding submit, fired from step 6. Optionally redeems the invite
@@ -407,7 +432,10 @@ export default function OnboardingPage() {
     try {
       if (code.length === INVITE_CODE_LEN) {
         try {
-          await invoke('app/redeem_invite', { code })
+          // Seed the groups cache from the redeem response's sidecar so the
+          // settings row shows the joined group on its very first open.
+          const res = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
+          if (res?.groups) setCachedGroups(res.groups)
         } catch {
           setCodeError(t('ob.inviteInvalid'))
           bioSubmittingRef.current = false
@@ -416,8 +444,23 @@ export default function OnboardingPage() {
         }
       }
       if (flushPromiseRef.current) {
-        await flushPromiseRef.current
+        try {
+          await flushPromiseRef.current
+        } catch {
+          flushPromiseRef.current = null
+          failToPhotoStep()
+          return
+        }
         flushPromiseRef.current = null
+      }
+      // Second guard: the flush can also resolve into an EMPTY images list (the
+      // parent unmount safety net already ran and dropped every file, a stale
+      // deferred set, etc.). Never save the bio without at least one photo --
+      // bio is the only thing _layout.tsx gates the /home redirect on, so
+      // saving it here is exactly what makes a photo-less profile permanent.
+      if ((useUserStore.getState().profile?.images?.length ?? 0) < 1) {
+        failToPhotoStep()
+        return
       }
       const bioValue = normalizeBio(bio)
       await invoke('app/profile', { bio: bioValue })
@@ -580,9 +623,14 @@ export default function OnboardingPage() {
           <PhotoEditor
             ref={photoEditorRef}
             deferUpload
-            onTotalCountChange={setTotalPhotoCount}
+            onTotalCountChange={(n) => {
+              setTotalPhotoCount(n)
+              if (n > 0) setPhotoError(null)
+            }}
           />
         </View>
+
+        {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
 
         <View style={styles.ctaWrap}>
           <Button

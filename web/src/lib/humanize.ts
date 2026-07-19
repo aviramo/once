@@ -38,6 +38,9 @@ export type Relations =
   | null
   | undefined;
 
+/** The slice of `users.data` the matchability gate reads. */
+export type ProfileData = { images?: unknown[] | null } | null | undefined;
+
 export type Narrative = { text: string; tone: Tone };
 
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -143,6 +146,27 @@ export function availabilityNarrative(
   return null;
 }
 
+/**
+ * The onboarding-completeness gate, as one sentence + tone, or `null` when the
+ * profile is displayable.
+ *
+ * This gate does NOT live in `relations` like the availability one: it is a
+ * clause inside `others(only_available)` requiring `data.images` to hold at
+ * least one entry, so a photo-less user can never be surfaced as a candidate to
+ * anyone. Their boards still sit at `state='free'`, which is why the panel used
+ * to badge them "available for matches" while the server would never match
+ * them. Bio is deliberately NOT consulted here, matching the SQL clause: an
+ * empty bio is still displayable.
+ */
+export function profileCompleteNarrative(
+  d: AdminDict,
+  data: ProfileData,
+): Narrative | null {
+  const images = data?.images;
+  if (Array.isArray(images) && images.length > 0) return null;
+  return { text: d.narrative.gate.noPhoto, tone: "idle" };
+}
+
 /** The user's side board (incoming invites / viewers), as one sentence. */
 export function page2Narrative(d: AdminDict, rel: Relations): Narrative {
   const p2 = rel?.page2;
@@ -183,7 +207,11 @@ export type Activity = Narrative & { page: 1 | 2 | null };
  * Collapses both boards into the one most informative sentence, and reports
  * which board (`page`) that sentence came from so the card can label it.
  */
-export function userActivity(d: AdminDict, rel: Relations): Activity {
+export function userActivity(
+  d: AdminDict,
+  rel: Relations,
+  data?: ProfileData,
+): Activity {
   const p1 = rel?.page1;
   const p2 = rel?.page2;
   const s1 = p1?.state ?? "locked";
@@ -191,11 +219,13 @@ export function userActivity(d: AdminDict, rel: Relations): Activity {
 
   if (s1 === "chat") return { ...page1Narrative(d, rel), page: 1 };
   if (s2 === "chat") return { ...page2Narrative(d, rel), page: 2 };
-  // The availability gate is a top-level fact: a gated user is out of the pool
-  // entirely, so "free, waiting for a match" would be a lie. It outranks every
-  // non-chat board state. `waiting`/`pending` are teardown-exempt in-flight
-  // interactions (the gate never tears them down) so they still show.
-  const gate = availabilityNarrative(d, rel);
+  // Both gates are top-level facts: a gated user is out of the pool entirely,
+  // so "free, waiting for a match" would be a lie. They outrank every non-chat
+  // board state. `waiting`/`pending` are teardown-exempt in-flight interactions
+  // (neither gate tears them down) so they still show.
+  const gate =
+    availabilityNarrative(d, rel) ??
+    (data !== undefined ? profileCompleteNarrative(d, data) : null);
   if (gate && s1 !== "waiting" && s2 !== "pending") {
     return { ...gate, page: null };
   }

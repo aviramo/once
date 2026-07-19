@@ -247,6 +247,8 @@ export default {
   'family.optional': 'אופציונאלי',
   'family.hasKidsQuestion': 'יש לך ילדים?',
   'family.hasKidsYes': 'יש לי ילדים',
+  'family.hasKidsYesOne': 'יש לי ילד אחד',
+  'family.hasKidsYesMany': 'יש לי {count} ילדים',
   'family.hasKidsNo': 'אין לי ילדים',
   'family.isForKids_m': 'מעוניין בילדים',
   'family.isForKids_f': 'מעוניינת בילדים',

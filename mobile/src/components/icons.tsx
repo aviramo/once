@@ -354,15 +354,31 @@ export function MailIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 
 // ── Add-options tile icons ─────────────────────────────────────────────────
 
+// The "you can add one" affordance both add-tiles carry: a bare plus parked in
+// the top-right of the 24-unit viewBox. No badge, no enclosing circle — it is
+// drawn in the outline colour only, so it reads as a mark floating beside the
+// glyph. Defined once so the camera and the family glyph carry the same
+// gesture; each glyph leaves that corner empty for it.
+const ADD_PLUS = { cx: 20, cy: 4, arm: 2.4 } as const
+
+function AddPlus() {
+  const { cx, cy, arm } = ADD_PLUS
+  return (
+    <G fill="none">
+      <Line x1={cx - arm} y1={cy} x2={cx + arm} y2={cy} />
+      <Line x1={cx} y1={cy - arm} x2={cx} y2={cy + arm} />
+    </G>
+  )
+}
+
 // Filled silhouette + white outline, matching HeartIcon's overlay-on-photo
 // visual. Default usage: `color={PRIMARY} stroke={WHITE}` inside a RoundButton.
 export function AddPhotoIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
-      <Rect x="3" y="5" width="18" height="14" rx="2" />
-      <Circle cx="12" cy="12" r="3" />
-      <Line x1="17.5" y1="3" x2="17.5" y2="7" />
-      <Line x1="15.5" y1="5" x2="19.5" y2="5" />
+      <Rect x="2" y="8" width="15" height="12" rx="2" />
+      <Circle cx="9.5" cy="14" r="3" />
+      <AddPlus />
     </Svg>
   )
 }
@@ -372,10 +388,11 @@ export function AddPhotoIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl
 export function FamilyKidsIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="8" cy="6" r="2.5" />
-      <Path d="M4 21v-7a4 4 0 0 1 8 0v7z" />
-      <Circle cx="17" cy="9" r="2" />
-      <Path d="M14 21v-5a3 3 0 0 1 6 0v5z" />
+      <Circle cx="6.5" cy="8.5" r="2.3" />
+      <Path d="M3 21v-6a3.5 3.5 0 0 1 7 0V21z" />
+      <Circle cx="13.5" cy="11.5" r="1.8" />
+      <Path d="M11 21v-4a2.7 2.7 0 0 1 5.4 0V21z" />
+      <AddPlus />
     </Svg>
   )
 }

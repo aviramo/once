@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { getAdminUser } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
-import { triggerResync } from "@/lib/resync";
 
 // The middleware rewrites /users -> /[lang]/users, so this is
 // the route segment to revalidate after the reset so the users list
@@ -136,6 +135,58 @@ export async function setUserHearts(
   return { ok: result?.ok === true };
 }
 
+/**
+ * Move users between the two matching environments.
+ *
+ * `users.is_test` partitions the matching pool: a test user is matchable ONLY
+ * with other test users and a normal user ONLY with normal users, enforced by
+ * a single unconditional clause in public.others() (the sole candidacy
+ * chokepoint). The flag is one set-based UPDATE for the whole selection — no
+ * RPC and no per-user loop.
+ *
+ * Flipping it moves the user across the boundary, so any live link they hold
+ * may now straddle the two pools. Both pages are released afterwards:
+ * app_admin_release_page1/2 are state-aware and repair the counterparty
+ * (detach from the watched user's viewer array, close a pending invite, end a
+ * chat, kick viewers, refund held hearts), so nothing dangles. A failed
+ * teardown is non-fatal — the flag itself is already committed and is what
+ * governs future matching.
+ */
+async function flipTest(
+  admin: ReturnType<typeof createSupabaseAdmin>,
+  ids: string[],
+  value: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await admin
+    .from("users")
+    .update({ is_test: value })
+    .in("user_id", ids);
+  if (error) return { ok: false, error: error.message };
+  for (const id of ids) {
+    try {
+      await admin.rpc("app_admin_release_page1", { p_user_id: id });
+      await admin.rpc("app_admin_release_page2", { p_user_id: id });
+    } catch {
+      /* non-fatal: the partition is already in effect for future matching */
+    }
+  }
+  return { ok: true };
+}
+
+/** Admin-only per-user test-environment flag. See flipTest. */
+export async function setUserTest(
+  userId: string,
+  value: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await getAdminUser())) throw new Error("Unauthorized");
+  if (!userId) throw new Error("missing_args");
+  const result = await flipTest(createSupabaseAdmin(), [userId], value);
+  if (!result.ok) return result;
+  revalidatePath(USER_PATH, "page");
+  revalidatePath(ADMIN_USERS_PATH, "page");
+  return { ok: true };
+}
+
 /** A bulk operation requested from the users-list multi-selection. */
 export type BulkAction =
   | { kind: "reset" }
@@ -143,14 +194,15 @@ export type BulkAction =
   | { kind: "release"; page: 1 | 2 }
   | { kind: "assignGroup"; groupId: string }
   | { kind: "removeGroup"; groupId: string }
-  | { kind: "expandFilters" };
+  | { kind: "expandFilters" }
+  | { kind: "setTest"; value: boolean };
 
 /**
  * Apply one action to every selected user. Each user is processed
  * independently — one failure is skipped, never fatal — and `count` reports
  * how many succeeded. The acting admin is never removed by a bulk delete. The
- * users path is revalidated once at the end; a group assignment additionally
- * resyncs availability (assigning a disabled group gates the user).
+ * users path is revalidated once at the end. Group membership is purely
+ * organisational (it no longer gates availability), so it needs no resync.
  */
 export async function bulkUserAction(
   userIds: string[],
@@ -177,6 +229,15 @@ export async function bulkUserAction(
       ok: true,
       count: Number((data as { users?: number } | null)?.users ?? 0),
     };
+  }
+
+  // Moving users between matching environments is likewise set-based.
+  if (action.kind === "setTest") {
+    const result = await flipTest(admin, ids, action.value);
+    if (!result.ok) return { ok: false, count: 0 };
+    revalidatePath(ADMIN_USERS_PATH, "page");
+    revalidatePath(USER_PATH, "page");
+    return { ok: true, count: ids.length };
   }
 
   for (const id of ids) {
@@ -228,10 +289,5 @@ export async function bulkUserAction(
 
   revalidatePath(ADMIN_USERS_PATH, "page");
   revalidatePath(USER_PATH, "page");
-  // Group membership flips can change a user's availability gate (assigning
-  // a disabled group gates them; removing the last group flips them back to
-  // available under the no-group=available rule). Resync covers both directions.
-  if (action.kind === "assignGroup" || action.kind === "removeGroup")
-    await triggerResync();
   return { ok: true, count };
 }
