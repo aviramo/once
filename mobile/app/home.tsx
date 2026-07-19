@@ -17,7 +17,7 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT } from '../src/colors'
-import { XS, SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, TAB, OVERLAY, ROUND_BUTTON_SIZE_SM, SEARCH_WATCHDOG_SLACK_MS, lh } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, SEARCH_WATCHDOG_SLACK_MS, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
@@ -1339,7 +1339,7 @@ export default function HomePage() {
     prevChatUnreadRef.current = chatUnread
     if (prev === 0 && chatUnread > 0 && !overlaysRef.current.includes('chat')) {
       setChatUnreadAlerting(true)
-      const timer = setTimeout(() => setChatUnreadAlerting(false), TAB.pulseTimeoutMs)
+      const timer = setTimeout(() => setChatUnreadAlerting(false), PULSE.timeoutMs)
       return () => { clearTimeout(timer); setChatUnreadAlerting(false) }
     }
   }, [chatUnread])
@@ -2913,54 +2913,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: PRIMARY,
   },
-  tabStripContainer: {
-    width: '100%',
-    // Flat solid deep-wine header (no gradients), seamless with the PRIMARY
-    // status bar, lifted off the white content by a soft shadow alone. The
-    // bottom edge is intentionally square and full-width: a rounded bottom
-    // over a top-flush header reveals the white shell in the corner cutouts
-    // (reads as a rendering glitch), and the soft shadow already gives the
-    // "floating shelf" separation. No overflow:hidden: the sub-label timer
-    // must be free to ride up into the top padding (see TabStrip.tsx).
-    backgroundColor: PRIMARY,
-    // Snug screen-edge margin: SM + XS (a touch more than the original tight
-    // SM, at the user's request — composed from tokens, not a magic literal,
-    // same pattern as paddingBottom below). It is symmetric, so the row only
-    // narrows equally on both sides; TabStrip recomputes its equal flexW from
-    // the new rowW and the chip stays centred per tab — tab structure and
-    // symmetry are untouched. Independent of the selected-tab chip (a
-    // fixed-width element centred on each tab inside the row), so changing
-    // this does not affect the chip.
-    paddingHorizontal: SM + XS,
-    // The selected chip is bottom-anchored and overflows the row by
-    // (indicatorPadV + chipBaselineNudge) px downward, so a plain MD here
-    // left only ~7px between the pill and the content/photo below — it read
-    // as glued to the indicator. Add the chip's downward overflow back so
-    // the *visible* gap beneath the pill is a clean MD; self-corrects if the
-    // anchor tokens change.
-    paddingBottom: TAB.indicatorPadV + TAB.chipBaselineNudge + MD,
-    // No drop-shadow: the header is intentionally flat. Separation from the
-    // white content below is the deep-wine color contrast alone.
-    zIndex: 1,
-  },
-  subPageOverlay: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    start: 0,
-    end: 0,
-    backgroundColor: PRIMARY,
-    shadowColor: BLACK,
-    shadowOffset: { width: -3, height: 0 },
-    shadowOpacity: 0.10,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  // `top` is set dynamically (= TabStrip bottom) so the sheet anchors just
-  // below the tabs and the card doesn't slide under them. `bottom: 0` keeps
-  // the sheet stretched to the bottom of the screen. The wrapper itself is
-  // transparent; the card child carries the white fill + shadow so the empty
-  // wrapper draws nothing while the sheet is closed.
   // Floating menu button on page1, at top-START (opposite the card's group
   // chip at top-END). `start` rather than `left` so it mirrors under RTL.
   hamburger: {

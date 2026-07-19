@@ -5,7 +5,7 @@ import { Text } from './AppText'
 import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { FONT_SCALE } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
-import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, TAB } from '../tokens'
+import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE } from '../tokens'
 import { PRIMARY, PRIMARY_BG, DESTRUCTIVE, WHITE, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
@@ -138,8 +138,8 @@ export function KidsIcon({ color }: { color: string }) {
 // hue carries the meaning: green (default) = "right now" / "right here" on
 // time + distance chips; white = kids-affinity chip (readable on the dark
 // photo scrim, where a black/brand dot would disappear). When
-// `pulsing` is set, opacity loops 1 ↔ pulseOpacity continuously to signal a
-// live ongoing state (e.g. the side tab while broadcasting).
+// `pulsing` is set, opacity loops 1 ↔ PULSE.opacity continuously to signal a
+// live ongoing state (today: the chat partner being online).
 
 const PRESENCE_DOT_SIZE = 7
 
@@ -147,7 +147,7 @@ export function PresenceDot({ color = ONLINE_GREEN, pulsing = false }: { color?:
   const opacity = useSharedValue(1)
   useEffect(() => {
     if (pulsing) {
-      opacity.value = withRepeat(withTiming(TAB.subLabelPulseOpacity, { duration: TAB.subLabelPulsePhaseMs }), -1, true)
+      opacity.value = withRepeat(withTiming(PULSE.opacity, { duration: PULSE.phaseMs }), -1, true)
     } else {
       opacity.value = withTiming(1)
     }

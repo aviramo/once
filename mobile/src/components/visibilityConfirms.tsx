@@ -28,9 +28,9 @@ export type VisibilityConfirmConfig = {
  * (each receives page1=locked + 'remove' push). */
 export function hideProfileConfirm(): VisibilityConfirmConfig {
   return {
-    title: t('home.hideConfirmTitle'),
-    description: t('home.hideConfirmDesc'),
-    confirmLabel: t('home.hideConfirmButton'),
+    title: t('settings.hideConfirmTitle'),
+    description: t('settings.hideConfirmDesc'),
+    confirmLabel: t('settings.hideConfirmButton'),
     topIcon: <EyeOffIcon color={PRIMARY} size={32} />,
   }
 }
