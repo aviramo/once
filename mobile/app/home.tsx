@@ -2726,7 +2726,9 @@ export default function HomePage() {
                     and tears it down + permanent-blocks the pair. */}
                 <ConfirmDialog
                   visible={!!reportTargetId}
-                  icon={<ShieldIcon color={PRIMARY} size={32} />}
+                  // Filled, matching the flag on the card that opens this dialog:
+                  // an outline shield read lighter than the solid one just tapped.
+                  icon={<ShieldIcon color={PRIMARY} fill={PRIMARY} size={32} />}
                   title={t('chat.reportTitle')}
                   description={t('chat.reportDesc')}
                   noteInput={{
