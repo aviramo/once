@@ -38,21 +38,19 @@ const SCROLL_TO_END_MS = 1400
 // reimplementing the scroll.
 //
 // The stack is `column-reverse`, so actions[0] anchors at the BOTTOM and later
-// entries stack upward. `size` lets a quiet secondary action (the report flag)
-// ride the same column at half diameter instead of needing its own overlay.
+// entries stack upward.
 export type CardAction = {
   key: string
   icon: React.ReactNode
   onPress?: () => void
   bg?: string
-  size?: number
 }
 
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
   return (
     <View style={styles.actionStack}>
       {actions.map(a => (
-        <RoundButton key={a.key} size={a.size} bg={a.bg} onPress={a.onPress}>
+        <RoundButton key={a.key} bg={a.bg} onPress={a.onPress}>
           {a.icon}
         </RoundButton>
       ))}
@@ -689,19 +687,32 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
-          {/* Group chip — overlaid at the TOP corner of the hero photo, only
-              when the snapshot carries a shared-group name (server embeds it
-              via make_profile when viewer and subject share any group). Same
-              on-photo Chip styling as the bottom info chips, custom GroupsIcon
-              to read as "same group". */}
-          {sections[0]?.type === 'photo' && match.group_name ? (
-            <View pointerEvents="box-none" style={styles.groupOverlay}>
-              <Chip
-                renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                text={match.group_name}
-                tone="neutral"
-                onPhoto
-              />
+          {/* Top-END row: the shared-group chip and the report flag, in that
+              order, so the flag is the one touching the screen edge. (Row
+              direction flips under RTL, so `end` keeps it there both ways.)
+
+              The group chip appears only when the snapshot carries a
+              group_name, which the server embeds via make_profile when viewer
+              and subject share a group. The flag is unconditional, so the row
+              renders whenever either is present.
+
+              Top-START is deliberately left empty: the shell paints its
+              floating chrome there (home's hamburger, a sheet's close X). */}
+          {sections[0]?.type === 'photo' && (match.group_name || onReport) ? (
+            <View pointerEvents="box-none" style={styles.topEndOverlay}>
+              {match.group_name ? (
+                <Chip
+                  renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                  text={match.group_name}
+                  tone="neutral"
+                  onPhoto
+                />
+              ) : null}
+              {onReport ? (
+                <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
+                  <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
+                </RoundButton>
+              ) : null}
             </View>
           ) : null}
 
@@ -764,19 +775,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 key: 'like',
                 icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
               }]
-              const resolved: Array<CardAction & { onPress: () => void }> =
-                base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
-              // Report rides the top of the same column (the stack is
-              // column-reverse, so appending puts it ABOVE the heart) at half
-              // diameter, reading as a quiet secondary affordance. It used to
-              // sit at the card's top-start corner, where it collided with the
-              // shell's floating hamburger.
-              if (onReport) resolved.push({
-                key: 'report',
-                icon: <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />,
-                onPress: onReport,
-                size: ROUND_BUTTON_SIZE_SM,
-              })
+              const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
               return resolved.length > 0 ? <CardActionStack actions={resolved} /> : null
             })()}
           </View>
@@ -879,11 +878,14 @@ const styles = StyleSheet.create({
     gap: MD,
     padding: MD,
   },
-  groupOverlay: {
+  topEndOverlay: {
     position: 'absolute',
     top: 0,
     end: 0,
     padding: MD,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SM,
   },
   infoLeft: {
     flex: 1,
