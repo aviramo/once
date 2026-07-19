@@ -55,6 +55,7 @@ export default {
   'photo.sub': 'Add 2-6 photos',
   'photo.confirm': 'Confirm & Continue',
   'photo.almostDone': 'One more step and we are done',
+  'photo.uploadFailed': 'Photo upload failed. You cannot continue without a photo, please try again.',
 
   // Onboarding bio
   'bio.title': 'Your moment',
@@ -138,6 +139,10 @@ export default {
   'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone.",
   'settings.profile': 'Edit your profile',
   'settings.account': 'Account',
+  'settings.visibility': 'Visibility',
+  'settings.visibilityVisible': 'Visible',
+  'settings.visibilityHidden': 'Hidden',
+  'settings.visibilityHiddenNoHearts': 'You are out of hearts. You need hearts to be visible again.',
   'settings.credits': 'Hearts',
   // Suffix word in the hearts-row value when the user has extras, e.g.
   // "1/3 + 5 extra". Distinct word so "+ 5" doesn't read as math.

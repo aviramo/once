@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker'
 import Svg, { Path, Line, Circle, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
-import { useUserStore, resolveLocationType, type LocationType } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectIsHidden, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -22,8 +22,9 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
+import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
+import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BugReportPopup } from '../src/components/BugReportPopup'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -2571,6 +2572,33 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   // free/pro switch here any more.
   const [starsPopupVisible, setStarsPopupVisible] = useState(false)
   const [buyExtraOpen, setBuyExtraOpen] = useState(false)
+  // Visibility (visible <-> hidden). This row is the ONLY way back to visible
+  // now that page2 has no UI of its own, so it must stay reachable and must
+  // not silently fail. Going hidden kicks every watcher pinned to the user,
+  // so it is confirmed first; going visible is immediate.
+  const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
+  const [visibilityBusy, setVisibilityBusy] = useState(false)
+  const isHidden = selectIsHidden(profile)
+  // The server auto-hides anyone whose wallet hits zero (the dispatcher's
+  // maybeAutoHide fires app_lock2 whenever balance + extra is 0 and page2 is
+  // free). Calling app/free2 in that state would be undone within the same
+  // round trip and the row would read as broken, so out of hearts routes to
+  // the buy-extra picker instead.
+  const outOfHearts = creditTotal(profile) === 0
+
+  const runVisibility = useCallback(async (endpoint: string) => {
+    if (visibilityBusy) return
+    setVisibilityBusy(true)
+    try { await invoke(endpoint) } catch (e) { console.error(e) }
+    finally { setVisibilityBusy(false); setHideConfirmOpen(false) }
+  }, [visibilityBusy])
+
+  const onVisibilityPress = useCallback(() => {
+    tap()
+    if (!isHidden) { setHideConfirmOpen(true); return }
+    if (outOfHearts) { setBuyExtraOpen(true); return }
+    runVisibility('app/free2')
+  }, [isHidden, outOfHearts, runVisibility])
 
   const onOpenBuyExtra = useCallback(() => {
     tap()
@@ -2602,6 +2630,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   }, [deleting, finishAndGoToLogin])
 
   if (!profile) return null
+
+  const hideConfirmConfig = hideProfileConfirm()
 
   // Hearts popup content. Two lines: current balance + extra, and the next
   // grant time (dropped when unknown). The "buy more" button opens the
@@ -2655,8 +2685,19 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   return (
     <>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
-        {/* Stars FIRST in the group (user request), then Account. Tapping
-            stars opens the stars/package popup (balance + renewal + plan). */}
+        {/* Visibility FIRST: it is a game-state control, not an account
+            detail, and it is the only path back to being discoverable. */}
+        <SelectFieldRow
+          grouped
+          label={t('settings.visibility')}
+          displayValue={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          subtitle={isHidden && outOfHearts ? t('settings.visibilityHiddenNoHearts') : undefined}
+          onPress={onVisibilityPress}
+          icon={isHidden ? <EyeOffIcon color={WHITE} size={ICON.md} /> : <EyeOpenIcon color={WHITE} size={ICON.md} />}
+        />
+        <View style={styles.accountActionDivider} />
+        {/* Stars, then Account. Tapping stars opens the stars/package popup
+            (balance + renewal + plan). */}
         <SelectFieldRow
           grouped
           label={t('settings.credits')}
@@ -2713,6 +2754,17 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       <BugReportPopup
         visible={bugReportVisible}
         onDismiss={() => setBugReportVisible(false)}
+      />
+      <ConfirmDialog
+        visible={hideConfirmOpen}
+        icon={hideConfirmConfig.topIcon}
+        title={hideConfirmConfig.title}
+        description={hideConfirmConfig.description}
+        confirmLabel={hideConfirmConfig.confirmLabel}
+        onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
+        onConfirm={() => runVisibility('app/lock2')}
+        busy={visibilityBusy}
+        draggable
       />
       <ConfirmDialog
         visible={signOutDialog}

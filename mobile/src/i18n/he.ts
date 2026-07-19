@@ -55,6 +55,7 @@ export default {
   'photo.sub': 'הוסף 2-6 תמונות',
   'photo.confirm': 'אישור והמשך',
   'photo.almostDone': 'עוד צעד אחד ומסיימים',
+  'photo.uploadFailed': 'העלאת התמונות נכשלה. בלי תמונה אי אפשר להמשיך, נסה שוב.',
 
   // Onboarding bio
   'bio.title': 'הרגע שלך',
@@ -138,6 +139,10 @@ export default {
   'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד.',
   'settings.profile': 'עריכת הפרופיל',
   'settings.account': 'חשבון',
+  'settings.visibility': 'נראות',
+  'settings.visibilityVisible': 'גלוי',
+  'settings.visibilityHidden': 'מוסתר',
+  'settings.visibilityHiddenNoHearts': 'נגמרו הלבבות, צריך לבבות כדי לחזור להיות גלוי',
   'settings.credits': 'לבבות',
   // Suffix word in the hearts-row value when the user has extras, e.g.
   // "1/3 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.

@@ -286,6 +286,19 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
   d.relations = relationsWithCompat
 }
 
+/** True when the user has hidden themselves from discovery: page2 is locked
+ *  and no invite card is occupying it (a pending / dead invite also parks
+ *  page2 at a non-free state, but that is an interaction, not a hide).
+ *
+ *  Read by home.tsx (the hidden placeholder) AND by the settings visibility
+ *  row, which is the only way back to visible now that page2 has no UI of its
+ *  own. Two consumers, one definition — do not re-derive it inline. */
+export function selectIsHidden(profile: UserProfile | null | undefined): boolean {
+  const page2 = profile?.relations?.page2
+  const hasInviteCard = !!page2 && !Array.isArray(page2)
+  return profile?.relations?.page2State === 'locked' && !hasInviteCard
+}
+
 export const useUserStore = create<UserStore>((set, get) => ({
   profile: null,
   loading: false,
