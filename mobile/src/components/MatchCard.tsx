@@ -8,7 +8,7 @@ import { PullScrollView, PullContext } from './PullPane'
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
 import { t, tg } from '../i18n'
-import { ageFromTitle } from '../lib/profileTitle'
+import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import type { FamilyData } from '../lib/family'
@@ -424,8 +424,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const hasDistance = match.distance != null && !isNaN(match.distance)
   const proximityStr = formatProximity(match.distance, timeIso, match.is_male, viewerType, subjectLocationType, hideTime)
   const proximityLive = isDistanceHere(match.distance) || (!hideTime && isLastSeenJustNow(timeIso))
-  // Age is shown as a small on-photo info chip (the name lives in the home
-  // tab, so neither name nor age is overlaid on the photo any more).
+  // Name and age are the two halves of the server's combined `title`, and both
+  // ride the first chips line. The name used to live in the home TAB; that
+  // strip was deleted with the pager (2026-07-19), which left the card showing
+  // a person with no name at all.
+  const nameChipText = nameFromTitle(match.title)
   const age = ageFromTitle(match.title)
   const ageChipText = age ? tg('home.ageChip', match.is_male).replace('{age}', age) : ''
 
@@ -697,14 +700,23 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
-                {ageChipText ? (
+                {/* Identity line: name then age, side by side. The name chip
+                    carries no icon — it is who this is, not an attribute of
+                    them. chipsLine wraps, so a long name pushes the age to a
+                    second row rather than squeezing it. */}
+                {nameChipText || ageChipText ? (
                   <View style={styles.chipsLine}>
-                    <Chip
-                      renderIcon={c => <CakeIcon color={c} size={ICON.sm} />}
-                      text={ageChipText}
-                      tone="neutral"
-                      onPhoto
-                    />
+                    {nameChipText ? (
+                      <Chip text={nameChipText} tone="neutral" onPhoto />
+                    ) : null}
+                    {ageChipText ? (
+                      <Chip
+                        renderIcon={c => <CakeIcon color={c} size={ICON.sm} />}
+                        text={ageChipText}
+                        tone="neutral"
+                        onPhoto
+                      />
+                    ) : null}
                   </View>
                 ) : null}
                 {proximityStr ? (
