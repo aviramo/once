@@ -1,33 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform } from 'react-native'
-import Animated, { useSharedValue, useDerivedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition, useEvent, useHandler } from 'react-native-reanimated'
-import PagerView from 'react-native-pager-view'
-
-// PagerView wrapped for Reanimated so onPageScroll events can be handled in a
-// worklet (UI thread) rather than crossing the JS bridge each frame. The JS
-// callback path noticeably lags the swipe, leaving the TabStrip indicator
-// behind the gesture.
-const AnimatedPagerView = Animated.createAnimatedComponent(PagerView)
-
-function usePagerScrollHandler(
-  handlers: { onPageScroll: (e: { position: number; offset: number }) => void },
-) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { context, doDependenciesDiffer } = useHandler(handlers as any)
-  return useEvent(
-    (event: unknown) => {
-      'worklet'
-      void context
-      const e = event as { eventName: string; position: number; offset: number }
-      const { onPageScroll } = handlers
-      if (onPageScroll && e.eventName.endsWith('onPageScroll')) {
-        onPageScroll(e)
-      }
-    },
-    ['onPageScroll'],
-    doDependenciesDiffer,
-  ) as unknown as (e: { nativeEvent: { position: number; offset: number } }) => void
-}
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition } from 'react-native-reanimated'
 import { Text } from '../src/components/AppText'
 const AnimatedText = Animated.createAnimatedComponent(Text)
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -44,18 +17,18 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT } from '../src/colors'
-import { XS, SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, TAB, SEARCH_WATCHDOG_SLACK_MS, lh } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, TAB, OVERLAY, ROUND_BUTTON_SIZE_SM, SEARCH_WATCHDOG_SLACK_MS, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { RisingCard } from '../src/components/RisingCard'
-import { TabStrip, type TabSpec } from '../src/components/TabStrip'
+import { OverlaySheet, chromeReserve } from '../src/components/OverlaySheet'
+import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
 import { PresenceDot } from '../src/components/Chip'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullPane, usePullBehavior } from '../src/components/PullPane'
-import { useSlidingActive } from '../src/lib/gesture'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
 import ChatPage from './chat'
 import { Image } from 'expo-image'
@@ -64,7 +37,7 @@ import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { CloseBoldIcon, PauseIcon, HeartIcon, EyeOpenIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon } from '../src/components/icons'
+import { CloseBoldIcon, PauseIcon, HeartIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon, HamburgerIcon, DotsVerticalIcon } from '../src/components/icons'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -383,6 +356,11 @@ function formatClock(secsLeft: number): string {
 // of snapping.
 const STATUS_LAYOUT = LinearTransition
 
+// Invitation-countdown type size. Deliberately its own token rather than a
+// TEXT step: the clock is the one glanceable number on the card and reads a
+// notch above the body copy.
+const STATUS_TIMER_FONT = TEXT.xl
+
 const statusCardStyles = StyleSheet.create({
   container: {
     backgroundColor: PRIMARY,
@@ -408,10 +386,22 @@ const statusCardStyles = StyleSheet.create({
     fontWeight: WEIGHT.extrabold,
     color: WHITE,
   },
+  // The invitation countdown, sitting between the body text and the buttons.
+  // Tabular figures so the digits don't jitter as the seconds tick.
+  timer: {
+    marginTop: MD,
+    fontSize: STATUS_TIMER_FONT,
+    lineHeight: lh(STATUS_TIMER_FONT),
+    fontWeight: WEIGHT.extrabold,
+    color: WHITE,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+  },
 })
 
 // Shared heading+body text for every StatusCard variant (InviteTimerCard /
-// EventMessageCard / ViewersStatusCard). One AppText-backed paragraph (real weighted Noto faces, not synthetic): the
+// EventMessageCard / ReplyingInviteCard). One AppText-backed paragraph (real weighted Noto faces, not synthetic): the
 // bold heading terminated with a period, a space, then the body — a single
 // flowing run so it wraps naturally but never hard-breaks between heading
 // and body. The period is only appended when the heading doesn't already
@@ -427,19 +417,37 @@ function StatusCardText({ title, description }: { title: string; description: st
   )
 }
 
+// The live invitation countdown, drawn inside whichever status card is
+// announcing that invitation. It used to ride in the TabStrip as a sub-label;
+// with the tabs gone it moved here (user decision 2026-07-19), which also
+// removed the sequencing hack that held the tab clock back until the card had
+// slid in — a clock rendered inside its own card cannot precede it.
+//
+// `frozen` holds it at 00:00 after an invitation expires, so "this is over" is
+// said by the same clock rather than by its disappearance.
+//
+// The tick lives in this component, not in HomePage, so a second of the
+// countdown re-renders only the card.
+function StatusTimer({ expiresAt, frozen }: { expiresAt?: string | null; frozen?: boolean }) {
+  const secsLeft = useSecsLeft(frozen ? null : expiresAt ?? null)
+  if (!frozen && !expiresAt) return null
+  return (
+    <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.timer}>
+      {formatClock(frozen ? 0 : secsLeft)}
+    </AnimatedText>
+  )
+}
+
 // Page1 "you sent an invitation" timer card. Heading-led body
-// (StatusCardText) + a plain full-width cancel button. The live countdown that used to ride inside
-// the button's footer now sits under the Once tab label, alongside the
-// symmetric page2 incoming-invite clock under the invite tab. Keeping the
-// two countdowns in the same chrome row (instead of one in the button and
-// one in the tab) means both sides of the invitation read the same way.
-function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean }) {
+// (StatusCardText) + the live countdown + a plain full-width cancel button.
+function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; expiresAt?: string | null; onCancel: () => void; busy?: boolean }) {
   const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
   const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
 
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={description} />
+      <StatusTimer expiresAt={expiresAt} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.cancelWaitingBtn')}
@@ -456,11 +464,13 @@ function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetI
 // Top-of-card info component for terminal locked-message states (page1 after
 // a terminal event, page2 dead invite). Same scaffold as InviteTimerCard —
 // heading-led body (StatusCardText) + a single full-width "back to game"
-// button. No timer here, so no footer on the button.
-function EventMessageCard({ title, description, onContinue, busy }: { title: string; description: string; onContinue: () => void; busy?: boolean }) {
+// button. `frozen` shows the countdown held at 00:00 when the invitation ended
+// by expiring; every other terminal message draws no clock.
+function EventMessageCard({ title, description, frozen, onContinue, busy }: { title: string; description: string; frozen?: boolean; onContinue: () => void; busy?: boolean }) {
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={description} />
+      {frozen ? <StatusTimer frozen /> : null}
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.endedBack')}
@@ -499,11 +509,15 @@ function ReplyingInviteCard({
   busy,
   acceptLoading,
   footerInset,
+  expiresAt,
 }: {
   title: string
   description: string
   acceptLabel: string
   declineLabel: string
+  /** Live countdown for an INCOMING invitation (the page2 use). The page1
+   * send-prompt has nothing ticking yet, so it passes none. */
+  expiresAt?: string | null
   /** Stars the accept action spends — shown as the in-button cost badge
    * (heart + N). Reads "0" on the free page1 invite prompt so the user
    * sees that inviting costs nothing. */
@@ -534,6 +548,7 @@ function ReplyingInviteCard({
   return (
     <View style={[statusCardStyles.container, footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null]}>
       <StatusCardText title={title} description={description} />
+      <StatusTimer expiresAt={expiresAt} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <View style={statusButtonStyles.btnRow}>
           <View style={statusButtonStyles.btnDecline}>
@@ -629,145 +644,95 @@ const statusButtonStyles = StyleSheet.create({
 export default function HomePage() {
   const { top: topInset, bottom: bottomInset } = useSafeAreaInsets()
   const { profile } = useUserStore()
-  // ── Horizontal pager shell ──────────────────────────────────────────────
-  // 3-page layout: [settings(0), home(1), side(2)]
-  // RTL right→left: Menu | Home | Side(page2/chat)
-  // A global TabStrip above the pager owns the title; pages are pure content.
-  type PaneIndex = 0 | 1 | 2
-  const SETTINGS_PANE: PaneIndex = 0
-  const HOME_PANE: PaneIndex = 1
-  const PAGE2_PANE: PaneIndex = 2
-  const CHAT_PANE: PaneIndex = 2  // same slot as PAGE2_PANE
-  // If the app was launched from a killed state by tapping a push, pick the
-  // matching pane up front so the user lands on it instead of seeing a flash
-  // of Home before re-routing. Cleared after first read so it doesn't replay
-  // on remount.
+  // ── Single-screen shell ─────────────────────────────────────────────────
+  // The app is ONE screen: page1 (home). Everything else rises over it as a
+  // full-screen OverlaySheet and is dismissed by swiping down — the same
+  // gesture, from the same machinery, as page1's pull-to-skip.
+  //
+  // Two kinds of overlay, deliberately modelled differently:
+  //
+  //   STACKED (this state) — user-driven surfaces the user opens and closes:
+  //     menu (settings), and the profile sheet stacked on top of it. Chat is
+  //     here too: it is opened from the card's chat button (or a push tap) and
+  //     closed by the user; the conversation itself lives on regardless.
+  //
+  //   DERIVED (not in this state) — the incoming-invite / dead-invite card.
+  //     Its lifetime belongs to the server, so it is computed from `relations`
+  //     rather than pushed and popped (see `inviteOverlayOpen`). That is what
+  //     makes it impossible for it to fall out of sync with the server, and it
+  //     is why a push-cold-start into an invite needs no routing at all.
+  //
+  // Paint order is low → high: home < invite < chat < menu < profile sheet.
+  // Menu sits above everything on purpose — it is the one surface that stays
+  // reachable while the availability gate is on.
+  type Overlay = 'menu' | 'chat' | 'profile'
+  const [overlays, setOverlays] = useState<Overlay[]>([])
+  const overlaysRef = useRef(overlays)
+  useEffect(() => { overlaysRef.current = overlays }, [overlays])
+  const menuOpen = overlays.includes('menu')
+  const chatOpen = overlays.includes('chat')
+  const profileSheetOpen = overlays.includes('profile')
+
+  const openOverlay = useCallback((kind: Overlay) => {
+    tap()
+    setOverlays(prev => (prev.includes(kind) ? prev : [...prev, kind]))
+  }, [])
+  const closeOverlay = useCallback((kind: Overlay) => {
+    tap()
+    setOverlays(prev => prev.filter(o => o !== kind))
+  }, [])
+  const closeTopOverlay = useCallback(() => {
+    tap()
+    setOverlays(prev => prev.slice(0, -1))
+  }, [])
+
+  // If the app was launched from a killed state by tapping a push, open the
+  // matching overlay up front so the user lands on it instead of seeing a
+  // flash of home first. Cleared after first read so it doesn't replay on
+  // remount.
   // Tap-routing rule (matches CLAUDE.md "Push notifications" section):
-  //   page2 codes → PAGE2_PANE  (incoming-invite world: pending / locked-with-message)
-  //   chat codes  → CHAT_PANE   (active chat — same physical slot as PAGE2_PANE)
-  //   page1 codes → HOME_PANE   (default; covered by `return null`)
+  //   chat codes  → the chat overlay
+  //   page2 codes → nothing to route: the invite overlay is DERIVED, so it is
+  //                 already up the moment the store hydrates
+  //   page1 codes → home, i.e. no overlay
   const PAGE2_CODES = new Set(['invite-in', 'extended', 'expired-in', 'cancelled-in'])
   const CHAT_CODES = new Set(['chat', 'match'])
-  const initialPaneFromNotif = useMemo<PaneIndex | null>(() => {
+  const initialOverlayFromNotif = useMemo<Overlay | null>(() => {
     const type = getInitialNotificationType()
     if (!type) return null
-    if (CHAT_CODES.has(type)) return CHAT_PANE
-    if (PAGE2_CODES.has(type)) return PAGE2_PANE
-    return null
+    return CHAT_CODES.has(type) ? 'chat' : null
   }, [])
   useEffect(() => {
-    if (initialPaneFromNotif !== null) clearInitialNotification()
+    if (initialOverlayFromNotif !== null) clearInitialNotification()
   }, [])
-  // First-render only: state→chat transitions during the session are owned
-  // by the chat-transition effect; this just seats the pager on mount.
-  const initialPane = useMemo<PaneIndex>(() => {
-    if (initialPaneFromNotif !== null) return initialPaneFromNotif
-    if (useUserStore.getState().profile?.state === 'chat') return CHAT_PANE
-    return HOME_PANE
+  // First-render only: a cold start while already in chat opens the chat
+  // overlay directly (user decision 2026-07-19). state→chat transitions during
+  // the session are owned by the chat-transition effect below.
+  useEffect(() => {
+    if (initialOverlayFromNotif === 'chat' || useUserStore.getState().profile?.state === 'chat') {
+      setOverlays(['chat'])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const [paneIndex, setPaneIndex] = useState<PaneIndex>(initialPane)
-  // Unread message count reported by ChatPage — shown as a badge next to the
-  // "Chat" title while we're on the home pane.
+  // Unread message count reported by ChatPage — drives the alert pulse on the
+  // card's open-chat button while the chat overlay is closed.
   const [chatUnread, setChatUnread] = useState(0)
   // Whether the chat partner is currently online — reported by ChatPage via
-  // its presence channel. Drives the green presence dot beside the chat
-  // (side-tab) icon. Stays whatever it last was after chat ends; the
-  // `chatAvailable` gate on the side-tab spec keeps a stale `true` harmless.
+  // its presence channel. Drives the presence dot in the chat sheet's header.
   const [partnerOnline, setPartnerOnline] = useState(false)
-  // SettingsPage reports when the user is editing photos (iOS-style jiggle).
-  // While that's active, PagerView scrolling is disabled so dragging a photo
-  // to reorder doesn't slide the whole pane.
-  const sliding = useSlidingActive()
-  const pagerRef = useRef<PagerView>(null)
-  const paneIndexRef = useRef(paneIndex)
-  // Float progress across panes (0..N-1) driven by PagerView onPageScroll.
-  // Feeds `tabProgress`, which drives BOTH the TabStrip label cross-fade AND
-  // the selected chip (position + size) — one live, linear, synced motion.
-  const pagerProgress = useSharedValue<number>(paneIndex)
-  useEffect(() => {
-    paneIndexRef.current = paneIndex
-  }, [paneIndex])
-  // Dismiss any open keyboard on every pane transition so it never lingers
-  // visually over a pane that doesn't own the focused input.
-  useEffect(() => { requestAnimationFrame(() => Keyboard.dismiss()) }, [paneIndex])
+  // Dismiss any open keyboard whenever the overlay stack changes so it never
+  // lingers visually over a surface that doesn't own the focused input.
+  useEffect(() => { requestAnimationFrame(() => Keyboard.dismiss()) }, [overlays.length])
 
-  // Profile sheet — rises from below using the same SlideInDown/SlideOutDown
-  // layout animations as the home-pane MatchCard, so both cards mount/unmount
-  // with identical motion. The swipe-down-to-dismiss gesture writes to a
-  // separate dragY shared value (analogous to MatchCard's pull-style transform)
-  // so the live finger-drag composes cleanly with the declarative mount motion.
-  const [profileSheetOpen, setProfileSheetOpen] = useState(false)
-  const profileSheetConfigRef = useRef(profileSheetOpen)
-  useEffect(() => { profileSheetConfigRef.current = profileSheetOpen }, [profileSheetOpen])
-  const profileSheetHeaderBottom = useSharedValue(0)
-  // Measured bottom of the home shell's TabStrip. Used to anchor the profile
-  // sheet just below the tabs so the card doesn't slide behind them.
-  const tabStripBottom = useSharedValue(0)
-  // Measured height of the page1 pane (the area below the TabStrip that the
+  // Measured height of the page1 pane (the area the
   // match card fills). Handed to MatchCard as `cardHeight` so the hero photo
   // is correctly sized on its first render — the card then rises as one solid
   // block instead of measuring-itself-then-revealing partway up the slide.
   const [paneHeight, setPaneHeight] = useState(0)
-  // Same unified pull behaviour as page1/page2, in 'sheet' mode: manual
-  // activation with header-vs-scroll arbitration. Threshold/flick/commit
-  // motion are all object-owned and identical to the other surfaces (slide
-  // off, then onCommit = close). No PullContext — PreviewFieldPage manages
-  // its own scroll via dismissGestureRef + onScrollAtTop. No first-time
-  // swipe-down tutorial here: the user explicitly disabled the demo
-  // choreography on their own profile card (settings "My profile" sheet).
-  // Omitting `tutorial` makes usePullBehavior bail before any choreography;
-  // the page1/page2 tutorials are unaffected.
-  const closeSheetViaSwipe = useCallback(() => setProfileSheetOpen(false), [])
-  const profilePull = usePullBehavior({
-    activation: 'sheet',
-    enabled: true,
-    onCommit: closeSheetViaSwipe,
-    headerBottom: profileSheetHeaderBottom,
-  })
-  // ── Sheet open-progress → TabStrip morph (0 = closed, 1 = fully open) ────
-  // `profileSheetOpenV` ramps with the card's SlideIn/SlideOut (system
-  // default withTiming, matching the card's own mount motion — no magic
-  // duration). The live swipe-down drag (`profilePull.pullY`) is folded in
-  // and normalised by the SAME commit distance as the gesture, so the morph
-  // tracks the card 1:1 and lands exactly at "closed" the instant the drag
-  // reaches the dismiss point, then snaps back if released short.
-  // `tabProgress` blends the real pager position toward HOME_PANE by this
-  // amount: with the sheet shut it IS the pager progress (zero behaviour
-  // change); as the sheet rises the selected-chip slides Settings→Home and
-  // the Home tab's word morphs "Once"→"My profile" in lockstep.
-  const profileSheetOpenV = useSharedValue(0)
-  useEffect(() => {
-    profileSheetOpenV.value = withTiming(profileSheetOpen ? 1 : 0)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileSheetOpen])
-  const profileSheetProgress = useDerivedValue(() => {
-    // SAME commit distance as the gesture (object-owned single source) so
-    // the morph tracks the card 1:1 and can never drift from the threshold.
-    const span = profilePull.commitDistance
-    const d = span > 0 ? Math.min(1, Math.max(0, profilePull.pullY.value / span)) : 0
-    return profileSheetOpenV.value * (1 - d)
-  })
-  // Drives the TabStrip label cross-fade AND the selected chip. The
-  // profile-sheet blend toward HOME_PANE is folded in here, so opening the
-  // sheet still slides the chip Settings->Home (and morphs "Once"->"My
-  // profile") with no separate chip driver.
-  const tabProgress = useDerivedValue(() => {
-    const p = pagerProgress.value
-    return p + (HOME_PANE - p) * profileSheetProgress.value
-  })
-  // PullPane owns the anchor (top = tabStripBottom via topAnchor) and the
-  // live drag transform; the RisingCard inside still owns SlideIn/SlideOut.
-  const openProfileSheet = useCallback(() => {
-    profilePull.reset()
-    setProfileSheetOpen(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  const closeProfileSheet = useCallback(() => {
-    tap()
-    profilePull.setScrollAtTop(true)
-    setProfileSheetOpen(false)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // The profile sheet stacks ON TOP of the menu it was opened from, so
+  // closing it returns to the menu rather than all the way home.
+  const openProfileSheet = useCallback(() => openOverlay('profile'), [openOverlay])
+  const closeProfileSheet = useCallback(() => closeOverlay('profile'), [closeOverlay])
 
   const shellWidth = useSharedValue(Dimensions.get('window').width)
 
@@ -820,85 +785,48 @@ export default function HomePage() {
   })()
 
 
-  const goToPane = (index: PaneIndex) => {
-    // While geo-gated the side slot (page2/chat) is unreachable — swallow any
-    // navigation to it (notification taps, programmatic routes). Menu/Home
-    // stay reachable so the user can still open settings / change location.
-    if (geoGated && index === PAGE2_PANE) return
-    if (index === paneIndexRef.current) return
-    tap()
-    paneIndexRef.current = index
-    setPaneIndex(index)
-    pagerRef.current?.setPage(index)
-  }
-
   // ── Notification tap handler ────────────────────────────────────────────
-  // Route to the right pane when the user taps a push notification.
-  const goToPaneRef = useRef(goToPane)
-  goToPaneRef.current = goToPane
+  // Chat codes open the chat overlay. page2 codes need no routing: the invite
+  // overlay is derived from `relations`, so it is already up. Everything else
+  // means "look at home", which is the empty stack.
+  // Both values are read through refs assigned during render, because
+  // `overlaysGated` depends on isPermMode, which is derived much further down.
+  const openOverlayRef = useRef(openOverlay)
+  openOverlayRef.current = openOverlay
+  const overlaysGatedRef = useRef(false)
   useEffect(() => {
     return addNotificationTapListener(type => {
-      if (CHAT_CODES.has(type)) goToPaneRef.current(CHAT_PANE)
-      else if (PAGE2_CODES.has(type)) goToPaneRef.current(PAGE2_PANE)
-      else goToPaneRef.current(HOME_PANE)
+      if (CHAT_CODES.has(type)) {
+        if (!overlaysGatedRef.current) openOverlayRef.current('chat')
+      } else if (!PAGE2_CODES.has(type)) {
+        setOverlays([])
+      }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const onPageSelected = (e: { nativeEvent: { position: number } }) => {
-    const pane = e.nativeEvent.position as PaneIndex
-    // Defense in depth: if the pager ever lands on the side slot while gated
-    // (e.g. mounted there from a stale notification), snap back to Home.
-    if (geoGated && pane === PAGE2_PANE) {
-      paneIndexRef.current = HOME_PANE
-      setPaneIndex(HOME_PANE)
-      pagerRef.current?.setPageWithoutAnimation(HOME_PANE)
-      return
-    }
-    if (pane !== paneIndexRef.current) {
-      tap()
-      paneIndexRef.current = pane
-      setPaneIndex(pane)
-    }
-  }
-
-  // If the gate turns on while the user is on the side slot (or mounted there
-  // from a notification), pull them back to Home so the gated slot can't stay
-  // on screen.
-  useEffect(() => {
-    if (geoGated && paneIndexRef.current === PAGE2_PANE) {
-      paneIndexRef.current = HOME_PANE
-      setPaneIndex(HOME_PANE)
-      pagerRef.current?.setPageWithoutAnimation(HOME_PANE)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geoGated])
-
-
   const openShellSubPage = (config: SubPageConfig): Promise<void> => {
-    tap()
     if (config.kind === 'profileSection') openProfileSheet()
     return Promise.resolve()
   }
 
 
 
-  // Android hardware back — when on the sub-page, slide it out;
-  // when on any other side pane, slide back to home.
+  // Android hardware back. Priority, top of the stack downward:
+  //   1. the topmost stacked overlay (profile sheet → menu → chat) pops
+  //   2. the derived invite overlay: pending declines (through its confirm),
+  //      dead is swallowed so back can't leave a card the server still owns
+  //   3. nothing left → false, i.e. leave the app
+  // Assigned during render (below) because step 2 needs values declared after
+  // this effect; the effect itself must stay mounted once.
+  const inviteBackRef = useRef<(() => boolean) | null>(null)
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (profileSheetConfigRef.current) {
-        closeProfileSheet()
+      if (overlaysRef.current.length > 0) {
+        closeTopOverlay()
         return true
       }
-      const idx = paneIndexRef.current
-      if (idx !== HOME_PANE) {
-        tap()
-        paneIndexRef.current = HOME_PANE
-        setPaneIndex(HOME_PANE)
-        pagerRef.current?.setPage(HOME_PANE)
-        return true
-      }
-      return false
+      return inviteBackRef.current?.() ?? false
     })
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -928,17 +856,12 @@ export default function HomePage() {
   // relations.last_add_at still exist and are untouched — nothing calls them.
   const isMale = profile?.is_male ?? null
 
-  const [page2Alerting, setPage2Alerting] = useState(false)
+  // One-shot flag for the incoming-invite card's discovery animation. The
+  // companion `page2Alerting` pulse is gone with the tab it blinked: the
+  // invitation now announces itself by raising its own overlay.
   const [page2Discovery, setPage2Discovery] = useState(false)
   const [chatUnreadAlerting, setChatUnreadAlerting] = useState(false)
   const prevChatUnreadRef = useRef(0)
-  // Stars-balance change → the Menu tab's standard 3-blink `alerting` pulse on
-  // the balance number. Same baseline-null + pulseTimeoutMs coalescing pattern
-  // as the viewer-count pulse: a burst of changes inside the window reads as
-  // one pulse, and a cold mount that loads with a balance (null→N) does NOT
-  // pulse. The flag clears on the timeout right after the blink.
-  const [starsAlerting, setStarsAlerting] = useState(false)
-  const prevStarsBalanceRef = useRef<number | null>(null)
   // Affordability: total spendable = balance + extra. Charging deducts
   // balance first, but the user can spend any heart they have. The
   // balance/extra split is displayed in settings, not here.
@@ -1364,8 +1287,10 @@ export default function HomePage() {
     return () => { cancelled = true; sub?.remove(); clearInterval(id) }
   }, [locPerm, locFailed, customLoc])
 
-  // Anchor pane on state transitions. Entering CHAT animates to slot 3;
-  // leaving CHAT snaps back to home (slot 1).
+  // A fresh match raises the chat overlay; the chat ending drops it. Nothing
+  // else needs anchoring any more: a resolved invite closes its own overlay
+  // by derivation, and the menu is never yanked out from under the user (they
+  // are intentionally in there, and settings actions can change state).
   const prevStateRef = useRef(state)
   useEffect(() => {
     if (prevStateRef.current !== state) {
@@ -1376,70 +1301,41 @@ export default function HomePage() {
 
       if (enteringChat) {
         setChatJustStarted(true)
-        requestAnimationFrame(() => { pagerRef.current?.setPage(CHAT_PANE) })
+        openOverlay('chat')
       } else if (leavingChat) {
         Keyboard.dismiss()
         setChatUnread(0)
-        paneIndexRef.current = HOME_PANE
-        setPaneIndex(HOME_PANE)
-        requestAnimationFrame(() => { pagerRef.current?.setPageWithoutAnimation(HOME_PANE) })
-      } else if (paneIndexRef.current !== HOME_PANE && paneIndexRef.current !== SETTINGS_PANE) {
-        // Anchor PAGE2 back to home on state transitions (so a resolved invite
-        // doesn't leave the user stranded on the viewers/invite pane), but
-        // never yank them out of SETTINGS — the user is intentionally there
-        // (e.g. toggling Game mode off via the GameModeCard) and the toggle
-        // itself changes state.
-        tap()
-        paneIndexRef.current = HOME_PANE
-        setPaneIndex(HOME_PANE)
-        pagerRef.current?.setPage(HOME_PANE)
+        setOverlays(prev2 => prev2.filter(o => o !== 'chat'))
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
   useEffect(() => {
     const prev = prevPage2InviteUserIdRef.current
     prevPage2InviteUserIdRef.current = page2InviteUserId
-    if (prev === undefined) {
-      // Initial mount with an already-active pending invite (app re-open or
-      // hot reload while an invite is still live): pulse the side tab so the
-      // returning user notices the live invitation. Skip the discovery card
-      // animation — the card itself was already present on the previous run.
-      if (page2InviteUserId !== null && paneIndexRef.current !== PAGE2_PANE) {
-        setPage2Alerting(true)
-        const timer = setTimeout(() => setPage2Alerting(false), TAB.pulseTimeoutMs)
-        return () => { clearTimeout(timer); setPage2Alerting(false) }
-      }
-      return
-    }
+    // Initial mount with an already-live invite (app re-open / hot reload):
+    // no discovery animation, the card was already present on the last run.
+    if (prev === undefined) return
     // Clear discovery flag if invite went away (cancelled / approved / etc).
     if (prev !== null && page2InviteUserId === null) {
       setPage2Discovery(false)
     }
+    // Fresh incoming invite — fire discovery animation when the card mounts.
     if (prev === null && page2InviteUserId !== null) {
-      // Fresh incoming invite — fire discovery animation when the card mounts.
       setPage2Discovery(true)
-      if (paneIndexRef.current !== PAGE2_PANE) {
-        setPage2Alerting(true)
-        const timer = setTimeout(() => setPage2Alerting(false), TAB.pulseTimeoutMs)
-        return () => { clearTimeout(timer); setPage2Alerting(false) }
-      }
     }
   }, [page2InviteUserId])
 
+  // Opening the chat clears its unread pulse.
   useEffect(() => {
-    if (paneIndex === PAGE2_PANE && page2Alerting) {
-      setPage2Alerting(false)
-    }
-    if (paneIndex === CHAT_PANE && chatUnreadAlerting) {
-      setChatUnreadAlerting(false)
-    }
-  }, [paneIndex, page2Alerting, chatUnreadAlerting])
+    if (chatOpen && chatUnreadAlerting) setChatUnreadAlerting(false)
+  }, [chatOpen, chatUnreadAlerting])
 
   useEffect(() => {
     const prev = prevChatUnreadRef.current
     prevChatUnreadRef.current = chatUnread
-    if (prev === 0 && chatUnread > 0 && paneIndexRef.current !== CHAT_PANE) {
+    if (prev === 0 && chatUnread > 0 && !overlaysRef.current.includes('chat')) {
       setChatUnreadAlerting(true)
       const timer = setTimeout(() => setChatUnreadAlerting(false), TAB.pulseTimeoutMs)
       return () => { clearTimeout(timer); setChatUnreadAlerting(false) }
@@ -1611,15 +1507,16 @@ export default function HomePage() {
   // very first frame of a pull is already tracked (no catch-up jump) — in
   // 'idle' the tab shows the same name at slide 0 and 2, so the value there
   // is visually moot.
+  // NOTE: the word-filmstrip this drove (the Home tab's name sliding out to
+  // "לא עכשיו" and back) went with the TabStrip on 2026-07-19, so nothing
+  // renders `skipSlide` any more. It is kept because its withTiming completion
+  // callbacks are what advance the phase machine below — it is now a clock for
+  // the skip choreography rather than a visual. The React state that mirrored
+  // the phase / outgoing name existed only for the tab and is gone; the ref +
+  // shared value do all the work.
   const skipSlide = useSharedValue(0)
   const skipPhaseSV = useSharedValue(0) // 0 idle · 1 pull · 2 hold · 3 anim
   const skipPhaseRef = useRef<'idle' | 'pull' | 'hold' | 'anim'>('idle')
-  const [skipPhase, setSkipPhaseState] = useState<'idle' | 'pull' | 'hold' | 'anim'>('idle')
-  // The candidate name frozen at skip start — the word that slides out. Held
-  // for the life of the skip even after `homeTabLabel` flips to the next
-  // candidate, so the outgoing word stays correct while the incoming one
-  // (always the live `homeTabLabel`) loads in behind it.
-  const [skipFromName, setSkipFromName] = useState('')
   // Index into SKIP_HEADLINES — re-rolled whenever a new card is shown (see
   // the effect by page1Pull), so each card carries its own random skip line
   // in the headline slot behind it, revealed when that card is pulled away.
@@ -1627,13 +1524,8 @@ export default function HomePage() {
   const setSkipPhase = useCallback((p: 'idle' | 'pull' | 'hold' | 'anim') => {
     skipPhaseRef.current = p
     skipPhaseSV.value = p === 'idle' ? 0 : p === 'pull' ? 1 : p === 'hold' ? 2 : 3
-    setSkipPhaseState(p)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // `homeTabLabel` read fresh inside callbacks (runIgnore) without making it a
-  // dependency — runIgnore is `onCommit` for the pull gesture, and churning
-  // its identity per label change would rebuild the gesture.
-  const homeTabLabelRef = useRef('')
   // The pull depth (in `pullY` units) that lands the descending card's top
   // edge on the pause-icon centre — consumed by the first-time skip tutorial.
   // Measured from the home pane's height (see the empty-pane onLayout).
@@ -1647,13 +1539,10 @@ export default function HomePage() {
   const runIgnore = useCallback(() => {
     if (busy || ignoreLoading) return
     tap()
-    // Home-tab name-slide → "לא עכשיו". A gesture skip arrives here already
-    // in 'pull' (the name is ~slid); a button skip arrives in 'idle', so
-    // freeze the outgoing name and start the slide from 0. Either way settle
-    // on "לא עכשיו" (skipSlide → 1) while the card rides off; the reaction
-    // stops the moment the phase leaves 'pull'.
+    // A gesture skip arrives here already in 'pull'; a button skip arrives in
+    // 'idle', so restart the choreography clock from 0. Either way it settles
+    // at 1 while the card rides off.
     if (skipPhaseRef.current === 'idle') {
-      setSkipFromName(homeTabLabelRef.current)
       skipSlide.value = 0
     }
     setSkipPhase('hold')
@@ -1753,7 +1642,6 @@ export default function HomePage() {
   useEffect(() => {
     if (page1Pulling) {
       if (skipPhaseRef.current === 'idle') {
-        setSkipFromName(homeTabLabelRef.current)
         setSkipPhase('pull')
       }
     } else if (skipPhaseRef.current === 'pull') {
@@ -1962,17 +1850,9 @@ export default function HomePage() {
     }
   }, [firstProfileImage, userId, selfAvatar?.filename])
 
+  // The chat partner's name (stripped of the trailing ", age"). Titles the
+  // chat sheet and fills {name} in the invite-confirm copy.
   const matchName = nameFromTitle(profile?.relations?.match?.title)
-  // Only name the tab when the card is actually on screen. A blocking notice
-  // (notif/location/network overlay) or an in-flight preload after a Realtime
-  // delivery would otherwise leave the tab advertising a candidate the user
-  // can't see (the post-onboarding first-entry bug).
-  const homeTabLabel = matchName && !noticeOverridesCard && !!displayedMatch
-    ? matchName
-    : t('home.tabs.home')
-  // Keep the ref fresh so runIgnore can freeze the outgoing name (button-skip
-  // path) without taking homeTabLabel as a dependency.
-  useEffect(() => { homeTabLabelRef.current = homeTabLabel })
   const matchIsMale = profile?.relations?.match?.is_male
   const inviteConfirmDesc = tgg('home.inviteConfirmDesc' as any, isMale, matchIsMale)
 
@@ -2184,37 +2064,18 @@ export default function HomePage() {
     tap()
     setRefuseConfirmOpen(true)
   }, [])
-  const declineViaSwipe = useCallback(() => {
-    if (busy) return
-    tap()
-    setBusy(true)
-    setPendingKey('refuse-confirm')
-    invoke('app/decline', {})
-      .then(() => { setBusy(false); setPendingKey(null) })
-      .catch(err => { console.error(err); setBusy(false); setPendingKey(null) })
-  }, [busy])
-  const page2Pull = usePullBehavior({
-    activation: 'scrollPan',
-    // User decision: an incoming invitation in page2 must NOT be skippable
-    // by swiping the card down. The gesture is fully disabled; declining is
-    // only via the explicit decline button (openRefuseConfirm). The tutorial
-    // demo is off too (never teach a disabled gesture). page2Pull is still
-    // created so the page2 PullPane keeps its (now inert, pullY≡0) pull
-    // wiring + reset without a structural change.
-    enabled: false,
-    onCommit: declineViaSwipe,
-    tutorial: { ready: false, seenFlag: SEEN_FLAGS.page2Demo },
-  })
-  // page2 has no match-sync (page1) / open() (sheet) reset path, and the
-  // unified slide-off commit leaves pullY at screenH after a decline. Reset
-  // it whenever a pending invite (re)appears, so the freshly-mounted card
-  // isn't translated fully off-screen (which would show only the bare
-  // PRIMARY container behind it).
-  useEffect(() => {
-    if (page2PendingInvite) page2Pull.reset()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page2PendingInvite?.user_id])
-
+  // The incoming invitation's own pull behaviour (`page2Pull`) is gone: the
+  // card is now the body of an OverlaySheet, which owns the gesture. That
+  // sheet is configured commit='confirm', so a committed swipe opens the
+  // decline confirm and the card springs back.
+  //
+  // This REVERSES an earlier decision that an incoming invitation must not be
+  // swipeable at all (the gesture used to be created with enabled:false). The
+  // user re-decided on 2026-07-19 with the single-screen redesign, where
+  // swipe-down-to-close is the one dismissal gesture every surface shares —
+  // an invitation that alone refused it read as broken. Declining still
+  // routes through the same confirm dialog as the decline button, so the
+  // swipe cannot discard an invitation by accident.
 
   // Watching-state invite prompt lives inside the MatchCard scroll (passed
   // as footerBlock), not in the pinned HomeButtons row. The "skip" button
@@ -2265,15 +2126,16 @@ export default function HomePage() {
   // (topBlock), mirroring how InviteTimerCard sits on the page1 sent-invite
   // card. StatusCard scaffold, no standalone heading (the title rides as a
   // bold lead-in inside the body via StatusCardText), accept CTA + decline
-  // secondary inside the card. The countdown rides under the invite tab
-  // label (see inviteTabSubLabel above). The decline button opens the same
-  // refuse-confirm dialog as the swipe-down gesture (page2Pull below).
+  // secondary inside the card, and the live countdown between the two. The
+  // decline button opens the same refuse-confirm dialog as the swipe-down
+  // gesture on the sheet.
   const replyingInviteCard = page2PendingInvite ? (
     <ReplyingInviteCard
       title={tg('home.replyingTitle', page2PendingInvite.is_male)}
       description={tgg('home.replyingDesc', isMale, page2PendingInvite.is_male)}
       acceptLabel={t('home.replyingAccept')}
       declineLabel={t('home.watchingReject')}
+      expiresAt={page2PendingInvite.expires_at}
       costCredits={CREDIT_COST.approve}
       affordable={starsBalance >= CREDIT_COST.approve}
       onAccept={() => runAction('app/approve', 'replying-accept')}
@@ -2291,16 +2153,19 @@ export default function HomePage() {
   //     behaviour (no onPress → MatchCard falls back to slowScrollToEnd).
   //     Pause is NOT on the card any more (2026-05-22, user request) — the
   //     only game-mode pause control is the home pane's center circle.
-  //   - chat     → X menu (opens end-chat / block / report sheet).
+  //   - chat     → OPEN CHAT. This used to be the end-chat X; that moved into
+  //     the chat sheet's 3-dot menu on 2026-07-19, because ending the
+  //     conversation belongs with the conversation, and the home card needs an
+  //     affordance to get back INTO it now that there is no chat tab.
   //   - else (waiting, ended) → no button at all. The relevant action for
   //     those states lives elsewhere (timer's cancel, message-block's
   //     continue), so a heart on the hero would just be noise.
   const page1CardActions: CardAction[] | undefined =
     state === 'chat'
       ? [{
-          key: 'chat-menu',
-          icon: <CloseBoldIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
-          onPress: () => { tap(); setChatMenuOpen(true) },
+          key: 'open-chat',
+          icon: <ChatIcon color={WHITE} size={ICON.huge} />,
+          onPress: () => openOverlay('chat'),
         }]
       : state === 'watching'
         ? [
@@ -2323,9 +2188,7 @@ export default function HomePage() {
       : handlePermissionRequest
   const permBusyState = locFailed ? locBusy : isNetMode ? netBusy : permBusy
 
-  const goToPreferences = () => {
-    goToPane(SETTINGS_PANE)
-  }
+  const goToPreferences = () => openOverlay('menu')
 
   // v3: synth state is null for both `free` (find ran, no candidate) and `locked`
   // without message (brand-new user, or post-clear). Only the latter is "ready to
@@ -2334,6 +2197,18 @@ export default function HomePage() {
   // candidates for a gated user anyway, so the button would be a dead end.
   const isReadyToFind = !geoGated && state === null && rawPage1State !== 'free'
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
+
+  // While gated — by the server availability gate OR a missing device
+  // permission — the chat and invite overlays are unreachable. The MENU is
+  // deliberately never gated: the user must still be able to open settings and
+  // change their location while they wait for the gate to lift.
+  const overlaysGated = geoGated || isPermMode
+  overlaysGatedRef.current = overlaysGated
+  // If the gate turns on while chat is open, close it so a gated surface can't
+  // stay on screen. The menu / profile sheet are left alone by design.
+  useEffect(() => {
+    if (overlaysGated) setOverlays(prev => prev.filter(o => o !== 'chat'))
+  }, [overlaysGated])
 
   // ── Queued find ──────────────────────────────────────────────────────────
   // The play button must register the very FIRST tap, even while the app is
@@ -2422,241 +2297,21 @@ export default function HomePage() {
               : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet })
         : null
 
-  // Tab strip content — single source of truth for the three pane titles
-  // and their inline chips (chat unread / pending-invite alert). Page chrome
-  // lives here; individual panes render content only.
-  // Pending-invite countdown rendered as a small clock directly under the
-  // invite tab's label. Replaces the old in-button timer footer; the bottom
-  // button on the page2 invite card is now a single full-width "accept" CTA
-  // with no timer of its own (decline is via swipe-down on the card).
-  const inviteSecsLeft = useSecsLeft(!chatAvailable ? page2PendingInvite?.expires_at : null)
-  // Once an incoming invitation expires (page2 transitions to locked +
-  // message='expire'), keep the tab-strip clock frozen at 00:00 instead of
-  // disappearing. Stays until the user acknowledges via clear2. Does not
-  // apply to broadcast — its cooldown label is handled separately below.
-  const page2ExpiredInvite = !chatAvailable && page2DeadInvite?.message === 'expire'
-  const inviteTabSubLabel = !chatAvailable && page2PendingInvite?.expires_at
-    ? formatClock(inviteSecsLeft)
-    : page2ExpiredInvite
-      ? formatClock(0)
-      : undefined
-  // Symmetric treatment for the page1 inviter side: when the user has sent
-  // an invitation and is waiting, the same countdown rides under the Once
-  // (home) tab label. The cancel button below stays plain — no embedded
-  // timer footer.
+  // ── Invitation countdowns ───────────────────────────────────────────────
+  // Both clocks used to ride in the TabStrip as sub-labels. With the tabs gone
+  // they moved INTO the card block that announces the invitation (user
+  // decision 2026-07-19), which is where they belonged anyway: the countdown
+  // is now drawn inside the very component it describes, so it can no longer
+  // appear before that component has (see StatusTimer + the deleted
+  // waitingChipReady sequencing that existed only to hold the tab back).
   //
-  // Reveal sequence on a `watching → waiting` transition (i.e. the user just
-  // pressed "send invite"): the button spinner runs during the server call,
-  // then MatchCard slides the InviteTimerCard topBlock in from above (with a
-  // scroll-to-top first if needed). We hold the tab chip back until MatchCard
-  // signals that the slide-in landed (`onTopBlockShown`), so the four steps
-  // read sequentially: spinner → top card appears → smooth scroll/reveal →
-  // tab clock fades in. On any other path into `waiting` (cold mount, app
-  // focus while already waiting) the chip is visible from frame 1.
+  // Outgoing (this user invited someone and is waiting) → InviteTimerCard.
+  // Incoming (someone invited this user) → ReplyingInviteCard.
+  // Expired either way → the EventMessageCard freezes at 00:00, so "this is
+  // over" is communicated by the same clock rather than its disappearance.
   const waitingExpiresAt = displayedCardMode === 'waiting' ? inviteExpiresAt ?? null : null
-  const waitingSecsLeft = useSecsLeft(waitingExpiresAt)
-  const prevCardModeRef = useRef(displayedCardMode)
-  const [waitingChipReady, setWaitingChipReady] = useState(displayedCardMode === 'waiting')
-  useEffect(() => {
-    const prev = prevCardModeRef.current
-    prevCardModeRef.current = displayedCardMode
-    if (displayedCardMode !== 'waiting') {
-      setWaitingChipReady(false)
-      return
-    }
-    if (prev === 'waiting') return
-    if (prev === 'watching') {
-      // Wait for MatchCard's slide-in completion callback below.
-      setWaitingChipReady(false)
-      return
-    }
-    setWaitingChipReady(true)
-  }, [displayedCardMode])
-  const handleTopBlockShown = useCallback(() => setWaitingChipReady(true), [])
-  // Symmetric to page2ExpiredInvite: once the user's outgoing invitation
-  // expires (page1 transitions to locked + message='expire' → displayedCardMode
-  // becomes 'missed'), keep the home-tab clock frozen at 00:00. Stays until
-  // the user acknowledges via clear1.
   const page1ExpiredInvite = displayedCardMode === 'missed' && invitedPage1?.message === 'expire'
-  const homeTabSubLabel = waitingExpiresAt && waitingChipReady
-    ? formatClock(waitingSecsLeft)
-    : page1ExpiredInvite
-      ? formatClock(0)
-      : undefined
-  // Unread-chat count chained into the side-tab label as `${label} ${n}` when
-  // chat is the active surface. Viewer-count is intentionally NOT chained on
-  // the viewers/broadcast labels — the bare word reads cleaner at tab size,
-  // and the broadcast state instead surfaces a flashing green "live" dot via
-  // `renderLeading` below.
-  const sideTabCount = chatAvailable && chatUnread > 0 ? chatUnread : 0
-  const sideAlerting = chatAvailable
-    ? chatUnreadAlerting
-    : (page2PendingInvite ? page2Alerting : false)
-  // While the profile preview sheet (opened from Menu) is up, the Menu tab
-  // doubles as the close affordance — render an X icon and clear the
-  // game-mode dot (irrelevant in that state). Tap handler below closes the
-  // sheet on any tab tap (and navigates to the tapped pane for the others).
-  // Inviter's name on page2 (stripped of trailing ", age") for the side-tab
-  // label when an incoming invitation is pending. Same one-on-one framing as
-  // matchName above: the tab reads as "you and this person", not a generic
-  // "Invitation" / "Viewers".
-  const page2InviteName = nameFromTitle(page2PendingInvite?.title)
-  const page2DeadName = nameFromTitle(page2DeadInvite?.title)
-  // Side-tab label resolves to the single counterpart's name whenever slot 2
-  // is dedicated to one user (pending inviter, or the user whose dead-invite
-  // "what happened" card is up). Chat falls through to the static `home.tabs.chat`
-  // label since the chat pane already shows the partner's name in its own header.
-  const sideTabName = page2PendingInvite
-    ? page2InviteName
-    : page2DeadInvite
-      ? page2DeadName
-      : ''
-  // Stars-balance change (grant, spend, refund) → blink the Menu-tab balance
-  // number 3× (the default `alerting` count). ANY change (up or down) is an
-  // attention event here, unlike the increase-only viewer pulse. Baseline-null
-  // so the first observed balance (cold mount) doesn't pulse. Single-dep on the
-  // numeric balance + pulseTimeoutMs coalescing so a burst within the window
-  // reads as one pulse.
-  useEffect(() => {
-    const prev = prevStarsBalanceRef.current
-    prevStarsBalanceRef.current = starsBalance
-    if (prev === null || starsBalance === prev) return
-    setStarsAlerting(true)
-    const timer = setTimeout(() => setStarsAlerting(false), TAB.pulseTimeoutMs)
-    return () => { clearTimeout(timer); setStarsAlerting(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [starsBalance])
-  const tabSpecsAll: TabSpec[] = [
-    // Menu tab is icon-only (no label) — it's chrome, not a destination, so
-    // it shrinks to its glyph width and yields the freed flex space to the
-    // two content tabs (Home + Side). The settings glyph stays the SAME in
-    // every state, INCLUDING pause (the paused state recolors the whole
-    // header chrome to BLACK_MID, it is not signalled by this glyph). The only
-    // swap is close-X while the profile-preview sheet is open over the menu
-    // pane (that is the sheet's close affordance, not a "state").
-    {
-      renderIndicator: profileSheetOpen
-        ? (color) => <CloseBoldIcon color={color} size={ICON.xxl} />
-        : (color) => <HeartIcon color={color} size={ICON.xxl} />,
-      // Hearts balance rides above the Menu glyph in the EXACT slot the side
-      // tab's viewer-count uses (number only, no glyph — the Menu heart is
-      // itself the hearts mark). Shows the TOTAL spendable (balance + extra)
-      // as a single number — the tab is tight chrome, the daily/purchased
-      // split lives in the settings hearts row where there's room for the
-      // "X + Y" notation (user feedback 2026-06-01). A wallet change is
-      // signalled by the standard 3-blink `alerting` pulse, scoped to the
-      // balance NUMBER only (`alertSubLabelOnly`) — the heart glyph stays
-      // steady, since the Menu icon is chrome and a wallet change is news
-      // about the hearts, not the menu. Suppressed while the profile-preview
-      // sheet is open (Menu is then the close-X affordance), change-pulse
-      // gated the same.
-      subLabel: profileSheetOpen ? undefined : String(starsBalance),
-      alerting: profileSheetOpen ? undefined : starsAlerting,
-      alertSubLabelOnly: true,
-    },
-    // Home tab. Always reads "Once" — while the own-profile preview sheet
-    // rises it morphs "Once" → "My profile" and (via tabProgress) the
-    // selected-chip slides onto it from the Menu tab, both driven 1:1 by the
-    // sheet's position. It carries NO game-mode pause glyph (removed
-    // 2026-05-22, user request) — the pause control lives on the home pane's
-    // center circle (see the page1Profile branch in render).
-    {
-      label: homeTabLabel,
-      subLabel: homeTabSubLabel,
-      altLabel: t('settings.myProfile'),
-      altProgress: profileSheetProgress,
-      // Skip name-slide: a 3-word vertical filmstrip [outgoing · "לא עכשיו" ·
-      // incoming]. While idle both ends are the live label, so the resting
-      // value (0, or a leftover 2 from the previous skip) shows the right
-      // name either way; mid-skip the outgoing slot is the frozen name.
-      nameSlide: {
-        words: (skipPhase === 'idle'
-          ? [homeTabLabel, t('home.watchingReject'), homeTabLabel]
-          : [skipFromName, t('home.watchingReject'), homeTabLabel]) as [string, string, string],
-        progress: skipSlide,
-      },
-    },
-    (() => {
-      // The side tab carries a full text label ONLY when slot 2 is dedicated
-      // to a single counterpart — an incoming-invite card or a dead-invite
-      // "what happened" card (sideTabName is that person's name). In every
-      // ambient state (live chat, or self-visibility: broadcast / visible /
-      // hidden) there's no 1:1 counterpart to name, so the tab collapses to
-      // an icon-only compact tab exactly like Menu: it shrinks to its glyph
-      // width (TabStrip flags iconOnly whenever there's no label — a
-      // sub-label no longer forces flex), freeing flex so "Once" recenters
-      // between the two compact end tabs. The expand/collapse + recentre is
-      // animated by TabStrip itself (LinearTransition on every tab,
-      // TAB.collapseDuration). The icon is shared with the in-page
-      // same glyph; chat gets its own bubble.
-      if (!sideTabName) {
-        return {
-          renderIndicator: chatAvailable
-            ? (color) => <ChatIcon color={color} size={ICON.xxl} />
-            : (color) => <EyeOpenIcon color={color} size={ICON.xxl} />,
-          // Green presence dot beside the chat icon while the partner is
-          // online (reported by ChatPage's presence channel). `renderLeading`
-          // keeps it a fixed colour — it carries its own meaning and must not
-          // cross-fade with tab selection. Chat-only (the `chatAvailable`
-          // gate); the ambient visibility states have no 1:1 counterpart.
-          renderLeading: chatAvailable && partnerOnline
-            ? () => <PresenceDot />
-            : undefined,
-          alerting: sideAlerting,
-          // Fade the whole side tab out 1:1 as the profile-preview sheet
-          // rises (same shared value that morphs "Once"→profile + slides the
-          // chip), so it disappears in sync with the close-button transition.
-          dimProgress: profileSheetProgress,
-        } satisfies TabSpec
-      }
-      return {
-        label: sideTabCount > 0 ? `${sideTabName} ${sideTabCount}` : sideTabName,
-        alerting: sideAlerting,
-        subLabel: inviteTabSubLabel ?? undefined,
-        // Same as the ambient branch: the side tab (label + countdown) fades
-        // out 1:1 with the profile-preview sheet so it vanishes in sync with
-        // the close-button transition.
-        dimProgress: profileSheetProgress,
-      } satisfies TabSpec
-    })(),
-  ]
-  // Side slot is gated whenever the user must fix something on the home pane
-  // before page2/chat is usable: the server availability gate (geoGated), OR
-  // a missing device permission (no notifications / no location / GPS failed
-  // / no internet — collapsed into isPermMode). In both cases we drop the
-  // side tab entirely so page2/chat has no entry point. Indices 0/1 still map
-  // to Menu/Home (TabStrip onSelect(i) → goToPane(i)), so the remaining tabs
-  // keep working unchanged.
-  const sideGated = geoGated || isPermMode
-  // Companion to the geoGated snap-back useEffect (defined earlier with only
-  // `geoGated` in scope): when a missing-permission state flips on while the
-  // user is on the side slot, pull them back to Home so the now-unrendered
-  // slot 2 can't stay on screen.
-  useEffect(() => {
-    if (isPermMode && paneIndexRef.current === PAGE2_PANE) {
-      paneIndexRef.current = HOME_PANE
-      setPaneIndex(HOME_PANE)
-      pagerRef.current?.setPageWithoutAnimation(HOME_PANE)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPermMode])
-  // Gated layout: keep three tabs but replace the side tab with an INERT
-  // spacer whose measured width matches the ambient side icon (ICON.xxl in a
-  // compact-tab padding). Renders a transparent HeartIcon so the layout
-  // engine measures the SAME width an ambient icon-only side tab would
-  // (broadcast / visible / chat all use ICON.xxl), keeping Menu at its end
-  // and Home in its natural position — Home does NOT shift sideways when the
-  // gate flips on or off. `disabled` makes the tab inert (no haptic / no nav
-  // on accidental tap). User decision 2026-05-31: "להשאיר מקום ריק שאין
-  // טאב2 שיהיה בגודל של הסמל שאמור להיות שם".
-  const sideSpacerSpec: TabSpec = {
-    // Empty box sized like a tab glyph (ICON.xxl square) so the compact-tab
-    // padding wraps it to the SAME measured width as an ambient icon-only
-    // side tab. No icon drawn — pure spacer.
-    renderIndicator: () => <View style={{ width: ICON.xxl, height: ICON.xxl }} />,
-    disabled: true,
-  }
-  const tabSpecs: TabSpec[] = sideGated ? [tabSpecsAll[0], tabSpecsAll[1], sideSpacerSpec] : tabSpecsAll
+  const page2ExpiredInvite = !chatAvailable && page2DeadInvite?.message === 'expire'
 
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
@@ -2702,92 +2357,46 @@ export default function HomePage() {
             ? genderize(READY_HEADLINES[readyHeadlineIdx] ?? '', isMale)
             : t('home.noOneNearbyTitle')
 
-  // PagerView onPageScroll drives the TabStrip indicator each frame. Runs on
-  // the UI thread (worklet) so the underline tracks the swipe 1:1 instead of
-  // lagging behind through a JS→UI bridge hop.
-  const onPageScroll = usePagerScrollHandler({
-    onPageScroll: (e) => {
-      'worklet'
-      pagerProgress.value = e.position + e.offset
-    },
-  })
+  // The invite overlay is DERIVED, not navigated to: its lifetime belongs to
+  // the server, so it is simply "up" whenever page2 carries a card. That is
+  // what makes it impossible to desync, and why an incoming invitation takes
+  // visual priority over whoever the user is currently watching — it paints
+  // above the page1 card, and it goes away only when the invitation resolves.
+  const inviteOverlayOpen = !overlaysGated && !!(page2PendingInvite || page2DeadInvite)
+  const inviteCardMatch = page2PendingInvite ?? page2DeadInvite
+  // Swiping the invite card down declines it (through the confirm dialog), so
+  // the sheet must SPRING BACK rather than ride off — the user may cancel.
+  // Reversal of the earlier "an incoming invitation must not be swipeable"
+  // decision; re-decided by the user on 2026-07-19 with the single-screen
+  // redesign, where swipe-down-to-close is the one dismissal gesture. The
+  // dead-invite card has nothing to confirm and closes via app/free2.
+  const closeInviteOverlay = useCallback(() => {
+    if (page2PendingInvite) openRefuseConfirm()
+    else runAction('app/free2', 'free2')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page2PendingInvite])
+  // Back button, step 2 (see the BackHandler effect). Pending declines through
+  // the confirm; dead is swallowed so back can't dismiss a card the server
+  // still owns.
+  inviteBackRef.current = () => {
+    if (!inviteOverlayOpen) return false
+    if (page2PendingInvite) { openRefuseConfirm(); return true }
+    return true
+  }
+
+  const cardChromeReserve = chromeReserve(topInset)
 
   return (
     <View style={styles.backdrop}>
-      {/* Paused state recolors the top chrome (status bar + TabStrip) from
-          the warm gradient shelf to flat BLACK_MID so the whole header reads
-          as "muted" without going as dark as the round pause overlay button.
-          The status bar can't take a gradient (Android), so it tracks the
-          gradient's PRIMARY 0% stop when active. Always render (not
-          gated on gameModeOff) so the value switches both ways: a gated mount
-          would leave the status bar stuck after resume, since expo-status-bar
-          applies its value imperatively and never restores prior values on
-          unmount. */}
+      {/* Paused recolors the status bar to flat BLACK_MID so the chrome reads
+          as "muted". Always rendered (not gated on gameModeOff) so the value
+          switches both ways: a gated mount would leave the status bar stuck
+          after resume, since expo-status-bar applies its value imperatively
+          and never restores prior values on unmount. */}
       <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : PRIMARY} />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
-        <View
-          style={[
-            styles.tabStripContainer,
-            // XL (not MD) above the safe inset so the sub-label timer, which
-            // floats as a caption above the selected-tab chip, has real
-            // breathing room and never sits jammed against the status bar.
-            { paddingTop: topInset + XL },
-            // Paused: swap the solid deep-wine for the flat muted BLACK_MID
-            // chrome. No shadow either way — the header is intentionally flat
-            // (the user removed the drop-shadow); the color contrast against
-            // the white content below is the only separation.
-            gameModeOff && { backgroundColor: BLACK_MID },
-          ]}
-          onLayout={e => {
-            tabStripBottom.value = e.nativeEvent.layout.y + e.nativeEvent.layout.height
-          }}
-        >
-          <TabStrip tabs={tabSpecs} progress={tabProgress} onSelect={(i) => {
-            // While the preview sheet is up, the ONLY actionable chrome is
-            // the Menu tab (rendered as an X) — it closes the sheet, no
-            // navigation. The middle tab is a passive "My profile" label
-            // for the open sheet and the side tab is inert: only X closes.
-            if (profileSheetOpen) {
-              if (i === SETTINGS_PANE) closeProfileSheet()
-              return
-            }
-            goToPane(i as PaneIndex)
-          }} />
-        </View>
-        {/* Pass pages as an array to avoid React 19 falsy-children issues
-            with react-native-pager-view's childrenWithOverriddenStyle. */}
-        <AnimatedPagerView
-          ref={pagerRef}
-          style={{ flex: 1 }}
-          // Clamp the seed page when gated: the side slot doesn't exist while
-          // gated (2-child pager), so a stale chat/page2 notification must not
-          // try to seat the pager on a non-existent index 2.
-          initialPage={sideGated ? Math.min(initialPane, HOME_PANE) : initialPane}
-          // Geo-gated: the pager stays swipeable so Home<->Menu(settings) keeps
-          // working by swipe (the user must still reach settings while waiting
-          // for launch). The side slot is made unreachable by NOT rendering it
-          // at all (the children array drops slot 2 when geoGated, see below).
-          // react-native-pager-view has no per-page swipe lock, so a 3-child
-          // pager always lets a finger reach slot 2 — onPageSelected can only
-          // bounce it back *after* it's already on screen, which still reads
-          // as "accessible". Removing the child is the only way to make
-          // page2/chat truly inaccessible. Its tab is also removed (tabSpecs)
-          // and goToPane swallows programmatic nav to it.
-          scrollEnabled={!sliding}
-          overdrag={false}
-          overScrollMode="never"
-          onPageSelected={onPageSelected}
-          onPageScroll={onPageScroll}
-        >
-          {[
-            // Slot 0: settings (menu) — embedded mode hides the internal
-            // ScreenHeader so the global TabStrip is the only chrome.
-            <View key="settings" style={{ flex: 1 }}>
-              <SettingsPage embedded topInset={0} onOpenSubPage={openShellSubPage} onNavigateHome={() => goToPane(HOME_PANE)} />
-            </View>,
-
-            // Slot 1: home (page1 — outgoing)
-            <View key="home" style={{ flex: 1 }}>
+            {/* page1 — the only standalone screen. */}
+            <View style={{ flex: 1 }}>
               <View style={styles.root}>
                 <View style={{ flex: 1 }}>
                   {/* Empty / no-match pane — always mounted underneath. The
@@ -2966,18 +2575,19 @@ export default function HomePage() {
                                 <InviteTimerCard
                                   targetIsMale={matchIsMale}
                                   userIsMale={isMale}
+                                  expiresAt={waitingExpiresAt}
                                   onCancel={() => { tap(); setCancelConfirmOpen(true) }}
                                 />
                               ) : isEndedState && page1MessageTitle ? (
                                 <EventMessageCard
                                   title={page1MessageTitle}
                                   description={page1MessageDesc}
+                                  frozen={page1ExpiredInvite}
                                   onContinue={() => runAction('app/clear1', 'ended-stop')}
                                   busy={busy && pendingKey === 'ended-stop'}
                                 />
                               ) : undefined
                             }
-                            onTopBlockShown={handleTopBlockShown}
                             footerBlock={watchingInviteButton}
                             footerBg={watchingInviteButton ? PRIMARY : undefined}
                           />
@@ -3134,126 +2744,149 @@ export default function HomePage() {
                 />
 
               </View>
-            </View>,
 
-            // Slot 2: side — page2 or chat depending on chatAvailable.
-            // Whenever the side is gated (server availability OR a missing
-            // device permission — sideGated), this slot is NOT rendered at
-            // all: the pager has only [settings, home] children, so page2/chat
-            // is physically unreachable by swipe while Home<->Menu keeps
-            // working. Spread an empty array, never a falsy child — see the
-            // React-19 array-children note above.
-            ...(sideGated ? [] : [
-            <View key="side" style={{ flex: 1 }}>
-              {chatAvailable ? (
-                <ChatPage
-                  key={profile?.relations?.match?.user_id ?? 'no-match'}
-                  isActive={paneIndex === CHAT_PANE}
-                  onUnreadChange={setChatUnread}
-                  onOnlineChange={setPartnerOnline}
-                  topInset={0}
-                  autoFocusInput={chatJustStarted}
-                />
-              ) : <View style={styles.root}>
-                {/* The viewer list and the broadcast / visibility surface that
-                    used to live here were removed on 2026-07-19: the user no
-                    longer sees who is watching them or how many, and
-                    visibility moved to a row in the settings menu. What is
-                    left of page2 is only the incoming-invite card and the
-                    dead-invite "what happened" card, so this pane is empty
-                    whenever neither is up. */}
-                {page2PendingInvite ? (
-                  <View style={StyleSheet.absoluteFill}>
-                    <View style={styles.matchPhoto}>
-                      {/* Pull-to-decline — same PullPane frame as page1, with
-                          page2's own gesture/shared values and PullContext. */}
-                      <PullPane
-                        gesture={page2Pull.gesture}
-                        pullY={page2Pull.pullY}
-                        pulling={page2Pull.pulling}
-                        tutorialPlaying={page2Pull.tutorialPlaying}
-                        cardStyle={StyleSheet.absoluteFill}
-                        pullContext={page2Pull.pullCtx}
-                      >
-                        <RisingCard
-                          key={`pending-${page2PendingInvite.user_id}`}
-                          style={StyleSheet.absoluteFill}
-                        >
-                          <MatchCard
-                            match={page2PendingInvite}
-                            actions={[]}
-                            onReport={() => openReport(page2PendingInvite.user_id)}
-                            viewerFamily={profile?.family ?? null}
-                            viewerLocationType={resolveLocationType(profile)}
-                            bottomInset={0}
-                            onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
-                            topBlock={replyingInviteCard}
-                          />
-                        </RisingCard>
-                      </PullPane>
-                    </View>
-                  </View>
-                ) : page2DeadInvite ? (
-                  <View style={StyleSheet.absoluteFill}>
-                    <View style={styles.matchPhoto}>
-                      <RisingCard
-                        key={`dead-${page2DeadInvite.user_id}`}
-                        style={{ flex: 1 }}
-                      >
-                        <MatchCard
-                          match={page2DeadInvite}
-                          actions={[]}
-                          onReport={() => openReport(page2DeadInvite.user_id)}
-                          viewerFamily={profile?.family ?? null}
-                          viewerLocationType={resolveLocationType(profile)}
-                          bottomInset={0}
-                          topBlock={page2MessageTitle ? (
-                            <EventMessageCard
-                              title={page2MessageTitle}
-                              description={page2MessageDesc}
-                              onContinue={() => runAction('app/free2', 'free2')}
-                              busy={busy && pendingKey === 'free2'}
-                            />
-                          ) : undefined}
-                        />
-                      </RisingCard>
-                    </View>
-                  </View>
-                ) : null}
-              </View>}
-            </View>,
-            ]),
-          ]}
-        </AnimatedPagerView>
-        {/* Profile preview sheet — same PullPane frame as page1/page2.
-            Outer container anchored at the TabStrip bottom (topAnchor) so it
-            sits in the gap below the tabs; the RisingCard (conditional on
-            open, owning its SlideIn/SlideOut mount motion) rides the
-            swipe-down transform. No PullContext here — the sheet's own
-            gesture handles its header-vs-scroll logic. */}
-        <PullPane
-          gesture={profilePull.gesture}
-          pullY={profilePull.pullY}
-          pulling={profilePull.pulling}
-          tutorialPlaying={profilePull.tutorialPlaying}
-          topAnchor={tabStripBottom}
-          style={styles.profileSheetOverlay}
-          pointerEvents={profileSheetOpen ? 'box-none' : 'none'}
+              {/* Floating menu button. A sibling AFTER the card layers so it
+                  is the deepest responder within its own bounds and does NOT
+                  translate when a card is pulled off. It sits at top-START,
+                  opposite the group chip the card renders at top-END; the
+                  card's own report flag drops below it via topStartInset. */}
+              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                <RoundButton
+                  size={ROUND_BUTTON_SIZE_SM}
+                  style={[styles.hamburger, { top: topInset + OVERLAY.chromeGap }]}
+                  onPress={() => openOverlay('menu')}
+                  accessibilityLabel={t('home.a11y.menu')}
+                >
+                  <HamburgerIcon color={WHITE} size={ICON.xxl} />
+                </RoundButton>
+              </View>
+            </View>
+
+        {/* ── Overlays, painted low → high ────────────────────────────────
+            Each is an OverlaySheet: rises from the bottom, closes on a
+            swipe down (the same gesture as page1's pull-to-skip) or its X.
+            The invite is first so the chat and menu can cover it. */}
+
+        {/* Incoming invitation / dead-invite card. DERIVED from `relations`,
+            so it takes priority over whoever the user is currently watching:
+            while it is up the page1 card is behind it, and it leaves only
+            when the invitation resolves. commit='confirm' because a swipe
+            here is a decline REQUEST — the card springs back and the confirm
+            dialog decides. floatingHeader: the body is a full-bleed photo, so
+            the X floats over it rather than sitting on a bar. */}
+        <OverlaySheet
+          open={inviteOverlayOpen}
+          activation="scrollPan"
+          commit={page2PendingInvite ? 'confirm' : 'dismiss'}
+          onClose={closeInviteOverlay}
+          isTop={!chatOpen && !menuOpen && !profileSheetOpen}
+          floatingHeader
+          zIndex={OVERLAY.z.invite}
+          cardStyle={styles.overlayCardBare}
+          closeAccessibilityLabel={t('home.a11y.closeInvite')}
         >
-          {profileSheetOpen && (
-            <RisingCard style={styles.profileSheetCard}>
-              <PreviewFieldPage
-                config={{ kind: 'preview', title: t('settings.myProfile') }}
-                onBack={closeProfileSheet}
-                dismissGestureRef={profilePull.panRef}
-                onScrollAtTop={profilePull.setScrollAtTop}
-                headerBottomShared={profileSheetHeaderBottom}
-                pulling={profilePull.pulling}
-                clipBottom
-              />
-            </RisingCard>
+          {inviteCardMatch ? (
+            <MatchCard
+              key={`invite-${inviteCardMatch.user_id}`}
+              match={inviteCardMatch}
+              actions={[]}
+              onReport={() => openReport(inviteCardMatch.user_id)}
+              viewerFamily={profile?.family ?? null}
+              viewerLocationType={resolveLocationType(profile)}
+              bottomInset={0}
+              topStartInset={cardChromeReserve}
+              onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
+              topBlock={page2PendingInvite
+                ? replyingInviteCard
+                : page2MessageTitle ? (
+                  <EventMessageCard
+                    title={page2MessageTitle}
+                    description={page2MessageDesc}
+                    frozen={page2ExpiredInvite}
+                    onContinue={() => runAction('app/free2', 'free2')}
+                    busy={busy && pendingKey === 'free2'}
+                  />
+                ) : undefined}
+            />
+          ) : null}
+        </OverlaySheet>
+
+        {/* Chat. dragFrom='header' is REQUIRED: the message list is an
+            inverted FlatList, so "scroll is at the top" is meaningless and
+            without this every drag in the list would be stolen by the
+            dismiss pan. The 3-dot menu opens the leave/block sheet, which
+            stays in this file with runAction — see the sheet below. */}
+        <OverlaySheet
+          open={chatOpen}
+          onClose={() => closeOverlay('chat')}
+          dragFrom="header"
+          isTop={!menuOpen && !profileSheetOpen}
+          zIndex={OVERLAY.z.chat}
+          title={matchName}
+          titleTrailing={partnerOnline ? <PresenceDot /> : undefined}
+          closeAccessibilityLabel={t('chat.a11y.close')}
+          headerTrailing={
+            <RoundButton
+              size={ROUND_BUTTON_SIZE_SM}
+              bg="transparent"
+              shadow={false}
+              onPress={() => { tap(); setChatMenuOpen(true) }}
+              accessibilityLabel={t('chat.a11y.menu')}
+            >
+              <DotsVerticalIcon color={WHITE} size={ICON.xxl} />
+            </RoundButton>
+          }
+        >
+          <ChatPage
+            key={profile?.relations?.match?.user_id ?? 'no-match'}
+            isActive={chatOpen && !menuOpen && !profileSheetOpen}
+            onUnreadChange={setChatUnread}
+            onOnlineChange={setPartnerOnline}
+            topInset={0}
+            autoFocusInput={chatJustStarted}
+          />
+        </OverlaySheet>
+
+        {/* Menu. Above everything on purpose: it is the one surface that
+            stays reachable while the availability gate is on. */}
+        <OverlaySheet
+          open={menuOpen}
+          onClose={() => closeOverlay('menu')}
+          isTop={!profileSheetOpen}
+          zIndex={OVERLAY.z.menu}
+          title={t('settings.settings')}
+          closeAccessibilityLabel={t('home.a11y.closeMenu')}
+        >
+          {ctx => (
+            <SettingsPage
+              embedded
+              topInset={0}
+              onOpenSubPage={openShellSubPage}
+              onNavigateHome={() => closeOverlay('menu')}
+              {...ctx}
+            />
           )}
-        </PullPane>
+        </OverlaySheet>
+
+        {/* Profile preview, stacked ON TOP of the menu it was opened from —
+            swiping it down returns to the menu, not to home. chromeless:
+            PreviewFieldPage draws its own back header. */}
+        <OverlaySheet
+          open={profileSheetOpen}
+          onClose={closeProfileSheet}
+          chromeless
+          zIndex={OVERLAY.z.subPage}
+        >
+          {ctx => (
+            <PreviewFieldPage
+              config={{ kind: 'preview', title: t('settings.myProfile') }}
+              onBack={closeProfileSheet}
+              clipBottom
+              {...ctx}
+            />
+          )}
+        </OverlaySheet>
+
         <BuyExtraPopup
           visible={buyExtraOpen}
           onDismiss={() => setBuyExtraOpen(false)}
@@ -3321,20 +2954,19 @@ const styles = StyleSheet.create({
   // the sheet stretched to the bottom of the screen. The wrapper itself is
   // transparent; the card child carries the white fill + shadow so the empty
   // wrapper draws nothing while the sheet is closed.
-  profileSheetOverlay: {
-    position: 'absolute' as const,
-    bottom: 0,
-    start: 0,
-    end: 0,
+  // Floating menu button on page1, at top-START (opposite the card's group
+  // chip at top-END). `start` rather than `left` so it mirrors under RTL.
+  hamburger: {
+    position: 'absolute',
+    start: MD,
   },
-  profileSheetCard: {
-    flex: 1,
-    backgroundColor: PRIMARY,
-    shadowColor: BLACK,
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 12,
+  // The invite sheet's body is a full-bleed MatchCard that paints its own
+  // background, so the sheet card underneath carries no fill or lift of its
+  // own — otherwise its shadow would sit over the photo.
+  overlayCardBare: {
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   root: {
     flex: 1,

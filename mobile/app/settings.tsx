@@ -14,7 +14,8 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
-import { PullContext, type PullCtx } from '../src/components/PullPane'
+import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
+import type { OverlaySheetBody } from '../src/components/OverlaySheet'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from '../src/components/PhotoEditor'
 import { supabase } from '../src/lib/supabase'
@@ -2811,9 +2812,19 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
 
 
-type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
+type SettingsPageProps = {
+  topInset?: number
+  onBack?: () => void
+  onNavigateHome?: () => void
+  focused?: boolean
+  onOpenSubPage?: (config: SubPageConfig) => Promise<void>
+  embedded?: boolean
+} & Partial<OverlaySheetBody>
 
-export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
+export default function SettingsPage({
+  topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false,
+  dismissGestureRef, onScrollAtTop, pulling,
+}: SettingsPageProps = {}) {
   const { profile } = useUserStore()
   const { user } = useAuthStore()
 
@@ -2822,10 +2833,21 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
     ? (localPhotoUriCache.get(firstPhoto) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user?.id ?? profile?.user_id}/normal/${firstPhoto}`)
     : undefined
 
-  return (
+  // Same wiring PreviewFieldPage uses: when this page is the body of an
+  // OverlaySheet, its scroll has to negotiate with the sheet's dismiss pan
+  // (PullScrollView reports at-top and drops scrollEnabled mid-pull) or the
+  // two fight and the content lands nudged after a swipe + snap-back.
+  const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
+    panRef: dismissGestureRef,
+    extraRefs: [],
+    setScrollAtTop: onScrollAtTop ?? (() => {}),
+    pulling: pulling ?? false,
+  } : null, [dismissGestureRef, onScrollAtTop, pulling])
+
+  const body = (
     <View style={styles.rootOuter}>
       <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['bottom', 'left', 'right']}>
-        <ScrollView
+        <PullScrollView
           style={styles.tabScroll}
           contentContainerStyle={[styles.tabContent, { paddingTop: 0 }]}
           showsVerticalScrollIndicator={false}
@@ -2833,6 +2855,7 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
           delaysContentTouches={false}
           bounces={false}
           overScrollMode="never"
+          scrollEventThrottle={16}
         >
           <Pressable
             style={styles.profileCard}
@@ -2882,10 +2905,14 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
             </View>
           </View>
 
-        </ScrollView>
+        </PullScrollView>
       </SafeAreaView>
     </View>
   )
+
+  return pullCtx
+    ? <PullContext.Provider value={pullCtx}>{body}</PullContext.Provider>
+    : body
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────

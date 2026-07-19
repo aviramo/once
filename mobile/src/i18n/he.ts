@@ -796,6 +796,8 @@ export default {
   'chat.blockDesc': 'המשתמש ייחסם ולא יוכל ליצור איתך קשר שוב. לא ניתן לבטל פעולה זו.',
   'chat.blockConfirm': 'חסימה',
   'chat.leave': 'סיום צ\'אט',
+  'chat.a11y.close': 'סגירת הצ\'אט',
+  'chat.a11y.menu': 'אפשרויות צ\'אט',
   'chat.report': 'דיווח',
   'chat.reportTitle': 'דיווח על המשתמש',
   'chat.reportDesc': 'הדיווח יישלח לצוות שלנו לבדיקה. המשתמש ייחסם ולא תותאמו שוב. כל קשר פעיל ביניכם יסתיים.',
@@ -838,6 +840,10 @@ export default {
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   'home.broadcast.endsIn': '{time} לסיום השידור',
+  // Accessibility labels for the floating shell chrome (no visible text).
+  'home.a11y.menu': 'פתיחת התפריט',
+  'home.a11y.closeMenu': 'סגירת התפריט',
+  'home.a11y.closeInvite': 'סגירת ההזמנה',
   'home.tabs.home': 'Once',
   'home.tabs.viewers': 'צופים בי',
   'home.tabs.hidden_m': 'מוסתר',
