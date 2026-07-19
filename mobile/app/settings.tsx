@@ -851,7 +851,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
         <Button
           label={t('settings.groupsJoinTitle')}
           onPress={() => { tap(); setStep('join') }}
-          variant="secondary"
+          variant="primary"
           size="lg"
         />
       </View>
