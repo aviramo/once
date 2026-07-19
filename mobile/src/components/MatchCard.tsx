@@ -36,18 +36,23 @@ const SCROLL_TO_END_MS = 1400
 // scroll-to-end behavior. Lets callers reuse the "teaser" affordance with a
 // custom icon (e.g. the page2 pending-invite question-mark) without
 // reimplementing the scroll.
+//
+// The stack is `column-reverse`, so actions[0] anchors at the BOTTOM and later
+// entries stack upward. `size` lets a quiet secondary action (the report flag)
+// ride the same column at half diameter instead of needing its own overlay.
 export type CardAction = {
   key: string
   icon: React.ReactNode
   onPress?: () => void
   bg?: string
+  size?: number
 }
 
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
   return (
     <View style={styles.actionStack}>
       {actions.map(a => (
-        <RoundButton key={a.key} bg={a.bg} onPress={a.onPress}>
+        <RoundButton key={a.key} size={a.size} bg={a.bg} onPress={a.onPress}>
           {a.icon}
         </RoundButton>
       ))}
@@ -320,13 +325,6 @@ type MatchCardProps = {
    * popping into view partway through the slide-up. Callers that omit it fall
    * back to the self-measured height + the opacity gate. */
   cardHeight?: number
-  /** Vertical space to reserve at the card's top-START corner for SHELL chrome
-   * painted above the card (home's floating hamburger, an OverlaySheet's close
-   * X). Both live at top-start, which is exactly where the report flag sits, so
-   * the flag drops below the reserved band instead of colliding. Pass
-   * `chromeReserve(topInset)` from OverlaySheet. 0 / omitted = nothing above
-   * the card (the hidden preloader, the own-profile preview). */
-  topStartInset?: number
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -353,7 +351,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   viewerLocationType,
   self = false,
   cardHeight,
-  topStartInset = 0,
 }: MatchCardProps, ref) {
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
@@ -675,30 +672,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
-          {/* Report (flag) button — overlaid at the TOP corner of the hero
-              photo, on the chips side (start), in every card state. Separate
-              from the bottom action stack so report lives in one consistent
-              place. Rendered at HALF the standard RoundButton diameter (with
-              a proportionally smaller glyph) so it reads as a quiet secondary
-              affordance, not a primary one. box-none so the padding margin
-              falls through to the photo and only the button itself is a tap
-              target. */}
-          {sections[0]?.type === 'photo' && onReport ? (
-            <View
-              pointerEvents="box-none"
-              style={[styles.reportOverlay, topStartInset > 0 && { paddingTop: MD + topStartInset }]}
-            >
-              <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
-                <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
-              </RoundButton>
-            </View>
-          ) : null}
-
-          {/* Group chip — overlaid at the TOP corner of the hero photo on the
-              side opposite the report flag, only when the snapshot carries a
-              shared-group name (server embeds it via make_profile when viewer
-              and subject share any group). Same on-photo Chip styling as the
-              bottom info chips, custom GroupsIcon to read as "same group". */}
+          {/* Group chip — overlaid at the TOP corner of the hero photo, only
+              when the snapshot carries a shared-group name (server embeds it
+              via make_profile when viewer and subject share any group). Same
+              on-photo Chip styling as the bottom info chips, custom GroupsIcon
+              to read as "same group". */}
           {sections[0]?.type === 'photo' && match.group_name ? (
             <View pointerEvents="box-none" style={styles.groupOverlay}>
               <Chip
@@ -760,7 +738,19 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 key: 'like',
                 icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
               }]
-              const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
+              const resolved: Array<CardAction & { onPress: () => void }> =
+                base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
+              // Report rides the top of the same column (the stack is
+              // column-reverse, so appending puts it ABOVE the heart) at half
+              // diameter, reading as a quiet secondary affordance. It used to
+              // sit at the card's top-start corner, where it collided with the
+              // shell's floating hamburger.
+              if (onReport) resolved.push({
+                key: 'report',
+                icon: <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />,
+                onPress: onReport,
+                size: ROUND_BUTTON_SIZE_SM,
+              })
               return resolved.length > 0 ? <CardActionStack actions={resolved} /> : null
             })()}
           </View>
@@ -861,12 +851,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: MD,
-    padding: MD,
-  },
-  reportOverlay: {
-    position: 'absolute',
-    top: 0,
-    start: 0,
     padding: MD,
   },
   groupOverlay: {

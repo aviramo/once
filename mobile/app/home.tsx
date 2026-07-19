@@ -22,7 +22,7 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { RisingCard } from '../src/components/RisingCard'
-import { OverlaySheet, chromeReserve } from '../src/components/OverlaySheet'
+import { OverlaySheet } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
 import { PresenceDot } from '../src/components/Chip'
@@ -2386,8 +2386,6 @@ export default function HomePage() {
     return true
   }
 
-  const cardChromeReserve = chromeReserve(topInset)
-
   return (
     <View style={styles.backdrop}>
       {/* Paused recolors the status bar to flat BLACK_MID so the chrome reads
@@ -2750,8 +2748,9 @@ export default function HomePage() {
               {/* Floating menu button. A sibling AFTER the card layers so it
                   is the deepest responder within its own bounds and does NOT
                   translate when a card is pulled off. It sits at top-START,
-                  opposite the group chip the card renders at top-END; the
-                  card's own report flag drops below it via topStartInset. */}
+                  opposite the group chip the card renders at top-END. The
+                  card's own chrome stays clear of it: the report flag rides
+                  the bottom action stack, above the heart. */}
               <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
                 <RoundButton
                   size={ROUND_BUTTON_SIZE_SM}
@@ -2796,7 +2795,6 @@ export default function HomePage() {
               viewerFamily={profile?.family ?? null}
               viewerLocationType={resolveLocationType(profile)}
               bottomInset={0}
-              topStartInset={cardChromeReserve}
               onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
               topBlock={page2PendingInvite
                 ? replyingInviteCard

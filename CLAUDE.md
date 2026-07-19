@@ -155,7 +155,7 @@ Menu sits above everything on purpose: it is the one surface that stays reachabl
 ### Home chrome
 
 - **Floating hamburger**, `position:absolute`, `start: MD`, `top: topInset + OVERLAY.chromeGap`. Top-START, opposite the group chip the card renders at top-END. It is a sibling rendered AFTER the card layers, so it is the deepest responder in its own bounds and does not translate when a card is pulled off.
-- **`chromeReserve(topInset)`** → `MatchCard`'s `topStartInset`. Shell chrome (the hamburger, a sheet's X) and the card's report flag both want top-start; the flag drops below the reserved band. One helper, both collisions.
+- **The report flag rides the card's bottom action stack, above the heart** (`CardAction` with `size: ROUND_BUTTON_SIZE_SM`; the stack is `column-reverse`, so appending puts it on top). It used to sit at the card's top-start corner, where it collided with the floating hamburger. Nothing else may claim top-start on a card. The earlier fix — a `chromeReserve(topInset)` helper feeding a `MatchCard.topStartInset` that pushed the flag below the chrome band — is deleted; do not reintroduce it.
 - **In chat state the card's action button OPENS the chat.** Ending the conversation lives in the chat sheet's 3-dot menu. The leave/block `BottomSheet` and its confirms stay in `home.tsx` with `runAction`; only the trigger renders inside the sheet. That is not a leak — the sheet *is* home.tsx's tree.
 - **Nothing else is displayed on home.** No hearts count (settings only), no viewer count, no viewer list, no visibility control (a settings row), no broadcast.
 
