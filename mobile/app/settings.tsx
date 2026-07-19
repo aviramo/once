@@ -661,6 +661,14 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
   const [codeError, setCodeError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [leavingId, setLeavingId] = useState<string | null>(null)
+  // The sheet is a small step machine rather than one long scroll. Joining is
+  // a deliberate act, so its explanation and code field only exist once the
+  // user asks for them; the resting view is just "these are my groups".
+  const [step, setStep] = useState<'list' | 'join'>('list')
+  // Leaving confirms in-sheet, NOT via ConfirmDialog: two Modals cannot be
+  // presented at the same parent level on iOS (see AccountPopup), so a dialog
+  // stacked over this sheet would never appear.
+  const [leaveTarget, setLeaveTarget] = useState<Group | null>(null)
 
   useEffect(() => {
     if (!visible) return
@@ -668,6 +676,8 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
     setLoaded(groups != null)
     setCode('')
     setCodeError(null)
+    setStep('list')
+    setLeaveTarget(null)
     invoke<{ groups?: Group[] }>('app/my_groups')
       .then(data => {
         if (cancelled) return
@@ -689,6 +699,8 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       const result = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
       if (result?.groups) setGroups(result.groups)
       setCode('')
+      // Success lands back on the list, where the new membership is visible.
+      setStep('list')
     } catch {
       setCodeError(t('settings.groupsInviteInvalid'))
     } finally {
@@ -708,6 +720,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       // Silently fail; the row stays. User can retry.
     } finally {
       setLeavingId(null)
+      setLeaveTarget(null)
     }
   }
 
@@ -718,6 +731,82 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
       contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
     >
+      {leaveTarget ? (
+        <View style={groupsPopupStyles.step}>
+          <Text style={groupsPopupStyles.title}>
+            {t('settings.groupsLeaveTitle').replace('{name}', leaveTarget.name)}
+          </Text>
+          <Text style={groupsPopupStyles.hint}>{t('settings.groupsLeaveDesc')}</Text>
+          <View style={groupsPopupStyles.actions}>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsBack')}
+                onPress={() => { tap(); setLeaveTarget(null) }}
+                disabled={leavingId !== null}
+                variant="secondary"
+                size="lg"
+              />
+            </View>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsLeaveConfirm')}
+                onPress={() => onLeave(leaveTarget.id)}
+                loading={leavingId !== null}
+                variant="softDestructive"
+                size="lg"
+              />
+            </View>
+          </View>
+        </View>
+      ) : step === 'join' ? (
+        <View style={groupsPopupStyles.step}>
+          <Text style={groupsPopupStyles.title}>{t('settings.groupsJoinTitle')}</Text>
+          <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
+          <View style={groupsPopupStyles.inputWrap}>
+            <TextInput
+              ref={codeInputRef}
+              style={groupsPopupStyles.input}
+              value={code}
+              onChangeText={(v) => {
+                const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
+                setCode(digits)
+                if (codeError) setCodeError(null)
+              }}
+              keyboardType="number-pad"
+              maxLength={INVITE_CODE_LEN}
+              placeholder={t('settings.groupsCodePlaceholder')}
+              placeholderTextColor={BLACK_MID}
+              autoComplete="off"
+              textContentType="none"
+              editable={!submitting}
+              autoFocus
+            />
+          </View>
+          {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
+          <View style={groupsPopupStyles.actions}>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsBack')}
+                onPress={() => { tap(); Keyboard.dismiss(); setStep('list') }}
+                disabled={submitting}
+                variant="secondary"
+                size="lg"
+              />
+            </View>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsJoinAction')}
+                onPress={onJoin}
+                disabled={code.length !== INVITE_CODE_LEN || submitting}
+                loading={submitting}
+                variant="primary"
+                size="lg"
+              />
+            </View>
+          </View>
+        </View>
+      ) : (
+        <>
       <View style={groupsPopupStyles.header}>
         <Text style={groupsPopupStyles.title}>{t('settings.groupsMine')}</Text>
       </View>
@@ -736,7 +825,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
                     <Text style={groupsPopupStyles.rowLabel} numberOfLines={1}>{g.name}</Text>
                   </View>
                   <Pressable
-                    onPress={() => onLeave(g.id)}
+                    onPress={() => { tapWarning(); setLeaveTarget(g) }}
                     disabled={leavingId !== null}
                     hitSlop={TAP_SLOP}
                     style={({ pressed }) => [groupsPopupStyles.rowAction, pressed ? { opacity: 0.5 } : null]}
@@ -756,40 +845,18 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
 
       <View style={groupsPopupStyles.sectionDivider} />
 
+      {/* Joining is one button here. Its explanation and code field live on
+          the next step, so the resting sheet is only the list. */}
       <View style={groupsPopupStyles.joinSection}>
-        <Text style={groupsPopupStyles.subheading}>{t('settings.groupsJoinTitle')}</Text>
-        <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
-        <View style={groupsPopupStyles.inputWrap}>
-          <TextInput
-            ref={codeInputRef}
-            style={groupsPopupStyles.input}
-            value={code}
-            onChangeText={(v) => {
-              const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
-              setCode(digits)
-              if (codeError) setCodeError(null)
-            }}
-            keyboardType="number-pad"
-            maxLength={INVITE_CODE_LEN}
-            placeholder={t('settings.groupsCodePlaceholder')}
-            placeholderTextColor={BLACK_MID}
-            autoComplete="off"
-            textContentType="none"
-            editable={!submitting}
-          />
-        </View>
-        {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
-        <View style={{ marginTop: SM }}>
-          <Button
-            label={t('settings.groupsJoinAction')}
-            onPress={onJoin}
-            disabled={code.length !== INVITE_CODE_LEN || submitting}
-            loading={submitting}
-            variant="primary"
-            size="lg"
-          />
-        </View>
+        <Button
+          label={t('settings.groupsJoinTitle')}
+          onPress={() => { tap(); setStep('join') }}
+          variant="secondary"
+          size="lg"
+        />
       </View>
+        </>
+      )}
     </BottomSheet>
   )
 }
@@ -797,9 +864,12 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
 const groupsPopupStyles = StyleSheet.create({
   header: { paddingHorizontal: MD, paddingTop: SM, paddingBottom: XS },
   title: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK },
-  mineSection: { paddingHorizontal: MD, paddingBottom: MD },
-  joinSection: { paddingHorizontal: MD, paddingTop: MD },
-  subheading: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  mineSection: { paddingHorizontal: MD, paddingBottom: LG },
+  joinSection: { paddingHorizontal: MD, paddingTop: LG },
+  // Join and leave steps: one titled block with its own actions row.
+  step: { paddingHorizontal: MD, paddingTop: SM },
+  actions: { flexDirection: 'row', gap: SM, marginTop: LG },
+  action: { flex: 1 },
   hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS, lineHeight: lh(TEXT.sm) },
   empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM },
   list: { borderRadius: RADIUS, backgroundColor: WHITE_SOFT, overflow: 'hidden' },
@@ -810,12 +880,16 @@ const groupsPopupStyles = StyleSheet.create({
   rowAction: { padding: SM },
   divider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
+  // Reads as a field: a border and a white fill, not just a tinted block. The
+  // previous WHITE_SOFT-on-white panel gave no edge to aim at.
   inputWrap: {
-    marginTop: MD,
-    backgroundColor: WHITE_SOFT,
+    marginTop: LG,
+    backgroundColor: WHITE,
+    borderWidth: 1.5,
+    borderColor: BLACK_MID,
     borderRadius: RADIUS,
     paddingHorizontal: MD,
-    paddingVertical: SM,
+    paddingVertical: MD,
   },
   input: {
     fontSize: TEXT.lg,

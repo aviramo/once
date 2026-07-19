@@ -158,6 +158,10 @@ export default {
   'settings.groupsCodePlaceholder': '6 ספרות',
   'settings.groupsJoinAction': 'הצטרפות',
   'settings.groupsInviteInvalid': 'הקוד שגוי או לא פעיל',
+  'settings.groupsBack': 'חזרה',
+  'settings.groupsLeaveTitle': 'לעזוב את {name}?',
+  'settings.groupsLeaveDesc': 'אפשר להצטרף שוב בהמשך בעזרת קוד הקבוצה.',
+  'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'דיווח על תקלה',
   'bugReport.title': 'דיווח על תקלה',

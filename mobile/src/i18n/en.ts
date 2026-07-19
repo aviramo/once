@@ -158,6 +158,10 @@ export default {
   'settings.groupsCodePlaceholder': '6 digits',
   'settings.groupsJoinAction': 'Join',
   'settings.groupsInviteInvalid': 'Invalid or inactive code',
+  'settings.groupsBack': 'Back',
+  'settings.groupsLeaveTitle': 'Leave {name}?',
+  'settings.groupsLeaveDesc': 'You can join again later with the group code.',
+  'settings.groupsLeaveConfirm': 'Leave group',
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'Report a bug',
   'bugReport.title': 'Report a bug',
