@@ -16,7 +16,7 @@ import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
-import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -323,12 +323,12 @@ type MatchCardProps = {
    * popping into view partway through the slide-up. Callers that omit it fall
    * back to the self-measured height + the opacity gate. */
   cardHeight?: number
-  /** Vertical space to reserve above the topBlock for SHELL chrome painted over
-   * the card (home's floating hamburger, an OverlaySheet's close X). Without it
-   * the status card starts at the card's top edge and the chrome lands on its
-   * text. Pass `chromeReserve(topInset)` from OverlaySheet. 0 / omitted = no
-   * chrome above the card. */
-  topBlockInset?: number
+  /** The shell's safe-area top inset, when floating chrome is painted over this
+   * card (home's hamburger, an OverlaySheet's close X). Two things derive from
+   * it and must stay in lockstep, which is why it is one prop rather than two:
+   * the card's own top-END row lines up WITH the chrome, and the topBlock
+   * status card starts BELOW it. 0 / omitted = no chrome above the card. */
+  chromeInset?: number
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -355,8 +355,12 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   viewerLocationType,
   self = false,
   cardHeight,
-  topBlockInset = 0,
+  chromeInset = 0,
 }: MatchCardProps, ref) {
+  // Top of the shell's floating chrome, and the bottom of the band it occupies.
+  // The card's top-END row aligns with the first; the topBlock clears the second.
+  const chromeTop = chromeInset > 0 ? chromeInset + OVERLAY.chromeGap : 0
+  const chromeBottom = chromeTop > 0 ? chromeTop + ROUND_BUTTON_SIZE_SM : 0
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
   // when image filenames are identical). Memo on the joined filename list
@@ -654,7 +658,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   a transparent gap would expose the backdrop as a stripe above
                   it. If a topBlock ever ships a different background this needs
                   to become a prop alongside `footerBg`. */}
-              <View style={topBlockInset > 0 ? { paddingTop: topBlockInset, backgroundColor: PRIMARY } : undefined}>
+              <View style={chromeBottom > 0 ? { paddingTop: chromeBottom, backgroundColor: PRIMARY } : undefined}>
                 {effectiveTopBlock}
               </View>
             </Animated.View>
@@ -699,7 +703,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               Top-START is deliberately left empty: the shell paints its
               floating chrome there (home's hamburger, a sheet's close X). */}
           {sections[0]?.type === 'photo' && (match.group_name || onReport) ? (
-            <View pointerEvents="box-none" style={styles.topEndOverlay}>
+            <View
+              pointerEvents="box-none"
+              style={[styles.topEndOverlay, chromeTop > 0 && { paddingTop: chromeTop }]}
+            >
               {match.group_name ? (
                 <Chip
                   renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
