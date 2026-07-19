@@ -9,6 +9,7 @@ import {
   page1Narrative,
   page2Narrative,
   availabilityNarrative,
+  profileCompleteNarrative,
 } from "@/lib/humanize";
 import { buildEventCards } from "@/lib/eventCards";
 import { AdminShell } from "../../_components/AdminShell";
@@ -26,13 +27,14 @@ import { type EditorGroup } from "./_components/UserGroupsEditor";
 import { UserGroupsChips } from "./_components/UserGroupsChips";
 import { UserDangerZone } from "./_components/UserDangerZone";
 import { UserHeartsEditor } from "./_components/UserHeartsEditor";
+import { UserTestToggle } from "./_components/UserTestToggle";
 import { UserPhotos } from "./_components/UserPhotos";
 import {
   UnifiedActivity,
   type UnifiedPartner,
 } from "./_components/UnifiedActivity";
 import { setUserGroupAssignment } from "../../groups/actions";
-import { deleteUser, resetUser, setUserHearts } from "../actions";
+import { deleteUser, resetUser, setUserHearts, setUserTest } from "../actions";
 
 type Image = { normal?: string; hash?: string };
 
@@ -73,6 +75,8 @@ type UserRecord = {
       held?: number | string;
     } | null;
   } | null;
+  /** Test-environment flag; see UserTestToggle. */
+  is_test: boolean | null;
 };
 
 type PartnerMini = {
@@ -131,7 +135,7 @@ export default async function UserDetailPage({
     admin
       .from("users")
       .select(
-        "user_id, name, is_male, birth_date, created_at, last_seen, data, relations",
+        "user_id, name, is_male, birth_date, created_at, last_seen, data, relations, is_test",
       )
       .eq("user_id", userId)
       .maybeSingle(),
@@ -223,6 +227,11 @@ export default async function UserDetailPage({
   const n1 = page1Narrative(a, u.relations);
   const n2 = page2Narrative(a, u.relations);
   const gate = availabilityNarrative(a, u.relations);
+  // Second, independent gate: the matchability clause inside
+  // others(only_available) requires >= 1 photo. It is not part of `relations`,
+  // so without it the page-state badges below would read "free / available for
+  // matches" for a profile the server can never surface to anyone.
+  const incomplete = profileCompleteNarrative(a, u.data);
   const gender =
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
 
@@ -282,6 +291,11 @@ export default async function UserDetailPage({
               {isAdmin && gate ? (
                 <StatusBadge tone={gate.tone}>{gate.text}</StatusBadge>
               ) : null}
+              {isAdmin && incomplete ? (
+                <StatusBadge tone={incomplete.tone}>
+                  {incomplete.text}
+                </StatusBadge>
+              ) : null}
               {isAdmin ? (
                 <PageReleaseBadge
                   userId={u.user_id}
@@ -308,6 +322,14 @@ export default async function UserDetailPage({
                     done: a.actions.done,
                     fail: a.actions.fail,
                   }}
+                />
+              ) : null}
+              {isAdmin ? (
+                <UserTestToggle
+                  userId={u.user_id}
+                  isTest={u.is_test === true}
+                  dict={d.test}
+                  action={setUserTest}
                 />
               ) : null}
               <UserGroupsChips

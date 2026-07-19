@@ -33,12 +33,18 @@ const SEG_VALUES = [
   "held",
   "extra",
   "no_notif",
+  // The two matching environments (users.is_test). Folded into `seg` rather
+  // than promoted to its own dropdown: SearchControls' URL writer is
+  // hand-written per param, so a top-level filter costs ~8 edits for a
+  // dimension that is never combined with another segment.
+  "test",
+  "not_test",
 ] as const;
 // Sort modes for the users list. `recent` = the server's last_seen order;
 // `distance` / `relevance` re-sort in JS relative to the admin's own location.
 const SORT_VALUES = ["recent", "distance", "relevance"] as const;
 const SELECT =
-  "user_id, name, created_at, last_seen, data, relations, location";
+  "user_id, name, created_at, last_seen, data, relations, location, is_test";
 // Sentinel role-filter value (can't collide with a uuid) = "users with no role".
 const GROUP_NONE = "__none__";
 // No row will ever carry this user_id — used to force an empty result when a
@@ -256,6 +262,12 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
         .or(
           "relations->push->>perm.eq.denied,relations->push->>dead.eq.true",
         );
+      break;
+    case "test":
+      q = q.eq("is_test", "true");
+      break;
+    case "not_test":
+      q = q.eq("is_test", "false");
       break;
   }
   return q;

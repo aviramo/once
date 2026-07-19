@@ -9,6 +9,7 @@ import { relativeTime } from "@/lib/relativeTime";
 import {
   page1Narrative,
   page2Narrative,
+  profileCompleteNarrative,
   type Relations,
 } from "@/lib/humanize";
 import { userImageUrl } from "@/lib/userImage";
@@ -19,7 +20,7 @@ import {
   type LngLat,
 } from "@/lib/userLocation";
 import { cn } from "@/lib/utils";
-import { Avatar } from "./ui";
+import { Avatar, StatusBadge } from "./ui";
 import { UserActionMenu } from "./UserActionMenu";
 import { PageReleaseBadge } from "./PageReleaseBadge";
 
@@ -34,6 +35,9 @@ export type UserRow = {
   relations: Relations;
   /** Raw PostGIS geography (EWKB hex / EWKT / GeoJSON); decoded for distance. */
   location?: unknown;
+  /** Test-environment flag. Optional so a realtime payload written before the
+   * column existed still merges; absent reads as false. */
+  is_test?: boolean | null;
   /** Joined separately from `users`; preserved across realtime merges since
    * the postgres_changes payload for `users` never carries it. */
   groups?: UserGroupBadge[];
@@ -87,6 +91,10 @@ export function UserCard({
   // entirely for non-admin viewers (managers don't see page state).
   const n1 = page1Narrative(dict, row.relations);
   const n2 = page2Narrative(dict, row.relations);
+  // The photo gate lives in others(only_available), not in `relations`, so the
+  // two page badges alone would read "free / available for matches" for a
+  // profile the server can never surface. Shown alongside them, not instead.
+  const incomplete = profileCompleteNarrative(dict, row.data);
   const loc = isAdmin && adminLoc ? parseUserLocation(row.location) : null;
   const distKm = loc && adminLoc ? haversineKm(adminLoc, loc) : null;
   const assignedGroups = row.groups ?? [];
@@ -187,6 +195,14 @@ export function UserCard({
               are interactive: tap to REVEAL a one-tap "release" button right
               next to the badge (no popup, no confirm text). Click anywhere
               outside the badge + button to dismiss. */}
+          {/* Test users match only other test users, so the page badges alone
+              would read the same for two users who can never meet. */}
+          {isAdmin && row.is_test ? (
+            <StatusBadge tone="busy">{dict.segStates.test}</StatusBadge>
+          ) : null}
+          {isAdmin && incomplete ? (
+            <StatusBadge tone={incomplete.tone}>{incomplete.text}</StatusBadge>
+          ) : null}
           {isAdmin ? (
             <>
               <PageReleaseBadge

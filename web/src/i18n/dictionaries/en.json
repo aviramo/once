@@ -240,6 +240,12 @@
       "expandFiltersDesc": "Clear family & kids settings, unlimited distance, widest age range",
       "openProfile": "Open full profile",
       "confirmExpandFilters": "Expand the filters for {target}? Family & kids settings will be cleared, distance set to unlimited, and the age range widened to the maximum.",
+      "markTest": "Mark as test users",
+      "markTestDesc": "Matched only with other test users",
+      "unmarkTest": "Unmark as test users",
+      "unmarkTestDesc": "Return to the normal matching pool",
+      "confirmMarkTest": "Mark {target} as test users? They will only be matched with other test users, and their active pages will be released.",
+      "confirmUnmarkTest": "Return {target} to the normal pool? Their active pages will be released.",
       "confirmReset": "Reset {target}? State and history will be wiped.",
       "confirmDelete": "Permanently delete {target}? This cannot be undone.",
       "confirmRelease1": "Release page 1 of {target}?",
@@ -306,7 +312,9 @@
       "broadcasting": "Broadcasting",
       "held": "Held hearts",
       "extra": "Holding extra hearts",
-      "no_notif": "Without notifications"
+      "no_notif": "Without notifications",
+      "test": "Test users",
+      "not_test": "Normal users"
     },
     "narrative": {
       "page1": {
@@ -330,6 +338,8 @@
       },
       "gate": {
         "push": "Disabled: notifications off",
+        "group": "Disabled: all their groups are disabled",
+        "noPhoto": "Not matchable: no photos",
         "unavailable": "Disabled: unavailable"
       }
     },
@@ -452,14 +462,6 @@
       "bulkResetBusy": "Resetting…",
       "bulkResetDone": "{count} users reset",
       "bulkFail": "Action failed",
-      "statusEnabled": "Enabled",
-      "statusDisabled": "Disabled",
-      "enableButton": "Enable",
-      "disableButton": "Disable",
-      "enableBusy": "Enabling…",
-      "disableBusy": "Disabling…",
-      "disableConfirm": "Disable the group \"{name}\"? Members without another enabled group will become unavailable in the app.",
-      "enableConfirm": "Re-enable the group \"{name}\"? Its members will become available again.",
       "detail": {
         "open": "Manage members",
         "members": "Group members",
@@ -573,6 +575,15 @@
       "attachmentLocation": "Location",
       "attachmentSchedule": "Schedule",
       "systemEvent": "System event",
+      "test": {
+        "status": "Test user",
+        "mark": "Mark as test",
+        "unmark": "Unmark test",
+        "busy": "Updating…",
+        "confirmMark": "Mark this user as a test user? They will only be matched with other test users, and their active pages will be released.",
+        "confirmUnmark": "Return this user to the normal pool? Their active pages will be released.",
+        "fail": "Action failed"
+      },
       "hearts": {
         "title": "Hearts",
         "balanceLabel": "Daily allowance",

@@ -10,6 +10,7 @@ import {
   FolderMinus,
   Eraser,
   Maximize2,
+  FlaskConical,
   ExternalLink,
   ChevronLeft,
   type LucideIcon,
@@ -54,6 +55,13 @@ function confirmTextFor(
     );
   if (action.kind === "expandFilters")
     return fill(dict.confirmExpandFilters, { target });
+  // Also reached via `initialAction`, so it must be handled here rather than
+  // falling through to the reset prompt.
+  if (action.kind === "setTest")
+    return fill(
+      action.value ? dict.confirmMarkTest : dict.confirmUnmarkTest,
+      { target },
+    );
   return fill(dict.confirmReset, { target });
 }
 
@@ -188,6 +196,31 @@ export function UserActionMenu({
             askConfirm(
               { kind: "expandFilters" },
               fill(dict.confirmExpandFilters, { target: targetLabel }),
+            )
+          }
+        />
+        {/* Two explicit rows rather than one toggle: the bulk sheet has no
+            single "current value" to toggle from, and single/bulk share one
+            code path. */}
+        <ActionRow
+          icon={FlaskConical}
+          label={dict.markTest}
+          desc={dict.markTestDesc}
+          onClick={() =>
+            askConfirm(
+              { kind: "setTest", value: true },
+              fill(dict.confirmMarkTest, { target: targetLabel }),
+            )
+          }
+        />
+        <ActionRow
+          icon={FlaskConical}
+          label={dict.unmarkTest}
+          desc={dict.unmarkTestDesc}
+          onClick={() =>
+            askConfirm(
+              { kind: "setTest", value: false },
+              fill(dict.confirmUnmarkTest, { target: targetLabel }),
             )
           }
         />
