@@ -293,11 +293,33 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
  *  Read by home.tsx (the hidden placeholder) AND by the settings visibility
  *  row, which is the only way back to visible now that page2 has no UI of its
  *  own. Two consumers, one definition — do not re-derive it inline. */
+/** Onboarding is needed when the profile row is absent (brand-new user) or
+ *  present with an empty bio (partially completed — the app treats a non-empty
+ *  bio as the "onboarding finished" marker, since it is the last step).
+ *
+ *  Read by the _layout routing guard AND by index.tsx, the boot route. Two
+ *  consumers, one definition — do not re-derive it inline. index.tsx used to
+ *  send every authenticated user straight to /home and leave the correction to
+ *  the guard; the guard is deliberately not subscribed to `segments`, so when
+ *  the profile fetch resolved before the boot navigation the guard's last
+ *  evaluation happened at `segments.length === 0` and bailed, and nothing ever
+ *  re-fired it. A half-onboarded user was then parked on /home forever with no
+ *  photos and no bio, which renders blank. */
+export function selectNeedsOnboarding(profile: UserProfile | null | undefined): boolean {
+  return !profile || !profile.bio
+}
+
 export function selectIsHidden(profile: UserProfile | null | undefined): boolean {
   const page2 = profile?.relations?.page2
   const hasInviteCard = !!page2 && !Array.isArray(page2)
   return profile?.relations?.page2State === 'locked' && !hasInviteCard
 }
+
+/** Retry budget for the boot profile read. Only transient failures are
+ *  retried (auth failures sign out immediately, "no row" is a valid answer).
+ *  Backoff is linear: attempt n waits n * PROFILE_FETCH_RETRY_MS. */
+const PROFILE_FETCH_RETRIES = 2
+const PROFILE_FETCH_RETRY_MS = 400
 
 export const useUserStore = create<UserStore>((set, get) => ({
   profile: null,
@@ -307,15 +329,49 @@ export const useUserStore = create<UserStore>((set, get) => ({
   fetch: async (userId: string) => {
     set({ loading: true })
     try {
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('user_id', userId)
-        .single()
-      if (data) get().applyServerUser(data as Record<string, unknown>, 'fetch')
-      else set({ profile: null })
+      for (let attempt = 0; ; attempt++) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('user_id', userId)
+          .single()
+
+        // A FAILED READ IS NOT AN EMPTY PROFILE. `.single()` reports "no row"
+        // as PGRST116 — that one genuinely means "brand-new user, send them to
+        // onboarding". Any OTHER error says nothing about whether a row
+        // exists, so it must not fall through to `profile: null`.
+        if (error && error.code !== 'PGRST116') {
+          // A dead session (revoked/expired refresh token, deleted auth user)
+          // is the case that bit us: the read 401s, `profile` reads as null,
+          // and the user looks exactly like a fresh signup while every
+          // subsequent /app call also 401s. Drop the session so routing lands
+          // on /login instead of looping through an onboarding that can't
+          // save. scope 'local' — the session is already invalid server-side,
+          // and a global sign-out would revoke this user's OTHER devices.
+          const status = (error as { status?: number }).status
+          if (status === 401 || status === 403 || error.code === 'PGRST301') {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+            set({ profile: null, fetched: true })
+            return
+          }
+          // Transient (network / server). Retry briefly, then give up and let
+          // routing proceed — `fetched` must always end up true or the boot
+          // route in index.tsx waits on it forever and renders nothing.
+          if (attempt < PROFILE_FETCH_RETRIES) {
+            await new Promise(r => setTimeout(r, PROFILE_FETCH_RETRY_MS * (attempt + 1)))
+            continue
+          }
+          set({ fetched: true })
+          return
+        }
+
+        if (data) get().applyServerUser(data as Record<string, unknown>, 'fetch')
+        else set({ profile: null })
+        set({ fetched: true })
+        return
+      }
     } finally {
-      set({ loading: false, fetched: true })
+      set({ loading: false })
     }
   },
 

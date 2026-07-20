@@ -24,7 +24,7 @@ import {
 import { supabase } from '../src/lib/supabase'
 import { consumeMagicLinkUrl } from '../src/lib/authRedirect'
 import { useAuthStore } from '../src/stores/authStore'
-import { useUserStore } from '../src/stores/userStore'
+import { useUserStore, selectNeedsOnboarding } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
@@ -74,11 +74,10 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const segments = useSegments()
 
-  // Onboarding is needed when profile is absent (new user not yet in DB) or
-  // when it exists but bio is empty (partially completed). The !profileLoading
-  // guard in each routing condition prevents redirecting while the fetch is
-  // still in flight.
-  const needsOnboarding = !profile || !profile.bio
+  // The !profileLoading guard in each routing condition prevents redirecting
+  // while the fetch is still in flight. index.tsx owns the *first* decision
+  // (this effect bails while segments is empty) — see selectNeedsOnboarding.
+  const needsOnboarding = selectNeedsOnboarding(profile)
 
   // ── Routing guard ─────────────────────────────────────────────────────
   // `segments` is intentionally excluded from the dependency array.
