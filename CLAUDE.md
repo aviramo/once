@@ -159,7 +159,7 @@ Menu sits above everything on purpose: it is the one surface that stays reachabl
 - **Floating hamburger**, `position:absolute`, `start: MD`, `top: topInset + OVERLAY.chromeGap`. Top-START, opposite the group chip the card renders at top-END. It is a sibling rendered AFTER the card layers, so it is the deepest responder in its own bounds and does not translate when a card is pulled off.
 - **Drag to open the menu** (`menuDragGesture`, 2026-07-19). A sideways-INWARD drag (from the START edge's direction) **anywhere on the shell** opens the drawer, the gesture twin of the hamburger. Three things are load-bearing; each was a real failure first, verified on the emulator:
   - **It is NOT an edge band.** The obvious design — an invisible strip on the START edge, mirroring where the drawer enters — is dead on arrival: Android gesture navigation (`navigation_mode=2`, the default) owns both screen edges for the system BACK gesture and eats those touches before the view tree sees them. An edge swipe left the app entirely without reaching one JS handler. Do not reintroduce a strip, and do not reach for `setSystemGestureExclusionRects` to force one — that fights the user's own OS back gesture for a gesture that hosts fine away from the edges.
-  - **The gesture is attached to the shell View itself, as an ancestor pan.** An ancestor always receives touches alongside its descendants, so there is no hit-testing race and nothing is swallowed. An overlaying view instead loses the race to whatever paints on top (the invite sheet swallowed it) or, if made full-surface, eats every tap.
+  - **The gesture is an ancestor pan on the page1 subtree.** An ancestor always receives touches alongside its descendants, so there is no hit-testing race and nothing is swallowed. An overlaying view instead loses the race to whatever paints on top (the invite sheet swallowed it) or, if made full-surface, eats every tap. It must wrap the subtree and NOT ride page1's card pan: the card is absent in the empty and gated states, and the drawer has to stay draggable there.
   - **Arbitration is `manualActivation` + a sideways-dominance ratio**, the same shape `usePullBehavior`'s axis-`'x'` close uses — **not** `activeOffsetX` + `failOffsetY`, where whichever axis crosses its slop first wins, so a normal slightly-diagonal swipe fails on Y before it ever activates on X. `dragClaimed` latches the claim because `onTouchesMove` keeps firing after `activate()` and would otherwise re-fire the haptic every frame.
 
   Live over home AND over the derived invite card (no horizontal gesture there, same reason its hamburger stays tappable); disabled while a stacked overlay is up. Vertical pulls are untouched — page1's pull-to-skip fails on horizontal, so the two are disjoint. It shares `AXIS_X_OPEN_SIGN`, derived from `AXIS_X_SIGN` so open and close cannot disagree under RTL.
@@ -1056,11 +1056,36 @@ Helper functions: `make_profile`, `_slim_viewer` (see "Slim viewer snapshots"), 
 
 The "Back to the game" button on the dead-invite card calls `app/free2` directly. Net effect: every page2 ending — declined, expired, cancelled, approve-fail, chat-ended — returns the user to the discoverable pool without an extra step. Only `app_lock2` (the explicit "Hide my profile" tile in the visibility popup) keeps the user out of the pool.
 
-**Known gap — the policy is not actually met for a user who does not reopen the app (found 2026-07-20, OPEN).** Every ending above parks `page2` at `locked` **with a `message`**, and the return to `free` happens only when the user opens the app and taps Continue (`app_clear2`). `others(only_available)` drops `page2.state = 'locked'` unconditionally, so until that tap the user is **invisible to everyone**. An expired invitation therefore removes the invitee from the pool indefinitely — the punishment for not answering an invite is being undiscoverable. Live pool when this was found: 12 of the 13 hidden users were in this state, the oldest since 2026-07-05 (13 days). The backlog was cleared by migration `others_drop_kids_hard_exclude`, but **nothing stops it recurring.**
+**This was not actually true until 2026-07-20 for a user who does not reopen the app.** Every ending above parks `page2` at `locked` **with a `message`**, and the return to `free` happens only when the user opens the app and taps Continue (`app_clear2`). `others(only_available)` dropped `page2.state = 'locked'` unconditionally, so until that tap the user was **invisible to everyone** — an expired invitation removed the invitee from the pool indefinitely, making the punishment for not answering an invite disappearing from the game. Live pool when found: 12 of the 13 hidden users were in this state, the oldest since 2026-07-05 (13 days). Backlog cleared by migration `others_drop_kids_hard_exclude`; the recurrence is fixed by `_page2_open` below (3 fresh cases accumulated within the hour it took to ship it).
 
-`locked` + message and `locked` + no message are two different things — an unread notification vs. a deliberate hide — and only the second should cost visibility. Fixing it needs a decision, because each option has a real cost:
-- **Expire the card.** A cron sweep returns a stale locked-with-message page2 to `free` after N hours. Needs a `locked_at` stamp (`_page2_locked` currently writes only `state`/`profile`/`message`) and an arbitrary N; the user loses the "what happened" card if they were away longer than N (the push already told them).
-- **Stop parking the pool on it.** Let `others()` accept `locked` + message. Cheaper, but wrong as-is: `app_invite`'s precondition requires the target's `page2.state = 'free'`, so candidates would surface that nobody can actually invite. Would need the invite precondition relaxed in the same change.
+`locked` + message and `locked` + no message are two different things — an unread notification vs. a deliberate hide — and only the second should cost visibility.
+
+### `_page2_open` — the "this page2 accepts discovery" predicate (2026-07-20, migration `page2_open_locked_with_message`)
+
+`public._page2_open(page2 jsonb) → boolean` (`sql immutable`) is the single definition of *open for discovery and invitations*:
+
+| `page2` | open | why |
+|---|---|---|
+| `free` (or state missing) | ✅ | resting open state |
+| `locked` **+ `message`** | ✅ | an unacknowledged "what happened" card — must not cost visibility |
+| `locked`, no message | ❌ | a real hide (`app_lock2`) or post-`approve` |
+| `pending` | ❌ | a live incoming invite already owns the page |
+| `chat` | ❌ | — |
+
+Every matching-path consumer was switched to it, and the set is the point — a half-applied version of this rule is worse than none:
+
+1. **`others()`** candidacy — a locked-with-message user is a valid candidate again.
+2. **`app_find`**'s re-check of the pick under the lock.
+3. **`app_find`**'s viewer append. Load-bearing: without it the newly-discoverable user accumulates no viewers, so `relevance_watchers` pegs at 1.0 and they rank top for **everyone simultaneously**.
+4. **`_remove_from_profiles`** — detaching must be symmetric with (3) or viewers leak.
+5. **`app_invite`**'s target precondition. This is why "just show them" is wrong on its own: without it we would surface candidates nobody can invite. The pending write replaces the whole `page2` object, so a live invitation correctly supersedes the stale card.
+6. **`app_clear2` / `app_free2`** now carry `profiles` forward instead of hardcoding `[]` — (3) can populate them while the card is up, and tapping Continue must not wipe them.
+
+**The stored shape is unchanged** (`locked` + message, exactly as before), so the deployed mobile build keeps rendering the dead-invite card and `selectIsHidden` — already `page2State === 'locked' && !hasInviteCard` — already agreed with this model. Server-side discoverability only. Not breaking, no `BACKWARD_COMPAT.md` entry.
+
+**The sender's side needs no equivalent change**, and the migration asserts it: `_expire_invite_pair` writes the inviter's `page1` (locked + `expire`, held heart refunded) and the invitee's `page2` — it never touches the inviter's `page2`, and `page1` state has never gated discovery (`others()` only excludes `page1 = 'chat'`). The inviter stays discoverable and invitable throughout, and always did; the whole asymmetry was that page2 gates visibility while page1 does not. `app_cancel` lands the same shape. The migration ends with a guard that raises if `_expire_invite_pair` ever starts writing the inviter's page2, since that would invalidate this reasoning.
+
+One behaviour does change for the sender: expiry writes **no restriction** (only `ignore`/`cancel`/`remove`/`decline`/`leave`/`block` do), so once the invitee is discoverable again the sender can immediately re-invite them. Intended — a missed invite must not permanently block a retry — and self-limiting, since each invite costs a heart out of a daily 3.
 
 ### `app_refresh_snapshots(me_id)` — keeping snapshots fresh
 
