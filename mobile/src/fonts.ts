@@ -32,11 +32,18 @@ export const FONT_SCALE = {
 // and stop together. Applied once, in icons.tsx's `Glyph` wrapper — call sites
 // keep passing plain ICON.* values.
 //
-// Clamped to `body` because that is the tier the icons actually sit beside
-// (settings rows, chips, list labels); a glyph must never outgrow the text it
-// labels. Scales below the ceiling are honoured in full.
-export const iconScale = (size: number): number =>
-  Math.round(size * Math.min(PixelRatio.getFontScale(), FONT_SCALE.body))
+// Clamped to `body` by default because that is the tier the icons actually sit
+// beside (settings rows, chips, list labels); a glyph must never outgrow the
+// text it labels. Scales below the ceiling are honoured in full.
+//
+// `cap` lowers that ceiling for a glyph living in a container that does NOT
+// grow with the font scale. Pass FONT_SCALE.ui (1.0) inside a fixed-dp box —
+// a round button is the case that matters: its diameter is a plain dp, so a
+// glyph that keeps scaling changes the glyph-to-circle ratio per device and
+// the same button reads crowded on one and lost on another. Call sites never
+// pass this by hand; RoundButton declares it once via GlyphScale (icons.tsx).
+export const iconScale = (size: number, cap: number = FONT_SCALE.body): number =>
+  Math.round(size * Math.min(PixelRatio.getFontScale(), cap))
 
 // Noto Sans Hebrew reserves more room above cap height (Latin ascenders, Hebrew
 // diacritic space) than below the baseline, so the visible ink of a line sits
@@ -49,8 +56,10 @@ export const iconScale = (size: number): number =>
 // iconScale itself, so the correction tracks the OS font scale like everything
 // else. includeFontPadding:false does NOT remove this — it trims the box, not
 // the font's own ascent/descent asymmetry (verified on device: zero change).
-export const inkOffset = (fontSize: number): number =>
-  Math.round(iconScale(fontSize) * 0.16)
+// `cap` mirrors iconScale's — pass the same ceiling the labelled text is
+// capped at, so the correction tracks the glyph it nudges.
+export const inkOffset = (fontSize: number, cap: number = FONT_SCALE.body): number =>
+  Math.round(iconScale(fontSize, cap) * 0.16)
 
 export const WEIGHT_TO_FAMILY: Record<string, string> = {
   '400': 'NotoSansHebrew_400Regular',

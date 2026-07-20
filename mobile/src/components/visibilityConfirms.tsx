@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { t } from '../i18n'
 import { PRIMARY } from '../colors'
+import { ICON } from '../tokens'
 import { EyeOffIcon } from './icons'
 
 // Confirm-popup copy for a press that is about to disrupt other users'
@@ -20,17 +21,27 @@ export type VisibilityConfirmConfig = {
   description: string
   confirmLabel: string
   /** Action icon shown in the dialog's tinted circle. Sized to the
-   * ConfirmDialog convention (`color={PRIMARY} size={32}`). */
+   * ConfirmDialog convention (`color={PRIMARY} size={ICON.circle}`). */
   topIcon: ReactNode
 }
 
 /** "Hide your profile?" Used when going hidden would kick existing watchers
- * (each receives page1=locked + 'remove' push). */
-export function hideProfileConfirm(): VisibilityConfirmConfig {
+ * (each receives page1=locked + 'remove' push).
+ *
+ * `watcherCount` makes the ripple concrete — "your 3 watchers" instead of the
+ * abstract "all your watchers". Three variants because Hebrew inflects the
+ * verb for a single watcher, and because 0 watchers must not claim a number
+ * that isn't there (the generic line still applies: someone can start watching
+ * between this render and the tap). */
+export function hideProfileConfirm(watcherCount: number): VisibilityConfirmConfig {
+  const description =
+    watcherCount <= 0 ? t('settings.hideConfirmDesc')
+    : watcherCount === 1 ? t('settings.hideConfirmDescOne')
+    : t('settings.hideConfirmDescMany').replace('{count}', String(watcherCount))
   return {
     title: t('settings.hideConfirmTitle'),
-    description: t('settings.hideConfirmDesc'),
+    description,
     confirmLabel: t('settings.hideConfirmButton'),
-    topIcon: <EyeOffIcon color={PRIMARY} size={32} />,
+    topIcon: <EyeOffIcon color={PRIMARY} size={ICON.circle} />,
   }
 }

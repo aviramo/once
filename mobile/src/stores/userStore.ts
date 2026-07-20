@@ -315,6 +315,14 @@ export function selectIsHidden(profile: UserProfile | null | undefined): boolean
   return profile?.relations?.page2State === 'locked' && !hasInviteCard
 }
 
+/** How many people are currently watching this user. Reads the synthesized
+ * `watchers` array, which deriveCompat only populates while page2 is `free` —
+ * in any other page2 state there is no viewer list, so 0 is the honest answer
+ * rather than a stale count. */
+export function selectWatcherCount(profile: UserProfile | null | undefined): number {
+  return profile?.relations?.watchers?.length ?? 0
+}
+
 /** Retry budget for the boot profile read. Only transient failures are
  *  retried (auth failures sign out immediately, "no row" is a valid answer).
  *  Backoff is linear: attempt n waits n * PROFILE_FETCH_RETRY_MS. */

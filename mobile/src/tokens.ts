@@ -73,6 +73,32 @@ export const RADII = {
 
 export const TAP_SLOP = 10
 
+// ── Round button diameters ─────────────────────────────────────────────────
+// Standard diameter for every round overlay button (heart / X / add-photo).
+// Lives here rather than in RoundButton.tsx because the overlay chrome below
+// derives from it, and a token file must not import a component. Declared
+// ABOVE ICON because the in-circle glyph sizes are derived from these.
+
+export const ROUND_BUTTON_SIZE = 76
+// Quiet secondary round button: the on-card report flag, and every piece of
+// floating shell chrome (home's hamburger, a sheet's close X, chat's 3-dot
+// menu). Half the hero diameter so the two read as a deliberate primary /
+// secondary pair. Derived, never a second literal.
+export const ROUND_BUTTON_SIZE_SM = ROUND_BUTTON_SIZE / 2
+
+// The ONE glyph-to-circle ratio. Every icon that sits inside a circle — round
+// button, the home center action surface, a popup's tinted icon badge —
+// occupies this fraction of the diameter, so they all read as the same object
+// at different sizes. It is the whole reason the glyph tokens below are
+// derived rather than hand-picked: at 34/76 (45%) the heart read as a dot lost
+// in its circle, while 24/38 (63%) crowded the hamburger against the edge.
+export const GLYPH_CIRCLE_RATIO = 0.55
+
+// Tinted icon badge at the head of a popup (ConfirmDialog's action icon, the
+// login "link sent" confirmation). Not a button — nothing here is pressable —
+// but it is a circle with a glyph in it, so it obeys the same ratio.
+export const ICON_CIRCLE_SIZE = 56
+
 // ── Common icon sizes ──────────────────────────────────────────────────────
 
 export const ICON = {
@@ -81,7 +107,11 @@ export const ICON = {
   lg: 20,
   xxl: 24,    // default glyph size — every standalone icon renders at this
   xxxl: 28,
-  huge: 48,   // glyph inside RoundButton overlays (heart / pause / dots / add-photo / family)
+  // The in-circle glyphs. All derive from GLYPH_CIRCLE_RATIO, so retuning the
+  // padding ring is one edit and the tiers can never drift apart.
+  round: Math.round(ROUND_BUTTON_SIZE_SM * GLYPH_CIRCLE_RATIO),  // 21 — small chrome circle (hamburger / report / close X / 3-dot)
+  circle: Math.round(ICON_CIRCLE_SIZE * GLYPH_CIRCLE_RATIO),     // 31 — popup icon badge (ConfirmDialog, login "link sent")
+  huge: Math.round(ROUND_BUTTON_SIZE * GLYPH_CIRCLE_RATIO),      // 42 — hero circle (heart / pause / chat / add-photo / family)
 } as const
 
 // Glyph sizes are dp and do NOT follow the OS font scale on their own — see
@@ -200,18 +230,6 @@ export const DRAG_HANDLE = {
   height: 4,
   radius: 2,
 } as const
-
-// ── Round button diameters ─────────────────────────────────────────────────
-// Standard diameter for every round overlay button (heart / X / add-photo).
-// Lives here rather than in RoundButton.tsx because the overlay chrome below
-// derives from it, and a token file must not import a component.
-
-export const ROUND_BUTTON_SIZE = 76
-// Quiet secondary round button: the on-card report flag, and every piece of
-// floating shell chrome (home's hamburger, a sheet's close X, chat's 3-dot
-// menu). Half the hero diameter so the two read as a deliberate primary /
-// secondary pair. Derived, never a second literal.
-export const ROUND_BUTTON_SIZE_SM = ROUND_BUTTON_SIZE / 2
 
 // ── Overlay sheets ─────────────────────────────────────────────────────────
 // The app is one screen (page1) with everything else rising over it as a

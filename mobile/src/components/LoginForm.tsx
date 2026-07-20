@@ -7,8 +7,8 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { BLACK, WHITE, PRIMARY, BLACK_MID, DESTRUCTIVE, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
-import { XS, SM, MD, RADIUS, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
+import { BLACK, WHITE, PRIMARY, BLACK_MID, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
+import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -31,9 +31,11 @@ function AppleIcon({ color = BLACK }: { color?: string } = {}) {
   )
 }
 
-function MailIcon({ color = WHITE }: { color?: string } = {}) {
+// Raw <Svg>, not a Glyph: it never followed the OS font scale, which is what
+// a fixed-dp badge needs anyway (see ICON_CIRCLE_SIZE in tokens.ts).
+function MailIcon({ color = WHITE, size = 20 }: { color?: string; size?: number } = {}) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 6h16v12H4z" />
       <Path d="M4 7l8 6 8-6" />
     </Svg>
@@ -194,7 +196,7 @@ export function LoginForm({
     return (
       <View style={styles.body}>
         <View style={styles.successCircle}>
-          <MailIcon color={PRIMARY} />
+          <MailIcon color={PRIMARY} size={ICON.circle} />
         </View>
         <Text style={styles.title}>{t('auth.linkSent')}</Text>
         <Text style={styles.desc}>
@@ -353,13 +355,13 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: SM,
     fontSize: FSIZE.sm,
-    color: DESTRUCTIVE,
+    color: PRIMARY,
     textAlign: 'center',
   },
   successCircle: {
     alignSelf: 'center',
-    width: 56,
-    height: 56,
+    width: ICON_CIRCLE_SIZE,
+    height: ICON_CIRCLE_SIZE,
     borderRadius: 999,
     backgroundColor: WHITE,
     alignItems: 'center',

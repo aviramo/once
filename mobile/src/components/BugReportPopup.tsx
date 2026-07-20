@@ -12,7 +12,7 @@ import { tap } from '../lib/haptics'
 import { useUserStore } from '../stores/userStore'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { t } from '../i18n'
-import { BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY, DESTRUCTIVE } from '../colors'
+import { BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY } from '../colors'
 import { ICON, LG, MD, RADIUS, RADII, SM, TEXT, WEIGHT, XS } from '../tokens'
 
 // Bottom-sheet for reporting a bug: free text + one optional image. On submit
@@ -229,6 +229,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: { marginTop: SM, fontSize: TEXT.sm, color: DESTRUCTIVE, textAlign: 'center' },
+  error: { marginTop: SM, fontSize: TEXT.sm, color: PRIMARY, textAlign: 'center' },
   submitWrap: { alignSelf: 'stretch', marginTop: LG },
 })

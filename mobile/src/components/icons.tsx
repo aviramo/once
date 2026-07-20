@@ -1,19 +1,38 @@
-import { ComponentProps } from 'react'
+import { ComponentProps, createContext, useContext, type ReactNode } from 'react'
 import { I18nManager } from 'react-native'
 import Svg, { Path, Circle, Line, Polyline, Rect, G } from 'react-native-svg'
 import { BLACK, BLACK_STRONG, WHITE, PRIMARY } from '../colors'
 import { ICON, STROKE } from '../tokens'
-import { iconScale } from '../fonts'
+import { iconScale, FONT_SCALE } from '../fonts'
+
+// The OS-font-scale ceiling every Glyph below this point obeys. Default is
+// `body`, matching iconScale's own default: a glyph beside text grows with it.
+const GlyphScaleContext = createContext<number>(FONT_SCALE.body)
+
+/** Declares the font-scale ceiling for every glyph rendered inside it.
+ *
+ *  A container whose own size is a fixed dp must pin this to FONT_SCALE.ui
+ *  (1.0), otherwise the glyph keeps growing while the box does not and the
+ *  glyph-to-box ratio drifts per device font scale — the same round button
+ *  reading crowded on one screen and lost on another. RoundButton is the one
+ *  caller today; it wraps its children, so every in-circle icon in the app
+ *  (heart, hamburger, report flag, close X, 3-dot) inherits it with no
+ *  call-site change. */
+export function GlyphScale({ cap, children }: { cap: number; children: ReactNode }) {
+  return <GlyphScaleContext.Provider value={cap}>{children}</GlyphScaleContext.Provider>
+}
 
 // Every glyph renders through this instead of a bare <Svg>: it applies the
 // shared OS font scale (see FONT_SCALE / iconScale in fonts.ts) so icons grow with
 // the label beside them. A raw <Svg width={ICON.md}> stays at 16dp while its
-// text doubles — that mismatch is the whole reason this wrapper exists.
+// text doubles — that mismatch is the whole reason this wrapper exists. The
+// ceiling comes from the nearest GlyphScale above (see above).
 export function Glyph({ width, height, ...rest }: ComponentProps<typeof Svg>) {
+  const cap = useContext(GlyphScaleContext)
   return (
     <Svg
-      width={typeof width === 'number' ? iconScale(width) : width}
-      height={typeof height === 'number' ? iconScale(height) : height}
+      width={typeof width === 'number' ? iconScale(width, cap) : width}
+      height={typeof height === 'number' ? iconScale(height, cap) : height}
       {...rest}
     />
   )

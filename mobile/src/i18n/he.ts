@@ -416,6 +416,8 @@ export default {
   // Gendered (אתה / את). Picked via tg(_m/_f) against the caller's is_male.
   'settings.hideConfirmTitle': 'להסתיר את הפרופיל?',
   'settings.hideConfirmDesc': 'כל הצופים בך יוסרו ויקבלו על כך התראה.',
+  'settings.hideConfirmDescOne': 'הצופה שיש לך כרגע יוסר ויקבל על כך התראה.',
+  'settings.hideConfirmDescMany': '{count} הצופים שיש לך כרגע יוסרו ויקבלו על כך התראה.',
   'settings.hideConfirmButton': 'הסתרה',
 
   // Home — match teaser

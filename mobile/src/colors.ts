@@ -75,18 +75,20 @@ export const HEADER_PILL_IOS_BASE = 'rgba(255,255,255,0.18)'
 // consumer was the settings profile-card label, sitting next to a pencil icon
 // that faked the same effect with a wider black stroke underneath. They read
 // as two different weights. Don't reintroduce per-element legibility.
-// ── Destructive ──────────────────────────────────────────────────────────
-// Warm gold/amber. The app surface is now the deep-wine PRIMARY everywhere,
-// and the old red (#D96B6B) sat muddily on wine (red-on-red, low separation).
-// Gold reads clearly as "caution / irreversible" on the wine field without
-// competing with the brand hue, and stays inside the warm family so it does
-// not look like a foreign accent. Two tiers: an opaque fill and a low-alpha
-// bg tint. There is intentionally NO muted-gold foreground tier — the muted
-// foreground role (Reset users / delete account / login-error border) uses
-// the faded-white WHITE_MID instead, by the user's request that the gold not
-// appear at lower visual weight.
-export const DESTRUCTIVE        = '#E8B04B'                 // opaque — text, icon, button fill
-export const DESTRUCTIVE_BG     = 'rgba(232,176,75,0.14)'   // low-alpha bg tint — pill, banner, accent surface on wine
+// ── Destructive — DELETED 2026-07-20 ─────────────────────────────────────
+// There is no destructive colour. `DESTRUCTIVE` (#E8B04B gold) and its 14%
+// tint were the last hued accent besides the deliberate semantic four
+// (POSITIVE / NEGATIVE / PREMIUM / ONLINE_GREEN); the brand is monochrome and
+// the gold read as a foreign warning banner wherever it landed — most visibly
+// on the photo-sheet Delete row, which looked like an alert next to its own
+// siblings. Do not reintroduce a warning hue.
+//
+// Express the role with WEIGHT and CONTRAST on the existing ramp instead:
+//   • error / attention text .... PRIMARY on a light surface, WHITE on a dark one
+//   • a secondary destructive act BLACK_STRONG (muted, e.g. "remove week")
+//   • a destructive CONFIRM ...... the normal `primary` button — a delete
+//                                  confirm looks like every other confirm; the
+//                                  dialog copy and the warning haptic carry it
 
 // ── Text selection ────────────────────────────────────────────────────────
 // Highlight drawn behind selected text in every TextInput (the shared

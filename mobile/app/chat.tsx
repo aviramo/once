@@ -18,7 +18,7 @@ import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh } from '../src/tokens'
-import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
@@ -1484,7 +1484,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             style={styles.retryRow}
             hitSlop={6}
           >
-            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={DESTRUCTIVE} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 9v4M12 17h.01" />
               <Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </Svg>
@@ -2591,7 +2591,7 @@ const styles = StyleSheet.create({
     marginTop: XS,
     paddingVertical: XS,
   },
-  retryLabel: { fontSize: TEXT.xs, color: DESTRUCTIVE },
+  retryLabel: { fontSize: TEXT.xs, color: PRIMARY },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
   daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT },
@@ -2865,7 +2865,7 @@ const styles = StyleSheet.create({
   recDot: {
     width: 8, height: 8,
     borderRadius: 4,
-    backgroundColor: DESTRUCTIVE,
+    backgroundColor: PRIMARY,
   },
   recTime: {
     fontSize: TEXT.md,

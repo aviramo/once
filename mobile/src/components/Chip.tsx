@@ -4,10 +4,10 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
 import { Text } from './AppText'
 import { Path, Circle, Rect } from 'react-native-svg'
 import { Glyph } from './icons'
-import { FONT_SCALE } from '../fonts'
+import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
-import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE } from '../tokens'
-import { PRIMARY, PRIMARY_BG, DESTRUCTIVE, WHITE, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
+import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, lh } from '../tokens'
+import { PRIMARY, PRIMARY_BG, WHITE, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -31,7 +31,6 @@ const isRTL = localeIsRTL
 const TONES = {
   neutral:  { fg: BLACK_STRONG, bg: BLACK_SOFT  },
   positive: { fg: PRIMARY,      bg: PRIMARY_BG  },
-  negative: { fg: DESTRUCTIVE,  bg: BLACK_SOFT  },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -64,14 +63,14 @@ export function Chip({
       onPress={onPress}
       style={[styles.chip, { backgroundColor: bgColor }]}
     >
-      {renderIcon?.(glyphColor)}
+      {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(glyphColor)}</View> : null}
       <Text
         style={[styles.chipText, { color: glyphColor }]}
         maxFontSizeMultiplier={FONT_SCALE.heading}
       >
         {text}
       </Text>
-      {renderTrailing?.(glyphColor)}
+      {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(glyphColor)}</View> : null}
     </Container>
   )
 }
@@ -169,8 +168,23 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     flexShrink: 1,
   },
+  // Same treatment the settings select rows use (selectRowIconWrap): a box
+  // exactly one text-line tall, top-aligned, so the glyph centres against the
+  // FIRST line of a wrapped chip label instead of drifting into the gap
+  // between the two lines. marginTop lands it on that line's ink rather than
+  // on its line box. Single-line chips are unaffected — the box then equals
+  // the row height, so top-align and centre coincide. The cap matches the
+  // label's own maxFontSizeMultiplier so box and text scale together.
+  glyphWrap: {
+    alignSelf: 'flex-start',
+    height: iconScale(lh(TEXT.sm), FONT_SCALE.heading),
+    marginTop: inkOffset(TEXT.sm, FONT_SCALE.heading),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chipText: {
     fontSize: TEXT.sm,
+    lineHeight: lh(TEXT.sm),
     fontWeight: WEIGHT.semibold,
     flexShrink: 1,
     // textAlign:'left' is "start of writing direction": physically left in

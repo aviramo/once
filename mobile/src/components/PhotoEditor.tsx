@@ -17,7 +17,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SM, RADIUS, STROKE } from '../tokens'
+import { SM, RADIUS, STROKE, ICON } from '../tokens'
 import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 import { InfoIcon } from './icons'
@@ -751,7 +751,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       />
       <ConfirmDialog
         visible={duplicateDialog}
-        icon={<InfoIcon color={PRIMARY} size={32} />}
+        icon={<InfoIcon color={PRIMARY} size={ICON.circle} />}
         title={t('settings.duplicatePhotoTitle')}
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}

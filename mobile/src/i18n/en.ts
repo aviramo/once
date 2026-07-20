@@ -404,6 +404,8 @@ export default {
   // English is non-gendered (single form); tg picks the same string for either is_male.
   'settings.hideConfirmTitle': 'Hide your profile?',
   'settings.hideConfirmDesc': 'All your watchers will be removed and notified.',
+  'settings.hideConfirmDescOne': 'Your 1 current watcher will be removed and notified.',
+  'settings.hideConfirmDescMany': 'Your {count} current watchers will be removed and notified.',
   'settings.hideConfirmButton': 'Hide',
 
   // Home — match teaser

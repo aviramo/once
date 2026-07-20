@@ -276,7 +276,7 @@ export function SheetHeader({
         bg={floating ? undefined : 'transparent'}
         shadow={!!floating}
       >
-        <CloseIcon color={WHITE} size={ICON.xxl} />
+        <CloseIcon color={WHITE} size={ICON.round} />
       </RoundButton>
       {title ? (
         <View style={styles.titleWrap} pointerEvents="none">

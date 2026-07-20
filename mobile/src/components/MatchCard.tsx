@@ -17,7 +17,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
+import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -691,23 +691,34 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
-          {/* Top-END: the shared-group chip, alone. It appears only when the
-              snapshot carries a group_name, which the server embeds via
-              make_profile when viewer and subject share a group.
+          {/* Top-END: the card's own chrome, in one row. Order in JSX (start
+              → end within the overlay container, which itself sits at the
+              screen END) is [group chip, report flag], so the report lands at
+              the SCREEN EDGE (outermost) and the group chip sits INSIDE it —
+              user directive 2026-07-20: "closest to the screen edge is the
+              report, then the group after". Either child is optional; the row
+              simply omits missing pieces.
 
               Top-START is deliberately left empty: the shell paints its
               floating chrome there (home's hamburger, a sheet's close X). */}
-          {sections[0]?.type === 'photo' && match.group_name ? (
+          {sections[0]?.type === 'photo' && (match.group_name || onReport) ? (
             <View
               pointerEvents="box-none"
               style={[styles.topEndOverlay, chromeTop > 0 && { paddingTop: chromeTop }]}
             >
-              <Chip
-                renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                text={match.group_name}
-                tone="neutral"
-                onPhoto
-              />
+              {match.group_name ? (
+                <Chip
+                  renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                  text={match.group_name}
+                  tone="neutral"
+                  onPhoto
+                />
+              ) : null}
+              {onReport ? (
+                <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
+                  <ShieldIcon color={WHITE} fill={WHITE} size={ICON.round} />
+                </RoundButton>
+              ) : null}
             </View>
           ) : null}
 
@@ -720,14 +731,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
-                {/* Report flag: sits directly above the name chip, at the head
-                    of the same left column, so it reads as "report this
-                    person" next to the identity it acts on. */}
-                {onReport ? (
-                  <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
-                    <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
-                  </RoundButton>
-                ) : null}
                 {/* Identity line: name then age, side by side. The name chip
                     carries no icon — it is who this is, not an attribute of
                     them. chipsLine wraps, so a long name pushes the age to a
@@ -947,7 +950,7 @@ const styles = StyleSheet.create({
     color: BLACK_STRONG,
     textAlign: 'center',
   },
-  bioCounterWarn: { color: DESTRUCTIVE },
+  bioCounterWarn: { color: PRIMARY },
   extraPhoto: {
     width: '100%',
     backgroundColor: BLACK_SOFT,

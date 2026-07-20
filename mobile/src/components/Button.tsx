@@ -4,9 +4,9 @@ import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
+import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
 
-// App-wide button. Every pressable primary/secondary/destructive action goes
+// App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
 // everywhere.
 //
@@ -21,7 +21,7 @@ import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRO
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
+type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -85,7 +85,7 @@ export function Button({
   const base = SIZE[size]
   const skin = VARIANT[variant]
   // Tone only overrides the fill of the primary variant. For
-  // secondary/destructive the tone is ignored — they already carry their
+  // secondary and the rest the tone is ignored — they already carry their
   // own semantic color.
   const toneSkin = variant === 'primary' && tone ? TONE[tone] : null
   // Variants on dark surfaces (onPrimary) look muddy under the global
@@ -223,10 +223,6 @@ const VARIANT: Record<Variant, {
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
     text: { color: BLACK_STRONG, fontWeight: WEIGHT.semibold },
-  },
-  softDestructive: {
-    btn: { backgroundColor: BLACK_SOFT },
-    text: { color: DESTRUCTIVE },
   },
   soft: {
     btn: { backgroundColor: BLACK_STRONG },

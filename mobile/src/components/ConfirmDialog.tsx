@@ -4,7 +4,9 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
-import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
+import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, ICON_CIRCLE_SIZE, lh } from '../tokens'
+import { GlyphScale } from './icons'
+import { FONT_SCALE } from '../fonts'
 import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
 // Every decision popup in the app is this one component. The action is
@@ -46,7 +48,7 @@ export function ConfirmDialog({
   /** Action icon rendered in a tinted circle above the title. Required:
    * every dialog communicates its action through this icon, since the
    * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
-   * sized to the convention: `<XIcon color={PRIMARY} size={32} />`. */
+   * sized to the convention: `<XIcon color={PRIMARY} size={ICON.circle} />`. */
   icon: ReactNode
   /** Opt-in icon/badge rendered INSIDE the confirm button before its label.
    * Deliberately breaks the "buttons carry no icon" convention for the one
@@ -79,6 +81,8 @@ export function ConfirmDialog({
   // field stays visible. Per-screen nudge — the global BottomSheet lift was
   // removed (see CLAUDE.md "Keyboard avoidance"); a single per-component
   // marginBottom does not over-shoot the way the old double-lift did.
+  // The extra MD is breathing room: lifting by exactly the keyboard height
+  // leaves the confirm button sitting flush on the top key row.
   const kbHeight = useKeyboardHeight()
 
   const dismiss = () => {
@@ -94,14 +98,19 @@ export function ConfirmDialog({
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
-      cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
+      cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight + MD } : undefined}
       // When draggable, the PRIMARY drag-handle bar (with its own top/bottom
       // margins) already supplies the top breathing room — drop the card's
       // own paddingTop so the gap above the icon isn't doubled up.
       contentStyle={[styles.card, draggable && styles.cardDraggable]}
     >
       <View style={styles.iconWrap}>
-        <View style={styles.iconCircle}>{icon}</View>
+        {/* The badge is a fixed dp, so its glyph must not follow the OS font
+            scale — same contract as RoundButton, or the icon-to-circle ratio
+            drifts per device (fat shield at font_scale 2, lost at 1). */}
+        <View style={styles.iconCircle}>
+          <GlyphScale cap={FONT_SCALE.ui}>{icon}</GlyphScale>
+        </View>
       </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
@@ -186,8 +195,8 @@ const styles = StyleSheet.create({
     marginBottom: MD,
   },
   iconCircle: {
-    width: 56,
-    height: 56,
+    width: ICON_CIRCLE_SIZE,
+    height: ICON_CIRCLE_SIZE,
     borderRadius: 999,
     backgroundColor: PRIMARY_BG,
     alignItems: 'center',

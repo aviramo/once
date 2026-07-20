@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker'
 import Svg, { Path, Line, Circle, Rect, Defs, RadialGradient, Stop } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
-import { useUserStore, resolveLocationType, selectIsHidden, type LocationType } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
+import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -513,7 +513,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           user to finish the current view/invitation first. */}
       <ConfirmDialog
         visible={locationLockedInfoVisible}
-        icon={<MapPinIcon color={PRIMARY} size={32} />}
+        icon={<MapPinIcon color={PRIMARY} size={ICON.circle} />}
         title={t('settings.locationLockedTitle')}
         description={t('settings.locationLockedDesc')}
         draggable
@@ -742,7 +742,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
                 label={t('settings.groupsLeaveConfirm')}
                 onPress={() => onLeave(leaveTarget.id)}
                 loading={leavingId !== null}
-                variant="softDestructive"
+                variant="primary"
                 size="lg"
               />
             </View>
@@ -889,7 +889,7 @@ const groupsPopupStyles = StyleSheet.create({
     letterSpacing: 6,
     padding: 0,
   },
-  error: { marginTop: XS, fontSize: TEXT.sm, color: DESTRUCTIVE, textAlign: 'center' },
+  error: { marginTop: XS, fontSize: TEXT.sm, color: PRIMARY, textAlign: 'center' },
 })
 
 // ── App Tab ────────────────────────────────────────────────────────────────
@@ -1996,9 +1996,7 @@ const familyStyles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
     backgroundColor: PRIMARY_BG,
   },
-  sectionPillDestructive: { backgroundColor: DESTRUCTIVE_BG },
   sectionPillLabel: { fontSize: TEXT.sm, color: PRIMARY },
-  sectionPillLabelDestructive: { color: DESTRUCTIVE },
   card: {
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
@@ -2050,7 +2048,7 @@ const familyStyles = StyleSheet.create({
   weekLabel: { fontSize: TEXT.sm, color: BLACK },
   weekLabelEmphasis: { fontWeight: WEIGHT.extrabold },
   weekHint: { fontSize: TEXT.sm, color: BLACK_STRONG },
-  weekRemove: { fontSize: TEXT.sm, color: DESTRUCTIVE },
+  weekRemove: { fontSize: TEXT.sm, color: BLACK_STRONG },
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
@@ -2167,16 +2165,18 @@ function PhotoOptionsPopup({
       </Pressable>
 
       <Pressable
-        style={[
-          photoOptionsStyles.fullRow,
-          canDelete ? photoOptionsStyles.destructiveRow : photoOptionsStyles.disabledRow,
-        ]}
+        // Deliberately NOT gold: this sheet's rows are one set of choices and
+        // the gold made Delete read as a warning banner rather than a sibling
+        // of Move / Replace (user request 2026-07-20). Deleting a photo is
+        // reversible by re-adding one, and the confirm still gates it; the
+        // warning haptic below carries the caution instead of the colour.
+        style={[photoOptionsStyles.fullRow, !canDelete && photoOptionsStyles.disabledRow]}
         onPress={() => { if (canDelete) { tapWarning(); onDelete() } }}
       >
-        <PhotoTrashIcon color={canDelete ? DESTRUCTIVE : BLACK_STRONG} />
+        <PhotoTrashIcon color={canDelete ? BLACK : BLACK_STRONG} />
         <Text style={[
           photoOptionsStyles.fullRowLabel,
-          canDelete ? photoOptionsStyles.destructiveLabel : photoOptionsStyles.disabledLabel,
+          !canDelete && photoOptionsStyles.disabledLabel,
         ]}>
           {canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
         </Text>
@@ -2224,12 +2224,6 @@ const photoOptionsStyles = StyleSheet.create({
   },
   fullRowLabel: {
     fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
-  },
-  destructiveRow: {
-    backgroundColor: DESTRUCTIVE_BG,
-  },
-  destructiveLabel: {
-    color: DESTRUCTIVE,
   },
   disabledRow: {
     opacity: 0.55,
@@ -2729,7 +2723,11 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  const hideConfirmConfig = hideProfileConfirm()
+  // Watcher count drives two surfaces: the "(n)" suffix on the Visible row and
+  // the concrete ripple in the hide confirm. deriveCompat only fills the array
+  // while page2 is free, so a hidden user reads 0 without a separate guard.
+  const watcherCount = selectWatcherCount(profile)
+  const hideConfirmConfig = hideProfileConfirm(watcherCount)
 
   // Hearts popup content. Two lines: current balance + extra, and the next
   // grant time (dropped when unknown). The "buy more" button opens the
@@ -2789,7 +2787,11 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             twice, and the eye glyph already names the field. */}
         <SelectFieldRow
           grouped
-          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          label={isHidden
+            ? t('settings.visibilityHidden')
+            : watcherCount > 0
+              ? `${t('settings.visibilityVisible')} (${watcherCount})`
+              : t('settings.visibilityVisible')}
           subtitle={isHidden && outOfHearts ? t('settings.visibilityHiddenNoHearts') : undefined}
           onPress={onVisibilityPress}
           icon={isHidden ? <EyeOffIcon color={WHITE} size={ICON.md} /> : <EyeOpenIcon color={WHITE} size={ICON.md} />}
@@ -2799,14 +2801,16 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             (balance + renewal + plan). */}
         <SelectFieldRow
           grouped
-          // "לבבות {balance}/{cap} + {extra} אקסטרה": the daily pool reads as
+          // "לבבות ({balance}/{cap} + {extra} אקסטרה)": the daily pool reads as
           // a fraction of its cap (it's the replenishable pool) and the extras
           // carry an explicit word (otherwise "+ 5" reads as math, not "five
           // extra"). Drop the extras tail when there are none — steady-state
-          // shows just "לבבות 1/3" (user feedback 2026-06-01).
-          label={`${t('settings.credits')} ${heartsExtra > 0
+          // shows just "לבבות (1/3)" (user feedback 2026-06-01). Parenthesised
+          // to match the Visible row's watcher count: both are a live quantity
+          // trailing a fixed label, so they read as one pattern.
+          label={`${t('settings.credits')} (${heartsExtra > 0
             ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
-            : `${heartsBalance}/${CREDIT_CAP}`}`}
+            : `${heartsBalance}/${CREDIT_CAP}`})`}
           // Subtitle is the "renews {when}" note; dropped entirely when the
           // time is unknown (e.g. between rollout and the first cron tick).
           subtitle={nextGrant
@@ -2866,7 +2870,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={signOutDialog}
-        icon={<SignOutIcon color={PRIMARY} size={32} />}
+        icon={<SignOutIcon color={PRIMARY} size={ICON.circle} />}
         title={t('settings.signOutConfirmTitle')}
         description={tg('settings.signOutConfirmDesc', profile.is_male)}
         confirmLabel={tg('settings.signOutYes', profile.is_male)}
@@ -2876,7 +2880,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={deleteDialog}
-        icon={<TrashIcon color={PRIMARY} size={32} />}
+        icon={<TrashIcon color={PRIMARY} size={ICON.circle} />}
         title={t('settings.deleteConfirmTitle')}
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
@@ -2891,7 +2895,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           otherwise the sheet is purely informational. */}
       <ConfirmDialog
         visible={starsPopupVisible}
-        icon={<HeartIcon color={PRIMARY} size={32} />}
+        icon={<HeartIcon color={PRIMARY} size={ICON.circle} />}
         title={t('stars.popup.title')}
         description={starsDesc}
         confirmLabel={canBuyExtra(profile) ? t('stars.popup.buyExtra') : undefined}

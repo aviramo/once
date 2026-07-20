@@ -17,7 +17,7 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT } from '../src/colors'
-import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
@@ -38,7 +38,7 @@ import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { CloseBoldIcon, PauseIcon, HeartIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon, HamburgerIcon, DotsVerticalIcon } from '../src/components/icons'
+import { CloseBoldIcon, PauseIcon, HeartIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon, HamburgerIcon, DotsVerticalIcon, GlyphScale } from '../src/components/icons'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -46,6 +46,10 @@ import { AppStatusBar } from '../src/components/AppStatusBar'
 // ── Avatar rings: static halo + radar pulse ───────────────────────────────
 
 const AVATAR_SIZE = 130
+// Glyph inside that circle (play / pause / hamburger / spinner). Derived from
+// the same ratio every round button uses, so the center action surface keeps
+// the same padding ring as the chrome buttons instead of a hand-picked size.
+const CENTER_GLYPH_SIZE = Math.round(AVATAR_SIZE * GLYPH_CIRCLE_RATIO)
 const RADAR_RING_COUNT = 3
 const RADAR_DURATION = 4200
 const RADAR_STAGGER = RADAR_DURATION / RADAR_RING_COUNT
@@ -2806,6 +2810,11 @@ export default function HomePage() {
                               : false}
                             style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                           >
+                            {/* Same contract as RoundButton: the circle is a
+                                fixed dp, so its glyph must not follow the OS
+                                font scale, and its size is the shared
+                                glyph-to-circle ratio rather than a literal. */}
+                            <GlyphScale cap={FONT_SCALE.ui}>
                             {centerNotice ? (
                               // When the gate is geo/group we render the user's
                               // OWN profile photo edge-to-edge inside the
@@ -2814,7 +2823,7 @@ export default function HomePage() {
                               // fall back to the centered icon-on-white tile.
                               <View style={[styles.permAvatar, centerNotice.avatarUri && !centerNotice.busy ? null : styles.permSlidersButton]}>
                                 {centerNotice.busy
-                                  ? <Spinner color={PRIMARY} size={64} />
+                                  ? <Spinner color={PRIMARY} size={CENTER_GLYPH_SIZE} />
                                   : centerNotice.avatarUri
                                     ? <Image source={{ uri: centerNotice.avatarUri }} style={styles.permAvatarImage} contentFit="cover" cachePolicy="memory-disk" />
                                     : centerNotice.icon}
@@ -2831,7 +2840,7 @@ export default function HomePage() {
                               // spinner — the radar-ring expansion (RadarRings,
                               // driven by searching/findQueued) is the cue.
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
-                                <Svg width={64} height={64} viewBox="0 0 24 24" fill={PRIMARY}>
+                                <Svg width={CENTER_GLYPH_SIZE} height={CENTER_GLYPH_SIZE} viewBox="0 0 24 24" fill={PRIMARY}>
                                   <Path d="M8 5v14l11-7z" />
                                 </Svg>
                               </View>
@@ -2840,7 +2849,7 @@ export default function HomePage() {
                               // center circle is revealed as the pause button
                               // (user request 2026-05-22). Tap → runPauseFromSkip.
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
-                                <PauseIcon color={PRIMARY} size={64} />
+                                <PauseIcon color={PRIMARY} size={CENTER_GLYPH_SIZE} />
                               </View>
                             ) : (
                               // No candidate to show. The circle's tap opens the
@@ -2848,9 +2857,10 @@ export default function HomePage() {
                               // hamburger glyph as the floating menu button —
                               // a heart here promised an action it never had.
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <HamburgerIcon color={PRIMARY} size={64} />
+                                <HamburgerIcon color={PRIMARY} size={CENTER_GLYPH_SIZE} />
                               </View>
                             )}
+                            </GlyphScale>
                           </Pressable>
                         </View>
                       </View>
@@ -2936,7 +2946,7 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={cancelConfirmOpen}
-                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
+                  icon={<CloseBoldIcon color={PRIMARY} size={ICON.circle} />}
                   title={t('home.cancelWaitingTitle')}
                   description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
                   confirmLabel={t('home.cancelWaitingConfirm')}
@@ -2948,7 +2958,7 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={refuseConfirmOpen}
-                  icon={<CloseBoldIcon color={PRIMARY} size={32} />}
+                  icon={<CloseBoldIcon color={PRIMARY} size={ICON.circle} />}
                   title={t('home.refuseReplyTitle')}
                   description={tg('home.refuseReplyDesc', page2InviteObj?.is_male ?? null)}
                   confirmLabel={t('home.refuseReplyConfirm')}
@@ -2962,7 +2972,7 @@ export default function HomePage() {
                   visible={skipHintOpen}
                   title={t('home.skipHintTitle')}
                   description={t('home.skipHintDesc')}
-                  icon={<ChevronDownIcon color={PRIMARY} size={32} />}
+                  icon={<ChevronDownIcon color={PRIMARY} size={ICON.circle} />}
                   // Secondary "got it": acknowledge the hint and scroll the
                   // card back to the top so the user can perform the
                   // swipe-down-to-skip gesture they were just taught (pull-
@@ -3029,7 +3039,7 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={chatConfirmAction === 'leave'}
-                  icon={<SignOutIcon color={PRIMARY} size={32} />}
+                  icon={<SignOutIcon color={PRIMARY} size={ICON.circle} />}
                   title={t('home.leaveTitle')}
                   description={t('home.leaveDesc')}
                   confirmLabel={t('home.leaveConfirm')}
@@ -3040,7 +3050,7 @@ export default function HomePage() {
                 />
                 <ConfirmDialog
                   visible={chatConfirmAction === 'block'}
-                  icon={<BlockIcon color={PRIMARY} size={32} />}
+                  icon={<BlockIcon color={PRIMARY} size={ICON.circle} />}
                   title={t('chat.blockTitle')}
                   description={t('chat.blockDesc')}
                   confirmLabel={t('chat.blockConfirm')}
@@ -3057,9 +3067,8 @@ export default function HomePage() {
                   visible={!!reportTargetId}
                   // Filled, matching the flag on the card that opens this dialog:
                   // an outline shield read lighter than the solid one just tapped.
-                  icon={<ShieldIcon color={PRIMARY} fill={PRIMARY} size={32} />}
+                  icon={<ShieldIcon color={PRIMARY} fill={PRIMARY} size={ICON.circle} />}
                   title={t('chat.reportTitle')}
-                  description={t('chat.reportDesc')}
                   noteInput={{
                     value: reportNote,
                     onChangeText: setReportNote,
@@ -3097,7 +3106,7 @@ export default function HomePage() {
                   onPress={openMenuByTap}
                   accessibilityLabel={t('home.a11y.menu')}
                 >
-                  <HamburgerIcon color={WHITE} size={ICON.xxl} />
+                  <HamburgerIcon color={WHITE} size={ICON.round} />
                 </RoundButton>
               </View>
             </View>
@@ -3174,7 +3183,7 @@ export default function HomePage() {
               onPress={() => { tap(); setChatMenuOpen(true) }}
               accessibilityLabel={t('chat.a11y.menu')}
             >
-              <DotsVerticalIcon color={WHITE} size={ICON.xxl} />
+              <DotsVerticalIcon color={WHITE} size={ICON.round} />
             </RoundButton>
           }
         >
