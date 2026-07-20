@@ -3,6 +3,7 @@ import Tools from "../tools.ts";
 import User from "../user.ts";
 import {
   Notify,
+  Pages,
   PushPresence,
   PushToken,
   PUSH_BODY,
@@ -44,6 +45,22 @@ function applyBodyFields(user: User, body: Record<string, unknown>) {
 function availabilityState(u: unknown): string {
   const rel = (u as { relations?: { availability?: { state?: string } } } | null | undefined)?.relations;
   return rel?.availability?.state ?? "available";
+}
+
+// Does this user hold an invitation whose clock has already run out, in either
+// direction (page1 waiting as the inviter, page2 pending as the invitee)?
+// Pre-check only — cheap enough to run on every start/location/focus so the
+// app_expire_self round trip is spent solely on rows that actually need it.
+// app_expire_self re-checks expires_at under the row lock, so a false positive
+// here (clock skew, a concurrent extend) is a harmless no-op, never a
+// premature close.
+function isInviteLapsed(u: unknown): boolean {
+  const rel = (u as { relations?: Pages } | null | undefined)?.relations;
+  const lapsed = (at?: string | null) => !!at && Date.parse(at) <= Date.now();
+  return (
+    (rel?.page1?.state === "waiting" && lapsed(rel.page1.expires_at)) ||
+    (rel?.page2?.state === "pending" && lapsed(rel.page2.expires_at))
+  );
 }
 
 // Auto-hide on zero hearts. When balance + extra has reached 0 and the user
@@ -278,6 +295,25 @@ Deno.serve(async (req) => {
         // round-trip the client gets back.
         recordPushPresence(user, body);
         await user.persist(log);
+        // Lazy invitation expiry. The per-minute app_expire_sweep is the safety
+        // net for closed apps; for an app that is OPEN it is far too slow -- the
+        // client's countdown hits 00:00 and the card would sit there, live
+        // cancel button and all, until the next cron tick (up to 60s). The
+        // client fires this endpoint the moment its clock reaches zero, so the
+        // real state comes back in one round trip instead.
+        //
+        // Guarded by a cheap in-memory pre-check so the common call adds
+        // nothing; app_expire_self re-verifies expires_at under the lock and
+        // no-ops if the invite is still live (or was extended concurrently).
+        // Runs before app_availability so the recompute -- and the Realtime
+        // relations change the client renders from -- carries the closed state.
+        if (isInviteLapsed(user)) {
+          const expired = await Tools.rpc(log, "app_expire_self", { me_id: user.user_id });
+          if (expired && !expired.error) {
+            rpcUser = expired.user;
+            notifyList = [...notifyList, ...(expired.notify ?? [])];
+          }
+        }
         // Recompute the geo-availability gate from the just-persisted
         // location and surface it via relations.availability. Synchronous so
         // the /app/start (or /location, /focus) response — and the Realtime

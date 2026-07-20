@@ -17,18 +17,19 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT } from '../src/colors'
-import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, SEARCH_WATCHDOG_SLACK_MS, lh } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { RisingCard } from '../src/components/RisingCard'
-import { OverlaySheet } from '../src/components/OverlaySheet'
+import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
 import { PresenceDot } from '../src/components/Chip'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { PullPane, usePullBehavior } from '../src/components/PullPane'
+import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/PullPane'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
 import ChatPage from './chat'
 import { Image } from 'expo-image'
@@ -151,18 +152,29 @@ function AvatarHaloRings() {
 const SKIP_HINT_HEIGHT = 58
 const SKIP_HINT_FONT = 26
 // Horizontal padding applied on each side of the label so text never
-// reaches the screen edges. The SVG is sized to (window - 2 × HPAD).
-const SKIP_HINT_HPAD = MD * 2
+// reaches the screen edges. The SVG is sized to (window - 2 × HPAD). It was
+// MD * 2 while the label shrank to fit — wide side margins cost nothing when
+// the font is free to shrink. Now that the size is fixed, every pixel of pad
+// is a pixel the wrap can't use, and the long notices were breaking into
+// five short lines with a wide empty gutter on both sides.
+const SKIP_HINT_HPAD = MD
 // Vertical advance for each wrapped line beyond the first. Combined with
-// SKIP_HINT_HEIGHT, defines the fixed area that wraps the label so the
-// avatar below stays at the same position whether the text is 1 line or 2.
+// SKIP_HINT_HEIGHT it defines the fixed area that wraps the label, so the
+// avatar below stays put no matter how many lines the text takes.
 const SKIP_HINT_LINE_H = 30
-const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H
+// Lines the reserved area is tall enough to hold. The label draws at ONE
+// size (SKIP_HINT_FONT) and wraps instead of shrinking, so the longest
+// strings that share this slot — the permission / gate notices, ~2× the
+// length of a skip headline — need three. The area is bottom-anchored, so
+// extra lines grow upward into empty space and a rare fourth line spills
+// into the gap above rather than pushing the avatar down.
+const SKIP_HINT_MAX_LINES = 3
+const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H * (SKIP_HINT_MAX_LINES - 1)
 
-// Estimated rest-state pixel width per character at SKIP_HINT_FONT extrabold,
-// used to decide whether a string needs wrapping. Conservative enough that
-// every string we ship today either fits as 1 line or wraps cleanly to 2.
-const SKIP_HINT_PER_CHAR_W = SKIP_HINT_FONT * 0.65 + 2
+// Estimated rest-state pixel width per character at extrabold + the 2px
+// letterSpacing the label draws with. Slightly over-estimates, so wrapping
+// decisions err toward breaking early rather than clipping.
+const skipHintCharW = (font: number) => font * 0.58 + 2
 
 // Headline pools: each i18n block split into lines (trimmed, blanks dropped,
 // so adding/removing a sentence in i18n is the only edit needed).
@@ -183,9 +195,42 @@ function pickHeadline(prev: number, count: number): number {
   return next
 }
 
+// A comma or period inside a headline is a written pause. At this size the
+// layout says it better than the glyph does, so the break REPLACES the
+// punctuation (it is dropped, not moved to the end of the first line) — and
+// it wins even over a string that would have fit on one line, since that is
+// the shape the copy was written for. Guarded so it can't disfigure the long
+// permission / gate notices that share this slot: the pause must land near
+// the middle (MIN_BALANCE) and both halves must fit, else the plain
+// width-driven path below takes over.
+const HEADLINE_PAUSE = /[,.]/
+const HEADLINE_MIN_BALANCE = 0.4
+
+function splitAtPause(text: string): string[] | null {
+  const mid = text.length / 2
+  let best = -1
+  let bestDist = Infinity
+  for (let i = 0; i < text.length - 1; i++) {
+    // Followed by a space ⇒ a real pause, not a decimal point or an
+    // abbreviation dot sitting inside a word.
+    if (!HEADLINE_PAUSE.test(text[i]) || text[i + 1] !== ' ') continue
+    const d = Math.abs(i - mid)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  }
+  if (best === -1) return null
+  const head = text.slice(0, best).trim()
+  const tail = text.slice(best + 1).trim()
+  if (!head || !tail) return null
+  const balance = Math.min(head.length, tail.length) / Math.max(head.length, tail.length)
+  return balance < HEADLINE_MIN_BALANCE ? null : [head, tail]
+}
+
 // Splits a string into two lines at the space closest to its character
-// midpoint. Empty array if there is no space — caller falls back to
-// glyph-compression via textLength on a single line.
+// midpoint. Used for the two-line case, where a balanced break reads better
+// than a greedy one that leaves a stub on the second line.
 function splitAtMidSpace(text: string): string[] {
   const mid = text.length / 2
   let best = -1
@@ -205,6 +250,40 @@ function splitAtMidSpace(text: string): string[] {
   return [text.slice(0, best).replace(/,\s*$/, ''), text.slice(best + 1)]
 }
 
+// Breaks `text` into the lines it needs to fit the padded width `w` AT ONE
+// FIXED SIZE. The label used to step the font down instead, which made the
+// long permission / gate strings render at ~16pt next to a 26pt skip
+// headline — the same slot visibly changing size with its content. Now the
+// size is constant and the line count varies.
+function fitHeadline(text: string, w: number): string[] {
+  const cw = skipHintCharW(SKIP_HINT_FONT)
+  const fits = (s: string) => s.length * cw <= w
+
+  // A written pause becomes the break, before length is even consulted.
+  const paused = splitAtPause(text)
+  if (paused && paused.every(fits)) return paused
+
+  if (fits(text)) return [text]
+
+  const balanced = splitAtMidSpace(text)
+  if (balanced.length > 1 && balanced.every(fits)) return balanced
+
+  // Greedy wrap for anything that needs three lines or more.
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const candidate = line ? `${line} ${word}` : word
+    if (line && !fits(candidate)) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
 // "לא עכשיו" label revealed behind the match card during a pull-to-skip
 // gesture. The fill uses a tonal vertical gradient — fully opaque solid
 // grays that shift from dark at the top to lighter at the bottom. Because
@@ -214,12 +293,11 @@ function splitAtMidSpace(text: string): string[] {
 // subtle "printed into the page" depth without compromising legibility.
 function SkipHintLabel({ text }: { text: string }) {
   const w = Dimensions.get('window').width - SKIP_HINT_HPAD * 2
-  // Strings whose estimated natural width exceeds the padded area get
-  // wrapped to 2 lines at the space nearest the midpoint. If a wrapped
-  // line is *still* too long for the pad, that single line falls back to
-  // textLength/lengthAdjust glyph-compression.
-  const naturalW = text.length * SKIP_HINT_PER_CHAR_W
-  const lines = naturalW > w ? splitAtMidSpace(text) : [text]
+  // One size for every string; length is absorbed by wrapping. A single word
+  // too wide for the pad still falls back to textLength/lengthAdjust
+  // glyph-compression below, since there is nowhere to break it.
+  const lines = fitHeadline(text, w)
+  const font = SKIP_HINT_FONT
   // SVG height grows downward only when wrapping engages. The bottom-line
   // baseline stays anchored at the original 1-line position (relative to
   // the SVG's bottom edge), so the parent fixed-height container can
@@ -235,7 +313,7 @@ function SkipHintLabel({ text }: { text: string }) {
         </SvgLinearGradient>
       </Defs>
       {lines.map((line, i) => {
-        const lineNaturalW = line.length * SKIP_HINT_PER_CHAR_W
+        const lineNaturalW = line.length * skipHintCharW(font)
         const fit = lineNaturalW > w
         const y = bottomBaseline - (lines.length - 1 - i) * SKIP_HINT_LINE_H
         return (
@@ -244,7 +322,7 @@ function SkipHintLabel({ text }: { text: string }) {
             x={w / 2}
             y={y}
             fill="url(#skipHintFade)"
-            fontSize={SKIP_HINT_FONT}
+            fontSize={font}
             fontWeight={WEIGHT.extrabold}
             textAnchor="middle"
             letterSpacing={2}
@@ -277,7 +355,9 @@ function HeadlineArea({ text }: { text: string }) {
 const headlineAreaStyle = StyleSheet.create({
   area: {
     height: SKIP_HINT_AREA_H,
-    justifyContent: 'flex-start',
+    // Bottom-anchored: the last line always sits the same distance above the
+    // avatar, and wrapping grows the block upward.
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
 })
@@ -318,17 +398,34 @@ const chatMenuStyles = StyleSheet.create({
 
 // ── Invite timer ──────────────────────────────────────────────────────────
 
-function useSecsLeft(expiresAt: string | null | undefined) {
+// `onZero` fires the moment the clock runs out — including on mount, when the
+// target is already in the past. Exactly once per target: an expired
+// invitation is a one-shot event, and the handler hits the network.
+//
+// Held in a ref so callers can pass an inline arrow without restarting the
+// interval every render, which would reset the countdown a caller never asked
+// to reset.
+function useSecsLeft(expiresAt: string | null | undefined, onZero?: () => void) {
   const target = expiresAt ? new Date(expiresAt).getTime() : 0
   const [secsLeft, setSecsLeft] = useState(() =>
     target ? Math.max(0, Math.floor((target - Date.now()) / 1000)) : 0
   )
+  const onZeroRef = useRef(onZero)
+  onZeroRef.current = onZero
+  const firedRef = useRef(false)
   useEffect(() => {
+    firedRef.current = false
     if (!target) { setSecsLeft(0); return }
-    setSecsLeft(Math.max(0, Math.floor((target - Date.now()) / 1000)))
-    const id = setInterval(() => {
-      setSecsLeft(Math.max(0, Math.floor((target - Date.now()) / 1000)))
-    }, 1000)
+    const tick = () => {
+      const left = Math.max(0, Math.floor((target - Date.now()) / 1000))
+      setSecsLeft(left)
+      if (left === 0 && !firedRef.current) {
+        firedRef.current = true
+        onZeroRef.current?.()
+      }
+    }
+    tick()
+    const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [target])
   return secsLeft
@@ -358,8 +455,10 @@ const STATUS_LAYOUT = LinearTransition
 
 // Invitation-countdown type size. Deliberately its own token rather than a
 // TEXT step: the clock is the one glanceable number on the card and reads a
-// notch above the body copy.
-const STATUS_TIMER_FONT = TEXT.xl
+// notch above the body copy. Sized at the "large numeric readout" step so the
+// countdown carries real presence on the card instead of reading as another
+// line of text (user request 2026-07-19).
+const STATUS_TIMER_FONT = TEXT.xxl
 
 const statusCardStyles = StyleSheet.create({
   container: {
@@ -428,8 +527,8 @@ function StatusCardText({ title, description }: { title: string; description: st
 //
 // The tick lives in this component, not in HomePage, so a second of the
 // countdown re-renders only the card.
-function StatusTimer({ expiresAt, frozen }: { expiresAt?: string | null; frozen?: boolean }) {
-  const secsLeft = useSecsLeft(frozen ? null : expiresAt ?? null)
+function StatusTimer({ expiresAt, frozen, onLapsed }: { expiresAt?: string | null; frozen?: boolean; onLapsed?: () => void }) {
+  const secsLeft = useSecsLeft(frozen ? null : expiresAt ?? null, onLapsed)
   if (!frozen && !expiresAt) return null
   return (
     <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.timer}>
@@ -440,14 +539,14 @@ function StatusTimer({ expiresAt, frozen }: { expiresAt?: string | null; frozen?
 
 // Page1 "you sent an invitation" timer card. Heading-led body
 // (StatusCardText) + the live countdown + a plain full-width cancel button.
-function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; expiresAt?: string | null; onCancel: () => void; busy?: boolean }) {
+function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, onLapsed, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; expiresAt?: string | null; onCancel: () => void; onLapsed?: () => void; busy?: boolean }) {
   const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
   const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
 
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={description} />
-      <StatusTimer expiresAt={expiresAt} />
+      <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.cancelWaitingBtn')}
@@ -510,6 +609,7 @@ function ReplyingInviteCard({
   acceptLoading,
   footerInset,
   expiresAt,
+  onLapsed,
 }: {
   title: string
   description: string
@@ -537,6 +637,9 @@ function ReplyingInviteCard({
   busy?: boolean
   acceptLoading?: boolean
   footerInset?: number
+  /** Fired once when `expiresAt` runs out. No-op on the page1 invite prompt,
+   * which carries no clock. */
+  onLapsed?: () => void
 }) {
   const unaffordable = affordable === false
   const hasFallback = unaffordable && onUnaffordable != null
@@ -548,7 +651,7 @@ function ReplyingInviteCard({
   return (
     <View style={[statusCardStyles.container, footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null]}>
       <StatusCardText title={title} description={description} />
-      <StatusTimer expiresAt={expiresAt} />
+      <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <View style={statusButtonStyles.btnRow}>
           <View style={statusButtonStyles.btnDecline}>
@@ -687,6 +790,11 @@ export default function HomePage() {
     tap()
     setOverlays(prev => prev.slice(0, -1))
   }, [])
+  // Removes the drawer from the stack once its slide-out has played. Split
+  // from closeMenu (below) because the motion has to finish BEFORE the
+  // unmount: the drawer animates on pullY, not on a layout animation, so
+  // unmounting first would make it vanish instead of slide.
+  const finishMenuClose = useCallback(() => { closeOverlay('menu') }, [closeOverlay])
 
   // If the app was launched from a killed state by tapping a push, open the
   // matching overlay up front so the user lands on it instead of seeing a
@@ -822,10 +930,18 @@ export default function HomePage() {
   // Assigned during render (below) because step 2 needs values declared after
   // this effect; the effect itself must stay mounted once.
   const inviteBackRef = useRef<(() => boolean) | null>(null)
+  // The BackHandler registers once with [] deps, so it reaches closeMenu (which
+  // is defined further down, next to the pull it drives) through a ref.
+  const closeMenuRef = useRef<() => void>(() => {})
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (overlaysRef.current.length > 0) {
-        closeTopOverlay()
+      const stack = overlaysRef.current
+      if (stack.length > 0) {
+        // The drawer animates itself out on pullY, so Back must go through its
+        // own closer rather than yanking it off the stack (which would make it
+        // vanish with no motion).
+        if (stack[stack.length - 1] === 'menu') closeMenuRef.current()
+        else closeTopOverlay()
         return true
       }
       return inviteBackRef.current?.() ?? false
@@ -2124,6 +2240,24 @@ export default function HomePage() {
     />
   ) : null
 
+  // ── Invitation lapse ─────────────────────────────────────────────────────
+  // The clock reaching 00:00 is the only local signal that an invitation died —
+  // nothing else on the client changes until the server says so. The per-minute
+  // app_expire_sweep gets there eventually, but up to 60s later: long enough to
+  // leave the user staring at a dead card whose cancel button, if tapped, used
+  // to forfeit their held heart. So the moment it lapses, ask the server to
+  // settle it. /app/focus runs app_expire_self, and the real locked/expire
+  // state comes back over Realtime — which is what swaps the card. Nothing is
+  // faked locally, so a failed call just falls back to the cron.
+  //
+  // Fires once per invitation (useSecsLeft guarantees it) and the server
+  // re-checks expires_at under the row lock, so a fast device clock can never
+  // close a still-live invite. Shared by both directions: the outgoing
+  // InviteTimerCard and the incoming ReplyingInviteCard below.
+  const handleInviteLapsed = useCallback(() => {
+    invoke('app/focus', { notif_perm: notifPerm }).catch(() => {})
+  }, [notifPerm])
+
   // Page2 pending-invite card — sits at the TOP of the page2 MatchCard
   // (topBlock), mirroring how InviteTimerCard sits on the page1 sent-invite
   // card. StatusCard scaffold, no standalone heading (the title rides as a
@@ -2138,6 +2272,7 @@ export default function HomePage() {
       acceptLabel={t('home.replyingAccept')}
       declineLabel={t('home.watchingReject')}
       expiresAt={page2PendingInvite.expires_at}
+      onLapsed={handleInviteLapsed}
       costCredits={CREDIT_COST.approve}
       affordable={starsBalance >= CREDIT_COST.approve}
       onAccept={() => runAction('app/approve', 'replying-accept')}
@@ -2190,7 +2325,6 @@ export default function HomePage() {
       : handlePermissionRequest
   const permBusyState = locFailed ? locBusy : isNetMode ? netBusy : permBusy
 
-  const goToPreferences = () => openOverlay('menu')
 
   // v3: synth state is null for both `free` (find ran, no candidate) and `locked`
   // without message (brand-new user, or post-clear). Only the latter is "ready to
@@ -2347,7 +2481,12 @@ export default function HomePage() {
   // so it carries this card's random skip line (SKIP_HEADLINES) — invisible
   // while the card covers it, revealed already-full the instant the card is
   // pulled away to skip.
-  const headlineText = centerNotice
+  // The first-time tutorial peeks the card down to reveal this very slot, so
+  // for its duration the slot names the gesture being demonstrated instead of
+  // carrying this card's random skip line.
+  const headlineText = page1Pull.tutorialPlaying
+    ? t('home.skipTutorialHint')
+    : centerNotice
     ? centerNotice.text
     : isLoadingProfileHeadline
       ? t('home.loadingProfile')
@@ -2386,8 +2525,186 @@ export default function HomePage() {
     return true
   }
 
+  // ── Drag the menu open ──────────────────────────────────────────────────
+  // A sideways drag INWARD (from the START edge's direction) anywhere on the
+  // shell opens the drawer — the gesture counterpart of the hamburger.
+  //
+  // It is deliberately NOT an edge band, which is the obvious design and does
+  // not work: Android gesture navigation (`navigation_mode=2`, the default)
+  // owns both screen edges for its system BACK gesture and consumes those
+  // touches before the app's view tree sees them. An edge strip there is dead
+  // on arrival — verified on the emulator, where a start-edge swipe left the
+  // app entirely instead of reaching a single JS handler. Do not reintroduce
+  // one, and do not reach for setSystemGestureExclusionRects to force it:
+  // that fights the user's own OS back gesture for a gesture we can host
+  // perfectly well away from the edges.
+  //
+  // The gesture is attached to the SHELL ITSELF, not to an overlaying view. An
+  // ancestor always receives touches alongside its descendants, so there is no
+  // hit-testing race with the card underneath and nothing is swallowed: it is
+  // invisible to taps, and it only claims sideways-DOMINANT drags, so page1's
+  // pull-to-skip (which fails on horizontal anyway) keeps every vertical pull.
+  //
+  // The drawer TRACKS THE FINGER while it opens, exactly as it tracks the
+  // finger while it closes — one continuous position, never a gesture that
+  // merely triggers a canned animation. That is why `menuPull` is created HERE
+  // and handed to the sheet (see OverlaySheet's `pull` prop): the closing pan
+  // lives on the sheet, the opening pan lives on the shell, and both write the
+  // same `pullY`. `pullY` is the distance from OPEN: 0 = fully out, screenW =
+  // fully hidden. So the opening drag is just `screenW - travel`.
+  const menuPull = usePullBehavior({
+    activation: 'sheet',
+    axis: 'x',
+    // Only the sheet's own closing pan is gated on being open; the shell pan
+    // below has its own gate.
+    enabled: menuOpen && !profileSheetOpen,
+    onCommit: finishMenuClose,
+  })
+  const { pullY: menuPullY, commitDistance: menuCommitDistance, screenSpan: menuSpan } = menuPull
+  // Slide the drawer out on pullY, THEN unmount. Guarded so the X, Back and a
+  // committed swipe can't each start their own close.
+  const menuClosingRef = useRef(false)
+  const closeMenu = useCallback(() => {
+    if (menuClosingRef.current) return
+    menuClosingRef.current = true
+    menuPullY.value = withTiming(menuSpan, undefined, () => {
+      'worklet'
+      // Fired even when the animation is INTERRUPTED (finished === false), so
+      // a close can never be stranded half-played with the sheet still in the
+      // overlay stack. Getting this wrong once already produced a drawer that
+      // no control could dismiss.
+      runOnJS(finishMenuClose)()
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuSpan, finishMenuClose])
+  useEffect(() => { if (!menuOpen) menuClosingRef.current = false }, [menuOpen])
+  closeMenuRef.current = closeMenu
+  // The drawer is ALWAYS mounted (OverlaySheet keepMounted), parked off-screen
+  // at pullY = menuSpan while closed. Its position IS its state.
+  //
+  // Why not mount it on demand: it has to already exist to be dragged in, and
+  // an earlier version that mounted it on drag-start had to juggle a
+  // `menuDragging` flag that gated the mount, the entrance animation and the
+  // unmount — which stranded the sheet mounted-but-unclosable the first time
+  // an animation was interrupted. Keeping it mounted deletes that state
+  // machine outright: the drag has nothing to create or destroy, only a
+  // position to move.
+  useEffect(() => {
+    // Park it hidden on first paint — usePullBehavior starts pullY at 0, which
+    // for an always-mounted drawer means "fully open".
+    menuPullY.value = menuSpan
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const commitMenuDrag = useCallback(() => { openOverlay('menu') }, [openOverlay])
+  // The tap path slides the drawer in on pullY, exactly like the drag — it
+  // just supplies the motion itself instead of taking it from a finger. One
+  // mechanism owns the drawer's position in every path (tap, drag, close), so
+  // there is no second source of truth for where it sits and no layout
+  // animation to keep in sync with the gesture.
+  const openMenuByTap = useCallback(() => {
+    menuPullY.value = menuSpan
+    openOverlay('menu')
+    menuPullY.value = withTiming(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuSpan, openOverlay])
+
+  const dragStart = useSharedValue({ x: 0, y: 0 })
+  const dragClaimed = useSharedValue(false)
+  // Live over home AND over the derived invite card (which has no horizontal
+  // gesture, and whose hamburger is tappable for the same reason). Off while a
+  // STACKED overlay is up so it can't fight that surface's own pans.
+  // Gated through a SHARED VALUE, never through `.enabled()`. Committing a
+  // drag opens the menu, which flips this condition — and with `.enabled()`
+  // that rebuilds the gesture object while the pan is still live, which makes
+  // RNGH detach and reattach the handler mid-drag. Reading the gate inside the
+  // handler keeps the gesture object constant for the life of the screen.
+  // Written from an effect, not during render: a render-phase shared-value
+  // write is the pattern Reanimated's strict mode warns about.
+  const menuDragEnabled = useSharedValue(true)
+  useEffect(() => { menuDragEnabled.value = overlays.length === 0 }, [overlays, menuDragEnabled])
+  const menuDragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        // Same arbitration OverlaySheet's axis-'x' close uses: wait out the
+        // slop, then claim only a sideways-dominant inward drag. An
+        // activeOffsetX/failOffsetY pair looks equivalent and is not —
+        // whichever axis crosses its slop first wins, so a normal slightly
+        // diagonal swipe fails on Y before it ever activates on X.
+        .manualActivation(true)
+        .onTouchesDown(e => {
+          'worklet'
+          dragClaimed.value = false
+          const tch = e.allTouches[0]
+          if (tch) dragStart.value = { x: tch.absoluteX, y: tch.absoluteY }
+        })
+        .onTouchesMove((e, manager) => {
+          'worklet'
+          // onTouchesMove keeps firing after activate(); the latch keeps the
+          // claim (and the mount) to once per drag.
+          if (dragClaimed.value) return
+          if (!menuDragEnabled.value) { manager.fail(); return }
+          const tch = e.allTouches[0]
+          if (!tch) return
+          const dx = tch.absoluteX - dragStart.value.x
+          const dy = tch.absoluteY - dragStart.value.y
+          if (Math.abs(dx) < OVERLAY.menuDragSlop && Math.abs(dy) < OVERLAY.menuDragSlop) return
+          if (dx * AXIS_X_OPEN_SIGN > 0 && Math.abs(dx) > Math.abs(dy) * 0.8) {
+            dragClaimed.value = true
+            manager.activate()
+            return
+          }
+          manager.fail()
+        })
+        .onUpdate(e => {
+          'worklet'
+          if (!dragClaimed.value) return
+          const travel = Math.max(0, e.translationX * AXIS_X_OPEN_SIGN)
+          // 1:1 with the finger, clamped at fully-open. Same no-resistance
+          // tracking the closing drag uses.
+          menuPullY.value = Math.max(0, menuSpan - travel)
+        })
+        .onEnd(e => {
+          'worklet'
+          if (!dragClaimed.value) return
+          const travel = Math.max(0, e.translationX * AXIS_X_OPEN_SIGN)
+          const speed = e.velocityX * AXIS_X_OPEN_SIGN
+          // Past half, or flicked: settle open. Otherwise back off-screen.
+          // Mirrors the closing pan's commit test so both directions agree.
+          if (travel >= menuCommitDistance || speed > SWIPE_DISMISS_VELOCITY) {
+            menuPullY.value = withTiming(0)
+            runOnJS(commitMenuDrag)()
+          } else {
+            // Abandoned: slide back off-screen. Nothing to unmount, nothing to
+            // reconcile — the drawer simply returns to its parked position.
+            menuPullY.value = withTiming(menuSpan)
+          }
+          dragClaimed.value = false
+        }),
+    // Every dep is stable for the life of the screen (shared values, screen
+    // dimensions, a []-dep callback), so this gesture is built exactly once.
+    // Keep it that way — see the shared-value gate above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [menuCommitDistance, menuSpan, commitMenuDrag],
+  )
+
   // Space the floating chrome (hamburger here, the close X on a sheet) occupies
   // at the top of the screen. The card's topBlock starts below it.
+
+  // Never paint the shell without a profile. Every branch below reads through
+  // `profile?.…`, so a null profile renders a bare PRIMARY screen: no card, no
+  // play button, no chrome, and no way out. That is the reported
+  // blank-screen-on-launch — a device holding a dead session read the profile
+  // as null and parked here. Routing (index.tsx / the _layout guard) owns the
+  // real destination; hold a spinner until it decides. Placed after every hook
+  // so the hook order is unchanged.
+  if (!profile) {
+    return (
+      <View style={[styles.backdrop, styles.bootFill]}>
+        <AppStatusBar backgroundColor={PRIMARY} />
+        <Spinner color={WHITE} />
+      </View>
+    )
+  }
 
   return (
     <View style={styles.backdrop}>
@@ -2398,7 +2715,12 @@ export default function HomePage() {
           and never restores prior values on unmount. */}
       <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : PRIMARY} />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
-            {/* page1 — the only standalone screen. */}
+            {/* page1 — the only standalone screen, and ALL of it is the
+                drag-to-open-menu surface (see menuDragGesture). The detector
+                wraps this subtree rather than riding page1's card pan: the
+                card is absent in the empty and gated states, and the drawer
+                must still be draggable there. */}
+            <GestureDetector gesture={menuDragGesture}>
             <View style={{ flex: 1 }}>
               <View style={styles.root}>
                 <View style={{ flex: 1 }}>
@@ -2439,7 +2761,7 @@ export default function HomePage() {
                         sits behind it; the card sliding down reveals the
                         centered group. */}
                     <View style={styles.permScreen}>
-                      <View style={styles.permFlexSpacer} />
+                      <View style={styles.permFlexSpacerTop} />
                       <View pointerEvents="box-none" style={styles.permCenterGroup}>
                         <HeadlineArea text={headlineText} />
                         <View style={styles.permAvatarWrap}>
@@ -2466,8 +2788,14 @@ export default function HomePage() {
                                 runPauseFromSkip()
                                 return
                               }
+                              // openMenuByTap, NOT openOverlay('menu'): the
+                              // drawer is keepMounted and parked at
+                              // pullY = menuSpan, so marking it open without
+                              // animating pullY leaves it off-screen and the
+                              // tap does nothing. Same opener the hamburger
+                              // uses — one mechanism owns the position.
                               tap()
-                              goToPreferences()
+                              openMenuByTap()
                             }}
                             // The play button is intentionally NOT disabled
                             // during the startup/focus window — requestFind
@@ -2516,7 +2844,7 @@ export default function HomePage() {
                               </View>
                             ) : (
                               // No candidate to show. The circle's tap opens the
-                              // menu (goToPreferences), so it wears the same
+                              // menu (openMenuByTap), so it wears the same
                               // hamburger glyph as the floating menu button —
                               // a heart here promised an action it never had.
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
@@ -2585,6 +2913,7 @@ export default function HomePage() {
                                   userIsMale={isMale}
                                   expiresAt={waitingExpiresAt}
                                   onCancel={() => { tap(); setCancelConfirmOpen(true) }}
+                                  onLapsed={handleInviteLapsed}
                                 />
                               ) : isEndedState && page1MessageTitle ? (
                                 <EventMessageCard
@@ -2765,13 +3094,14 @@ export default function HomePage() {
                 <RoundButton
                   size={ROUND_BUTTON_SIZE_SM}
                   style={[styles.hamburger, { top: topInset + OVERLAY.chromeGap }]}
-                  onPress={() => openOverlay('menu')}
+                  onPress={openMenuByTap}
                   accessibilityLabel={t('home.a11y.menu')}
                 >
                   <HamburgerIcon color={WHITE} size={ICON.xxl} />
                 </RoundButton>
               </View>
             </View>
+            </GestureDetector>
 
         {/* ── Overlays, painted low → high ────────────────────────────────
             Each is an OverlaySheet: rises from the bottom, closes on a
@@ -2862,20 +3192,41 @@ export default function HomePage() {
             stays reachable while the availability gate is on. */}
         <OverlaySheet
           open={menuOpen}
-          onClose={() => closeOverlay('menu')}
+          onClose={closeMenu}
+          // Always mounted, parked off-screen — see the drawer note in home's
+          // menu-drag block. `open` here means interactive, not mounted.
+          keepMounted
           isTop={!profileSheetOpen}
           // The one drawer: it slides in from the START edge, where its own
           // hamburger sits, and closes back toward it. Every other sheet rises
           // from the bottom.
           axis="x"
+          // Host-owned pull, so the shell's opening drag and this sheet's
+          // closing drag move the same surface — see menuDragGesture.
+          pull={menuPull}
+          // A drag supplies its own motion; only the hamburger tap animates.
+          // animateExit is not cosmetic: an abandoned drag unmounts the sheet
+          // MID-GESTURE, and an exit animation there crashes Fabric (see
+          // RisingCard.animateExit). A tap-opened menu never sets this flag,
+          // so its X / Back close keeps the normal slide-out.
+          // No layout animation in either direction — pullY carries the drawer
+          // both ways (openMenuByTap / closeMenu). A slide-in animation on a
+          // permanently-mounted sheet would never fire anyway, and a slide-out
+          // would fight the pullY the gesture is already driving.
+          animateEnter={false}
+          animateExit={false}
           zIndex={OVERLAY.z.menu}
-          title={t('settings.settings')}
+          // No title bar: the profile photo runs to the top of the screen and
+          // the X floats over it in its own chip, exactly as it does on the
+          // profile card this row opens.
+          floatingHeader
           closeAccessibilityLabel={t('home.a11y.closeMenu')}
         >
           {ctx => (
             <SettingsPage
               embedded
               topInset={0}
+              photoBleed={sheetHeaderHeight(topInset)}
               onOpenSubPage={openShellSubPage}
               onNavigateHome={() => closeOverlay('menu')}
               {...ctx}
@@ -2920,6 +3271,10 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: PRIMARY,
+  },
+  bootFill: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shell: {
     flex: 1,
@@ -2966,10 +3321,15 @@ const styles = StyleSheet.create({
   permScreen: {
     flex: 1,
   },
-  // Equal flex:1 spacers above and below permCenterGroup vertically center
-  // the visible group across every screen height. Named (not inline) so
-  // both copies of the layout (page1 watching + page2 pull-to-decline)
-  // share the same single source.
+  // Flex spacers above and below permCenterGroup position the visible group
+  // across every screen height. Named (not inline) so both copies of the
+  // layout (page1 watching + page2 pull-to-decline) share the same single
+  // source. The top spacer is deliberately lighter than the bottom one, so
+  // the group sits above centre — dead-centring left too much empty space
+  // between the top chrome and the headline.
+  permFlexSpacerTop: {
+    flex: 0.6,
+  },
   permFlexSpacer: {
     flex: 1,
   },

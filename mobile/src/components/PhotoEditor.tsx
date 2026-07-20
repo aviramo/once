@@ -17,12 +17,18 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SM, MD, RADIUS, STROKE } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
+import { SM, RADIUS, STROKE } from '../tokens'
+import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 import { InfoIcon } from './icons'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
+
+// How many photos a profile may hold, and how many onboarding requires. The
+// grid, the picker limit and the onboarding CTA gate all read these — the
+// numbers were previously inlined at each of those sites.
+export const MAX_PHOTOS = 6
+export const MIN_PHOTOS = 2
 
 function uuidv4(): string {
   const bytes = new Uint8Array(16)
@@ -352,21 +358,6 @@ function PhotoGrid({
         </View>
       ))}
       {additionalChildren}
-      {(() => {
-        const pendingCount = uploads.filter(u => !u.filename).length
-        const addCount = Array.isArray(additionalChildren)
-          ? additionalChildren.length
-          : additionalChildren ? 1 : 0
-        const total = photos.length + pendingCount + addCount
-        const fillers = (3 - (total % 3)) % 3
-        return Array.from({ length: fillers }).map((_, i) => (
-          <View
-            key={`filler-${i}`}
-            style={[photoStyles.cell, photoStyles.filler]}
-            pointerEvents="none"
-          />
-        ))
-      })()}
     </View>
     </GestureDetector>
   )
@@ -522,8 +513,8 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const pickPhoto = async (addIdx: number) => {
-    if (!user || photos.length >= 6) return
-    const maxPick = 6 - photos.length
+    if (!user || photos.length >= MAX_PHOTOS) return
+    const maxPick = MAX_PHOTOS - photos.length
     setPickingAddIdx(addIdx)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -736,17 +727,20 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         additionalChildren={
           (() => {
             const filledCount = photos.length + uploads.filter(u => !u.filename).length
-            const emptySlots = Math.max(0, 6 - filledCount)
+            // Two slots on an empty grid — that is the minimum the step asks
+            // for, so the requirement is visible as shape. After the first
+            // photo one slot trails the set, and none once it is full.
+            const emptySlots = filledCount === 0 ? MIN_PHOTOS : filledCount >= MAX_PHOTOS ? 0 : 1
             return Array.from({ length: emptySlots }).map((_, i) => (
               <Pressable
                 key={`add-${i}`}
-                style={photoStyles.add}
+                style={[photoStyles.cell, photoStyles.add]}
                 onPress={() => { if (pickingAddIdx !== null) return; tap(); pickPhoto(i) }}
               >
                 {pickingAddIdx === i ? (
-                  <ActivityIndicator size="small" color={PRIMARY} />
+                  <ActivityIndicator size="small" color={WHITE} />
                 ) : (
-                  <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={1.5} strokeLinecap="round">
+                  <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE_MID} strokeWidth={1.5} strokeLinecap="round">
                     <Path d="M12 5v14M5 12h14" />
                   </Svg>
                 )}
@@ -773,13 +767,20 @@ const photoStyles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    // Centered, with a real column gap. The previous layout was
+    // `space-between` plus invisible filler cells padding every partial row
+    // out to three — that only ever produced a left-aligned last row. With a
+    // gap the tiles centre on their own and the fillers are gone. 31% x3 +
+    // 2 gaps fits any container wider than 228px, so it never wraps to two.
+    justifyContent: 'center',
+    columnGap: SM,
     rowGap: SM,
-    marginTop: MD,
+    // No top margin: the gap above the grid belongs to the host layout, so
+    // the photo step's title→grid distance is the same single XL every other
+    // onboarding step puts between its title and its fields.
     overflow: 'visible',
   },
-  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS, overflow: 'hidden' },
-  filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
+  cell: { width: '31%', aspectRatio: 3 / 4, borderRadius: RADIUS, overflow: 'hidden' },
   img: { width: '100%', height: '100%' },
   placeholderBg: {
     ...StyleSheet.absoluteFillObject,
@@ -799,11 +800,12 @@ const photoStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
+  // Empty slot: no fill, white hairline border — the same skin the onboarding
+  // name and date fields wear, since this grid sits on the same black sheet.
+  // Geometry comes from `cell` so an add slot and a photo are the same tile.
   add: {
-    width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS,
-    backgroundColor: WHITE,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
+    borderWidth: STROKE.thin, borderColor: WHITE,
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,

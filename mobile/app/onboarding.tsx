@@ -10,16 +10,29 @@ import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
-import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
-import { setCachedGroups } from '../src/lib/groupsCache'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
-import { CountBadge } from '../src/components/CountBadge'
-import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_STRONG, DESTRUCTIVE, PRIMARY, BLACK_MID, BLACK_STRONG } from '../src/colors'
+import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
+import { ConfirmDialog } from '../src/components/ConfirmDialog'
+import { CakeIcon } from '../src/components/icons'
+import { WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, DESTRUCTIVE, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION } from '../src/tokens'
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 5
+
+// "13 באוקטובר" / "October 13" — the birthdate spelled out in words for the
+// confirmation popup, so a digit transposition in the DD/MM boxes reads as an
+// obviously wrong month rather than another pair of digits. Intl carries the
+// month names per language (the app already relies on full ICU for the
+// credits grant day), so this needs no month table of its own.
+function birthdateInWords(yyyy: string, mm: string, dd: string): string {
+  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd))
+  // The title is built on every render, including while the boxes are still
+  // half-typed and the popup is closed. Without this the formatter yields the
+  // literal "Invalid Date".
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(lang, { day: 'numeric', month: 'long' })
+}
 
 // Delay before auto-focusing a step's input after navigating to it. The step
 // transition slides the pager over MOTION.base; focusing an input that is
@@ -126,6 +139,7 @@ export default function OnboardingPage() {
   const [mm, setMm] = useState('')
   const [yyyy, setYyyy] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [birthConfirmOpen, setBirthConfirmOpen] = useState(false)
   const [dateError, setDateError] = useState<string | null>(null)
   const [bio, setBio] = useState(profile?.bio ?? '')
   const [bioSubmitting, setBioSubmitting] = useState(false)
@@ -135,13 +149,6 @@ export default function OnboardingPage() {
   // it), cleared as soon as they pick a photo again.
   const [photoError, setPhotoError] = useState<string | null>(null)
   const photoEditorRef = useRef<PhotoEditorRef>(null)
-  // Step 6: optional group invite code. Digits-only, length 6 (see
-  // INVITE_CODE_LEN). Held in local state until the final step submits — the
-  // server isn't touched on step 5 anymore so the user can still get to step 6
-  // (and to onboarding generally on app relaunch) until the whole flow lands.
-  const [code, setCode] = useState('')
-  const [codeError, setCodeError] = useState<string | null>(null)
-  const codeInputRef = useRef<RNTextInput | null>(null)
 
   // Estimate the pager height for first paint so the initial step renders
   // immediately (rather than flashing an empty background until onLayout fires).
@@ -150,14 +157,13 @@ export default function OnboardingPage() {
   const measuredOnceRef = useRef(false)
   const slideY = useRef(new Animated.Value(-(initialStep - 1) * initialPagerH)).current
   const keyboardOffset = useRef(new Animated.Value(0)).current
-  const [keyboardH, setKeyboardH] = useState(0)
   const stepRef = useRef(step)
   const containerHRef = useRef(containerH)
   const bioSubmittingRef = useRef(false)
   useEffect(() => { stepRef.current = step }, [step])
   useEffect(() => { containerHRef.current = containerH }, [containerH])
 
-  const canGoBack = (s: number) => s === 2 || s === 3 || s === 5 || s === 6
+  const canGoBack = (s: number) => s === 2 || s === 3 || s === 5
   const goBack = () => setStep(s => canGoBack(s) ? s - 1 : s)
   const overlayY = useRef(new Animated.Value(initialStep === 5 ? 0 : initialPagerH)).current
 
@@ -224,7 +230,6 @@ export default function OnboardingPage() {
       // Subtract bottom safe-area inset: SafeAreaView already reserves it,
       // and the keyboard frame on iOS extends through the home-indicator area.
       const h = Math.max(0, e.endCoordinates.height - insets.bottom)
-      setKeyboardH(h)
       // Only shrink the viewport from the bottom (paddingBottom). The content
       // is top-aligned, so the focused input sits above the keyboard with no
       // upward translate needed; translating up would push the header
@@ -235,7 +240,6 @@ export default function OnboardingPage() {
     const hide = Keyboard.addListener(hideEvent, (e) => {
       if (bioSubmittingRef.current) return
       const duration = (e as any).duration ?? 250
-      setKeyboardH(0)
       Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }).start()
     })
     return () => { show.remove(); hide.remove() }
@@ -339,10 +343,6 @@ export default function OnboardingPage() {
       const id = setTimeout(() => bioInputRef.current?.focus(), STEP_FOCUS_DELAY_MS)
       return () => clearTimeout(id)
     }
-    if (step === 6) {
-      const id = setTimeout(() => codeInputRef.current?.focus(), STEP_FOCUS_DELAY_MS)
-      return () => clearTimeout(id)
-    }
     Keyboard.dismiss()
   }, [step])
 
@@ -361,18 +361,13 @@ export default function OnboardingPage() {
     return a
   })()
   const dateValid = age !== null && age >= 18 && age <= 120
-  const bioRemaining = BIO_MAX - bio.length
   const bioValid = bio.trim().length >= BIO_MIN
-  // Step 6 invite code: legal lengths are 0 (skip) or 6 (redeem). Any other
-  // length leaves Continue disabled — there is no "incomplete" partial action.
-  const codeValid = code.length === 0 || code.length === INVITE_CODE_LEN
   const canContinue =
     step === 1 ? isMale !== null :
     step === 2 ? nameValid :
     step === 3 ? dateValid && !submitting :
-    step === 4 ? totalPhotoCount >= 2 :
-    step === 5 ? bioValid :
-    step === 6 ? codeValid && !bioSubmitting :
+    step === 4 ? totalPhotoCount >= MIN_PHOTOS :
+    step === 5 ? bioValid && !bioSubmitting :
     false
 
   const submitAccount = async () => {
@@ -387,6 +382,7 @@ export default function OnboardingPage() {
       setDateError(e?.message ?? 'error')
     } finally {
       setSubmitting(false)
+      setBirthConfirmOpen(false)
     }
   }
 
@@ -417,32 +413,16 @@ export default function OnboardingPage() {
     setBioSubmitting(false)
   }
 
-  // Final onboarding submit, fired from step 6. Optionally redeems the invite
-  // code first (so the group membership is in place when the bio save's
-  // server-side auto-find runs), then awaits the photo flush, saves the bio,
-  // and finally flips the local userStore.bio — which is what `_layout.tsx`
-  // watches to redirect to /home. Holding bio in local state through step 6
-  // keeps onboarding self-contained: if anything in here fails, the user is
-  // still on /onboarding because the persisted profile still has no bio.
+  // Final onboarding submit, fired from step 5. Awaits the photo flush, saves
+  // the bio, and finally flips the local userStore.bio — which is what
+  // `_layout.tsx` watches to redirect to /home. Holding bio in local state
+  // until here keeps onboarding self-contained: if anything in here fails, the
+  // user is still on /onboarding because the persisted profile has no bio.
   const finishOnboarding = async () => {
     if (bioSubmittingRef.current) return
     bioSubmittingRef.current = true
     setBioSubmitting(true)
-    setCodeError(null)
     try {
-      if (code.length === INVITE_CODE_LEN) {
-        try {
-          // Seed the groups cache from the redeem response's sidecar so the
-          // settings row shows the joined group on its very first open.
-          const res = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
-          if (res?.groups) setCachedGroups(res.groups)
-        } catch {
-          setCodeError(t('ob.inviteInvalid'))
-          bioSubmittingRef.current = false
-          setBioSubmitting(false)
-          return
-        }
-      }
       if (flushPromiseRef.current) {
         try {
           await flushPromiseRef.current
@@ -480,16 +460,17 @@ export default function OnboardingPage() {
     if (!canContinue) return
     tap()
     if (step !== 2) Keyboard.dismiss()
-    if (step === 3) { submitAccount(); return }
+    // The birthdate is uneditable after onboarding and drives matching, so it
+    // is read back in words for confirmation before the account is created.
+    if (step === 3) { setBirthConfirmOpen(true); return }
     if (step === 4) { saveImagesAndContinue(); return }
-    if (step === 6) { finishOnboarding(); return }
+    if (step === 5) { finishOnboarding(); return }
     setStep(s => Math.min(TOTAL_STEPS, s + 1))
   }
   const renderStep = (s: number) => {
     if (s === 1) return (
       <View style={styles.page}>
-        <Text style={styles.title}>{t('ob.welcome')}</Text>
-        <Text style={styles.subtitle}>{t('ob.whoAreYou')}</Text>
+        <Text style={styles.title}>{t('ob.whoAreYou')}</Text>
 
         <View style={styles.cardRow}>
           <GenderCard
@@ -511,9 +492,8 @@ export default function OnboardingPage() {
     if (s === 2) return (
       <View style={styles.page}>
         <Text style={styles.title}>{t('ob.nicknameStep')}</Text>
-        <Text style={styles.subtitle}>{t('ob.nicknamePlaceholder')}</Text>
 
-        <View style={styles.inputWrap}>
+        <View style={[styles.fieldShell, styles.inputWrap]}>
           <TextInput
             ref={nameInputRef}
             style={styles.input}
@@ -522,8 +502,8 @@ export default function OnboardingPage() {
             maxLength={30}
             returnKeyType="done"
             onSubmitEditing={onContinue}
-            placeholder={t('ob.nicknameField')}
-            placeholderTextColor={BLACK_MID}
+            cursorColor={WHITE}
+            selectionColor={SELECTION_ON_DARK}
           />
         </View>
 
@@ -532,8 +512,7 @@ export default function OnboardingPage() {
             label={t('ob.next')}
             onPress={onContinue}
             disabled={!canContinue}
-            variant="primary"
-            tone="positive"
+            variant="onPrimary"
             size="lg"
           />
         </View>
@@ -542,22 +521,11 @@ export default function OnboardingPage() {
 
     if (s === 3) {
       const unitValue: Record<DateUnit, string> = { dd, mm, yyyy }
-      const unitLabel: Record<DateUnit, string> = {
-        dd: t('ob.day'), mm: t('ob.month'), yyyy: t('ob.year'),
-      }
       const unitPlaceholder: Record<DateUnit, string> = { dd: 'DD', mm: 'MM', yyyy: 'YYYY' }
       const showMinAge = dateComplete && age !== null && age < 18
       return (
         <View style={styles.page}>
           <Text style={styles.title}>{t('ob.birthdate')}</Text>
-          <View style={styles.subtitleRow}>
-            <View style={styles.subtitleAnchor}>
-              <Text style={[styles.subtitle, { marginTop: 0 }]}>{tg('ob.howOld', isMale === true)}</Text>
-              <View style={{ opacity: dateValid ? 1 : 0 }}>
-                <CountBadge value={age ?? 0} color={WHITE} />
-              </View>
-            </View>
-          </View>
 
           <View style={styles.dateRow}>
             {dateOrder.map((unit, i) => (
@@ -569,7 +537,7 @@ export default function OnboardingPage() {
                   i > 0 && styles.dateSegmentGap,
                 ]}
               >
-                <View style={styles.dateBox}>
+                <View style={[styles.fieldShell, styles.dateBox]}>
                   <TextInput
                     ref={unitRefs[unit]}
                     style={styles.dateInput}
@@ -578,6 +546,8 @@ export default function OnboardingPage() {
                     keyboardType="number-pad"
                     maxLength={unit === 'yyyy' ? 4 : 2}
                     selectTextOnFocus
+                    cursorColor={WHITE}
+                    selectionColor={SELECTION_ON_DARK}
                   />
                   {/* Custom placeholder overlay: a TextInput shares one font
                       size for placeholder + value, but the typed digits should
@@ -591,7 +561,6 @@ export default function OnboardingPage() {
                     </View>
                   )}
                 </View>
-                <Text style={styles.dateUnit}>{unitLabel[unit]}</Text>
               </View>
             ))}
           </View>
@@ -605,8 +574,7 @@ export default function OnboardingPage() {
               onPress={onContinue}
               disabled={!dateValid}
               loading={submitting}
-              variant="primary"
-              tone="positive"
+              variant="onPrimary"
               size="lg"
             />
           </View>
@@ -616,8 +584,7 @@ export default function OnboardingPage() {
 
     if (s === 4) return (
       <View style={styles.page}>
-        <Text style={styles.title}>{t('photo.title')}</Text>
-        <Text style={styles.subtitle}>{tg('photo.sub', isMale === true)}</Text>
+        <Text style={styles.title}>{tg('photo.sub', isMale === true)}</Text>
 
         <View style={styles.photoWrap} pointerEvents="box-none">
           <PhotoEditor
@@ -634,33 +601,25 @@ export default function OnboardingPage() {
 
         <View style={styles.ctaWrap}>
           <Button
-            label={t('photo.confirm')}
+            label={t('ob.next')}
             onPress={onContinue}
-            disabled={totalPhotoCount < 2}
-            variant="primary"
-            tone="positive"
+            disabled={totalPhotoCount < MIN_PHOTOS}
+            variant="onPrimary"
             size="lg"
           />
-          <Text style={styles.almostDone}>{t('photo.almostDone')}</Text>
         </View>
       </View>
     )
 
     if (s === 5) {
-      const bioLen = bio.trim().length
-      const belowMin = bioLen < BIO_MIN
-      // On short screens (or any device whose remaining content height after
-      // the keyboard pops up is below ~500dp) the bio textbox gets squeezed by
-      // the surrounding copy. Drop BOTH the subtitle and the bottom tip in
-      // that case so the field + min-chars note stay usable (on tight screens
-      // the tip was overlapping the textbox / "minimum 20 chars" note).
-      const tightSpace = keyboardH > 0 && (containerH - keyboardH) < 500
+      // The step is the field and the button, nothing else. The surrounding
+      // copy used to be dropped only below a ~500dp height budget, which meant
+      // the layout differed by device and still squeezed the field on the
+      // screens in between.
       return (
         <View style={styles.pageStretched}>
-          <Text style={styles.title}>{t('bio.title')}</Text>
-          {!tightSpace && <Text style={styles.subtitle}>{t('bio.emphasis')}</Text>}
 
-          <View style={[styles.bioField, { flex: 1, minHeight: 0 }]}>
+          <View style={[styles.fieldShell, styles.bioField, { flex: 1, minHeight: 0 }]}>
             <TextInput
               ref={bioInputRef}
               style={[styles.bioInput, { flex: 1, minHeight: 0 }]}
@@ -669,72 +628,24 @@ export default function OnboardingPage() {
               maxLength={BIO_MAX}
               multiline
               textAlignVertical="top"
-              placeholder={t('bio.placeholder')}
-              placeholderTextColor={BLACK_MID}
+              // The min-chars note is a second line of the placeholder rather
+              // than its own element. Composed from the two existing strings,
+              // both of which the MatchCard bio editor still uses separately.
+              placeholder={`${t('bio.placeholder')}\n${t('bio.min')}`}
+              placeholderTextColor={WHITE_MID}
+              cursorColor={WHITE}
+              selectionColor={SELECTION_ON_DARK}
               editable={!bioSubmitting}
             />
-            <Text style={[styles.bioCounter, !belowMin && bioRemaining < 20 && styles.bioCounterWarn]}>
-              {belowMin ? t('bio.min') : bioRemaining}
-            </Text>
           </View>
-
-          {!tightSpace && <Text style={styles.bioTip}>{t('bio.tip')}</Text>}
 
           <View style={[styles.ctaWrap, { marginBottom: MD }]}>
             <Button
               label={t('bio.submit')}
               onPress={onContinue}
               disabled={!bioValid}
-              variant="primary"
-              tone="positive"
-              size="lg"
-            />
-          </View>
-        </View>
-      )
-    }
-
-    if (s === 6) {
-      // Optional group invite-code step. Digits-only, length 0 (skip) or 6.
-      // The Continue button shape-shifts: when the input is empty it reads
-      // "Skip" — pressing it submits the bio with no group attached; when
-      // 6 digits are entered it reads "Join" — pressing it redeems first.
-      const isEmpty = code.length === 0
-      return (
-        <View style={styles.page}>
-          <Text style={styles.title}>{t('ob.inviteTitle')}</Text>
-          <Text style={styles.subtitle}>{t('ob.inviteHint')}</Text>
-
-          <View style={styles.inputWrap}>
-            <TextInput
-              ref={codeInputRef}
-              style={[styles.input, styles.codeInput]}
-              value={code}
-              onChangeText={(v) => {
-                const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
-                setCode(digits)
-                if (codeError) setCodeError(null)
-              }}
-              keyboardType="number-pad"
-              maxLength={INVITE_CODE_LEN}
-              placeholder={t('ob.invitePlaceholder')}
-              placeholderTextColor={BLACK_MID}
-              autoComplete="off"
-              textContentType="none"
-              editable={!bioSubmitting}
-            />
-          </View>
-
-          {codeError ? <Text style={styles.errorText}>{codeError}</Text> : null}
-
-          <View style={styles.ctaWrap}>
-            <Button
-              label={isEmpty ? t('ob.inviteSkip') : t('ob.inviteJoin')}
-              onPress={onContinue}
-              disabled={!canContinue}
               loading={bioSubmitting}
-              variant="primary"
-              tone="positive"
+              variant="onPrimary"
               size="lg"
             />
           </View>
@@ -767,7 +678,7 @@ export default function OnboardingPage() {
         >
           {containerH > 0 && (
             <Animated.View style={{ transform: [{ translateY: slideY }] }}>
-              {[1, 2, 3, 4, 5, 6].map(s => (
+              {[1, 2, 3, 4, 5].map(s => (
                 <View key={String(s)} style={{ height: containerH }}>
                   {s !== 5 && renderedSteps.has(s) ? renderStep(s) : null}
                 </View>
@@ -787,6 +698,21 @@ export default function OnboardingPage() {
           )}
         </View>
       </Animated.View>
+
+      <ConfirmDialog
+        visible={birthConfirmOpen}
+        icon={<CakeIcon color={PRIMARY} size={32} />}
+        title={tg('ob.birthConfirm', isMale === true)
+          .replace('{date}', birthdateInWords(yyyy, mm, dd))
+          .replace('{age}', String(age ?? ''))}
+        confirmLabel={tg('ob.createAccount', isMale === true)}
+        cancelLabel={t('ob.birthConfirmFix')}
+        // The popup closes on the tap; the spinner lives on the Create-account
+        // button underneath, so the in-flight state is shown in one place
+        // rather than freezing the sheet open on top of it.
+        onConfirm={() => { setBirthConfirmOpen(false); submitAccount() }}
+        onCancel={() => setBirthConfirmOpen(false)}
+      />
     </SafeAreaView>
   )
 }
@@ -798,7 +724,10 @@ const styles = StyleSheet.create({
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
   page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },
-  pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: XL, paddingBottom: LG },
+  // The bio step's page. Its LG top padding is deliberately tighter than
+  // `page`'s XL: those steps open on a title, this one opens straight onto the
+  // field, which needs no headroom above it.
+  pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: LG, paddingBottom: LG },
 
   title: {
     fontSize: TEXT.xxl,
@@ -806,21 +735,6 @@ const styles = StyleSheet.create({
     color: WHITE,
     textAlign: 'center',
     letterSpacing: -0.5,
-  },
-  subtitle: {
-    marginTop: SM,
-    fontSize: TEXT.md,
-    color: WHITE_STRONG,
-    textAlign: 'center',
-  },
-  subtitleRow: {
-    marginTop: SM,
-    alignItems: 'center',
-  },
-  subtitleAnchor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SM,
   },
 
   cardRow: {
@@ -855,35 +769,30 @@ const styles = StyleSheet.create({
   cardLabelActive: { color: PRIMARY },
 
   ctaWrap: { marginTop: LG },
-  almostDone: {
-    marginTop: MD,
-    fontSize: TEXT.sm,
-    color: WHITE_STRONG,
-    textAlign: 'center',
-  },
 
   photoWrap: {
-    marginTop: LG,
+    marginTop: XL,
     zIndex: 2, elevation: 2,
   },
 
+  // The onboarding field skin: no fill, white hairline border, white glyphs.
+  // Shared by the name box and the three date boxes so the two steps can't
+  // drift apart — each caller adds only its own padding/metrics on top.
+  fieldShell: {
+    borderWidth: 1,
+    borderColor: WHITE,
+    borderRadius: RADIUS,
+  },
   inputWrap: {
     marginTop: XL,
-    backgroundColor: WHITE,
-    borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingVertical: MD,
   },
   input: {
     fontSize: TEXT.md,
-    color: BLACK,
+    color: WHITE,
     textAlign: 'center',
     padding: 0,
-  },
-  codeInput: {
-    fontSize: TEXT.xl,
-    fontWeight: WEIGHT.extrabold,
-    letterSpacing: 8,
   },
 
   dateRow: {
@@ -897,15 +806,13 @@ const styles = StyleSheet.create({
   dateSegmentGap: { marginLeft: SM },
   dateBox: {
     alignSelf: 'stretch',
-    backgroundColor: WHITE,
-    borderRadius: RADIUS,
     paddingVertical: MD,
     paddingHorizontal: SM,
   },
   dateInput: {
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    color: WHITE,
     textAlign: 'center',
     padding: 0,
   },
@@ -917,13 +824,8 @@ const styles = StyleSheet.create({
   datePlaceholderText: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
-    color: BLACK_MID,
+    color: WHITE_MID,
     textAlign: 'center',
-  },
-  dateUnit: {
-    marginTop: SM,
-    fontSize: TEXT.sm,
-    color: WHITE_STRONG,
   },
   errorText: {
     marginTop: MD,
@@ -932,10 +834,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  // No top margin: `pageStretched`'s padding is the whole gap above the field.
   bioField: {
-    marginTop: MD,
-    backgroundColor: WHITE,
-    borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingTop: MD,
     paddingBottom: LG,
@@ -943,23 +843,9 @@ const styles = StyleSheet.create({
   },
   bioInput: {
     fontSize: TEXT.md,
-    color: BLACK,
+    color: WHITE,
     padding: 0,
     minHeight: 96,
-    textAlign: 'center',
-  },
-  bioCounter: {
-    position: 'absolute',
-    end: 12,
-    bottom: 8,
-    fontSize: TEXT.sm,
-    color: BLACK_STRONG,
-  },
-  bioCounterWarn: { color: DESTRUCTIVE },
-  bioTip: {
-    marginTop: MD,
-    fontSize: TEXT.sm,
-    color: WHITE_STRONG,
     textAlign: 'center',
   },
 })

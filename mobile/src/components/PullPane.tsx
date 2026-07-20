@@ -20,7 +20,7 @@
 
 import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Dimensions, type ScrollViewProps, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
-import { Gesture, GestureDetector, ScrollView, type GestureType } from 'react-native-gesture-handler'
+import { Gesture, GestureDetector, ScrollView, type GestureType, type ComposedGesture } from 'react-native-gesture-handler'
 import type { NativeViewGestureHandlerProps } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSpring, withSequence, withDelay,
@@ -40,6 +40,10 @@ export type PullAxis = 'y' | 'x'
 // negative in LTR and positive in RTL. Declared once, here, because this is the
 // only place that turns the drag magnitude back into a direction.
 const AXIS_X_SIGN = I18nManager.isRTL ? 1 : -1
+/** The opposite direction: inward from the START edge, i.e. the way the menu
+ *  drawer is dragged OPEN (home.tsx's edge grab). Derived from the closing sign
+ *  rather than re-deriving `isRTL`, so the two can never disagree. */
+export const AXIS_X_OPEN_SIGN = -AXIS_X_SIGN
 
 // ── Context for pull gesture ─────────────────────────────────────────────────
 
@@ -154,7 +158,9 @@ export function PullPane({
   cardStatic,
   children,
 }: {
-  gesture: GestureType
+  /** Composed is allowed so a host can Race another pan onto this surface —
+   *  see home.tsx's menu drag, which must NOT add a second GestureDetector. */
+  gesture: GestureType | ComposedGesture
   pullY: SharedValue<number>
   pulling: boolean
   /** Which way the surface travels. See PullAxis. */
@@ -310,6 +316,11 @@ export type PullBehavior = {
   tutorialPlaying: boolean
   // The single commit distance (px) every consumer must share.
   commitDistance: number
+  // Full travel along the axis — the pullY at which the surface is entirely
+  // off-screen. A host that drags the surface IN (the menu drawer's opening
+  // pan) needs it as the starting offset; taking it from here keeps one
+  // definition of "gone" for both directions.
+  screenSpan: number
   // True ONLY once a release committed and the surface is riding off-screen
   // (set in onEnd, cleared on the next onStart). Never set by 'snapBack'.
   slidOut: SharedValue<boolean>
@@ -572,5 +583,5 @@ export function usePullBehavior(opts: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activation, gestureEnabled, commitMode, axis, commitDistance, screenSpan, screenH, onCommit, headerBottom])
 
-  return { gesture, pullY, pulling, pullCtx, panRef, setScrollAtTop, reset, commit, tutorialPlaying, commitDistance, slidOut }
+  return { gesture, pullY, pulling, pullCtx, panRef, setScrollAtTop, reset, commit, tutorialPlaying, commitDistance, screenSpan, slidOut }
 }

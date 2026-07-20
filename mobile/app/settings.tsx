@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Platform, TextInput as RNTextInput } from 'react-native'
+import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, TextInput as RNTextInput } from 'react-native'
 import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -11,7 +11,7 @@ import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore, resolveLocationType, selectIsHidden, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
-import { t, tg, lang, genderize } from '../src/i18n'
+import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { MatchCard, type CardAction } from '../src/components/MatchCard'
 import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
@@ -22,8 +22,9 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
+import { iconScale, inkOffset } from '../src/fonts'
 import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
@@ -161,9 +162,12 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Shared tappable settings row used across Preferences, Profile, App and the
 // Main Menu. Layout (logical order, flips automatically in RTL):
-//   [chevron] [label / title+subtitle] ... [value] [trailing icon | avatar]
+//   [chevron] [label / title+subtitle] ... [trailing icon | avatar]
+// The row has NO separate value column: a field's current value is baked into
+// the `label` as one whole sentence ("Available for women", "Up to 5 km").
+// Splitting it into label + value read as two disconnected fragments at the
+// row's size (user feedback 2026-07-20) — one text run reads as one statement.
 // Variants:
-//   - displayValue?      → orange right-aligned value (radius/age/gender/kids)
 //   - subtitle?          → small secondary text under the label (profile row)
 //   - avatar?            → image URI rendered as a circular avatar at the end
 //   - tone='accent'      → soft PRIMARY_BG halo behind the trailing icon
@@ -173,7 +177,6 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 function SelectFieldRow({
   label,
   subtitle,
-  displayValue,
   onPress,
   icon,
   avatar,
@@ -184,7 +187,6 @@ function SelectFieldRow({
 }: {
   label?: string
   subtitle?: string
-  displayValue?: string
   onPress: () => void | Promise<unknown>
   icon?: React.ReactNode
   avatar?: string
@@ -231,43 +233,26 @@ function SelectFieldRow({
             <View style={styles.selectRowIconWrap}>{icon}</View>
           )
         ) : null
-        // The subtitle (e.g. the stars renewal note) must align with the
-        // LABEL TEXT, not under the leading icon. Indent it by the icon
-        // column's footprint + the label group's gap (MD) so its left edge
-        // lands exactly where the label starts.
-        const iconColW = avatar ? 44 : icon ? (tone === 'accent' ? 36 : ICON.md) : 0
-        const subtitleIndent = iconColW > 0 ? iconColW + MD : 0
+        // The subtitle (e.g. the stars renewal note) must align with the LABEL
+        // TEXT, not under the leading icon. It shares the label's column
+        // rather than being indented by a computed icon width: that estimate
+        // (`ICON.md` for a plain glyph) is only ever as good as its guess at
+        // what the icon actually renders, and any icon whose intrinsic width
+        // differs left the subtitle a few pixels off the label. Sharing the
+        // column makes the two flush by construction.
         return label != null ? (
           <View style={styles.selectRowTextCol}>
-            <View style={styles.selectRowLabelWrap}>
-              <View style={styles.selectRowLabelGroup}>
-                {renderedIcon}
+            <View style={styles.selectRowLabelGroup}>
+              {renderedIcon}
+              <View style={styles.selectRowLabelStack}>
                 <Text style={styles.selectRowLabel}>{label}</Text>
+                {subtitle ? (
+                  <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
+                ) : null}
               </View>
-              {displayValue != null ? (
-                <Text style={styles.selectRowValue}>{displayValue}</Text>
-              ) : null}
             </View>
-            {subtitle ? (
-              <Text style={[styles.selectRowSubtitle, { marginStart: subtitleIndent }]}>{subtitle}</Text>
-            ) : null}
           </View>
-        ) : (
-          <>
-            {renderedIcon}
-            {/* Label-less variant: value fills the row and stays end-aligned
-                (the continuation-after-label positioning is a labelled-row
-                concern; this branch has no label to continue from). */}
-            <Text
-              style={[
-                styles.selectRowValue,
-                { flex: 1, textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right' },
-              ]}
-            >
-              {displayValue ?? ''}
-            </Text>
-          </>
-        )
+        ) : renderedIcon
       })()}
     </View>
   )
@@ -329,29 +314,29 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   if (tab === 'preferences') {
     // Magnifying glass
     return (
-      <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Circle cx="11" cy="11" r="7" />
         <Line x1="16.5" y1="16.5" x2="21" y2="21" />
-      </Svg>
+      </Glyph>
     )
   }
   if (tab === 'profile') {
     // Person — head + shoulders
     return (
-      <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Circle cx="12" cy="8" r="4" />
         <Path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-      </Svg>
+      </Glyph>
     )
   }
   // app → 2×2 grid (app icon)
   return (
-    <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="3" y="3" width="8" height="8" rx="2" />
       <Rect x="13" y="3" width="8" height="8" rx="2" />
       <Rect x="3" y="13" width="8" height="8" rx="2" />
       <Rect x="13" y="13" width="8" height="8" rx="2" />
-    </Svg>
+    </Glyph>
   )
 }
 
@@ -381,22 +366,30 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
-  // The gender field's LABEL is itself gendered by the user's own sex
+  // The gender field's opening word is itself gendered by the user's own sex
   // ("פנוי"/"פנויה"); English collapses to "Available" (genderize no-op).
-  const genderLabel = genderize(t('settings.preferredGender'), profile.is_male)
+  // The picker's option strings are standalone sentences ("For women"), so
+  // they need their initial lowered to continue this one ("Available for
+  // women"). No-op in Hebrew — the script has no case.
+  const genderLabel = `${genderize(t('settings.preferredGender'), profile.is_male)} ${lowerFirst(genderDisplayValue)}`
   const locationType = resolveLocationType(profile)
-  // Location row: the LABEL names the chosen anchor ("מהבית" / "מהמשרד" /
-  // "מהמיקום הנוכחי שלי"); the icon matches it; and the value column shows
-  // the picked address for home/work but NOTHING for the device case (the
-  // label already says it's the current location).
-  const locationFieldLabel =
+  // Location row: one sentence naming the chosen anchor ("מהבית" / "מהמשרד" /
+  // "מהמיקום הנוכחי שלי"), with the icon matching it. Home/work append the
+  // picked address; the device case appends nothing (the sentence already
+  // says it's the current location).
+  const locationFieldAnchor =
     locationType === 'home' ? t('settings.locationFromHome')
     : locationType === 'work' ? t('settings.locationFromWork')
     : t('settings.locationFromDevice')
-  const locationFieldValue =
+  const locationFieldAddress =
     locationType === 'home' ? (profile.location_label || t('settings.locationHome'))
     : locationType === 'work' ? (profile.location_label || t('settings.locationWork'))
     : undefined
+  // Comma, not a space: the address is an apposition on the anchor
+  // ("From home, 12 Rothschild St"), not a continuation of it.
+  const locationFieldLabel = locationFieldAddress
+    ? `${locationFieldAnchor}, ${locationFieldAddress}`
+    : locationFieldAnchor
   const locationFieldIcon =
     locationType === 'home' ? <HomeGlyph color={WHITE} size={ICON.md} />
     : locationType === 'work' ? <WorkGlyph color={WHITE} size={ICON.md} />
@@ -418,27 +411,25 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         <SelectFieldRow
           grouped
           label={genderLabel}
-          displayValue={genderDisplayValue}
           onPress={() => setGenderPopupVisible(true)}
           icon={<GenderIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          label={t('settings.ageRange')}
-          displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
+          label={`${t('settings.ageRange')} ${ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}`}
           onPress={() => setAgePopupVisible(true)}
           icon={<SlidersIcon color={WHITE} />}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          // "עד {value}" normally; when unlimited the value column is empty
-          // and the label itself says "ללא הגבלת מרחק". (The zero/"ממש כאן"
-          // special-case was reverted at the user's request — it shows
-          // normally as label "עד" + value "ממש כאן".)
-          label={radius === Infinity ? t('settings.rangeUnlimitedLabel') : t('settings.range')}
-          displayValue={radius === Infinity ? undefined : formatRadius(radius)}
+          // "עד {value}" normally; unlimited has its own standalone sentence
+          // ("ללא הגבלת מרחק"). (The zero/"ממש כאן" special-case was reverted
+          // at the user's request — it reads normally as "עד ממש כאן".)
+          label={radius === Infinity
+            ? t('settings.rangeUnlimitedLabel')
+            : `${t('settings.range')} ${formatRadius(radius)}`}
           onPress={() => setRadiusPopupVisible(true)}
           icon={<RadiusIcon color={WHITE} />}
         />
@@ -446,7 +437,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         <SelectFieldRow
           grouped
           label={locationFieldLabel}
-          displayValue={locationFieldValue}
           locked={locationLocked}
           onPress={() => locationLocked
             ? setLocationLockedInfoVisible(true)
@@ -2743,7 +2733,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   // Hearts popup content. Two lines: current balance + extra, and the next
   // grant time (dropped when unknown). The "buy more" button opens the
-  // BuyExtraPopup with 5/10/50 options. {balance} is the daily-pool count
+  // BuyExtraPopup with 3/10/50 options. {balance} is the daily-pool count
   // (refilled to CREDIT_CAP every 20:00 Asia/Jerusalem); {extra} is the
   // purchased pool (no cap). Both render BOLD inside the otherwise-regular
   // text. Hebrew verb gender resolved via genderize() inline markers.
@@ -2809,20 +2799,19 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             (balance + renewal + plan). */}
         <SelectFieldRow
           grouped
-          label={t('settings.credits')}
+          // "לבבות {balance}/{cap} + {extra} אקסטרה": the daily pool reads as
+          // a fraction of its cap (it's the replenishable pool) and the extras
+          // carry an explicit word (otherwise "+ 5" reads as math, not "five
+          // extra"). Drop the extras tail when there are none — steady-state
+          // shows just "לבבות 1/3" (user feedback 2026-06-01).
+          label={`${t('settings.credits')} ${heartsExtra > 0
+            ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
+            : `${heartsBalance}/${CREDIT_CAP}`}`}
           // Subtitle is the "renews {when}" note; dropped entirely when the
           // time is unknown (e.g. between rollout and the first cron tick).
           subtitle={nextGrant
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
-          // Value: "{balance}/{cap} + {extra} אקסטרה" so the daily pool reads
-          // as a fraction of its cap (it's the replenishable pool) and the
-          // extras carry an explicit label (otherwise "+ 5" reads as math,
-          // not "five extra"). Drop the extras tail when there are none —
-          // steady-state shows just "1/3" (user feedback 2026-06-01).
-          displayValue={heartsExtra > 0
-            ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
-            : `${heartsBalance}/${CREDIT_CAP}`}
           onPress={() => setStarsPopupVisible(true)}
           icon={<HeartIcon color={WHITE} size={ICON.md} />}
         />
@@ -2922,6 +2911,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
 type SettingsPageProps = {
   topInset?: number
+  /** Height of the floating sheet chrome drawn OVER this page. The profile
+   *  photo grows by this much and bleeds up behind the chrome, so the photo
+   *  fills to the very top of the screen while its bottom edge — and the
+   *  caption row on it — stay exactly where they were. 0 = opaque chrome
+   *  above the page, nothing to bleed behind. */
+  photoBleed?: number
   onBack?: () => void
   onNavigateHome?: () => void
   focused?: boolean
@@ -2930,7 +2925,7 @@ type SettingsPageProps = {
 } & Partial<OverlaySheetBody>
 
 export default function SettingsPage({
-  topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false,
+  topInset = 0, photoBleed = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false,
   dismissGestureRef, onScrollAtTop, pulling,
 }: SettingsPageProps = {}) {
   const { profile } = useUserStore()
@@ -2965,8 +2960,12 @@ export default function SettingsPage({
           overScrollMode="never"
           scrollEventThrottle={16}
         >
+          {/* The photo grows by `photoBleed` and the scrim + caption are inset
+              by the same amount, so the image alone extends up behind the
+              floating chrome. Everything below the card, and the caption on
+              it, keep their positions. */}
           <Pressable
-            style={styles.profileCard}
+            style={[styles.profileCard, { height: PROFILE_CARD_HEIGHT + photoBleed }]}
             onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
           >
             {avatarUri ? (
@@ -2991,7 +2990,7 @@ export default function SettingsPage({
                 past the caption fades to nothing, so the rest of the photo is
                 untouched. Anchored at cy 0.5 because profileCardRow is
                 vertically centred; move the row and this must move with it. */}
-            <Svg style={styles.profileCardScrim} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
+            <Svg style={[styles.profileCardScrim, { top: photoBleed }]} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
               <Defs>
                 <RadialGradient id="profileScrim" cx={isRTL ? '0.7' : '0.3'} cy="0.5" r="0.5">
                   <Stop offset="0" stopColor={BLACK} stopOpacity="0.75" />
@@ -3001,7 +3000,7 @@ export default function SettingsPage({
               </Defs>
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
             </Svg>
-            <View style={styles.profileCardRow} pointerEvents="none">
+            <View style={[styles.profileCardRow, { top: photoBleed }]} pointerEvents="none">
               {/* ICON.md, same as every settings row icon: sharing the start
                   column is not enough on its own, since a wider glyph puts its
                   ink outside a narrower one's even from the same origin. */}
@@ -3190,15 +3189,15 @@ const styles = StyleSheet.create({
   selectRowLarge: { paddingVertical: MD },
   selectRowLocked: { opacity: 0.45 },
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  // No `justifyContent: space-between`: the value must read as a CONTINUATION
-  // of the label text, so children pack from the start (label, then value)
-  // separated only by `columnGap` instead of being shoved to opposite edges.
-  selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', columnGap: SM },
-  // flexShrink:1 (not flex:1) + minWidth:0: the label group sizes to its
-  // content so the value can sit immediately after it, but it can still
-  // shrink below content width so a long label with no value (e.g.
-  // "מהמיקום הנוכחי שלי") wraps to a second line instead of clipping.
-  selectRowLabelGroup: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: MD },
+  // minWidth:0 so a long single-sentence label (e.g. "מהמיקום הנוכחי שלי")
+  // wraps to a second line instead of clipping.
+  // Stays 'center' so the taller leading elements (avatar, accent circle) keep
+  // centring against the label. Only the plain glyph opts out — see
+  // selectRowIconWrap's alignSelf.
+  selectRowLabelGroup: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: MD },
+  // Label + optional subtitle, stacked. Owns the whole width beside the icon
+  // so both texts share one start edge.
+  selectRowLabelStack: { flex: 1, minWidth: 0 },
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
   selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
@@ -3212,10 +3211,6 @@ const styles = StyleSheet.create({
   // size/line-height and only overrides weight + (darker) colour.
   starsEm: { fontWeight: WEIGHT.extrabold, color: BLACK },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  // No `marginStart: 'auto'` / no forced right textAlign: the value flows
-  // right after the label as a continuation (its position is the only thing
-  // that changed; it stays its own element with its own colour/weight).
-  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,
@@ -3225,7 +3220,20 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
-  selectRowIconWrap: { alignItems: 'center', justifyContent: 'center' },
+  // alignSelf:'flex-start' + a box exactly one label-line tall: the glyph
+  // centres against the FIRST line of a wrapped label instead of drifting into
+  // the gap between the two lines. Single-line labels are unaffected (the box
+  // then equals the group height, so top-align and centre coincide). iconScale
+  // keeps the box locked to the same OS font scale the label is capped at.
+  // alignSelf:'flex-start' + a box exactly one label-line tall pins the glyph to
+  // the FIRST line of a wrapped label instead of letting it drift into the gap
+  // between the two lines. marginTop lands it on that line's ink rather than on
+  // its line box (see inkOffset). Single-line labels are unaffected by the
+  // alignSelf — the box then equals the group height.
+  selectRowIconWrap: {
+    alignSelf: 'flex-start', height: iconScale(lh(TEXT.md)), marginTop: inkOffset(TEXT.md),
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,

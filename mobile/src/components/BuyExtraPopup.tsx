@@ -5,14 +5,14 @@ import { BottomSheet } from './BottomSheet'
 import { HeartIcon } from './icons'
 import { invoke } from '../lib/api'
 import { tap } from '../lib/haptics'
-import { BUY_EXTRA_OPTIONS, type BuyExtraCount, canBuyExtra, starsText } from '../lib/credits'
+import { BUY_EXTRA_OPTIONS, type BuyExtraCount, buyExtraBlock, starsText } from '../lib/credits'
 import { useUserStore } from '../stores/userStore'
 import { t } from '../i18n'
 import { BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, PRIMARY, WHITE_MID } from '../colors'
 import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON } from '../tokens'
 
 // Bottom-sheet picker for buying extra hearts. One row per
-// BUY_EXTRA_OPTIONS entry (5 / 10 / 50). The 5-entry posts /app/buy_extra;
+// BUY_EXTRA_OPTIONS entry (3 / 10 / 50). The 3-entry posts /app/buy_extra;
 // the others render dimmed with a "coming soon" badge until pricing is wired
 // up. Pricing is "Free" for every option for now. Used in two places:
 // (1) the settings hearts popup's confirm button; (2) the home Viewers
@@ -25,7 +25,7 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
   // recent purchase/refill. The popup is mounted long enough for a remote
   // refund/grant to land while it's open.
   const profile = useUserStore(s => s.profile)
-  const buyAllowed = canBuyExtra(profile)
+  const blocked = buyExtraBlock(profile)
 
   const onPick = useCallback(async (count: BuyExtraCount) => {
     if (busy != null) return
@@ -54,11 +54,12 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
             // Three reasons a row is unavailable:
             //   - the option isn't enabled (10 / 50 'coming soon')
             //   - a sibling row is currently busy (lock out concurrent picks)
-            //   - the user already used today's purchase slot (canBuyExtra=false)
+            //   - a server buy gate is closed (`blocked`): the wallet still
+            //     has hearts, or today's purchase slot is used up
             // The tail label communicates the reason explicitly so the user
             // knows why they can't tap.
-            const alreadyBoughtToday = opt.enabled && !buyAllowed
-            const disabled = !opt.enabled || alreadyBoughtToday || (busy != null && !isBusy)
+            const gate = opt.enabled ? blocked : null
+            const disabled = !opt.enabled || gate != null || (busy != null && !isBusy)
             return (
               <Pressable
                 key={opt.count}
@@ -79,8 +80,10 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
                 <View style={styles.rowTail}>
                   {!opt.enabled ? (
                     <Text style={styles.rowSoon}>{t('stars.buy.comingSoon')}</Text>
-                  ) : alreadyBoughtToday ? (
-                    <Text style={styles.rowSoon}>{t('stars.buy.alreadyBoughtToday')}</Text>
+                  ) : gate != null ? (
+                    <Text style={styles.rowSoon}>
+                      {t(gate === 'has_credits' ? 'stars.buy.hasHearts' : 'stars.buy.alreadyBoughtToday')}
+                    </Text>
                   ) : isBusy ? (
                     <ActivityIndicator color={PRIMARY} />
                   ) : (

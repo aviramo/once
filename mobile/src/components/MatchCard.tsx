@@ -691,35 +691,23 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
-          {/* Top-END row: the shared-group chip and the report flag, in that
-              order, so the flag is the one touching the screen edge. (Row
-              direction flips under RTL, so `end` keeps it there both ways.)
-
-              The group chip appears only when the snapshot carries a
-              group_name, which the server embeds via make_profile when viewer
-              and subject share a group. The flag is unconditional, so the row
-              renders whenever either is present.
+          {/* Top-END: the shared-group chip, alone. It appears only when the
+              snapshot carries a group_name, which the server embeds via
+              make_profile when viewer and subject share a group.
 
               Top-START is deliberately left empty: the shell paints its
               floating chrome there (home's hamburger, a sheet's close X). */}
-          {sections[0]?.type === 'photo' && (match.group_name || onReport) ? (
+          {sections[0]?.type === 'photo' && match.group_name ? (
             <View
               pointerEvents="box-none"
               style={[styles.topEndOverlay, chromeTop > 0 && { paddingTop: chromeTop }]}
             >
-              {match.group_name ? (
-                <Chip
-                  renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                  text={match.group_name}
-                  tone="neutral"
-                  onPhoto
-                />
-              ) : null}
-              {onReport ? (
-                <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
-                  <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
-                </RoundButton>
-              ) : null}
+              <Chip
+                renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                text={match.group_name}
+                tone="neutral"
+                onPhoto
+              />
             </View>
           ) : null}
 
@@ -732,6 +720,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
+                {/* Report flag: sits directly above the name chip, at the head
+                    of the same left column, so it reads as "report this
+                    person" next to the identity it acts on. */}
+                {onReport ? (
+                  <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
+                    <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
+                  </RoundButton>
+                ) : null}
                 {/* Identity line: name then age, side by side. The name chip
                     carries no icon — it is who this is, not an attribute of
                     them. chipsLine wraps, so a long name pushes the age to a

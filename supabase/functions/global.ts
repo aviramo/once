@@ -97,7 +97,7 @@ export type Page2 = {
 export type Credits = {
   // Daily pool. Refilled to _credits_cap() == 3 every 20:00 Asia/Jerusalem.
   balance: number;
-  // Purchased pool, no daily cap. Bought via app_buy_extra (5/10/50). Charge
+  // Purchased pool, no daily cap. Bought via app_buy_extra (3/10/50). Charge
   // order is balance FIRST, then extra. Refund overflow lands here so a
   // hold + refund cycle never loses a heart.
   extra: number;

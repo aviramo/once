@@ -52,8 +52,19 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   }
 
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      await supabase.auth.signOut()
+    // 401 ONLY. 401 means "we don't know who you are" — the session is dead
+    // and signing out is the correct recovery. 403 means "we know who you are
+    // and the answer is no", which the server uses for ordinary business
+    // rules: the presence gate (`unavailable`, app/index.ts) and the chat
+    // validators (schedule_not_allowed / invalid_image_key /
+    // invalid_audio_key). Signing out on those logged the user clean out of
+    // the app for tapping play while geo-gated.
+    //
+    // scope 'local': the token is already invalid, so the global /logout call
+    // would 401 and revoke nothing — but when it DOES have a live token it
+    // revokes every session this user has on every other device.
+    if (res.status === 401) {
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
       return null as any
     }
     throw new Error(await res.text())

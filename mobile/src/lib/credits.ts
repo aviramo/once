@@ -118,21 +118,32 @@ function currentGrantDay(wallet: CreditsWallet): string | null {
   }).format(prev)
 }
 
-/** True iff the user is allowed to buy extras right now. Mirrors the
- *  server's app_buy_extra gates:
- *    1. credits.extra === 0  (only when the extras pool is empty —
- *       regardless of the daily balance; user request 2026-06-01)
- *    2. credits.bought_on !== current grant day  (once per cycle)
- *  Once a buy succeeds, the server sets `bought_on` to the live grant_day,
- *  so subsequent reads of this predicate return false until the next 20:00
- *  Asia/Jerusalem boundary. */
-export function canBuyExtra(profile: WithCredits): boolean {
+/** Why the user can't buy extras right now, or null when they can.
+ *  Mirrors the server's app_buy_extra gates 1:1 — the RPC returns these
+ *  exact error codes, so the client never offers a tap the server would
+ *  reject:
+ *    1. 'has_credits'          — creditTotal > 0. Buying extras is a
+ *       recovery mechanism, not a power-up: it's only available when the
+ *       wallet (balance + extra) is empty.
+ *    2. 'already_bought_today' — credits.bought_on === current grant day.
+ *  Once a buy succeeds the server stamps `bought_on` with the live grant
+ *  day, so this returns 'already_bought_today' until the next 20:00
+ *  Asia/Jerusalem boundary. A wallet the server hasn't seeded yet reads as
+ *  blocked (the user has nothing to recover from yet). */
+export type BuyExtraBlock = 'has_credits' | 'already_bought_today'
+
+export function buyExtraBlock(profile: WithCredits): BuyExtraBlock | null {
   const c = readCredits(profile)
-  if (!c) return false
-  if ((c.extra ?? 0) > 0) return false
+  if (!c) return 'has_credits'
+  if (creditTotal(profile) > 0) return 'has_credits'
   const day = currentGrantDay(c)
-  if (!day) return true
-  return (c.bought_on ?? '') !== day
+  if (!day) return null
+  return (c.bought_on ?? '') === day ? 'already_bought_today' : null
+}
+
+/** True iff the user is allowed to buy extras right now. */
+export function canBuyExtra(profile: WithCredits): boolean {
+  return buyExtraBlock(profile) === null
 }
 
 /** The next grant moment formatted as a relative day word + clock time:

@@ -108,7 +108,7 @@ The pull family lives in **`mobile/src/components/PullPane.tsx`**: `PullContext`
 
 | Surface | `activation` | `axis` | `commit` | header | notes |
 |---|---|---|---|---|---|
-| Menu (`SettingsPage`) | `sheet` | **`x`** | `dismiss` | bar, titled | the drawer; never gated |
+| Menu (`SettingsPage`) | `sheet` | **`x`** | `dismiss` | floating | the drawer; never gated |
 | Profile preview (`PreviewFieldPage`) | `sheet` | `y` | `dismiss` | floating | stacks on the menu |
 | Chat (`ChatPage`) | `sheet` | `y` | `dismiss` | bar, titled | `dragFrom="header"` |
 | Incoming invite | `scrollPan` | `y` | `confirm` | floating | swipe = decline request |

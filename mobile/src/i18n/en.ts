@@ -30,48 +30,29 @@ export default {
   'auth.legalPrivacy': 'Privacy Policy',
 
   // Onboarding step 1
-  'ob.welcome': "Let's start with you",
   'ob.whoAreYou': 'How do you identify?',
   'ob.male': 'Male',
   'ob.female': 'Female',
   'ob.nicknameStep': "What's your name?",
-  'ob.nicknamePlaceholder': 'This name will appear on your profile',
-  'ob.nicknameField': 'First name',
   'ob.next': 'Continue',
 
   // Onboarding step 2
   'ob.birthdate': 'Date of Birth',
-  'ob.howOld': 'How old are you?',
-  'ob.day': 'Day',
-  'ob.month': 'Month',
-  'ob.year': 'Year',
   'ob.minAge': 'Minimum age to register is 18',
   'ob.createAccount': 'Create account',
   'ob.createAccount_m': 'Create account',
   'ob.createAccount_f': 'Create account',
+  'ob.birthConfirm': 'Your birthday is {date} and you are {age}?',
+  'ob.birthConfirmFix': 'Fix',
 
   // Onboarding photo
-  'photo.title': 'Profile Photos',
   'photo.sub': 'Add 2-6 photos',
-  'photo.confirm': 'Confirm & Continue',
-  'photo.almostDone': 'One more step and we are done',
   'photo.uploadFailed': 'Photo upload failed. You cannot continue without a photo, please try again.',
 
   // Onboarding bio
-  'bio.title': 'Your moment',
-  'bio.emphasis': 'This is the first thing people will see on your profile',
   'bio.placeholder': 'A sentence, a feeling, or a moment that represents you...',
-  'bio.tip': '✦ Authenticity attracts more than anything else',
   'bio.submit': 'Continue',
   'bio.min': 'Minimum 20 characters',
-
-  // Onboarding step 6 — optional invite code to join a group.
-  'ob.inviteTitle': 'Got an invite code?',
-  'ob.inviteHint': 'If someone invited you to a group, enter their code here. You can also skip.',
-  'ob.invitePlaceholder': '6 digits',
-  'ob.inviteSkip': 'Skip',
-  'ob.inviteJoin': 'Join',
-  'ob.inviteInvalid': 'Invalid or inactive code',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
   // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
@@ -119,7 +100,6 @@ export default {
   'settings.preferences': 'Menu',
   'settings.searchPreferences': 'Search preferences',
   'settings.myInfo': 'My info',
-  'settings.settings': 'Settings',
   'settings.appSettings': 'App',
   'settings.about': 'A Different Way to Meet',
   'settings.profileSubtitle': 'Edit your profile',
@@ -335,7 +315,7 @@ export default {
   'stars.grant.today': 'today at {time}',
   'stars.grant.tomorrow': 'tomorrow at {time}',
   'stars.popup.buyExtra': 'Buy extra hearts',
-  // Buy-extra picker (5/10/50 options, all "Free" for now, only 5 enabled).
+  // Buy-extra picker (3/10/50 options, all "Free" for now, only 3 enabled).
   'stars.buy.title': 'Buy extra hearts',
   'stars.buy.desc': 'Hearts you buy are added on top of your daily allowance and never expire.',
   'stars.buy.priceFree': 'Free',
@@ -343,6 +323,10 @@ export default {
   // Shown on the active (3-hearts) option when the user already used today's
   // buy slot — the once-per-grant-day gate.
   'stars.buy.alreadyBoughtToday': 'Already bought today',
+  // Shown on the active option when the wallet still has hearts. Buying
+  // extras is a recovery mechanism, so the server rejects it with
+  // has_credits while anything is left to spend.
+  'stars.buy.hasHearts': 'You still have hearts',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',
@@ -694,6 +678,10 @@ Next may surprise`,
   'home.skipHintDesc': 'Next time, swipe the card down to quickly skip to another profile. Want to skip now?',
   'home.skipHintCancel': 'Got it',
   'home.skipHintConfirm': 'Skip',
+  // Shown in the rotating-headline slot for the duration of the first-time
+  // swipe-down tutorial, instead of that card's random skip line: while the
+  // card peeks down and reveals the slot, the text names the gesture.
+  'home.skipTutorialHint': 'Swipe down to skip',
   // Incoming-invite card (page2). English varies only by the inviter (he/she);
   // "you" is gender-neutral. Title: tg(key, inviterMale). Desc: tgg(key,
   // receiverMale, inviterMale) — _mm/_fm read he, _mf/_ff read she. Receiver
@@ -789,8 +777,6 @@ Next may surprise`,
   'settings.signOutYes_f': 'Sign out',
   'chat.inputPlaceholder_m': 'Write a message...',
   'chat.inputPlaceholder_f': 'Write a message...',
-  'ob.howOld_m': 'How old are you?',
-  'ob.howOld_f': 'How old are you?',
   'photo.sub_m': 'Add 2-6 photos',
   'photo.sub_f': 'Add 2-6 photos',
 

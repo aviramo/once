@@ -30,48 +30,31 @@ export default {
   'auth.legalPrivacy': 'מדיניות הפרטיות',
 
   // Onboarding step 1
-  'ob.welcome': 'נתחיל ממך',
   'ob.whoAreYou': 'איך את/ה מזדהה?',
   'ob.male': 'גבר',
   'ob.female': 'אישה',
   'ob.nicknameStep': 'איך קוראים לך?',
-  'ob.nicknamePlaceholder': 'זה השם שיופיע בפרופיל שלך',
-  'ob.nicknameField': 'שם פרטי',
   'ob.next': 'המשך',
 
   // Onboarding step 2
   'ob.birthdate': 'תאריך לידה',
-  'ob.howOld': 'כמה את/ה בן/בת?',
-  'ob.day': 'יום',
-  'ob.month': 'חודש',
-  'ob.year': 'שנה',
   'ob.minAge': 'גיל מינימלי להרשמה הוא 18',
   'ob.createAccount': 'צור חשבון',
   'ob.createAccount_m': 'צור חשבון',
   'ob.createAccount_f': 'צרי חשבון',
+  'ob.birthConfirm': 'יום ההולדת שלך הוא {date} ואת/ה בן/בת {age}?',
+  'ob.birthConfirm_m': 'יום ההולדת שלך הוא {date} ואתה בן {age}?',
+  'ob.birthConfirm_f': 'יום ההולדת שלך הוא {date} ואת בת {age}?',
+  'ob.birthConfirmFix': 'תיקון',
 
   // Onboarding photo
-  'photo.title': 'תמונות פרופיל',
   'photo.sub': 'הוסף 2-6 תמונות',
-  'photo.confirm': 'אישור והמשך',
-  'photo.almostDone': 'עוד צעד אחד ומסיימים',
   'photo.uploadFailed': 'העלאת התמונות נכשלה. בלי תמונה אי אפשר להמשיך, נסה שוב.',
 
   // Onboarding bio
-  'bio.title': 'הרגע שלך',
-  'bio.emphasis': 'זה הדבר הראשון שאנשים יראו בפרופיל שלך',
   'bio.placeholder': 'משפט, תחושה או רגע שמספרים עליך...',
-  'bio.tip': '✦ אותנטיות מושכת יותר מהכול',
   'bio.submit': 'המשך',
   'bio.min': 'מינימום 20 תווים',
-
-  // Onboarding step 6 — optional invite code to join a group.
-  'ob.inviteTitle': 'יש לך קוד הצטרפות?',
-  'ob.inviteHint': 'אם קיבלת קוד מאדם שהזמין אותך לקבוצה, הזן אותו כאן. אפשר גם לדלג.',
-  'ob.invitePlaceholder': '6 ספרות',
-  'ob.inviteSkip': 'דלג',
-  'ob.inviteJoin': 'הצטרפות',
-  'ob.inviteInvalid': 'הקוד שגוי או לא פעיל',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
   // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
@@ -119,7 +102,6 @@ export default {
   'settings.preferences': 'תפריט',
   'settings.searchPreferences': 'העדפות חיפוש',
   'settings.myInfo': 'המידע שלי',
-  'settings.settings': 'הגדרות',
   'settings.appSettings': 'האפליקציה',
   'settings.about': 'דרך אחרת להכיר',
   'settings.profileSubtitle': 'עריכת הפרופיל שלך',
@@ -342,7 +324,7 @@ export default {
   'stars.grant.today': 'היום ב-{time}',
   'stars.grant.tomorrow': 'מחר ב-{time}',
   'stars.popup.buyExtra': 'קניית לבבות אקסטרה',
-  // Buy-extra picker (5/10/50 options, all "Free" for now, only 5 enabled).
+  // Buy-extra picker (3/10/50 options, all "Free" for now, only 3 enabled).
   'stars.buy.title': 'קניית לבבות אקסטרה',
   'stars.buy.desc': 'הלבבות שתקנה יתווספו ללבבות שיש לך כבר, ולא יתבטלו עם הזמן.',
   'stars.buy.priceFree': 'חינם',
@@ -350,6 +332,10 @@ export default {
   // Shown on the active (3-hearts) option when the user already used today's
   // buy slot — the once-per-grant-day gate.
   'stars.buy.alreadyBoughtToday': 'כבר נקנה היום',
+  // Shown on the active option when the wallet still has hearts. Buying
+  // extras is a recovery mechanism, so the server rejects it with
+  // has_credits while anything is left to spend.
+  'stars.buy.hasHearts': 'יש לך עדיין לבבות',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',
@@ -449,8 +435,8 @@ export default {
 רגע אמיתי לא מחכה
 בוחרים פחות, מרגישים יותר
 מפגש אחד בלי מסכים פתוחים
-נוכחות היא הסינון החדש
-לא כולם, רק מי שמרגיש
+נוכחות משנה את כל התמונה
+לא כולם, רק אחד עכשיו
 כשהלב פנוי, משהו קורה
 שיחה אחת יכולה להספיק
 בלי משחקים, עם כוונה
@@ -461,9 +447,8 @@ export default {
 פחות אפשרויות, יותר בהירות
 חיבור צריך מקום לנשום
 לא לחפש, להיפגש
-מי שבפוקוס, מקבל לב
+מי שבפוקוס, מקבל מקום
 העולם זז, {אתה|את} {נוכח|נוכחת}
-רגע קטן, אפשרות גדולה
 כשזה קורה, זה עכשיו
 לא עוד החמצות שקטות
 פגישה מתחילה בהחלטה קטנה
@@ -487,7 +472,58 @@ export default {
 בלי לברוח לאפשרות הבאה
 להיות {פנוי|פנויה} באמת
 קשר מתחיל כשעוצרים
-רק רגע, רק אתם`,
+רק רגע, רק אתם
+מפגש טוב מתחיל בשקט
+משהו אמיתי מתחיל כאן
+{תן|תני} למישהו מקום
+הערב יכול להשתנות עכשיו
+כל מה שצריך הוא רגע
+מישהו חדש מחכה מעבר ללחיצה
+פחות להשוות, יותר להרגיש
+רגע אחד יכול להפתיע
+אין צורך לדעת מראש
+מספיק לבחור להיות כאן
+אולי החיבור הבא קרוב
+לפעמים צריך רק לעצור
+מפגש מתחיל כשנותנים מקום
+מישהו יכול להרגיש נכון
+הלב מזהה בלי רשימות
+חיבור קורה כשנשארים
+יש מקום למשהו חדש
+{פתח|פתחי} דלת לרגע
+לא כל רגע צריך הסבר
+לפעמים פשוט לוחצים ונפגשים
+מישהו יכול לשנות כיוון
+עכשיו אפשר לפגוש באמת
+פחות לחשוב, יותר להיות
+{תן|תני} לערב להפתיע
+החיבור הבא מתחיל כאן
+משהו חדש יכול להתחיל
+לא צריך למהר הלאה
+אדם אחד, תשומת לב מלאה
+אפשרות אחת, נוכחות שלמה
+אולי זה הרגע לעצור
+להיות פתוחים למה שיגיע
+הרגע הבא יכול להספיק
+לפעמים הקסם מתחיל בלחיצה
+כל פגישה מתחילה בסקרנות
+מישהו מחכה שתופיע
+יש מישהו שכדאי לפגוש
+{בחר|בחרי} רגע אחד אמיתי
+לא עוד מסך, מפגש
+לתת מקום למה שמגיע
+אולי מישהו מחפש בדיוק אותך
+עכשיו אפשר להתחיל מחדש
+מפגש אחד שווה ניסיון
+מישהו אחד, בלי הסחות
+הלב פתוח כשעוצרים
+להתחיל קטן, להרגיש גדול
+רגע אחד מחוץ לאינסוף
+פחות אפשרויות, יותר סיכוי
+{היה|היי} כאן באמת
+כל חיבור מתחיל באפשרות
+לפעמים הבא הוא הנכון
+ללחוץ ולראות מה קורה`,
   // Skip-feedback headline pool. One line is picked at random when a skip
   // starts (see home.tsx skipHeadlineIdx) and shown in the headline slot
   // above the centre button for the duration of that skip. Same newline-block
@@ -495,53 +531,103 @@ export default {
   'home.skipHeadlines': `ממשיכים הלאה
 לא הפעם
 אולי הבא
-רגע חדש
-הבא בדרך
-ממשיכים לחפש
-עוד מבט
-משחררים בעדינות
-מחפשים חיבור
-קדימה בשקט
-עוד ניסיון
 זה בסדר
-ממשיכים פתוח
-אולי בקרוב
-בודקים הלאה
-הכל טוב
-ממשיכים בנחת
-לא זה
-חיפוש נעים
+הכול טוב
 עוד אפשרות
-רגע ממשיך
-הדרך פתוחה
-ממשיכים קליל
-הבא מחכה
-עוד חיבור
-לא קרה
-מדפדפים הלאה
+הבא מסקרן
+ממשיכים בנחת
+משחררים בעדינות
 נשארים פתוחים
-אולי שם
-עוד מישהו
-ממשיכים בזרימה
-בחירה נקייה
-רגע עובר
-מחפשים קליק
-ממשיכים רגוע
-הבא בתור
-עוד הזדמנות
-לא מתאים
-הכל פתוח
-ממשיכים קדימה
+הבא יפתיע
+עוד מבט
 בלי לחץ
-עוד רגע
-אולי עכשיו
-חיבור אחר
-עוברים הלאה
-נשימה קטנה
+ממשיכים ברוגע
+אולי בהמשך
+הדרך פתוחה
+עוד הזדמנות
+קדימה בשקט
+הבא בדרך
+לא עכשיו
+ממשיכים בקלילות
+עוד מישהו
+אולי שם
+הכול פתוח
 ממשיכים לבדוק
-הלב יודע
+הרגע הבא
+בחירה טובה
 עוד סיכוי
-הבא יפתיע`,
+ממשיכים בזרימה
+אולי בקרוב
+הבא מחכה
+עוברים ברכות
+עוד כיוון
+נשארים סקרנים
+ממשיכים קדימה
+משהו אחר
+אולי אחר כך
+עוד פנים
+ממשיכים בעדינות
+לא מרגיש נכון
+פותחים לחדש
+עוד חיבור
+ממשיכים לבחור
+אולי הפעם
+הבא עשוי להתאים
+עוד רגע
+ממשיכים לגלות
+בחירה נקייה
+הבא יכול להפתיע
+משחררים וממשיכים
+עוד פתח
+אולי זה הבא
+ממשיכים פתוחים
+הבא אולי יתאים
+לא כרגע
+עוד מפגש
+הדרך ממשיכה
+ממשיכים בסקרנות
+אולי עוד מעט
+הבא ירגיש אחרת
+עוברים הלאה
+עוד ניסיון
+ממשיכים קליל
+הלב נשאר פתוח
+אולי מישהו אחר
+הבא יכול להתאים
+עוד בחירה
+ממשיכים בשקט
+לא מתאים עכשיו
+הכול אפשרי
+עוד רגע חדש
+ממשיכים רגוע
+אולי חיבור אחר
+הבא מרגיש קרוב
+עוד דלת
+פותחים אפשרות
+ממשיכים עם הלב
+לא הפעם הזו
+הבא כבר מגיע
+עוד משהו
+ממשיכים אל החדש
+אולי בפעם אחרת
+הכול עדיין פתוח
+הבא יכול להיות
+עוד אדם
+ממשיכים בקצב
+לא חייב להתאים
+אולי עוד אחד
+הבא עשוי להפתיע
+עוד הזדמנות בדרך
+ממשיכים למה שנכון
+לא צריך בכוח
+אולי הרגע הבא
+הבא מביא אפשרות
+עוד מקום לחדש
+ממשיכים בלי לחץ
+הבחירה ממשיכה
+אולי שם ירגיש
+הבא פותח דלת
+ממשיכים לאפשרות הבאה`,
   // Geo-availability gate. Shown in the rotating-headline slot when the
   // server marks the user outside every active area (unavailable) or inside
   // an area that has not opened yet (notYet). While shown, the side tab is
@@ -719,6 +805,10 @@ export default {
   'home.skipHintDesc': 'בפעם הבאה החליקו את הכרטיס למטה כדי לדלג במהירות לפרופיל אחר. רוצים לדלג עכשיו?',
   'home.skipHintCancel': 'הבנתי',
   'home.skipHintConfirm': 'לדלג',
+  // Shown in the rotating-headline slot for the duration of the first-time
+  // swipe-down tutorial, instead of that card's random skip line: while the
+  // card peeks down and reveals the slot, the text names the gesture.
+  'home.skipTutorialHint': 'דילוג בהחלקה למטה',
   // Incoming-invite card (page2). Title via tg(key, inviterMale) — only the
   // inviter's gender (הוא/היא + הזמין/הזמינה). Desc via tgg(key, receiverMale,
   // inviterMale) → suffix _<receiver><inviter>: receiver drives תחליטי/תחליט
@@ -820,8 +910,6 @@ export default {
   'settings.signOutYes_f': 'התנתקות',
   'chat.inputPlaceholder_m': 'כתוב הודעה...',
   'chat.inputPlaceholder_f': 'כתבי הודעה...',
-  'ob.howOld_m': 'בן כמה אתה?',
-  'ob.howOld_f': 'בת כמה את?',
   'photo.sub_m': 'הוסף 2-6 תמונות',
   'photo.sub_f': 'הוסיפי 2-6 תמונות',
 

@@ -96,6 +96,12 @@ export const DESTRUCTIVE_BG     = 'rgba(232,176,75,0.14)'   // low-alpha bg tint
 // brand-tinted ~25% wash keeps the glyphs legible while reading as a
 // selection. The caret stays opaque BLACK via cursorColor.
 export const SELECTION = 'rgba(0,0,0,0.25)'
+// The same role inverted, for an input whose text is WHITE on a dark field
+// (the onboarding name / date boxes: transparent fill, white border, white
+// glyphs). SELECTION's black wash is invisible there, and the default black
+// caret disappears entirely — those inputs pass WHITE for cursorColor and
+// this for selectionColor.
+export const SELECTION_ON_DARK = 'rgba(255,255,255,0.25)'
 
 // ── Misc surface colors ──────────────────────────────────────────────────
 // Soft border used on white pills/inputs.

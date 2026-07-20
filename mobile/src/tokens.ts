@@ -84,6 +84,10 @@ export const ICON = {
   huge: 48,   // glyph inside RoundButton overlays (heart / pause / dots / add-photo / family)
 } as const
 
+// Glyph sizes are dp and do NOT follow the OS font scale on their own — see
+// `iconScale` in fonts.ts, which is what keeps them in step with the text
+// beside them. Never hand a raw ICON.* straight to an <Svg width>.
+
 // ── Spinner ────────────────────────────────────────────────────────────────
 // The single in-app loading spinner (rotating SVG arc over a faint full
 // track). One component, sized/weighted by props from this token. `md` is the
@@ -218,6 +222,9 @@ export const OVERLAY = {
   // hamburger, a sheet's close X). Consumed via chromeReserve() so the card
   // underneath reserves exactly the room the chrome occupies.
   chromeGap: SM,
+  // How far the finger must travel before a sideways drag on home is claimed
+  // as "open the menu drawer" (below it the touch is still up for grabs).
+  menuDragSlop: SM,
   // Paint order. Menu sits above everything on purpose: it is the one surface
   // that stays reachable while the availability gate is on.
   z: {

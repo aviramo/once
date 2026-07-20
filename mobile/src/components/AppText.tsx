@@ -1,6 +1,6 @@
 import { forwardRef } from 'react'
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps } from 'react-native'
-import { DEFAULT_FAMILY, SINGLE_WEIGHT, WEIGHT_TO_FAMILY } from '../fonts'
+import { DEFAULT_FAMILY, FONT_SCALE, SINGLE_WEIGHT, WEIGHT_TO_FAMILY } from '../fonts'
 import { BLACK, SELECTION } from '../colors'
 
 // Drop-in replacement for react-native's Text that applies Heebo as the
@@ -33,6 +33,7 @@ export const Text = forwardRef<RNText, TextProps>(function AppText(props, ref) {
   return (
     <RNText
       ref={ref}
+      maxFontSizeMultiplier={FONT_SCALE.body}
       {...props}
       style={[props.style, { fontFamily: family, ...weightOverride }]}
     />
@@ -44,6 +45,7 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function AppTex
   return (
     <RNTextInput
       ref={ref}
+      maxFontSizeMultiplier={FONT_SCALE.body}
       selectionColor={SELECTION}
       cursorColor={BLACK}
       {...props}

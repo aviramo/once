@@ -22,7 +22,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { useSharedValue, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
-import { PullPane, usePullBehavior, type PullActivation, type PullAxis } from './PullPane'
+import { PullPane, usePullBehavior, type PullActivation, type PullAxis, type PullBehavior } from './PullPane'
 import { RisingCard } from './RisingCard'
 import { RoundButton } from './RoundButton'
 import { CloseIcon } from './icons'
@@ -83,6 +83,30 @@ export type OverlaySheetProps = {
   zIndex?: number
   cardStyle?: StyleProp<ViewStyle>
   closeAccessibilityLabel?: string
+  /** Externally-owned pull behavior, for a surface the HOST also drags IN.
+   *  Normally the sheet creates its own and nobody else can reach it — but a
+   *  drawer that tracks the finger while OPENING needs the opening pan (which
+   *  lives on the shell, since a closed sheet is off-screen and catches
+   *  nothing) to drive the very same `pullY` the closing pan does. One value,
+   *  both directions, no second source of truth for where the sheet sits.
+   *  When set, the caller also owns the rest position: the reset-on-open below
+   *  is skipped, because "open" no longer implies "starts at 0" (a drag-open
+   *  starts parked off-screen and is pulled to 0 by hand).
+   *  Note the sheet still owns `headerBottom` for SheetHeader, so an external
+   *  pull is not wired to it. That only matters on the 'y' axis, where the
+   *  header is a drag handle; the 'x' drawer never reads it. */
+  pull?: PullBehavior
+  /** False mounts the sheet at rest with no slide-in — for a drag-open, where
+   *  the finger supplies the motion and an entrance animation would fight it. */
+  animateEnter?: boolean
+  /** False removes the sheet with no slide-out. Required, not cosmetic, for a
+   *  sheet that can unmount MID-GESTURE — see RisingCard's animateExit. */
+  animateExit?: boolean
+  /** Keeps the body mounted while closed, parked off-screen by the host's
+   *  `pull`. For the drawer, whose position IS the open/closed state: it must
+   *  already exist to be dragged in, and mounting it mid-gesture crashes
+   *  Fabric. With this set, `open` means "interactive", not "mounted". */
+  keepMounted?: boolean
   children: ReactNode | ((ctx: OverlaySheetBody) => ReactNode)
 }
 
@@ -102,6 +126,10 @@ export function OverlaySheet({
   zIndex,
   cardStyle,
   closeAccessibilityLabel,
+  pull: externalPull,
+  animateEnter = true,
+  animateExit = true,
+  keepMounted = false,
   children,
 }: OverlaySheetProps) {
   const { top: topInset } = useSafeAreaInsets()
@@ -113,25 +141,28 @@ export function OverlaySheet({
   onCloseRef.current = onClose
   const requestClose = useCallback(() => { onCloseRef.current() }, [])
 
-  const pull = usePullBehavior({
+  // Called unconditionally (rules of hooks); ignored when the host owns one.
+  const ownPull = usePullBehavior({
     activation,
-    enabled: open && isTop,
+    enabled: open && isTop && !externalPull,
     commit: commit === 'confirm' ? 'snapBack' : 'slideOff',
     axis,
     onCommit: requestClose,
     headerBottom: activation === 'sheet' ? headerBottom : undefined,
   })
+  const pull = externalPull ?? ownPull
 
   // A 'slideOff' close parks pullY at the screen height. Without this reset a
   // reopened sheet would mount already translated fully off-screen and never
   // be seen. (Same hazard the page1 skip's reset covers.) Also (re)seeds
-  // scrollAtTop for the dragFrom policy on every open.
+  // scrollAtTop for the dragFrom policy on every open. Skipped for an external
+  // pull — see the `pull` prop: there, "open" does not imply "starts at 0".
   const { reset, setScrollAtTop } = pull
   useEffect(() => {
-    if (!open) return
+    if (!open || externalPull) return
     reset()
     setScrollAtTop(dragFrom !== 'header')
-  }, [open, dragFrom, reset, setScrollAtTop])
+  }, [open, dragFrom, externalPull, reset, setScrollAtTop])
 
   const ctx: OverlaySheetBody = {
     dismissGestureRef: pull.panRef,
@@ -163,8 +194,13 @@ export function OverlaySheet({
       pointerEvents={open ? 'box-none' : 'none'}
       pullContext={pull.pullCtx}
     >
-      {open ? (
-        <RisingCard from={axis === 'x' ? 'side' : 'up'} style={[styles.card, cardStyle]}>
+      {open || keepMounted ? (
+        <RisingCard
+          from={axis === 'x' ? 'side' : 'up'}
+          animateEnter={animateEnter}
+          animateExit={animateExit}
+          style={[styles.card, cardStyle]}
+        >
           {floatingHeader ? (
             <>
               <View style={styles.body}>
@@ -192,6 +228,15 @@ export function OverlaySheet({
 // optional centred title, an optional trailing control. Reports its own bottom
 // edge so the sheet's pan knows what counts as "dragging the header" (a drag
 // started here always pulls, even when the body's scroll is not at the top).
+
+/** Height SheetHeader occupies for a given top inset. Mirrors the `header`
+ *  style below (paddingTop + button + paddingBottom) and must move with it.
+ *  A `floatingHeader` sheet draws the header OVER its body, so a body that
+ *  wants to bleed artwork up behind it — the menu's profile photo — needs to
+ *  know exactly how much room that is. */
+export function sheetHeaderHeight(topInset: number): number {
+  return topInset + OVERLAY.chromeGap + ROUND_BUTTON_SIZE_SM + SM
+}
 
 export function SheetHeader({
   title,

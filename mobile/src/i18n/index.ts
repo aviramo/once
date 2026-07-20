@@ -50,6 +50,15 @@ export function genderize(text: string, isMale: boolean | null | undefined): str
   return text.replace(/\{([^{}|]*)\|([^{}|]*)\}/g, (_, m: string, f: string) => (female ? f : m))
 }
 
+/**
+ * Lowers a string's first letter so a standalone sentence can be spliced into
+ * the middle of another one ("For women" → "Available for women"). Hebrew has
+ * no case, so this is a no-op there and needs no per-language branch.
+ */
+export function lowerFirst(text: string): string {
+  return text.charAt(0).toLocaleLowerCase() + text.slice(1)
+}
+
 /** Double-gender lookup: key_mm, key_mf, key_fm, key_ff → falls back to tg → t. */
 export function tgg(key: keyof Translations, userMale: boolean | null | undefined, otherMale: boolean | null | undefined): string {
   const dict = translations as Record<string, string>

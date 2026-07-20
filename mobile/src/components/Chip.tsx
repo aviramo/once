@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Text } from './AppText'
-import Svg, { Path, Circle, Rect } from 'react-native-svg'
+import { Path, Circle, Rect } from 'react-native-svg'
+import { Glyph } from './icons'
 import { FONT_SCALE } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE } from '../tokens'
@@ -84,10 +85,10 @@ export function Chip({
 // one source of truth per type.
 export function PinIcon({ color, size = ICON.sm }: { color: string; size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       <Circle cx={12} cy={9} r={2.5} stroke={color} strokeWidth={2} />
-    </Svg>
+    </Glyph>
   )
 }
 
@@ -95,42 +96,42 @@ export function PinIcon({ color, size = ICON.sm }: { color: string; size?: numbe
 // address rather than GPS).
 export function HomeIcon({ color, size = ICON.sm }: { color: string; size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M3 11l9-8 9 8" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M5 10v10h14V10" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M10 20v-5h4v5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
+    </Glyph>
   )
 }
 
 // 'work' anchor — briefcase. Same baseline as the others.
 export function WorkIcon({ color, size = ICON.sm }: { color: string; size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Rect x={3} y={7} width={18} height={13} rx={2} stroke={color} strokeWidth={2} />
       <Path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M3 13h18" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    </Svg>
+    </Glyph>
   )
 }
 
 export function ClockIcon({ color }: { color: string }) {
   return (
-    <Svg width={ICON.sm} height={ICON.sm} viewBox="0 0 24 24" fill="none">
+    <Glyph width={ICON.sm} height={ICON.sm} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2} />
       <Path d="M12 7v5l3 3" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
+    </Glyph>
   )
 }
 
 export function KidsIcon({ color }: { color: string }) {
   return (
-    <Svg width={ICON.sm} height={ICON.sm} viewBox="0 0 24 24" fill="none">
+    <Glyph width={ICON.sm} height={ICON.sm} viewBox="0 0 24 24" fill="none">
       <Circle cx={8} cy={7} r={3} stroke={color} strokeWidth={2} />
       <Path d="M2 21v-2a6 6 0 0 1 12 0v2" stroke={color} strokeWidth={2} strokeLinecap="round" />
       <Circle cx={17} cy={10} r={2.2} stroke={color} strokeWidth={2} />
       <Path d="M13 21v-1a4 4 0 0 1 8 0v1" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    </Svg>
+    </Glyph>
   )
 }
 
