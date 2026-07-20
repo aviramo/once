@@ -17,7 +17,7 @@ import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
-import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh } from '../src/tokens'
+import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
 import { BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
@@ -25,6 +25,14 @@ import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendD
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
+
+// Auto-growing message input: one line = one line-height, capped at 10 lines.
+// The floor keeps the empty field square-ish; the ceiling turns the field into
+// a scroll view once the text passes ten lines.
+const INPUT_VPAD = SM * 2
+const INPUT_MIN_HEIGHT = 44
+const INPUT_MAX_LINES = 10
+const INPUT_MAX_HEIGHT = lh(TEXT.md) * INPUT_MAX_LINES + INPUT_VPAD
 
 function buildRecWavePath(bars: number[], W: number, H: number): string {
   const n = bars.length
@@ -138,6 +146,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const matchIsMale = match?.is_male ?? null
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
+  const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT)
   const [sending, setSending] = useState(false)
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   const [otherIsTyping, setOtherIsTyping] = useState(false)
@@ -860,6 +869,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     tap()
     setSending(true)
     setText('')
+    setInputHeight(INPUT_MIN_HEIGHT)
     hasTextShared.value = 0
     const now = new Date().toISOString()
     seenSet.current.add(userId + now)
@@ -1576,9 +1586,14 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               <View style={styles.inputAnimWrap}>
                 <TextInput
                   ref={inputRef}
-                  style={styles.input}
+                  style={[styles.input, { height: inputHeight }]}
                   value={text}
                   onChangeText={onInputChange}
+                  onContentSizeChange={e => {
+                    const h = e.nativeEvent.contentSize.height
+                    setInputHeight(Math.min(INPUT_MAX_HEIGHT, Math.max(INPUT_MIN_HEIGHT, h)))
+                  }}
+                  scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
                   placeholderTextColor={BLACK_MID}
                   multiline
@@ -1667,8 +1682,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 pressed && styles.sendBtnPressed,
               ]}
             >
-              <ReAnimated.View style={micIconStyle}><MicIcon /></ReAnimated.View>
-              <ReAnimated.View style={sendIconStyle}><SendIcon /></ReAnimated.View>
+              <ReAnimated.View style={micIconStyle}><MicIcon size={ICON.lg} /></ReAnimated.View>
+              <ReAnimated.View style={sendIconStyle}><SendIcon size={ICON.lg} /></ReAnimated.View>
             </Pressable>
 
             {recordPhase === 'recording' && (
@@ -1735,7 +1750,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   {(() => { const s = Math.floor((previewPlaying ? previewPos : audioDuration) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}
                 </Text>
                 <Pressable onPress={handleSendAudio} style={styles.sendBtn}>
-                  <SendIcon />
+                  <SendIcon size={ICON.lg} />
                 </Pressable>
               </View>
             )}
@@ -2639,8 +2654,8 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    minHeight: 44,
-    maxHeight: 174,
+    minHeight: INPUT_MIN_HEIGHT,
+    maxHeight: INPUT_MAX_HEIGHT,
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
     borderColor: BLACK_SOFT,
@@ -2652,9 +2667,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 174,
+    // Height is driven imperatively from onContentSizeChange (see the input
+    // row); a `flex: 1` here made the field fill its parent instead of
+    // growing it from content, so it never expanded past one line.
+    width: '100%',
     paddingStart: MD,
     paddingEnd: SM,
     paddingVertical: SM,

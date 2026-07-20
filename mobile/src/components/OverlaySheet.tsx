@@ -267,27 +267,30 @@ export function SheetHeader({
       pointerEvents="box-none"
       onLayout={e => onMeasured?.(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
     >
-      <RoundButton
-        size={ROUND_BUTTON_SIZE_SM}
-        onPress={onClose}
-        accessibilityLabel={closeAccessibilityLabel}
-        // On a solid bar the button needs no scrim; floating over a photo it
-        // keeps RoundButton's default dark scrim so the glyph stays legible.
-        bg={floating ? undefined : 'transparent'}
-        shadow={!!floating}
-      >
-        <CloseIcon color={WHITE} size={ICON.round} />
-      </RoundButton>
+      {/* Both side columns are flex:1 (equal width), so the title sits at the
+          TRUE centre of the row regardless of how wide the trailing control is
+          — a text button ("End") no longer shoves the title off-centre the way
+          a fixed-width RoundButton used to keep it balanced only by luck. */}
+      <View style={styles.side}>
+        <RoundButton
+          size={ROUND_BUTTON_SIZE_SM}
+          onPress={onClose}
+          accessibilityLabel={closeAccessibilityLabel}
+          // On a solid bar the button needs no scrim; floating over a photo it
+          // keeps RoundButton's default dark scrim so the glyph stays legible.
+          bg={floating ? undefined : 'transparent'}
+          shadow={!!floating}
+        >
+          <CloseIcon color={WHITE} size={ICON.round} />
+        </RoundButton>
+      </View>
       {title ? (
         <View style={styles.titleWrap} pointerEvents="none">
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           {titleTrailing}
         </View>
-      ) : (
-        <View style={styles.titleWrap} />
-      )}
-      {/* Balances the X so a title centres on the row. */}
-      <View style={styles.trailingWrap}>
+      ) : null}
+      <View style={[styles.side, styles.sideEnd]}>
         {trailing ?? <View style={styles.trailingSpacer} />}
       </View>
     </View>
@@ -325,8 +328,18 @@ const styles = StyleSheet.create({
     end: 0,
     backgroundColor: 'transparent',
   },
-  titleWrap: {
+  // Equal-width side columns flank the centred title so it stays on the row's
+  // true centre no matter what each side holds.
+  side: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sideEnd: {
+    justifyContent: 'flex-end',
+  },
+  titleWrap: {
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -338,10 +351,6 @@ const styles = StyleSheet.create({
     lineHeight: lh(TEXT.lg),
     fontWeight: WEIGHT.extrabold,
     flexShrink: 1,
-  },
-  trailingWrap: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
   },
   trailingSpacer: {
     width: ROUND_BUTTON_SIZE_SM,

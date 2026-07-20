@@ -35,10 +35,11 @@ import ChatPage from './chat'
 import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
+import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { CloseBoldIcon, PauseIcon, HeartIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon, HamburgerIcon, DotsVerticalIcon, GlyphScale } from '../src/components/icons'
+import { CloseBoldIcon, PauseIcon, HeartIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale } from '../src/components/icons'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -396,6 +397,19 @@ const chatMenuStyles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: BLACK_SOFT,
     marginHorizontal: MD,
+  },
+  // The chat header's trailing control: an explicit "End chat" TEXT button
+  // (replaced the cryptic 3-dot menu icon — users reported the end-conversation
+  // action was undiscoverable). Sits on the dark PRIMARY header bar, so WHITE.
+  endBtn: {
+    paddingVertical: SM / 2,
+    paddingHorizontal: SM,
+  },
+  endBtnPressed: { opacity: 0.55 },
+  endLabel: {
+    fontSize: TEXT.md,
+    color: WHITE,
+    fontWeight: WEIGHT.semibold,
   },
 })
 
@@ -831,6 +845,11 @@ export default function HomePage() {
   // Unread message count reported by ChatPage — drives the alert pulse on the
   // card's open-chat button while the chat overlay is closed.
   const [chatUnread, setChatUnread] = useState(0)
+  // Persistent "new messages" marker for the card's open-chat button. Unlike
+  // `chatUnread` (only live while ChatPage is mounted, i.e. the sheet is open),
+  // this works while the chat is CLOSED — exactly when the dot is needed. See
+  // useChatHasUnread.
+  const chatHasUnread = useChatHasUnread(chatOpen)
   // Whether the chat partner is currently online — reported by ChatPage via
   // its presence channel. Drives the presence dot in the chat sheet's header.
   const [partnerOnline, setPartnerOnline] = useState(false)
@@ -2307,6 +2326,7 @@ export default function HomePage() {
           key: 'open-chat',
           icon: <ChatIcon color={WHITE} size={ICON.huge} />,
           onPress: () => openOverlay('chat'),
+          badge: chatHasUnread,
         }]
       : state === 'watching'
         ? [
@@ -3176,15 +3196,15 @@ export default function HomePage() {
           titleTrailing={partnerOnline ? <PresenceDot /> : undefined}
           closeAccessibilityLabel={t('chat.a11y.close')}
           headerTrailing={
-            <RoundButton
-              size={ROUND_BUTTON_SIZE_SM}
-              bg="transparent"
-              shadow={false}
+            <Pressable
               onPress={() => { tap(); setChatMenuOpen(true) }}
-              accessibilityLabel={t('chat.a11y.menu')}
+              hitSlop={SM}
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.endChat')}
+              style={({ pressed }) => [chatMenuStyles.endBtn, pressed && chatMenuStyles.endBtnPressed]}
             >
-              <DotsVerticalIcon color={WHITE} size={ICON.round} />
-            </RoundButton>
+              <Text style={chatMenuStyles.endLabel}>{t('chat.endChat')}</Text>
+            </Pressable>
           }
         >
           <ChatPage

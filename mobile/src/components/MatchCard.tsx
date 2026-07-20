@@ -44,15 +44,30 @@ export type CardAction = {
   icon: React.ReactNode
   onPress?: () => void
   bg?: string
+  /** When true, a minimal unread dot is overlaid on the button's top-END arc
+   *  (the open-chat button uses it to signal new messages). */
+  badge?: boolean
 }
+
+// Minimal unread marker. Sized/placed to sit ON the round button's upper-END
+// arc (~11px in from each corner of the 76dp button), so it reads as attached
+// to the button rather than floating in the empty square corner. The brand is
+// strictly monochrome (no warning hue) — attention on a dark surface is WHITE
+// (see colors.ts), so this is a solid WHITE dot with a thin BLACK ring that
+// separates it from both the dark button scrim and any bright photo behind it.
+const UNREAD_DOT_SIZE = 14
+const UNREAD_DOT_INSET = 4
 
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
   return (
     <View style={styles.actionStack}>
       {actions.map(a => (
-        <RoundButton key={a.key} bg={a.bg} onPress={a.onPress}>
-          {a.icon}
-        </RoundButton>
+        <View key={a.key} style={styles.actionItem}>
+          <RoundButton bg={a.bg} onPress={a.onPress}>
+            {a.icon}
+          </RoundButton>
+          {a.badge ? <View pointerEvents="none" style={styles.unreadDot} /> : null}
+        </View>
       ))}
     </View>
   )
@@ -901,6 +916,20 @@ const styles = StyleSheet.create({
     flexDirection: 'column-reverse',
     alignItems: 'center',
     gap: SM,
+  },
+  actionItem: {
+    position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: UNREAD_DOT_INSET,
+    end: UNREAD_DOT_INSET,
+    width: UNREAD_DOT_SIZE,
+    height: UNREAD_DOT_SIZE,
+    borderRadius: UNREAD_DOT_SIZE / 2,
+    backgroundColor: WHITE,
+    borderWidth: 2,
+    borderColor: BLACK,
   },
   chipsStack: {
     flexDirection: 'column',
