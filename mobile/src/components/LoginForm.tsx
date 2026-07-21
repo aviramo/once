@@ -7,7 +7,7 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { INK, INK_2, INK_3, SURFACE, BLACK, WHITE, PRIMARY, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
+import { BLACK_STRONG, INK, INK_2, INK_3, SURFACE, BLACK, WHITE, PRIMARY, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
 import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -205,10 +205,10 @@ export function LoginForm({
         <View style={{ marginTop: MD }}>
           <Button
             label={t('auth.linkResend')}
-            variant="onPrimaryGhost"
+            variant="secondary"
             size="lg"
             onPress={() => { setSentTo(null); setEmail(sentTo) }}
-            iconStart={<MailIcon color={WHITE} />}
+            iconStart={<MailIcon color={BLACK_STRONG} />}
           />
         </View>
       </View>
@@ -283,7 +283,7 @@ export function LoginForm({
         <Button
           label={isReviewEmail ? t('auth.reviewSubmit') : t('auth.sendLink')}
           onPress={isReviewEmail ? handleReview : handleEmail}
-          variant="onPrimary"
+          variant="primary"
           size="lg"
           loading={isReviewEmail ? loading === 'review' : loading === 'email'}
           disabled={
@@ -292,7 +292,7 @@ export function LoginForm({
               : (loading !== null && loading !== 'email') || !canSendEmail
           }
           silentDisabled={!isReviewEmail && loading !== null && loading !== 'email' && canSendEmail}
-          iconStart={<MailIcon color={PRIMARY} />}
+          iconStart={<MailIcon color={WHITE} />}
         />
       </View>
     </View>
