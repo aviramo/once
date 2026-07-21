@@ -1,10 +1,28 @@
 import { useEffect } from 'react'
 import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppStatusBar } from '../src/components/AppStatusBar'
+
+// The green band behind the OS status bar.
+//
+// Android 15 (targetSdk 35) enforces edge-to-edge and IGNORES every API that
+// used to colour the status bar — `androidStatusBar.backgroundColor` in
+// app.json and expo-status-bar's `backgroundColor` prop are both no-ops there.
+// So the app draws the strip itself.
+//
+// Deliberately ABSOLUTE and pointerEvents="none": it paints over the top strip
+// without taking layout space. If it were a normal child it would push every
+// screen down by the inset, and screens that already pad by `insets.top` (home's
+// floating chrome, the sheets) would end up double-inset.
+function StatusBarBand() {
+  const { top } = useSafeAreaInsets()
+  if (top <= 0) return null
+  return <View pointerEvents="none" style={[styles.statusBand, { height: top }]} />
+}
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
@@ -30,7 +48,7 @@ import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-import { BG, PRIMARY } from '../src/colors'
+import { GREEN, BG, PRIMARY } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -238,6 +256,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
+    <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: BG }}>
       {/* Global status bar: white text whenever the app is in the foreground.
           The OS automatically restores the system default when the app is
@@ -255,6 +274,21 @@ export default function RootLayout() {
           </LayoutAnimationConfig>
         </AuthProvider>
       </QueryClientProvider>
+      {/* Last child so it paints above every screen. */}
+      <StatusBarBand />
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   )
 }
+
+const styles = StyleSheet.create({
+  statusBand: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: GREEN,
+    zIndex: 100,
+    elevation: 100,
+  },
+})

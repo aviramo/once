@@ -633,9 +633,14 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
  * whose responses carry a fresh `groups` sidecar so the list updates in one
  * round trip per mutation.
  */
-function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
+function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }: {
   visible: boolean
   onDismiss: () => void
+  /** Which act to show. The sheet no longer lists the groups — the menu does
+   * that with chips — so it opens straight into joining or leaving. */
+  mode: 'join' | 'leave'
+  /** The group a chip was tapped on. Only read when mode is 'leave'. */
+  leaveGroup: Group | null
   // Lifted up to AppInlineContent so the settings menu row can render the
   // chained group names alongside this sheet, sharing one source of truth.
   // null = not yet loaded (initial fetch in flight); [] = loaded, empty.
@@ -651,14 +656,6 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
   const [codeError, setCodeError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [leavingId, setLeavingId] = useState<string | null>(null)
-  // The sheet is a small step machine rather than one long scroll. Joining is
-  // a deliberate act, so its explanation and code field only exist once the
-  // user asks for them; the resting view is just "these are my groups".
-  const [step, setStep] = useState<'list' | 'join'>('list')
-  // Leaving confirms in-sheet, NOT via ConfirmDialog: two Modals cannot be
-  // presented at the same parent level on iOS (see AccountPopup), so a dialog
-  // stacked over this sheet would never appear.
-  const [leaveTarget, setLeaveTarget] = useState<Group | null>(null)
 
   useEffect(() => {
     if (!visible) return
@@ -666,8 +663,6 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
     setLoaded(groups != null)
     setCode('')
     setCodeError(null)
-    setStep('list')
-    setLeaveTarget(null)
     invoke<{ groups?: Group[] }>('app/my_groups')
       .then(data => {
         if (cancelled) return
@@ -689,8 +684,8 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       const result = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
       if (result?.groups) setGroups(result.groups)
       setCode('')
-      // Success lands back on the list, where the new membership is visible.
-      setStep('list')
+      // Nothing left to show here once joined — the new chip appears in the menu.
+      onDismiss()
     } catch {
       setCodeError(t('settings.groupsInviteInvalid'))
     } finally {
@@ -710,7 +705,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       // Silently fail; the row stays. User can retry.
     } finally {
       setLeavingId(null)
-      setLeaveTarget(null)
+      onDismiss()
     }
   }
 
@@ -721,17 +716,17 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
       contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
     >
-      {leaveTarget ? (
+      {mode === 'leave' && leaveGroup ? (
         <View style={groupsPopupStyles.step}>
           <Text style={groupsPopupStyles.title}>
-            {t('settings.groupsLeaveTitle').replace('{name}', leaveTarget.name)}
+            {t('settings.groupsLeaveTitle').replace('{name}', leaveGroup.name)}
           </Text>
           <Text style={groupsPopupStyles.hint}>{t('settings.groupsLeaveDesc')}</Text>
           <View style={groupsPopupStyles.actions}>
             <View style={groupsPopupStyles.action}>
               <Button
                 label={t('settings.groupsBack')}
-                onPress={() => { tap(); setLeaveTarget(null) }}
+                onPress={() => { tap(); onDismiss() }}
                 disabled={leavingId !== null}
                 variant="secondary"
                 size="lg"
@@ -740,7 +735,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
             <View style={groupsPopupStyles.action}>
               <Button
                 label={t('settings.groupsLeaveConfirm')}
-                onPress={() => onLeave(leaveTarget.id)}
+                onPress={() => onLeave(leaveGroup.id)}
                 loading={leavingId !== null}
                 variant="primary"
                 size="lg"
@@ -748,7 +743,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
             </View>
           </View>
         </View>
-      ) : step === 'join' ? (
+      ) : (
         <View style={groupsPopupStyles.step}>
           <Text style={groupsPopupStyles.title}>{t('settings.groupsJoinTitle')}</Text>
           <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
@@ -777,7 +772,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
             <View style={groupsPopupStyles.action}>
               <Button
                 label={t('settings.groupsBack')}
-                onPress={() => { tap(); Keyboard.dismiss(); setStep('list') }}
+                onPress={() => { tap(); Keyboard.dismiss(); onDismiss() }}
                 disabled={submitting}
                 variant="secondary"
                 size="lg"
@@ -795,44 +790,6 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
             </View>
           </View>
         </View>
-      ) : (
-        <>
-      <View style={groupsPopupStyles.header}>
-        <Text style={groupsPopupStyles.title}>{t('settings.groupsMine')}</Text>
-      </View>
-
-      <View style={groupsPopupStyles.mineSection}>
-        {!loaded || groups == null ? (
-          <ActivityIndicator color={BLACK_MID} style={{ marginVertical: MD }} />
-        ) : groups.length === 0 ? (
-          <Text style={groupsPopupStyles.empty}>{t('settings.groupsEmpty')}</Text>
-        ) : (
-          <View style={groupsPopupStyles.list}>
-            {groups.map(g => (
-              <Chip
-                key={g.id}
-                text={g.name}
-                onPress={leavingId !== null ? undefined : () => { tapWarning(); setLeaveTarget(g) }}
-                renderTrailing={c => leavingId === g.id
-                  ? <ActivityIndicator color={c} size="small" />
-                  : <TrashIcon color={c} size={ICON.sm} />}
-              />
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* Joining is one button here. Its explanation and code field live on
-          the next step, so the resting sheet is only the list. */}
-      <View style={groupsPopupStyles.joinSection}>
-        <Button
-          label={t('settings.groupsJoinTitle')}
-          onPress={() => { tap(); setStep('join') }}
-          variant="primary"
-          size="lg"
-        />
-      </View>
-        </>
       )}
     </BottomSheet>
   )
@@ -2618,6 +2575,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const { signOut } = useAuthStore()
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
   const [groupsPopupVisible, setGroupsPopupVisible] = useState(false)
+  // The groups sheet is opened straight into one of its two acts by the chip
+  // that was tapped: a group chip leaves it, the trailing chip joins a new one.
+  const [groupsMode, setGroupsMode] = useState<'join' | 'leave'>('join')
+  const [groupsLeaveTarget, setGroupsLeaveTarget] = useState<Group | null>(null)
+  const openJoinGroup = () => { tap(); setGroupsLeaveTarget(null); setGroupsMode('join'); setGroupsPopupVisible(true) }
+  const openLeaveGroup = (g: Group) => { tapWarning(); setGroupsLeaveTarget(g); setGroupsMode('leave'); setGroupsPopupVisible(true) }
   const [bugReportVisible, setBugReportVisible] = useState(false)
   // Lifted from GroupsPopup so the menu row can render the chained group
   // names from the same fetched list — one source of truth shared between
@@ -2816,13 +2779,23 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
-        <SelectFieldRow
-          grouped
-          label={groupsRowLabel}
-          onPress={() => setGroupsPopupVisible(true)}
-          icon={<GroupsIcon color={GREEN} />}
-          labelColor={GREEN}
-        />
+        {/* Groups are chips right here rather than a label that opens a list:
+            the memberships are short, so showing them beats hiding them behind
+            a sheet. Tapping one asks to leave it; the trailing chip joins a
+            new one. */}
+        <View style={styles.groupsRow}>
+          <View style={styles.groupsRowIcon}><GroupsIcon color={GREEN} /></View>
+          <View style={styles.groupsChips}>
+            {(groups ?? []).map(g => (
+              <Chip key={g.id} text={g.name} onPress={() => openLeaveGroup(g)} />
+            ))}
+            <Chip
+              text={t('settings.groupsJoinTitle')}
+              tone="positive"
+              onPress={openJoinGroup}
+            />
+          </View>
+        </View>
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
@@ -2841,6 +2814,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       <GroupsPopup
         visible={groupsPopupVisible}
         onDismiss={() => setGroupsPopupVisible(false)}
+        mode={groupsMode}
+        leaveGroup={groupsLeaveTarget}
         groups={groups}
         setGroups={setGroups}
       />
@@ -3090,6 +3065,11 @@ const styles = StyleSheet.create({
   // Flat group, identical visual language to `accountLinksCard`: no frame,
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
+  // The groups row: the shared leading-icon column, then a wrap of chips
+  // instead of a single label.
+  groupsRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: MD, paddingVertical: MD, gap: MD },
+  groupsRowIcon: { marginTop: XS },
+  groupsChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: SM },
   accountActionsCard: {
     // No fill: the rows sit straight on the beige sheet, separated by their
     // hairline. A white card here read as a slab pasted onto the popup.
