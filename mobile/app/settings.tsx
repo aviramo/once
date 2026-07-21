@@ -34,7 +34,7 @@ import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
-import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
+import { Chip, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
@@ -808,26 +808,15 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
           <Text style={groupsPopupStyles.empty}>{t('settings.groupsEmpty')}</Text>
         ) : (
           <View style={groupsPopupStyles.list}>
-            {groups.map((g, i) => (
-              <View key={g.id}>
-                <View style={groupsPopupStyles.row}>
-                  <View style={groupsPopupStyles.rowText}>
-                    <Text style={groupsPopupStyles.rowLabel} numberOfLines={1}>{g.name}</Text>
-                  </View>
-                  <Pressable
-                    onPress={() => { tapWarning(); setLeaveTarget(g) }}
-                    disabled={leavingId !== null}
-                    hitSlop={TAP_SLOP}
-                    style={({ pressed }) => [groupsPopupStyles.rowAction, pressed ? { opacity: 0.5 } : null]}
-                  >
-                    {leavingId === g.id
-                      ? <ActivityIndicator color={BLACK_MID} size="small" />
-                      : <TrashIcon color={BLACK_MID} />
-                    }
-                  </Pressable>
-                </View>
-                {i < groups.length - 1 ? <View style={groupsPopupStyles.divider} /> : null}
-              </View>
+            {groups.map(g => (
+              <Chip
+                key={g.id}
+                text={g.name}
+                onPress={leavingId !== null ? undefined : () => { tapWarning(); setLeaveTarget(g) }}
+                renderTrailing={c => leavingId === g.id
+                  ? <ActivityIndicator color={c} size="small" />
+                  : <TrashIcon color={c} size={ICON.sm} />}
+              />
             ))}
           </View>
         )}
@@ -852,8 +841,10 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
 }
 
 const groupsPopupStyles = StyleSheet.create({
-  header: { paddingHorizontal: MD, paddingTop: SM, paddingBottom: XS },
-  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK },
+  header: { paddingHorizontal: MD, paddingBottom: MD },
+  // The standard popup title: same size, weight and centring as every other
+  // sheet in the app, so this one stops looking like a section heading.
+  title: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: BLACK, textAlign: 'center', letterSpacing: -0.3 },
   mineSection: { paddingHorizontal: MD, paddingBottom: LG },
   joinSection: { paddingHorizontal: MD, paddingTop: LG },
   // Join and leave steps: one titled block with its own actions row.
@@ -861,14 +852,9 @@ const groupsPopupStyles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: SM, marginTop: LG },
   action: { flex: 1 },
   hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS, lineHeight: lh(TEXT.sm) },
-  empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM },
-  list: { borderRadius: RADIUS, backgroundColor: WHITE_SOFT, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: MD, paddingVertical: SM, gap: SM },
-  rowText: { flex: 1, minWidth: 0 },
-  rowLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM, textAlign: 'center' },
+  list: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SM },
   rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
-  rowAction: { padding: SM },
-  divider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   // Reads as a field: a border and a white fill, not just a tinted block. The
   // previous WHITE_SOFT-on-white panel gave no edge to aim at.
