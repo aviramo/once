@@ -8,7 +8,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
-import { BG, PRIMARY, WHITE, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { BG, GREEN, INK, INK_2, INK_3, PRIMARY } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 import { legalUrl } from '../src/lib/links'
@@ -198,13 +198,13 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: TEXT.xxxl,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: INK,
     letterSpacing: -1.4,
   },
   brandSlogan: {
     fontSize: TEXT.lg,
     fontWeight: WEIGHT.semibold,
-    color: WHITE_STRONG,
+    color: INK_2,
     letterSpacing: -0.2,
     marginTop: XS,
   },
@@ -222,12 +222,12 @@ const styles = StyleSheet.create({
   },
   legalText: {
     fontSize: TEXT.sm,
-    color: WHITE_MID,
+    color: INK_3,
     textAlign: 'center',
     lineHeight: lh(TEXT.sm),
   },
   legalLink: {
     textDecorationLine: 'underline',
-    color: WHITE_STRONG,
+    color: GREEN,
   },
 })

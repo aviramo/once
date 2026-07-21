@@ -7,7 +7,7 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { INK, SURFACE, BLACK, WHITE, PRIMARY, BLACK_MID, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
+import { INK, INK_2, INK_3, SURFACE, BLACK, WHITE, PRIMARY, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
 import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FSIZE.xl,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: INK,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     marginTop: SM,
     fontSize: FSIZE.md,
     lineHeight: lh(FSIZE.md),
-    color: WHITE_STRONG,
+    color: INK_2,
     textAlign: 'center',
   },
   dividerRow: {
@@ -327,11 +327,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: WHITE_MID,
+    backgroundColor: BLACK_SOFT,
   },
   dividerText: {
     fontSize: FSIZE.sm,
-    color: WHITE_STRONG,
+    color: INK_3,
     letterSpacing: 0.2,
   },
   inputWrap: {
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inputWrapError: {
-    borderColor: WHITE_MID,
+    borderColor: NEGATIVE,
   },
   input: {
     fontSize: FSIZE.md,
