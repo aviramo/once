@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=41" />
+  <link rel="stylesheet" href="styles.css?v=42" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -136,7 +136,7 @@
   </footer>
 
   <!-- Sticky mobile download CTA -->
-  <div class="mobile-cta" id="mobile-cta">
+  <div class="mobile-cta is-hidden" id="mobile-cta">
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
@@ -897,6 +897,7 @@
 
       wireNavLinks();
       observeReveals();
+      observeCtaZones();
     }
 
     /* ---------- Reveal on scroll ---------- */
@@ -948,12 +949,36 @@
     /* ---------- Mobile menu ---------- */
     var mobileMenu = document.getElementById('mobile-menu');
     var menuToggle = document.getElementById('menu-toggle');
-    function openMenu() { mobileMenu.classList.add('open'); menuToggle.setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden'; }
-    function closeMenu() { mobileMenu.classList.remove('open'); menuToggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }
+    function openMenu() { mobileMenu.classList.add('open'); menuToggle.setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden'; syncMobileCta(); }
+    function closeMenu() { mobileMenu.classList.remove('open'); menuToggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; syncMobileCta(); }
     menuToggle.addEventListener('click', openMenu);
     document.getElementById('menu-close').addEventListener('click', closeMenu);
     Array.prototype.forEach.call(document.querySelectorAll('[data-close-menu]'), function (el) { el.addEventListener('click', closeMenu); });
     document.getElementById('mobile-cta-inline').addEventListener('click', closeMenu);
+
+    /* ---------- Floating download CTA ----------
+       It slides away (and back) whenever a real download button is on screen,
+       so the same action is never offered twice at once. */
+    var CTA_ZONE_SEL = '.hero-cta, .final-actions';
+    var mobileCta = document.getElementById('mobile-cta');
+    var ctaIo = null;
+    var ctaZones = [];
+    function syncMobileCta() {
+      var blocked = mobileMenu.classList.contains('open') ||
+        ctaZones.some(function (z) { return z._ctaIn; });
+      mobileCta.classList.toggle('is-hidden', blocked);
+    }
+    function observeCtaZones() {
+      if (ctaIo) ctaIo.disconnect();
+      ctaZones = Array.prototype.slice.call(document.querySelectorAll(CTA_ZONE_SEL));
+      if (!('IntersectionObserver' in window)) { syncMobileCta(); return; }
+      ctaIo = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { e.target._ctaIn = e.isIntersecting; });
+        syncMobileCta();
+      }, { rootMargin: '-10% 0px -12% 0px' });
+      ctaZones.forEach(function (z) { ctaIo.observe(z); });
+      syncMobileCta();
+    }
 
     /* ---------- Header scrolled state ---------- */
     var header = document.getElementById('header');

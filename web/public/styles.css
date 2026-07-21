@@ -54,6 +54,7 @@
   --maxw: 1120px;
   --measure: 62ch;
   --gap: clamp(20px, 4vw, 40px);
+  --ctl-h: 44px;            /* header control (tap target) height */
 
   /* --- Motion --- */
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -279,7 +280,7 @@ strong { color: var(--ink); font-weight: 600; }
 /* Mobile menu toggle */
 .menu-toggle {
   display: none;
-  inline-size: 44px; block-size: 44px;
+  inline-size: var(--ctl-h); block-size: var(--ctl-h);
   align-items: center; justify-content: center;
   border-radius: var(--r-xs);
   border: 1px solid var(--border-strong);
@@ -616,8 +617,16 @@ strong { color: var(--ink); font-weight: 600; }
   z-index: 55;
   display: none;
   box-shadow: var(--shadow-lg);
+  transition: transform 0.32s var(--ease), opacity 0.32s var(--ease);
 }
 .mobile-cta .btn { width: 100%; }
+/* Slides out of the way while a real download button is on screen (hero,
+   final CTA, mobile menu) so we never show the same action twice. */
+.mobile-cta.is-hidden {
+  transform: translateY(calc(100% + 12px));
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* ---------- Skip link ---------- */
 .skip-link {
@@ -662,6 +671,13 @@ strong { color: var(--ink); font-weight: 600; }
   .menu-toggle { display: inline-flex; }
   .header-cta { display: none; }
 
+  /* Header: wordmark on the start edge, controls pinned to the end edge.
+     Without the auto margin the actions bunch up against the brand and leave
+     the whole end half of the bar empty. */
+  .header-inner { gap: 12px; padding: 10px clamp(14px, 4vw, 24px); }
+  .header-actions { margin-inline-start: auto; gap: 8px; }
+  .lang-btn { min-height: var(--ctl-h); padding-inline: 14px; }
+
   .hero-grid { grid-template-columns: 1fr; }
   .hero-visual { order: -1; margin-bottom: 8px; }
   .hero-copy { max-width: none; }
@@ -678,6 +694,9 @@ strong { color: var(--ink); font-weight: 600; }
 
 @media (max-width: 560px) {
   body { font-size: 16px; }
+  :root { --ctl-h: 40px; }
+  .brand-name { font-size: 1.3rem; }
+  .header-actions { gap: 6px; }
   .card-grid--2, .card-grid--3, .card-grid--4, .steps--5 { grid-template-columns: 1fr; }
   .hero-cta .btn, .final-actions .btn { width: 100%; }
   .band { padding-block: clamp(48px, 12vw, 72px); }
