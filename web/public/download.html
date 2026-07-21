@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#2C0A14" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Once | הורדת האפליקציה</title>
   <meta name="description" content="הורדת אפליקציית Once." />
@@ -13,17 +13,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
-    /* Fixed all-dark scheme, identical to the app: black page, white
-       content, no theme toggle. Buttons mirror the app's <Button> on a
-       dark surface: 56px tall, radius 12, flat fill, no shadow — primary
-       is a white fill (onPrimary), secondary a white-alpha wash. */
+    /* Fixed all-dark scheme, identical to the app: bordeaux page, cream
+       content, gold accents, no theme toggle. Buttons mirror the app's
+       <Button> on a dark surface: 56px tall, radius 12, flat fill, no shadow
+       — primary is a gold fill with bordeaux text, secondary a cream-alpha
+       wash. */
     :root { color-scheme: dark; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
       font-family: "Noto Sans Hebrew", system-ui, -apple-system, sans-serif;
-      background: #000000;
-      color: #ffffff;
+      background: #2C0A14;
+      color: #F6EAD6;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -35,7 +36,7 @@
     }
     .wrap { width: 100%; max-width: 360px; }
     .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.5px; }
-    .msg { margin-top: 14px; font-size: 16px; font-weight: 600; color: rgba(255, 255, 255, 0.62); }
+    .msg { margin-top: 14px; font-size: 16px; font-weight: 600; color: rgba(246, 234, 214, 0.66); }
     .choices { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
     .btn {
       display: flex;
@@ -44,8 +45,8 @@
       min-height: 56px;
       padding: 8px 24px;
       border-radius: 12px;
-      background: #ffffff;
-      color: #000000;
+      background: #E3B457;
+      color: #2C0A14;
       border: none;
       font-family: inherit;
       font-size: 18px;
@@ -55,15 +56,15 @@
       cursor: pointer;
     }
     .btn.secondary {
-      background: rgba(255, 255, 255, 0.14);
-      color: #ffffff;
+      background: rgba(246, 234, 214, 0.14);
+      color: #F6EAD6;
       font-weight: 600;
     }
-    .hint { margin-top: 14px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(255, 255, 255, 0.62); }
-    .hint strong { color: #ffffff; }
+    .hint { margin-top: 14px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(246, 234, 214, 0.66); }
+    .hint strong { color: #F6EAD6; }
     .choices-ios { margin-top: 20px; }
-    .ios-note { display: none; margin-top: 18px; font-size: 14px; font-weight: 600; line-height: 1.5; color: rgba(255, 255, 255, 0.62); }
-    .ios-note a { color: #ffffff; }
+    .ios-note { display: none; margin-top: 18px; font-size: 14px; font-weight: 600; line-height: 1.5; color: rgba(246, 234, 214, 0.66); }
+    .ios-note a { color: #E3B457; }
     .show .ios-note { display: block; }
     /* The choosers are hidden until JS decides which one this device needs. */
     .choices { display: none; }
