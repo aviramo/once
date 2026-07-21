@@ -4,7 +4,7 @@ import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { GREEN, WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
+import { GREEN, GREEN_SOFT, WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
@@ -219,9 +219,15 @@ const VARIANT: Record<Variant, {
   disabledBtn?: object
   disabledText?: { color: string }
 }> = {
+  // Disabled is a LIGHT GREEN fill with a muted green label, not the global
+  // opacity fade. Fading the solid green over the beige page left a
+  // near-invisible ghost of a button — the user could not see that the action
+  // existed at all, only that something was missing.
   primary: {
     btn: { backgroundColor: GREEN },
     text: { color: WHITE },
+    disabledBtn: { backgroundColor: GREEN_SOFT },
+    disabledText: { color: BLACK_STRONG },
   },
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
