@@ -29,7 +29,7 @@ import { CloseIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
 import { SM, MD, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { BG, SCRIM_BLACK, PRIMARY, WHITE, BLACK } from '../colors'
+import { GREEN, BG, SCRIM_BLACK, PRIMARY, WHITE, BLACK } from '../colors'
 
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
  *  the sheet's dismiss pan instead of fighting it. This is exactly the prop
@@ -281,7 +281,7 @@ export function SheetHeader({
           bg={floating ? undefined : 'transparent'}
           shadow={!!floating}
         >
-          <CloseIcon color={WHITE} size={ICON.round} />
+          <CloseIcon color={GREEN} size={ICON.round} />
         </RoundButton>
       </View>
       {title ? (

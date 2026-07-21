@@ -435,10 +435,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const { bottom: safeBottomInset } = useSafeAreaInsets()
   // The first photo runs to the bottom of the card (callers pass bottomInset=0
   // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
-  // must clear the home indicator on its own. The extra LG on top of that is
-  // deliberate breathing room: clearing the indicator alone left the chip
-  // column sitting on the very edge of the card.
-  const overlayBottomOffset = Math.max(safeBottomInset, MD) + LG
+  // must clear the home indicator on its own. This offset is shared by the
+  // chips AND the heart, so the chips' extra breathing room is NOT added here
+  // — it lives on the chip column alone (infoLeft), or the heart rides up with
+  // it and leaves its anchored position.
+  const overlayBottomOffset = Math.max(safeBottomInset, MD)
   const ready = effectiveCardH > 0
   const timeIso = match.last_seen
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
@@ -914,6 +915,10 @@ const styles = StyleSheet.create({
   infoLeft: {
     flex: 1,
     flexDirection: 'column',
+    // Breathing room under the chip column only. Deliberately here and not on
+    // the shared overlay padding: the heart is anchored to the card's bottom
+    // edge and must not move with the chips.
+    marginBottom: LG,
   },
   actionStack: {
     flexDirection: 'column-reverse',

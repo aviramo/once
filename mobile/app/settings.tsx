@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { GREEN, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { BG, GREEN, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -176,6 +176,7 @@ function SelectFieldRow({
   tone = 'default',
   size = 'default',
   locked,
+  labelColor,
 }: {
   label?: string
   subtitle?: string
@@ -188,6 +189,10 @@ function SelectFieldRow({
   /** Dims the row content to signal the field is currently unavailable.
    * The row stays pressable so onPress can explain why. */
   locked?: boolean
+  /** Ink for the label. The menu splits its rows into two groups: the
+   * preferences you tune are GREEN, the account/status rows below them are
+   * ORANGE. Pass the same colour to this row's `icon` so the pair matches. */
+  labelColor?: string
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
   const tapProps = useTapResponder(onPress, (pressed) => {
@@ -237,7 +242,7 @@ function SelectFieldRow({
             <View style={styles.selectRowLabelGroup}>
               {renderedIcon}
               <View style={styles.selectRowLabelStack}>
-                <Text style={styles.selectRowLabel}>{label}</Text>
+                <Text style={[styles.selectRowLabel, labelColor ? { color: labelColor } : null]}>{label}</Text>
                 {subtitle ? (
                   <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
                 ) : null}
@@ -383,9 +388,9 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
     ? `${locationFieldAnchor}, ${locationFieldAddress}`
     : locationFieldAnchor
   const locationFieldIcon =
-    locationType === 'home' ? <HomeGlyph color={WHITE} size={ICON.md} />
-    : locationType === 'work' ? <WorkGlyph color={WHITE} size={ICON.md} />
-    : <PinGlyph color={WHITE} size={ICON.md} />
+    locationType === 'home' ? <HomeGlyph color={GREEN} size={ICON.md} />
+    : locationType === 'work' ? <WorkGlyph color={GREEN} size={ICON.md} />
+    : <PinGlyph color={GREEN} size={ICON.md} />
   // An active page1/page2 interaction freezes the location field: 'watching'
   // (looking at a candidate), 'waiting' (outgoing invite), or 'pending'
   // (incoming invite on page2). Changing location mid-interaction would shift
@@ -404,14 +409,16 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           grouped
           label={genderLabel}
           onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon color={WHITE} />}
+          icon={<GenderIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={`${t('settings.ageRange')} ${ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}`}
           onPress={() => setAgePopupVisible(true)}
-          icon={<SlidersIcon color={WHITE} />}
+          icon={<SlidersIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -423,7 +430,8 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
             ? t('settings.rangeUnlimitedLabel')
             : `${t('settings.range')} ${formatRadius(radius)}`}
           onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon color={WHITE} />}
+          icon={<RadiusIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
@@ -434,6 +442,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
             ? setLocationLockedInfoVisible(true)
             : setLocationPopupVisible(true)}
           icon={locationFieldIcon}
+          labelColor={GREEN}
         />
       </View>
       <RadiusPopup
@@ -2808,28 +2817,32 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
           onPress={() => setStarsPopupVisible(true)}
-          icon={<HeartIcon color={WHITE} size={ICON.md} />}
+          icon={<HeartIcon color={PRIMARY} size={ICON.md} />}
+          labelColor={PRIMARY}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={WHITE} />}
+          icon={<UserIcon color={PRIMARY} />}
+          labelColor={PRIMARY}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={groupsRowLabel}
           onPress={() => setGroupsPopupVisible(true)}
-          icon={<GroupsIcon color={WHITE} />}
+          icon={<GroupsIcon color={PRIMARY} />}
+          labelColor={PRIMARY}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.bugReport')}
           onPress={() => setBugReportVisible(true)}
-          icon={<BugIcon color={WHITE} />}
+          icon={<BugIcon color={PRIMARY} />}
+          labelColor={PRIMARY}
         />
       </View>
       <AccountPopup
@@ -2989,7 +3002,7 @@ export default function SettingsPage({
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: PRIMARY },
+  rootOuter: { flex: 1, backgroundColor: BG },
   root: { flex: 1 },
 
   header: {
@@ -3141,7 +3154,7 @@ const styles = StyleSheet.create({
   selectRowLabelStack: { flex: 1, minWidth: 0 },
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
-  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
+  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
   // Force start-aligned ('left' under explicit writingDirection becomes
   // physically right in RTL after auto-flip). Without the explicit
   // writingDirection, iOS did not pick the container's RTL direction and the

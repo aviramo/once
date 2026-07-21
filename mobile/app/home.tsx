@@ -316,8 +316,8 @@ function SkipHintLabel({ text }: { text: string }) {
     <Svg width={w} height={h}>
       <Defs>
         <SvgLinearGradient id="skipHintFade" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={WHITE} stopOpacity={1} />
-          <Stop offset="1" stopColor={WHITE_STRONG} stopOpacity={1} />
+          <Stop offset="0" stopColor={GREEN} stopOpacity={1} />
+          <Stop offset="1" stopColor={GREEN} stopOpacity={1} />
         </SvgLinearGradient>
       </Defs>
       {lines.map((line, i) => {
@@ -2727,7 +2727,7 @@ export default function HomePage() {
   if (!profile) {
     return (
       <View style={[styles.backdrop, styles.bootFill]}>
-        <AppStatusBar backgroundColor={PRIMARY} style="light" />
+        <AppStatusBar backgroundColor={BG} />
         <Spinner color={WHITE} />
       </View>
     )
@@ -2740,7 +2740,7 @@ export default function HomePage() {
           switches both ways: a gated mount would leave the status bar stuck
           after resume, since expo-status-bar applies its value imperatively
           and never restores prior values on unmount. */}
-      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : PRIMARY} style="light" />
+      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : BG} />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
             {/* page1 — the only standalone screen, and ALL of it is the
                 drag-to-open-menu surface (see menuDragGesture). The detector
@@ -2863,7 +2863,7 @@ export default function HomePage() {
                               // spinner — the radar-ring expansion (RadarRings,
                               // driven by searching/findQueued) is the cue.
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
-                                <Svg width={CENTER_GLYPH_SIZE} height={CENTER_GLYPH_SIZE} viewBox="0 0 24 24" fill={PRIMARY}>
+                                <Svg width={CENTER_GLYPH_SIZE} height={CENTER_GLYPH_SIZE} viewBox="0 0 24 24" fill={WHITE}>
                                   <Path d="M8 5v14l11-7z" />
                                 </Svg>
                               </View>
