@@ -17,7 +17,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { HeartIcon, QuoteIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { INK, SURFACE, BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
+import { INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -737,7 +737,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               ) : null}
               {onReport ? (
                 <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
-                  <ShieldIcon color={WHITE} fill={WHITE} size={ICON.round} />
+                  <ShieldIcon color={GREEN} fill={GREEN} size={ICON.round} />
                 </RoundButton>
               ) : null}
             </View>

@@ -7,7 +7,7 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, lh } from '../tokens'
-import { PHOTO_CHROME, INK, ORANGE, ORANGE_SOFT, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
+import { PHOTO_CHROME, GREEN, ORANGE, ORANGE_SOFT, BLACK_SOFT, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -28,9 +28,11 @@ import { PHOTO_CHROME, INK, ORANGE, ORANGE_SOFT, BLACK_SOFT, BLACK_STRONG, ONLIN
 const isRTL = localeIsRTL
 
 const TONES = {
-  neutral:  { fg: BLACK_STRONG, bg: BLACK_SOFT },
+  // Green ink on a faint neutral wash. The chip's fill stays neutral so the
+  // colour lives entirely in the label and glyph.
+  neutral:  { fg: GREEN,  bg: BLACK_SOFT },
   // Orange on an orange wash — the positive hue, never the action green.
-  positive: { fg: ORANGE,       bg: ORANGE_SOFT },
+  positive: { fg: ORANGE, bg: ORANGE_SOFT },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -55,11 +57,12 @@ export function Chip({
   onPress?: () => void
 }) {
   const { fg, bg } = TONES[tone]
-  // On a photo the chip is the shared WHITE chrome tile with BLACK ink. The
-  // photo underneath is arbitrary, so the chip supplies its own contrast
-  // rather than hoping the picture is dark enough.
+  // On a photo the chip is the shared WHITE chrome tile carrying GREEN ink.
+  // The white tile is what supplies the contrast — the photo underneath is
+  // arbitrary — which is exactly what frees the label and glyph to be the
+  // brand green rather than a neutral black.
   const bgColor = onPhoto ? PHOTO_CHROME : bg
-  const glyphColor = onPhoto ? INK : fg
+  const glyphColor = onPhoto ? GREEN : fg
   const Container: any = onPress ? Pressable : View
   return (
     <Container

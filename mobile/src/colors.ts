@@ -3,11 +3,13 @@
 // A LIGHT scheme: warm off-white pages, white cards, near-black ink, with two
 // hues that each own one job and never trade places:
 //
-//   GREEN  = ACTION.   Primary buttons, selected states, headings, the icons
-//                      inside popup rows. If the user can do something, it is
-//                      green.
-//   ORANGE = POSITIVE. The heart, likes, "someone is here", a positive delta.
-//                      Status, never a button the user presses to navigate.
+//   ORANGE = ACTION.  Every surface the user acts on: primary buttons, the
+//                     invite panel, the heart, the home centre disc, selected
+//                     states. Also the positive signals (a like, presence, a
+//                     positive delta) — acting and good news are one hue here.
+//                     Ink on an orange fill is always WHITE.
+//   GREEN  = INK.     The brand's text colour: chip labels and glyphs,
+//                     headings, emphasis. Green is read, never pressed.
 //
 // Everything on top of a PHOTO is a WHITE chip with BLACK ink — the photo is
 // the loudest thing on the card, so its chrome stays neutral and lets the two
@@ -60,10 +62,10 @@ export const ORANGE       = '#E4573D'
 export const ORANGE_SOFT  = 'rgba(228,87,61,0.14)'
 
 // ── Primary brand ──────────────────────────────────────────────────────────
-// The brand fill IS the action green — one value, so a "primary" surface and
+// The brand fill IS the action orange — one value, so a "primary" surface and
 // an "action" surface can never drift apart. Ink on it is WHITE.
-export const PRIMARY      = GREEN
-export const PRIMARY_BG   = GREEN_SOFT
+export const PRIMARY      = ORANGE
+export const PRIMARY_BG   = ORANGE_SOFT
 // A solid, light brand-tinted surface for the rare full-screen case where a
 // translucent overlay would be wrong (the Android status bar cannot accept
 // alpha and would mismatch the screen underneath).

@@ -16,7 +16,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
+import { GREEN, INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
 import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -2328,7 +2328,7 @@ export default function HomePage() {
     state === 'chat'
       ? [{
           key: 'open-chat',
-          icon: <ChatIcon color={WHITE} size={ICON.huge} />,
+          icon: <ChatIcon color={PRIMARY} size={ICON.huge} />,
           onPress: () => openOverlay('chat'),
           badge: chatHasUnread,
         }]
@@ -2336,7 +2336,7 @@ export default function HomePage() {
         ? [
             {
               key: 'like',
-              icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
+              icon: <HeartIcon color={PRIMARY} stroke={PRIMARY} size={ICON.huge} />,
             },
           ]
         : []
@@ -2728,7 +2728,7 @@ export default function HomePage() {
   if (!profile) {
     return (
       <View style={[styles.backdrop, styles.bootFill]}>
-        <AppStatusBar backgroundColor={PRIMARY} />
+        <AppStatusBar backgroundColor={PRIMARY} style="light" />
         <Spinner color={WHITE} />
       </View>
     )
@@ -2741,7 +2741,7 @@ export default function HomePage() {
           switches both ways: a gated mount would leave the status bar stuck
           after resume, since expo-status-bar applies its value imperatively
           and never restores prior values on unmount. */}
-      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : PRIMARY} />
+      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : PRIMARY} style="light" />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
             {/* page1 — the only standalone screen, and ALL of it is the
                 drag-to-open-menu surface (see menuDragGesture). The detector
@@ -3124,7 +3124,7 @@ export default function HomePage() {
                   onPress={openMenuByTap}
                   accessibilityLabel={t('home.a11y.menu')}
                 >
-                  <HamburgerIcon color={WHITE} size={ICON.round} />
+                  <HamburgerIcon color={GREEN} size={ICON.round} />
                 </RoundButton>
               </View>
             </View>
