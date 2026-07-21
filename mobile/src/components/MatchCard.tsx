@@ -14,7 +14,7 @@ import { resolveLocationType, type Profile, type LocationType } from '../stores/
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, ShieldIcon, GroupsIcon } from './icons'
+import { HeartIcon, QuoteIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { INK, SURFACE, BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
@@ -752,14 +752,20 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
-                {/* Identity chip: name and age in ONE chip, with no icon — it
-                    is who this is, not an attribute of them, and a cake glyph
-                    beside an age reads as a birthday rather than as a fact.
+                {/* Identity chip: name and age in ONE chip, led by the same
+                    person glyph the account row wears, so "who this is" reads
+                    identically wherever it appears. Deliberately NOT a cake —
+                    that glyph read as a birthday rather than as a fact.
                     Either half may be missing, so the two are joined only
                     when both are present. */}
                 {identityChipText ? (
                   <View style={styles.chipsLine}>
-                    <Chip text={identityChipText} tone="neutral" onPhoto />
+                    <Chip
+                      renderIcon={c => <UserIcon color={c} size={ICON.sm} />}
+                      text={identityChipText}
+                      tone="neutral"
+                      onPhoto
+                    />
                   </View>
                 ) : null}
                 {proximityStr ? (
