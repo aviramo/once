@@ -689,8 +689,12 @@ function ReplyingInviteCard({
             />
           </View>
           <View style={statusButtonStyles.btnAccept}>
+            {/* The invite pair — sending one and accepting one — is the only
+                action that wears the ORANGE. Every other button in the app is
+                green; these two are what the whole product is for. */}
             <Button
               variant="primary"
+              tone="positive"
               label={acceptLabel}
               iconStart={<CreditCost cost={costCredits} color={WHITE} bg={WHITE_SOFT} />}
               onPress={handleAccept}
