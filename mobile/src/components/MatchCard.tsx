@@ -14,7 +14,7 @@ import { resolveLocationType, type Profile, type LocationType } from '../stores/
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
+import { HeartIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
@@ -723,19 +723,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
 
               Top-START is deliberately left empty: the shell paints its
               floating chrome there (home's hamburger, a sheet's close X). */}
-          {sections[0]?.type === 'photo' && (match.group_name || onReport) ? (
+          {sections[0]?.type === 'photo' && onReport ? (
             <View
               pointerEvents="box-none"
               style={[styles.topEndOverlay, chromeTop > 0 && { paddingTop: chromeTop }]}
             >
-              {match.group_name ? (
-                <Chip
-                  renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                  text={match.group_name}
-                  tone="neutral"
-                  onPhoto
-                />
-              ) : null}
               {onReport ? (
                 <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
                   <ShieldIcon color={GREEN} fill={GREEN} size={ICON.round} />
@@ -839,17 +831,24 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   : undefined}
               >
                 <View style={styles.aboutBubble}>
-                  <View style={styles.aboutQuoteOpen}>
-                    <QuoteIcon color={BLACK} size={ICON.xxl} />
-                  </View>
                   {bioEditable && bioEdit ? (
                     <BioField edit={bioEdit} onFocusRequested={onBioFocusRequested} />
                   ) : (
                     <Text style={styles.aboutText}>{section.value}</Text>
                   )}
-                  <View style={styles.aboutQuoteClose}>
-                    <QuoteIcon color={BLACK} size={ICON.xxl} />
-                  </View>
+                  {/* Shared groups live with the bio, not up in the chrome: a
+                      group in common is something you READ about this person,
+                      the same as their bio. A wrap row so more than one still
+                      lays out if the field ever carries several. */}
+                  {match.group_name ? (
+                    <View style={styles.aboutGroups}>
+                      <Chip
+                        renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                        text={match.group_name}
+                        tone="neutral"
+                      />
+                    </View>
+                  ) : null}
                 </View>
               </View>
             )
@@ -954,6 +953,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: MD,
   },
+  aboutGroups: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SM, marginTop: MD },
   aboutBubble: {
     alignSelf: 'stretch',
     alignItems: 'center',
@@ -961,12 +961,6 @@ const styles = StyleSheet.create({
     paddingVertical: MD,
     paddingHorizontal: MD,
     gap: MD,
-  },
-  aboutQuoteOpen: {
-    alignSelf: 'flex-start',
-  },
-  aboutQuoteClose: {
-    alignSelf: 'flex-end',
   },
   aboutText: {
     fontSize: TEXT.md,

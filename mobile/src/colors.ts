@@ -81,6 +81,13 @@ export const PRIMARY_BG   = ORANGE_SOFT
 // translucent overlay would be wrong (the Android status bar cannot accept
 // alpha and would mismatch the screen underneath).
 export const PRIMARY_LIGHT = '#E8F0EB'
+// The brand GROUND: ORANGE laid over BG and flattened to a solid hex, because
+// the surfaces that use it — the launcher icon, the adaptive-icon background,
+// the splash screen (app.json) and the web favicon / og-image — are all places
+// alpha cannot go. `scripts/build-icons.mjs` recomputes this mix from ORANGE +
+// BG and refuses to build if this constant has drifted from it, so the value
+// is derived, never hand-picked.
+export const PRIMARY_GROUND = '#F2CCC1'  // ORANGE at 25% over BG
 
 // ── Borders ────────────────────────────────────────────────────────────────
 export const BORDER_SOFT   = '#E5DFD4'  // hairlines on the warm page

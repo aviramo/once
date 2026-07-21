@@ -179,10 +179,16 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     flexShrink: 1,
   },
+  // The rule is drawn OUTSIDE the padding box, so an outlined chip would sit
+  // taller and wider than the filled chips beside it. Pull the padding in by
+  // exactly the border width: same tokens, same outer rectangle, so a row of
+  // chips keeps one height whichever variant it holds.
   chipOutlined: {
     backgroundColor: 'transparent',
     borderWidth: STROKE.thin,
     borderColor: BORDER_STRONG,
+    paddingHorizontal: MD - STROKE.thin,
+    paddingVertical: SM - STROKE.thin,
   },
   // Same treatment the settings select rows use (selectRowIconWrap): a box
   // exactly one text-line tall, top-aligned, so the glyph centres against the
