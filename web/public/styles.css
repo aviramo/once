@@ -1,46 +1,56 @@
 /* ==========================================================================
    Once — marketing landing page
-   Vibe: "Bordeaux & Gold" — a deep, warm, premium dark scheme.
-   Palette: deep bordeaux background, gold accent, warm cream text, lifted
-   bordeaux surfaces. Flat brand language, soft gold focus glow as the single
-   decorative motif. One design system, driven entirely by CSS custom
-   properties. RTL/LTR: layout uses logical properties so it mirrors
-   automatically.
+   Palette: THE APP'S. Every value below is a copy of a constant in
+   `mobile/src/colors.ts` (the app's single source of truth for colour) — a
+   LIGHT scheme of warm beige pages and white cards, with two hues that each
+   own one job and never trade places:
+
+     ORANGE (--brand)  = ACTION. Buttons, links, the accent word in a heading,
+                         the presence dot. Ink on orange is WHITE.
+     GREEN  (--ink / --accent) = INK + quiet decoration. Everything you read,
+                         plus the line-art icons, chips and step numbers.
+
+   There are no greys: every muted step is a translucent green, exactly as in
+   the app. Flat only — no gradients, no frosted fills. One design system,
+   driven entirely by CSS custom properties. RTL/LTR: layout uses logical
+   properties so it mirrors automatically.
+
+   When a colour changes in `mobile/src/colors.ts`, change it here too.
    ========================================================================== */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* --- Surfaces / background --- */
-  --bg: #2c0a14;            /* primary — deep bordeaux */
-  --bg-2: #37101c;          /* secondary — lifted bordeaux (alternating bands) */
-  --surface: #42121f;       /* cards / panels */
-  --surface-sunk: #260810;  /* subtle inset / phone screen */
+  /* --- Surfaces / background (BG / SURFACE_LIFT / SURFACE / SURFACE_SUNK) --- */
+  --bg: #F6F3ED;            /* the page — warm off-white */
+  --bg-2: #EFEAE0;          /* alternating bands — SURFACE_SUNK */
+  --surface: #FFFFFF;       /* cards / panels / chips */
+  --surface-sunk: var(--bg-2);  /* subtle inset — the same sunk step, one value */
 
-  /* --- Ink / text (light-gold ramp — no white anywhere, only golds) --- */
-  --ink: #ecd7a0;           /* primary — light warm gold */
-  --ink-2: rgba(236, 215, 160, 0.75); /* secondary — gold */
-  --ink-3: rgba(236, 215, 160, 0.50); /* tertiary — muted gold */
+  /* --- Ink / text (INK, INK_2, INK_3) — deep brand green, never black --- */
+  --ink: #2B4F40;
+  --ink-2: rgba(43, 79, 64, 0.72);  /* secondary / body */
+  --ink-3: rgba(43, 79, 64, 0.48);  /* muted: hints, captions */
 
-  /* --- Brand — gold accent --- */
-  --brand: #e3b457;         /* gold */
-  --brand-strong: #c79a3a;  /* hover / active — deeper gold */
-  --brand-ink: #2c0a14;     /* text on gold (the bordeaux bg) */
-  --brand-soft: rgba(227, 180, 87, 0.12);  /* gold tint — chips, icon circles, spotlight */
-  --brand-soft-2: rgba(227, 180, 87, 0.20);
+  /* --- Brand — the action orange (ORANGE / PRIMARY) --- */
+  --brand: #E4573D;
+  --brand-strong: #C7452D;  /* hover / active — pressed orange */
+  --brand-ink: #FFFFFF;     /* text on an orange fill */
+  --brand-soft: rgba(228, 87, 61, 0.14);  /* ORANGE_SOFT — tints, washes */
 
-  /* --- Secondary — soft rose (used sparingly) --- */
-  --plum: #d08ba0;
-  --plum-soft: rgba(208, 139, 160, 0.14);
+  /* --- Accent — the reading green (GREEN / GREEN_SOFT) --- */
+  --accent: #417A62;
+  --accent-strong: #35634F;  /* pressed / hover green */
+  --accent-soft: rgba(65, 122, 98, 0.12);
 
-  /* --- Lines (gold hairlines) --- */
-  --border: rgba(227, 180, 87, 0.16);
-  --border-strong: rgba(227, 180, 87, 0.34);
+  /* --- Lines (BORDER_SOFT / BORDER_STRONG) --- */
+  --border: #E5DFD4;
+  --border-strong: rgba(65, 122, 98, 0.38);
 
-  /* --- Shadows (single, soft, sparse) --- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
-  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.40);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.52);
+  /* --- Shadows (single, soft, sparse — the app's SHEET_SHADOW family) --- */
+  --shadow-sm: 0 1px 2px rgba(43, 79, 64, 0.08);
+  --shadow-md: 0 10px 30px rgba(43, 79, 64, 0.10);
+  --shadow-lg: 0 24px 60px rgba(43, 79, 64, 0.14);
 
   /* --- Radii --- */
   --r-xs: 10px;
@@ -85,7 +95,8 @@ ul { list-style: none; }
   outline-offset: 3px;
   border-radius: 6px;
 }
-::selection { background: var(--brand); color: var(--brand-ink); }
+/* The app's SELECTION: a translucent green wash, never an opaque block. */
+::selection { background: rgba(65, 122, 98, 0.25); color: var(--ink); }
 
 /* ---------- Layout helpers ---------- */
 .container {
@@ -109,7 +120,8 @@ strong { color: var(--ink); font-weight: 600; }
 .lede { font-size: clamp(1.06rem, 1.6vw, 1.22rem); color: var(--ink-2); max-width: var(--measure); }
 .measure { max-width: var(--measure); }
 
-/* Eyebrow — small gold label with a leading dot */
+/* Eyebrow — small green label with a leading dot. Green because it is read,
+   not pressed; orange stays reserved for the actions. */
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -117,14 +129,14 @@ strong { color: var(--ink); font-weight: 600; }
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--brand);
+  color: var(--accent);
   margin-bottom: 16px;
 }
 .eyebrow::before {
   content: "";
   inline-size: 7px; block-size: 7px;
   border-radius: 50%;
-  background: var(--brand);
+  background: var(--accent);
   flex: 0 0 auto;
 }
 
@@ -157,12 +169,13 @@ strong { color: var(--ink); font-weight: 600; }
   box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover { background: var(--brand-strong); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+/* Mirrors the app's secondary <Button>: a green outline with green ink. */
 .btn-secondary {
   background: var(--surface);
-  color: var(--ink);
+  color: var(--accent);
   border: 1px solid var(--border-strong);
 }
-.btn-secondary:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-2px); }
+.btn-secondary:hover { border-color: var(--accent-strong); color: var(--accent-strong); background: var(--accent-soft); transform: translateY(-2px); }
 .btn-ghost { min-height: 44px; color: var(--brand); font-weight: 600; padding-inline: 6px; }
 .btn-ghost:hover { color: var(--brand-strong); }
 .btn-lg { min-height: 58px; padding-inline: 32px; font-size: 1.08rem; }
@@ -179,7 +192,7 @@ strong { color: var(--ink); font-weight: 600; }
 .availability::before {
   content: "";
   inline-size: 7px; block-size: 7px; border-radius: 50%;
-  background: #5fb97e; /* calm green presence dot */
+  background: var(--brand); /* presence dot — orange, as in the app */
 }
 
 /* ---------- Header ---------- */
@@ -187,9 +200,7 @@ strong { color: var(--ink); font-weight: 600; }
   position: sticky;
   top: 0;
   z-index: 60;
-  background: color-mix(in srgb, var(--bg) 84%, transparent);
-  backdrop-filter: saturate(1.1) blur(12px);
-  -webkit-backdrop-filter: saturate(1.1) blur(12px);
+  background: var(--bg); /* flat, opaque — no frosted/blurred fill */
   border-bottom: 1px solid transparent;
   transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
 }
@@ -207,7 +218,7 @@ strong { color: var(--ink); font-weight: 600; }
   font-weight: 800;
   font-size: 1.5rem;
   letter-spacing: -0.03em;
-  color: var(--brand); /* gold wordmark */
+  color: var(--brand); /* orange wordmark — the app's brand fill */
 }
 .nav { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; }
 .nav-link {
@@ -218,7 +229,7 @@ strong { color: var(--ink); font-weight: 600; }
   color: var(--ink-2);
   transition: color 0.18s var(--ease), background 0.18s var(--ease);
 }
-.nav-link:hover { color: var(--ink); background: var(--brand-soft); }
+.nav-link:hover { color: var(--ink); background: var(--accent-soft); }
 .header-actions { display: flex; align-items: center; gap: 10px; margin-inline-start: 6px; }
 .login-link {
   font-size: 0.92rem;
@@ -243,7 +254,7 @@ strong { color: var(--ink); font-weight: 600; }
   font-size: 0.86rem;
   color: var(--ink-2);
 }
-.lang-btn:hover { border-color: var(--brand); color: var(--brand); }
+.lang-btn:hover { border-color: var(--accent); color: var(--accent); }
 .lang-chevron { transition: transform 0.2s var(--ease); }
 .lang-btn[aria-expanded="true"] .lang-chevron { transform: rotate(180deg); }
 .lang-menu {
@@ -272,8 +283,8 @@ strong { color: var(--ink); font-weight: 600; }
   color: var(--ink-2);
   text-align: start;
 }
-.lang-menu button:hover { background: var(--brand-soft); color: var(--ink); }
-.lang-menu button.active { color: var(--brand); font-weight: 600; }
+.lang-menu button:hover { background: var(--accent-soft); color: var(--ink); }
+.lang-menu button.active { color: var(--accent); font-weight: 600; }
 .lang-check { opacity: 0; }
 .lang-menu button.active .lang-check { opacity: 1; }
 
@@ -287,7 +298,7 @@ strong { color: var(--ink); font-weight: 600; }
   background: var(--surface);
   color: var(--ink);
 }
-.menu-toggle:hover { border-color: var(--brand); color: var(--brand); }
+.menu-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- Hero ---------- */
 .hero { padding-block: clamp(48px, 8vw, 96px); overflow: clip; }
@@ -320,16 +331,23 @@ strong { color: var(--ink); font-weight: 600; }
 .pill::before {
   content: "";
   inline-size: 6px; block-size: 6px; border-radius: 50%;
-  background: var(--brand);
+  background: var(--accent);
 }
 
-/* Hero visual + "single spotlight" wildcard (soft gold focus glow) */
+/* Hero visual + "single spotlight" wildcard: a FLAT orange-tint disc behind
+   the phone (the app's ORANGE_SOFT wash). Never a gradient glow. */
 .hero-visual { position: relative; display: flex; justify-content: center; }
 .hero-visual::before {
   content: "";
   position: absolute;
-  inset: -12% -6%;
-  background: radial-gradient(closest-side, var(--brand-soft-2) 0%, transparent 72%);
+  inset-block-start: 50%;
+  inset-inline: 0;
+  margin-inline: auto;
+  inline-size: min(400px, 88%);
+  aspect-ratio: 1 / 1;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--brand-soft);
   z-index: 0;
   pointer-events: none;
 }
@@ -356,8 +374,8 @@ strong { color: var(--ink); font-weight: 600; }
   aspect-ratio: 9 / 18.5;
   border-radius: var(--r-xl);
   border-width: 8px;
-  border-color: #571a29; /* lifted bordeaux frame */
-  background: var(--surface-sunk);
+  border-color: var(--ink); /* deep green device frame */
+  background: var(--bg);
 }
 .media--phone::after { /* speaker/notch hint */
   content: "";
@@ -376,8 +394,8 @@ strong { color: var(--ink); font-weight: 600; }
   inline-size: 56px; block-size: 56px;
   border-radius: 50%;
   display: grid; place-items: center;
-  background: var(--brand-soft);
-  color: var(--brand);
+  background: var(--accent-soft);
+  color: var(--accent);
   flex: 0 0 auto;
 }
 .media--phone .media-icon { inline-size: 50px; block-size: 50px; }
@@ -390,7 +408,7 @@ strong { color: var(--ink); font-weight: 600; }
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.03em;
-  color: var(--brand);
+  color: var(--accent);
   background: var(--surface);
   border: 1px solid var(--border);
   padding: 4px 9px;
@@ -417,7 +435,7 @@ strong { color: var(--ink); font-weight: 600; }
   font-weight: 500;
   color: var(--ink);
 }
-.point svg { color: var(--brand); flex: 0 0 auto; margin-block-start: 3px; }
+.point svg { color: var(--accent); flex: 0 0 auto; margin-block-start: 3px; }
 
 /* ---------- Card grids ---------- */
 .card-grid {
@@ -442,8 +460,8 @@ strong { color: var(--ink); font-weight: 600; }
   inline-size: 46px; block-size: 46px;
   border-radius: 13px;
   display: grid; place-items: center;
-  background: var(--brand-soft);
-  color: var(--brand);
+  background: var(--accent-soft);
+  color: var(--accent);
   margin-bottom: 16px;
 }
 .card h3 { margin-bottom: 8px; }
@@ -465,8 +483,8 @@ strong { color: var(--ink); font-weight: 600; }
 .step-num {
   font-weight: 800;
   font-size: 0.9rem;
-  color: var(--brand);
-  background: var(--brand-soft);
+  color: var(--accent);
+  background: var(--accent-soft);
   inline-size: 34px; block-size: 34px;
   border-radius: 50%;
   display: grid; place-items: center;
@@ -493,7 +511,7 @@ strong { color: var(--ink); font-weight: 600; }
   font-size: 0.92rem;
   color: var(--ink);
 }
-.chip svg { color: var(--brand); }
+.chip svg { color: var(--accent); }
 
 /* ---------- Stat cards (hearts) ---------- */
 .stat {
@@ -550,7 +568,7 @@ strong { color: var(--ink); font-weight: 600; }
 .faq-icon {
   flex: 0 0 auto;
   inline-size: 22px; block-size: 22px;
-  color: var(--brand);
+  color: var(--accent);
   transition: transform 0.25s var(--ease);
 }
 .faq-item[open] .faq-icon { transform: rotate(45deg); }
@@ -568,13 +586,15 @@ strong { color: var(--ink); font-weight: 600; }
   position: relative;
   overflow: hidden;
 }
+/* A flat orange-tint rule across the top edge — the card's only decoration.
+   (Was a radial glow; the brand language is flat fills only.) */
 .final::before {
   content: "";
   position: absolute;
-  inset-block-start: -40%;
+  inset-block-start: 0;
   inset-inline: 0;
-  block-size: 80%;
-  background: radial-gradient(closest-side, var(--brand-soft-2) 0%, transparent 70%);
+  block-size: 4px;
+  background: var(--brand);
   pointer-events: none;
 }
 .final > * { position: relative; }
@@ -588,6 +608,47 @@ strong { color: var(--ink); font-weight: 600; }
 .contact { margin-top: clamp(36px, 5vw, 52px); text-align: center; font-size: 0.95rem; color: var(--ink-2); }
 .contact a { color: var(--brand); font-weight: 600; }
 .contact a:hover { color: var(--brand-strong); }
+
+/* ---------- Legal pages (privacy / terms / child safety) ----------
+   These pages carry only <main class="legal"> and plain prose, so the whole
+   page shell lives here: the same container width, the same ink ramp and the
+   same green/orange split as the landing page. */
+.legal {
+  max-width: 820px;
+  margin-inline: auto;
+  padding: clamp(28px, 6vw, 64px) clamp(18px, 5vw, 40px) clamp(48px, 8vw, 88px);
+}
+.legal h1 { margin-bottom: 6px; }
+.legal h2 {
+  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+  margin-top: clamp(28px, 4vw, 40px);
+  margin-bottom: 10px;
+}
+.legal p { margin-bottom: 12px; }
+.legal .updated { color: var(--ink-3); font-size: 0.92rem; margin-bottom: 8px; }
+.legal ul { display: grid; gap: 8px; margin-bottom: 12px; }
+.legal li {
+  position: relative;
+  color: var(--ink-2);
+  padding-inline-start: 20px;
+}
+.legal li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 4px;
+  inset-block-start: 0.65em;
+  inline-size: 6px; block-size: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.legal a { color: var(--brand); font-weight: 600; }
+.legal a:hover { color: var(--brand-strong); }
+.legal .contact {
+  margin-top: clamp(32px, 5vw, 48px);
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  text-align: start;
+}
 
 /* ---------- Footer ---------- */
 .footer {
@@ -712,7 +773,7 @@ strong { color: var(--ink); font-weight: 600; }
 .mobile-menu.open { display: block; }
 .mobile-menu-backdrop {
   position: absolute; inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(43, 79, 64, 0.42);
   opacity: 0; transition: opacity 0.25s var(--ease);
 }
 .mobile-menu.open .mobile-menu-backdrop { opacity: 1; }
@@ -749,7 +810,7 @@ strong { color: var(--ink); font-weight: 600; }
   border-radius: var(--r-xs);
   color: var(--ink-2);
 }
-.menu-close:hover { color: var(--ink); background: var(--brand-soft); }
+.menu-close:hover { color: var(--ink); background: var(--accent-soft); }
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
