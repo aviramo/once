@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -18,10 +19,27 @@ import { AppStatusBar } from '../src/components/AppStatusBar'
 // without taking layout space. If it were a normal child it would push every
 // screen down by the inset, and screens that already pad by `insets.top` (home's
 // floating chrome, the sheets) would end up double-inset.
+//
+// It is a vertical FADE, not a flat fill: solid green under the system glyphs
+// at the top, dissolving to nothing at the bottom edge, so the band meets
+// whatever the screen is (a photo, a beige page) without drawing a hard line
+// across it.
 function StatusBarBand() {
   const { top } = useSafeAreaInsets()
   if (top <= 0) return null
-  return <View pointerEvents="none" style={[styles.statusBand, { height: top }]} />
+  return (
+    <View pointerEvents="none" style={[styles.statusBand, { height: top }]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id="statusBand" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={GREEN} stopOpacity={1} />
+            <Stop offset="1" stopColor={GREEN} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#statusBand)" />
+      </Svg>
+    </View>
+  )
 }
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
@@ -287,7 +305,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: GREEN,
     zIndex: 100,
     elevation: 100,
   },
