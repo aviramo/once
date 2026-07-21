@@ -7,16 +7,16 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, lh } from '../tokens'
-import { PRIMARY, PRIMARY_BG, WHITE, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
+import { GOLD, GOLD_SOFT, WHITE_STRONG, PRIMARY, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
 // lightweight fabric swatches instead of bordered stickers. When `onPhoto`
-// is set, the chip switches to a dark translucent scrim + white text so it
-// stays readable over a color photo. State-presence chips (online,
-// proximate, kids-affinity) add a `renderTrailing` dot via `PresenceDot`,
-// colored per meaning (green = present/here, white = kids-affinity — a
-// neutral marker that stays visible on the dark photo scrim).
+// is set, the chip inverts: a near-solid GOLD swatch carrying BORDEAUX ink,
+// so it supplies its own contrast over an arbitrary photo. State-presence
+// chips (online, proximate, kids-affinity) add a `renderTrailing` dot via
+// `PresenceDot`; it is handed the chip's own ink colour, so on a photo the
+// dot is bordeaux and stays visible against the gold swatch.
 //
 // RTL strategy: use `direction:'rtl'` on the chip View (and the inner text
 // wrapper) so the Yoga node renders right-to-left regardless of whether
@@ -29,8 +29,10 @@ import { PRIMARY, PRIMARY_BG, WHITE, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } fr
 const isRTL = localeIsRTL
 
 const TONES = {
-  neutral:  { fg: BLACK_STRONG, bg: BLACK_SOFT  },
-  positive: { fg: PRIMARY,      bg: PRIMARY_BG  },
+  neutral:  { fg: BLACK_STRONG, bg: BLACK_SOFT },
+  // Gold ink on a gold wash. (It used to be bordeaux-on-bordeaux-tint, which
+  // on the dark scheme meant the label vanished into the card behind it.)
+  positive: { fg: GOLD,         bg: GOLD_SOFT  },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -55,8 +57,13 @@ export function Chip({
   onPress?: () => void
 }) {
   const { fg, bg } = TONES[tone]
-  const bgColor = onPhoto ? BLACK_STRONG : bg
-  const glyphColor = onPhoto ? WHITE : fg
+  // On a photo the chip is a near-solid GOLD swatch with BORDEAUX ink, not a
+  // dark scrim with light ink: the photo behind it is arbitrary, so the chip
+  // has to supply its own contrast. The fill is deliberately the most opaque
+  // step of the ramp — a translucent chip let a bright photo bleed through
+  // and swallow the label.
+  const bgColor = onPhoto ? WHITE_STRONG : bg
+  const glyphColor = onPhoto ? PRIMARY : fg
   const Container: any = onPress ? Pressable : View
   return (
     <Container

@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -1978,7 +1978,7 @@ const familyStyles = StyleSheet.create({
   toggleKnob: {
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: SURFACE,
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
+    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
   section: { marginBottom: MD },
   subSection: {},
@@ -2997,9 +2997,9 @@ export default function SettingsPage({
             <Svg style={[styles.profileCardScrim, { top: photoBleed }]} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
               <Defs>
                 <RadialGradient id="profileScrim" cx={isRTL ? '0.7' : '0.3'} cy="0.5" r="0.5">
-                  <Stop offset="0" stopColor={BLACK} stopOpacity="0.75" />
-                  <Stop offset="0.55" stopColor={BLACK} stopOpacity="0.4" />
-                  <Stop offset="1" stopColor={BLACK} stopOpacity="0" />
+                  <Stop offset="0" stopColor={SCRIM_BLACK} stopOpacity="0.75" />
+                  <Stop offset="0.55" stopColor={SCRIM_BLACK} stopOpacity="0.4" />
+                  <Stop offset="1" stopColor={SCRIM_BLACK} stopOpacity="0" />
                 </RadialGradient>
               </Defs>
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
@@ -3182,7 +3182,7 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
+    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.

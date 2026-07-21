@@ -111,6 +111,13 @@ export const HEADER_PILL_IOS_BASE = 'rgba(227,180,87,0.18)'
 // Deliberately a true black alpha, NOT the gold ramp — its job is to darken a
 // photograph, which a translucent gold would tint instead.
 export const PHOTO_SCRIM = 'rgba(0,0,0,0.60)'
+// The one opaque black in the palette, and the ONLY place black is allowed.
+// It is not a brand colour: it exists purely for things whose job is to
+// subtract light — a drop shadow, and SVG gradient stops that darken a photo
+// behind a caption (those need a solid colour + a separate stopOpacity, so
+// they cannot use the rgba PHOTO_SCRIM above). Never use it for a fill, a
+// border or text: on this scheme those are bordeaux or gold.
+export const SCRIM_BLACK = '#000000'
 
 // ── Destructive — DELETED 2026-07-20 ─────────────────────────────────────
 // There is no destructive colour. A warning hue read as a foreign alert banner

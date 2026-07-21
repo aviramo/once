@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
-import { BLACK, BLACK_STRONG } from '../colors'
+import { SCRIM_BLACK, BLACK, BLACK_STRONG } from '../colors'
 import { ROUND_BUTTON_SIZE } from '../tokens'
 import { FONT_SCALE } from '../fonts'
 import { GlyphScale } from './icons'
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shadow: {
-    shadowColor: BLACK,
+    shadowColor: SCRIM_BLACK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
