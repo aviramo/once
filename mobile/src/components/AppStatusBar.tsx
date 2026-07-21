@@ -3,11 +3,14 @@ import { GREEN } from '../colors'
 
 // Single source of truth for the OS status bar appearance.
 //
-// The bar is a solid GREEN band across every screen, carrying WHITE system
-// icons. It is deliberately NOT the page tone: a green strip gives the app a
-// fixed top edge regardless of what the screen underneath is doing (a light
-// sheet, a user photo), so the clock and battery never have to survive an
-// arbitrary background.
+// The bar is a SOLID GREEN band across every screen, carrying WHITE system
+// icons, and the app starts BELOW it — nothing is drawn behind the bar.
+//
+// That requires `edgeToEdgeEnabled: false` in app.json. While it was true,
+// Android forced a transparent status bar and drew the app underneath it, so
+// `backgroundColor` here was silently ignored and the page tone showed through
+// no matter what this component asked for. If the bar ever goes see-through
+// again, check that flag before touching anything in this file.
 //
 // `style` stays a prop for the rare screen that paints its own bar background
 // and needs dark glyphs on it.
