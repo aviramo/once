@@ -135,6 +135,7 @@ export default {
   'settings.groupsMore': 'עוד...',
   'settings.groupsEmpty': 'עוד לא הצטרפת לקבוצה.',
   'settings.groupsDisabled': 'מושבתת',
+  'settings.groupsAdd': 'הוספת קבוצה',
   'settings.groupsJoinTitle': 'הצטרפות לקבוצה',
   'settings.groupsJoinHint': 'הזן את הקוד שקיבלת ממנהל הקבוצה. אפשר להיות חבר בכמה קבוצות במקביל.',
   'settings.groupsCodePlaceholder': '6 ספרות',

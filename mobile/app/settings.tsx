@@ -2790,8 +2790,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
               <Chip key={g.id} text={g.name} onPress={() => openLeaveGroup(g)} />
             ))}
             <Chip
-              text={t('settings.groupsJoinTitle')}
-              tone="positive"
+              text={t('settings.groupsAdd')}
+              outlined
               onPress={openJoinGroup}
             />
           </View>

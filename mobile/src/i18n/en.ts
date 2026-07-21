@@ -133,6 +133,7 @@ export default {
   'settings.groupsMore': 'more...',
   'settings.groupsEmpty': "You haven't joined any group yet.",
   'settings.groupsDisabled': 'Disabled',
+  'settings.groupsAdd': 'Add a group',
   'settings.groupsJoinTitle': 'Join a group',
   'settings.groupsJoinHint': "Enter the code you got from the group's manager. You can be a member of several groups at once.",
   'settings.groupsCodePlaceholder': '6 digits',

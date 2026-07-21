@@ -6,8 +6,8 @@ import { Path, Circle, Rect } from 'react-native-svg'
 import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
-import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, lh } from '../tokens'
-import { PHOTO_CHROME, GREEN, ORANGE, ORANGE_SOFT, BLACK_SOFT, ONLINE_GREEN } from '../colors'
+import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
+import { PHOTO_CHROME, BORDER_STRONG, GREEN, ORANGE, ORANGE_SOFT, BLACK_SOFT, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -42,6 +42,7 @@ export function Chip({
   text,
   tone = 'neutral',
   onPhoto = false,
+  outlined = false,
   renderTrailing,
   onPress,
 }: {
@@ -49,6 +50,10 @@ export function Chip({
   text: string
   tone?: ChipTone
   onPhoto?: boolean
+  /** No fill, just a light green rule. For a chip that ADDS something rather
+   * than reporting a fact — it reads as an empty slot waiting to be filled,
+   * which a solid chip cannot. */
+  outlined?: boolean
   renderTrailing?: (color: string) => React.ReactNode
   /** When provided, the chip itself becomes the Pressable. Avoids an extra
    * wrapper View that would break the flexShrink chain — wrapping a
@@ -67,7 +72,7 @@ export function Chip({
   return (
     <Container
       onPress={onPress}
-      style={[styles.chip, { backgroundColor: bgColor }]}
+      style={[styles.chip, outlined ? styles.chipOutlined : { backgroundColor: bgColor }]}
     >
       {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(glyphColor)}</View> : null}
       <Text
@@ -173,6 +178,11 @@ const styles = StyleSheet.create({
     paddingVertical: SM,
     borderRadius: RADIUS,
     flexShrink: 1,
+  },
+  chipOutlined: {
+    backgroundColor: 'transparent',
+    borderWidth: STROKE.thin,
+    borderColor: BORDER_STRONG,
   },
   // Same treatment the settings select rows use (selectRowIconWrap): a box
   // exactly one text-line tall, top-aligned, so the glyph centres against the
