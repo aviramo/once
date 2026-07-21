@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { BG, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -2997,9 +2997,9 @@ export default function SettingsPage({
             <Svg style={[styles.profileCardScrim, { top: photoBleed }]} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
               <Defs>
                 <RadialGradient id="profileScrim" cx={isRTL ? '0.7' : '0.3'} cy="0.5" r="0.5">
-                  <Stop offset="0" stopColor={SCRIM_BLACK} stopOpacity="0.75" />
-                  <Stop offset="0.55" stopColor={SCRIM_BLACK} stopOpacity="0.4" />
-                  <Stop offset="1" stopColor={SCRIM_BLACK} stopOpacity="0" />
+                  <Stop offset="0" stopColor={BG} stopOpacity="0.75" />
+                  <Stop offset="0.55" stopColor={BG} stopOpacity="0.4" />
+                  <Stop offset="1" stopColor={BG} stopOpacity="0" />
                 </RadialGradient>
               </Defs>
               <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />

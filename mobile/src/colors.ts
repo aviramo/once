@@ -108,15 +108,24 @@ export const HEADER_PILL_IOS_BASE = 'rgba(227,180,87,0.18)'
 // per-element shadow or halo: an element-level trick has to be re-invented for
 // each element type (text takes textShadow, an SVG glyph does not), and the
 // two never end up matching. A shared backdrop is uniform by construction.
-// Deliberately a true black alpha, NOT the gold ramp — its job is to darken a
-// photograph, which a translucent gold would tint instead.
-export const PHOTO_SCRIM = 'rgba(0,0,0,0.60)'
+// TRANSLUCENT BORDEAUX — the single fabric every piece of chrome wears when it
+// sits ON TOP OF A PHOTO: the on-photo chips, every round overlay button, the
+// spinner badge and the replacing overlay. It is the direct heir of the old
+// 60%-black wash that did this job before the scheme went dark: same weight,
+// same role, bordeaux instead of black, carrying GOLD ink instead of white.
+//
+// Deliberately TRANSLUCENT. An opaque chip covers the photograph, and the
+// photograph is the point of the card — the scrim only has to darken enough
+// for the gold to read, not hide what is underneath.
+//
+// The caption scrim on the profile card is the same idea but must be a
+// gradient, and an SVG <Stop> needs a solid colour plus its own stopOpacity —
+// so that one uses BG with stopOpacity, not this rgba. Same hue either way.
+export const PHOTO_CHROME = 'rgba(44,10,20,0.60)'  // = BG at 60%
 // The one opaque black in the palette, and the ONLY place black is allowed.
-// It is not a brand colour: it exists purely for things whose job is to
-// subtract light — a drop shadow, and SVG gradient stops that darken a photo
-// behind a caption (those need a solid colour + a separate stopOpacity, so
-// they cannot use the rgba PHOTO_SCRIM above). Never use it for a fill, a
-// border or text: on this scheme those are bordeaux or gold.
+// It is not a brand colour and never a surface: it exists purely for DROP
+// SHADOWS, whose whole job is to subtract light. A bordeaux or gold shadow
+// does not read as a shadow. Never use it for a fill, a border or text.
 export const SCRIM_BLACK = '#000000'
 
 // ── Destructive — DELETED 2026-07-20 ─────────────────────────────────────

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
-import { SCRIM_BLACK, BLACK, BLACK_STRONG } from '../colors'
+import { PHOTO_CHROME, SCRIM_BLACK } from '../colors'
 import { ROUND_BUTTON_SIZE } from '../tokens'
 import { FONT_SCALE } from '../fonts'
 import { GlyphScale } from './icons'
@@ -40,11 +40,10 @@ export type RoundButtonProps = {
 
 export function RoundButton({
   size = ROUND_BUTTON_SIZE,
-  // Same dark translucent scrim the on-photo Chip uses (Chip's `onPhoto`
-  // background = BLACK_STRONG), so round overlay buttons and the profile
-  // chips read as one consistent fabric over the photo. Single source: the
-  // shared BLACK_STRONG token.
-  bg = BLACK_STRONG,
+  // Same translucent bordeaux the on-photo Chip uses, so round overlay buttons
+  // and the profile chips read as one consistent fabric over the photo.
+  // Single source: the shared PHOTO_CHROME token.
+  bg = PHOTO_CHROME,
   borderColor,
   borderWidth,
   shadow = true,

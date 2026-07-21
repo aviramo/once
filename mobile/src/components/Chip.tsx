@@ -7,16 +7,16 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, lh } from '../tokens'
-import { GOLD, GOLD_SOFT, WHITE_STRONG, PRIMARY, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
+import { PHOTO_CHROME, INK, GOLD, GOLD_SOFT, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
 // lightweight fabric swatches instead of bordered stickers. When `onPhoto`
-// is set, the chip inverts: a near-solid GOLD swatch carrying BORDEAUX ink,
-// so it supplies its own contrast over an arbitrary photo. State-presence
-// chips (online, proximate, kids-affinity) add a `renderTrailing` dot via
-// `PresenceDot`; it is handed the chip's own ink colour, so on a photo the
-// dot is bordeaux and stays visible against the gold swatch.
+// is set, the chip switches to the shared translucent-bordeaux chrome
+// (PHOTO_CHROME) carrying GOLD ink, so it stays readable over a colour photo
+// without covering it. State-presence chips (online, proximate,
+// kids-affinity) add a `renderTrailing` dot via `PresenceDot`; it is handed
+// the chip's own ink colour, so on a photo the dot is gold like the label.
 //
 // RTL strategy: use `direction:'rtl'` on the chip View (and the inner text
 // wrapper) so the Yoga node renders right-to-left regardless of whether
@@ -57,13 +57,12 @@ export function Chip({
   onPress?: () => void
 }) {
   const { fg, bg } = TONES[tone]
-  // On a photo the chip is a near-solid GOLD swatch with BORDEAUX ink, not a
-  // dark scrim with light ink: the photo behind it is arbitrary, so the chip
-  // has to supply its own contrast. The fill is deliberately the most opaque
-  // step of the ramp — a translucent chip let a bright photo bleed through
-  // and swallow the label.
-  const bgColor = onPhoto ? WHITE_STRONG : bg
-  const glyphColor = onPhoto ? PRIMARY : fg
+  // On a photo the chip wears the shared translucent-bordeaux chrome with GOLD
+  // ink — exactly the arrangement the 60%-black-plus-white wash had before the
+  // scheme went dark. It must stay translucent: an opaque swatch reads as a
+  // sticker pasted over the photograph and takes the card away from the photo.
+  const bgColor = onPhoto ? PHOTO_CHROME : bg
+  const glyphColor = onPhoto ? INK : fg
   const Container: any = onPress ? Pressable : View
   return (
     <Container
