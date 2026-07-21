@@ -29,7 +29,7 @@ import { CloseIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
 import { SM, MD, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { SCRIM_BLACK, PRIMARY, WHITE, BLACK } from '../colors'
+import { BG, SCRIM_BLACK, PRIMARY, WHITE, BLACK } from '../colors'
 
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
  *  the sheet's dismiss pan instead of fighting it. This is exactly the prop
@@ -300,7 +300,7 @@ export function SheetHeader({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
     // Soft upward lift so the sheet reads as sitting above home.
     shadowColor: SCRIM_BLACK,
     shadowOffset: { width: 0, height: -3 },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   headerBar: {
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
   headerFloating: {
     position: 'absolute',

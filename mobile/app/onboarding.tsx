@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { CakeIcon } from '../src/components/icons'
-import { INK, BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
+import { BG, INK, BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, ICON } from '../src/tokens'
 
 const TOTAL_STEPS = 5
@@ -689,7 +689,7 @@ export default function OnboardingPage() {
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: PRIMARY, transform: [{ translateY: overlayY }] },
+                { backgroundColor: BG, transform: [{ translateY: overlayY }] },
               ]}
               pointerEvents={step === 5 ? 'auto' : 'none'}
             >
@@ -719,7 +719,7 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: PRIMARY },
+  root: { flex: 1, backgroundColor: BG },
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
   page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },

@@ -8,7 +8,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
-import { PRIMARY, WHITE, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { BG, PRIMARY, WHITE, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 import { legalUrl } from '../src/lib/links'
@@ -176,7 +176,7 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
   content: {
     flex: 1,

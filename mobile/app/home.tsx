@@ -16,7 +16,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { GREEN, INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
+import { BG, GREEN, INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
 import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -130,11 +130,10 @@ function AvatarHaloRings() {
         width: HALO_SIZE,
         height: HALO_SIZE,
         borderRadius: HALO_SIZE / 2,
-        // A LIFTED BORDEAUX disc, not a gold wash. A low-alpha gold over the
-        // bordeaux page composites to a muddy brown with a hard edge — the
-        // halo has to read as depth (the same hue, one step lighter), not as
-        // a coloured blob sitting behind the glyph.
-        backgroundColor: SURFACE_SUNK,
+        // A faint wash of the ACTION hue, so the halo reads as the button's
+        // own glow rather than as a grey disc parked behind it. Must stay a
+        // low-alpha tint: an opaque ring competes with the button it frames.
+        backgroundColor: PRIMARY_BG,
       }} />
       <Svg
         pointerEvents="none"
@@ -146,7 +145,7 @@ function AvatarHaloRings() {
           cx={DOTTED_RING_SIZE / 2}
           cy={DOTTED_RING_SIZE / 2}
           r={DOTTED_RING_SIZE / 2 - 2}
-          stroke={WHITE}
+          stroke={PRIMARY}
           strokeWidth={1.5}
           strokeDasharray="2 5"
           fill="none"
@@ -3297,7 +3296,7 @@ const styles = StyleSheet.create({
   // Outer, always-opaque backdrop behind the shell.
   backdrop: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
   bootFill: {
     alignItems: 'center',
@@ -3306,7 +3305,7 @@ const styles = StyleSheet.create({
   shell: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
   // Floating menu button on page1, at top-START (opposite the card's group
   // chip at top-END). `start` rather than `left` so it mirrors under RTL.
@@ -3324,7 +3323,7 @@ const styles = StyleSheet.create({
   },
   root: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
 
   // Hidden MatchCard used to drive expo-image's onLoad before promoting the
@@ -3341,7 +3340,7 @@ const styles = StyleSheet.create({
   },
   matchPhoto: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
     overflow: 'hidden',
   },
   // ── Permission screen (no card) ────────────────────────────────────────

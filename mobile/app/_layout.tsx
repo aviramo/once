@@ -30,7 +30,7 @@ import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-import { PRIMARY } from '../src/colors'
+import { BG, PRIMARY } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -196,7 +196,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     <>
       {children}
       {authHandoff && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: PRIMARY }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
       )}
     </>
   )
@@ -238,7 +238,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: PRIMARY }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: BG }}>
       {/* Global status bar: white text whenever the app is in the foreground.
           The OS automatically restores the system default when the app is
           backgrounded or closed — every app owns its own status bar style. */}
