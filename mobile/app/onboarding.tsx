@@ -753,9 +753,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: MD,
   },
+  // Selected = a SOLID GOLD card carrying BORDEAUX content, the same
+  // inversion the primary Button and the home centre button use. The
+  // unselected card is the faint gold wash above, so the two states differ by
+  // fill AND by ink, not by a subtle change of shade.
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: SURFACE,
+    backgroundColor: GOLD,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,
@@ -765,7 +769,8 @@ const styles = StyleSheet.create({
     fontWeight: WEIGHT.extrabold,
     color: WHITE,
   },
-  cardLabelActive: { color: GOLD },
+  // Bordeaux ink, because the selected card's fill is gold.
+  cardLabelActive: { color: PRIMARY },
 
   ctaWrap: { marginTop: LG },
 
