@@ -1,23 +1,22 @@
 // ── Green & Orange on white — the single source of truth for colour ────────
 //
-// A LIGHT scheme: warm off-white pages, white cards, near-black ink, with two
-// hues that each own one job and never trade places:
+// A LIGHT scheme: warm beige pages and sheets, with two hues that each own one
+// job and never trade places:
 //
 //   ORANGE = ACTION.  Every surface the user acts on: primary buttons, the
-//                     invite panel, the heart, the home centre disc, selected
-//                     states. Also the positive signals (a like, presence, a
-//                     positive delta) — acting and good news are one hue here.
-//                     Ink on an orange fill is always WHITE.
-//   GREEN  = INK.     The brand's text colour: chip labels and glyphs,
-//                     headings, emphasis. Green is read, never pressed.
+//                     heart, the home centre disc, selected states. Also the
+//                     positive signals (a like, presence, a positive delta) —
+//                     acting and good news are one hue. Ink on orange is WHITE.
+//   GREEN  = INK.     Everything you read: bios, popup titles, settings rows,
+//                     chip labels. Green is read, never pressed.
 //
-// Everything on top of a PHOTO is a WHITE chip with BLACK ink — the photo is
-// the loudest thing on the card, so its chrome stays neutral and lets the two
-// brand hues mean something.
+// THERE ARE NO GREYS. Every muted step — a divider, a placeholder, a disabled
+// label, a hairline — is a translucent GREEN, so the whole surface stays in
+// one family instead of drifting into neutral grey. The only true black left
+// is SCRIM_BLACK, for shadows.
 //
-// Taken from the two reference designs: the match card (white chips, black
-// text, orange heart) and the invite popup (cream sheet, green headings,
-// green primary button, white/green outlined secondary).
+// On top of a PHOTO the chips go WHITE, because the photo underneath is
+// arbitrary and the chip has to supply its own contrast.
 
 // ── Surfaces ───────────────────────────────────────────────────────────────
 export const BG           = '#F6F3ED'  // the page / a popup sheet — warm off-white
@@ -41,12 +40,13 @@ export const INK_2 = 'rgba(43,79,64,0.72)'  // secondary / body
 export const INK_3 = 'rgba(43,79,64,0.48)'  // muted: hints, timestamps
 
 // ── Alpha overlay scales ───────────────────────────────────────────────────
-// BLACK_* sits on a LIGHT surface, WHITE_* on a dark one (a photo, a green
-// fill). Three tiers each — don't add intermediate values, "almost SOFT"
-// reads identically to SOFT and drifts across components.
-export const BLACK_SOFT   = 'rgba(0,0,0,0.06)'  // dividers, soft borders, tracks, inactive chip bg
-export const BLACK_MID    = 'rgba(0,0,0,0.28)'  // inactive bar/pill, spinner track, placeholder, checkbox border
-export const BLACK_STRONG = 'rgba(0,0,0,0.58)'  // muted icon, secondary label, body text on chips
+// BLACK_* is the MUTED GREEN ramp on a light surface (the name is legacy —
+// nothing here is black). WHITE_* is its counterpart on a dark or filled one.
+// Three tiers each — don't add intermediate values, "almost SOFT" reads
+// identically to SOFT and drifts across components.
+export const BLACK_SOFT   = 'rgba(43,79,64,0.10)'  // dividers, soft borders, tracks, inactive chip bg
+export const BLACK_MID    = 'rgba(43,79,64,0.32)'  // inactive bar/pill, spinner track, placeholder, checkbox border
+export const BLACK_STRONG = 'rgba(43,79,64,0.62)'  // muted icon, secondary label, disabled text
 
 export const WHITE_SOFT   = 'rgba(255,255,255,0.20)'  // subtle fills on a dark/green surface
 export const WHITE_MID    = 'rgba(255,255,255,0.42)'  // borders, spinner track on a green fill

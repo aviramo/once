@@ -5,7 +5,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
-import { SURFACE, WHITE, BLACK_MID } from '../colors'
+import { BG, SURFACE, WHITE, BLACK_MID } from '../colors'
 import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, DRAG_HANDLE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
@@ -206,7 +206,9 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   cardWrap: {},
   card: {
-    backgroundColor: SURFACE,
+    // Beige, the same tone as the page — a popup is a raised part of the
+    // app, not a white sheet of paper laid on top of it.
+    backgroundColor: BG,
     boxShadow: SHEET_SHADOW,
   },
   dragHandle: {
