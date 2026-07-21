@@ -487,7 +487,7 @@ const statusCardStyles = StyleSheet.create({
   // solid orange slab with white text, which made the whole screen orange and
   // left no room for the action to stand out.
   container: {
-    backgroundColor: SURFACE,
+    backgroundColor: BG,
     paddingVertical: LG,
     paddingHorizontal: MD,
   },

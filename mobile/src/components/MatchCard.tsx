@@ -17,7 +17,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { HeartIcon, QuoteIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
+import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -676,11 +676,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               }}
             >
               {/* The reserved band is painted PRIMARY, not left transparent:
-                  every topBlock the app renders is a status card on PRIMARY, so
-                  a transparent gap would expose the backdrop as a stripe above
-                  it. If a topBlock ever ships a different background this needs
-                  to become a prop alongside `footerBg`. */}
-              <View style={chromeBottom > 0 ? { paddingTop: chromeBottom, backgroundColor: PRIMARY } : undefined}>
+                  every topBlock the app renders is a status card on the light
+                  BG, so a transparent gap would expose the backdrop as a stripe
+                  above it. If a topBlock ever ships a different background this
+                  needs to become a prop alongside `footerBg`. */}
+              <View style={chromeBottom > 0 ? { paddingTop: chromeBottom, backgroundColor: BG } : undefined}>
                 {effectiveTopBlock}
               </View>
             </Animated.View>
