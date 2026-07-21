@@ -18,7 +18,7 @@ import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
-import { SURFACE, SURFACE_SUNK, BG, GOLD, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { INK, SURFACE, SURFACE_SUNK, BG, GOLD, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
@@ -2606,7 +2606,7 @@ const styles = StyleSheet.create({
     marginTop: XS,
     paddingVertical: XS,
   },
-  retryLabel: { fontSize: TEXT.xs, color: PRIMARY },
+  retryLabel: { fontSize: TEXT.xs, color: INK },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
   daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT },
@@ -2770,7 +2770,7 @@ const styles = StyleSheet.create({
   attachConfirmSendPressed: { opacity: 0.7 },
   attachConfirmSendLabel: {
     fontSize: TEXT.sm,
-    color: PRIMARY,
+    color: INK,
     fontWeight: WEIGHT.extrabold,
   },
 
@@ -2971,7 +2971,7 @@ const styles = StyleSheet.create({
   scheduleDayLetterMine: { color: WHITE },
   scheduleDayLetterSelected: { color: WHITE },
   scheduleDayLetterSelectedMine: { color: PRIMARY },
-  scheduleDayLetterWeekend: { color: PRIMARY },
+  scheduleDayLetterWeekend: { color: GOLD },
   scheduleDayLetterWeekendMine: { color: WHITE },
   scheduleDayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
   scheduleDayDateMine: { color: WHITE_STRONG },

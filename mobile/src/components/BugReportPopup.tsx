@@ -12,7 +12,7 @@ import { tap } from '../lib/haptics'
 import { useUserStore } from '../stores/userStore'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { t } from '../i18n'
-import { PHOTO_CHROME, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY } from '../colors'
+import { INK, PHOTO_CHROME, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY } from '../colors'
 import { ICON, LG, MD, RADIUS, RADII, SM, TEXT, WEIGHT, XS } from '../tokens'
 
 // Bottom-sheet for reporting a bug: free text + one optional image. On submit
@@ -98,7 +98,7 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
     >
       <View style={styles.card}>
-        <BugIcon color={PRIMARY} size={32} />
+        <BugIcon color={INK} size={32} />
         <Text style={styles.title}>{t('bugReport.title')}</Text>
         {done ? (
           <Text style={styles.thanks}>{t('bugReport.thanks')}</Text>
@@ -136,7 +136,7 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
                 disabled={picking || submitting}
                 style={({ pressed }) => [styles.attach, pressed && styles.attachPressed]}
               >
-                <AddPhotoIcon color={PRIMARY} stroke={WHITE} size={ICON.lg} />
+                <AddPhotoIcon color={INK} stroke={WHITE} size={ICON.lg} />
                 <Text style={styles.attachLabel}>{t('bugReport.attach')}</Text>
               </Pressable>
             )}
@@ -229,6 +229,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: { marginTop: SM, fontSize: TEXT.sm, color: PRIMARY, textAlign: 'center' },
+  error: { marginTop: SM, fontSize: TEXT.sm, color: INK, textAlign: 'center' },
   submitWrap: { alignSelf: 'stretch', marginTop: LG },
 })

@@ -407,7 +407,7 @@ function AddPlus() {
 }
 
 // Filled silhouette + white outline, matching HeartIcon's overlay-on-photo
-// visual. Default usage: `color={PRIMARY} stroke={WHITE}` inside a RoundButton.
+// visual. Default usage: `color={INK} stroke={WHITE}` inside a RoundButton.
 export function AddPhotoIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">

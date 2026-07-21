@@ -48,7 +48,7 @@ export function ConfirmDialog({
   /** Action icon rendered in a tinted circle above the title. Required:
    * every dialog communicates its action through this icon, since the
    * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
-   * sized to the convention: `<XIcon color={PRIMARY} size={ICON.circle} />`. */
+   * sized to the convention: `<XIcon color={INK} size={ICON.circle} />`. */
   icon: ReactNode
   /** Opt-in icon/badge rendered INSIDE the confirm button before its label.
    * Deliberately breaks the "buttons carry no icon" convention for the one

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { t } from '../i18n'
-import { PRIMARY } from '../colors'
+import { INK, PRIMARY } from '../colors'
 import { ICON } from '../tokens'
 import { EyeOffIcon } from './icons'
 
@@ -21,7 +21,7 @@ export type VisibilityConfirmConfig = {
   description: string
   confirmLabel: string
   /** Action icon shown in the dialog's tinted circle. Sized to the
-   * ConfirmDialog convention (`color={PRIMARY} size={ICON.circle}`). */
+   * ConfirmDialog convention (`color={INK} size={ICON.circle}`). */
   topIcon: ReactNode
 }
 
@@ -42,6 +42,6 @@ export function hideProfileConfirm(watcherCount: number): VisibilityConfirmConfi
     title: t('settings.hideConfirmTitle'),
     description,
     confirmLabel: t('settings.hideConfirmButton'),
-    topIcon: <EyeOffIcon color={PRIMARY} size={ICON.circle} />,
+    topIcon: <EyeOffIcon color={INK} size={ICON.circle} />,
   }
 }

@@ -8,7 +8,7 @@ import { tap } from '../lib/haptics'
 import { BUY_EXTRA_OPTIONS, type BuyExtraCount, buyExtraBlock, starsText } from '../lib/credits'
 import { useUserStore } from '../stores/userStore'
 import { t } from '../i18n'
-import { BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, PRIMARY, WHITE_MID } from '../colors'
+import { INK, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, PRIMARY, WHITE_MID } from '../colors'
 import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON } from '../tokens'
 
 // Bottom-sheet picker for buying extra hearts. One row per
@@ -45,7 +45,7 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
       disableBackdropDismiss={busy != null}
     >
       <View style={styles.card}>
-        <HeartIcon color={PRIMARY} size={32} />
+        <HeartIcon color={INK} size={32} />
         <Text style={styles.title}>{t('stars.buy.title')}</Text>
         <Text style={styles.desc}>{t('stars.buy.desc')}</Text>
         <View style={styles.list}>
@@ -85,7 +85,7 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
                       {t(gate === 'has_credits' ? 'stars.buy.hasHearts' : 'stars.buy.alreadyBoughtToday')}
                     </Text>
                   ) : isBusy ? (
-                    <ActivityIndicator color={PRIMARY} />
+                    <ActivityIndicator color={INK} />
                   ) : (
                     <Text style={styles.rowPrice}>{t('stars.buy.priceFree')}</Text>
                   )}
@@ -131,6 +131,6 @@ const styles = StyleSheet.create({
   rowCount: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK },
   rowCountDisabled: { color: BLACK_MID },
   rowTail: { flexDirection: 'row', alignItems: 'center' },
-  rowPrice: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: PRIMARY },
+  rowPrice: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: INK },
   rowSoon: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_MID },
 })

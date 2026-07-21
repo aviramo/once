@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { CakeIcon } from '../src/components/icons'
-import { SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
+import { GOLD, INK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, ICON } from '../src/tokens'
 
 const TOTAL_STEPS = 5
@@ -701,7 +701,7 @@ export default function OnboardingPage() {
 
       <ConfirmDialog
         visible={birthConfirmOpen}
-        icon={<CakeIcon color={PRIMARY} size={ICON.circle} />}
+        icon={<CakeIcon color={INK} size={ICON.circle} />}
         title={tg('ob.birthConfirm', isMale === true)
           .replace('{date}', birthdateInWords(yyyy, mm, dd))
           .replace('{age}', String(age ?? ''))}
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
     fontWeight: WEIGHT.extrabold,
     color: WHITE,
   },
-  cardLabelActive: { color: PRIMARY },
+  cardLabelActive: { color: GOLD },
 
   ctaWrap: { marginTop: LG },
 

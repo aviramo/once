@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { BG, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { GOLD, INK, BG, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -513,7 +513,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           user to finish the current view/invitation first. */}
       <ConfirmDialog
         visible={locationLockedInfoVisible}
-        icon={<MapPinIcon color={PRIMARY} size={ICON.circle} />}
+        icon={<MapPinIcon color={INK} size={ICON.circle} />}
         title={t('settings.locationLockedTitle')}
         description={t('settings.locationLockedDesc')}
         draggable
@@ -889,7 +889,7 @@ const groupsPopupStyles = StyleSheet.create({
     letterSpacing: 6,
     padding: 0,
   },
-  error: { marginTop: XS, fontSize: TEXT.sm, color: PRIMARY, textAlign: 'center' },
+  error: { marginTop: XS, fontSize: TEXT.sm, color: INK, textAlign: 'center' },
 })
 
 // ── App Tab ────────────────────────────────────────────────────────────────
@@ -1004,7 +1004,7 @@ const agePopupStyles = StyleSheet.create({
     // selection tint is AppText's app-standard translucent SELECTION, so the
     // black number stays readable on it (the old bespoke solid-black
     // selectionColor + white-text flip rendered white-on-light, unreadable).
-    color: PRIMARY,
+    color: INK,
     textAlign: 'center',
     padding: 0,
     minWidth: 60,
@@ -1086,7 +1086,7 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
           <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
         </View>
         <View style={selectListStyles.checkSlot}>
-          {selected ? <CheckIcon color={PRIMARY} /> : null}
+          {selected ? <CheckIcon color={INK} /> : null}
         </View>
       </View>
       {!isLast ? <View style={selectListStyles.divider} /> : null}
@@ -1103,7 +1103,7 @@ const selectListStyles = StyleSheet.create({
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowIcon: { marginEnd: SM },
   label: { fontSize: TEXT.md, color: BLACK },
-  labelSelected: { color: PRIMARY, fontWeight: WEIGHT.semibold },
+  labelSelected: { color: GOLD, fontWeight: WEIGHT.semibold },
   checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
 })
@@ -1407,7 +1407,7 @@ function LocationPopup({
           />
           {deviceBusy ? (
             <View style={locationPopupStyles.statusRow}>
-              <ActivityIndicator color={PRIMARY} />
+              <ActivityIndicator color={INK} />
               <Text style={locationPopupStyles.statusText}>{t('settings.locationFetchingDevice')}</Text>
             </View>
           ) : deviceError ? (
@@ -1430,7 +1430,7 @@ function LocationPopup({
             />
             {searching || selecting ? (
               <View style={locationPopupStyles.searchSpinner}>
-                <ActivityIndicator color={PRIMARY} />
+                <ActivityIndicator color={INK} />
               </View>
             ) : null}
           </View>
@@ -1996,7 +1996,7 @@ const familyStyles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
     backgroundColor: PRIMARY_BG,
   },
-  sectionPillLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  sectionPillLabel: { fontSize: TEXT.sm, color: INK },
   card: {
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
@@ -2009,7 +2009,7 @@ const familyStyles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   dropdownLabel: { fontSize: TEXT.sm, color: BLACK },
-  dropdownValue: { fontSize: TEXT.sm, color: PRIMARY },
+  dropdownValue: { fontSize: TEXT.sm, color: INK },
   dropdownPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
 
   // "Days with kids" schedule. Title + weeks render inline with the rest of
@@ -2025,7 +2025,7 @@ const familyStyles = StyleSheet.create({
     paddingStart: MD, paddingEnd: SM,
   },
   kidChipMain: { paddingVertical: SM },
-  kidChipLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipLabel: { fontSize: TEXT.sm, color: INK },
   kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
   kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
   kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
@@ -2041,7 +2041,7 @@ const familyStyles = StyleSheet.create({
 
   // + Add kid / + Add week button.
   addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addKidLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  addKidLabel: { fontSize: TEXT.sm, color: INK },
 
   weekHeader: { marginBottom: MD, gap: XS },
   weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
@@ -2061,12 +2061,12 @@ const familyStyles = StyleSheet.create({
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
   dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
-  dayLetterWeekend: { color: PRIMARY },
+  dayLetterWeekend: { color: GOLD },
   dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
   dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
   addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addWeekLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  addWeekLabel: { fontSize: TEXT.sm, color: INK },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the gray cards expanding/collapsing inside
   // don't push it around. WHITE bg + same horizontal padding as the sheet
@@ -2089,8 +2089,8 @@ const familyStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
   },
   valueRowLabel: { fontSize: TEXT.md, color: BLACK },
-  valueRowLabelSelected: { color: PRIMARY, fontWeight: WEIGHT.extrabold },
-  valueRowCheck: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.extrabold },
+  valueRowLabelSelected: { color: INK, fontWeight: WEIGHT.extrabold },
+  valueRowCheck: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.extrabold },
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
@@ -2870,7 +2870,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={signOutDialog}
-        icon={<SignOutIcon color={PRIMARY} size={ICON.circle} />}
+        icon={<SignOutIcon color={INK} size={ICON.circle} />}
         title={t('settings.signOutConfirmTitle')}
         description={tg('settings.signOutConfirmDesc', profile.is_male)}
         confirmLabel={tg('settings.signOutYes', profile.is_male)}
@@ -2880,7 +2880,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={deleteDialog}
-        icon={<TrashIcon color={PRIMARY} size={ICON.circle} />}
+        icon={<TrashIcon color={INK} size={ICON.circle} />}
         title={t('settings.deleteConfirmTitle')}
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
@@ -2895,7 +2895,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           otherwise the sheet is purely informational. */}
       <ConfirmDialog
         visible={starsPopupVisible}
-        icon={<HeartIcon color={PRIMARY} size={ICON.circle} />}
+        icon={<HeartIcon color={INK} size={ICON.circle} />}
         title={t('stars.popup.title')}
         description={starsDesc}
         confirmLabel={canBuyExtra(profile) ? t('stars.popup.buyExtra') : undefined}

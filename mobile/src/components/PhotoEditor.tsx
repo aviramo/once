@@ -354,7 +354,7 @@ function PhotoGrid({
               </Svg>
             </View>
           )}
-          <ActivityIndicator size="small" color={PRIMARY} style={photoStyles.placeholderSpinner} />
+          <ActivityIndicator size="small" color={INK} style={photoStyles.placeholderSpinner} />
         </View>
       ))}
       {additionalChildren}
@@ -751,7 +751,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       />
       <ConfirmDialog
         visible={duplicateDialog}
-        icon={<InfoIcon color={PRIMARY} size={ICON.circle} />}
+        icon={<InfoIcon color={INK} size={ICON.circle} />}
         title={t('settings.duplicatePhotoTitle')}
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}
