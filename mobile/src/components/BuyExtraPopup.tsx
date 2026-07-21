@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     backgroundColor: BLACK_SOFT,
   },
-  rowPressed: { backgroundColor: BLACK_STRONG },
+  rowPressed: { backgroundColor: BLACK_MID },
   rowDisabled: { opacity: 0.45 },
   rowLead: { flexDirection: 'row', alignItems: 'center', gap: SM },
   rowCount: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK },

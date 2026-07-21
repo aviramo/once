@@ -1,158 +1,178 @@
-export const BLACK = '#111111'
-export const WHITE        = '#FFFFFF'
-
-// ── Black-alpha overlay scale ──────────────────────────────────────────────
-// Three tiers. Don't add intermediate values — "almost SOFT" reads identically
-// to SOFT and creates drift across components. Each tier owns a clear role.
-export const BLACK_SOFT   = 'rgba(0,0,0,0.08)'   // scrims, dividers, soft borders, slider track, inactive chip bg, illustration fill
-export const BLACK_MID    = 'rgba(0,0,0,0.30)'   // inactive bar/pill, spinner track, input placeholder, checkbox border, Terms link
-export const BLACK_STRONG = 'rgba(0,0,0,0.60)'   // muted icon, secondary label, body text on chips, sign-out icon, menu emphasis
-
-// ── White-alpha overlay scale ──────────────────────────────────────────────
-// Used inside dark surfaces (chat bubbles for me, dark dialogs) where text
-// or controls sit on a tinted color. Three tiers matching BLACK_*.
-export const WHITE_SOFT   = 'rgba(255,255,255,0.20)' // subtle fills (audio play btn on my bubble, schedule cells, attach-bar pressed)
-export const WHITE_MID    = 'rgba(255,255,255,0.40)' // borders, spinner track on PRIMARY, light scrims
-export const WHITE_STRONG = 'rgba(255,255,255,0.85)' // strong text/active state on my bubble, replace-floating btn bg
-
-// ── Primary brand color ──────────────────────────────────────────────────
-// Pure black. A confident, premium dark brand hue (white text and icons sit
-// on it with maximum contrast). PRIMARY_BG is just PRIMARY at 10%
-// (#000000 = rgb(0,0,0)) — keep the two in lockstep.
-export const PRIMARY      = '#000000'
-export const PRIMARY_BG   = 'rgba(0,0,0,0.10)'
-// Solid "light coral" surface — used as a full-screen background where a
-// translucent overlay would be wrong (the status bar can't accept alpha on
-// Android and would mismatch the screen underneath). Designed to read as
-// clearly coral while staying bright enough for BLACK text + icons.
-export const PRIMARY_LIGHT = '#FFE9E0'
-
-// ── Header (global top tab strip) ─────────────────────────────────────────
-// Flat, no gradients and no drop-shadow (the user removed both). The header
-// is a solid `PRIMARY` (deep wine) block, seamless with the PRIMARY status
-// bar; its only separation from the white content below is the color
-// contrast. Square, full-width bottom edge. Consumed only by home.tsx's
-// `tabStripContainer`, which references PRIMARY directly for the fill — the
-// only header-specific tokens are the white-text depth and the selected-tab
-// lozenge below.
+// ── Bordeaux & Gold — the single source of truth for colour ────────────────
 //
-// Low-alpha depth behind the active (white) header label/timer on the dark
-// header. Tracks selection because it's only on the active cross-fade layer
-// — the wordmark gains a faint emboss exactly as its tab becomes selected.
+// The app is a FIXED DARK scheme: deep bordeaux surfaces, gold content, and
+// NO white anywhere. It is the same palette the marketing site wears, value
+// for value — the hexes below are byte-identical to the site's CSS custom
+// properties (web/public/styles.css), so the two can never drift apart:
+//
+//   app            web                 value
+//   BG             --bg                #2C0A14
+//   SURFACE_LIFT   --bg-2              #37101C
+//   SURFACE        --surface           #42121F
+//   SURFACE_SUNK   --surface-sunk      #260810
+//   INK            --ink               #ECD7A0
+//   INK_2          --ink-2             rgba(236,215,160,0.75)
+//   INK_3          --ink-3             rgba(236,215,160,0.50)
+//   GOLD           --brand             #E3B457
+//   GOLD_STRONG    --brand-strong      #C79A3A
+//   PRIMARY        --brand-ink         #2C0A14
+//
+// Change a value here and change it in styles.css in the same edit.
+
+// ── Bordeaux surface ramp (darkest → lightest) ─────────────────────────────
+// Every background in the app is one of these four. Nothing is ever white.
+export const SURFACE_SUNK = '#260810'  // inset / recessed (input wells, tracks)
+export const BG           = '#2C0A14'  // the page itself — screens, sheets
+export const SURFACE_LIFT = '#37101C'  // a band lifted off the page
+export const SURFACE      = '#42121F'  // cards / panels / dialogs
+
+// ── Gold ink ramp (text + icons) ───────────────────────────────────────────
+// Three tiers, mirroring the site's --ink ramp. INK is the primary reading
+// colour; INK_2 is secondary/body; INK_3 is muted (hints, timestamps).
+export const INK   = '#ECD7A0'
+export const INK_2 = 'rgba(236,215,160,0.75)'
+export const INK_3 = 'rgba(236,215,160,0.50)'
+
+// Legacy names. The app used to be a light scheme (white surfaces, black
+// ink), and ~270 call sites still say BLACK/WHITE for "the foreground
+// colour". Both roles collapsed onto the one gold ink when the app went
+// dark, so both alias INK rather than being re-typed at every call site —
+// exactly how the site keeps its legacy --coral* names pointing at gold.
+// Aliases, never a second copy of the value.
+export const BLACK = INK
+export const WHITE = INK
+
+// ── Alpha overlay scales ───────────────────────────────────────────────────
+// Both scales now sit on a DARK bordeaux surface, so both are gold-alpha.
+// The two names survive from the light era (BLACK_* was "on a light surface",
+// WHITE_* was "on a dark one"); they kept their separate tiers because the
+// call sites lean on the different weights, not because the hue differs.
+//
+// BLACK_* — the quieter ramp: dividers, hairlines, soft chip fills, tracks.
+export const BLACK_SOFT   = 'rgba(227,180,87,0.10)'  // dividers, soft borders, slider track, inactive chip bg
+export const BLACK_MID    = 'rgba(227,180,87,0.28)'  // inactive bar/pill, spinner track, placeholder, checkbox border
+export const BLACK_STRONG = 'rgba(236,215,160,0.62)' // muted icon, secondary label, body text on chips
+
+// WHITE_* — the brighter ramp: fills and active states that must read as lit.
+export const WHITE_SOFT   = 'rgba(227,180,87,0.14)'  // subtle fills (audio play btn, schedule cells, pressed bar)
+export const WHITE_MID    = 'rgba(227,180,87,0.32)'  // borders, spinner track on a gold fill, scrims
+export const WHITE_STRONG = 'rgba(236,215,160,0.85)' // strong text / active state on a filled bubble
+
+// ── Gold accent ────────────────────────────────────────────────────────────
+// The brand's action colour: primary buttons, selected states, highlights.
+// GOLD is the site's --brand; GOLD_STRONG its --brand-strong (hover/pressed).
+export const GOLD        = '#E3B457'
+export const GOLD_STRONG = '#C79A3A'
+export const GOLD_DEEP   = '#9A6F1E'  // deepest step, for a gold-on-gold edge
+export const GOLD_SOFT   = 'rgba(227,180,87,0.14)'  // faint gold wash (chips, badges)
+// Legacy alias: call sites that asked for the brightest gold. Same value.
+export const GOLD_BRIGHT = GOLD
+
+// ── Primary brand ──────────────────────────────────────────────────────────
+// The bordeaux itself. Two jobs, one value: the deep brand fill, and the text
+// colour that sits ON a gold surface (a gold button's label) — the site's
+// --brand-ink. PRIMARY_BG is the faint brand wash; on a dark page that has to
+// be a GOLD tint, since a bordeaux tint on bordeaux is invisible.
+export const PRIMARY      = BG
+export const PRIMARY_BG   = 'rgba(227,180,87,0.10)'
+// A solid, lifted bordeaux used where a translucent overlay would be wrong
+// (the Android status bar cannot accept alpha and would mismatch the screen
+// underneath). Reads as clearly bordeaux while staying distinct from BG.
+export const PRIMARY_LIGHT = SURFACE
+
+// ── Borders ────────────────────────────────────────────────────────────────
+// Gold hairlines, matching the site's --border / --border-strong.
+export const BORDER_SOFT   = 'rgba(227,180,87,0.16)'
+export const BORDER_STRONG = 'rgba(227,180,87,0.34)'
+
+// ── Header chrome ─────────────────────────────────────────────────────────
+// Flat, no gradients and no drop-shadow. Low-alpha depth behind the active
+// label on the bordeaux header.
 export const HEADER_TEXT_SHADOW = 'rgba(0,0,0,0.30)'
-// Selected-tab gliding "lozenge": a borderless glass chip that slides and
-// resizes behind the active tab, tracking the pager swipe. A native
-// BlurView (expo-blur) provides the frosted-glass material; a soft drop
-// shadow gives it depth. No border, no gradient. The typography cross-fade
-// rides on top of it.
-//   • HEADER_PILL_TINT — the BlurView `tint`. `light` reads as a luminous
-//     frosted overlay; on iOS it adapts to the system material; on Android
-//     with `experimentalBlurMethod='dimezisBlurView'` the BlurView blurs
-//     whatever lives behind it (the solid PRIMARY black) and renders a
-//     visible frosted chip on its own.
+// Selected-tab gliding "lozenge": a borderless glass chip that slides behind
+// the active tab. A native BlurView (expo-blur) provides the material.
+//   • HEADER_PILL_TINT — the BlurView `tint`. `dark` matches the bordeaux
+//     chrome; on Android `experimentalBlurMethod='dimezisBlurView'` blurs
+//     whatever sits behind it and renders a visible chip on its own.
 //   • HEADER_PILL_INTENSITY — 0..100. Higher = more material visible.
-//   • HEADER_PILL_IOS_BASE — iOS-only translucent white base laid BENEATH
-//     the BlurView. The header is opaque PRIMARY (black), so on iOS the
-//     `UIVisualEffectView` has nothing translucent to blur and renders
-//     near-invisible (the original design assumed the header would
-//     eventually turn translucent — it never did). The base gives the chip
-//     a visible body on iOS while the system blur still composites on top
-//     (still reads as glass). Android keeps the proven `dimezisBlurView`
-//     path with no base, so its chip is byte-identical to before.
-export const HEADER_PILL_TINT = 'light' as const
+//   • HEADER_PILL_IOS_BASE — iOS-only translucent base laid BENEATH the
+//     BlurView, which otherwise renders near-invisible over an opaque fill.
+export const HEADER_PILL_TINT = 'dark' as const
 export const HEADER_PILL_INTENSITY = 55
 export const HEADER_PILL_SHADOW = '0px 6px 18px rgba(0,0,0,0.32)'
-export const HEADER_PILL_IOS_BASE = 'rgba(255,255,255,0.18)'
+export const HEADER_PILL_IOS_BASE = 'rgba(227,180,87,0.18)'
 
 // ── Photo-caption legibility ──────────────────────────────────────────────
-// White text or white SVG strokes laid directly over a user photo can vanish
-// on a bright image. The mechanism is a BLACK_STRONG scrim behind them, never
-// a per-element shadow or halo: an element-level trick has to be re-invented
-// for each element type (text takes textShadow, an SVG glyph does not), and
-// the two never end up matching. A shared backdrop is uniform by construction.
-//
-// Retired 2026-07-19: PHOTO_TEXT_SHADOW, a blurred text shadow whose last
-// consumer was the settings profile-card label, sitting next to a pencil icon
-// that faked the same effect with a wider black stroke underneath. They read
-// as two different weights. Don't reintroduce per-element legibility.
+// Gold text or gold SVG strokes laid directly over a user photo can vanish on
+// a bright image. The mechanism is a dark scrim behind them, never a
+// per-element shadow or halo: an element-level trick has to be re-invented for
+// each element type (text takes textShadow, an SVG glyph does not), and the
+// two never end up matching. A shared backdrop is uniform by construction.
+// Deliberately a true black alpha, NOT the gold ramp — its job is to darken a
+// photograph, which a translucent gold would tint instead.
+export const PHOTO_SCRIM = 'rgba(0,0,0,0.60)'
+
 // ── Destructive — DELETED 2026-07-20 ─────────────────────────────────────
-// There is no destructive colour. `DESTRUCTIVE` (#E8B04B gold) and its 14%
-// tint were the last hued accent besides the deliberate semantic four
-// (POSITIVE / NEGATIVE / PREMIUM / ONLINE_GREEN); the brand is monochrome and
-// the gold read as a foreign warning banner wherever it landed — most visibly
-// on the photo-sheet Delete row, which looked like an alert next to its own
-// siblings. Do not reintroduce a warning hue.
+// There is no destructive colour. A warning hue read as a foreign alert banner
+// wherever it landed — most visibly on the photo-sheet Delete row, which
+// looked like an alert next to its own siblings. (Note: gold is the brand
+// accent, so a destructive act must NOT borrow it — that would read as
+// "premium", not "danger".) Do not reintroduce a warning hue.
 //
 // Express the role with WEIGHT and CONTRAST on the existing ramp instead:
-//   • error / attention text .... PRIMARY on a light surface, WHITE on a dark one
-//   • a secondary destructive act BLACK_STRONG (muted, e.g. "remove week")
+//   • error / attention text .... INK at full strength
+//   • a secondary destructive act BLACK_STRONG (muted)
 //   • a destructive CONFIRM ...... the normal `primary` button — a delete
 //                                  confirm looks like every other confirm; the
 //                                  dialog copy and the warning haptic carry it
 
 // ── Text selection ────────────────────────────────────────────────────────
-// Highlight drawn behind selected text in every TextInput (the shared
-// AppTextInput default). MUST stay translucent: an opaque highlight under
-// black text renders an unreadable solid block — the age-range "From" field
-// (which uses selectTextOnFocus) showed a black box hiding the digits. A
-// brand-tinted ~25% wash keeps the glyphs legible while reading as a
-// selection. The caret stays opaque BLACK via cursorColor.
-export const SELECTION = 'rgba(0,0,0,0.25)'
-// The same role inverted, for an input whose text is WHITE on a dark field
-// (the onboarding name / date boxes: transparent fill, white border, white
-// glyphs). SELECTION's black wash is invisible there, and the default black
-// caret disappears entirely — those inputs pass WHITE for cursorColor and
-// this for selectionColor.
-export const SELECTION_ON_DARK = 'rgba(255,255,255,0.25)'
+// Highlight drawn behind selected text in every TextInput. MUST stay
+// translucent: an opaque highlight under the gold ink renders an unreadable
+// solid block. A gold ~25% wash keeps the glyphs legible while reading as a
+// selection. The caret stays opaque INK via cursorColor.
+export const SELECTION = 'rgba(227,180,87,0.25)'
+// Kept as a distinct name for inputs drawn directly on a photo or on a gold
+// fill, where the standard wash would disappear.
+export const SELECTION_ON_DARK = 'rgba(236,215,160,0.28)'
 
-// ── Misc surface colors ──────────────────────────────────────────────────
-// Soft border used on white pills/inputs.
-export const BORDER_SOFT = '#E2DADA'
-// Online dot / success indicator.
-export const ONLINE_GREEN = '#2BB673'
-
-// Signed-delta semantics (the stars +/- text in the Menu tab — no badge,
-// no circle: just the coloured number). Deliberate green/red, the only
-// place the app uses true semantic colour, by explicit user request.
-// Brightened so the small +N / -N reads clearly on the pure-black header
-// (the muted online-green was too dim there).
-export const POSITIVE = '#3DDC84'  // bright green for an added-stars delta
-export const NEGATIVE = '#FF5C5C'  // bright red for a removed-stars delta
+// ── Semantic signals ──────────────────────────────────────────────────────
+// The only non-gold colours in the app, and the only ones allowed to be.
+// They encode meaning, not brand, so they stay their own hue — brightened to
+// carry on the deep bordeaux.
+export const ONLINE_GREEN = '#5FB97E'  // online dot / success indicator
+export const POSITIVE     = '#5FD68F'  // an added-stars delta (+N)
+export const NEGATIVE     = '#FF7A7A'  // a removed-stars delta (-N)
 
 // ── Premium ──────────────────────────────────────────────────────────────
-// Purple band reserved for paid / premium affordances. Distinct hue from
-// the brand coral so a premium control reads as "different surface" at a
-// glance, not just "another orange button".
-export const PREMIUM       = '#8B5CF6'
+// Paid / premium affordances are gold — the luxe half of bordeaux + gold. It
+// IS the accent; reference GOLD, never a second copy of the same hex.
+export const PREMIUM = GOLD
 
 // ── Illustration palette ──────────────────────────────────────────────────
 // The empty-state spot illustrations (telescope = "visible/scanning",
-// crescent moon = "hidden") are white line-art on the pure-black PRIMARY
-// field. The brand is strictly monochrome (black-only, no theme toggle), so
-// the artwork carries NO hue at all — only a neutral white→gray ramp. An
-// earlier rose/wine tint (#B86E80 / #E89AAB / #FFE9E0) was the last colored
-// surface left in the app and clashed with the black-only direction; it is
-// gone. Both illustrations share this one palette by contract (they are the
-// same scene in two modes) — defined once here, never re-inlined per
-// component.
+// crescent moon = "hidden") are GOLD line-art on the bordeaux field — the same
+// gold-on-bordeaux the brand wears everywhere else. Both illustrations share
+// this one palette by contract (they are the same scene in two modes) —
+// defined once here, never re-inlined per component.
 //
-// NOTE: opaque, hand-tuned greys — NOT low-alpha white. The shapes are
-// already drawn with per-path `opacity`; an alpha fill would double-composite
-// against that and against the black field, muddying the ramp. Solid greys at
-// each step keep the artwork crisp and the depth order exact on pure black.
+// NOTE: opaque, hand-tuned golds — NOT low-alpha. The shapes are already drawn
+// with per-path `opacity`; an alpha fill would double-composite against that
+// and against the bordeaux field, muddying the ramp. Solid golds at each step
+// keep the artwork crisp and the depth order exact.
 //
-// Layered for depth on the black (PRIMARY) sheet, darkest → brightest:
-//   WASH   = PRIMARY itself — the moon's crescent cutout / lens-disc core,
-//            i.e. the parts "carved back to the background"
-//   CLOUD  mid-grey — drifting clouds, recede behind the figure (0.85 op.)
-//   LINE   light-grey — tube/moon outline & shade, craters (between body & bg)
-//   BODY   white — the tube / moon face, the brightest shape
-//   STRUCT white — tripod legs & mount, the load-bearing lines
-//   ACCENT white — sparkles & lens ring (always drawn at low opacity, so it
-//          still reads as a faint twinkle distinct from the solid-white body)
-export const ILLUSTRATION_WASH   = PRIMARY
-export const ILLUSTRATION_CLOUD  = '#8C8C8C'
-export const ILLUSTRATION_BODY   = WHITE
-export const ILLUSTRATION_LINE   = '#C4C4C4'
-export const ILLUSTRATION_STRUCT = WHITE
-export const ILLUSTRATION_ACCENT = WHITE
+// Layered for depth on the bordeaux sheet, darkest → brightest:
+//   WASH   = the background itself — the moon's crescent cutout / lens-disc
+//            core, i.e. the parts "carved back to the background"
+//   CLOUD  bronze — drifting clouds, recede behind the figure (0.85 op.)
+//   LINE   mid-gold — tube/moon outline & shade, craters
+//   BODY   bright gold — the tube / moon face, the brightest shape
+//   STRUCT bright gold — tripod legs & mount, the load-bearing lines
+//   ACCENT bright gold — sparkles & lens ring (drawn at low opacity, so it
+//          still reads as a faint twinkle distinct from the solid body)
+export const ILLUSTRATION_WASH   = BG
+export const ILLUSTRATION_CLOUD  = '#8A5A2A'
+export const ILLUSTRATION_BODY   = GOLD
+export const ILLUSTRATION_LINE   = GOLD_STRONG
+export const ILLUSTRATION_STRUCT = GOLD
+export const ILLUSTRATION_ACCENT = GOLD

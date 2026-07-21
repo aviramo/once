@@ -5,13 +5,13 @@
     "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "scheme": "once",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#4A1020"
+      "backgroundColor": "#2C0A14"
     },
     "ios": {
       "supportsTablet": false,
@@ -28,12 +28,12 @@
     "androidStatusBar": {
       "barStyle": "light-content",
       "translucent": false,
-      "backgroundColor": "#000000"
+      "backgroundColor": "#2C0A14"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#4A1020"
+        "backgroundColor": "#2C0A14"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -60,7 +60,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#4A1020"
+          "color": "#2C0A14"
         }
       ],
       "expo-web-browser",

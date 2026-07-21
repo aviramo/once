@@ -17,7 +17,7 @@ import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } f
 import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
+import { SURFACE, BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -871,7 +871,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
   },
   hidden: {
     opacity: 0,
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
     width: UNREAD_DOT_SIZE,
     height: UNREAD_DOT_SIZE,
     borderRadius: UNREAD_DOT_SIZE / 2,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     borderWidth: 2,
     borderColor: BLACK,
   },
@@ -949,7 +949,7 @@ const styles = StyleSheet.create({
   aboutBubble: {
     alignSelf: 'stretch',
     alignItems: 'center',
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     paddingVertical: MD,
     paddingHorizontal: MD,
     gap: MD,

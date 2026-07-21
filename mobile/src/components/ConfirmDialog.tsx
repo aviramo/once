@@ -7,7 +7,7 @@ import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, ICON_CIRCLE_SIZE, lh } from '../tokens'
 import { GlyphScale } from './icons'
 import { FONT_SCALE } from '../fonts'
-import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
+import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
 
 // Every decision popup in the app is this one component. The action is
 // always communicated by a single carefully-chosen icon in the tinted
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     borderRadius: RADII.sm,
     borderWidth: STROKE.thin,
     borderColor: BLACK_MID,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },

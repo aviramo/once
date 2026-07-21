@@ -18,7 +18,7 @@ import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
-import { BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { SURFACE, SURFACE_SUNK, BG, GOLD, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
@@ -2561,7 +2561,7 @@ function LightboxModal({ uri, onClose }: { uri: string; onClose: () => void }) {
 const lbStyles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: BLACK,
+    backgroundColor: SURFACE_SUNK,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2585,7 +2585,7 @@ const lbStyles = StyleSheet.create({
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: WHITE },
+  root: { flex: 1, backgroundColor: BG },
 
   body: { flex: 1 },
   messages: { flex: 1 },
@@ -2638,7 +2638,7 @@ const styles = StyleSheet.create({
   // Outer wrapper: holds the single-row input + send button plus the
   // dynamic bottom spacer that clears the nav bar / keyboard.
   inputBarOuter: {
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     zIndex: 2,
   },
   inputRow: {
@@ -2659,7 +2659,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
     borderColor: BLACK_SOFT,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     paddingEnd: XS,
     overflow: 'hidden',
   },
@@ -2763,7 +2763,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD,
     height: 32,
     borderRadius: 16,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2866,7 +2866,7 @@ const styles = StyleSheet.create({
   recordOverlay: {
     position: 'absolute',
     top: 0, start: 0, end: 0, bottom: 0,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
   },
   recSideBtn: {
     width: 40, height: 49,
@@ -2960,11 +2960,11 @@ const styles = StyleSheet.create({
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
   scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
   scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  scheduleDayBubbleSelectedMine: { backgroundColor: WHITE, borderColor: WHITE },
+  scheduleDayBubbleSelectedMine: { backgroundColor: GOLD, borderColor: GOLD },
   scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
   scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
   scheduleDayLetter: { fontSize: TEXT.sm, color: BLACK },

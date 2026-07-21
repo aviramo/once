@@ -7,7 +7,7 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { BLACK, WHITE, PRIMARY, BLACK_MID, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
+import { SURFACE, BLACK, WHITE, PRIMARY, BLACK_MID, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
 import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -100,7 +100,7 @@ const ssoBtnStyles = StyleSheet.create({
     minHeight: BUTTON_MIN_HEIGHT,
     paddingVertical: SM,
     paddingHorizontal: BUTTON_MIN_HEIGHT,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
     borderColor: BORDER_SOFT,
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
     borderColor: BORDER_SOFT,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     paddingHorizontal: MD,
     justifyContent: 'center',
   },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     width: ICON_CIRCLE_SIZE,
     height: ICON_CIRCLE_SIZE,
     borderRadius: 999,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: MD,

@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { CakeIcon } from '../src/components/icons'
-import { WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
+import { SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, ICON } from '../src/tokens'
 
 const TOTAL_STEPS = 5
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
   },
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,

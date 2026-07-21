@@ -16,7 +16,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT } from '../src/colors'
+import { SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT } from '../src/colors'
 import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -756,7 +756,7 @@ const statusButtonStyles = StyleSheet.create({
   },
   footerBarFill: {
     height: 4,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
   },
 })
 
@@ -3395,7 +3395,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   permPlayButton: {
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3408,7 +3408,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   permSlidersButton: {
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },

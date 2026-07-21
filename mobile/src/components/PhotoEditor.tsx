@@ -18,7 +18,7 @@ import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SM, RADIUS, STROKE, ICON } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
+import { PHOTO_SCRIM, SURFACE, BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
 import { ConfirmDialog } from './ConfirmDialog'
 import { InfoIcon } from './icons'
 
@@ -212,7 +212,7 @@ function PhotoCell({
       )}
       {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={BLACK} strokeWidth={3} strokeLinecap="round">
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
@@ -784,7 +784,7 @@ const photoStyles = StyleSheet.create({
   img: { width: '100%', height: '100%' },
   placeholderBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -814,7 +814,7 @@ const photoStyles = StyleSheet.create({
   },
   replacingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: BLACK_STRONG,
+    backgroundColor: PHOTO_SCRIM,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -823,7 +823,7 @@ const photoStyles = StyleSheet.create({
     top: '50%', start: '50%',
     width: 36, height: 36, marginStart: -18, marginTop: -18,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_STRONG,
+    backgroundColor: PHOTO_SCRIM,
     alignItems: 'center', justifyContent: 'center',
   },
 })

@@ -5,7 +5,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
-import { WHITE, BLACK_MID } from '../colors'
+import { SURFACE, WHITE, BLACK_MID } from '../colors'
 import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, DRAG_HANDLE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   cardWrap: {},
   card: {
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     boxShadow: SHEET_SHADOW,
   },
   dragHandle: {

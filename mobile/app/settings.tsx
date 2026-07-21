@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -874,7 +874,7 @@ const groupsPopupStyles = StyleSheet.create({
   // previous WHITE_SOFT-on-white panel gave no edge to aim at.
   inputWrap: {
     marginTop: LG,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     borderWidth: 1.5,
     borderColor: BLACK_MID,
     borderRadius: RADIUS,
@@ -1948,10 +1948,10 @@ export function FamilyKidsPopup({
 const familyStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   shadowGradient: { height: 60, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: BLACK },
+  shadowLayer: { flex: 1, backgroundColor: SURFACE_SUNK },
   gestureWrap: { flexShrink: 1 },
   sheet: {
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     paddingTop: RADIUS,
     paddingHorizontal: SM,
     flexShrink: 1,
@@ -1977,7 +1977,7 @@ const familyStyles = StyleSheet.create({
   },
   toggleKnob: {
     width: 24, height: 24, borderRadius: 12,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
   section: { marginBottom: MD },
@@ -2054,7 +2054,7 @@ const familyStyles = StyleSheet.create({
   dayBubble: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
   dayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
@@ -2071,12 +2071,12 @@ const familyStyles = StyleSheet.create({
   // the sheet's ScrollView so the gray cards expanding/collapsing inside
   // don't push it around. WHITE bg + same horizontal padding as the sheet
   // so the popup reads as one continuous surface.
-  interestedBar: { backgroundColor: WHITE },
+  interestedBar: { backgroundColor: SURFACE },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     paddingTop: RADIUS, paddingHorizontal: SM,
   },
   valuePopupTitle: {
@@ -3048,8 +3048,8 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE_SOFT, borderRadius: RADIUS, padding: XS,
   },
   tabItem: { flex: 1, paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS },
-  tabItemActive: { backgroundColor: WHITE },
-  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: WHITE },
+  tabItemActive: { backgroundColor: SURFACE },
+  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: SURFACE },
 
   tabScroll: { flex: 1 },
   // No horizontal padding here: the profile card extends edge-to-edge, flush
@@ -3154,7 +3154,7 @@ const styles = StyleSheet.create({
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
   accountActionsCard: {
-    backgroundColor: WHITE, marginTop: SM,
+    backgroundColor: SURFACE, marginTop: SM,
   },
   accountActionRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
