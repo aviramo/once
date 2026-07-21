@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { CakeIcon } from '../src/components/icons'
-import { BG, INK, BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
+import { BG, INK, INK_3, BLACK, GREEN_SOFT, BORDER_STRONG, NEGATIVE, WHITE, PRIMARY, SELECTION } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, ICON } from '../src/tokens'
 
 const TOTAL_STEPS = 5
@@ -502,8 +502,8 @@ export default function OnboardingPage() {
             maxLength={30}
             returnKeyType="done"
             onSubmitEditing={onContinue}
-            cursorColor={WHITE}
-            selectionColor={SELECTION_ON_DARK}
+            cursorColor={INK}
+            selectionColor={SELECTION}
           />
         </View>
 
@@ -546,8 +546,8 @@ export default function OnboardingPage() {
                     keyboardType="number-pad"
                     maxLength={unit === 'yyyy' ? 4 : 2}
                     selectTextOnFocus
-                    cursorColor={WHITE}
-                    selectionColor={SELECTION_ON_DARK}
+                    cursorColor={INK}
+                    selectionColor={SELECTION}
                   />
                   {/* Custom placeholder overlay: a TextInput shares one font
                       size for placeholder + value, but the typed digits should
@@ -632,9 +632,9 @@ export default function OnboardingPage() {
               // than its own element. Composed from the two existing strings,
               // both of which the MatchCard bio editor still uses separately.
               placeholder={`${t('bio.placeholder')}\n${t('bio.min')}`}
-              placeholderTextColor={WHITE_MID}
-              cursorColor={WHITE}
-              selectionColor={SELECTION_ON_DARK}
+              placeholderTextColor={INK_3}
+              cursorColor={INK}
+              selectionColor={SELECTION}
               editable={!bioSubmitting}
             />
           </View>
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: TEXT.xxl,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: INK,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
   card: {
     aspectRatio: 1,
     borderRadius: RADIUS,
-    backgroundColor: SURFACE,
+    backgroundColor: GREEN_SOFT,
     overflow: 'hidden',
   },
   cardInner: {
@@ -753,13 +753,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: MD,
   },
-  // Selected = a SOLID GREEN card carrying WHITE content, the same
+  // Selected = a DEEP GREEN card carrying WHITE content, against the light
+  // green of the unselected ones. Same
   // inversion the primary Button and the home centre button use. The
   // unselected card is the faint gold wash above, so the two states differ by
   // fill AND by ink, not by a subtle change of shade.
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,
@@ -784,7 +785,7 @@ const styles = StyleSheet.create({
   // drift apart — each caller adds only its own padding/metrics on top.
   fieldShell: {
     borderWidth: 1,
-    borderColor: WHITE,
+    borderColor: BORDER_STRONG,
     borderRadius: RADIUS,
   },
   inputWrap: {
@@ -794,7 +795,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: TEXT.md,
-    color: WHITE,
+    color: INK,
     textAlign: 'center',
     padding: 0,
   },
@@ -816,7 +817,7 @@ const styles = StyleSheet.create({
   dateInput: {
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: INK,
     textAlign: 'center',
     padding: 0,
   },
@@ -828,13 +829,13 @@ const styles = StyleSheet.create({
   datePlaceholderText: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
-    color: WHITE_MID,
+    color: INK_3,
     textAlign: 'center',
   },
   errorText: {
     marginTop: MD,
     fontSize: TEXT.sm,
-    color: WHITE,
+    color: NEGATIVE,
     textAlign: 'center',
   },
 
@@ -847,7 +848,7 @@ const styles = StyleSheet.create({
   },
   bioInput: {
     fontSize: TEXT.md,
-    color: WHITE,
+    color: INK,
     padding: 0,
     minHeight: 96,
     textAlign: 'center',
