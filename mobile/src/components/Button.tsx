@@ -4,7 +4,7 @@ import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { SURFACE_LIFT, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM, GOLD_BRIGHT } from '../colors'
+import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
@@ -217,37 +217,30 @@ const VARIANT: Record<Variant, {
   disabledText?: { color: string }
 }> = {
   primary: {
-    btn: { backgroundColor: GOLD_BRIGHT },
-    text: { color: PRIMARY },
+    btn: { backgroundColor: PRIMARY },
+    text: { color: WHITE },
   },
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
     text: { color: BLACK_STRONG, fontWeight: WEIGHT.semibold },
   },
-  // Quiet solid button: a lifted bordeaux slab with a gold label. (It used to
-  // be a 60%-black wash; on the dark scheme that same token is a BRIGHT gold
-  // wash, which would have put gold text on gold — hence the solid surface.)
   soft: {
-    btn: { backgroundColor: SURFACE_LIFT },
+    btn: { backgroundColor: BLACK_STRONG },
     text: { color: WHITE },
   },
   dark: {
-    btn: { backgroundColor: SURFACE_SUNK },
+    btn: { backgroundColor: BLACK },
     text: { color: WHITE },
   },
-  // Gold fill, so the label must be the bordeaux ink — a gold label here
-  // would be invisible.
+  // Orange fill (the positive hue), so the label is white.
   premium: {
     btn: { backgroundColor: PREMIUM },
-    text: { color: PRIMARY },
+    text: { color: WHITE },
   },
-  // Gold button sized for placement on top of a PRIMARY-colored (bordeaux)
-  // surface. The gold fill + bordeaux label keeps the CTA legible and on-brand
-  // against the bordeaux background. Disabled state swaps to a soft white wash
-  // + bright muted text so the button reads as "waiting on input" instead of
-  // the muddy blob produced by a fill at 45%-opacity on bordeaux.
+  // White button sized for placement on top of a PRIMARY (green) surface.
+  // The white fill keeps the CTA legible against the green.
   onPrimary: {
-    btn: { backgroundColor: GOLD_BRIGHT },
+    btn: { backgroundColor: WHITE },
     text: { color: PRIMARY },
     disabledBtn: { backgroundColor: WHITE_SOFT },
     disabledText: { color: WHITE_STRONG },

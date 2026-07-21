@@ -18,7 +18,7 @@ import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
-import { INK, SURFACE, SURFACE_SUNK, BG, GOLD, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
@@ -2964,14 +2964,14 @@ const styles = StyleSheet.create({
   },
   scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
   scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  scheduleDayBubbleSelectedMine: { backgroundColor: GOLD, borderColor: GOLD },
+  scheduleDayBubbleSelectedMine: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
   scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
   scheduleDayLetter: { fontSize: TEXT.sm, color: BLACK },
   scheduleDayLetterMine: { color: WHITE },
   scheduleDayLetterSelected: { color: WHITE },
-  scheduleDayLetterSelectedMine: { color: PRIMARY },
-  scheduleDayLetterWeekend: { color: GOLD },
+  scheduleDayLetterSelectedMine: { color: WHITE },
+  scheduleDayLetterWeekend: { color: GREEN },
   scheduleDayLetterWeekendMine: { color: WHITE },
   scheduleDayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
   scheduleDayDateMine: { color: WHITE_STRONG },

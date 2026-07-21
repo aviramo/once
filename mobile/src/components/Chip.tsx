@@ -7,14 +7,13 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, lh } from '../tokens'
-import { PHOTO_CHROME, INK, GOLD, GOLD_SOFT, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
+import { PHOTO_CHROME, INK, ORANGE, ORANGE_SOFT, BLACK_SOFT, BLACK_STRONG, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
 // lightweight fabric swatches instead of bordered stickers. When `onPhoto`
-// is set, the chip switches to the shared translucent-bordeaux chrome
-// (PHOTO_CHROME) carrying GOLD ink, so it stays readable over a colour photo
-// without covering it. State-presence chips (online, proximate,
+// is set, the chip switches to the shared on-photo chrome: an opaque WHITE
+// tile carrying BLACK ink, so it stays readable over any colour photo. State-presence chips (online, proximate,
 // kids-affinity) add a `renderTrailing` dot via `PresenceDot`; it is handed
 // the chip's own ink colour, so on a photo the dot is gold like the label.
 //
@@ -30,9 +29,8 @@ const isRTL = localeIsRTL
 
 const TONES = {
   neutral:  { fg: BLACK_STRONG, bg: BLACK_SOFT },
-  // Gold ink on a gold wash. (It used to be bordeaux-on-bordeaux-tint, which
-  // on the dark scheme meant the label vanished into the card behind it.)
-  positive: { fg: GOLD,         bg: GOLD_SOFT  },
+  // Orange on an orange wash — the positive hue, never the action green.
+  positive: { fg: ORANGE,       bg: ORANGE_SOFT },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -57,10 +55,9 @@ export function Chip({
   onPress?: () => void
 }) {
   const { fg, bg } = TONES[tone]
-  // On a photo the chip wears the shared translucent-bordeaux chrome with GOLD
-  // ink — exactly the arrangement the 60%-black-plus-white wash had before the
-  // scheme went dark. It must stay translucent: an opaque swatch reads as a
-  // sticker pasted over the photograph and takes the card away from the photo.
+  // On a photo the chip is the shared WHITE chrome tile with BLACK ink. The
+  // photo underneath is arbitrary, so the chip supplies its own contrast
+  // rather than hoping the picture is dark enough.
   const bgColor = onPhoto ? PHOTO_CHROME : bg
   const glyphColor = onPhoto ? INK : fg
   const Container: any = onPress ? Pressable : View

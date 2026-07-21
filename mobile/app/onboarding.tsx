@@ -15,7 +15,7 @@ import { Button } from '../src/components/Button'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { CakeIcon } from '../src/components/icons'
-import { GOLD, INK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
+import { INK, BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, SELECTION_ON_DARK } from '../src/colors'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, ICON } from '../src/tokens'
 
 const TOTAL_STEPS = 5
@@ -104,14 +104,14 @@ function GenderCard({
         onResponderRelease={handlePress}
       >
         <View style={styles.cardInner}>
-          {icon(WHITE)}
+          {icon(BLACK)}
           <Text style={styles.cardLabel}>{label}</Text>
         </View>
         <Animated.View
           pointerEvents="none"
           style={[styles.cardActive, { opacity: activeOpacity }]}
         >
-          {icon(PRIMARY)}
+          {icon(WHITE)}
           <Text style={[styles.cardLabel, styles.cardLabelActive]}>{label}</Text>
         </Animated.View>
       </View>
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
   card: {
     aspectRatio: 1,
     borderRadius: RADIUS,
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: SURFACE,
     overflow: 'hidden',
   },
   cardInner: {
@@ -753,13 +753,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: MD,
   },
-  // Selected = a SOLID GOLD card carrying BORDEAUX content, the same
+  // Selected = a SOLID GREEN card carrying WHITE content, the same
   // inversion the primary Button and the home centre button use. The
   // unselected card is the faint gold wash above, so the two states differ by
   // fill AND by ink, not by a subtle change of shade.
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: GOLD,
+    backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,
@@ -767,10 +767,10 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: BLACK,
   },
-  // Bordeaux ink, because the selected card's fill is gold.
-  cardLabelActive: { color: PRIMARY },
+  // White ink, because the selected card's fill is green.
+  cardLabelActive: { color: WHITE },
 
   ctaWrap: { marginTop: LG },
 

@@ -16,7 +16,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, GOLD } from '../src/colors'
+import { INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
 import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -101,7 +101,7 @@ function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }
         height: AVATAR_SIZE,
         borderRadius: AVATAR_SIZE / 2,
         borderWidth: 2,
-        borderColor: WHITE,
+        borderColor: PRIMARY,
       }, style]}
     />
   )
@@ -134,7 +134,7 @@ function AvatarHaloRings() {
         // bordeaux page composites to a muddy brown with a hard edge — the
         // halo has to read as depth (the same hue, one step lighter), not as
         // a coloured blob sitting behind the glyph.
-        backgroundColor: SURFACE,
+        backgroundColor: SURFACE_SUNK,
       }} />
       <Svg
         pointerEvents="none"
@@ -689,7 +689,7 @@ function ReplyingInviteCard({
             <Button
               variant="onPrimary"
               label={acceptLabel}
-              iconStart={<CreditCost cost={costCredits} color={GOLD} bg={PRIMARY} />}
+              iconStart={<CreditCost cost={costCredits} color={PRIMARY} bg={PRIMARY_BG} />}
               onPress={handleAccept}
               disabled={acceptDisabled}
               loading={acceptLoading}
@@ -2432,10 +2432,10 @@ export default function HomePage() {
       ? {
           text: permTitle,
           icon: showNotifOverlay
-            ? <BellIcon color={PRIMARY} size={64} />
+            ? <BellIcon color={WHITE} size={64} />
             : (showLocOverlay || locFailed)
-              ? <MapPinIcon color={PRIMARY} size={64} />
-              : <WifiOffIcon color={PRIMARY} size={64} />,
+              ? <MapPinIcon color={WHITE} size={64} />
+              : <WifiOffIcon color={WHITE} size={64} />,
           onPress: permOnConfirm,
           busy: permBusyState,
         }
@@ -2447,18 +2447,18 @@ export default function HomePage() {
             // identically whether the gate comes from device perm or a dead
             // server-side token. Stays a bell icon — the call to action is
             // re-enable notifications, not view your profile.
-            ? { text: tg('home.notifAccessRequired', isMale), icon: <BellIcon color={PRIMARY} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
+            ? { text: tg('home.notifAccessRequired', isMale), icon: <BellIcon color={WHITE} size={64} />, onPress: handlePermissionRequest, busy: permBusy }
             : availability?.state === 'not_yet'
               // Scheduled-future area: still a geo state, treat it like the
               // other geo-gated branches — show the user's avatar, tap opens
               // the profile sheet. (Was an inert InboxIcon before.)
-              ? { text: t('home.geoGate.notYet').replace('{date}', gateWhenStr), icon: <InboxIcon color={PRIMARY} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet }
+              ? { text: t('home.geoGate.notYet').replace('{date}', gateWhenStr), icon: <InboxIcon color={WHITE} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet }
               // Any other unavailable state (geo / membership in disabled-only
               // groups) — render the user's own avatar; tap opens the profile
               // preview sheet so they can review/edit their profile while they
               // wait for the gate to lift. Static InboxIcon is the fallback
               // for a fresh install where the avatar hasn't been resolved yet.
-              : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={PRIMARY} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet })
+              : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={WHITE} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet })
         : null
 
   // ── Invitation countdowns ───────────────────────────────────────────────
@@ -2847,7 +2847,7 @@ export default function HomePage() {
                               // fall back to the centered icon-on-white tile.
                               <View style={[styles.permAvatar, centerNotice.avatarUri && !centerNotice.busy ? null : styles.permSlidersButton]}>
                                 {centerNotice.busy
-                                  ? <Spinner color={PRIMARY} size={CENTER_GLYPH_SIZE} />
+                                  ? <Spinner color={WHITE} size={CENTER_GLYPH_SIZE} />
                                   : centerNotice.avatarUri
                                     ? <Image source={{ uri: centerNotice.avatarUri }} style={styles.permAvatarImage} contentFit="cover" cachePolicy="memory-disk" />
                                     : centerNotice.icon}
@@ -2873,7 +2873,7 @@ export default function HomePage() {
                               // center circle is revealed as the pause button
                               // (user request 2026-05-22). Tap → runPauseFromSkip.
                               <View style={[styles.permAvatar, styles.permPlayButton]}>
-                                <PauseIcon color={PRIMARY} size={CENTER_GLYPH_SIZE} />
+                                <PauseIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
                               </View>
                             ) : (
                               // No candidate to show. The circle's tap opens the
@@ -2881,7 +2881,7 @@ export default function HomePage() {
                               // hamburger glyph as the floating menu button —
                               // a heart here promised an action it never had.
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <HamburgerIcon color={PRIMARY} size={CENTER_GLYPH_SIZE} />
+                                <HamburgerIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
                               </View>
                             )}
                             </GlyphScale>
@@ -3392,13 +3392,13 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  // The centre action surface is a SOLID GOLD disc carrying a BORDEAUX glyph —
+  // The centre action surface is a SOLID GREEN disc carrying a WHITE glyph —
   // the same arrangement as the primary Button, so the one big tap target on
   // home reads as the app's main action. Every variation of it (play, pause,
   // hamburger, spinner, and the gate notices) shares this fill, so the glyphs
-  // inside are all PRIMARY.
+  // inside are all WHITE.
   permPlayButton: {
-    backgroundColor: GOLD,
+    backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3411,7 +3411,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   permSlidersButton: {
-    backgroundColor: GOLD,
+    backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
   },

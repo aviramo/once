@@ -14,9 +14,9 @@ import { resolveLocationType, type Profile, type LocationType } from '../stores/
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
+import { HeartIcon, QuoteIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
-import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { INK, SURFACE, BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -435,8 +435,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const { bottom: safeBottomInset } = useSafeAreaInsets()
   // The first photo runs to the bottom of the card (callers pass bottomInset=0
   // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
-  // must clear the home indicator on its own.
-  const overlayBottomOffset = Math.max(safeBottomInset, MD)
+  // must clear the home indicator on its own. The extra LG on top of that is
+  // deliberate breathing room: clearing the indicator alone left the chip
+  // column sitting on the very edge of the card.
+  const overlayBottomOffset = Math.max(safeBottomInset, MD) + LG
   const ready = effectiveCardH > 0
   const timeIso = match.last_seen
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
@@ -455,6 +457,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const nameChipText = nameFromTitle(match.title)
   const age = ageFromTitle(match.title)
   const ageChipText = age ? tg('home.ageChip', match.is_male).replace('{age}', age) : ''
+  // Name and age live in ONE chip ("נטע, בת 45"). Either half can be missing —
+  // an unnamed match, or one with no birth date — so the comma is applied by
+  // joining the present parts, never leaving a stray separator behind.
+  const identityChipText = [nameChipText, ageChipText].filter(Boolean).join(', ')
 
   const familyChipText = useMemo(
     () => buildFamilyChipText(match.family, isForKids, self, viewerFamily, match.is_male),
@@ -746,23 +752,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
-                {/* Identity line: name then age, side by side. The name chip
-                    carries no icon — it is who this is, not an attribute of
-                    them. chipsLine wraps, so a long name pushes the age to a
-                    second row rather than squeezing it. */}
-                {nameChipText || ageChipText ? (
+                {/* Identity chip: name and age in ONE chip, with no icon — it
+                    is who this is, not an attribute of them, and a cake glyph
+                    beside an age reads as a birthday rather than as a fact.
+                    Either half may be missing, so the two are joined only
+                    when both are present. */}
+                {identityChipText ? (
                   <View style={styles.chipsLine}>
-                    {nameChipText ? (
-                      <Chip text={nameChipText} tone="neutral" onPhoto />
-                    ) : null}
-                    {ageChipText ? (
-                      <Chip
-                        renderIcon={c => <CakeIcon color={c} size={ICON.sm} />}
-                        text={ageChipText}
-                        tone="neutral"
-                        onPhoto
-                      />
-                    ) : null}
+                    <Chip text={identityChipText} tone="neutral" onPhoto />
                   </View>
                 ) : null}
                 {proximityStr ? (

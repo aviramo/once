@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { GOLD, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { GREEN, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -1094,7 +1094,7 @@ const selectListStyles = StyleSheet.create({
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowIcon: { marginEnd: SM },
   label: { fontSize: TEXT.md, color: BLACK },
-  labelSelected: { color: GOLD, fontWeight: WEIGHT.semibold },
+  labelSelected: { color: PRIMARY, fontWeight: WEIGHT.semibold },
   checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
 })
@@ -2052,7 +2052,7 @@ const familyStyles = StyleSheet.create({
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
   dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
-  dayLetterWeekend: { color: GOLD },
+  dayLetterWeekend: { color: GREEN },
   dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
   dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },

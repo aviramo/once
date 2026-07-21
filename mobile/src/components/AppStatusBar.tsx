@@ -1,13 +1,13 @@
 import { StatusBar } from 'expo-status-bar'
-import { PRIMARY } from '../colors'
+import { BG } from '../colors'
 
 // Single source of truth for the OS status bar appearance.
 //
 // Product rule (absolute, no exceptions): the status bar text/icons are
-// ALWAYS white, on every screen in the app. Every full-screen surface is
-// the deep-wine PRIMARY (or a dark chrome like the paused BLACK_MID
-// header), so white icons read with strong contrast everywhere. There is
-// no light-background screen left, hence no "dark icons" variant.
+// ALWAYS dark, on every screen in the app. The scheme is light — every
+// full-screen surface is the warm off-white BG or a white card — so dark
+// icons read with strong contrast everywhere. There is no dark-background
+// screen left, hence no "light icons" variant.
 //
 // expo-status-bar applies imperatively and never restores its value on
 // unmount, so a screen that forgets to set it would silently inherit
@@ -17,14 +17,14 @@ import { PRIMARY } from '../colors'
 export function AppStatusBar({
   backgroundColor,
 }: {
-  // Override only the bar background (e.g. home's paused BLACK_MID
-  // chrome). The text style is fixed (always white) and never changes.
+  // Override only the bar background. The text style is fixed (always
+  // dark) and never changes.
   backgroundColor?: string
 } = {}) {
   return (
     <StatusBar
-      style="light"
-      backgroundColor={backgroundColor ?? PRIMARY}
+      style="dark"
+      backgroundColor={backgroundColor ?? BG}
       translucent={false}
     />
   )
