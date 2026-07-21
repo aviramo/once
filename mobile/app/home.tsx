@@ -2731,7 +2731,7 @@ export default function HomePage() {
   if (!profile) {
     return (
       <View style={[styles.backdrop, styles.bootFill]}>
-        <AppStatusBar backgroundColor={BG} />
+        <AppStatusBar />
         <Spinner color={WHITE} />
       </View>
     )
@@ -2744,7 +2744,7 @@ export default function HomePage() {
           switches both ways: a gated mount would leave the status bar stuck
           after resume, since expo-status-bar applies its value imperatively
           and never restores prior values on unmount. */}
-      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : BG} />
+      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : undefined} />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
             {/* page1 — the only standalone screen, and ALL of it is the
                 drag-to-open-menu surface (see menuDragGesture). The detector

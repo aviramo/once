@@ -28,7 +28,7 @@
     "androidStatusBar": {
       "barStyle": "light-content",
       "translucent": false,
-      "backgroundColor": "#F6F3ED"
+      "backgroundColor": "#417A62"
     },
     "android": {
       "adaptiveIcon": {
