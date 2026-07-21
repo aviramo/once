@@ -2,87 +2,135 @@ import sharp from 'sharp'
 import fs from 'node:fs'
 import path from 'node:path'
 
-// Single source of truth for the "1" glyph: the canonical brand mark in
-// web/public/once-mark.svg. We pull only its <path> (dropping the black bg
-// rect) so we can re-pad it per target. The glyph itself is never redefined
-// here — change the path in once-mark.svg and every asset follows.
+// ─────────────────────────────────────────────────────────────────────────
+// SINGLE SOURCE OF TRUTH for the Once brand mark: concentric gold rings on a
+// bordeaux ground, with the digit "1" in the centre. Everything below — every
+// mobile icon, the web favicon(s), og-image, and the on-page once-mark.svg —
+// is derived from the tokens in this file. Change a token here and every
+// asset regenerates in lockstep. Run: `node scripts/build-icons.mjs`.
+//
+//   • GLYPH  — the canonical rounded "1" path (1024 viewBox). Same geometry the
+//              wordmark has always used; do not redraw it, only retune tokens.
+//   • RINGS  — [radius, strokeWidth] pairs in the same 1024 space, centred at
+//              (512,512). Outer ring r=500 fills the tile; per-target `scale`
+//              shrinks the whole mark for launcher safe-zones.
+//   • Colours: BORDEAUX ground + GOLD rings/glyph (flat, no gradient).
+// ─────────────────────────────────────────────────────────────────────────
+
+const BORDEAUX = '#4A1020' // brand PRIMARY
+const GOLD = '#E6BE5E' // brand GOLD_BRIGHT (flat)
+const WHITE = '#FFFFFF'
+
+// Rounded "1" glyph, 1024 viewBox (leftmost ~330, rightmost ~690, y 190..835).
+const GLYPH =
+  'M 610 190 Q 690 190 690 270 L 690 760 Q 690 835 615 835 L 570 835 ' +
+  'Q 495 835 495 760 L 495 390 L 430 440 Q 375 480 330 430 ' +
+  'Q 285 380 340 335 L 505 210 Q 550 190 610 190 Z'
+
+// Concentric rings (radius, stroke-width) in 1024 space. Outer band, a heavy
+// primary ring, then inner grooves down to the clear centre that holds the 1.
+const RINGS = [
+  [500, 5],
+  [480, 8],
+  [458, 5],
+  [432, 14],
+  [392, 36], // primary ring
+  [348, 6],
+  [326, 5],
+  [302, 10],
+  [278, 5],
+]
+
 const root = path.resolve(
   path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
   '..',
 )
 const assets = path.join(root, 'assets')
-const markSvg = fs.readFileSync(path.join(root, '..', 'web', 'public', 'once-mark.svg'), 'utf8')
+const web = path.join(root, '..', 'web', 'public')
 
-const pathEl = markSvg.match(/<path[\s\S]*?\/>/)?.[0]
-if (!pathEl) throw new Error('Could not extract <path> from web/public/once-mark.svg')
+// ── Measure the glyph's tight bounding box once, so we can scale + centre it
+//    exactly inside the rings (independent of the path's own coordinates). ──
+const probe = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="${GLYPH}" fill="#fff"/></svg>`
+const { info } = await sharp(Buffer.from(probe))
+  .trim({ threshold: 1 })
+  .raw()
+  .toBuffer({ resolveWithObject: true })
+const bboxLeft = Math.abs(info.trimOffsetLeft ?? 0)
+const bboxTop = Math.abs(info.trimOffsetTop ?? 0)
+const GLYPH_CX = bboxLeft + info.width / 2
+const GLYPH_CY = bboxTop + info.height / 2
+const GLYPH_H = info.height
 
-// Glyph-only SVG (transparent, same 1024 viewBox as the source so geometry is
-// byte-identical to the brand mark).
-const glyphSvg = Buffer.from(
-  `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">${pathEl}</svg>`,
+// Glyph height as a fraction of the 1024 canvas is tied to the ring `scale` so
+// the numeral keeps the same proportion inside the rings at every size.
+const GLYPH_FRAC = (scale) => 0.4 * scale
+
+/**
+ * Build the full logo as an SVG string.
+ * @param scale     ring scale (1 = outer ring touches the tile edge)
+ * @param bg        background fill, or null for transparent
+ * @param rings     draw the rings (false = glyph only, e.g. notification)
+ * @param glyphFill glyph colour
+ * @param glyphFrac glyph height / canvas (defaults to GLYPH_FRAC(scale))
+ */
+function logoSvg({ scale = 1, bg = null, rings = true, glyphFill = GOLD, glyphFrac } = {}) {
+  const parts = []
+  if (bg) parts.push(`<rect width="1024" height="1024" fill="${bg}"/>`)
+  if (rings) {
+    for (const [r, w] of RINGS) {
+      parts.push(
+        `<circle cx="512" cy="512" r="${(r * scale).toFixed(2)}" fill="none" stroke="${GOLD}" stroke-width="${(w * scale).toFixed(2)}"/>`,
+      )
+    }
+  }
+  const gH = (glyphFrac ?? GLYPH_FRAC(scale)) * 1024
+  const g = gH / GLYPH_H
+  parts.push(
+    `<g transform="translate(512,512) scale(${g.toFixed(4)}) translate(${(-GLYPH_CX).toFixed(2)},${(-GLYPH_CY).toFixed(2)})"><path d="${GLYPH}" fill="${glyphFill}"/></g>`,
+  )
+  return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`
+}
+
+const svgBuf = (opts) => Buffer.from(logoSvg(opts))
+
+async function writePng(opts, size, file) {
+  await sharp(svgBuf(opts)).resize(size, size).png().toFile(file)
+}
+
+// ── Mobile assets ────────────────────────────────────────────────────────
+// App icon + web-tab share the full colour mark on a bordeaux tile.
+await writePng({ scale: 0.9, bg: BORDEAUX }, 1024, path.join(assets, 'icon.png'))
+await writePng({ scale: 0.9, bg: BORDEAUX }, 512, path.join(assets, 'once-512.png'))
+// Splash: bordeaux tile, a touch more breathing room (app.json splash bg = bordeaux).
+await writePng({ scale: 0.82, bg: BORDEAUX }, 1024, path.join(assets, 'splash-icon.png'))
+// Android adaptive foreground: transparent, shrunk into the launcher safe zone
+// (app.json adaptiveIcon.backgroundColor = bordeaux fills the margin).
+await writePng({ scale: 0.62, bg: null }, 1024, path.join(assets, 'adaptive-icon.png'))
+// Android notification small icon: WHITE glyph on transparent, no rings (the
+// status bar renders the alpha channel only and thin rings would vanish).
+await writePng(
+  { rings: false, glyphFill: WHITE, bg: null, glyphFrac: 0.6 },
+  1024,
+  path.join(assets, 'notification-icon.png'),
 )
 
-const SIZE = 1024
-const BLACK = '#000000'
+// ── Web assets ─────────────────────────────────────────────────────────────
+await writePng({ scale: 0.9, bg: BORDEAUX }, 256, path.join(web, 'favicon.png'))
 
-// --- Padding tokens (single source of truth for icon breathing room) ---
-// Value = the glyph's height as a fraction of the full SIZE canvas.
-// iOS / splash: no launcher mask, only the ~22% system corner round, so the
-//   glyph can sit larger but still wants clear margins.
-// Android adaptive foreground: the launcher mask + zoom crops the outer ring
-//   (safe zone is only the inner ~61%), so the glyph must be noticeably
-//   smaller on the 108dp layer to read with the same padding as stock icons.
-// notification: Android renders the small status-bar icon from the ALPHA
-//   channel only (everything opaque is drawn solid white). It must be a white
-//   glyph on a fully transparent canvas. Tiny render target (status bar), so
-//   the glyph fills more of the frame than the app icon but keeps a margin so
-//   the system's own padding/clipping doesn't crop it.
-const GLYPH_HEIGHT_FRACTION = {
-  ios: 0.52,
-  splash: 0.52,
-  adaptive: 0.4,
-  notification: 0.6,
-}
-
-// Render the glyph once, trimmed tight to its bounding box.
-const glyphTrimmed = await sharp(glyphSvg, { density: 512 })
-  .resize(SIZE, SIZE, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-  .trim({ threshold: 1 })
+// og-image: the mark centred on a 1200×630 bordeaux card.
+const ogLogo = await sharp(svgBuf({ scale: 0.9, bg: BORDEAUX })).resize(600, 600).png().toBuffer()
+await sharp({
+  create: { width: 1200, height: 630, channels: 4, background: BORDEAUX },
+})
+  .composite([{ input: ogLogo, gravity: 'center' }])
   .png()
-  .toBuffer()
+  .toFile(path.join(web, 'og-image.png'))
 
-async function buildIcon({ file, fraction, background }) {
-  const glyphH = Math.round(SIZE * fraction)
-  const glyph = await sharp(glyphTrimmed)
-    .resize({ height: glyphH }) // width auto, aspect preserved (tall numeral → height-bound)
-    .png()
-    .toBuffer()
-  await sharp({
-    create: { width: SIZE, height: SIZE, channels: 4, background },
-  })
-    .composite([{ input: glyph, gravity: 'center' }])
-    .png()
-    .toFile(path.join(assets, file))
-}
+// Vector brand mark + SVG favicon (both the full colour logo).
+const markSvg = logoSvg({ scale: 0.9, bg: BORDEAUX })
+fs.writeFileSync(path.join(web, 'once-mark.svg'), markSvg + '\n')
+fs.writeFileSync(path.join(web, 'favicon.svg'), markSvg + '\n')
 
-// iOS app icon + splash: solid black, full-bleed canvas, padded glyph.
-await buildIcon({ file: 'icon.png', fraction: GLYPH_HEIGHT_FRACTION.ios, background: BLACK })
-await buildIcon({ file: 'splash-icon.png', fraction: GLYPH_HEIGHT_FRACTION.splash, background: BLACK })
-
-// Android adaptive foreground: transparent (app.json sets the #000000
-// backgroundColor layer), extra padding for the launcher mask safe zone.
-await buildIcon({
-  file: 'adaptive-icon.png',
-  fraction: GLYPH_HEIGHT_FRACTION.adaptive,
-  background: { r: 0, g: 0, b: 0, alpha: 0 },
-})
-
-// Android notification small icon: white glyph, fully transparent canvas
-// (Android masks by alpha and tints the result itself).
-await buildIcon({
-  file: 'notification-icon.png',
-  fraction: GLYPH_HEIGHT_FRACTION.notification,
-  background: { r: 0, g: 0, b: 0, alpha: 0 },
-})
-
-console.log('icons built: icon.png, splash-icon.png, adaptive-icon.png, notification-icon.png')
+console.log(
+  'icons built → mobile: icon, once-512, splash-icon, adaptive-icon, notification-icon | web: favicon.png/.svg, og-image.png, once-mark.svg',
+)
