@@ -1072,7 +1072,7 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
           <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
         </View>
         <View style={selectListStyles.checkSlot}>
-          {selected ? <CheckIcon color={INK} /> : null}
+          {selected ? <CheckIcon color={GREEN} /> : null}
         </View>
       </View>
       {!isLast ? <View style={selectListStyles.divider} /> : null}
@@ -1089,7 +1089,7 @@ const selectListStyles = StyleSheet.create({
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowIcon: { marginEnd: SM },
   label: { fontSize: TEXT.md, color: BLACK },
-  labelSelected: { color: PRIMARY, fontWeight: WEIGHT.semibold },
+  labelSelected: { color: GREEN, fontWeight: WEIGHT.extrabold },
   checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
 })
@@ -1372,21 +1372,21 @@ function LocationPopup({
         <>
           <SelectListRow
             label={t('settings.locationDevice')}
-            icon={<PinGlyph color={currentType === 'device' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            icon={<PinGlyph color={currentType === 'device' ? GREEN : BLACK_STRONG} size={ICON.md} />}
             selected={currentType === 'device'}
             isLast={false}
             onPress={handleMyLocation}
           />
           <SelectListRow
             label={t('settings.locationHome')}
-            icon={<HomeGlyph color={currentType === 'home' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            icon={<HomeGlyph color={currentType === 'home' ? GREEN : BLACK_STRONG} size={ICON.md} />}
             selected={currentType === 'home'}
             isLast={false}
             onPress={() => { setPendingType('home'); setStep('address') }}
           />
           <SelectListRow
             label={t('settings.locationWork')}
-            icon={<WorkGlyph color={currentType === 'work' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            icon={<WorkGlyph color={currentType === 'work' ? GREEN : BLACK_STRONG} size={ICON.md} />}
             selected={currentType === 'work'}
             isLast={true}
             onPress={() => { setPendingType('work'); setStep('address') }}

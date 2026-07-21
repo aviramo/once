@@ -171,6 +171,9 @@ const styles = StyleSheet.create({
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
     color: BLACK,
+    // One rhythm down the sheet: the same MD gap separates title -> field ->
+    // attach -> send, so no pair reads as more related than another.
+    marginBottom: MD,
     textAlign: 'center',
   },
   thanks: {
@@ -231,5 +234,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   error: { marginTop: SM, fontSize: TEXT.sm, color: INK, textAlign: 'center' },
-  submitWrap: { alignSelf: 'stretch', marginTop: LG },
+  submitWrap: { alignSelf: 'stretch', marginTop: MD },
 })
