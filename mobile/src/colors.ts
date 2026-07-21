@@ -26,14 +26,19 @@ export const SURFACE_LIFT = '#FBF9F5'  // a barely-lifted band
 export const SURFACE_SUNK = '#EFEAE0'  // inset rows inside a sheet, input wells
 
 // ── Ink ────────────────────────────────────────────────────────────────────
-// Near-black rather than pure #000: softer on a warm off-white page.
-export const BLACK = '#1A1A1A'
+// Text is the deep brand GREEN, never a neutral black. Every reading surface
+// in the app — a bio, a popup title, a settings row, a chip label — is inked
+// in this one colour, which is what makes green read as "the app's voice"
+// rather than as an accent sprinkled here and there.
+//
+// `BLACK` is the legacy name (~100 call sites predate the green scheme) and
+// aliases INK. One definition, two names, never two copies. It is NOT black:
+// for something that must actually subtract light, see SCRIM_BLACK.
+export const INK   = '#2B4F40'
+export const BLACK = INK
 export const WHITE = '#FFFFFF'
-// `INK` is the name the newer call sites use for "the primary foreground".
-// Same value as BLACK — one definition, two names, never two copies.
-export const INK   = BLACK
-export const INK_2 = 'rgba(26,26,26,0.65)'  // secondary / body
-export const INK_3 = 'rgba(26,26,26,0.42)'  // muted: hints, timestamps
+export const INK_2 = 'rgba(43,79,64,0.72)'  // secondary / body
+export const INK_3 = 'rgba(43,79,64,0.48)'  // muted: hints, timestamps
 
 // ── Alpha overlay scales ───────────────────────────────────────────────────
 // BLACK_* sits on a LIGHT surface, WHITE_* on a dark one (a photo, a green
@@ -53,7 +58,9 @@ export const WHITE_STRONG = 'rgba(255,255,255,0.86)'  // strong text / active st
 // light page (a heading), where the button green is a touch light to read.
 export const GREEN        = '#417A62'
 export const GREEN_STRONG = '#35634F'  // pressed / hover
-export const GREEN_DEEP   = '#2B4F40'  // green as TEXT on the page (headings)
+// Green used AS text on the page. That is exactly what INK is, so this is an
+// alias — the same hex written twice would be free to drift.
+export const GREEN_DEEP   = INK
 export const GREEN_SOFT   = 'rgba(65,122,98,0.12)'  // faint green wash (chips, row fills)
 
 // ── ORANGE — the positive colour ───────────────────────────────────────────
