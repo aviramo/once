@@ -1951,7 +1951,7 @@ const familyStyles = StyleSheet.create({
   shadowLayer: { flex: 1, backgroundColor: SURFACE_SUNK },
   gestureWrap: { flexShrink: 1 },
   sheet: {
-    backgroundColor: SURFACE,
+    backgroundColor: BG,
     paddingTop: RADIUS,
     paddingHorizontal: SM,
     flexShrink: 1,
@@ -2068,15 +2068,15 @@ const familyStyles = StyleSheet.create({
   addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
   addWeekLabel: { fontSize: TEXT.sm, color: INK },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
-  // the sheet's ScrollView so the gray cards expanding/collapsing inside
-  // don't push it around. WHITE bg + same horizontal padding as the sheet
-  // so the popup reads as one continuous surface.
-  interestedBar: { backgroundColor: SURFACE },
+  // the sheet's ScrollView so the cards expanding/collapsing inside don't
+  // push it around. Same tone + horizontal padding as the sheet, so the popup
+  // reads as one continuous surface.
+  interestedBar: { backgroundColor: BG },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
-    backgroundColor: SURFACE,
+    backgroundColor: BG,
     paddingTop: RADIUS, paddingHorizontal: SM,
   },
   valuePopupTitle: {
@@ -3105,7 +3105,9 @@ const styles = StyleSheet.create({
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
   accountActionsCard: {
-    backgroundColor: SURFACE, marginTop: SM,
+    // No fill: the rows sit straight on the beige sheet, separated by their
+    // hairline. A white card here read as a slab pasted onto the popup.
+    backgroundColor: 'transparent', marginTop: SM,
   },
   accountActionRow: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
