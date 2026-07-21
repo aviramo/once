@@ -7,10 +7,16 @@ import { XS, SM, TEXT, WEIGHT, RADII, ICON } from '../tokens'
 // The hearts-cost badge shown INSIDE an action button in place of its icon:
 // a rounded capsule holding a heart glyph and the number of hearts the
 // action spends (e.g. ♥ 2). One component so the invite / approve / broadcast
-// buttons all render the cost identically; the caller passes the content
-// `color` and capsule `bg` to fit the button it sits on (PRIMARY content on
-// a white button, WHITE content on a PRIMARY one). No "×" — the user wants
-// just the heart glyph and the amount (the multiplication sign was removed).
+// buttons all render the cost identically.
+//
+// The capsule INVERTS its host button: on the gold action buttons it is a
+// solid BORDEAUX capsule carrying GOLD content, so the badge reads as its own
+// object rather than dissolving into the fill (a faint tint of the label
+// colour was invisible on gold). The caller passes both, so a badge on some
+// future dark button can invert the other way.
+//
+// No "×" — the user wants just the heart glyph and the amount (the
+// multiplication sign was removed).
 export function CreditCost({
   cost,
   color,

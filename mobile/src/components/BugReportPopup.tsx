@@ -98,7 +98,6 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
     >
       <View style={styles.card}>
-        <BugIcon color={INK} size={32} />
         <Text style={styles.title}>{t('bugReport.title')}</Text>
         {done ? (
           <Text style={styles.thanks}>{t('bugReport.thanks')}</Text>

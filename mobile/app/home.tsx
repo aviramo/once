@@ -39,7 +39,7 @@ import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { CloseBoldIcon, PauseIcon, HeartIcon, ChatIcon, ChevronDownIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, ShieldIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale } from '../src/components/icons'
+import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale } from '../src/components/icons'
 import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -689,7 +689,7 @@ function ReplyingInviteCard({
             <Button
               variant="onPrimary"
               label={acceptLabel}
-              iconStart={<CreditCost cost={costCredits} color={PRIMARY} bg={PRIMARY_BG} />}
+              iconStart={<CreditCost cost={costCredits} color={GOLD} bg={PRIMARY} />}
               onPress={handleAccept}
               disabled={acceptDisabled}
               loading={acceptLoading}
@@ -2970,7 +2970,6 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={cancelConfirmOpen}
-                  icon={<CloseBoldIcon color={INK} size={ICON.circle} />}
                   title={t('home.cancelWaitingTitle')}
                   description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
                   confirmLabel={t('home.cancelWaitingConfirm')}
@@ -2982,7 +2981,6 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={refuseConfirmOpen}
-                  icon={<CloseBoldIcon color={INK} size={ICON.circle} />}
                   title={t('home.refuseReplyTitle')}
                   description={tg('home.refuseReplyDesc', page2InviteObj?.is_male ?? null)}
                   confirmLabel={t('home.refuseReplyConfirm')}
@@ -2996,7 +2994,6 @@ export default function HomePage() {
                   visible={skipHintOpen}
                   title={t('home.skipHintTitle')}
                   description={t('home.skipHintDesc')}
-                  icon={<ChevronDownIcon color={INK} size={ICON.circle} />}
                   // Secondary "got it": acknowledge the hint and scroll the
                   // card back to the top so the user can perform the
                   // swipe-down-to-skip gesture they were just taught (pull-
@@ -3063,7 +3060,6 @@ export default function HomePage() {
 
                 <ConfirmDialog
                   visible={chatConfirmAction === 'leave'}
-                  icon={<SignOutIcon color={INK} size={ICON.circle} />}
                   title={t('home.leaveTitle')}
                   description={t('home.leaveDesc')}
                   confirmLabel={t('home.leaveConfirm')}
@@ -3074,7 +3070,6 @@ export default function HomePage() {
                 />
                 <ConfirmDialog
                   visible={chatConfirmAction === 'block'}
-                  icon={<BlockIcon color={INK} size={ICON.circle} />}
                   title={t('chat.blockTitle')}
                   description={t('chat.blockDesc')}
                   confirmLabel={t('chat.blockConfirm')}
@@ -3091,7 +3086,6 @@ export default function HomePage() {
                   visible={!!reportTargetId}
                   // Filled, matching the flag on the card that opens this dialog:
                   // an outline shield read lighter than the solid one just tapped.
-                  icon={<ShieldIcon color={INK} fill={PRIMARY} size={ICON.circle} />}
                   title={t('chat.reportTitle')}
                   noteInput={{
                     value: reportNote,

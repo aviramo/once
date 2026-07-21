@@ -4,16 +4,14 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
-import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, ICON_CIRCLE_SIZE, lh } from '../tokens'
-import { GlyphScale } from './icons'
-import { FONT_SCALE } from '../fonts'
-import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
+import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
+import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, BLACK_MID } from '../colors'
 
-// Every decision popup in the app is this one component. The action is
-// always communicated by a single carefully-chosen icon in the tinted
-// circle above the title — never by the buttons. The primary button is a
-// plain PRIMARY label with no icon in every scenario (destructive or not);
-// the icon at the top is what tells the user what they're about to do.
+// Every decision popup in the app is this one component. The TITLE carries
+// the action: there is no icon above it, and the buttons are plain labels in
+// every scenario (destructive or not). The tinted icon badge that used to sit
+// above the title was removed at the user's request (2026-07-21) — do not
+// reintroduce it, here or in any other popup.
 //
 // Informational variant: omit both `confirmLabel` and `cancelLabel` and the
 // button row is dropped entirely — the sheet becomes a notice the user
@@ -24,7 +22,6 @@ export function ConfirmDialog({
   description,
   cancelLabel,
   confirmLabel,
-  icon,
   confirmIconStart,
   onCancel,
   onConfirm,
@@ -45,11 +42,6 @@ export function ConfirmDialog({
   cancelLabel?: string
   /** Omit (together with `cancelLabel`) for a button-less info popup. */
   confirmLabel?: string
-  /** Action icon rendered in a tinted circle above the title. Required:
-   * every dialog communicates its action through this icon, since the
-   * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
-   * sized to the convention: `<XIcon color={INK} size={ICON.circle} />`. */
-  icon: ReactNode
   /** Opt-in icon/badge rendered INSIDE the confirm button before its label.
    * Deliberately breaks the "buttons carry no icon" convention for the one
    * case the user asked for it: the broadcast popup must show the credit
@@ -104,14 +96,6 @@ export function ConfirmDialog({
       // own paddingTop so the gap above the icon isn't doubled up.
       contentStyle={[styles.card, draggable && styles.cardDraggable]}
     >
-      <View style={styles.iconWrap}>
-        {/* The badge is a fixed dp, so its glyph must not follow the OS font
-            scale — same contract as RoundButton, or the icon-to-circle ratio
-            drifts per device (fat shield at font_scale 2, lost at 1). */}
-        <View style={styles.iconCircle}>
-          <GlyphScale cap={FONT_SCALE.ui}>{icon}</GlyphScale>
-        </View>
-      </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
 
@@ -189,18 +173,6 @@ const styles = StyleSheet.create({
   },
   cardDraggable: {
     paddingTop: 0,
-  },
-  iconWrap: {
-    alignItems: 'center',
-    marginBottom: MD,
-  },
-  iconCircle: {
-    width: ICON_CIRCLE_SIZE,
-    height: ICON_CIRCLE_SIZE,
-    borderRadius: 999,
-    backgroundColor: PRIMARY_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   title: {
     fontSize: FSIZE.xl,

@@ -701,7 +701,6 @@ export default function OnboardingPage() {
 
       <ConfirmDialog
         visible={birthConfirmOpen}
-        icon={<CakeIcon color={INK} size={ICON.circle} />}
         title={tg('ob.birthConfirm', isMale === true)
           .replace('{date}', birthdateInWords(yyyy, mm, dd))
           .replace('{age}', String(age ?? ''))}

@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
 import * as ImagePicker from 'expo-image-picker'
-import Svg, { Path, Line, Circle, Rect, Defs, RadialGradient, Stop } from 'react-native-svg'
+import Svg, { Path, Line, Circle, Rect } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, type LocationType } from '../src/stores/userStore'
@@ -23,8 +23,8 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { GOLD, INK, BG, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
-import { Glyph, SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { GOLD, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
@@ -45,14 +45,6 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 // double that. The card keeps the photo as its background but reads as one of
 // the menu buttons rather than a hero.
 const PROFILE_CARD_HEIGHT = (ICON.xxl + MD * 2) * 2
-
-// Distance from the screen edge to the start of every row icon in this page,
-// so they form one column. A settings row reaches it additively — `optionsWrap`
-// pads by SM, `selectRow*` by MD inside that — but the profile card is
-// full-bleed and sits outside `optionsWrap`, so it has to state the sum. The
-// sheet's close X lands on the same column via its own geometry (MD padding
-// plus the RoundButton's centring of a smaller glyph).
-const ROW_ICON_INSET = SM + MD
 
 // Provided by the shell (home.tsx) so section pages can share their inner
 // sub-page slide animation with the shell. The shell hosts the SharedValue
@@ -513,7 +505,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           user to finish the current view/invitation first. */}
       <ConfirmDialog
         visible={locationLockedInfoVisible}
-        icon={<MapPinIcon color={INK} size={ICON.circle} />}
         title={t('settings.locationLockedTitle')}
         description={t('settings.locationLockedDesc')}
         draggable
@@ -2859,7 +2850,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={hideConfirmOpen}
-        icon={hideConfirmConfig.topIcon}
         title={hideConfirmConfig.title}
         description={hideConfirmConfig.description}
         confirmLabel={hideConfirmConfig.confirmLabel}
@@ -2870,7 +2860,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={signOutDialog}
-        icon={<SignOutIcon color={INK} size={ICON.circle} />}
         title={t('settings.signOutConfirmTitle')}
         description={tg('settings.signOutConfirmDesc', profile.is_male)}
         confirmLabel={tg('settings.signOutYes', profile.is_male)}
@@ -2880,7 +2869,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={deleteDialog}
-        icon={<TrashIcon color={INK} size={ICON.circle} />}
         title={t('settings.deleteConfirmTitle')}
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
@@ -2895,7 +2883,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           otherwise the sheet is purely informational. */}
       <ConfirmDialog
         visible={starsPopupVisible}
-        icon={<HeartIcon color={INK} size={ICON.circle} />}
         title={t('stars.popup.title')}
         description={starsDesc}
         confirmLabel={canBuyExtra(profile) ? t('stars.popup.buyExtra') : undefined}
@@ -2979,38 +2966,6 @@ export default function SettingsPage({
                 <TabIcon tab="profile" color={BLACK_STRONG} />
               </View>
             )}
-            {/* Legibility scrim: a soft dark band centred on the row, fading to
-                fully transparent well before the card's edges, so the photo
-                stays a photo. It replaces the per-element tricks the label and
-                the pencil each carried (a blurred text shadow vs. a hard
-                dual-stroke halo) — those are invented per element type and
-                never match, which is exactly how they read. One backdrop is
-                uniform by construction.
-
-                It is RADIAL, not linear, because the darkening has to be local
-                on BOTH axes: a linear gradient can only fade along one, so it
-                would either band the full width or the full height. The centre
-                sits on the row's start corner (flipped in RTL) and everything
-                past the caption fades to nothing, so the rest of the photo is
-                untouched. Anchored at cy 0.5 because profileCardRow is
-                vertically centred; move the row and this must move with it. */}
-            <Svg style={[styles.profileCardScrim, { top: photoBleed }]} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
-              <Defs>
-                <RadialGradient id="profileScrim" cx={isRTL ? '0.7' : '0.3'} cy="0.5" r="0.5">
-                  <Stop offset="0" stopColor={BG} stopOpacity="0.75" />
-                  <Stop offset="0.55" stopColor={BG} stopOpacity="0.4" />
-                  <Stop offset="1" stopColor={BG} stopOpacity="0" />
-                </RadialGradient>
-              </Defs>
-              <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
-            </Svg>
-            <View style={[styles.profileCardRow, { top: photoBleed }]} pointerEvents="none">
-              {/* ICON.md, same as every settings row icon: sharing the start
-                  column is not enough on its own, since a wider glyph puts its
-                  ink outside a narrower one's even from the same origin. */}
-              <PencilIcon color={WHITE} size={ICON.md} />
-              <Text style={styles.profileCardLabel} numberOfLines={1} ellipsizeMode="tail">{t('settings.profile')}</Text>
-            </View>
           </Pressable>
 
           <View style={styles.optionsWrap}>
@@ -3115,11 +3070,9 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
     marginBottom: MD,
   },
-  // Profile card reads as a menu row (icon + start-aligned label) at 2× the
-  // height of a regular row, with the user's photo as the background. The
-  // image fills the card, a soft scrim keeps the label legible, and the row
-  // content matches the visual language of the other `accountLinksCard`
-  // entries below it.
+  // The user's photo, uncaptioned, at 2× the height of a regular row: tapping
+  // it opens profile editing. No label and no scrim over it — the photo is the
+  // affordance, and anything drawn on it only fought the image.
   profileCard: {
     width: '100%', height: PROFILE_CARD_HEIGHT,
     overflow: 'hidden',
@@ -3127,22 +3080,6 @@ const styles = StyleSheet.create({
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Spans the card, but the gradient inside it is only dark around the middle
-  // band where the row sits — the single legibility mechanism for everything
-  // drawn on this card. A FLAT full-card scrim was tried first and washed the
-  // photo out; the darkening has to be local to the caption.
-  profileCardScrim: { ...StyleSheet.absoluteFillObject },
-  // Icon at the start, label after it, gap MD. Fills the card and centers
-  // the row on the image's vertical midline (alignItems on the cross axis).
-  profileCardRow: {
-    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-    flexDirection: 'row', alignItems: 'center', gap: MD,
-    paddingHorizontal: ROW_ICON_INSET,
-  },
-  profileCardLabel: {
-    flexShrink: 1, fontSize: TEXT.lg, lineHeight: lh(TEXT.lg),
-    color: WHITE, fontWeight: WEIGHT.semibold,
-  },
   // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
   // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
   accentCard: { backgroundColor: PRIMARY },

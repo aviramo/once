@@ -20,9 +20,6 @@ export type VisibilityConfirmConfig = {
   title: string
   description: string
   confirmLabel: string
-  /** Action icon shown in the dialog's tinted circle. Sized to the
-   * ConfirmDialog convention (`color={INK} size={ICON.circle}`). */
-  topIcon: ReactNode
 }
 
 /** "Hide your profile?" Used when going hidden would kick existing watchers
@@ -42,6 +39,5 @@ export function hideProfileConfirm(watcherCount: number): VisibilityConfirmConfi
     title: t('settings.hideConfirmTitle'),
     description,
     confirmLabel: t('settings.hideConfirmButton'),
-    topIcon: <EyeOffIcon color={INK} size={ICON.circle} />,
   }
 }

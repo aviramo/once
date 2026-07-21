@@ -751,7 +751,6 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       />
       <ConfirmDialog
         visible={duplicateDialog}
-        icon={<InfoIcon color={INK} size={ICON.circle} />}
         title={t('settings.duplicatePhotoTitle')}
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}

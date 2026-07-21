@@ -45,7 +45,6 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
       disableBackdropDismiss={busy != null}
     >
       <View style={styles.card}>
-        <HeartIcon color={INK} size={32} />
         <Text style={styles.title}>{t('stars.buy.title')}</Text>
         <Text style={styles.desc}>{t('stars.buy.desc')}</Text>
         <View style={styles.list}>

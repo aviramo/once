@@ -802,7 +802,7 @@ export default {
   'home.watchingAccept': 'להתמקד',
   'home.watchingAccept_m': 'להתמקד בו',
   'home.watchingAccept_f': 'להתמקד בה',
-  'home.watchingReject': 'לא עכשיו',
+  'home.watchingReject': 'דילוג',
   'home.skipHintTitle': 'אפשר להחליק את הכרטיס למטה',
   'home.skipHintDesc': 'בפעם הבאה החליקו את הכרטיס למטה כדי לדלג במהירות לפרופיל אחר. רוצים לדלג עכשיו?',
   'home.skipHintCancel': 'הבנתי',
