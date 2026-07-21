@@ -1,7 +1,7 @@
 import { ComponentProps, createContext, useContext, type ReactNode } from 'react'
 import { I18nManager } from 'react-native'
 import Svg, { Path, Circle, Line, Polyline, Rect, G } from 'react-native-svg'
-import { BLACK, BLACK_STRONG, WHITE, PRIMARY } from '../colors'
+import { INK, BLACK, BLACK_STRONG, WHITE, PRIMARY } from '../colors'
 import { ICON, STROKE } from '../tokens'
 import { iconScale, FONT_SCALE } from '../fonts'
 
@@ -403,6 +403,18 @@ function AddPlus() {
       <Line x1={cx - arm} y1={cy} x2={cx + arm} y2={cy} />
       <Line x1={cx} y1={cy - arm} x2={cx} y2={cy + arm} />
     </G>
+  )
+}
+
+// Plain single-stroke camera. No fill and no second colour: it sits on a
+// light surface as a label's glyph, where the filled+outlined treatment below
+// reads as a sticker rather than as an icon.
+export function CameraIcon({ color = INK, size = ICON.lg }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 8h3l1.6-2.2h8.8L18 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+      <Circle cx="12" cy="13.5" r="3.6" />
+    </Glyph>
   )
 }
 

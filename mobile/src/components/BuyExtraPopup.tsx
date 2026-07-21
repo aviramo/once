@@ -99,12 +99,18 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
 }
 
 const styles = StyleSheet.create({
-  card: { padding: LG, alignItems: 'center' },
+  card: {
+    // No top padding: the sheet's drag handle already supplies the gap above
+    // the title (its own marginBottom). Adding padding here stacked on top of
+    // it and left a large dead band under the handle.
+    padding: LG,
+    paddingTop: 0,
+    alignItems: 'center',
+  },
   title: {
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
     color: BLACK,
-    marginTop: SM,
     textAlign: 'center',
   },
   desc: {
