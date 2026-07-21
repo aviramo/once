@@ -145,7 +145,6 @@ export default {
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'Report a bug',
   'bugReport.title': 'Report a bug',
-  'bugReport.desc': 'Hit a problem? Tell us what happened and we\'ll look into it.',
   'bugReport.placeholder': 'Describe the bug...',
   'bugReport.attach': 'Attach a photo',
   'bugReport.attachChange': 'Change photo',

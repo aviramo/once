@@ -95,7 +95,7 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
       onDismiss={() => { if (!submitting) onDismiss() }}
       swipeToDismiss={!submitting}
       disableBackdropDismiss={submitting}
-      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
+      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight + MD } : undefined}
     >
       <View style={styles.card}>
         <Text style={styles.title}>{t('bugReport.title')}</Text>
@@ -103,7 +103,6 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
           <Text style={styles.thanks}>{t('bugReport.thanks')}</Text>
         ) : (
           <>
-            <Text style={styles.desc}>{t('bugReport.desc')}</Text>
 
             <View style={styles.inputWrap}>
               <TextInput
@@ -172,13 +171,6 @@ const styles = StyleSheet.create({
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
     color: BLACK,
-    textAlign: 'center',
-  },
-  desc: {
-    fontSize: TEXT.md,
-    color: BLACK_MID,
-    marginTop: XS,
-    marginBottom: LG,
     textAlign: 'center',
   },
   thanks: {

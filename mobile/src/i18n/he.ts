@@ -147,7 +147,6 @@ export default {
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'דיווח על תקלה',
   'bugReport.title': 'דיווח על תקלה',
-  'bugReport.desc': 'נתקלת בבעיה? ספרו לנו מה קרה ונטפל בזה.',
   'bugReport.placeholder': 'תארו את התקלה...',
   'bugReport.attach': 'צירוף תמונה',
   'bugReport.attachChange': 'החלפת תמונה',
