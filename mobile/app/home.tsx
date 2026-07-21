@@ -16,7 +16,7 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { BG, GREEN, INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
+import { GREEN_DEEP, BG, GREEN, INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
 import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
@@ -411,7 +411,7 @@ const chatMenuStyles = StyleSheet.create({
   endBtnPressed: { opacity: 0.55 },
   endLabel: {
     fontSize: TEXT.md,
-    color: WHITE,
+    color: GREEN_DEEP,
     fontWeight: WEIGHT.semibold,
   },
 })
@@ -482,8 +482,12 @@ const STATUS_LAYOUT = LinearTransition
 const STATUS_TIMER_FONT = TEXT.xxl
 
 const statusCardStyles = StyleSheet.create({
+  // The message card is INVERTED relative to the page it announces on: a light
+  // surface carrying GREEN ink, with a green action button. It used to be a
+  // solid orange slab with white text, which made the whole screen orange and
+  // left no room for the action to stand out.
   container: {
-    backgroundColor: PRIMARY,
+    backgroundColor: SURFACE,
     paddingVertical: LG,
     paddingHorizontal: MD,
   },
@@ -493,7 +497,7 @@ const statusCardStyles = StyleSheet.create({
     // No fontWeight: rendered through AppText, so this resolves to the real
     // NotoSansHebrew_400Regular face. Kept slightly dimmed so the full-white
     // ExtraBold heading lead-in clearly carries the emphasis.
-    color: WHITE_STRONG,
+    color: GREEN,
     textAlign: 'center',
     includeFontPadding: false,
   },
@@ -504,7 +508,7 @@ const statusCardStyles = StyleSheet.create({
   // contrast step so the two ranks read clearly apart.
   lead: {
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: GREEN_DEEP,
   },
   // The invitation countdown, sitting between the body text and the buttons.
   // Tabular figures so the digits don't jitter as the seconds tick.
@@ -513,7 +517,7 @@ const statusCardStyles = StyleSheet.create({
     fontSize: STATUS_TIMER_FONT,
     lineHeight: lh(STATUS_TIMER_FONT),
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: GREEN_DEEP,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
     includeFontPadding: false,
@@ -571,7 +575,7 @@ function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, onLaps
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.cancelWaitingBtn')}
-          variant="onPrimary"
+          variant="primary"
           onPress={onCancel}
           loading={busy}
         />
@@ -594,7 +598,7 @@ function EventMessageCard({ title, description, frozen, onContinue, busy }: { ti
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.endedBack')}
-          variant="onPrimary"
+          variant="primary"
           onPress={onContinue}
           loading={busy}
         />
@@ -677,7 +681,7 @@ function ReplyingInviteCard({
         <View style={statusButtonStyles.btnRow}>
           <View style={statusButtonStyles.btnDecline}>
             <Button
-              variant="onPrimaryGhost"
+              variant="secondary"
               label={declineLabel}
               onPress={onDecline}
               disabled={busy}
@@ -686,9 +690,9 @@ function ReplyingInviteCard({
           </View>
           <View style={statusButtonStyles.btnAccept}>
             <Button
-              variant="onPrimary"
+              variant="primary"
               label={acceptLabel}
-              iconStart={<CreditCost cost={costCredits} color={PRIMARY} bg={PRIMARY_BG} />}
+              iconStart={<CreditCost cost={costCredits} color={WHITE} bg={WHITE_SOFT} />}
               onPress={handleAccept}
               disabled={acceptDisabled}
               loading={acceptLoading}
