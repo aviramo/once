@@ -219,15 +219,16 @@ const VARIANT: Record<Variant, {
   disabledBtn?: object
   disabledText?: { color: string }
 }> = {
-  // Disabled is a LIGHT GREEN fill with a muted green label, not the global
-  // opacity fade. Fading the solid green over the beige page left a
-  // near-invisible ghost of a button — the user could not see that the action
-  // existed at all, only that something was missing.
+  // Disabled is a LIGHT GREEN fill carrying a FULL-STRENGTH green label, not
+  // the global opacity fade. Two separate problems that fade caused: the solid
+  // green washed out to near-invisible on the beige page, and a muted label on
+  // top of that was unreadable. The pale fill alone says "not yet"; the label
+  // stays legible so the user can still read what the action is.
   primary: {
     btn: { backgroundColor: GREEN },
     text: { color: WHITE },
     disabledBtn: { backgroundColor: GREEN_SOFT },
-    disabledText: { color: BLACK_STRONG },
+    disabledText: { color: GREEN },
   },
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
