@@ -23,6 +23,7 @@ export function ConfirmDialog({
   cancelLabel,
   confirmLabel,
   confirmIconStart,
+  confirmTone,
   onCancel,
   onConfirm,
   busy,
@@ -47,6 +48,9 @@ export function ConfirmDialog({
    * case the user asked for it: the broadcast popup must show the credit
    * cost on its confirm button (see CLAUDE.md "Credits economy"). */
   confirmIconStart?: ReactNode
+  /** Marks this popup's confirm as an INVITE action, which is the one case
+   * that wears the orange instead of the default green. */
+  confirmTone?: 'positive'
   onCancel?: () => void
   onConfirm?: () => void
   busy?: boolean
@@ -147,6 +151,7 @@ export function ConfirmDialog({
               <Button
                 label={confirmLabel}
                 iconStart={confirmIconStart}
+                tone={confirmTone}
                 onPress={() => { setPressed('confirm'); onConfirm?.() }}
                 variant="primary"
                 size="lg"

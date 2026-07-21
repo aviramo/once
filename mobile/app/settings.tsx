@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { BG, GREEN, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { ORANGE_MUTED, BG, GREEN, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -2794,7 +2794,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
               : t('settings.visibilityVisible')}
           subtitle={isHidden && outOfHearts ? t('settings.visibilityHiddenNoHearts') : undefined}
           onPress={onVisibilityPress}
-          icon={isHidden ? <EyeOffIcon color={WHITE} size={ICON.md} /> : <EyeOpenIcon color={WHITE} size={ICON.md} />}
+          icon={isHidden ? <EyeOffIcon color={PRIMARY} size={ICON.md} /> : <EyeOpenIcon color={PRIMARY} size={ICON.md} />}
+          labelColor={PRIMARY}
         />
         <View style={styles.accountActionDivider} />
         {/* Stars, then Account. Tapping stars opens the stars/package popup
@@ -3045,7 +3046,7 @@ const styles = StyleSheet.create({
 
   previewWrap: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
 
   textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: WHITE_SOFT },
@@ -3080,7 +3081,7 @@ const styles = StyleSheet.create({
   // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
   // the subtle hairline `accountActionDivider` between siblings.
   accountLinksCard: {
-    backgroundColor: PRIMARY,
+    backgroundColor: 'transparent',
     marginBottom: MD,
   },
   // The user's photo, uncaptioned, at 2× the height of a regular row: tapping
@@ -3093,9 +3094,9 @@ const styles = StyleSheet.create({
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
-  // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
-  accentCard: { backgroundColor: PRIMARY },
+  // A plain white card. The GROUP's meaning is carried by its ink (orange
+  // for the account/status rows), never by tinting the card itself.
+  accentCard: { backgroundColor: 'transparent' },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
@@ -3111,7 +3112,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   accountActionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
     marginStart: MD,
   },
   accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
@@ -3129,7 +3130,7 @@ const styles = StyleSheet.create({
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: SM,
-    backgroundColor: PRIMARY, borderRadius: RADIUS,
+    backgroundColor: 'transparent', borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
     shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
@@ -3159,7 +3160,7 @@ const styles = StyleSheet.create({
   // physically right in RTL after auto-flip). Without the explicit
   // writingDirection, iOS did not pick the container's RTL direction and the
   // subtitle ended up physically left under the hearts row.
-  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: ORANGE_MUTED, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
   // Bold emphasis span inside the stars-popup description (the dynamic
   // values). Sits in ConfirmDialog's centered desc <Text>, so it inherits
   // size/line-height and only overrides weight + (darker) colour.
@@ -3201,7 +3202,7 @@ const styles = StyleSheet.create({
   subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
   subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
   optionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
     marginStart: MD,
   },
   subPageDesc: {

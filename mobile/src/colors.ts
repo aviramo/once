@@ -60,6 +60,10 @@ export const GREEN_SOFT   = 'rgba(65,122,98,0.12)'  // faint green wash (chips, 
 // The heart, a like, presence, a positive delta. Status, not navigation.
 export const ORANGE       = '#E4573D'
 export const ORANGE_SOFT  = 'rgba(228,87,61,0.14)'
+// A lighter orange for SECONDARY text that belongs to the orange group (a row
+// subtitle under an orange label). Alpha rather than a second hex so it can
+// never drift away from ORANGE itself.
+export const ORANGE_MUTED = 'rgba(228,87,61,0.72)'
 
 // ── Primary brand ──────────────────────────────────────────────────────────
 // The brand fill IS the action orange — one value, so a "primary" surface and

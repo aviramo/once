@@ -4,7 +4,7 @@ import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
+import { GREEN, WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
@@ -201,6 +201,9 @@ const SIZE: Record<Size, { btn: object; labelArea: object; text: object }> = {
   },
 }
 
+// The ONE exception to "an action button is green": the invite pair (sending
+// an invitation, and accepting one). Those two are the app's whole point, so
+// they wear the action ORANGE while every other button stays green.
 const TONE: Record<Tone, { btn: object }> = {
   positive: {
     btn: { backgroundColor: PRIMARY },
@@ -217,7 +220,7 @@ const VARIANT: Record<Variant, {
   disabledText?: { color: string }
 }> = {
   primary: {
-    btn: { backgroundColor: PRIMARY },
+    btn: { backgroundColor: GREEN },
     text: { color: WHITE },
   },
   secondary: {
