@@ -23,7 +23,7 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { ORANGE_MUTED, BG, GREEN, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
@@ -162,7 +162,7 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 // Variants:
 //   - subtitle?          → small secondary text under the label (profile row)
 //   - avatar?            → image URI rendered as a circular avatar at the end
-//   - tone='accent'      → soft PRIMARY_BG halo behind the trailing icon
+//   - tone='accent'      → soft GREEN_SOFT halo behind the trailing icon
 // Press feedback fades in a BLACK_SOFT background; `grouped` rows inherit
 // rounding from their parent card so the press state stays inside the card.
 
@@ -822,8 +822,6 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
         )}
       </View>
 
-      <View style={groupsPopupStyles.sectionDivider} />
-
       {/* Joining is one button here. Its explanation and code field live on
           the next step, so the resting sheet is only the list. */}
       <View style={groupsPopupStyles.joinSection}>
@@ -853,7 +851,9 @@ const groupsPopupStyles = StyleSheet.create({
   action: { flex: 1 },
   hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS, lineHeight: lh(TEXT.sm) },
   empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM, textAlign: 'center' },
-  list: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SM },
+  // Wrap: as many chips per line as fit, centred. alignItems keeps a chip
+  // sized to its own content instead of stretching to the tallest on its line.
+  list: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: SM },
   rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
   sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   // Reads as a field: a border and a white fill, not just a tinted block. The
@@ -973,7 +973,7 @@ const agePopupStyles = StyleSheet.create({
   },
   field: {
     flex: 1,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: GREEN_SOFT,
     borderRadius: RADIUS,
     paddingVertical: SM,
     paddingHorizontal: SM,
@@ -1980,7 +1980,7 @@ const familyStyles = StyleSheet.create({
   pillLabelSelected: { color: WHITE },
   sectionPill: {
     paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: GREEN_SOFT,
   },
   sectionPillLabel: { fontSize: TEXT.sm, color: INK },
   card: {
@@ -2046,7 +2046,7 @@ const familyStyles = StyleSheet.create({
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
-  dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
+  dayBubbleWeekend: { backgroundColor: GREEN_SOFT, borderColor: GREEN_SOFT },
   dayLetterWeekend: { color: GREEN },
   dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
@@ -2780,8 +2780,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
               : t('settings.visibilityVisible')}
           subtitle={isHidden && outOfHearts ? t('settings.visibilityHiddenNoHearts') : undefined}
           onPress={onVisibilityPress}
-          icon={isHidden ? <EyeOffIcon color={PRIMARY} size={ICON.md} /> : <EyeOpenIcon color={PRIMARY} size={ICON.md} />}
-          labelColor={PRIMARY}
+          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.md} /> : <EyeOpenIcon color={GREEN} size={ICON.md} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         {/* Stars, then Account. Tapping stars opens the stars/package popup
@@ -2804,32 +2804,32 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
           onPress={() => setStarsPopupVisible(true)}
-          icon={<HeartIcon color={PRIMARY} size={ICON.md} />}
-          labelColor={PRIMARY}
+          icon={<HeartIcon color={GREEN} size={ICON.md} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={PRIMARY} />}
-          labelColor={PRIMARY}
+          icon={<UserIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={groupsRowLabel}
           onPress={() => setGroupsPopupVisible(true)}
-          icon={<GroupsIcon color={PRIMARY} />}
-          labelColor={PRIMARY}
+          icon={<GroupsIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.bugReport')}
           onPress={() => setBugReportVisible(true)}
-          icon={<BugIcon color={PRIMARY} />}
-          labelColor={PRIMARY}
+          icon={<BugIcon color={GREEN} />}
+          labelColor={GREEN}
         />
       </View>
       <AccountPopup
@@ -3148,7 +3148,7 @@ const styles = StyleSheet.create({
   // physically right in RTL after auto-flip). Without the explicit
   // writingDirection, iOS did not pick the container's RTL direction and the
   // subtitle ended up physically left under the hearts row.
-  selectRowSubtitle: { fontSize: TEXT.sm, color: ORANGE_MUTED, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
   // Bold emphasis span inside the stars-popup description (the dynamic
   // values). Sits in ConfirmDialog's centered desc <Text>, so it inherits
   // size/line-height and only overrides weight + (darker) colour.
