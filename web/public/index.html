@@ -3,574 +3,978 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
-  <title>Once | רק אחד עכשיו</title>
-  <meta name="description" content="אפליקציית הכרויות בזמן אמת שמתמקדת באדם אחד בכל פעם, בלי רעש ובלי שיחות במקביל." />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=7" />
-  <link rel="icon" type="image/png" href="favicon.png?v=7" />
+  <meta name="theme-color" content="#2C0A14" />
+  <title>Once | להכיר באמת, אדם אחד בכל פעם</title>
+  <meta name="description" content="אפליקציית היכרויות בלי אינסוף החלקות. Once מציגה אדם אחד בכל פעם ויוצרת היכרות ממוקדת, חיה ומכוונת יותר." />
+  <link rel="canonical" href="https://once-lake.vercel.app/" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=9" />
+  <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Once" />
-  <meta property="og:title" content="Once | רק אחד עכשיו" />
-  <meta property="og:description" content="הכרויות בזמן אמת, עם אדם אחד בכל פעם. בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי." />
+  <meta property="og:title" content="Once | להכיר באמת, אדם אחד בכל פעם" />
+  <meta property="og:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
   <meta property="og:image" content="https://once-lake.vercel.app/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Once — רק אחד עכשיו" />
+  <meta property="og:image:alt" content="Once — אדם אחד בכל פעם" />
   <meta property="og:url" content="https://once-lake.vercel.app/" />
   <meta property="og:locale" content="he_IL" />
   <meta property="og:locale:alternate" content="en_US" />
   <meta property="og:locale:alternate" content="ru_RU" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Once | רק אחד עכשיו" />
-  <meta name="twitter:description" content="הכרויות בזמן אמת, עם אדם אחד בכל פעם." />
+  <meta name="twitter:title" content="Once | להכיר באמת, אדם אחד בכל פעם" />
+  <meta name="twitter:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=34" />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=41" />
 </head>
 <body>
-  <header class="header">
+  <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
+
+  <header class="header" id="header">
     <div class="header-inner">
-      <a class="brand" href="./" aria-label="Once home">
+      <a class="brand" href="./" aria-label="Once">
         <span class="brand-name">Once</span>
       </a>
-      <a class="header-link" id="login-link" href="/login">התחברות</a>
-      <div class="lang-switcher">
-        <button class="lang-btn" id="lang-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Language">
-          <span id="lang-label">HE</span>
-          <svg class="lang-chevron" width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
-            <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+
+      <nav class="nav" id="nav" aria-label="Primary"></nav>
+
+      <div class="header-actions">
+        <a class="login-link" id="login-link" href="/login">התחברות</a>
+        <div class="lang-switcher">
+          <button class="lang-btn" id="lang-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Language">
+            <span id="lang-label">HE</span>
+            <svg class="lang-chevron" width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
+              <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <ul class="lang-menu" id="lang-menu" role="listbox" hidden>
+            <li><button type="button" role="option" data-lang="he">עברית<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
+            <li><button type="button" role="option" data-lang="en">English<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
+            <li><button type="button" role="option" data-lang="ru">Русский<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
+          </ul>
+        </div>
+        <a class="btn btn-primary header-cta" id="header-cta" href="download.html">להורדת האפליקציה</a>
+        <button class="menu-toggle" id="menu-toggle" type="button" aria-label="תפריט" aria-expanded="false">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
-        <ul class="lang-menu" id="lang-menu" role="listbox" hidden>
-          <li><button type="button" role="option" data-lang="he">עברית<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
-          <li><button type="button" role="option" data-lang="en">English<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
-          <li><button type="button" role="option" data-lang="ru">Русский<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
-        </ul>
       </div>
     </div>
   </header>
 
-  <main>
+  <!-- Mobile slide-in menu -->
+  <div class="mobile-menu" id="mobile-menu">
+    <div class="mobile-menu-backdrop" data-close-menu></div>
+    <div class="mobile-menu-panel" role="dialog" aria-modal="true" aria-label="תפריט">
+      <div class="mobile-menu-head">
+        <span class="brand-name">Once</span>
+        <button class="menu-close" id="menu-close" type="button" aria-label="סגירה">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <nav id="mobile-nav" aria-label="Mobile"></nav>
+      <a class="btn btn-primary" id="mobile-cta-inline" href="download.html">להורדת האפליקציה</a>
+      <a class="login-link" id="mobile-login" href="/login">התחברות</a>
+    </div>
+  </div>
+
+  <main id="main">
     <section class="hero">
       <div class="container">
-        <div class="hero-slogan" id="hero-slogan">רק אחד עכשיו</div>
-        <h1 id="hero-title">הכרויות בזמן אמת, עם אדם אחד בכל פעם</h1>
-        <p id="hero-sub">בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.</p>
-        <div class="hero-cta">
-          <a class="btn-primary" id="hero-cta-primary" href="https://docs.google.com/forms/d/e/1FAIpQLSd_Y0A1bWvcGI19C536aesf9KybH0RtRS0L8rz2hDih2fNL3g/viewform" target="_blank" rel="noopener">להרשמה לערב החשיפה</a>
-          <a class="btn-secondary" id="hero-cta-download" href="download.html">להורדת האפליקציה</a>
-        </div>
-        <a class="hero-secondary-link" id="hero-cta-secondary" href="#how">איך זה עובד?</a>
-        <div class="hero-pills" id="hero-pills">
-          <span class="pill">אדם אחד</span>
-          <span class="pill">בזמן אמת</span>
-          <span class="pill">בלי רעשי רקע</span>
-        </div>
-        <div class="hero-visual" aria-hidden="true">
-          <picture>
-            <img src="img/01-hero-one-bubble-w.webp?v=32" alt="" loading="eager" class="blob-1" />
-          </picture>
-        </div>
+        <div id="sec-hero" class="hero-grid"></div>
       </div>
     </section>
 
-    <section class="problem">
-      <div class="container">
-        <div class="section-split">
-          <div class="section-text">
-            <div class="eyebrow" id="problem-eyebrow">הבעיה</div>
-            <h2 id="problem-title">הבעיה היא לא שאין אנשים. הבעיה היא שאין פוקוס.</h2>
-            <p class="problem-body" id="problem-body">באפליקציות הכרויות רגילות הכול קורה במקביל:<br>עוד פרופיל, עוד התאמה, עוד שיחה, עוד התלבטות.<br>בסוף זה מרגיש פחות כמו להכיר מישהו<br>ויותר כמו לנהל רשימה.</p>
-            <div class="problem-points" id="problem-points">
-              <div class="problem-point">יותר מדי אפשרויות</div>
-              <div class="problem-point">פחות מדי נוכחות</div>
-              <div class="problem-point">שיחות שנמרחות בלי כיוון</div>
-            </div>
-          </div>
-          <div class="section-visual" aria-hidden="true">
-            <picture>
-              <img src="img/02-crowd-noise-focus-w.webp?v=32" alt="" loading="lazy" class="blob-2" />
-            </picture>
-          </div>
-        </div>
-      </div>
+    <section class="band band--tint" id="sec-problem-wrap">
+      <div class="container"><div id="sec-problem"></div></div>
     </section>
 
-    <section class="solution">
-      <div class="container">
-        <div class="section-split flip">
-          <div class="section-text solution-text">
-            <div class="eyebrow" id="solution-eyebrow">הפתרון</div>
-            <h2 id="solution-title">ב־Once הכול קורה אחרת</h2>
-            <p class="solution-body" id="solution-body">במקום להיות פתוחים לעשרות אנשים במקביל,<br>Once יוצרת רגע אחד ברור:<br>אתם כאן, הצד השני כאן,<br>ועכשיו יש מקום לבדוק אם יש חיבור אמיתי.</p>
-            <div class="solution-points" id="solution-points">
-              <div class="solution-point">אדם אחד בכל פעם</div>
-              <div class="solution-point">שיחה בזמן אמת</div>
-              <div class="solution-point">בלי רעשי רקע</div>
-              <div class="solution-point">בלי תחושת קטלוג</div>
-            </div>
-          </div>
-          <div class="section-visual" aria-hidden="true">
-            <picture>
-              <img src="img/06-two-sides-one-moment-w.webp?v=32" alt="" loading="lazy" class="blob-3" />
-            </picture>
-          </div>
-        </div>
-      </div>
+    <section class="band" id="difference">
+      <div class="container"><div id="sec-difference"></div></div>
     </section>
 
-    <section class="how" id="how">
-      <div class="container">
-        <div class="eyebrow" id="how-eyebrow">איך זה עובד</div>
-        <h2 id="how-title">שלושה צעדים פשוטים</h2>
-        <div class="how-grid" id="how-grid">
-          <div class="how-card">
-            <div class="how-num">01</div>
-            <h3>נכנסים כשפנויים</h3>
-            <p>אתם בוחרים מתי להיות זמינים ומתי לא.</p>
-          </div>
-          <div class="how-card">
-            <div class="how-num">02</div>
-            <h3>מתמקדים באדם אחד</h3>
-            <p>בכל רגע יש רק חיבור אחד על המסך. בלי מקביליות.</p>
-          </div>
-          <div class="how-card">
-            <div class="how-num">03</div>
-            <h3>אם יש עניין, מדברים</h3>
-            <p>אם שני הצדדים בעניין, השיחה מתחילה בזמן אמת.</p>
-          </div>
-        </div>
-        <div class="lead-visual" aria-hidden="true">
-          <picture>
-            <img src="img/04-send-invite-w.webp?v=32" alt="" loading="lazy" class="blob-4" />
-          </picture>
-        </div>
-      </div>
+    <section class="band band--tint" id="how">
+      <div class="container"><div id="sec-how"></div></div>
     </section>
 
-    <section class="why">
-      <div class="container">
-        <div class="section-split">
-          <div class="section-text">
-            <div class="eyebrow" id="why-eyebrow">למה זה שונה</div>
-            <h2 id="why-title">פחות דפדוף. יותר מפגש.</h2>
-            <div class="why-grid" id="why-grid">
-              <div class="why-item">
-                <h3>בלי שיחות במקביל</h3>
-                <p>כדי שלא תרגישו שאתם מתחרים על תשומת לב.</p>
-              </div>
-              <div class="why-item">
-                <h3>בלי אינסוף פרופילים</h3>
-                <p>כדי שהחוויה לא תרגיש כמו קטלוג.</p>
-              </div>
-              <div class="why-item">
-                <h3>בזמן אמת</h3>
-                <p>כדי שהחיבור יקרה כששניכם באמת שם.</p>
-              </div>
-              <div class="why-item">
-                <h3>בשליטה שלכם</h3>
-                <p>אתם מחליטים מתי להופיע, לדבר ולעצור.</p>
-              </div>
-            </div>
-          </div>
-          <div class="section-visual" aria-hidden="true">
-            <picture>
-              <img src="img/08-real-time-clock-w.webp?v=32" alt="" loading="lazy" class="blob-5" />
-            </picture>
-          </div>
-        </div>
-      </div>
+    <section class="band" id="sec-psychology-wrap">
+      <div class="container"><div id="sec-psychology"></div></div>
     </section>
 
-    <section class="trust">
-      <div class="container">
-        <div class="eyebrow" id="trust-eyebrow">אמון</div>
-        <h2 id="trust-title">אתם בשליטה</h2>
-        <p class="trust-body" id="trust-body">Once לא דוחפת אתכם להיות זמינים כל הזמן.<br>אתם בוחרים מתי להופיע,<br>עם מי להמשיך לדבר,<br>ומתי לעצור.</p>
-        <ul class="trust-list" id="trust-list">
-          <li>אפשר להיות זמינים רק כשמתאים לכם</li>
-          <li>אפשר לסיים שיחה בכל רגע</li>
-          <li>אין חובה לענות לכולם</li>
-          <li>אין ריבוי שיחות שמפעיל לחץ</li>
-        </ul>
-      </div>
+    <section class="band band--tint" id="sec-dualrole-wrap">
+      <div class="container"><div id="sec-dualrole"></div></div>
     </section>
 
-    <section class="cta">
-      <div class="container">
-        <div class="lead-visual" aria-hidden="true">
-          <picture>
-            <img src="img/06-matchstick-brand-w.webp?v=32" alt="" loading="lazy" class="blob-6" />
-          </picture>
-        </div>
-        <h2 id="cta-title">רוצים להיות בין הראשונים?</h2>
-        <p id="cta-sub">Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.</p>
-        <div class="cta-actions">
-          <a class="btn-primary" id="cta-button" href="https://docs.google.com/forms/d/e/1FAIpQLSd_Y0A1bWvcGI19C536aesf9KybH0RtRS0L8rz2hDih2fNL3g/viewform" target="_blank" rel="noopener">להרשמה לערב החשיפה</a>
-          <a class="btn-secondary" id="cta-download" href="download.html">להורדת האפליקציה</a>
-        </div>
-        <div class="cta-contact">
-          <span id="cta-contact-label">שאלות? פנו אלינו בכתובת</span>
-          <a id="cta-contact-link" href="mailto:once.app.support@gmail.com?subject=שאלה%20ל-Once">once.app.support@gmail.com</a>
-        </div>
-      </div>
+    <section class="band" id="sec-hearts-wrap">
+      <div class="container"><div id="sec-hearts"></div></div>
+    </section>
+
+    <section class="band band--tint" id="sec-matching-wrap">
+      <div class="container"><div id="sec-matching"></div></div>
+    </section>
+
+    <section class="band" id="sec-safety-wrap">
+      <div class="container"><div id="sec-safety"></div></div>
+    </section>
+
+    <section class="band band--tint" id="faq">
+      <div class="container"><div id="sec-faq"></div></div>
+    </section>
+
+    <section class="band" id="sec-final-wrap">
+      <div class="container"><div id="sec-final"></div></div>
     </section>
   </main>
 
   <footer class="footer">
-    <div class="footer-links">
-      <a id="link-privacy" href="privacy.html">מדיניות פרטיות</a>
-      <span class="sep">·</span>
-      <a id="link-terms" href="terms.html">תנאי שימוש</a>
-      <span class="sep">·</span>
-      <a id="link-safety" href="child-safety.html">תקני בטיחות ילדים</a>
+    <div class="container">
+      <div class="footer-links" id="footer-links"></div>
+      <div class="footer-copy" id="footer-copy">© Once 2026</div>
     </div>
-    <div id="copyright">© Once 2026</div>
   </footer>
 
+  <!-- Sticky mobile download CTA -->
+  <div class="mobile-cta" id="mobile-cta">
+    <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
+  </div>
+
   <script>
-    const params = new URLSearchParams(location.search)
-    const urlLang = params.get('lang')
-    const browserLang = (() => {
-      const l = (navigator.language || '').toLowerCase()
-      if (l.startsWith('he')) return 'he'
-      if (l.startsWith('ru')) return 'ru'
-      return 'en'
-    })()
-    const SUPPORTED = ['he', 'en', 'ru']
-    const LANG_CODE = { he: 'HE', en: 'EN', ru: 'RU' }
-    let lang = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang
+  (function () {
+    'use strict';
 
-    const STRINGS = {
+    var DOWNLOAD_URL = 'download.html';
+    var SUPPORTED = ['he', 'en', 'ru'];
+    var LANG_CODE = { he: 'HE', en: 'EN', ru: 'RU' };
+    var OG_LOCALE = { he: 'he_IL', en: 'en_US', ru: 'ru_RU' };
+
+    /* ---------- Custom icon set (not Lucide) ---------- */
+    var IC = {
+      image: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="9.5" r="1.6" fill="currentColor"/><path d="M4 17l4.5-4.5 3 3L15 12l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      heart: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M12 20s-7-4.4-7-9.3A4.2 4.2 0 0 1 12 7.6a4.2 4.2 0 0 1 7 3.1C19 15.6 12 20 12 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="1.6"/><path d="M12 7.6V12l3 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      user: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><circle cx="12" cy="8.4" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 19a6.5 6.5 0 0 1 13 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+      users: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><circle cx="9" cy="8.6" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M3.6 18.4a5.4 5.4 0 0 1 10.8 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M15.6 6.2a3 3 0 0 1 0 5.9M17 18.4a5.4 5.4 0 0 0-2.2-4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+      shield: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M12 3.5l6.5 2.4V11c0 4.4-2.9 7.6-6.5 9-3.6-1.4-6.5-4.6-6.5-9V5.9L12 3.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.3 12l1.9 1.9 3.6-3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      pin: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M12 21c4-3.6 6.5-6.7 6.5-10A6.5 6.5 0 0 0 5.5 11c0 3.3 2.5 6.4 6.5 10z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10.8" r="2.3" stroke="currentColor" stroke-width="1.6"/></svg>',
+      spark: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M12 3.5c.6 4 1.9 5.3 5.9 5.9-4 .6-5.3 1.9-5.9 5.9-.6-4-1.9-5.3-5.9-5.9 4-.6 5.3-1.9 5.9-5.9z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+      check: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.5"/><path d="M8.4 12.2l2.4 2.4 4.8-4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      plus: '<svg class="faq-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      refresh: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M5 12a7 7 0 0 1 12-4.9M19 12a7 7 0 0 1-12 4.9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M17 4v3.2h-3.2M7 20v-3.2h3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      sliders: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="7" r="2.1" fill="currentColor"/><circle cx="15" cy="12" r="2.1" fill="currentColor"/><circle cx="8" cy="17" r="2.1" fill="currentColor"/></svg>',
+      handshake: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M12 8l2-1.6a2.4 2.4 0 0 1 3 .2l3 2.7M12 8l-2-1.6a2.4 2.4 0 0 0-3 .2L4 9.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9.3v4.2l4 3.4a1.8 1.8 0 0 0 2.6-.3l.4-.5.7.5a1.7 1.7 0 0 0 2.4-.4l.3-.5.6.3a1.6 1.6 0 0 0 2-2.4L20 9.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      ban: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="1.6"/><path d="M6.4 6.4l11.2 11.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+      flag: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M6 21V4M6 5h9l-1.5 3L15 11H6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      eye: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>',
+      forward: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M13 6l6 6-6 6M5 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    };
+
+    /* ---------- Translations (he = source) ---------- */
+    var STRINGS = {
       he: {
-        title: 'Once | רק אחד עכשיו',
         dir: 'rtl',
-        download: 'להורדת האפליקציה',
-        login: 'התחברות',
+        title: 'Once | להכיר באמת, אדם אחד בכל פעם',
+        metaDescription: 'אפליקציית היכרויות בלי אינסוף החלקות. Once מציגה אדם אחד בכל פעם ויוצרת היכרות ממוקדת, חיה ומכוונת יותר.',
+        ogDescription: 'אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת.',
+        ui: { preview: 'תצוגה מקדימה', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
+        nav: { why: 'למה Once', how: 'איך זה עובד', faq: 'שאלות נפוצות', login: 'התחברות' },
+        availability: 'זמין כרגע באנדרואיד',
         hero: {
-          slogan: 'רק אחד עכשיו',
-          title: 'הכרויות בזמן אמת, עם אדם אחד בכל פעם',
-          sub: 'בלי עשרות שיחות פתוחות. בלי דפדוף אינסופי. רק מפגש אחד, כששניכם באמת שם.',
-          ctaPrimary: 'להרשמה לערב החשיפה',
-          ctaSecondary: 'איך זה עובד?',
-          pills: ['אדם אחד', 'בזמן אמת', 'בלי רעשי רקע']
+          eyebrow: 'אדם אחד עכשיו',
+          title: { lines: ['להכיר באמת.', 'אדם אחד בכל פעם.'], accent: true },
+          sub: 'Once היא אפליקציית היכרויות שנבנתה אחרת: בלי אינסוף החלקות, בלי עשרות שיחות במקביל ובלי ללכת לאיבוד בתוך יותר מדי אפשרויות. בכל רגע פוגשים אדם אחד, מתמקדים ומחליטים בכוונה.',
+          ctaSecondary: 'לראות איך זה עובד',
+          pills: ['אדם אחד בכל פעם', 'בזמן אמת', 'בלי רעש'],
+          media: { name: 'מסך Once — אדם אחד', desc: 'מסך האפליקציה שבו מופיע אדם אחד בלבד, עם כפתור לשליחת הזמנה.' }
         },
         problem: {
-          eyebrow: 'הבעיה',
-          title: 'הבעיה היא לא שאין אנשים. הבעיה היא שאין פוקוס.',
-          body: 'באפליקציות הכרויות רגילות הכול קורה במקביל:<br>עוד פרופיל, עוד התאמה, עוד שיחה, עוד התלבטות.<br>בסוף זה מרגיש פחות כמו להכיר מישהו<br>ויותר כמו לנהל רשימה.',
-          points: ['יותר מדי אפשרויות', 'פחות מדי נוכחות', 'שיחות שנמרחות בלי כיוון']
+          eyebrow: 'יותר מדי אפשרויות',
+          title: { lines: ['הבעיה היא לא שאין אנשים.', 'הבעיה היא שאין פוקוס.'], accent: true },
+          body: [
+            'אפליקציות היכרויות רגילות בנויות כדי שנמשיך לגלול.',
+            'עוד פרופיל. עוד החלקה. עוד מאצ׳. עוד שיחה שלא באמת מתחילה.',
+            'כשהכול זמין כל הזמן, כל אדם מקבל פחות תשומת לב.'
+          ],
+          points: [
+            'יותר אפשרויות, פחות החלטות',
+            'יותר מאצ׳ים, פחות שיחות אמיתיות',
+            'יותר גלילה, פחות נוכחות',
+            'יותר אנשים פתוחים במקביל, פחות מקום לאדם שמולכם'
+          ],
+          media: { name: 'עומס מול מיקוד', desc: 'מסך עמוס בכרטיסי פרופיל רבים שהופכים בהדרגה לכרטיס אחד ברור.' }
         },
-        solution: {
-          eyebrow: 'הפתרון',
-          title: 'ב־Once הכול קורה אחרת',
-          body: 'במקום להיות פתוחים לעשרות אנשים במקביל,<br>Once יוצרת רגע אחד ברור:<br>אתם כאן, הצד השני כאן,<br>ועכשיו יש מקום לבדוק אם יש חיבור אמיתי.',
-          points: ['אדם אחד בכל פעם', 'שיחה בזמן אמת', 'בלי רעשי רקע', 'בלי תחושת קטלוג']
+        difference: {
+          eyebrow: 'הדרך של Once',
+          title: { lines: ['מסך אחד.', 'אדם אחד.', 'החלטה אחת.'], accent: true },
+          body: [
+            'Once לא מנסה להציג לכם כמה שיותר אנשים. היא בוחרת עבורכם את האדם הרלוונטי ביותר כרגע ונותנת לכם רגע להתמקד בו.',
+            'לא מתאים? ממשיכים. מתאים? שולחים הזמנה. אין צורך לנהל עשרות אפשרויות במקביל.'
+          ],
+          cards: [
+            { icon: 'user', title: 'אדם אחד בכל פעם', body: 'במקום ערימת כרטיסים, פוגשים אדם אחד ומחליטים לגביו.' },
+            { icon: 'heart', title: 'תשומת לב בעלת ערך', body: 'שליחת הזמנה עולה לב, ולכן כל פנייה מתחילה מכוונה אמיתית.' },
+            { icon: 'clock', title: 'תגובה בזמן אמת', body: 'ההזמנה פתוחה במשך 10 דקות ולא נשארת תלויה במשך ימים.' },
+            { icon: 'users', title: 'חוויה דו-כיוונית', body: 'בזמן שאתם בוחרים אדם אחד, מישהו אחר יכול לבחור בכם.' }
+          ],
+          media: { name: 'ארבעת עקרונות הבידול', desc: 'אינפוגרפיקה הממחישה אדם אחד, לב אחד, טיימר והזמנה נכנסת.' }
         },
         how: {
-          eyebrow: 'איך זה עובד',
-          title: 'שלושה צעדים פשוטים',
+          eyebrow: 'חמישה צעדים',
+          title: { lines: ['פחות מורכב ממה שהתרגלתם.'], accent: false },
           steps: [
-            { title: 'נכנסים כשפנויים', body: 'אתם בוחרים מתי להיות זמינים ומתי לא.' },
-            { title: 'מתמקדים באדם אחד', body: 'בכל רגע יש רק חיבור אחד על המסך. בלי מקביליות.' },
-            { title: 'אם יש עניין, מדברים', body: 'אם שני הצדדים בעניין, השיחה מתחילה בזמן אמת.' }
+            { title: 'יוצרים פרופיל', body: 'נכנסים בלי סיסמה ובונים פרופיל קצר עם תמונות וכמה מילים על עצמכם.', media: { name: 'יצירת פרופיל', desc: 'מסך יצירת פרופיל קצר עם תמונות וטקסט.' } },
+            { title: 'המערכת מוצאת אדם אחד', body: 'Once בוחרת את האדם המתאים ביותר עבורכם כרגע.', media: { name: 'מציאת מועמד', desc: 'אנימציית החיפוש והופעת מועמד אחד.' } },
+            { title: 'מחליטים', body: 'לא מתאים? ממשיכים הלאה. מתאים? שולחים הזמנה.', media: { name: 'החלטה ושליחת הזמנה', desc: 'כרטיס משתמש עם שתי פעולות ברורות.' } },
+            { title: 'מחכים עד 10 דקות', body: 'האדם השני מקבל הזמנה בזמן אמת ויכול לקבל או לדחות אותה.', media: { name: 'שעון 10 דקות', desc: 'מסך הזמנה עם שעון ספירה לאחור.' } },
+            { title: 'מתחילים לדבר', body: 'כשההזמנה מתקבלת, נוצר Match והצ׳אט נפתח מיד.', media: { name: 'Match וצ׳אט', desc: 'מסך Match ומעבר לצ׳אט.' } }
           ]
         },
-        why: {
-          eyebrow: 'למה זה שונה',
-          title: 'פחות דפדוף. יותר מפגש.',
+        psychology: {
+          eyebrow: 'מאחורי החוויה',
+          title: { lines: ['פחות אפשרויות.', 'יותר תשומת לב.'], accent: true },
+          intro: 'Once לא מנסה לגרום לכם לבלות יותר זמן באפליקציה. היא מנסה ליצור רגע שבו אדם אחד באמת מקבל מקום.',
+          cards: [
+            { icon: 'sliders', title: 'פחות עומס בחירה', body: 'כשלא עוברים בין עשרות פרופילים, קל יותר להרגיש אם האדם שמולכם באמת מעניין אתכם.' },
+            { icon: 'heart', title: 'מחסור שיוצר משמעות', body: 'הלבבות מוגבלים, ולכן שליחת הזמנה היא החלטה ולא רפלקס.' },
+            { icon: 'clock', title: 'זמן אמת שיוצר נוכחות', body: 'חלון תגובה של 10 דקות שומר את שני הצדדים באותו רגע.' },
+            { icon: 'handshake', title: 'פעולה הדדית', body: 'כל משתמש יכול להיות גם מי שבוחר וגם מי שנבחר.' }
+          ],
+          emphasis: { lines: ['המטרה אינה להכיר יותר אנשים.', 'המטרה היא לתת יותר סיכוי לאדם אחד.'], accent: true },
+          media: { name: 'המנגנון הפסיכולוגי', desc: 'המחשה מופשטת של מעבר מרעש והצפה למיקוד ונוכחות.' }
+        },
+        dualRole: {
+          eyebrow: 'שני הצדדים חיים',
+          title: { lines: ['בזמן שאתם מתעניינים במישהו,', 'מישהו יכול להתעניין בכם.'], accent: true },
+          body: [
+            'הזמנה נכנסת יכולה להגיע בכל רגע, גם בזמן שאתם בוחנים אדם אחר.',
+            'כך החוויה אינה רשימה חד-צדדית של מועמדים. אתם יכולים ליזום, להיבחר ולהחליט בזמן אמת.'
+          ],
+          media: { name: 'יוזם ונבחר בו-זמנית', desc: 'שני משתמשים שכל אחד יכול לשלוח ולקבל הזמנה באותו הזמן.' }
+        },
+        hearts: {
+          eyebrow: 'מטבע של תשומת לב',
+          title: { lines: ['כשכל פנייה עולה משהו,', 'היא גם שווה יותר.'], accent: true },
+          body: [
+            'שליחת הזמנה עולה לב מתוך מלאי יומי מוגבל. המטרה אינה למנוע מכם לפנות לאנשים, אלא להפוך כל פנייה לפעולה מודעת.',
+            'כאשר הזמנה נדחית או פגה, הלב חוזר. כך האפליקציה מתגמלת כוונה ולא גלילה אוטומטית.'
+          ],
+          cards: [
+            { icon: 'refresh', title: 'מלאי שמתחדש בכל יום', body: 'מקבלים מכסת לבבות יומית חדשה.' },
+            { icon: 'heart', title: 'לב אחד לכל הזמנה', body: 'כל הזמנה היא בחירה מודעת.' },
+            { icon: 'check', title: 'פחות פניות אקראיות', body: 'שולחים הזמנה רק כשבאמת מעוניינים.' }
+          ],
+          media: { name: 'לבבות', desc: 'ממשק לבבות והמחשה של לב שנשלח עם הזמנה.' }
+        },
+        matching: {
+          eyebrow: 'לא בחירה אקראית',
+          title: { lines: ['האדם הנכון ביותר', 'לרגע הזה.'], accent: true },
+          body: [
+            'Once לא מציגה סתם פרופיל. המערכת בוחנת שילוב של קרבה, גיל, פעילות אחרונה, התאמת אורח חיים, קבוצות משותפות ונתונים רלוונטיים נוספים.',
+            'החוויה בנויה סביב אזורים, קהילות וזמינות אמיתית. המטרה היא להציג אנשים שאפשר באמת לפגוש, ולא פרופילים שנעלמו לפני חודשים.'
+          ],
+          chips: [
+            { icon: 'pin', label: 'קרבה' },
+            { icon: 'spark', label: 'פעילות אחרונה' },
+            { icon: 'users', label: 'התאמת אורח חיים' },
+            { icon: 'handshake', label: 'קבוצות משותפות' },
+            { icon: 'clock', label: 'זמינות בזמן אמת' }
+          ],
+          media: { name: 'התאמה מקומית', desc: 'המחשה של מנגנון התאמה מקומי עם נקודות קרובות על מפה מופשטת.' }
+        },
+        safety: {
+          eyebrow: 'אתם מחליטים',
+          title: { lines: ['שליטה מלאה בכל שלב.'], accent: false },
+          points: [
+            { icon: 'forward', label: 'אפשר להמשיך הלאה' },
+            { icon: 'ban', label: 'אפשר לבטל הזמנה' },
+            { icon: 'clock', label: 'אפשר לסיים שיחה' },
+            { icon: 'shield', label: 'אפשר לחסום' },
+            { icon: 'flag', label: 'אפשר לדווח' },
+            { icon: 'eye', label: 'אפשר לשלוט בנראות' }
+          ],
+          body: 'Once מתוכננת כך שכל אחד מהצדדים יוכל להציב גבול במהירות ובבהירות.',
+          media: { name: 'בטיחות', desc: 'מסך פעולות בטיחות הכולל סיום שיחה, חסימה ודיווח.' }
+        },
+        faq: {
+          title: 'שאלות נפוצות',
           items: [
-            { title: 'בלי שיחות במקביל', body: 'כדי שלא תרגישו שאתם מתחרים על תשומת לב.' },
-            { title: 'בלי אינסוף פרופילים', body: 'כדי שהחוויה לא תרגיש כמו קטלוג.' },
-            { title: 'בזמן אמת', body: 'כדי שהחיבור יקרה כששניכם באמת שם.' },
-            { title: 'בשליטה שלכם', body: 'אתם מחליטים מתי להופיע, לדבר ולעצור.' }
+            { q: 'האם רואים הרבה אנשים בבת אחת?', a: 'לא. Once מציגה אדם אחד בכל פעם.' },
+            { q: 'מה קורה אם אני לא מעוניין?', a: 'ממשיכים הלאה ומקבלים בהמשך מועמד אחר.' },
+            { q: 'מהו לב?', a: 'לב הוא המטבע שמשמש לשליחת הזמנה. מלאי הלבבות מוגבל ומתחדש.' },
+            { q: 'כמה זמן נשארת הזמנה פתוחה?', a: 'הזמנה נשארת פתוחה במשך 10 דקות.' },
+            { q: 'מה קורה אם אין תשובה?', a: 'ההזמנה פגה בעדינות ואפשר להמשיך.' },
+            { q: 'מה קורה כשהזמנה מתקבלת?', a: 'נוצר Match והצ׳אט נפתח מיד.' },
+            { q: 'למה צריך להפעיל התראות?', a: 'האפליקציה מבוססת על תגובות בזמן אמת, ולכן ההתראות מאפשרות לא לפספס הזמנה.' },
+            { q: 'האם אפשר לחסום או לדווח?', a: 'כן. אפשר לסיים שיחה, לחסום ולדווח דרך האפליקציה.' },
+            { q: 'האם Once פעילה בכל מקום?', a: 'Once נפתחת בהדרגה באזורים ובקהילות שונות. האפליקציה תציג לכם אם האזור שלכם פעיל.' }
           ]
         },
-        trust: {
-          eyebrow: 'אמון',
-          title: 'אתם בשליטה',
-          body: 'Once לא דוחפת אתכם להיות זמינים כל הזמן.<br>אתם בוחרים מתי להופיע,<br>עם מי להמשיך לדבר,<br>ומתי לעצור.',
-          items: [
-            'אפשר להיות זמינים רק כשמתאים לכם',
-            'אפשר לסיים שיחה בכל רגע',
-            'אין חובה לענות לכולם',
-            'אין ריבוי שיחות שמפעיל לחץ'
-          ]
+        finalCta: {
+          eyebrow: 'אולי הגיע הזמן להכיר אחרת',
+          title: { lines: ['פחות גלילה.', 'יותר סיכוי שמשהו באמת יתחיל.'], accent: true },
+          body: 'Once נבנתה עבור אנשים שרוצים להכיר בלי ללכת לאיבוד בתוך אינסוף אפשרויות.',
+          emphasis: { lines: ['אדם אחד. רגע אחד. החלטה אמיתית.'], accent: true },
+          media: { name: 'מסכי האפליקציה', desc: 'שלושה מסכי אפליקציה המציגים מציאת אדם, הזמנה וצ׳אט.' }
         },
-        cta: {
-          title: 'רוצים להיות בין הראשונים?',
-          sub: 'Once נבנית לאנשים שרוצים להכיר בצורה נוכחת, פשוטה ואמיתית.',
-          button: 'להרשמה לערב החשיפה'
-        },
-        contact: {
-          label: 'שאלות? פנו אלינו בכתובת',
-          subject: 'שאלה ל-Once'
-        },
-        footer: {
-          privacy: 'מדיניות פרטיות',
-          terms: 'תנאי שימוש',
-          safety: 'תקני בטיחות ילדים',
-          copyright: '© Once 2026'
-        }
+        contact: { label: 'שאלות? אפשר לכתוב לנו:', subject: 'שאלה ל-Once' },
+        footer: { privacy: 'מדיניות פרטיות', terms: 'תנאי שימוש', safety: 'תקני בטיחות ילדים', copyright: '© Once 2026' }
       },
+
       en: {
-        title: 'Once | Just one. Now.',
         dir: 'ltr',
-        download: 'Download the app',
-        login: 'Login',
+        title: 'Once | Meet for real, one person at a time',
+        metaDescription: 'A dating app without endless swiping. Once shows one person at a time for a focused, real-time, more intentional way to meet.',
+        ogDescription: 'A dating app without endless swiping. One person at a time, in real time.',
+        ui: { preview: 'Preview', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
+        nav: { why: 'Why Once', how: 'How it works', faq: 'FAQ', login: 'Login' },
+        availability: 'Currently available on Android',
         hero: {
-          slogan: 'Just one. Now.',
-          title: 'Real-time dating, one person at a time',
-          sub: 'No dozens of open chats. No endless scrolling. Just one meeting, when both of you are really there.',
-          ctaPrimary: 'Register for the launch event',
-          ctaSecondary: 'How it works',
-          pills: ['One person', 'Real-time', 'No background noise']
+          eyebrow: 'One person, now',
+          title: { lines: ['Meet for real.', 'One person at a time.'], accent: true },
+          sub: 'Once is a dating app built differently: no endless swiping, no dozens of parallel chats, and no getting lost in too many options. Every moment, you meet one person, focus, and choose on purpose.',
+          ctaSecondary: 'See how it works',
+          pills: ['One at a time', 'Real time', 'No noise'],
+          media: { name: 'Once screen — one person', desc: 'The app screen showing a single person, with a button to send an invitation.' }
         },
         problem: {
-          eyebrow: 'The problem',
-          title: "The problem isn't that there aren't enough people. The problem is that there's no focus.",
-          body: 'On regular dating apps, everything happens in parallel: another profile, another match, another chat, another decision. In the end it feels less like meeting someone and more like managing a list.',
-          points: ['Too many options', 'Not enough presence', 'Conversations that drift']
+          eyebrow: 'Too many options',
+          title: { lines: ["The problem isn't a lack of people.", "It's a lack of focus."], accent: true },
+          body: [
+            'Regular dating apps are built to keep you scrolling.',
+            'Another profile. Another swipe. Another match. Another chat that never really begins.',
+            'When everything is available all the time, every person gets less attention.'
+          ],
+          points: [
+            'More options, fewer decisions',
+            'More matches, fewer real conversations',
+            'More scrolling, less presence',
+            'More people open in parallel, less room for the person in front of you'
+          ],
+          media: { name: 'Overload vs. focus', desc: 'A screen crowded with many profile cards that gradually resolves into one clear card.' }
         },
-        solution: {
-          eyebrow: 'The solution',
-          title: 'On Once, everything works differently',
-          body: 'Instead of being open to dozens of people in parallel, Once creates one clear moment: you are here, the other person is here, and now there is space to find out if there is a real connection.',
-          points: ['One person at a time', 'Real-time conversation', 'No background noise', 'No catalog feel']
+        difference: {
+          eyebrow: 'The Once way',
+          title: { lines: ['One screen.', 'One person.', 'One decision.'], accent: true },
+          body: [
+            "Once doesn't try to show you as many people as possible. It picks the most relevant person for you right now and gives you a moment to focus on them.",
+            'Not a match? Move on. A match? Send an invitation. No need to juggle dozens of options at once.'
+          ],
+          cards: [
+            { icon: 'user', title: 'One person at a time', body: 'Instead of a pile of cards, you meet one person and decide about them.' },
+            { icon: 'heart', title: 'Attention that matters', body: 'Sending an invitation costs a heart, so every reach-out starts from real intent.' },
+            { icon: 'clock', title: 'Real-time response', body: 'An invitation stays open for 10 minutes, it never lingers for days.' },
+            { icon: 'users', title: 'A two-way experience', body: 'While you choose one person, someone else can be choosing you.' }
+          ],
+          media: { name: 'The four principles', desc: 'An infographic illustrating one person, one heart, a timer, and an incoming invitation.' }
         },
         how: {
-          eyebrow: 'How it works',
-          title: 'Three simple steps',
+          eyebrow: 'Five steps',
+          title: { lines: ['Simpler than you are used to.'], accent: false },
           steps: [
-            { title: 'Show up when you are free', body: 'You decide when to be available and when not.' },
-            { title: 'Focus on one person', body: 'At any moment there is only one connection on screen. No parallel chats.' },
-            { title: 'If there is interest, you talk', body: 'If both sides are interested, the conversation begins in real time.' }
+            { title: 'Create a profile', body: 'Sign in without a password and build a short profile with photos and a few words about you.', media: { name: 'Create profile', desc: 'A short profile-creation screen with photos and text.' } },
+            { title: 'The app finds one person', body: 'Once picks the person best suited for you right now.', media: { name: 'Finding a candidate', desc: 'The search animation and one candidate appearing.' } },
+            { title: 'Decide', body: 'Not a match? Move on. A match? Send an invitation.', media: { name: 'Decide and invite', desc: 'A profile card with two clear actions.' } },
+            { title: 'Wait up to 10 minutes', body: 'The other person gets the invitation in real time and can accept or decline.', media: { name: '10-minute timer', desc: 'An invitation screen with a countdown clock.' } },
+            { title: 'Start talking', body: 'When the invitation is accepted, a match is made and the chat opens right away.', media: { name: 'Match and chat', desc: 'A match screen leading into the chat.' } }
           ]
         },
-        why: {
-          eyebrow: 'Why it is different',
-          title: 'Less scrolling. More meeting.',
+        psychology: {
+          eyebrow: 'Behind the experience',
+          title: { lines: ['Fewer options.', 'More attention.'], accent: true },
+          intro: "Once isn't trying to make you spend more time in the app. It's trying to create a moment where one person really gets space.",
+          cards: [
+            { icon: 'sliders', title: 'Less choice overload', body: "When you're not flipping through dozens of profiles, it's easier to feel whether the person in front of you actually interests you." },
+            { icon: 'heart', title: 'Scarcity that creates meaning', body: 'Hearts are limited, so sending an invitation is a decision, not a reflex.' },
+            { icon: 'clock', title: 'Real time creates presence', body: 'A 10-minute response window keeps both sides in the same moment.' },
+            { icon: 'handshake', title: 'A mutual action', body: 'Every user can be both the one who chooses and the one who is chosen.' }
+          ],
+          emphasis: { lines: ['The goal is not to meet more people.', 'The goal is to give one person a better chance.'], accent: true },
+          media: { name: 'The psychology', desc: 'An abstract illustration of moving from noise and overload to focus and presence.' }
+        },
+        dualRole: {
+          eyebrow: 'Both sides are live',
+          title: { lines: ['While you take interest in someone,', 'someone can take interest in you.'], accent: true },
+          body: [
+            "An incoming invitation can arrive at any moment, even while you're considering someone else.",
+            "So the experience isn't a one-way list of candidates. You can initiate, be chosen, and decide in real time."
+          ],
+          media: { name: 'Initiator and chosen at once', desc: 'Two users, each able to send and receive an invitation at the same time.' }
+        },
+        hearts: {
+          eyebrow: 'A currency of attention',
+          title: { lines: ['When every reach-out costs something,', "it's also worth more."], accent: true },
+          body: [
+            'Sending an invitation costs a heart from a limited daily balance. The goal is not to stop you from reaching out, but to make every reach-out a conscious act.',
+            'When an invitation is declined or expires, the heart comes back. The app rewards intent, not automatic scrolling.'
+          ],
+          cards: [
+            { icon: 'refresh', title: 'Balance renews daily', body: 'You get a fresh daily allowance of hearts.' },
+            { icon: 'heart', title: 'One heart per invitation', body: 'Every invitation is a conscious choice.' },
+            { icon: 'check', title: 'Fewer random reach-outs', body: 'You send an invitation only when you truly mean it.' }
+          ],
+          media: { name: 'Hearts', desc: 'The hearts interface and an illustration of a heart sent with an invitation.' }
+        },
+        matching: {
+          eyebrow: 'Not a random pick',
+          title: { lines: ['The right person', 'for this moment.'], accent: true },
+          body: [
+            'Once never shows just any profile. It weighs a mix of proximity, age, recent activity, lifestyle fit, shared groups, and other relevant signals.',
+            'The experience is built around areas, communities, and real availability. The goal is to show people you can actually meet, not profiles that vanished months ago.'
+          ],
+          chips: [
+            { icon: 'pin', label: 'Proximity' },
+            { icon: 'spark', label: 'Recent activity' },
+            { icon: 'users', label: 'Lifestyle fit' },
+            { icon: 'handshake', label: 'Shared groups' },
+            { icon: 'clock', label: 'Real-time availability' }
+          ],
+          media: { name: 'Local matching', desc: 'An illustration of local matching with nearby points on an abstract map.' }
+        },
+        safety: {
+          eyebrow: 'You decide',
+          title: { lines: ['Full control at every step.'], accent: false },
+          points: [
+            { icon: 'forward', label: 'You can move on' },
+            { icon: 'ban', label: 'You can cancel an invitation' },
+            { icon: 'clock', label: 'You can end a conversation' },
+            { icon: 'shield', label: 'You can block' },
+            { icon: 'flag', label: 'You can report' },
+            { icon: 'eye', label: 'You can control your visibility' }
+          ],
+          body: 'Once is designed so that either side can set a boundary quickly and clearly.',
+          media: { name: 'Safety', desc: 'A safety-actions screen with end conversation, block, and report.' }
+        },
+        faq: {
+          title: 'Frequently asked questions',
           items: [
-            { title: 'No parallel chats', body: 'So you do not feel like you are competing for attention.' },
-            { title: 'No infinite profiles', body: 'So the experience does not feel like a catalog.' },
-            { title: 'In real time', body: 'So the connection happens when both people are really there.' },
-            { title: 'In your control', body: 'You decide when to appear, when to talk, and when to stop.' }
+            { q: 'Do I see many people at once?', a: 'No. Once shows one person at a time.' },
+            { q: "What if I'm not interested?", a: 'You move on and get another candidate later.' },
+            { q: 'What is a heart?', a: 'A heart is the currency used to send an invitation. The balance is limited and renews.' },
+            { q: 'How long does an invitation stay open?', a: 'An invitation stays open for 10 minutes.' },
+            { q: 'What happens if there is no reply?', a: 'The invitation expires gently and you can move on.' },
+            { q: 'What happens when an invitation is accepted?', a: 'A match is made and the chat opens right away.' },
+            { q: 'Why do I need to enable notifications?', a: 'The app is based on real-time responses, so notifications let you not miss an invitation.' },
+            { q: 'Can I block or report?', a: 'Yes. You can end a conversation, block, and report from inside the app.' },
+            { q: 'Is Once active everywhere?', a: 'Once opens gradually in different areas and communities. The app will show you whether your area is active.' }
           ]
         },
-        trust: {
-          eyebrow: 'Trust',
-          title: 'You are in control',
-          body: 'Once does not push you to be available all the time. You choose when to appear, who to continue with, and when to end.',
-          items: [
-            'Be available only when it suits you',
-            'End any conversation at any moment',
-            'No obligation to reply to everyone',
-            'No multiple chats creating pressure'
-          ]
+        finalCta: {
+          eyebrow: 'Maybe it is time to meet differently',
+          title: { lines: ['Less scrolling.', 'A better chance something actually begins.'], accent: true },
+          body: 'Once was built for people who want to meet without getting lost in endless options.',
+          emphasis: { lines: ['One person. One moment. A real decision.'], accent: true },
+          media: { name: 'App screens', desc: 'Three app screens showing finding a person, an invitation, and a chat.' }
         },
-        cta: {
-          title: 'Want to be among the first?',
-          sub: 'Once is for people who want to meet in a present, simple, real way.',
-          button: 'Register for the launch event'
-        },
-        contact: {
-          label: 'Have questions? Contact us at',
-          subject: 'Question for Once'
-        },
-        footer: {
-          privacy: 'Privacy Policy',
-          terms: 'Terms of Service',
-          safety: 'Child Safety Standards',
-          copyright: '© Once 2026'
-        }
+        contact: { label: 'Questions? Write to us:', subject: 'Question for Once' },
+        footer: { privacy: 'Privacy Policy', terms: 'Terms of Service', safety: 'Child Safety Standards', copyright: '© Once 2026' }
       },
+
       ru: {
-        title: 'Once | Только один. Сейчас.',
         dir: 'ltr',
-        download: 'Скачать приложение',
-        login: 'Войти',
+        title: 'Once | Настоящие знакомства, по одному человеку',
+        metaDescription: 'Приложение для знакомств без бесконечных свайпов. Once показывает одного человека за раз, для сфокусированного и настоящего знакомства в реальном времени.',
+        ogDescription: 'Приложение для знакомств без бесконечных свайпов. По одному человеку за раз, в реальном времени.',
+        ui: { preview: 'Превью', download: 'Скачать приложение', menu: 'Меню', close: 'Закрыть', skip: 'Перейти к содержимому' },
+        nav: { why: 'Почему Once', how: 'Как это работает', faq: 'Вопросы', login: 'Войти' },
+        availability: 'Сейчас доступно на Android',
         hero: {
-          slogan: 'Только один. Сейчас.',
-          title: 'Знакомства в реальном времени, по одному человеку за раз',
-          sub: 'Никаких десятков открытых чатов. Никакого бесконечного скролла. Только одна встреча, когда вы оба действительно здесь.',
-          ctaPrimary: 'Регистрация на презентацию',
-          ctaSecondary: 'Как это работает',
-          pills: ['Один человек', 'В реальном времени', 'Без шума']
+          eyebrow: 'Один человек, сейчас',
+          title: { lines: ['Знакомиться по-настоящему.', 'По одному человеку за раз.'], accent: true },
+          sub: 'Once, приложение для знакомств, устроенное иначе: без бесконечных свайпов, без десятков параллельных чатов и без ощущения, что вы теряетесь среди слишком многих вариантов. В каждый момент вы встречаете одного человека, сосредотачиваетесь и выбираете осознанно.',
+          ctaSecondary: 'Посмотреть, как это работает',
+          pills: ['По одному', 'В реальном времени', 'Без шума'],
+          media: { name: 'Экран Once — один человек', desc: 'Экран приложения, где показан один человек и кнопка отправить приглашение.' }
         },
         problem: {
-          eyebrow: 'Проблема',
-          title: 'Проблема не в том, что нет людей. Проблема в том, что нет фокуса.',
-          body: 'В обычных приложениях знакомств всё происходит параллельно: ещё один профиль, ещё одно совпадение, ещё один разговор, ещё одно решение. В итоге это меньше похоже на знакомство и больше на ведение списка.',
-          points: ['Слишком много вариантов', 'Мало присутствия', 'Разговоры без направления']
+          eyebrow: 'Слишком много вариантов',
+          title: { lines: ['Проблема не в том, что нет людей.', 'Проблема в том, что нет фокуса.'], accent: true },
+          body: [
+            'Обычные приложения для знакомств устроены так, чтобы вы продолжали листать.',
+            'Ещё профиль. Ещё свайп. Ещё совпадение. Ещё разговор, который так и не начинается.',
+            'Когда всё доступно постоянно, каждому человеку достаётся меньше внимания.'
+          ],
+          points: [
+            'Больше вариантов, меньше решений',
+            'Больше совпадений, меньше настоящих разговоров',
+            'Больше скролла, меньше присутствия',
+            'Больше людей параллельно, меньше места для того, кто перед вами'
+          ],
+          media: { name: 'Перегрузка против фокуса', desc: 'Экран, заполненный множеством карточек профилей, который постепенно превращается в одну ясную карточку.' }
         },
-        solution: {
-          eyebrow: 'Решение',
-          title: 'В Once всё устроено иначе',
-          body: 'Вместо того чтобы быть открытыми для десятков людей одновременно, Once создаёт один ясный момент: вы здесь, другой человек здесь, и сейчас есть место проверить, есть ли настоящая связь.',
-          points: ['Один человек за раз', 'Разговор в реальном времени', 'Без фонового шума', 'Без ощущения каталога']
+        difference: {
+          eyebrow: 'Путь Once',
+          title: { lines: ['Один экран.', 'Один человек.', 'Одно решение.'], accent: true },
+          body: [
+            'Once не пытается показать вам как можно больше людей. Она выбирает для вас самого подходящего человека прямо сейчас и даёт момент сосредоточиться на нём.',
+            'Не подходит? Идёте дальше. Подходит? Отправляете приглашение. Не нужно вести десятки вариантов одновременно.'
+          ],
+          cards: [
+            { icon: 'user', title: 'По одному человеку за раз', body: 'Вместо стопки карточек вы встречаете одного человека и принимаете решение о нём.' },
+            { icon: 'heart', title: 'Внимание, которое ценно', body: 'Отправка приглашения стоит сердце, поэтому каждое обращение начинается с настоящего намерения.' },
+            { icon: 'clock', title: 'Ответ в реальном времени', body: 'Приглашение открыто 10 минут и не висит днями.' },
+            { icon: 'users', title: 'Двусторонний опыт', body: 'Пока вы выбираете одного человека, кто-то может выбирать вас.' }
+          ],
+          media: { name: 'Четыре принципа', desc: 'Инфографика: один человек, одно сердце, таймер и входящее приглашение.' }
         },
         how: {
-          eyebrow: 'Как это работает',
-          title: 'Три простых шага',
+          eyebrow: 'Пять шагов',
+          title: { lines: ['Проще, чем вы привыкли.'], accent: false },
           steps: [
-            { title: 'Заходите, когда свободны', body: 'Вы выбираете, когда быть доступными, а когда нет.' },
-            { title: 'Сосредоточьтесь на одном', body: 'В каждый момент на экране только одна связь. Никакой многозадачности.' },
-            { title: 'Если есть интерес, говорите', body: 'Если обе стороны заинтересованы, разговор начинается в реальном времени.' }
+            { title: 'Создаёте профиль', body: 'Входите без пароля и создаёте короткий профиль с фото и парой слов о себе.', media: { name: 'Создание профиля', desc: 'Экран короткого создания профиля с фото и текстом.' } },
+            { title: 'Система находит одного человека', body: 'Once выбирает человека, который подходит вам лучше всего прямо сейчас.', media: { name: 'Поиск кандидата', desc: 'Анимация поиска и появление одного кандидата.' } },
+            { title: 'Решаете', body: 'Не подходит? Идёте дальше. Подходит? Отправляете приглашение.', media: { name: 'Решение и приглашение', desc: 'Карточка профиля с двумя понятными действиями.' } },
+            { title: 'Ждёте до 10 минут', body: 'Другой человек получает приглашение в реальном времени и может принять или отклонить.', media: { name: 'Таймер 10 минут', desc: 'Экран приглашения с обратным отсчётом.' } },
+            { title: 'Начинаете общаться', body: 'Когда приглашение принято, создаётся совпадение и чат открывается сразу.', media: { name: 'Совпадение и чат', desc: 'Экран совпадения и переход в чат.' } }
           ]
         },
-        why: {
-          eyebrow: 'Почему это иначе',
-          title: 'Меньше скролла. Больше встреч.',
+        psychology: {
+          eyebrow: 'За кулисами опыта',
+          title: { lines: ['Меньше вариантов.', 'Больше внимания.'], accent: true },
+          intro: 'Once не пытается заставить вас проводить в приложении больше времени. Она пытается создать момент, где одному человеку действительно есть место.',
+          cards: [
+            { icon: 'sliders', title: 'Меньше перегрузки выбором', body: 'Когда вы не листаете десятки профилей, легче почувствовать, действительно ли человек перед вами вам интересен.' },
+            { icon: 'heart', title: 'Дефицит, создающий смысл', body: 'Сердец ограниченное число, поэтому отправка приглашения, это решение, а не рефлекс.' },
+            { icon: 'clock', title: 'Реальное время создаёт присутствие', body: 'Окно ответа в 10 минут держит обе стороны в одном моменте.' },
+            { icon: 'handshake', title: 'Взаимное действие', body: 'Каждый пользователь может быть и тем, кто выбирает, и тем, кого выбирают.' }
+          ],
+          emphasis: { lines: ['Цель не в том, чтобы познакомиться с большим числом людей.', 'Цель в том, чтобы дать одному человеку больше шанса.'], accent: true },
+          media: { name: 'Психология', desc: 'Абстрактная иллюстрация перехода от шума и перегрузки к фокусу и присутствию.' }
+        },
+        dualRole: {
+          eyebrow: 'Живы обе стороны',
+          title: { lines: ['Пока вы интересуетесь кем-то,', 'кто-то может интересоваться вами.'], accent: true },
+          body: [
+            'Входящее приглашение может прийти в любой момент, даже пока вы рассматриваете другого человека.',
+            'Так опыт не превращается в односторонний список кандидатов. Вы можете инициировать, быть выбранным и решать в реальном времени.'
+          ],
+          media: { name: 'Инициатор и выбранный одновременно', desc: 'Два пользователя, каждый из которых может отправлять и получать приглашение в одно и то же время.' }
+        },
+        hearts: {
+          eyebrow: 'Валюта внимания',
+          title: { lines: ['Когда каждое обращение чего-то стоит,', 'оно и ценится больше.'], accent: true },
+          body: [
+            'Отправка приглашения стоит сердце из ограниченного дневного запаса. Цель не в том, чтобы мешать вам обращаться к людям, а в том, чтобы каждое обращение было осознанным.',
+            'Когда приглашение отклонено или истекло, сердце возвращается. Приложение вознаграждает намерение, а не автоматический скролл.'
+          ],
+          cards: [
+            { icon: 'refresh', title: 'Запас обновляется каждый день', body: 'Вы получаете новый дневной запас сердец.' },
+            { icon: 'heart', title: 'Одно сердце за приглашение', body: 'Каждое приглашение, это осознанный выбор.' },
+            { icon: 'check', title: 'Меньше случайных обращений', body: 'Вы отправляете приглашение, только когда действительно этого хотите.' }
+          ],
+          media: { name: 'Сердца', desc: 'Интерфейс сердец и иллюстрация сердца, отправленного с приглашением.' }
+        },
+        matching: {
+          eyebrow: 'Не случайный выбор',
+          title: { lines: ['Самый подходящий человек', 'для этого момента.'], accent: true },
+          body: [
+            'Once никогда не показывает просто любой профиль. Система учитывает сочетание близости, возраста, недавней активности, совпадения образа жизни, общих групп и других значимых сигналов.',
+            'Опыт построен вокруг районов, сообществ и настоящей доступности. Цель, показывать людей, с которыми действительно можно встретиться, а не профили, исчезнувшие месяцы назад.'
+          ],
+          chips: [
+            { icon: 'pin', label: 'Близость' },
+            { icon: 'spark', label: 'Недавняя активность' },
+            { icon: 'users', label: 'Совпадение образа жизни' },
+            { icon: 'handshake', label: 'Общие группы' },
+            { icon: 'clock', label: 'Доступность в реальном времени' }
+          ],
+          media: { name: 'Локальный подбор', desc: 'Иллюстрация локального подбора с ближайшими точками на абстрактной карте.' }
+        },
+        safety: {
+          eyebrow: 'Вы решаете',
+          title: { lines: ['Полный контроль на каждом шаге.'], accent: false },
+          points: [
+            { icon: 'forward', label: 'Можно идти дальше' },
+            { icon: 'ban', label: 'Можно отменить приглашение' },
+            { icon: 'clock', label: 'Можно завершить разговор' },
+            { icon: 'shield', label: 'Можно заблокировать' },
+            { icon: 'flag', label: 'Можно пожаловаться' },
+            { icon: 'eye', label: 'Можно управлять видимостью' }
+          ],
+          body: 'Once устроена так, чтобы любая сторона могла быстро и ясно обозначить границу.',
+          media: { name: 'Безопасность', desc: 'Экран действий безопасности: завершить разговор, заблокировать и пожаловаться.' }
+        },
+        faq: {
+          title: 'Частые вопросы',
           items: [
-            { title: 'Без параллельных чатов', body: 'Чтобы вы не чувствовали, что соревнуетесь за внимание.' },
-            { title: 'Без бесконечных профилей', body: 'Чтобы опыт не ощущался как каталог.' },
-            { title: 'В реальном времени', body: 'Чтобы связь происходила, когда оба человека действительно здесь.' },
-            { title: 'Под вашим контролем', body: 'Вы решаете, когда появиться, когда говорить и когда остановиться.' }
+            { q: 'Я вижу много людей сразу?', a: 'Нет. Once показывает одного человека за раз.' },
+            { q: 'Что если мне не интересно?', a: 'Вы идёте дальше и позже получаете другого кандидата.' },
+            { q: 'Что такое сердце?', a: 'Сердце, это валюта для отправки приглашения. Запас ограничен и обновляется.' },
+            { q: 'Сколько приглашение остаётся открытым?', a: 'Приглашение остаётся открытым 10 минут.' },
+            { q: 'Что если ответа нет?', a: 'Приглашение мягко истекает, и вы можете идти дальше.' },
+            { q: 'Что происходит, когда приглашение принято?', a: 'Создаётся совпадение и чат открывается сразу.' },
+            { q: 'Зачем включать уведомления?', a: 'Приложение основано на ответах в реальном времени, поэтому уведомления помогают не пропустить приглашение.' },
+            { q: 'Можно заблокировать или пожаловаться?', a: 'Да. Внутри приложения можно завершить разговор, заблокировать и пожаловаться.' },
+            { q: 'Once работает везде?', a: 'Once открывается постепенно в разных районах и сообществах. Приложение покажет вам, активен ли ваш район.' }
           ]
         },
-        trust: {
-          eyebrow: 'Доверие',
-          title: 'Вы в контроле',
-          body: 'Once не подталкивает вас быть доступными постоянно. Вы выбираете, когда появиться, с кем продолжить и когда закончить.',
-          items: [
-            'Будьте доступны только когда вам удобно',
-            'Завершите любой разговор в любой момент',
-            'Никаких обязательств отвечать всем',
-            'Никаких нескольких чатов, создающих давление'
-          ]
+        finalCta: {
+          eyebrow: 'Может быть, пора знакомиться иначе',
+          title: { lines: ['Меньше скролла.', 'Больше шанса, что что-то действительно начнётся.'], accent: true },
+          body: 'Once создана для людей, которые хотят знакомиться, не теряясь среди бесконечных вариантов.',
+          emphasis: { lines: ['Один человек. Один момент. Настоящее решение.'], accent: true },
+          media: { name: 'Экраны приложения', desc: 'Три экрана приложения: поиск человека, приглашение и чат.' }
         },
-        cta: {
-          title: 'Хотите быть среди первых?',
-          sub: 'Once создаётся для людей, которые хотят знакомиться по-настоящему, просто и присутствующе.',
-          button: 'Регистрация на презентацию'
-        },
-        contact: {
-          label: 'Есть вопросы? Свяжитесь с нами по адресу',
-          subject: 'Вопрос для Once'
-        },
-        footer: {
-          privacy: 'Политика конфиденциальности',
-          terms: 'Условия использования',
-          safety: 'Стандарты безопасности детей',
-          copyright: '© Once 2026'
-        }
+        contact: { label: 'Вопросы? Напишите нам:', subject: 'Вопрос для Once' },
+        footer: { privacy: 'Политика конфиденциальности', terms: 'Условия использования', safety: 'Стандарты безопасности детей', copyright: '© Once 2026' }
       }
+    };
+
+    /* ---------- Helpers ---------- */
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    function titleHTML(t) {
+      return (t.lines || []).map(function (ln, i) {
+        var isLast = i === t.lines.length - 1;
+        var txt = esc(ln);
+        return (t.accent && isLast) ? '<span class="accent">' + txt + '</span>' : txt;
+      }).join('<br>');
+    }
+    function paras(arr) { return (arr || []).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join(''); }
+    function icon(name) { return IC[name] || IC.spark; }
+
+    var T; // active language block
+
+    function media(m, kind) {
+      kind = kind || 'wide';
+      var label = esc(m.name) + ': ' + esc(m.desc);
+      return '<figure class="media media--' + kind + ' reveal" role="img" aria-label="' + label + '">' +
+        '<span class="media-tag">' + esc(T.ui.preview) + '</span>' +
+        '<span class="media-icon">' + IC.image + '</span>' +
+        '<span class="media-name">' + esc(m.name) + '</span>' +
+        '<span class="media-desc">' + esc(m.desc) + '</span>' +
+        '</figure>';
+    }
+    function downloadBtn(cls, big) {
+      return '<a class="btn ' + cls + (big ? ' btn-lg' : '') + '" href="' + DOWNLOAD_URL + '">' + esc(T.ui.download) + '</a>';
+    }
+    function availability(inClass) {
+      return '<span class="availability ' + (inClass || '') + '">' + esc(T.availability) + '</span>';
     }
 
-    function applyLang() {
-      const t = STRINGS[lang]
-      document.documentElement.lang = lang
-      document.documentElement.dir = t.dir
-      document.title = t.title
-
-      document.getElementById('hero-slogan').textContent = t.hero.slogan
-      document.getElementById('hero-title').textContent = t.hero.title
-      document.getElementById('hero-sub').textContent = t.hero.sub
-      document.getElementById('hero-cta-primary').textContent = t.hero.ctaPrimary
-      document.getElementById('hero-cta-download').textContent = t.download
-      document.getElementById('hero-cta-secondary').textContent = t.hero.ctaSecondary
-      document.getElementById('hero-pills').innerHTML = (t.hero.pills || [])
-        .map(x => '<span class="pill">' + x + '</span>').join('')
-
-      document.getElementById('problem-eyebrow').textContent = t.problem.eyebrow
-      document.getElementById('problem-title').textContent = t.problem.title
-      document.getElementById('problem-body').innerHTML = t.problem.body
-      document.getElementById('problem-points').innerHTML = t.problem.points
-        .map(x => '<div class="problem-point">' + x + '</div>').join('')
-
-      document.getElementById('solution-eyebrow').textContent = t.solution.eyebrow
-      document.getElementById('solution-title').textContent = t.solution.title
-      document.getElementById('solution-body').innerHTML = t.solution.body
-      document.getElementById('solution-points').innerHTML = t.solution.points
-        .map(x => '<div class="solution-point">' + x + '</div>').join('')
-
-      document.getElementById('how-eyebrow').textContent = t.how.eyebrow
-      document.getElementById('how-title').textContent = t.how.title
-      document.getElementById('how-grid').innerHTML = t.how.steps
-        .map((s, i) => '<div class="how-card"><div class="how-num">0' + (i + 1) + '</div><h3>' + s.title + '</h3><p>' + s.body + '</p></div>').join('')
-
-      document.getElementById('why-eyebrow').textContent = t.why.eyebrow
-      document.getElementById('why-title').textContent = t.why.title
-      document.getElementById('why-grid').innerHTML = t.why.items
-        .map(x => '<div class="why-item"><h3>' + x.title + '</h3><p>' + x.body + '</p></div>').join('')
-
-      document.getElementById('trust-eyebrow').textContent = t.trust.eyebrow
-      document.getElementById('trust-title').textContent = t.trust.title
-      document.getElementById('trust-body').innerHTML = t.trust.body
-      document.getElementById('trust-list').innerHTML = t.trust.items
-        .map(x => '<li>' + x + '</li>').join('')
-
-      document.getElementById('cta-title').textContent = t.cta.title
-      document.getElementById('cta-sub').textContent = t.cta.sub
-      document.getElementById('cta-button').textContent = t.cta.button
-      document.getElementById('cta-download').textContent = t.download
-      document.getElementById('login-link').textContent = t.login
-
-      const langSuffix = '?lang=' + lang
-      const lp = document.getElementById('link-privacy')
-      const lt = document.getElementById('link-terms')
-      const ls = document.getElementById('link-safety')
-      document.getElementById('cta-contact-label').textContent = t.contact.label
-      document.getElementById('cta-contact-link').href = 'mailto:once.app.support@gmail.com?subject=' + encodeURIComponent(t.contact.subject)
-      lp.textContent = t.footer.privacy
-      lt.textContent = t.footer.terms
-      ls.textContent = t.footer.safety
-      lp.href = 'privacy.html' + langSuffix
-      lt.href = 'terms.html' + langSuffix
-      ls.href = 'child-safety.html' + langSuffix
-      document.getElementById('copyright').textContent = t.footer.copyright
-
-      document.getElementById('lang-label').textContent = LANG_CODE[lang]
-      document.querySelectorAll('#lang-menu button').forEach(b => {
-        b.classList.toggle('active', b.dataset.lang === lang)
-        b.setAttribute('aria-selected', b.dataset.lang === lang ? 'true' : 'false')
-      })
+    /* ---------- Section builders ---------- */
+    function buildHero() {
+      var s = T.hero;
+      return '' +
+        '<div class="hero-copy reveal">' +
+          '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
+          '<h1>' + titleHTML(s.title) + '</h1>' +
+          '<p class="hero-sub">' + esc(s.sub) + '</p>' +
+          '<div class="hero-cta">' +
+            downloadBtn('btn-primary btn-lg') +
+            '<a class="btn btn-secondary btn-lg" href="#how">' + esc(s.ctaSecondary) + '</a>' +
+          '</div>' +
+          availability('hero-avail') +
+          '<div class="hero-pills">' + s.pills.map(function (p) { return '<span class="pill">' + esc(p) + '</span>'; }).join('') + '</div>' +
+        '</div>' +
+        '<div class="hero-visual reveal">' + media(s.media, 'phone') + '</div>';
     }
 
-    const SIGNUP_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSd_Y0A1bWvcGI19C536aesf9KybH0RtRS0L8rz2hDih2fNL3g/viewform'
-    ;['hero-cta-primary', 'cta-button'].forEach(function(id) {
-      const btn = document.getElementById(id)
-      btn.href = SIGNUP_URL
-      btn.target = '_blank'
-      btn.rel = 'noopener'
-    })
-
-    const langBtn = document.getElementById('lang-btn')
-    const langMenu = document.getElementById('lang-menu')
-    function closeLangMenu() {
-      langMenu.setAttribute('hidden', '')
-      langBtn.setAttribute('aria-expanded', 'false')
+    function buildProblem() {
+      var s = T.problem;
+      return '<div class="split">' +
+        '<div class="split-text">' +
+          '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
+          '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
+          '<div class="reveal measure">' + paras(s.body) + '</div>' +
+          '<div class="points reveal">' + s.points.map(function (p) {
+            return '<div class="point">' + IC.check + '<span>' + esc(p) + '</span></div>';
+          }).join('') + '</div>' +
+        '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+      '</div>';
     }
-    function openLangMenu() {
-      langMenu.removeAttribute('hidden')
-      langBtn.setAttribute('aria-expanded', 'true')
-    }
-    langBtn.addEventListener('click', function(e) {
-      e.stopPropagation()
-      if (langMenu.hasAttribute('hidden')) openLangMenu()
-      else closeLangMenu()
-    })
-    document.addEventListener('click', function(e) {
-      if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) closeLangMenu()
-    })
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') closeLangMenu()
-    })
-    langMenu.querySelectorAll('button').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const newLang = btn.dataset.lang
-        if (newLang !== lang) {
-          lang = newLang
-          history.replaceState(null, '', '?lang=' + lang)
-          applyLang()
-        }
-        closeLangMenu()
-      })
-    })
 
-    applyLang()
+    function buildDifference() {
+      var s = T.difference;
+      return '<div class="heading reveal">' +
+          '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
+          '<h2>' + titleHTML(s.title) + '</h2>' +
+          '<div class="lede" style="margin-inline:auto;margin-top:16px">' + paras(s.body) + '</div>' +
+        '</div>' +
+        '<div class="card-grid card-grid--4">' + s.cards.map(function (c) {
+          return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
+            '<h3>' + esc(c.title) + '</h3><p>' + esc(c.body) + '</p></div>';
+        }).join('') + '</div>' +
+        '<div class="reveal" style="margin-top:clamp(32px,5vw,52px);max-width:820px;margin-inline:auto">' + media(s.media, 'wide') + '</div>';
+    }
+
+    function buildHow() {
+      var s = T.how;
+      return '<div class="heading reveal">' +
+          '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
+          '<h2>' + titleHTML(s.title) + '</h2>' +
+        '</div>' +
+        '<div class="steps steps--5">' + s.steps.map(function (st, i) {
+          return '<div class="step reveal">' +
+            '<div class="step-num">' + (i + 1) + '</div>' +
+            '<h3>' + esc(st.title) + '</h3>' +
+            '<p>' + esc(st.body) + '</p>' +
+            media(st.media, 'wide') +
+          '</div>';
+        }).join('') + '</div>' +
+        '<div class="section-cta reveal">' + downloadBtn('btn-primary', true) + '</div>';
+    }
+
+    function buildPsychology() {
+      var s = T.psychology;
+      return '<div class="heading reveal">' +
+          '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
+          '<h2>' + titleHTML(s.title) + '</h2>' +
+          '<p class="lede" style="margin-inline:auto;margin-top:16px">' + esc(s.intro) + '</p>' +
+        '</div>' +
+        '<div class="card-grid card-grid--4">' + s.cards.map(function (c) {
+          return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
+            '<h3>' + esc(c.title) + '</h3><p>' + esc(c.body) + '</p></div>';
+        }).join('') + '</div>' +
+        '<div class="split" style="margin-top:clamp(36px,5vw,56px)">' +
+          '<div class="split-text reveal"><p class="emphasis">' + titleHTML(s.emphasis) + '</p></div>' +
+          '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+        '</div>';
+    }
+
+    function buildDualRole() {
+      var s = T.dualRole;
+      return '<div class="split split--media-start">' +
+        '<div class="split-text">' +
+          '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
+          '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
+          '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
+        '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+      '</div>';
+    }
+
+    function buildHearts() {
+      var s = T.hearts;
+      return '<div class="split">' +
+          '<div class="split-text">' +
+            '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
+            '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
+            '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
+          '</div>' +
+          '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+        '</div>' +
+        '<div class="card-grid card-grid--3" style="margin-top:clamp(28px,4vw,44px)">' + s.cards.map(function (c) {
+          return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
+            '<h3>' + esc(c.title) + '</h3><p>' + esc(c.body) + '</p></div>';
+        }).join('') + '</div>';
+    }
+
+    function buildMatching() {
+      var s = T.matching;
+      return '<div class="split split--media-start">' +
+        '<div class="split-text">' +
+          '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
+          '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
+          '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
+          '<div class="chips reveal">' + s.chips.map(function (c) {
+            return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
+          }).join('') + '</div>' +
+        '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+      '</div>';
+    }
+
+    function buildSafety() {
+      var s = T.safety;
+      return '<div class="split">' +
+        '<div class="split-text">' +
+          '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
+          '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
+          '<div class="points reveal">' + s.points.map(function (p) {
+            return '<div class="point">' + icon(p.icon) + '<span>' + esc(p.label) + '</span></div>';
+          }).join('') + '</div>' +
+          '<p class="reveal measure" style="margin-top:22px">' + esc(s.body) + '</p>' +
+        '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'phone') + '</div>' +
+      '</div>';
+    }
+
+    function buildFaq() {
+      var s = T.faq;
+      return '<div class="heading reveal"><h2>' + esc(s.title) + '</h2></div>' +
+        '<div class="faq-list">' + s.items.map(function (it) {
+          return '<details class="faq-item reveal"><summary>' + esc(it.q) + IC.plus + '</summary>' +
+            '<div class="faq-answer"><p>' + esc(it.a) + '</p></div></details>';
+        }).join('') + '</div>';
+    }
+
+    function buildFinal() {
+      var s = T.finalCta;
+      return '<div class="final reveal">' +
+        '<div class="eyebrow" style="margin-inline:auto">' + esc(s.eyebrow) + '</div>' +
+        '<h2>' + titleHTML(s.title) + '</h2>' +
+        '<p class="lede">' + esc(s.body) + '</p>' +
+        '<p class="emphasis">' + titleHTML(s.emphasis) + '</p>' +
+        '<div class="final-actions">' + downloadBtn('btn-primary', true) + '</div>' +
+        availability() +
+        '<div class="final-media">' + media(s.media, 'wide') + '</div>' +
+        '<div class="contact"><span>' + esc(T.contact.label) + '</span> ' +
+          '<a href="mailto:once.app.support@gmail.com?subject=' + encodeURIComponent(T.contact.subject) + '">once.app.support@gmail.com</a>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function set(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
+
+    function buildNav() {
+      var n = T.nav;
+      return [
+        '<a class="nav-link" href="#difference" data-nav>' + esc(n.why) + '</a>',
+        '<a class="nav-link" href="#how" data-nav>' + esc(n.how) + '</a>',
+        '<a class="nav-link" href="#faq" data-nav>' + esc(n.faq) + '</a>'
+      ].join('');
+    }
+
+    function buildFooter() {
+      var f = T.footer;
+      var suffix = '?lang=' + CURRENT;
+      return '<a href="privacy.html' + suffix + '">' + esc(f.privacy) + '</a>' +
+        '<span class="sep">·</span>' +
+        '<a href="terms.html' + suffix + '">' + esc(f.terms) + '</a>' +
+        '<span class="sep">·</span>' +
+        '<a href="child-safety.html' + suffix + '">' + esc(f.safety) + '</a>';
+    }
+
+    /* ---------- Render ---------- */
+    var CURRENT;
+    function render(lang) {
+      CURRENT = lang;
+      T = STRINGS[lang];
+
+      document.documentElement.lang = lang;
+      document.documentElement.dir = T.dir;
+      document.title = T.title;
+
+      var setMeta = function (sel, val) { var el = document.querySelector(sel); if (el) el.setAttribute('content', val); };
+      setMeta('meta[name="description"]', T.metaDescription);
+      setMeta('meta[property="og:title"]', T.title);
+      setMeta('meta[property="og:description"]', T.ogDescription);
+      setMeta('meta[property="og:locale"]', OG_LOCALE[lang]);
+      setMeta('meta[name="twitter:title"]', T.title);
+      setMeta('meta[name="twitter:description"]', T.ogDescription);
+
+      // header + menus
+      set('nav', buildNav());
+      set('mobile-nav', buildNav());
+      document.getElementById('login-link').textContent = T.nav.login;
+      document.getElementById('mobile-login').textContent = T.nav.login;
+      document.getElementById('header-cta').textContent = T.ui.download;
+      document.getElementById('mobile-cta-inline').textContent = T.ui.download;
+      document.getElementById('mobile-cta-btn').textContent = T.ui.download;
+      document.getElementById('menu-toggle').setAttribute('aria-label', T.ui.menu);
+      document.getElementById('menu-close').setAttribute('aria-label', T.ui.close);
+      var skip = document.getElementById('skip-link'); if (skip) skip.textContent = T.ui.skip;
+
+      // sections
+      set('sec-hero', buildHero());
+      set('sec-problem', buildProblem());
+      set('sec-difference', buildDifference());
+      set('sec-how', buildHow());
+      set('sec-psychology', buildPsychology());
+      set('sec-dualrole', buildDualRole());
+      set('sec-hearts', buildHearts());
+      set('sec-matching', buildMatching());
+      set('sec-safety', buildSafety());
+      set('sec-faq', buildFaq());
+      set('sec-final', buildFinal());
+
+      // footer
+      set('footer-links', buildFooter());
+      document.getElementById('footer-copy').textContent = T.footer.copyright;
+
+      // language switcher label + active state
+      document.getElementById('lang-label').textContent = LANG_CODE[lang];
+      Array.prototype.forEach.call(document.querySelectorAll('#lang-menu button'), function (b) {
+        var on = b.getAttribute('data-lang') === lang;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+
+      wireNavLinks();
+      observeReveals();
+    }
+
+    /* ---------- Reveal on scroll ---------- */
+    var io = null;
+    function observeReveals() {
+      var els = document.querySelectorAll('.reveal:not(.in)');
+      if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        Array.prototype.forEach.call(els, function (el) { el.classList.add('in'); });
+        return;
+      }
+      // Only now, with a working observer, do we allow .reveal to start hidden.
+      document.documentElement.classList.add('js-reveal');
+      if (!io) {
+        io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+      }
+      Array.prototype.forEach.call(els, function (el) { io.observe(el); });
+    }
+
+    /* ---------- Smooth-scroll nav links (close mobile menu) ---------- */
+    function wireNavLinks() {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) {
+        a.addEventListener('click', function () { closeMenu(); });
+      });
+    }
+
+    /* ---------- Language switcher ---------- */
+    var langBtn = document.getElementById('lang-btn');
+    var langMenu = document.getElementById('lang-menu');
+    function closeLangMenu() { langMenu.setAttribute('hidden', ''); langBtn.setAttribute('aria-expanded', 'false'); }
+    function openLangMenu() { langMenu.removeAttribute('hidden'); langBtn.setAttribute('aria-expanded', 'true'); }
+    langBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (langMenu.hasAttribute('hidden')) openLangMenu(); else closeLangMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) closeLangMenu();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeLangMenu(); closeMenu(); } });
+    Array.prototype.forEach.call(langMenu.querySelectorAll('button'), function (btn) {
+      btn.addEventListener('click', function () {
+        var newLang = btn.getAttribute('data-lang');
+        if (newLang !== CURRENT) { history.replaceState(null, '', '?lang=' + newLang); render(newLang); }
+        closeLangMenu();
+      });
+    });
+
+    /* ---------- Mobile menu ---------- */
+    var mobileMenu = document.getElementById('mobile-menu');
+    var menuToggle = document.getElementById('menu-toggle');
+    function openMenu() { mobileMenu.classList.add('open'); menuToggle.setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden'; }
+    function closeMenu() { mobileMenu.classList.remove('open'); menuToggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }
+    menuToggle.addEventListener('click', openMenu);
+    document.getElementById('menu-close').addEventListener('click', closeMenu);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-close-menu]'), function (el) { el.addEventListener('click', closeMenu); });
+    document.getElementById('mobile-cta-inline').addEventListener('click', closeMenu);
+
+    /* ---------- Header scrolled state ---------- */
+    var header = document.getElementById('header');
+    function onScroll() { header.classList.toggle('scrolled', window.scrollY > 8); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    document.body.classList.add('has-mobile-cta');
+
+    /* ---------- Initial language ---------- */
+    var params = new URLSearchParams(location.search);
+    var urlLang = params.get('lang');
+    var browserLang = (function () {
+      var l = (navigator.language || '').toLowerCase();
+      if (l.indexOf('he') === 0) return 'he';
+      if (l.indexOf('ru') === 0) return 'ru';
+      return 'en';
+    })();
+    var initial = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang;
+    render(initial);
+  })();
   </script>
 </body>
 </html>
