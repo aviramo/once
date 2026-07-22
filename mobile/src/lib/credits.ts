@@ -12,8 +12,10 @@ import { t } from '../i18n'
 //   { balance:0..CREDIT_CAP, extra:0..N, held:0..N, granted_on?, next_grant_at? }
 // `balance` is the daily pool (refilled to CREDIT_CAP every 20:00 Asia/Jerusalem).
 // `extra` is the purchased pool (no cap), bought via /app/buy_extra.
-// Charging deducts balance FIRST, then extra; refunds restore balance up to
-// the cap and overflow lands in extra.
+// Charging deducts balance FIRST, then extra. A refund puts a PURCHASED
+// credit back into extra (bought credits never expire) but tops the daily
+// balance up only to the cap — a daily credit refunded into a full pool is
+// dropped, so a hold+refund cycle can never stockpile past the cap.
 //
 // The currency is called CREDITS and is drawn as a coin (CoinIcon). It used
 // to be called hearts and drawn as a heart, which collided with the heart on
@@ -67,7 +69,9 @@ export type CreditsWallet = {
   extra: number
   /** Reserved against a live waiting invite (server-side accounting). Not
    * displayed; the spend already left balance / extra when the invite was
-   * sent. */
+   * sent. The server also tracks `held_extra` (how much of the hold came out
+   * of the purchased pool, so a refund returns it there rather than dropping
+   * it against a full daily pool) — server-only, never sent as a UI signal. */
   held?: number
   granted_on?: string | null
   /** ISO instant of the next 20:00 Asia/Jerusalem grant. Server-computed so
