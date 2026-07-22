@@ -43,9 +43,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
     /* The app's own palette (mobile/src/colors.ts): a warm off-white page,
-       deep-green ink, orange action. No theme toggle. Buttons mirror the
-       app's <Button>: 56px tall, radius 12, flat fill, no shadow — primary is
-       an orange fill with white text, secondary a green outline. */
+       deep-green ink, orange action. No theme toggle. The button mirrors the
+       app's <Button>: 56px tall, radius 12, flat orange fill, white text,
+       no shadow. */
     :root { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -83,26 +83,14 @@
       text-decoration: none;
       cursor: pointer;
     }
-    .btn.secondary {
-      background: #FFFFFF;
-      color: #417A62;
-      border: 1px solid rgba(65, 122, 98, 0.38);
-      font-weight: 600;
-    }
-    .hint { margin-top: 14px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(43, 79, 64, 0.72); }
-    .hint strong { color: #2B4F40; }
-    .choices-ios { margin-top: 20px; }
-    .ios-note { display: none; margin-top: 18px; font-size: 14px; font-weight: 600; line-height: 1.5; color: rgba(43, 79, 64, 0.72); }
-    .ios-note a { color: #E4573D; }
-    .show .ios-note { display: block; }
-    /* The choosers are hidden until JS decides which one this device needs. */
+    .note { display: none; margin-top: 18px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(43, 79, 64, 0.72); }
+    .note strong { color: #2B4F40; }
+    /* The Play button is hidden until JS decides this device can use it: an
+       iPhone gets the note alone, with nothing to install. */
     .choices { display: none; }
-    .ios-steps { display: none; }
     .no-js .choices, .show .choices { display: flex; }
-    .show-ios .ios-steps { display: block; }
-    .no-js .msg, .show .msg, .show-ios .msg { display: none; }
-    /* On the iOS guided screen, hide the generic two-store chooser. */
-    .show-ios .choices { display: none; }
+    .no-js .note, .show .note, .show-unsupported .note { display: block; }
+    .no-js .msg, .show .msg, .show-unsupported .msg { display: none; }
   </style>
 </head>
 <body class="no-js">
@@ -111,27 +99,15 @@
     <div class="msg" id="msg">מעבירים אותך לחנות&hellip;</div>
     <div class="choices">
       <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">הורדה ל&#8209;Android</a>
-      <a class="btn secondary" id="ios" href="https://testflight.apple.com/join/dZw9a3wv">הורדה ל&#8209;iPhone&nbsp;(TestFlight)</a>
     </div>
-    <div class="ios-note" id="iosNote">משתמשי iPhone צריכים קודם את אפליקציית <a href="https://apps.apple.com/app/testflight/id899247664">TestFlight</a> של Apple, ורק אז לפתוח את ההזמנה.</div>
-    <!-- iOS-specific guided step: shown only on iPhone/iPad. TestFlight's join
-         page auto-opens the itms-beta:// scheme, which Safari rejects with
-         "the address is invalid" when the TestFlight app isn't installed. So
-         on iOS we guide the user to install TestFlight first, then open the
-         invite, instead of redirecting blindly into that error. -->
-    <div class="ios-steps" id="iosSteps">
-      <div class="hint">כדי להצטרף לגרסת הביתא ל&#8209;iPhone צריך קודם את אפליקציית <strong>TestFlight</strong> של Apple. בלעדיה Safari יציג שגיאת "הכתובת אינה תקינה".</div>
-      <div class="choices choices-ios">
-        <a class="btn" id="tf" href="https://apps.apple.com/app/testflight/id899247664">1. התקנת TestFlight</a>
-        <a class="btn secondary" id="join" href="https://testflight.apple.com/join/dZw9a3wv">2. פתיחת ההזמנה ל&#8209;Once</a>
-      </div>
-    </div>
+    <!-- One note for every device: with the Play button on desktop, and alone
+         on an iPhone, where there is nothing to install. -->
+    <div class="note">Once זמינה למכשירי <strong>Android</strong> בלבד. אין תמיכה ב&#8209;iPhone.</div>
   </div>
 
   <script>
     (function () {
       var ANDROID = "https://play.google.com/store/apps/details?id=com.aviramo.once";
-      var IOS = "https://testflight.apple.com/join/dZw9a3wv";
 
       document.body.className = "";
 
@@ -145,12 +121,11 @@
       if (isAndroid) {
         location.replace(ANDROID);
       } else if (isIOS) {
-        // Don't redirect blindly into the TestFlight join page: if TestFlight
-        // isn't installed, its itms-beta:// auto-launch makes Safari throw
-        // "the address is invalid". Show a guided install-then-open screen.
-        document.body.className = "show-ios";
+        // There is no iOS build. Say so instead of handing out a Play link
+        // the device cannot use.
+        document.body.className = "show-unsupported";
       } else {
-        // Desktop / unknown: no single right answer, show both.
+        // Desktop / unknown: show the Play link plus the Android-only note.
         document.body.className = "show";
       }
     })();

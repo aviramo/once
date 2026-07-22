@@ -29,8 +29,9 @@ const STATIC_PAGES: Record<string, string> = {
 // into `referrer`, which Play preserves through the install and hands back to
 // the app via the Install Referrer API on first launch — that is the whole
 // attribution mechanism, and it is why the invitee never has to type anything.
-// Everyone else (desktop, iPhone) falls through to the normal download page so
-// the link is never a dead end; those installs simply go unattributed.
+// Everyone else (desktop, iPhone) falls through to the normal download page,
+// which offers the Play link on desktop and states plainly on iPhone that
+// Once is Android-only; a desktop install simply goes unattributed.
 //
 // Duplicated from public/download.html on purpose: that file is a static asset
 // served straight from /public and cannot import a shared constant.
