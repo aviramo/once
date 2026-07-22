@@ -121,10 +121,9 @@ export default {
   'settings.account': 'Account',
   'settings.visibilityVisible': 'Visible',
   'settings.visibilityHidden': 'Hidden',
-  'settings.visibilityHiddenNoHearts': 'You are out of hearts. You need hearts to be visible again.',
-  'settings.credits': 'Hearts',
-  // Suffix word in the hearts-row value when the user has extras, e.g.
-  // "1/3 + 5 extra". Distinct word so "+ 5" doesn't read as math.
+  'settings.credits': 'Credits',
+  // Suffix word in the credits-row value when the user has extras, e.g.
+  // "1/1 + 5 extra". Distinct word so "+ 5" doesn't read as math.
   'settings.creditsExtraSuffix': 'extra',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'My groups',
@@ -292,43 +291,36 @@ export default {
   'family.summaryFreeWeekend': 'free weekend',
   'family.summaryWithKidsWeekend': 'busy weekend',
   'common.gotIt': 'Got it',
-  // Count phrase with correct singular/plural, built by starsText() in
-  // lib/credits.ts. Used wherever a hearts amount is shown in prose.
-  'stars.count.one': '1 heart',
-  'stars.count.many': '{n} hearts',
-  // Hearts popup (opened from the settings hearts row). The description is
+  // Count phrase with correct singular/plural, built by creditsText() in
+  // lib/credits.ts. Used wherever a credits amount is shown in prose.
+  'credits.count.one': '1 credit',
+  'credits.count.many': '{n} credits',
+  // Credits popup (opened from the settings credits row). The description is
   // assembled in code from these lines (so the renew line can be dropped
   // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
   // render bold in code. {balance} = the daily pool, {extra} = the
-  // purchased pool, {cap} = daily ceiling (currently 3).
+  // purchased pool, {cap} = daily ceiling (currently 1).
   // English is non-gendered (genderize() is a no-op without {m|f} markers).
-  'stars.popup.title': 'Your hearts',
-  'stars.popup.line.balance': 'You have {balance} in your daily allowance, which refills to {cap} every day.',
-  // Variant for the balance=0 case — reads "your hearts ran out" instead of
-  // the literal "you have 0 hearts" (user request 2026-06-01).
-  'stars.popup.line.balanceEmpty': 'Your hearts ran out in your daily allowance, which refills to {cap} every day.',
-  // {extra} expands via starsText → "5 hearts" / "1 heart" (carries the noun
-  // already). Template must NOT repeat "hearts", just append "extra".
-  'stars.popup.line.extra': 'You also have {extra} extra.',
+  'credits.popup.title': 'Your credits',
+  'credits.popup.line.balance': 'You have {balance} in your daily allowance, which refills to {cap} every day.',
+  // Variant for the balance=0 case — reads "your credits ran out" instead of
+  // the literal "you have 0 credits" (user request 2026-06-01).
+  'credits.popup.line.balanceEmpty': 'Your credits ran out in your daily allowance, which refills to {cap} every day.',
+  // {extra} expands via creditsText → "5 credits" / "1 credit" (carries the
+  // noun already). Template must NOT repeat "credits", just append "extra".
+  'credits.popup.line.extra': 'You also have {extra} extra.',
   // {when} carries its own "today at HH:MM" — no leading preposition in the template.
-  'stars.popup.line.renew': 'Your daily allowance refreshes {when}.',
+  'credits.popup.line.renew': 'Your daily allowance refreshes {when}.',
   // Relative next-grant day. Returned from formatNextGrant() — replaces the
   // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
-  'stars.grant.today': 'today at {time}',
-  'stars.grant.tomorrow': 'tomorrow at {time}',
-  'stars.popup.buyExtra': 'Buy extra hearts',
-  // Buy-extra picker (3/10/50 options, all "Free" for now, only 3 enabled).
-  'stars.buy.title': 'Buy extra hearts',
-  'stars.buy.desc': 'Hearts you buy are added on top of your daily allowance and never expire.',
-  'stars.buy.priceFree': 'Free',
-  'stars.buy.comingSoon': 'Coming soon',
-  // Shown on the active (3-hearts) option when the user already used today's
-  // buy slot — the once-per-grant-day gate.
-  'stars.buy.alreadyBoughtToday': 'Already bought today',
-  // Shown on the active option when the wallet still has hearts. Buying
-  // extras is a recovery mechanism, so the server rejects it with
-  // has_credits while anything is left to spend.
-  'stars.buy.hasHearts': 'You still have hearts',
+  'credits.grant.today': 'today at {time}',
+  'credits.grant.tomorrow': 'tomorrow at {time}',
+  'credits.popup.buyExtra': 'Buy credits',
+  // Buy picker (3/10/50 options, all "Free" for now, only 3 enabled).
+  'credits.buy.title': 'Buy credits',
+  'credits.buy.desc': 'Credits you buy are added on top of your daily allowance and never expire.',
+  'credits.buy.priceFree': 'Free',
+  'credits.buy.comingSoon': 'Coming soon',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',
@@ -397,9 +389,6 @@ export default {
   // mode-switch (parallel to the go-visible label), NOT as the action verb;
   // the confirm popup's button (home.broadcastConfirmButton) keeps the
   // "broadcast me" wording.
-  // Out-of-hearts auto-hide variant: shown when the user runs out of hearts
-  // (balance + extra = 0). The "go visible" button is replaced by the
-  // buy-extra CTA (stars.popup.buyExtra label).
   'home.premiumPopup.add': 'Show me to people',
   'home.premiumPopup.hide': 'Hide my profile',
   'home.premiumPopup.reveal': 'Show my profile',
@@ -654,11 +643,11 @@ Next may surprise`,
   'home.waitingTimerTitle': 'Your invitation is waiting for them',
   'home.waitingTimerTitle_m': 'Your invitation is waiting for him',
   'home.waitingTimerTitle_f': 'Your invitation is waiting for her',
-  'home.waitingTimerDesc': 'Meanwhile, he won\'t receive other invitations. Your heart only comes back to you if he declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_mm': 'Meanwhile, he won\'t receive other invitations. Your heart only comes back to you if he declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_mf': 'Meanwhile, she won\'t receive other invitations. Your heart only comes back to you if she declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_fm': 'Meanwhile, he won\'t receive other invitations. Your heart only comes back to you if he declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_ff': 'Meanwhile, she won\'t receive other invitations. Your heart only comes back to you if she declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_mm': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_mf': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_fm': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_ff': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time.',
   'home.waitingFirstInLine': 'You\'re first in line',
   'home.waitingFirstInLineSubtext': 'We\'ll let you know if she responds.',
   'home.waitingFirstInLineSubtext_m': 'We\'ll let you know if he responds.',

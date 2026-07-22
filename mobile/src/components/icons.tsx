@@ -425,11 +425,14 @@ export function PhotoTrashIcon({ color, size = ICON.xxl }: IconProps & { color: 
 
 // ── Action overlays (over photos) ──────────────────────────────────────────
 
-// HeartIcon — the app's solid filled heart mark. Multi-purpose: the
-// like/action overlay over match photos (over-photo callers pass
-// `stroke={WHITE}` for the white perimeter halo), the Menu tab glyph, and
-// the credits currency token (CreditCost / settings). `stroke` defaults to
-// `color`, so omitting it yields a clean single-color glyph.
+// HeartIcon — the app's solid filled heart mark: the like/action overlay over
+// match photos (over-photo callers pass `stroke={WHITE}` for the white
+// perimeter halo) and the Menu tab glyph. `stroke` defaults to `color`, so
+// omitting it yields a clean single-color glyph.
+//
+// NOT the currency — that's CoinIcon. The heart is the "invite this person"
+// affordance; drawing money with the same glyph made the cost badge dissolve
+// into the button it sat on (renamed hearts -> credits, 2026-07-22).
 export function HeartIcon({
   color = PRIMARY,
   stroke = color,
@@ -438,6 +441,20 @@ export function HeartIcon({
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </Glyph>
+  )
+}
+
+// CoinIcon — the credits currency mark. A thick rim with a centre pip, drawn
+// in ONE colour: the gaps are transparent, so it picks up whatever surface it
+// sits on (the CreditCost capsule, a settings row, the buy sheet) without a
+// second colour or any gradient. Reads as a coin down to ICON.sm (16dp),
+// where a minted-face design would turn to mush.
+export function CoinIcon({ color = PRIMARY, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="9" strokeWidth={STROKE.thick} />
+      <Circle cx="12" cy="12" r="3.25" fill={color} stroke="none" />
     </Glyph>
   )
 }

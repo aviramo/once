@@ -63,49 +63,16 @@ function isInviteLapsed(u: unknown): boolean {
   );
 }
 
-// Auto-hide on zero hearts. When balance + extra has reached 0 and the user
-// is still discoverable (page2.state='free', not in chat, not within the
-// paid 30-min broadcast window), flip page2 to locked via app_lock2 so the
-// mobile hidden-state UI surfaces the "buy extra hearts" CTA. Idempotent
-// (app_lock2 is a no-op when page2.state is not 'free'), fire-and-forget so
-// the response isn't blocked. Returns the post-lock2 row if the lock
-// actually fired (so the response reflects the hidden state immediately);
-// falls through otherwise.
-//
-// The broadcast carve-out (user request 2026-06-01): a user who just spent
-// their last heart on app_add deliberately paid to be discoverable for the
-// 30-minute window. Auto-hiding right after would forfeit what they paid
-// for. The check runs on every endpoint, so once last_add_at falls outside
-// the 30-min window the next call will auto-hide them naturally.
-async function maybeAutoHide(
-  log: Log,
-  user: User,
-  after: Record<string, unknown> | undefined,
-): Promise<Record<string, unknown> | undefined> {
-  const u = (after ?? user.db.new) as {
-    relations?: {
-      credits?: { balance?: unknown; extra?: unknown };
-      page1?: { state?: string };
-      page2?: { state?: string };
-      last_add_at?: string;
-    };
-  };
-  const credits = u.relations?.credits;
-  const total = Number(credits?.balance ?? 0) + Number(credits?.extra ?? 0);
-  if (total > 0) return after;
-  if ((u.relations?.page2?.state ?? "free") !== "free") return after;
-  if ((u.relations?.page1?.state ?? "") === "chat") return after;
-  const lastAddAtRaw = u.relations?.last_add_at;
-  if (typeof lastAddAtRaw === "string" && lastAddAtRaw) {
-    const lastAddMs = Date.parse(lastAddAtRaw);
-    if (Number.isFinite(lastAddMs) && lastAddMs > Date.now() - 30 * 60_000) {
-      return after;
-    }
-  }
-  const result = await Tools.rpc(log, "app_lock2", { me_id: user.user_id });
-  if (result && !result.error && result.user) return result.user;
-  return after;
-}
+// Auto-hide on zero credits was REMOVED 2026-07-22 (credits rework). It used
+// to flip page2 to locked via app_lock2 the moment balance + extra hit 0, so a
+// user who ran out disappeared from the pool entirely — and therefore never
+// received the invitation that would have been the reason to pay. The economy
+// now works the other way round: a zero-credit user stays discoverable, the
+// incoming invite's accept button IS the paywall, and only an accept the
+// wallet could not cover (credits.unpaid_at, stamped in app_approve) takes
+// them out of others(). With a daily pool of 1 the old rule also hid anyone
+// who merely held a credit against a live invite. app_lock2 stays for the
+// EXPLICIT hide in settings.
 
 // Record the notification-presence signal into relations.push (drives the SQL
 // push_blocked() gate). Called from start/location/focus only. `notif_perm` is
@@ -486,10 +453,12 @@ Deno.serve(async (req) => {
       }
 
       case "buy_extra": {
-        // Add `count` purchasable hearts to relations.credits.extra. Count is
-        // validated against the offered options (3/10/50). Pricing is mobile-
-        // side (currently all "Free"); once real payments are wired up,
-        // receipt verification happens before this RPC is invoked.
+        // Add `count` purchasable credits to relations.credits.extra. Count
+        // is validated against the offered options (3/10/50). Pricing is
+        // mobile-side (currently all "Free"); once real payments are wired
+        // up, receipt verification happens before this RPC is invoked. The
+        // RPC no longer gates on an empty wallet / one-buy-a-day: buying is
+        // always available (2026-07-22).
         const count = Number(body.count);
         if (!Number.isFinite(count) || ![3, 10, 50].includes(count)) {
           return log.error("buy_extra", "bad_count", 400);
@@ -739,23 +708,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Auto-hide on zero hearts. After any RPC that may have charged the
-    // wallet (invite hold / approve / buy_extra), if balance + extra hit 0
-    // while the user is still discoverable, flip them to hidden so the
-    // mobile UI surfaces the buy-extra prompt. Cheap: most calls miss the
-    // total>0 short-circuit and never reach app_lock2.
-    //
-    // EXPLICIT EXCEPTION (user request 2026-06-01): `app_add` (= entering
-    // broadcast) NEVER triggers auto-hide, even when it was the call that
-    // brought the wallet to 0. The user just paid 1 heart for the 30-min
-    // broadcast window; auto-hiding immediately would forfeit that paid
-    // slot. `maybeAutoHide` ALSO carries an inner 30-min `last_add_at`
-    // window check as defense-in-depth (covers other endpoints firing
-    // during the paid window), but the user's mental model is "entering
-    // broadcast can't hide me" — implemented literally here.
-    if (key !== "add") {
-      rpcUser = await maybeAutoHide(log, user, rpcUser);
-    }
+    // (The zero-credit auto-hide that used to run here was removed in the
+    // 2026-07-22 credits rework — see the note where maybeAutoHide stood.)
 
     // Fire pushes behind waitUntil (never block response).
     for (const n of notifyList) {

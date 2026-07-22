@@ -24,8 +24,8 @@ import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startO
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
 import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { creditBalance, creditExtra, formatNextGrant, creditsText, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BugReportPopup } from '../src/components/BugReportPopup'
@@ -2620,12 +2620,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
   const [visibilityBusy, setVisibilityBusy] = useState(false)
   const isHidden = selectIsHidden(profile)
-  // The server auto-hides anyone whose wallet hits zero (the dispatcher's
-  // maybeAutoHide fires app_lock2 whenever balance + extra is 0 and page2 is
-  // free). Calling app/free2 in that state would be undone within the same
-  // round trip and the row would read as broken, so out of hearts routes to
-  // the buy-extra picker instead.
-  const outOfHearts = creditTotal(profile) === 0
+  // Visibility is NOT credit-gated any more. The server used to auto-hide a
+  // zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
+  // row routed an empty wallet to the buy picker instead of app/free2, which
+  // would have been undone in the same round trip. That auto-hide is gone
+  // (2026-07-22): being broke keeps you visible on purpose — the invitation
+  // you can't accept is the moment to buy.
 
   const runVisibility = useCallback(async (endpoint: string) => {
     if (visibilityBusy) return
@@ -2637,9 +2637,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const onVisibilityPress = useCallback(() => {
     tap()
     if (!isHidden) { setHideConfirmOpen(true); return }
-    if (outOfHearts) { setBuyExtraOpen(true); return }
     runVisibility('app/free2')
-  }, [isHidden, outOfHearts, runVisibility])
+  }, [isHidden, runVisibility])
 
   const onOpenBuyExtra = useCallback(() => {
     tap()
@@ -2688,9 +2687,9 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const heartsExtra = creditExtra(profile)
   const nextGrant = formatNextGrant(profile)
   const starsTok: Record<string, string> = {
-    '{balance}': starsText(heartsBalance),
-    '{extra}': starsText(heartsExtra),
-    '{cap}': starsText(CREDIT_CAP),
+    '{balance}': creditsText(heartsBalance),
+    '{extra}': creditsText(heartsExtra),
+    '{cap}': creditsText(CREDIT_CAP),
     '{when}': nextGrant,
   }
   let starsEmKey = 0
@@ -2701,16 +2700,16 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         ? <Text key={`em${starsEmKey++}`} style={styles.starsEm}>{starsTok[p]}</Text>
         : p)
   // Skip the "extra" line entirely when there are no extras — saying
-  // "you also have 0 extra hearts" reads as noise. The balance line swaps
-  // to a dedicated "you have NO hearts" copy at 0 instead of the literal
-  // "you have 0 hearts" (user feedback 2026-06-01).
+  // "you also have 0 extra credits" reads as noise. The balance line swaps
+  // to a dedicated "you have NO credits" copy at 0 instead of the literal
+  // "you have 0 credits" (user feedback 2026-06-01).
   const balanceLineKey = heartsBalance === 0
-    ? 'stars.popup.line.balanceEmpty'
-    : 'stars.popup.line.balance'
+    ? 'credits.popup.line.balanceEmpty'
+    : 'credits.popup.line.balance'
   const starsBodyLines = [
     emLine(t(balanceLineKey)),
-    ...(heartsExtra > 0 ? [emLine(t('stars.popup.line.extra'))] : []),
-    ...(nextGrant ? [emLine(t('stars.popup.line.renew'))] : []),
+    ...(heartsExtra > 0 ? [emLine(t('credits.popup.line.extra'))] : []),
+    ...(nextGrant ? [emLine(t('credits.popup.line.renew'))] : []),
   ]
   const starsDesc = starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln]))
 
@@ -2741,14 +2740,13 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             : watcherCount > 0
               ? `${t('settings.visibilityVisible')} (${watcherCount})`
               : t('settings.visibilityVisible')}
-          subtitle={isHidden && outOfHearts ? t('settings.visibilityHiddenNoHearts') : undefined}
           onPress={onVisibilityPress}
           icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.md} /> : <EyeOpenIcon color={GREEN} size={ICON.md} />}
           labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
-        {/* Stars, then Account. Tapping stars opens the stars/package popup
-            (balance + renewal + plan). */}
+        {/* Credits, then Account. Tapping credits opens the credits popup
+            (balance + renewal + buy). */}
         <SelectFieldRow
           grouped
           // "לבבות ({balance}/{cap} + {extra} אקסטרה)": the daily pool reads as
@@ -2767,7 +2765,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
           onPress={() => setStarsPopupVisible(true)}
-          icon={<HeartIcon color={GREEN} size={ICON.md} />}
+          icon={<CoinIcon color={GREEN} size={ICON.md} />}
           labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
@@ -2852,15 +2850,14 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         onConfirm={onDeleteConfirmed}
         draggable
       />
-      {/* Hearts popup. Heart icon, balance + extra + renew explainer. The
-          "buy extra" button is shown only when canBuyExtra (= wallet empty
-          AND not already bought this grant cycle, user request 2026-06-01);
-          otherwise the sheet is purely informational. */}
+      {/* Credits popup: balance + extra + renew explainer. The buy button is
+          always offered — the two gates that used to hide it (wallet must be
+          empty, one purchase per grant cycle) were removed 2026-07-22. */}
       <ConfirmDialog
         visible={starsPopupVisible}
-        title={t('stars.popup.title')}
+        title={t('credits.popup.title')}
         description={starsDesc}
-        confirmLabel={canBuyExtra(profile) ? t('stars.popup.buyExtra') : undefined}
+        confirmLabel={t('credits.popup.buyExtra')}
         onCancel={() => setStarsPopupVisible(false)}
         onConfirm={onOpenBuyExtra}
         draggable

@@ -123,10 +123,9 @@ export default {
   'settings.account': 'חשבון',
   'settings.visibilityVisible': 'גלוי',
   'settings.visibilityHidden': 'מוסתר',
-  'settings.visibilityHiddenNoHearts': 'נגמרו הלבבות, צריך לבבות כדי לחזור להיות גלוי',
-  'settings.credits': 'לבבות',
-  // Suffix word in the hearts-row value when the user has extras, e.g.
-  // "1/3 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.
+  'settings.credits': 'קרדיטים',
+  // Suffix word in the credits-row value when the user has extras, e.g.
+  // "1/1 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.
   'settings.creditsExtraSuffix': 'אקסטרה',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'הקבוצות שלי',
@@ -301,43 +300,36 @@ export default {
   'family.summaryWithKidsWeekend_m': 'לא פנוי בסופ״ש הקרוב',
   'family.summaryWithKidsWeekend_f': 'לא פנויה בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
-  // Count phrase with correct singular/plural, built by starsText() in
-  // lib/credits.ts. Used wherever a hearts amount is shown in prose.
-  'stars.count.one': 'לב אחד',
-  'stars.count.many': '{n} לבבות',
-  // Hearts popup (opened from the settings hearts row). The description is
+  // Count phrase with correct singular/plural, built by creditsText() in
+  // lib/credits.ts. Used wherever a credits amount is shown in prose.
+  'credits.count.one': 'קרדיט אחד',
+  'credits.count.many': '{n} קרדיטים',
+  // Credits popup (opened from the settings credits row). The description is
   // assembled in code from these lines (so the renew line can be dropped
   // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
   // render bold in code. {balance} = the daily pool, {extra} = the
-  // purchased pool, {cap} = daily ceiling (currently 3).
+  // purchased pool, {cap} = daily ceiling (currently 1).
   // Hebrew gendered via genderize() inline {male|female} markers.
-  'stars.popup.title': 'הלבבות שלך',
-  'stars.popup.line.balance': 'יש לך {balance} בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
-  // Variant for the balance=0 case — reads "your hearts ran out" instead of
-  // the literal "you have 0 hearts" (user request 2026-06-01).
-  'stars.popup.line.balanceEmpty': 'נגמרו לך הלבבות בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
-  // {extra} expands via starsText → "5 לבבות" / "לב אחד" (carries the noun
-  // already). Template must NOT repeat the noun, just append "אקסטרה".
-  'stars.popup.line.extra': 'בנוסף יש לך {extra} אקסטרה.',
+  'credits.popup.title': 'הקרדיטים שלך',
+  'credits.popup.line.balance': 'יש לך {balance} בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
+  // Variant for the balance=0 case — reads "your credits ran out" instead of
+  // the literal "you have 0 credits" (user request 2026-06-01).
+  'credits.popup.line.balanceEmpty': 'נגמרו לך הקרדיטים בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
+  // {extra} expands via creditsText → "5 קרדיטים" / "קרדיט אחד" (carries the
+  // noun already). Template must NOT repeat the noun, just append "אקסטרה".
+  'credits.popup.line.extra': 'בנוסף יש לך {extra} אקסטרה.',
   // {when} carries its own "היום/מחר ב-HH:MM" — no leading "ב-" in the template.
-  'stars.popup.line.renew': 'החבילה היומית תתחדש {when}.',
+  'credits.popup.line.renew': 'החבילה היומית תתחדש {when}.',
   // Relative next-grant day. Returned from formatNextGrant() — replaces the
   // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
-  'stars.grant.today': 'היום ב-{time}',
-  'stars.grant.tomorrow': 'מחר ב-{time}',
-  'stars.popup.buyExtra': 'קניית לבבות אקסטרה',
-  // Buy-extra picker (3/10/50 options, all "Free" for now, only 3 enabled).
-  'stars.buy.title': 'קניית לבבות אקסטרה',
-  'stars.buy.desc': 'הלבבות שתקנה יתווספו ללבבות שיש לך כבר, ולא יתבטלו עם הזמן.',
-  'stars.buy.priceFree': 'חינם',
-  'stars.buy.comingSoon': 'בקרוב',
-  // Shown on the active (3-hearts) option when the user already used today's
-  // buy slot — the once-per-grant-day gate.
-  'stars.buy.alreadyBoughtToday': 'כבר נקנה היום',
-  // Shown on the active option when the wallet still has hearts. Buying
-  // extras is a recovery mechanism, so the server rejects it with
-  // has_credits while anything is left to spend.
-  'stars.buy.hasHearts': 'יש לך עדיין לבבות',
+  'credits.grant.today': 'היום ב-{time}',
+  'credits.grant.tomorrow': 'מחר ב-{time}',
+  'credits.popup.buyExtra': 'קניית קרדיטים',
+  // Buy picker (3/10/50 options, all "Free" for now, only 3 enabled).
+  'credits.buy.title': 'קניית קרדיטים',
+  'credits.buy.desc': 'הקרדיטים שתקנה יתווספו לקרדיטים שיש לך כבר, ולא יתבטלו עם הזמן.',
+  'credits.buy.priceFree': 'חינם',
+  'credits.buy.comingSoon': 'בקרוב',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',
@@ -409,9 +401,6 @@ export default {
   // mode-switch (parallel to the go-visible label), NOT as the action verb;
   // the confirm popup's button (home.broadcastConfirmButton) keeps the
   // "broadcast me" wording.
-  // Out-of-hearts auto-hide variant (balance + extra = 0): the user is hidden
-  // because they have no hearts left to accept invites. The "go visible"
-  // button is replaced by a buy-extra CTA (stars.popup.buyExtra label).
   'home.premiumPopup.add': 'הצג אותי לאנשים',
   'home.premiumPopup.hide': 'הסתר את הפרופיל',
   'home.premiumPopup.reveal': 'הצג את הפרופיל',
@@ -779,11 +768,11 @@ export default {
   'home.waitingTimerTitle': 'ההזמנה שלך מחכה לו',
   'home.waitingTimerTitle_m': 'ההזמנה שלך מחכה לו',
   'home.waitingTimerTitle_f': 'ההזמנה שלך מחכה לה',
-  'home.waitingTimerDesc': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
-  'home.waitingTimerDesc_mm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
-  'home.waitingTimerDesc_mf': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
-  'home.waitingTimerDesc_fm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
-  'home.waitingTimerDesc_ff': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
+  'home.waitingTimerDesc': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
+  'home.waitingTimerDesc_mm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
+  'home.waitingTimerDesc_mf': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
+  'home.waitingTimerDesc_fm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
+  'home.waitingTimerDesc_ff': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
   'home.waitingFirstInLine': 'הראשון/ה בתור',
   'home.waitingFirstInLineSubtext': 'נעדכן אותך כשתהיה תשובה.',
   'home.waitingFirstInLineSubtext_m': 'נעדכן אותך כשהוא יענה.',

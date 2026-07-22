@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 
-export type HeartsEditorDict = {
-  /** Section title (e.g. "Hearts"). */
+export type CreditsEditorDict = {
+  /** Section title (e.g. "Credits"). */
   title: string;
   /** Input labels. */
   balanceLabel: string;
@@ -23,14 +23,15 @@ export type HeartsEditorDict = {
 };
 
 /**
- * Admin-only inline editor for a user's hearts wallet. Two number inputs
+ * Admin-only inline editor for a user's credits wallet. Two number inputs
  * (balance / extra) + a save button — wired to `setUserHearts(userId, …)`
  * which routes through the `app_admin_set_credits` RPC. The other credit
- * fields (held / granted_on / next_grant_at / bought_on) are preserved by
- * the RPC, so this is safe to use without disturbing the daily-grant or
- * once-per-day buy throttles.
+ * fields (held / granted_on / next_grant_at / bought_on / unpaid_at) are
+ * preserved by the RPC, so this is safe to use without disturbing the daily
+ * grant. Funding a wallet here does NOT clear `unpaid_at` — only the RPCs
+ * do — but a positive balance already puts the user back in others().
  */
-export function UserHeartsEditor({
+export function UserCreditsEditor({
   userId,
   initialBalance,
   initialExtra,
@@ -40,7 +41,7 @@ export function UserHeartsEditor({
   userId: string;
   initialBalance: number;
   initialExtra: number;
-  dict: HeartsEditorDict;
+  dict: CreditsEditorDict;
   action: (
     userId: string,
     balance: number,

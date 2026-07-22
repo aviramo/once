@@ -116,6 +116,30 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** Nothing to delete in code (no shim). Delete this note once the new build is the live floor.
 - **Verify before removing:** check the live mobile version distribution; confirm the floor build shows the heart badge on the invite CTA (not the cancel CTA) and disables the invite button on insufficient balance.
 
+### Credits rework 2026-07-22 — old builds show a stale cap and a dead "out of hearts" path (informational)
+
+- **Added:** 2026-07-22 (migration `20260722120000_credits_one_per_day_open_purchase`)
+- **Reason:** Daily cap 3 → 1, both `app_buy_extra` gates removed, the dispatcher's zero-credit auto-hide deleted, and a new `credits.unpaid_at` mark drives candidacy in `others()`. None of it changes a response shape, a field name, or an endpoint, so there is no shim to stage — but the deployed mobile build renders three things differently and that window is recorded here.
+- **Old shape (kept alive):** Nothing on the wire. The deployed build:
+  - hardcodes `CREDIT_CAP = 3`, so the settings row reads "1/3" and the popup says "refills to 3 hearts" while the server grants 1. Cosmetic, self-corrects on update.
+  - mirrors the removed buy gates client-side (`buyExtraBlock`: wallet must be empty AND not bought this grant day) and hides the buy button otherwise. Strictly narrower than the server, so it never offers a tap the server rejects — old users simply see fewer chances to pay than the new build gives them.
+  - routes "go visible" to the buy popup when the wallet is empty (`outOfHearts`) and shows the `settings.visibilityHiddenNoHearts` subtitle. With the auto-hide gone a zero-credit user is no longer hidden, so that branch is simply unreachable rather than wrong.
+  - `credits.unpaid_at` is a new key inside the wallet; old clients ignore unknown keys.
+- **New shape (preferred):** `CREDIT_CAP = 1`; no client-side buy gate; visibility never credit-gated; `credits.*` i18n keys and a `CoinIcon` instead of the heart.
+- **Safe to remove after:** the build shipping `CREDIT_CAP = 1` is the live floor.
+- **How to remove:** Nothing to delete in code (no shim). Delete this note once that build is the floor.
+- **Verify before removing:** check the live mobile version distribution; confirm the floor build shows a coin (not a heart) on the invite cost badge.
+
+### `app_buy_extra` count set stays {3,10,50}
+
+- **Added:** 2026-07-22
+- **Reason:** The 2026-07-22 rework made the daily grant 1, which invites shrinking the smallest pack to 1 credit. It was deliberately NOT done: the deployed mobile build posts `{ count: 3 }` from its buy sheet, and narrowing the accepted set would 400 every one of those taps. The pack is 3 = three days of allowance.
+- **Old shape (kept alive):** `app_buy_extra` and the edge dispatcher both validate `count ∈ {3,10,50}`.
+- **New shape (preferred):** unchanged for now. If a 1-credit pack is ever wanted, it must be staged: accept `{1,3,10,50}` server-side first, ship the client that offers 1, and only drop 3 once that build is the live floor.
+- **Safe to remove after:** N/A — this is a constraint note, not a shim. Delete it if the pack set is ever intentionally changed under the staging rule above.
+- **How to remove:** delete this entry.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'buy_extra' AND created_at > now() - interval '14 days'` and check which counts appear in the bodies.
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.

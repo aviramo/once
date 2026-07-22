@@ -26,7 +26,7 @@ import { PageReleaseBadge } from "../../_components/PageReleaseBadge";
 import { type EditorGroup } from "./_components/UserGroupsEditor";
 import { UserGroupsChips } from "./_components/UserGroupsChips";
 import { UserDangerZone } from "./_components/UserDangerZone";
-import { UserHeartsEditor } from "./_components/UserHeartsEditor";
+import { UserCreditsEditor } from "./_components/UserCreditsEditor";
 import { UserTestToggle } from "./_components/UserTestToggle";
 import { UserPhotos } from "./_components/UserPhotos";
 import {
@@ -411,13 +411,13 @@ export default async function UserDetailPage({
           bought_on) are preserved by the RPC, so changing these doesn't
           disturb the daily-grant or once-per-day buy throttles. */}
       {isAdmin ? (
-        <Section title={d.hearts.title}>
+        <Section title={d.credits.title}>
           <Card className="p-4">
-            <UserHeartsEditor
+            <UserCreditsEditor
               userId={u.user_id}
               initialBalance={Number(u.relations?.credits?.balance ?? 0)}
               initialExtra={Number(u.relations?.credits?.extra ?? 0)}
-              dict={d.hearts}
+              dict={d.credits}
               action={setUserHearts}
             />
           </Card>
