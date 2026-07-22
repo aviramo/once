@@ -97,8 +97,10 @@
       'M' + n(cx - wd / 2) + ' ' + n(cy) + 'h' + n(wd) +
       'M' + n(cx - wd / 2) + ' ' + n(cy + wd * 0.34) + 'h' + n(wd), INK, n(wd * 0.15));
   }
+  /* The path runs 1.62s tall, so it starts half of that above cy: the glyph is
+     centred on (cx, cy) and drops straight into a round button. */
   function shield(cx, cy, s, fill) {
-    return path('M' + n(cx) + ' ' + n(cy - s) + 'l' + n(s * 0.72) + ' ' + n(s * 0.26) + 'v' + n(s * 0.5) +
+    return path('M' + n(cx) + ' ' + n(cy - s * 0.81) + 'l' + n(s * 0.72) + ' ' + n(s * 0.26) + 'v' + n(s * 0.5) +
       'c0 ' + n(s * 0.46) + ' ' + n(-s * 0.3) + ' ' + n(s * 0.75) + ' ' + n(-s * 0.72) + ' ' + n(s * 0.86) +
       'c' + n(-s * 0.42) + ' ' + n(-s * 0.11) + ' ' + n(-s * 0.72) + ' ' + n(-s * 0.4) + ' ' + n(-s * 0.72) + ' ' + n(-s * 0.86) +
       'v' + n(-s * 0.5) + 'Z', ' fill="' + (fill || ACCENT) + '"');
@@ -184,17 +186,19 @@
       rect(105, 606, 90, 5, 2.5, INK, op(0.3));
   };
 
-  /* Report: the safety sheet, one tap from every card. */
+  /* Report: the safety sheet, one tap from every card. The sheet rises over the
+     person with a shield at its head, so the screen reads as safety at a glance. */
   SCREEN.report = function (face) {
-    return photo(0, 0, SW, 396, 0, face || F(1), null, 1, -10) +
+    return photo(0, -2, SW, 396, 0, face || F(1), null, 1, -10) +
       roundBtn(34, 42, 20, hamburger(34, 42, 18)) +
       roundBtn(266, 42, 20, shield(266, 42, 13, ACCENT)) +
-      path('M0 617V404c0-16 11-28 26-28h248c15 0 26 12 26 28v213Z', ' fill="' + PAGE + '"') +
-      rect(138, 396, 24, 4, 2, INK, op(0.25)) +
-      bar(105, 424, 90, 14, INK, 0.75) +
-      rect(20, 458, 260, 74, 16, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') +
-      bar(38, 478, 190, 11, INK, 0.32) + bar(38, 500, 120, 11, INK, 0.32) +
-      rect(20, 548, 260, 44, 22, ACCENT) + bar(110, 566, 80, 12, SURFACE, 0.92);
+      rect(0, 370, SW, 280, 30, PAGE, ' filter="url(#SHADOW)"') +
+      rect(138, 384, 24, 4, 2, INK, op(0.25)) +
+      circle(150, 428, 30, TINT) + shield(150, 428, 18, ACCENT) +
+      bar(105, 470, 90, 14, INK, 0.75) +
+      rect(20, 500, 260, 56, 16, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') +
+      bar(38, 516, 190, 11, INK, 0.3) + bar(38, 536, 120, 11, INK, 0.3) +
+      rect(20, 568, 260, 42, 21, ACCENT) + bar(110, 585, 80, 12, SURFACE, 0.92);
   };
 
   /* ---------- Devices ---------- */
@@ -225,9 +229,10 @@
   }
 
   /* ---------- Canvas ---------- */
-  function svg(wd, ht, body) {
+  function svg(wd, ht, body, fill) {
     var sh = id('sh'), bl = id('bl');
-    return '<svg class="art" viewBox="0 0 ' + wd + ' ' + ht + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">' +
+    return '<svg class="art" viewBox="0 0 ' + wd + ' ' + ht + '" preserveAspectRatio="xMidYMid ' +
+      (fill ? 'slice' : 'meet') + '" aria-hidden="true" focusable="false">' +
       '<defs>' +
       '<filter id="' + sh + '" x="-40%" y="-40%" width="180%" height="180%">' +
       '<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="' + INK + '" flood-opacity="0.16"/></filter>' +
@@ -238,7 +243,9 @@
       '</svg>';
   }
   function wide(body) { return svg(800, 500, body); }
-  function phone(body) { return svg(SW, SH, body); }
+  /* A phone artwork IS the device frame's content, so it fills it edge to edge:
+     a hair of crop beats a band of background along the top. */
+  function phone(body) { return svg(SW, SH, body, true); }
 
   /* ---------- Artworks ---------- */
   var ART = {};
