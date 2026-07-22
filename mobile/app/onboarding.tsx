@@ -14,9 +14,9 @@ import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { CakeIcon } from '../src/components/icons'
-import { BG, INK, INK_3, BLACK, GREEN_SOFT, BORDER_STRONG, NEGATIVE, WHITE, PRIMARY, SELECTION } from '../src/colors'
-import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, ICON } from '../src/tokens'
+import { BG, INK, INK_3, BLACK, GREEN_SOFT, NEGATIVE, WHITE, SELECTION } from '../src/colors'
+import { FIELD_SKIN } from '../src/field'
+import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 
@@ -512,7 +512,7 @@ export default function OnboardingPage() {
             label={t('ob.next')}
             onPress={onContinue}
             disabled={!canContinue}
-            variant="onPrimary"
+            variant="primary"
             size="lg"
           />
         </View>
@@ -574,7 +574,7 @@ export default function OnboardingPage() {
               onPress={onContinue}
               disabled={!dateValid}
               loading={submitting}
-              variant="onPrimary"
+              variant="primary"
               size="lg"
             />
           </View>
@@ -604,7 +604,7 @@ export default function OnboardingPage() {
             label={t('ob.next')}
             onPress={onContinue}
             disabled={totalPhotoCount < MIN_PHOTOS}
-            variant="onPrimary"
+            variant="primary"
             size="lg"
           />
         </View>
@@ -645,7 +645,7 @@ export default function OnboardingPage() {
               onPress={onContinue}
               disabled={!bioValid}
               loading={bioSubmitting}
-              variant="onPrimary"
+              variant="primary"
               size="lg"
             />
           </View>
@@ -658,8 +658,7 @@ export default function OnboardingPage() {
 
   return (
     <SafeAreaView style={styles.root}>
-      {/* Deep-wine PRIMARY surface: the app-wide white status-bar chrome
-          (AppStatusBar default) blends into the screen. */}
+      {/* The shared green band with white glyphs, as on every other screen. */}
       <AppStatusBar />
       <Animated.View style={{ flex: 1, paddingBottom: keyboardOffset }}>
         <View
@@ -780,18 +779,15 @@ const styles = StyleSheet.create({
     zIndex: 2, elevation: 2,
   },
 
-  // The onboarding field skin: no fill, white hairline border, white glyphs.
-  // Shared by the name box and the three date boxes so the two steps can't
-  // drift apart — each caller adds only its own padding/metrics on top.
-  fieldShell: {
-    borderWidth: 1,
-    borderColor: BORDER_STRONG,
-    borderRadius: RADIUS,
-  },
+  // The one typing surface, shared with the login email field and the empty
+  // photo slot. Worn here by the name box, the three date boxes and the bio
+  // box; each adds only its own metrics below.
+  fieldShell: FIELD_SKIN,
   inputWrap: {
     marginTop: XL,
+    height: INPUT_MIN_HEIGHT,
     paddingHorizontal: MD,
-    paddingVertical: MD,
+    justifyContent: 'center',
   },
   input: {
     fontSize: TEXT.md,
@@ -811,8 +807,9 @@ const styles = StyleSheet.create({
   dateSegmentGap: { marginLeft: SM },
   dateBox: {
     alignSelf: 'stretch',
-    paddingVertical: MD,
+    height: INPUT_MIN_HEIGHT,
     paddingHorizontal: SM,
+    justifyContent: 'center',
   },
   dateInput: {
     fontSize: TEXT.xl,

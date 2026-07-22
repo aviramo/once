@@ -7,7 +7,7 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
-import { PHOTO_CHROME, BORDER_STRONG, GREEN, ORANGE, ORANGE_SOFT, BLACK_SOFT, ONLINE_GREEN } from '../colors'
+import { PHOTO_CHROME, BORDER_STRONG, GREEN, GREEN_WASH, ORANGE, ORANGE_SOFT, ONLINE_GREEN } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -28,14 +28,63 @@ import { PHOTO_CHROME, BORDER_STRONG, GREEN, ORANGE, ORANGE_SOFT, BLACK_SOFT, ON
 const isRTL = localeIsRTL
 
 const TONES = {
-  // Green ink on a faint neutral wash. The chip's fill stays neutral so the
-  // colour lives entirely in the label and glyph.
-  neutral:  { fg: GREEN,  bg: BLACK_SOFT },
+  // Green ink on a pale GREEN tile. The fill used to be the muted alpha ramp,
+  // which composites over the warm page into something the eye reads as grey —
+  // so the chip sat outside the palette. GREEN_WASH is the solid half-green
+  // that keeps it inside it.
+  neutral:  { fg: GREEN,  bg: GREEN_WASH },
   // Orange on an orange wash — the positive hue, never the action green.
   positive: { fg: ORANGE, bg: ORANGE_SOFT },
 } as const
 
 type ChipTone = keyof typeof TONES
+
+// ── Where a chip label is allowed to break ─────────────────────────────────
+// A chip label is a compound of short facts: "6.4 mi away, 1 day ago",
+// "Has 3 kids (-, 5, 0), no more kids, busy weekend". The chips column is
+// narrow (it shares the card's bottom with the action stack), so these wrap —
+// and greedy wrapping breaks at whatever space happens to overflow, landing
+// inside a phrase: "6.4 mi away, 1 / day ago", "Has 3 kids (-, / 0)".
+//
+// A line breaker has no notion of "preferred" break, only "possible" one — so
+// the fix is to leave it only the seams BETWEEN phrases: after a top-level
+// comma, and before a parenthetical. Inside a phrase every space becomes a
+// NO-BREAK space. Nothing is forced: a label that fits still renders on one
+// line, and one that doesn't breaks where the meaning breaks.
+const NBSP = '\u00a0'
+// Longer than this, a phrase keeps its ordinary spaces. Glued it would offer
+// the breaker no seam at all, and a phrase too wide for the column would then
+// be split mid-word — worse than the ragged break we started from. The number
+// is the widest phrase the column comfortably fits, in characters.
+const PHRASE_GLUE_MAX = 20
+
+export function phraseWrap(label: string): string {
+  const phrases: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < label.length; i++) {
+    const c = label[i]
+    if (c === '(') {
+      depth++
+      // Seam before a parenthetical, so "(ages)" travels as one piece.
+      if (depth === 1 && i > start && label[i - 1] === ' ') {
+        phrases.push(label.slice(start, i - 1))
+        start = i
+      }
+    } else if (c === ')') {
+      depth = Math.max(0, depth - 1)
+    } else if (c === ',' && depth === 0 && label[i + 1] === ' ') {
+      // Seam after a top-level comma — the comma stays with its phrase, the
+      // space after it is dropped and re-added as the joining break.
+      phrases.push(label.slice(start, i + 1))
+      start = i + 2
+    }
+  }
+  phrases.push(label.slice(start))
+  return phrases
+    .map(p => (p.length <= PHRASE_GLUE_MAX ? p.replace(/ /g, NBSP) : p))
+    .join(' ')
+}
 
 export function Chip({
   renderIcon,
@@ -79,7 +128,7 @@ export function Chip({
         style={[styles.chipText, { color: glyphColor }]}
         maxFontSizeMultiplier={FONT_SCALE.heading}
       >
-        {text}
+        {phraseWrap(text)}
       </Text>
       {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(glyphColor)}</View> : null}
     </Container>

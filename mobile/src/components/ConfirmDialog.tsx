@@ -4,8 +4,9 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
-import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
-import { GREEN, SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, BLACK_MID } from '../colors'
+import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
+import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, BLACK_MID } from '../colors'
+import { FIELD_SKIN } from '../field'
 
 // Every decision popup in the app is this one component. The TITLE carries
 // the action: there is no icon above it, and the buttons are plain labels in
@@ -225,12 +226,9 @@ const styles = StyleSheet.create({
     color: BLACK_STRONG,
   },
   noteInput: {
+    ...FIELD_SKIN,
     marginTop: MD,
     minHeight: 96,
-    backgroundColor: SURFACE,
-    borderWidth: STROKE.thin,
-    borderColor: GREEN,
-    borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingVertical: SM,
     fontSize: FSIZE.md,

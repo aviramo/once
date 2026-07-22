@@ -8,7 +8,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
-import { BG, GREEN, INK, INK_2, INK_3, PRIMARY } from '../src/colors'
+import { BG, GREEN, INK, INK_2, INK_3 } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 import { legalUrl } from '../src/lib/links'
@@ -126,9 +126,7 @@ export default function LoginPage() {
 
   return (
     <View style={styles.root}>
-      {/* Deep-wine PRIMARY surface: the app-wide white status-bar chrome
-          (AppStatusBar default) blends into the screen rather than
-          contrasting against it. */}
+      {/* The shared green band with white glyphs, as on every other screen. */}
       <AppStatusBar />
       <SafeAreaView style={styles.content} edges={['top', 'left', 'right']}>
         <View style={[styles.flex, { paddingBottom: kbHeight }]}>

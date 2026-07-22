@@ -7,7 +7,8 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { BLACK_STRONG, INK, INK_2, INK_3, SURFACE, BLACK, WHITE, PRIMARY, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
+import { BLACK_STRONG, INK, INK_2, INK_3, SURFACE, BLACK, WHITE, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
+import { FIELD_SKIN } from '../field'
 import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -335,11 +336,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   inputWrap: {
+    ...FIELD_SKIN,
     height: INPUT_MIN_HEIGHT,
-    borderRadius: RADIUS,
-    borderWidth: STROKE.thin,
-    borderColor: BORDER_SOFT,
-    backgroundColor: SURFACE,
     paddingHorizontal: MD,
     justifyContent: 'center',
   },

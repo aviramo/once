@@ -18,7 +18,8 @@ import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SM, RADIUS, STROKE, ICON } from '../tokens'
-import { INK, PHOTO_CHROME, SURFACE, BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
+import { INK, INK_3, PHOTO_CHROME, SURFACE, BLACK_SOFT, WHITE_MID } from '../colors'
+import { FIELD_SKIN } from '../field'
 import { ConfirmDialog } from './ConfirmDialog'
 import { InfoIcon } from './icons'
 
@@ -207,7 +208,8 @@ function PhotoCell({
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
       {replacing && (
         <View pointerEvents="none" style={photoStyles.replacingOverlay}>
-          <ActivityIndicator size="large" color={WHITE} />
+          {/* Dark ink: the scrim underneath is the opaque white PHOTO_CHROME. */}
+          <ActivityIndicator size="large" color={INK} />
         </View>
       )}
       {canRemove && (
@@ -738,9 +740,9 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
                 onPress={() => { if (pickingAddIdx !== null) return; tap(); pickPhoto(i) }}
               >
                 {pickingAddIdx === i ? (
-                  <ActivityIndicator size="small" color={WHITE} />
+                  <ActivityIndicator size="small" color={INK} />
                 ) : (
-                  <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE_MID} strokeWidth={1.5} strokeLinecap="round">
+                  <Svg pointerEvents="none" width={ICON.xxl} height={ICON.xxl} viewBox="0 0 24 24" fill="none" stroke={INK_3} strokeWidth={STROKE.thin} strokeLinecap="round">
                     <Path d="M12 5v14M5 12h14" />
                   </Svg>
                 )}
@@ -799,12 +801,13 @@ const photoStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
-  // Empty slot: no fill, white hairline border — the same skin the onboarding
-  // name and date fields wear, since this grid sits on the same black sheet.
-  // Geometry comes from `cell` so an add slot and a photo are the same tile.
+  // Empty slot: a white surface behind the warm hairline — the same skin the
+  // onboarding name/date/bio fields and the login email field wear, since an
+  // empty slot is a field waiting to be filled. Geometry comes from `cell` so
+  // an add slot and a photo are the same tile.
   add: {
+    ...FIELD_SKIN,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: STROKE.thin, borderColor: WHITE,
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,

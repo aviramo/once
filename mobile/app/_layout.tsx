@@ -66,7 +66,7 @@ import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-import { GREEN, BG, PRIMARY } from '../src/colors'
+import { GREEN, BG } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -216,8 +216,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   // home-vs-onboarding and `router.replace` off `/login`. Leaving the
   // fully-mounted login screen visible during that wait makes it linger and
   // repaint ("flicker") before the hard `animation: 'none'` cut. Cover it
-  // with a full-bleed PRIMARY layer — the same wine as the login background
-  // and the home header, so login → hold → destination reads as one
+  // with a full-bleed BG layer — the same beige page as login and home, so
+  // login → hold → destination reads as one
   // continuous surface. It stays up only while the user is authenticated but
   // still sitting on `/login` (or the profile hasn't loaded yet), and drops
   // the instant the route changes, with the destination already painted

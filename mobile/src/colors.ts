@@ -63,6 +63,16 @@ export const GREEN_STRONG = '#35634F'  // pressed / hover
 export const GREEN_DEEP   = INK
 export const GREEN_SOFT   = 'rgba(65,122,98,0.12)'  // faint green wash (chips, row fills)
 
+// ── Half-green ─────────────────────────────────────────────────────────────
+// The alpha ramp above keeps the hue on paper but loses it on screen: laid
+// over the warm page at 10-32% the mix desaturates and the eye reads plain
+// GREY. Where a muted element must still read GREEN — a placeholder, a hint,
+// an empty state, an incoming bubble — use these SOLID half-strength greens
+// instead of an alpha step. Two tiers, same discipline as the ramp: one ink,
+// one surface, no in-betweens.
+export const GREEN_HALF = '#6E9986'  // muted green INK: placeholders, hints, empty states
+export const GREEN_WASH = '#DCE9E1'  // muted green SURFACE: incoming bubbles, soft tiles
+
 // ── ORANGE — the positive colour ───────────────────────────────────────────
 // The heart, a like, presence, a positive delta. Status, not navigation.
 export const ORANGE       = '#E4573D'

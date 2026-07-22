@@ -29,7 +29,7 @@ import { CloseIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
 import { SM, MD, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { GREEN, BG, SCRIM_BLACK, PRIMARY, WHITE, BLACK } from '../colors'
+import { GREEN, GREEN_WASH, BG, SCRIM_BLACK, INK } from '../colors'
 
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
  *  the sheet's dismiss pan instead of fighting it. This is exactly the prop
@@ -276,9 +276,11 @@ export function SheetHeader({
           size={ROUND_BUTTON_SIZE_SM}
           onPress={onClose}
           accessibilityLabel={closeAccessibilityLabel}
-          // On a solid bar the button needs no scrim; floating over a photo it
-          // keeps RoundButton's default dark scrim so the glyph stays legible.
-          bg={floating ? undefined : 'transparent'}
+          // On a solid bar the X wears the same pale-green tile as the header's
+          // trailing chip, so the two sides of the row read as one pair sitting
+          // symmetrically inside the page gutter. Floating over a photo it keeps
+          // RoundButton's default white chrome + shadow so it stays legible.
+          bg={floating ? undefined : GREEN_WASH}
           shadow={!!floating}
         >
           <CloseIcon color={GREEN} size={ICON.round} />
@@ -311,10 +313,14 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
+  // The horizontal inset is SM, not the page gutter: the chrome on this row is
+  // a circle and a chip, both of which carry their own visual padding, and they
+  // are meant to land on the same start/end line as the sheet body's content
+  // (the chat's bubbles) rather than sitting a gutter further in.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: MD,
+    paddingHorizontal: SM,
     paddingBottom: SM,
     gap: SM,
   },
@@ -346,7 +352,8 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   title: {
-    color: WHITE,
+    // The header sits on BG, so the title is INK like every other heading.
+    color: INK,
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
     fontWeight: WEIGHT.extrabold,

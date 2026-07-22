@@ -18,7 +18,7 @@ import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
-import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_STRONG, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
@@ -101,7 +101,7 @@ function formatTime(dateStr: string): string {
 // ── Icons (chat-specific only; shared icons live in src/components/icons.tsx) ─
 
 function CheckMark({ status, isMine }: { status: 'pending' | 'sent' | 'read'; isMine: boolean }) {
-  const c = isMine ? WHITE_STRONG : BLACK_MID
+  const c = isMine ? WHITE_STRONG : GREEN_HALF
   if (status === 'pending') {
     return (
       <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -234,7 +234,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
   }))
   const inputWrapBorderStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(attachAnim.value, [0, 1], [BLACK_SOFT, PRIMARY]),
+    borderColor: interpolateColor(attachAnim.value, [0, 1], [BORDER_STRONG, PRIMARY]),
   }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
@@ -1534,7 +1534,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: MD, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={BLACK_SOFT} />
+              <ActivityIndicator size="small" color={GREEN_HALF} />
             </View>
           ) : null}
           ListEmptyComponent={!otherIsTyping ? (
@@ -1595,7 +1595,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   }}
                   scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
-                  placeholderTextColor={BLACK_MID}
+                  placeholderTextColor={GREEN_HALF}
                   multiline
                   blurOnSubmit={false}
                   autoFocus={false}
@@ -1606,7 +1606,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
                 style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
               >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={GREEN_HALF} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </Svg>
               </Pressable>
@@ -1732,7 +1732,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   <Waveform
                     bars={previewBars}
                     height={28}
-                    inactiveColor={BLACK_MID}
+                    inactiveColor={GREEN_HALF}
                     activeColor={PRIMARY}
                     thumbColor={PRIMARY}
                     progressAnim={previewProgressAnim}
@@ -1840,9 +1840,9 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
   ]
 
   const textColor = isMine ? WHITE : BLACK
-  const subColor = isMine ? WHITE_STRONG : BLACK_STRONG
-  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
-  const iconBg = isMine ? WHITE_SOFT : BLACK_SOFT
+  const subColor = isMine ? WHITE_STRONG : GREEN
+  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
+  const iconBg = isMine ? WHITE_SOFT : GREEN_SOFT
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -1927,7 +1927,7 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
+  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -2398,8 +2398,8 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
   ]
   const iconColor = isMine ? WHITE : BLACK
   const barActive = isMine ? WHITE_STRONG : PRIMARY
-  const barInactive = isMine ? WHITE_MID : BLACK_MID
-  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
+  const barInactive = isMine ? WHITE_MID : GREEN_HALF
+  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
   const routeBtn = playing ? (
@@ -2428,7 +2428,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           <Pressable
             onPress={handlePlayPause}
             disabled={!ready}
-            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : BLACK_SOFT }]}
+            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : GREEN_SOFT }]}
             hitSlop={8}
           >
             {ready ? (
@@ -2592,7 +2592,7 @@ const styles = StyleSheet.create({
   messagesContent: { padding: SM, flexGrow: 1 },
   emptyLabel: {
     marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
-    color: BLACK_MID, fontSize: TEXT.md, letterSpacing: 0.4,
+    color: GREEN_HALF, fontSize: TEXT.md, letterSpacing: 0.4,
   },
 
   msgWrap: { marginTop: XS },
@@ -2609,8 +2609,8 @@ const styles = StyleSheet.create({
   retryLabel: { fontSize: TEXT.xs, color: INK },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
-  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT },
-  daySepLabel: { fontSize: TEXT.xs, color: BLACK_STRONG },
+  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BORDER_STRONG },
+  daySepLabel: { fontSize: TEXT.xs, color: GREEN },
 
   bubble: {
     maxWidth: '80%',
@@ -2620,7 +2620,7 @@ const styles = StyleSheet.create({
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: BLACK_SOFT },
+  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: GREEN_WASH },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), flexShrink: 1 },
   bubbleTextMine: { color: WHITE },
@@ -2628,17 +2628,19 @@ const styles = StyleSheet.create({
 
   inlineTime: { fontSize: TEXT.xs, lineHeight: lh(TEXT.xs), letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
-  inlineTimeTheirs: { color: BLACK_MID },
+  inlineTimeTheirs: { color: GREEN_HALF },
   bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
   textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginEnd: -SM },
 
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: MD, paddingHorizontal: MD },
-  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: BLACK_STRONG },
+  typingDot: { width: 7, height: 7, borderRadius: RADII.pill, backgroundColor: GREEN_HALF },
 
   // Outer wrapper: holds the single-row input + send button plus the
-  // dynamic bottom spacer that clears the nav bar / keyboard.
+  // dynamic bottom spacer that clears the nav bar / keyboard. Deliberately
+  // TRANSPARENT: a full-width white band under the row read as a second
+  // surface stacked on the sheet. The field's own pill is the only thing that
+  // should look like a control; the bar itself is just page.
   inputBarOuter: {
-    backgroundColor: SURFACE,
     zIndex: 2,
   },
   inputRow: {
@@ -2658,7 +2660,7 @@ const styles = StyleSheet.create({
     maxHeight: INPUT_MAX_HEIGHT,
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
-    borderColor: BLACK_SOFT,
+    borderColor: BORDER_STRONG,
     backgroundColor: SURFACE,
     paddingEnd: XS,
     overflow: 'hidden',
@@ -2691,9 +2693,11 @@ const styles = StyleSheet.create({
 
   // Attach popup (inline, above input bar)
   attachBtn: {
-    width: 36, height: 36,
+    // Full single-line height so the icon centers on the text row; with
+    // alignItems 'flex-end' on the wrap it stays on the last line as the
+    // field grows. A fixed 36 + marginBottom sat 4px above center.
+    width: 36, height: INPUT_MIN_HEIGHT,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: SM,
   },
   attachBtnPressed: { opacity: 0.4 },
   attachBar: {
@@ -2792,7 +2796,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: GREEN_WASH,
   },
   chatImageSpinnerOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -2832,9 +2836,9 @@ const styles = StyleSheet.create({
   },
   audioRouteBtn: {
     width: 32, height: 32,
-    borderRadius: 16,
+    borderRadius: RADII.pill,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: GREEN_WASH,
   },
   audioRouteBtnActive: {
     backgroundColor: PRIMARY,
@@ -2863,10 +2867,12 @@ const styles = StyleSheet.create({
   },
 
   // Recording / preview bar
+  // Opaque so it hides the text row underneath — the page colour, not white,
+  // now that the input bar itself carries no band.
   recordOverlay: {
     position: 'absolute',
     top: 0, start: 0, end: 0, bottom: 0,
-    backgroundColor: SURFACE,
+    backgroundColor: BG,
   },
   recSideBtn: {
     width: 40, height: 49,

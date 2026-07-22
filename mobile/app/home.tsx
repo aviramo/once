@@ -25,7 +25,7 @@ import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
-import { PresenceDot } from '../src/components/Chip'
+import { Chip, PresenceDot } from '../src/components/Chip'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/PullPane'
@@ -375,44 +375,11 @@ const headlineAreaStyle = StyleSheet.create({
 // every per-state variant of this screen (HIDDEN, WATCHING, WAITING, etc.).
 
 const chatMenuStyles = StyleSheet.create({
+  // Two stacked full-width buttons on the page gutter.
   sheet: {
-    paddingHorizontal: 0,
-    paddingVertical: SM / 2,
-  },
-  row: {
-    paddingVertical: MD,
     paddingHorizontal: MD,
-    alignItems: 'center',
-  },
-  // Icon + label cluster (both rows carry a glyph). Row direction follows
-  // RTL, so the glyph leads on the start edge with an SM gap to the label.
-  rowInner: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  rowPressed: { backgroundColor: BLACK_SOFT },
-  label: {
-    fontSize: TEXT.md,
-    color: BLACK,
-    fontWeight: WEIGHT.semibold,
-  },
-  // End-chat reads at full BLACK; block (the more drastic / irreversible
-  // action) steps down to BLACK_STRONG so it reads a touch softer.
-  labelMid: { color: BLACK_STRONG },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: BLACK_SOFT,
-    marginHorizontal: MD,
-  },
-  // The chat header's trailing control: an explicit "End chat" TEXT button
-  // (replaced the cryptic 3-dot menu icon — users reported the end-conversation
-  // action was undiscoverable). Sits on the dark PRIMARY header bar, so WHITE.
-  endBtn: {
-    paddingVertical: SM / 2,
-    paddingHorizontal: SM,
-  },
-  endBtnPressed: { opacity: 0.55 },
-  endLabel: {
-    fontSize: TEXT.md,
-    color: GREEN_DEEP,
-    fontWeight: WEIGHT.semibold,
+    paddingTop: MD,
+    gap: SM,
   },
 })
 
@@ -3034,35 +3001,29 @@ export default function HomePage() {
                     icon-as-action-button), and is mirrored on page2. See
                     `centerNotice` and `noticeOverridesCard`. */}
 
-                {/* Chat-state actions menu (opened from the MatchCard X
-                    button). Exactly two rows, each with its own glyph: end
-                    chat (leave) and block. Report is a card-level affordance,
-                    not here. paddingBottom = safe-area bottom + MD so the
-                    last row sits clear of the home-indicator gesture area. */}
+                {/* Chat-state actions menu (opened from the chat header's End
+                    chip). Exactly two full-width buttons: leaving is the action
+                    the user came here for, so it is the solid primary; blocking
+                    is the drastic, rarely-wanted one and recedes to the muted
+                    secondary. Report is a card-level affordance, not here.
+                    paddingBottom = safe-area bottom + MD so the last button
+                    sits clear of the home-indicator gesture area. */}
                 <BottomSheet
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
                   contentStyle={[chatMenuStyles.sheet, { paddingBottom: Math.max(bottomInset, SM) + MD }]}
                 >
-                  <Pressable
+                  <Button
+                    label={t('chat.leave')}
+                    iconStart={<SignOutIcon color={WHITE} />}
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('leave') }}
-                    style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
-                  >
-                    <View style={chatMenuStyles.rowInner}>
-                      <SignOutIcon color={BLACK} />
-                      <Text style={chatMenuStyles.label}>{t('chat.leave')}</Text>
-                    </View>
-                  </Pressable>
-                  <View style={chatMenuStyles.divider} />
-                  <Pressable
+                  />
+                  <Button
+                    label={t('chat.block')}
+                    variant="secondary"
+                    iconStart={<BlockIcon color={BLACK_STRONG} />}
                     onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('block') }}
-                    style={({ pressed }) => [chatMenuStyles.row, pressed && chatMenuStyles.rowPressed]}
-                  >
-                    <View style={chatMenuStyles.rowInner}>
-                      <BlockIcon color={BLACK_STRONG} />
-                      <Text style={[chatMenuStyles.label, chatMenuStyles.labelMid]}>{t('chat.block')}</Text>
-                    </View>
-                  </Pressable>
+                  />
                 </BottomSheet>
 
                 <ConfirmDialog
@@ -3201,15 +3162,7 @@ export default function HomePage() {
           titleTrailing={partnerOnline ? <PresenceDot /> : undefined}
           closeAccessibilityLabel={t('chat.a11y.close')}
           headerTrailing={
-            <Pressable
-              onPress={() => { tap(); setChatMenuOpen(true) }}
-              hitSlop={SM}
-              accessibilityRole="button"
-              accessibilityLabel={t('chat.endChat')}
-              style={({ pressed }) => [chatMenuStyles.endBtn, pressed && chatMenuStyles.endBtnPressed]}
-            >
-              <Text style={chatMenuStyles.endLabel}>{t('chat.endChat')}</Text>
-            </Pressable>
+            <Chip text={t('chat.endChat')} onPress={() => { tap(); setChatMenuOpen(true) }} />
           }
         >
           <ChatPage

@@ -16,7 +16,7 @@ import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
 import { RoundButton } from './RoundButton'
-import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -51,10 +51,10 @@ export type CardAction = {
 
 // Minimal unread marker. Sized/placed to sit ON the round button's upper-END
 // arc (~11px in from each corner of the 76dp button), so it reads as attached
-// to the button rather than floating in the empty square corner. The brand is
-// strictly monochrome (no warning hue) — attention on a dark surface is WHITE
-// (see colors.ts), so this is a solid WHITE dot with a thin BLACK ring that
-// separates it from both the dark button scrim and any bright photo behind it.
+// to the button rather than floating in the empty square corner. A solid GREEN
+// disc inside a WHITE ring: the ring is what separates it from the white
+// button below and from any photo behind it, and green keeps the marker in the
+// brand's reading hue instead of inventing a warning colour.
 const UNREAD_DOT_SIZE = 14
 const UNREAD_DOT_INSET = 4
 
@@ -463,6 +463,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // joining the present parts, never leaving a stray separator behind.
   const identityChipText = [nameChipText, ageChipText].filter(Boolean).join(', ')
 
+  // Several facts in one label; Chip's phraseWrap decides where it breaks.
   const familyChipText = useMemo(
     () => buildFamilyChipText(match.family, isForKids, self, viewerFamily, match.is_male),
     [match.family, isForKids, self, viewerFamily, match.is_male],
@@ -934,9 +935,9 @@ const styles = StyleSheet.create({
     width: UNREAD_DOT_SIZE,
     height: UNREAD_DOT_SIZE,
     borderRadius: UNREAD_DOT_SIZE / 2,
-    backgroundColor: SURFACE,
-    borderWidth: 2,
-    borderColor: BLACK,
+    backgroundColor: GREEN,
+    borderWidth: STROKE.base,
+    borderColor: WHITE,
   },
   chipsStack: {
     flexDirection: 'column',
