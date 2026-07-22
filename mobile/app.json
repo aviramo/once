@@ -79,7 +79,15 @@
           "iosUrlScheme": "com.googleusercontent.apps.243101157812-39cu77j7o0ukr8vvnl59mshsdelne3he"
         }
       ],
-      "./plugins/withAdiRegistration.js"
+      "./plugins/withAdiRegistration.js",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useModularHeaders": true
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},

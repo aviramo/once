@@ -49,12 +49,23 @@ export type CardAction = {
   badge?: boolean
 }
 
+// One "add this to your profile" chip in the own-profile preview's chip
+// column. Same Chip primitive as the fact chips above it — only the tone
+// differs — so an add row can never drift from the row it sits under.
+export type CardAddChip = {
+  key: string
+  label: string
+  renderIcon: (color: string) => React.ReactNode
+  onPress: () => void
+}
+
 // Minimal unread marker. Sized/placed to sit ON the round button's upper-END
 // arc (~11px in from each corner of the 76dp button), so it reads as attached
 // to the button rather than floating in the empty square corner. A solid GREEN
 // disc inside a WHITE ring: the ring is what separates it from the white
-// button below and from any photo behind it, and green keeps the marker in the
-// brand's reading hue instead of inventing a warning colour.
+// button below and from any photo behind it, and the brand orange keeps the
+// marker in the app's "good news" hue (a waiting message is news, not a
+// warning) and matches the chat glyph on the button it rides.
 const UNREAD_DOT_SIZE = 14
 const UNREAD_DOT_INSET = 4
 
@@ -303,8 +314,16 @@ type MatchCardProps = {
   /** Overlay action buttons stacked at the bottom-right of the hero photo,
    * starting at the heart's anchor and growing upward. When omitted, a
    * single heart button is rendered (tapping scrolls to the end of the
-   * card). The self-profile preview passes [add-photo, add-family]. */
+   * card). Pass `[]` for a card that carries no round action at all — the
+   * own-profile preview, whose adds are `addChips` instead. */
   actions?: CardAction[]
+  /** Add-affordances for the own-profile preview, rendered as one row of
+   * chips at the BOTTOM of the fact-chip column rather than as round buttons
+   * over the photo (user directive 2026-07-22). An "add" is a slot in the
+   * same list of facts the chips above it state, so it belongs in that
+   * column; the `action` tone is what keeps a "do this" from reading as
+   * "here is a fact". */
+  addChips?: CardAddChip[]
   /** When provided, a report (flag) RoundButton is overlaid at the TOP corner
    * of the hero photo (the chips side), in EVERY state — separate from the
    * bottom action stack so the report affordance lives in one consistent
@@ -364,6 +383,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   onFamilyTap,
   bioEdit,
   actions,
+  addChips,
   onReport,
   isForKids,
   viewerFamily,
@@ -785,6 +805,24 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     />
                   </View>
                 ) : null}
+                {/* The adds close the column: everything above states a fact
+                    about the profile, these offer the facts still missing.
+                    One wrap row, so they sit side by side and only break to a
+                    second line when the column is genuinely too narrow. */}
+                {addChips && addChips.length > 0 ? (
+                  <View style={styles.chipsLine}>
+                    {addChips.map(c => (
+                      <Chip
+                        key={c.key}
+                        renderIcon={c.renderIcon}
+                        text={c.label}
+                        tone="action"
+                        onPhoto
+                        onPress={c.onPress}
+                      />
+                    ))}
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -935,7 +973,7 @@ const styles = StyleSheet.create({
     width: UNREAD_DOT_SIZE,
     height: UNREAD_DOT_SIZE,
     borderRadius: UNREAD_DOT_SIZE / 2,
-    backgroundColor: GREEN,
+    backgroundColor: PRIMARY,
     borderWidth: STROKE.base,
     borderColor: WHITE,
   },

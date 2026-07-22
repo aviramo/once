@@ -7,7 +7,7 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
-import { PHOTO_CHROME, BORDER_STRONG, GREEN, GREEN_WASH, ORANGE, ORANGE_SOFT, ONLINE_GREEN } from '../colors'
+import { PHOTO_CHROME, BORDER_STRONG, GREEN, GREEN_WASH, ORANGE, ORANGE_SOFT, ONLINE_GREEN, PRIMARY } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -35,6 +35,12 @@ const TONES = {
   neutral:  { fg: GREEN,  bg: GREEN_WASH },
   // Orange on an orange wash — the positive hue, never the action green.
   positive: { fg: ORANGE, bg: ORANGE_SOFT },
+  // "Do this" rather than "here is a fact". Same white tile as every other
+  // on-photo chip — the tile is the fabric of the card and an add-chip is not
+  // a foreign object on it — but the ink is the brand orange instead of the
+  // reading green. Colour alone carries the difference, which is why this tone
+  // opts out of the on-photo ink override below.
+  action:   { fg: PRIMARY, bg: PHOTO_CHROME },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -114,9 +120,12 @@ export function Chip({
   // On a photo the chip is the shared WHITE chrome tile carrying GREEN ink.
   // The white tile is what supplies the contrast — the photo underneath is
   // arbitrary — which is exactly what frees the label and glyph to be the
-  // brand green rather than a neutral black.
-  const bgColor = onPhoto ? PHOTO_CHROME : bg
-  const glyphColor = onPhoto ? GREEN : fg
+  // brand green rather than a neutral black. The `action` tone opts out of the
+  // ink half: it wears the same white tile, and its orange ink is the whole of
+  // what separates a "do this" from the facts beside it.
+  const asChrome = onPhoto && tone !== 'action'
+  const bgColor = asChrome ? PHOTO_CHROME : bg
+  const glyphColor = asChrome ? GREEN : fg
   const Container: any = onPress ? Pressable : View
   return (
     <Container

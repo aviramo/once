@@ -387,59 +387,15 @@ export function MailIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
-// ── Add-options tile icons ─────────────────────────────────────────────────
-
-// The "you can add one" affordance both add-tiles carry: a bare plus parked in
-// the top-right of the 24-unit viewBox. No badge, no enclosing circle — it is
-// drawn in the outline colour only, so it reads as a mark floating beside the
-// glyph. Defined once so the camera and the family glyph carry the same
-// gesture; each glyph leaves that corner empty for it.
-const ADD_PLUS = { cx: 20, cy: 4, arm: 2.4 } as const
-
-function AddPlus() {
-  const { cx, cy, arm } = ADD_PLUS
-  return (
-    <G fill="none">
-      <Line x1={cx - arm} y1={cy} x2={cx + arm} y2={cy} />
-      <Line x1={cx} y1={cy - arm} x2={cx} y2={cy + arm} />
-    </G>
-  )
-}
-
-// Plain single-stroke camera. No fill and no second colour: it sits on a
-// light surface as a label's glyph, where the filled+outlined treatment below
-// reads as a sticker rather than as an icon.
+// Plain single-stroke camera. Also the glyph on the own-profile card's
+// "add a photo" chip, at the chips' shared ICON.sm baseline — the old filled
+// sticker pair (AddPhotoIcon / FamilyKidsIcon) went with the round buttons
+// those chips replaced.
 export function CameraIcon({ color = INK, size = ICON.lg }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M3 8h3l1.6-2.2h8.8L18 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
       <Circle cx="12" cy="13.5" r="3.6" />
-    </Glyph>
-  )
-}
-
-// Filled silhouette + white outline, matching HeartIcon's overlay-on-photo
-// visual. Default usage: `color={INK} stroke={WHITE}` inside a RoundButton.
-export function AddPhotoIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
-      <Rect x="2" y="8" width="15" height="12" rx="2" />
-      <Circle cx="9.5" cy="14" r="3" />
-      <AddPlus />
-    </Glyph>
-  )
-}
-
-// Filled silhouette + white outline, matching HeartIcon. Body paths are closed
-// (trailing `z`) so the fill produces a person silhouette, not an open arc.
-export function FamilyKidsIcon({ color = PRIMARY, stroke = WHITE, size = ICON.xxxl }: IconProps & { stroke?: string } = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="6.5" cy="8.5" r="2.3" />
-      <Path d="M3 21v-6a3.5 3.5 0 0 1 7 0V21z" />
-      <Circle cx="13.5" cy="11.5" r="1.8" />
-      <Path d="M11 21v-4a2.7 2.7 0 0 1 5.4 0V21z" />
-      <AddPlus />
     </Glyph>
   )
 }

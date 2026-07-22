@@ -13,7 +13,7 @@ import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, 
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { MatchCard, type CardAction } from '../src/components/MatchCard'
+import { MatchCard, type CardAddChip } from '../src/components/MatchCard'
 import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import type { OverlaySheetBody } from '../src/components/OverlaySheet'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
@@ -23,8 +23,8 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, creditTotal, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
@@ -34,7 +34,7 @@ import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
-import { Chip, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
+import { Chip, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
@@ -562,9 +562,6 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     onDismiss()
   }, [onDismiss])
 
-  const signOutTap = useTapResponder(() => { tap(); dismissThen(onSignOutPress) })
-  const deleteTap = useTapResponder(() => { tapWarning(); dismissThen(onDeletePress) })
-
   if (!profile || !user) return null
 
   const age = profile.birth_date ? calcAge(profile.birth_date) : null
@@ -585,9 +582,9 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       visible={visible}
       onDismiss={onDismiss}
       onClosed={handleClosed}
-      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) }}
+      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + MD }}
     >
-      {/* Identity details as a plain stacked text list (PRIMARY on the white
+      {/* Identity details as a plain stacked text list (muted ink on the white
           sheet), not chip pills — one line per field, like a list. */}
       <View style={styles.accountPopupList}>
         {detailRows.map(r => (
@@ -601,24 +598,21 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
           </Text>
         ))}
       </View>
-      <View style={styles.accountActionsCard}>
-        <View style={styles.accountActionRow} {...signOutTap}>
-          <SignOutIcon color={BLACK} />
-          {/* Wrap label in flex:1 row so the Text auto-flips to the logical
-              start side on iOS RTL — more reliable than textAlign alone. */}
-          <View style={styles.accountActionTextWrap}>
-            <Text style={[styles.accountActionText, { color: BLACK }]} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
-          </View>
-        </View>
-        {/* Soft dark hairline — the shared WHITE_SOFT divider is invisible on
-            the white popup surface. */}
-        <View style={[styles.accountActionDivider, { backgroundColor: BLACK_SOFT }]} />
-        <View style={styles.accountActionRow} {...deleteTap}>
-          <TrashIcon color={BLACK_MID} />
-          <View style={styles.accountActionTextWrap}>
-            <Text style={[styles.accountActionText, { color: BLACK_MID }]} numberOfLines={1} ellipsizeMode="clip">{t('settings.deleteAccount')}</Text>
-          </View>
-        </View>
+      {/* The same pair of full-width buttons the chat menu's leave/block sheet
+          uses: the action you opened this for is the solid primary, the
+          drastic and rarely-wanted one recedes to the muted secondary. */}
+      <View style={styles.accountActions}>
+        <Button
+          label={tg('settings.signOut', profile.is_male)}
+          iconStart={<SignOutIcon color={WHITE} />}
+          onPress={() => { tap(); dismissThen(onSignOutPress) }}
+        />
+        <Button
+          label={t('settings.deleteAccount')}
+          variant="secondary"
+          iconStart={<TrashIcon color={BLACK_STRONG} />}
+          onPress={() => { tapWarning(); dismissThen(onDeletePress) }}
+        />
       </View>
     </BottomSheet>
   )
@@ -1445,7 +1439,7 @@ function ageLabel(n: number): string {
 }
 
 function FamilyToggleRow({ label, value, onValueChange }: { label: string; value: boolean; onValueChange: (v: boolean) => void }) {
-  const trackBg = value ? PRIMARY : BLACK_SOFT
+  const trackBg = value ? GREEN : BLACK_SOFT
   // Knob travel = track width 48 - knob width 24 - padding 4 = 20px.
   // OFF always rests at the knob's natural layout position (translateX 0):
   // the left edge in LTR, the right edge in RTL (the `start` side — layout is
@@ -1583,12 +1577,11 @@ function FamilyValuePopup({
 }
 
 export function FamilyKidsPopup({
-  visible, initial, initialIsForKids, saving, weekStart, isMale, onDismiss, onSave,
+  visible, initial, initialIsForKids, weekStart, isMale, onDismiss, onSave,
 }: {
   visible: boolean
   initial: FamilyData | null
   initialIsForKids: boolean | null
-  saving: boolean
   weekStart: number
   isMale: boolean | null
   onDismiss: () => void
@@ -1724,10 +1717,12 @@ export function FamilyKidsPopup({
 
   const dirty = !familyEqual(current, initial) || isForKids !== (initialIsForKids ?? null)
 
+  // Tapping outside closes the sheet on the same frame. The save is handed to
+  // the parent as fire-and-forget — waiting for the round trip to finish before
+  // closing made the popup feel stuck on a slow network.
   const handleDismiss = () => {
-    if (saving) return
     if (dirty) onSave(current, isForKids)
-    else onDismiss()
+    onDismiss()
   }
   const onPickerDismiss = () => setPickerTarget(null)
   const onPickerPick = (value: number) => {
@@ -1757,7 +1752,6 @@ export function FamilyKidsPopup({
     <BottomSheet
       visible={visible}
       onDismiss={handleDismiss}
-      disableBackdropDismiss={saving}
       cardWrapStyle={{ maxHeight: sheetMaxH }}
       contentStyle={familyStyles.sheet}
     >
@@ -1932,7 +1926,7 @@ const familyStyles = StyleSheet.create({
   optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
   pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
-  pillSelected: { backgroundColor: PRIMARY },
+  pillSelected: { backgroundColor: GREEN },
   pillLabel: { fontSize: TEXT.sm, color: BLACK },
   pillLabelSelected: { color: WHITE },
   sectionPill: {
@@ -1978,7 +1972,7 @@ const familyStyles = StyleSheet.create({
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: 999,
-    backgroundColor: PRIMARY,
+    backgroundColor: GREEN,
   },
   kidChipAddLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE },
 
@@ -1999,7 +1993,7 @@ const familyStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
-  dayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  dayBubbleSelected: { backgroundColor: GREEN, borderColor: GREEN },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
@@ -2041,7 +2035,7 @@ const familyStyles = StyleSheet.create({
   triOptionLabel: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
   triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
-  triOptionPillSelected: { backgroundColor: PRIMARY },
+  triOptionPillSelected: { backgroundColor: GREEN },
   triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
   triOptionPillLabelSelected: { color: WHITE },
 })
@@ -2200,7 +2194,8 @@ export function PreviewFieldPage({
   const { user } = useAuthStore()
   const [photoPopupImageIndex, setPhotoPopupImageIndex] = useState<number | null>(null)
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
-  const [familySaving, setFamilySaving] = useState(false)
+  // Serializes the background family writes (see handleSaveFamily).
+  const familySaveChain = useRef<Promise<void>>(Promise.resolve())
   const [bioSaving, setBioSaving] = useState(false)
   // True while the OS image picker is launching. launchImageLibraryAsync has a
   // cold-start delay (especially the very first time it loads the native
@@ -2480,25 +2475,26 @@ export function PreviewFieldPage({
   // When both toggles are off (no kids and not interested in kids), the
   // family entry has nothing to communicate — clear it so the profile
   // doesn't show an empty "No kids" card.
-  const handleSaveFamily = async (data: FamilyData, isForKids: boolean | null) => {
-    if (familySaving) return
-    setFamilySaving(true)
-    try {
-      if (inFlightUploads.current.size > 0) {
-        await Promise.all(Array.from(inFlightUploads.current))
-      }
-      const dropEntry = !data.hasKids && isForKids == null
-      const familyWithPref: FamilyData | null = dropEntry
-        ? null
-        : { ...data, ...(isForKids !== null ? { isForKids } : {}) }
-      update({ family: familyWithPref })
-      await invoke('app/profile', { family: familyWithPref })
-      setFamilyPopupVisible(false)
-    } catch (e) {
-      console.error('Save family error:', e)
-    } finally {
-      setFamilySaving(false)
-    }
+  //
+  // The popup has already closed by the time this runs: the local store is
+  // updated on this frame (so the card behind the sheet is correct at once) and
+  // the write goes out behind it. Saves are chained rather than dropped, so a
+  // reopen-edit-close while the previous request is still in flight can't race
+  // it or be silently lost.
+  const handleSaveFamily = (data: FamilyData, isForKids: boolean | null) => {
+    const dropEntry = !data.hasKids && isForKids == null
+    const familyWithPref: FamilyData | null = dropEntry
+      ? null
+      : { ...data, ...(isForKids !== null ? { isForKids } : {}) }
+    update({ family: familyWithPref })
+    familySaveChain.current = familySaveChain.current
+      .then(async () => {
+        if (inFlightUploads.current.size > 0) {
+          await Promise.all(Array.from(inFlightUploads.current))
+        }
+        await invoke('app/profile', { family: familyWithPref })
+      })
+      .catch(e => { console.error('Save family error:', e) })
   }
 
   return (
@@ -2519,18 +2515,23 @@ export function PreviewFieldPage({
               }}
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
               bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
-              actions={(() => {
-                const list: CardAction[] = []
+              // No round button on your own card: there is nobody to invite,
+              // and the adds moved into the chip column below.
+              actions={[]}
+              addChips={(() => {
+                const list: CardAddChip[] = []
                 if (photoAddEnabled) list.push({
                   key: 'photo',
-                  icon: photoPicking
-                    ? <ActivityIndicator color={WHITE} />
-                    : <AddPhotoIcon stroke={WHITE} size={ICON.huge} />,
+                  label: t('settings.addPhoto'),
+                  renderIcon: c => photoPicking
+                    ? <ActivityIndicator size="small" color={c} />
+                    : <CameraIcon color={c} size={ICON.sm} />,
                   onPress: () => { tap(); handleAddPhoto() },
                 })
                 if (familyAddEnabled) list.push({
                   key: 'family',
-                  icon: <FamilyKidsIcon stroke={WHITE} size={ICON.huge} />,
+                  label: t('settings.addFamily'),
+                  renderIcon: c => <KidsGlyph color={c} />,
                   onPress: () => { tap(); setFamilyPopupVisible(true) },
                 })
                 return list
@@ -2555,7 +2556,6 @@ export function PreviewFieldPage({
         visible={familyPopupVisible}
         initial={familyInitial}
         initialIsForKids={profile?.family?.isForKids ?? null}
-        saving={familySaving}
         weekStart={profile?.weekStart ?? defaultWeekStart(lang)}
         isMale={profile?.is_male ?? null}
         onDismiss={() => setFamilyPopupVisible(false)}
@@ -3070,23 +3070,15 @@ const styles = StyleSheet.create({
   groupsRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: MD, paddingVertical: MD, gap: MD },
   groupsRowIcon: { marginTop: XS },
   groupsChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: SM },
-  accountActionsCard: {
-    // No fill: the rows sit straight on the beige sheet, separated by their
-    // hairline. A white card here read as a slab pasted onto the popup.
-    backgroundColor: 'transparent', marginTop: SM,
-  },
-  accountActionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: MD,
-    paddingHorizontal: MD, paddingVertical: MD,
-  },
+  // Two stacked full-width buttons on the page gutter — the same spec as the
+  // chat menu's leave/block sheet (chatMenuStyles.sheet in home.tsx).
+  accountActions: { paddingHorizontal: MD, gap: SM },
   accountActionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
     marginStart: MD,
   },
-  accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  accountActionText: { fontSize: TEXT.md, color: WHITE, fontWeight: WEIGHT.semibold },
   // Account popup identity block: stacked text list (one field per line) in
-  // PRIMARY on the white sheet, replacing the old chip pills.
+  // muted ink on the white sheet, replacing the old chip pills.
   accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
   accountPopupListItem: {
     fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG,

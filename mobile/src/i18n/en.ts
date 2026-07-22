@@ -221,6 +221,9 @@ export default {
   'settings.photoEditReplace': 'Replace',
   'settings.photoEditDelete': 'Delete',
   'settings.photoMinTwo': 'At least 2 photos required',
+  // Add-chips on the own-profile card, under the fact chips.
+  'settings.addPhoto': 'Add a photo',
+  'settings.addFamily': 'Family & kids',
   'family.title': 'Family & kids',
   'family.optional': 'optional',
   'family.hasKidsQuestion': 'Do you have kids?',

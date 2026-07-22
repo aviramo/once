@@ -225,6 +225,9 @@ export default {
   'settings.photoEditReplace': 'החלפה',
   'settings.photoEditDelete': 'מחיקה',
   'settings.photoMinTwo': 'נדרשות לפחות 2 תמונות',
+  // Add-chips on the own-profile card, under the fact chips.
+  'settings.addPhoto': 'הוספת תמונה',
+  'settings.addFamily': 'משפחה וילדים',
   'family.title': 'משפחה וילדים',
   'family.optional': 'אופציונאלי',
   'family.hasKidsQuestion': 'יש לך ילדים?',
