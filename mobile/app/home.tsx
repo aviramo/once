@@ -1846,6 +1846,24 @@ export default function HomePage() {
       clearLoading()
       return () => { cancelled = true }
     }
+    // A match just started — swap the card NOW, without the preload hold.
+    // The hold below exists for skip: keep the current candidate on screen
+    // while the next one's photos warm the disk cache. Applying it to a chat
+    // would leave the person the user was merely *watching* on the home pane
+    // while the chat sheet rises over them, so approving YAEL's invitation
+    // briefly shows someone else's face behind (and before) the conversation.
+    // The partner's photos load into a card the chat sheet is covering anyway.
+    if (rawPage1State === 'chat') {
+      setLoadingProfile(false)
+      preloadingMatchRef.current = null
+      setPreloadingMatch(null)
+      setDisplayedMatch(remoteMatch)
+      page1Pull.reset()
+      startNameRise()
+      setSearching(false)
+      clearLoading()
+      return () => { cancelled = true }
+    }
     // Same exact URLs MatchCard requests (raw filename, no encodeURI) so the
     // prefetch shares expo-image's disk-cache key — single source of truth in
     // matchImageUrls.
