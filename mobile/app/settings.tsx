@@ -25,7 +25,7 @@ import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, 
 import { iconScale, inkOffset } from '../src/fonts'
 import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, formatNextGrant, creditsText, CREDIT_CAP } from '../src/lib/credits'
+import { creditBalance, creditExtra, formatNextGrant, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BugReportPopup } from '../src/components/BugReportPopup'
@@ -2608,10 +2608,11 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  // Hearts popup: explains balance + extra + next grant, and opens the
-  // buy-extra picker. The tier model retired 2026-06-01, so there is no
-  // free/pro switch here any more.
-  const [starsPopupVisible, setStarsPopupVisible] = useState(false)
+  // The credits row opens the buy picker DIRECTLY (2026-07-22). It used to
+  // open an explainer dialog first (balance + extra + next grant) whose only
+  // action was "more credits" — but the row itself already carries the
+  // balance in its label and the renewal time in its subtitle, so the dialog
+  // was a step that re-read what the user had just tapped.
   const [buyExtraOpen, setBuyExtraOpen] = useState(false)
   // Visibility (visible <-> hidden). This row is the ONLY way back to visible
   // now that page2 has no UI of its own, so it must stay reachable and must
@@ -2642,7 +2643,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   const onOpenBuyExtra = useCallback(() => {
     tap()
-    setStarsPopupVisible(false)
     setBuyExtraOpen(true)
   }, [])
 
@@ -2677,41 +2677,13 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const watcherCount = selectWatcherCount(profile)
   const hideConfirmConfig = hideProfileConfirm(watcherCount)
 
-  // Hearts popup content. Two lines: current balance + extra, and the next
-  // grant time (dropped when unknown). The "buy more" button opens the
-  // BuyExtraPopup with 3/10/50 options. {balance} is the daily-pool count
-  // (refilled to CREDIT_CAP every 20:00 Asia/Jerusalem); {extra} is the
-  // purchased pool (no cap). Both render BOLD inside the otherwise-regular
-  // text. Hebrew verb gender resolved via genderize() inline markers.
+  // Credits row content: the daily pool as a fraction of its cap, the extras
+  // (purchased pool, no cap) when there are any, and the next grant time as
+  // the subtitle. This IS the credits explainer now — the dialog that used to
+  // spell the same numbers out in prose is gone.
   const heartsBalance = creditBalance(profile)
   const heartsExtra = creditExtra(profile)
   const nextGrant = formatNextGrant(profile)
-  const starsTok: Record<string, string> = {
-    '{balance}': creditsText(heartsBalance),
-    '{extra}': creditsText(heartsExtra),
-    '{cap}': creditsText(CREDIT_CAP),
-    '{when}': nextGrant,
-  }
-  let starsEmKey = 0
-  const emLine = (template: string) =>
-    genderize(template, profile.is_male)
-      .split(/(\{balance\}|\{extra\}|\{cap\}|\{when\})/g)
-      .map(p => starsTok[p] !== undefined
-        ? <Text key={`em${starsEmKey++}`} style={styles.starsEm}>{starsTok[p]}</Text>
-        : p)
-  // Skip the "extra" line entirely when there are no extras — saying
-  // "you also have 0 extra credits" reads as noise. The balance line swaps
-  // to a dedicated "you have NO credits" copy at 0 instead of the literal
-  // "you have 0 credits" (user feedback 2026-06-01).
-  const balanceLineKey = heartsBalance === 0
-    ? 'credits.popup.line.balanceEmpty'
-    : 'credits.popup.line.balance'
-  const starsBodyLines = [
-    emLine(t(balanceLineKey)),
-    ...(heartsExtra > 0 ? [emLine(t('credits.popup.line.extra'))] : []),
-    ...(nextGrant ? [emLine(t('credits.popup.line.renew'))] : []),
-  ]
-  const starsDesc = starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln]))
 
   // Menu row label: chained group names (up to 3) with "more..." overflow,
   // or the "no groups" message when loaded-empty. While the initial fetch
@@ -2745,8 +2717,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
-        {/* Credits, then Account. Tapping credits opens the credits popup
-            (balance + renewal + buy). */}
+        {/* Credits, then Account. Tapping credits opens the buy picker
+            straight away. */}
         <SelectFieldRow
           grouped
           // "לבבות ({balance}/{cap} + {extra} אקסטרה)": the daily pool reads as
@@ -2764,7 +2736,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           subtitle={nextGrant
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
-          onPress={() => setStarsPopupVisible(true)}
+          onPress={onOpenBuyExtra}
           icon={<CoinIcon color={GREEN} size={ICON.md} />}
           labelColor={GREEN}
         />
@@ -2848,18 +2820,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
-        draggable
-      />
-      {/* Credits popup: balance + extra + renew explainer. The buy button is
-          always offered — the two gates that used to hide it (wallet must be
-          empty, one purchase per grant cycle) were removed 2026-07-22. */}
-      <ConfirmDialog
-        visible={starsPopupVisible}
-        title={t('credits.popup.title')}
-        description={starsDesc}
-        confirmLabel={t('credits.popup.buyExtra')}
-        onCancel={() => setStarsPopupVisible(false)}
-        onConfirm={onOpenBuyExtra}
         draggable
       />
       <BuyExtraPopup
@@ -3118,10 +3078,6 @@ const styles = StyleSheet.create({
   // writingDirection, iOS did not pick the container's RTL direction and the
   // subtitle ended up physically left under the hearts row.
   selectRowSubtitle: { fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
-  // Bold emphasis span inside the stars-popup description (the dynamic
-  // values). Sits in ConfirmDialog's centered desc <Text>, so it inherits
-  // size/line-height and only overrides weight + (darker) colour.
-  starsEm: { fontWeight: WEIGHT.extrabold, color: BLACK },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,

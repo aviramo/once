@@ -130,6 +130,11 @@ interface PagesCompat {
   /** Credits wallet (relations.credits). Like `availability` / `last_add_at`
    * it rides through untouched by the shim's raw-relations spread. */
   credits?: import('../lib/credits').CreditsWallet | null
+  /** Referral tallies (relations.referral). `joined` counts friends who
+   * installed AND completed a profile, i.e. referrals that actually paid out;
+   * the server maintains it in _referral_settle so the credits sheet needs no
+   * extra round trip and the number ticks up live over Realtime. */
+  referral?: { joined?: number } | null
 }
 
 interface UserProfile {
@@ -160,6 +165,11 @@ interface UserProfile {
    * legacy location_custom fallback for pre-typed rows. */
   location_type: LocationType | null
   data?: { push_token?: { type: string; token: string } | null; role?: string | null; [key: string]: unknown } | null
+  /** The user's own referral code, server-generated on insert. Packed into
+   * the personal invite link (lib/links.ts referralUrl) and read back from
+   * the Play install referrer on the invitee's first launch. Never entered by
+   * hand. Null only on a row the server hasn't seeded yet. */
+  referral_code?: string | null
   relations?: PagesCompat | null
   /** Synthesized legacy page1 state: 'watching' | 'waiting' | 'chat' | 'missed' | 'fail' | null. Derived from server's v3 page1.state + message via deriveCompat. */
   state: string | null

@@ -295,32 +295,27 @@ export default {
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': '1 credit',
   'credits.count.many': '{n} credits',
-  // Credits popup (opened from the settings credits row). The description is
-  // assembled in code from these lines (so the renew line can be dropped
-  // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
-  // render bold in code. {balance} = the daily pool, {extra} = the
-  // purchased pool, {cap} = daily ceiling (currently 1).
-  // English is non-gendered (genderize() is a no-op without {m|f} markers).
-  'credits.popup.title': 'Your credits',
-  'credits.popup.line.balance': 'You have {balance} in your daily allowance, which refills to {cap} every day.',
-  // Variant for the balance=0 case — reads "your credits ran out" instead of
-  // the literal "you have 0 credits" (user request 2026-06-01).
-  'credits.popup.line.balanceEmpty': 'Your credits ran out in your daily allowance, which refills to {cap} every day.',
-  // {extra} expands via creditsText → "5 credits" / "1 credit" (carries the
-  // noun already). Template must NOT repeat "credits", just append "extra".
-  'credits.popup.line.extra': 'You also have {extra} extra.',
-  // {when} carries its own "today at HH:MM" — no leading preposition in the template.
-  'credits.popup.line.renew': 'Your daily allowance refreshes {when}.',
   // Relative next-grant day. Returned from formatNextGrant() — replaces the
   // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
   'credits.grant.today': 'today at {time}',
   'credits.grant.tomorrow': 'tomorrow at {time}',
-  'credits.popup.buyExtra': 'Buy credits',
-  // Buy picker (3/10/50 options, all "Free" for now, only 3 enabled).
-  'credits.buy.title': 'Buy credits',
-  'credits.buy.desc': 'Credits you buy are added on top of your daily allowance and never expire.',
+  // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
+  // "coming soon") and inviting a friend is the only way to earn extra, so the
+  // copy talks about getting credits rather than buying them.
+  'credits.buy.title': 'More credits',
+  'credits.buy.desc': 'Credits you get are added on top of your daily allowance and never expire.',
   'credits.buy.priceFree': 'Free',
   'credits.buy.comingSoon': 'Coming soon',
+  // Invite row: the one active way to earn. The title is the action alone;
+  // the sub-line under it inside the same row carries WHEN the credit lands,
+  // so the row never reads as "tap and get a credit". genderize() is a no-op
+  // on English (no {m|f} marker) — single form.
+  'credits.invite.title': 'Invite a friend',
+  'credits.invite.joined.none': 'The credit arrives once your friend installs the app and completes a profile.',
+  'credits.invite.joined.one': 'One friend joined through you.',
+  'credits.invite.joined.many': '{n} friends joined through you.',
+  // Text that rides along with the link in the OS share sheet.
+  'credits.invite.shareText': 'Join me on Once, the one on one dating app:',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',

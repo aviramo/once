@@ -37,19 +37,28 @@ export type CreditAction = keyof typeof CREDIT_COST
  *  not a number nobody reaches. Mirrors SQL `_credits_cap()`. */
 export const CREDIT_CAP = 1
 
-/** Options offered by the buy-extra popup. Server validates against this
- *  exact set in app_buy_extra. The mobile popup currently surfaces the
- *  prices as "Free" for every option and only the 3-credit entry is enabled
- *  ("coming soon" badge on 10 / 50). When real pricing is wired up, swap
- *  the labels in i18n keys (`credits.buy.price.*`) and flip the `enabled`
- *  flags here. The 3/10/50 set is mirrored in the SQL `app_buy_extra`
- *  validation and in the edge dispatcher; change all three places together.
- *  3 is deliberately the smallest pack: three days of daily allowance. */
+/** Options offered by the credits popup. Server validates against this exact
+ *  set in app_buy_extra. Every entry is DISABLED since 2026-07-22: the free
+ *  3-credit pack was the only live one, and handing out free credits on tap
+ *  is not an economy — inviting a friend replaced it as the way to earn
+ *  (REFERRAL_REWARD below). The rows stay visible with a "coming soon" badge
+ *  so the price list still reads as a price list once real payments land;
+ *  flip `enabled` back on then. The 3/10/50 set is mirrored in the SQL
+ *  `app_buy_extra` validation and in the edge dispatcher.
+ *
+ *  /app/buy_extra deliberately stays deployed and functional — the published
+ *  mobile build still renders the 3-credit row as enabled and calls it. See
+ *  BACKWARD_COMPAT.md. */
 export const BUY_EXTRA_OPTIONS = [
-  { count: 3,  enabled: true  },
+  { count: 3,  enabled: false },
   { count: 10, enabled: false },
   { count: 50, enabled: false },
 ] as const
+
+/** Credits paid to the inviter for each friend who installs and completes a
+ *  profile. Display only — the server credits it and enforces the daily cap.
+ *  Mirrors SQL `_referral_reward()`. */
+export const REFERRAL_REWARD = 1
 
 export type BuyExtraCount = (typeof BUY_EXTRA_OPTIONS)[number]['count']
 

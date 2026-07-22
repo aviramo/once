@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.aviramo.once'
+version = '1.0.0'
+
+android {
+  namespace "com.aviramo.once.installreferrer"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // Google Play Install Referrer API. This single dependency IS the referral
+  // attribution mechanism: Play preserves the `referrer` query parameter from
+  // the store link through the install, and this client hands it back on
+  // first launch, so the invitee never types a code.
+  implementation 'com.android.installreferrer:installreferrer:2.2'
+}

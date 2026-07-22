@@ -471,6 +471,29 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "referral": {
+        // Claim the referral code the Play Install Referrer API handed the
+        // client on first launch. The invitee never sees or types it — this
+        // is a silent background call, so it must never surface an error to
+        // them. app_referral_attach is idempotent (unique(invitee_id)) and
+        // irreversible; a second call for an already-claimed account returns
+        // outcome 'already', not an error.
+        //
+        // NOT in requiresPresence: this fires during onboarding, before the
+        // gate has anything to say, and it starts no interaction.
+        const code = typeof body.code === "string" ? body.code.trim() : "";
+        if (!code) return log.error("referral", "no_code", 400);
+        const source = typeof body.source === "string" ? body.source : "unknown";
+        const result = await Tools.rpc(log, "app_referral_attach", {
+          me_id: user.user_id, p_code: code, p_source: source,
+        });
+        await user.persist(log);
+        if (result?.error) return log.error("referral", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
       case "redeem_invite": {
         // Per-group 6-digit invite code: user joins the matching enabled
         // group atomically. Additive — never removes existing memberships.
@@ -680,6 +703,21 @@ Deno.serve(async (req) => {
         await user.persist(log);
         if (result?.error) return log.error(key, result.error, 400);
         rpcUser = result?.user;
+        // Referral payout hook. Saving a profile is the round trip in which an
+        // invitee typically crosses the matchable gate (>= 1 image), which is
+        // exactly what qualifies their inviter for a credit. Fire-and-forget:
+        // it moves a THIRD PARTY's wallet and must never sit on the caller's
+        // critical path, and the inviter learns about it through Realtime +
+        // push, not through this response. No-op for the overwhelming majority
+        // of calls (no pending referral row). The per-minute app_referral_sweep
+        // is the safety net if this ever misses.
+        EdgeRuntime.waitUntil((async () => {
+          const q = await Tools.rpc(log, "app_referral_qualify", { me_id: user.user_id });
+          if (!q || q.error) return;
+          for (const n of (q.notify ?? []) as Notify[]) {
+            if (n.user_id) await firePush(log, n.user_id, n.code, user.user_id);
+          }
+        })());
         // family.isForKids and family.schedule both feed into matching
         // relevance, so re-pick when the user is idle with no page1 profile.
         // Re-read state from the rpcUser (app_save_profile may have updated it).

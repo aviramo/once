@@ -304,32 +304,30 @@ export default {
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': 'קרדיט אחד',
   'credits.count.many': '{n} קרדיטים',
-  // Credits popup (opened from the settings credits row). The description is
-  // assembled in code from these lines (so the renew line can be dropped
-  // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
-  // render bold in code. {balance} = the daily pool, {extra} = the
-  // purchased pool, {cap} = daily ceiling (currently 1).
-  // Hebrew gendered via genderize() inline {male|female} markers.
-  'credits.popup.title': 'הקרדיטים שלך',
-  'credits.popup.line.balance': 'יש לך {balance} בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
-  // Variant for the balance=0 case — reads "your credits ran out" instead of
-  // the literal "you have 0 credits" (user request 2026-06-01).
-  'credits.popup.line.balanceEmpty': 'נגמרו לך הקרדיטים בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
-  // {extra} expands via creditsText → "5 קרדיטים" / "קרדיט אחד" (carries the
-  // noun already). Template must NOT repeat the noun, just append "אקסטרה".
-  'credits.popup.line.extra': 'בנוסף יש לך {extra} אקסטרה.',
-  // {when} carries its own "היום/מחר ב-HH:MM" — no leading "ב-" in the template.
-  'credits.popup.line.renew': 'החבילה היומית תתחדש {when}.',
   // Relative next-grant day. Returned from formatNextGrant() — replaces the
   // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
   'credits.grant.today': 'היום ב-{time}',
   'credits.grant.tomorrow': 'מחר ב-{time}',
-  'credits.popup.buyExtra': 'קניית קרדיטים',
-  // Buy picker (3/10/50 options, all "Free" for now, only 3 enabled).
-  'credits.buy.title': 'קניית קרדיטים',
-  'credits.buy.desc': 'הקרדיטים שתקנה יתווספו לקרדיטים שיש לך כבר, ולא יתבטלו עם הזמן.',
+  // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
+  // "coming soon") and inviting a friend is the only way to earn extra, so the
+  // copy talks about getting credits rather than buying them.
+  'credits.buy.title': 'עוד קרדיטים',
+  'credits.buy.desc': 'קרדיטים שתקבל מצטרפים לקרדיטים שכבר יש לך, ולא יתבטלו עם הזמן.',
   'credits.buy.priceFree': 'חינם',
   'credits.buy.comingSoon': 'בקרוב',
+  // Invite row: the one active way to earn. The title is the action alone;
+  // the sub-line under it inside the same row carries WHEN the credit lands,
+  // so the row never reads as "tap and get a credit". The verb is gendered by
+  // the user's own sex via the inline {male|female} marker, so the call site
+  // must use genderize() — tg() only resolves whole-string _m/_f keys and
+  // would print the marker as-is. The friend stays ungendered ("חבר" covers
+  // any friend you'd invite).
+  'credits.invite.title': '{הזמן|הזמיני} חבר',
+  'credits.invite.joined.none': 'הקרדיט מגיע כשהחבר מוריד את האפליקציה ומשלים פרופיל.',
+  'credits.invite.joined.one': 'חבר אחד הצטרף דרכך.',
+  'credits.invite.joined.many': '{n} חברים הצטרפו דרכך.',
+  // Text that rides along with the link in the OS share sheet.
+  'credits.invite.shareText': 'בוא לונס, אפליקציית היכרויות של אחד על אחד:',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',

@@ -331,6 +331,20 @@ export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+// Silhouette with a plus — "invite someone who isn't here yet", used by the
+// referral row in the credits popup. Deliberately built on UserIcon's body so
+// it reads as the same family, with the plus carrying the whole difference.
+export function UserPlusIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <Circle cx="9" cy="7" r="4" />
+      <Path d="M19 8v6" />
+      <Path d="M22 11h-6" />
+    </Glyph>
+  )
+}
+
 // Two silhouettes — the "members of a group" mark used by the settings
 // "my groups" row. Visually distinct from UserIcon (single silhouette) so
 // the two adjacent rows in the account card don't read as the same icon.

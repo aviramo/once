@@ -188,6 +188,11 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'chat': 'התקבלה הודעה',
     'area-open': 'המשחק התחיל! האפליקציה זמינה עכשיו באזור שלך',
     'area-closed': 'האפליקציה כבר לא זמינה באזור שלך',
+    // Referral payout. Actor = the friend who joined, so firePush titles it
+    // with THEIR name and this line explains why a credit just appeared.
+    'referral_m': 'הצטרף דרך ההזמנה שלך, קיבלת קרדיט',
+    'referral_f': 'הצטרפה דרך ההזמנה שלך, קיבלת קרדיט',
+    'referral': 'הצטרף דרך ההזמנה שלך, קיבלת קרדיט',
   },
   en: {
     'invite-in': 'Chat invitation',
@@ -205,6 +210,7 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'chat': 'New message',
     'area-open': 'The game has started. The app is now available in your area.',
     'area-closed': 'The app is no longer available in your area.',
+    'referral': 'Joined with your invite. You earned a credit.',
   },
 };
 

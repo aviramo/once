@@ -140,6 +140,30 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** delete this entry.
 - **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'buy_extra' AND created_at > now() - interval '14 days'` and check which counts appear in the bodies.
 
+### `app/buy_extra` endpoint kept alive after purchasing was switched off
+
+- **Added:** 2026-07-22 (referral program — migration `20260722160000_referral_program`)
+- **Reason:** Every `BUY_EXTRA_OPTIONS` entry flipped to `enabled: false`, so the new mobile build never posts `/app/buy_extra` — inviting a friend is now the only way to earn beyond the daily pool. The endpoint and RPC are deliberately left untouched: the deployed build (≤ 1.0.3) still renders the 3-credit row as tappable and calls it, and removing it would 400 those taps. Purely a *client-side* narrowing, so nothing needed staging — this entry is the cleanup reminder.
+- **Old shape (kept alive):** `public.app_buy_extra(me_id, p_count)` + the `case "buy_extra":` dispatcher branch, both validating `count ∈ {3,10,50}`. Old builds keep granting themselves 3 free credits per tap until they update.
+- **New shape (preferred):** no purchase path at all. Credits come from the 20:00 grant (`_credits_cap()` = 1) and from referrals (`_referral_reward()` = 1 per friend who installs AND completes a profile, capped at `_referral_daily_cap()` = 10 per grant day).
+- **Safe to remove after:** the build shipping the referral row (all buy options "coming soon") is the live floor. Note this supersedes the `app_buy_extra count set stays {3,10,50}` entry above — resolve both together.
+- **How to remove:**
+  - Remove the `case "buy_extra":` block from `supabase/functions/app/index.ts`.
+  - `DROP FUNCTION public.app_buy_extra(uuid, integer);` in a follow-up migration.
+  - Delete `BUY_EXTRA_OPTIONS` / `BuyExtraCount` / `onPick` from `mobile/src/lib/credits.ts` + `mobile/src/components/BuyExtraPopup.tsx`, leaving the referral row as the sheet's only content (and rename the component).
+  - **Only if real payments are never wired up.** If they are, flip `enabled` back on instead of deleting.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'buy_extra' AND created_at > now() - interval '14 days'`. Zero hits = safe.
+
+### Referral program — old builds never claim an install referrer (informational)
+
+- **Added:** 2026-07-22
+- **Reason:** The referral program is entirely additive server-side (new `users.referral_code` column, new `referrals` table, new `relations.referral` key, new `/app/referral` endpoint, new `referral` push code). No response shape, field, or endpoint changed, so there is no shim. This records the cross-version window only.
+- **Old shape (kept alive):** Nothing. Builds that predate the referral row never call `/app/referral`, so **an install attributable to a referral is simply never claimed if the invitee is on an old build** — but that cannot happen in practice, since a new install always gets the current store build. The real window is the *inviter* side: an old build has no invite row in its credits sheet, so those users cannot earn until they update. They ignore the unknown `referral_code` / `relations.referral` keys.
+- **New shape (preferred):** the credits sheet's top row shares `https://once-lake.vercel.app/i/<CODE>`; the invitee's first launch reads the Play install referrer and posts `/app/referral`.
+- **Safe to remove after:** the referral-row build is the live floor.
+- **How to remove:** nothing to delete (no shim). Delete this note.
+- **Verify before removing:** check the live mobile version distribution, and `SELECT source, count(*) FROM referrals GROUP BY 1` to confirm claims are arriving.
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.

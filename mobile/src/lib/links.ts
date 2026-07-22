@@ -10,3 +10,9 @@ export type LegalPage = 'terms' | 'privacy' | 'child-safety'
 
 export const legalUrl = (page: LegalPage, lang: string): string =>
   `${BRAND_SITE}/${page}?lang=${lang}`
+
+/** Personal invite link. web/src/proxy.ts matches /i/<CODE> and bounces an
+ *  Android visitor to the Play listing with the code packed into the store's
+ *  `referrer` parameter, which is what makes attribution automatic. Anyone
+ *  else lands on the normal download page. */
+export const referralUrl = (code: string): string => `${BRAND_SITE}/i/${code}`

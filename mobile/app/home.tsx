@@ -27,6 +27,7 @@ import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
 import { Chip, PresenceDot } from '../src/components/Chip'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
+import { claimInstallReferral } from '../src/lib/referral'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/PullPane'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -1173,6 +1174,12 @@ export default function HomePage() {
           setStartupInflight(false)
           setStartupCompleted(true)
         })
+      // Referral attribution, once per install. Silent and fire-and-forget:
+      // the invitee never learns this ran, and the inviter's credit lands via
+      // Realtime + push. Deliberately AFTER app/start so it can never delay
+      // the first paint, and self-healing if it runs late (app_referral_attach
+      // settles a completed profile on the spot).
+      claimInstallReferral()
       if (!location && !customLoc) setLocFailed(true)
     })()
   }, [notifPerm, locPerm, customLoc])
