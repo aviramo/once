@@ -92,6 +92,13 @@ export function phraseWrap(label: string): string {
     .join(' ')
 }
 
+// A chip's outer height, derived from the same tokens its padding box is
+// built from (see `styles.chip`). Exported so anything that has to sit level
+// with a chip — the leading glyph of the settings groups row — centres against
+// the real height instead of a hand-tuned margin that drifts when the tokens
+// move.
+export const CHIP_HEIGHT = lh(TEXT.sm) + 2 * SM
+
 export function Chip({
   renderIcon,
   text,

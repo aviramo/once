@@ -34,7 +34,7 @@ import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
-import { Chip, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
+import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
@@ -232,7 +232,12 @@ function SelectFieldRow({
           tone === 'accent' ? (
             <View style={styles.selectRowAccentIcon}>{icon}</View>
           ) : (
-            <View style={styles.selectRowIconWrap}>{icon}</View>
+            // A trailing node (the watcher chip) is taller than the label line,
+            // so it — not the label — sets the group height. Pinning the glyph
+            // to the first label line would then leave it floating above a
+            // vertically centred label; centre it instead, next to the chip it
+            // now shares the row with.
+            <View style={[styles.selectRowIconWrap, trailing ? styles.selectRowIconWrapCentered : null]}>{icon}</View>
           )
         ) : null
         // The subtitle (e.g. the stars renewal note) must align with the LABEL
@@ -2722,14 +2727,18 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
           trailing={!isHidden && watcherCount > 0 ? (
             <Chip
-              renderIcon={color => <EyeOpenIcon color={color} size={ICON.sm} />}
               text={watcherCount === 1
                 ? t('settings.watchersOne')
                 : t('settings.watchersMany').replace('{count}', String(watcherCount))}
             />
           ) : undefined}
           onPress={onVisibilityPress}
-          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.md} /> : <EyeOpenIcon color={GREEN} size={ICON.md} />}
+          // Optical size, not nominal: the eye is a flat lens that fills barely
+          // half its box vertically, so at the ICON.md every other row uses it
+          // reads visibly smaller than the person/groups/bug glyphs beside it.
+          // ICON.xxl matches their ink mass; the icon column keeps its fixed
+          // width, so the labels stay aligned.
+          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xxl} /> : <EyeOpenIcon color={GREEN} size={ICON.xxl} />}
           labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
@@ -3042,7 +3051,11 @@ const styles = StyleSheet.create({
   // The groups row: the shared leading-icon column, then a wrap of chips
   // instead of a single label.
   groupsRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: MD, paddingVertical: MD, gap: MD },
-  groupsRowIcon: { marginTop: XS },
+  // A box exactly one chip tall so the glyph centres against the FIRST chip
+  // (the row wraps to more chip lines, and a hand-tuned margin drifted a few
+  // pixels above that first line). Same idea as selectRowIconWrap, measured
+  // against the chip's own exported height rather than a re-typed number.
+  groupsRowIcon: { height: CHIP_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   groupsChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: SM },
   // Two stacked full-width buttons on the page gutter — the same spec as the
   // chat menu's leave/block sheet (chatMenuStyles.sheet in home.tsx).
@@ -3115,10 +3128,15 @@ const styles = StyleSheet.create({
   // between the two lines. marginTop lands it on that line's ink rather than on
   // its line box (see inkOffset). Single-line labels are unaffected by the
   // alignSelf — the box then equals the group height.
+  // The width is fixed to the nominal glyph size so every row's label starts at
+  // the same x even when a glyph is drawn larger than the column for optical
+  // reasons (the eye — see the visibility row). Overflow is centred, not
+  // clipped.
   selectRowIconWrap: {
-    alignSelf: 'flex-start', height: iconScale(lh(TEXT.md)), marginTop: inkOffset(TEXT.md),
+    alignSelf: 'flex-start', width: ICON.md, height: iconScale(lh(TEXT.md)), marginTop: inkOffset(TEXT.md),
     alignItems: 'center', justifyContent: 'center',
   },
+  selectRowIconWrapCentered: { alignSelf: 'center', marginTop: 0 },
 
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,
