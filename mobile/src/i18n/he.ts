@@ -123,6 +123,10 @@ export default {
   'settings.account': 'חשבון',
   'settings.visibilityVisible': 'גלוי',
   'settings.visibilityHidden': 'מוסתר',
+  // Watcher chip on the visibility row. The number alone says nothing, so the
+  // chip carries the whole phrase.
+  'settings.watchersOne': '1 צופה בך',
+  'settings.watchersMany': '{count} צופים בך',
   'settings.credits': 'קרדיטים',
   // Suffix word in the credits-row value when the user has extras, e.g.
   // "1/1 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.

@@ -177,6 +177,7 @@ function SelectFieldRow({
   size = 'default',
   locked,
   labelColor,
+  trailing,
 }: {
   label?: string
   subtitle?: string
@@ -193,6 +194,10 @@ function SelectFieldRow({
    * preferences you tune are GREEN, the account/status rows below them are
    * ORANGE. Pass the same colour to this row's `icon` so the pair matches. */
   labelColor?: string
+  /** Node parked at the row's END edge, beside the label (e.g. the watcher
+   * chip on the visibility row). A live quantity belongs on its own surface,
+   * not glued into the label string. */
+  trailing?: React.ReactNode
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
   const tapProps = useTapResponder(onPress, (pressed) => {
@@ -247,6 +252,9 @@ function SelectFieldRow({
                   <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
                 ) : null}
               </View>
+              {trailing ? (
+                <View style={styles.selectRowTrailing}>{trailing}</View>
+              ) : null}
             </View>
           </View>
         ) : renderedIcon
@@ -2671,7 +2679,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Watcher count drives two surfaces: the "(n)" suffix on the Visible row and
+  // Watcher count drives two surfaces: the chip on the Visible row and
   // the concrete ripple in the hide confirm. deriveCompat only fills the array
   // while page2 is free, so a hidden user reads 0 without a separate guard.
   const watcherCount = selectWatcherCount(profile)
@@ -2705,13 +2713,21 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             detail, and it is the only path back to being discoverable. */}
         {/* The state IS the label: "Visibility  Hidden" says the same thing
             twice, and the eye glyph already names the field. */}
+        {/* The watcher count is a live quantity, so it rides its own chip
+            instead of a bare "(n)" glued to the label: a number in
+            parentheses says nothing about what it counts, the chip spells
+            it out ("3 watching you"). */}
         <SelectFieldRow
           grouped
-          label={isHidden
-            ? t('settings.visibilityHidden')
-            : watcherCount > 0
-              ? `${t('settings.visibilityVisible')} (${watcherCount})`
-              : t('settings.visibilityVisible')}
+          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          trailing={!isHidden && watcherCount > 0 ? (
+            <Chip
+              renderIcon={color => <EyeOpenIcon color={color} size={ICON.sm} />}
+              text={watcherCount === 1
+                ? t('settings.watchersOne')
+                : t('settings.watchersMany').replace('{count}', String(watcherCount))}
+            />
+          ) : undefined}
           onPress={onVisibilityPress}
           icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.md} /> : <EyeOpenIcon color={GREEN} size={ICON.md} />}
           labelColor={GREEN}
@@ -2725,9 +2741,10 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           // a fraction of its cap (it's the replenishable pool) and the extras
           // carry an explicit word (otherwise "+ 5" reads as math, not "five
           // extra"). Drop the extras tail when there are none — steady-state
-          // shows just "לבבות (1/3)" (user feedback 2026-06-01). Parenthesised
-          // to match the Visible row's watcher count: both are a live quantity
-          // trailing a fixed label, so they read as one pattern.
+          // shows just "לבבות (1/3)" (user feedback 2026-06-01). The count
+          // stays parenthesised here because it is a fixed ratio the label
+          // already names; the Visible row's watcher count moved to a chip
+          // instead, since "3" alone never says what is being counted.
           label={`${t('settings.credits')} (${heartsExtra > 0
             ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
             : `${heartsBalance}/${CREDIT_CAP}`})`}

@@ -121,6 +121,10 @@ export default {
   'settings.account': 'Account',
   'settings.visibilityVisible': 'Visible',
   'settings.visibilityHidden': 'Hidden',
+  // Watcher chip on the visibility row. The number alone says nothing, so the
+  // chip carries the whole phrase.
+  'settings.watchersOne': '1 person watching you',
+  'settings.watchersMany': '{count} people watching you',
   'settings.credits': 'Credits',
   // Suffix word in the credits-row value when the user has extras, e.g.
   // "1/1 + 5 extra". Distinct word so "+ 5" doesn't read as math.
