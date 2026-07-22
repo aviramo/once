@@ -140,11 +140,15 @@
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
+  <script src="art.js?v=1"></script>
   <script>
   (function () {
     'use strict';
 
     var DOWNLOAD_URL = 'download.html';
+    /* Illustrations live in art.js (window.ART), keyed per section. A media slot
+       whose builder passes a key renders the artwork; one without stays the
+       labelled placeholder. */
     var SUPPORTED = ['he', 'en', 'ru'];
     var LANG_CODE = { he: 'HE', en: 'EN', ru: 'RU' };
     var OG_LOCALE = { he: 'he_IL', en: 'en_US', ru: 'ru_RU' };
@@ -186,7 +190,7 @@
           sub: 'Once היא אפליקציית היכרויות שנבנתה אחרת: בלי אינסוף החלקות, בלי עשרות שיחות במקביל ובלי ללכת לאיבוד בתוך יותר מדי אפשרויות. בכל רגע פוגשים אדם אחד, מתמקדים ומחליטים בכוונה.',
           ctaSecondary: 'לראות איך זה עובד',
           pills: ['אדם אחד בכל פעם', 'בזמן אמת', 'בלי רעש'],
-          media: { name: 'מסך Once — אדם אחד', desc: 'מסך האפליקציה שבו מופיע אדם אחד בלבד, עם כפתור לשליחת הזמנה.' }
+          media: { name: 'מסך Once, אדם אחד', desc: 'מסך האפליקציה שבו מופיע אדם אחד בלבד, עם כפתור לשליחת הזמנה.' }
         },
         problem: {
           eyebrow: 'יותר מדי אפשרויות',
@@ -335,7 +339,7 @@
           sub: 'Once is a dating app built differently: no endless swiping, no dozens of parallel chats, and no getting lost in too many options. Every moment, you meet one person, focus, and choose on purpose.',
           ctaSecondary: 'See how it works',
           pills: ['One at a time', 'Real time', 'No noise'],
-          media: { name: 'Once screen — one person', desc: 'The app screen showing a single person, with a button to send an invitation.' }
+          media: { name: 'Once screen, one person', desc: 'The app screen showing a single person, with a button to send an invitation.' }
         },
         problem: {
           eyebrow: 'Too many options',
@@ -484,7 +488,7 @@
           sub: 'Once, приложение для знакомств, устроенное иначе: без бесконечных свайпов, без десятков параллельных чатов и без ощущения, что вы теряетесь среди слишком многих вариантов. В каждый момент вы встречаете одного человека, сосредотачиваетесь и выбираете осознанно.',
           ctaSecondary: 'Посмотреть, как это работает',
           pills: ['По одному', 'В реальном времени', 'Без шума'],
-          media: { name: 'Экран Once — один человек', desc: 'Экран приложения, где показан один человек и кнопка отправить приглашение.' }
+          media: { name: 'Экран Once, один человек', desc: 'Экран приложения, где показан один человек и кнопка отправить приглашение.' }
         },
         problem: {
           eyebrow: 'Слишком много вариантов',
@@ -638,15 +642,18 @@
 
     var T; // active language block
 
-    function media(m, kind) {
+    function media(m, kind, art) {
       kind = kind || 'wide';
       var label = esc(m.name) + ': ' + esc(m.desc);
-      return '<figure class="media media--' + kind + ' reveal" role="img" aria-label="' + label + '">' +
-        '<span class="media-tag">' + esc(T.ui.preview) + '</span>' +
-        '<span class="media-icon">' + IC.image + '</span>' +
-        '<span class="media-name">' + esc(m.name) + '</span>' +
-        '<span class="media-desc">' + esc(m.desc) + '</span>' +
-        '</figure>';
+      var draw = art && window.ART && window.ART[art];
+      var body = draw
+        ? draw()
+        : '<span class="media-tag">' + esc(T.ui.preview) + '</span>' +
+          '<span class="media-icon">' + IC.image + '</span>' +
+          '<span class="media-name">' + esc(m.name) + '</span>' +
+          '<span class="media-desc">' + esc(m.desc) + '</span>';
+      return '<figure class="media media--' + kind + (draw ? ' media--art' : '') +
+        ' reveal" role="img" aria-label="' + label + '">' + body + '</figure>';
     }
     function downloadBtn(cls, big) {
       return '<a class="btn ' + cls + (big ? ' btn-lg' : '') + '" href="' + DOWNLOAD_URL + '">' + esc(T.ui.download) + '</a>';
@@ -670,7 +677,7 @@
           availability('hero-avail') +
           '<div class="hero-pills">' + s.pills.map(function (p) { return '<span class="pill">' + esc(p) + '</span>'; }).join('') + '</div>' +
         '</div>' +
-        '<div class="hero-visual reveal">' + media(s.media, 'phone') + '</div>';
+        '<div class="hero-visual reveal">' + media(s.media, 'phone', 'hero') + '</div>';
     }
 
     function buildProblem() {
@@ -684,7 +691,7 @@
             return '<div class="point">' + IC.check + '<span>' + esc(p) + '</span></div>';
           }).join('') + '</div>' +
         '</div>' +
-        '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'wide', 'problem') + '</div>' +
       '</div>';
     }
 
@@ -699,7 +706,7 @@
           return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
             '<h3>' + esc(c.title) + '</h3><p>' + esc(c.body) + '</p></div>';
         }).join('') + '</div>' +
-        '<div class="reveal" style="margin-top:clamp(32px,5vw,52px);max-width:820px;margin-inline:auto">' + media(s.media, 'wide') + '</div>';
+        '<div class="reveal" style="margin-top:clamp(32px,5vw,52px);max-width:820px;margin-inline:auto">' + media(s.media, 'wide', 'principles') + '</div>';
     }
 
     function buildHow() {
@@ -713,7 +720,7 @@
             '<div class="step-num">' + (i + 1) + '</div>' +
             '<h3>' + esc(st.title) + '</h3>' +
             '<p>' + esc(st.body) + '</p>' +
-            media(st.media, 'wide') +
+            media(st.media, 'wide', 'step' + (i + 1)) +
           '</div>';
         }).join('') + '</div>' +
         '<div class="section-cta reveal">' + downloadBtn('btn-primary', true) + '</div>';
@@ -732,7 +739,7 @@
         }).join('') + '</div>' +
         '<div class="split" style="margin-top:clamp(36px,5vw,56px)">' +
           '<div class="split-text reveal"><p class="emphasis">' + titleHTML(s.emphasis) + '</p></div>' +
-          '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+          '<div class="split-visual reveal">' + media(s.media, 'wide', 'psychology') + '</div>' +
         '</div>';
     }
 
@@ -744,7 +751,7 @@
           '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
           '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
         '</div>' +
-        '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'wide', 'dualRole') + '</div>' +
       '</div>';
     }
 
@@ -756,7 +763,7 @@
             '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
             '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
           '</div>' +
-          '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+          '<div class="split-visual reveal">' + media(s.media, 'wide', 'credits') + '</div>' +
         '</div>' +
         '<div class="card-grid card-grid--3" style="margin-top:clamp(28px,4vw,44px)">' + s.cards.map(function (c) {
           return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
@@ -775,7 +782,7 @@
             return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
           }).join('') + '</div>' +
         '</div>' +
-        '<div class="split-visual reveal">' + media(s.media, 'wide') + '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'wide', 'matching') + '</div>' +
       '</div>';
     }
 
@@ -790,7 +797,7 @@
           }).join('') + '</div>' +
           '<p class="reveal measure" style="margin-top:22px">' + esc(s.body) + '</p>' +
         '</div>' +
-        '<div class="split-visual reveal">' + media(s.media, 'phone') + '</div>' +
+        '<div class="split-visual reveal">' + media(s.media, 'phone', 'safety') + '</div>' +
       '</div>';
     }
 
@@ -812,7 +819,7 @@
         '<p class="emphasis">' + titleHTML(s.emphasis) + '</p>' +
         '<div class="final-actions">' + downloadBtn('btn-primary', true) + '</div>' +
         availability() +
-        '<div class="final-media">' + media(s.media, 'wide') + '</div>' +
+        '<div class="final-media">' + media(s.media, 'wide', 'final') + '</div>' +
         '<div class="contact"><span>' + esc(T.contact.label) + '</span> ' +
           '<a href="mailto:once.app.support@gmail.com?subject=' + encodeURIComponent(T.contact.subject) + '">once.app.support@gmail.com</a>' +
         '</div>' +
