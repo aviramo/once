@@ -303,9 +303,14 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
  *  Read by home.tsx (the hidden placeholder) AND by the settings visibility
  *  row, which is the only way back to visible now that page2 has no UI of its
  *  own. Two consumers, one definition — do not re-derive it inline. */
-/** Onboarding is needed when the profile row is absent (brand-new user) or
- *  present with an empty bio (partially completed — the app treats a non-empty
- *  bio as the "onboarding finished" marker, since it is the last step).
+/** An ACCOUNT is needed when the profile row is absent (brand-new user) or has
+ *  no name/birth_date yet. Account creation (onboarding steps 1-3: gender +
+ *  name + birthdate → app/account) writes the row and derives the matching
+ *  fields (preferred gender, age span, range), which is everything others()
+ *  needs to place the user in pools. This — NOT a built profile — is the only
+ *  hard gate before /home: a user with an account but no photos/bio browses
+ *  freely (they simply cannot be seen or invite until they build one; see
+ *  selectProfileBuilt).
  *
  *  Read by the _layout routing guard AND by index.tsx, the boot route. Two
  *  consumers, one definition — do not re-derive it inline. index.tsx used to
@@ -313,10 +318,19 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
  *  the guard; the guard is deliberately not subscribed to `segments`, so when
  *  the profile fetch resolved before the boot navigation the guard's last
  *  evaluation happened at `segments.length === 0` and bailed, and nothing ever
- *  re-fired it. A half-onboarded user was then parked on /home forever with no
- *  photos and no bio, which renders blank. */
-export function selectNeedsOnboarding(profile: UserProfile | null | undefined): boolean {
-  return !profile || !profile.bio
+ *  re-fired it. An account-less user was then parked on /home forever. */
+export function selectNeedsAccount(profile: UserProfile | null | undefined): boolean {
+  return !profile || !profile.name || !profile.birth_date
+}
+
+/** A profile is BUILT once it carries a non-empty bio — the last step of the
+ *  onboarding build flow, saved together with the (2-6) photos. This is the
+ *  single marker for "full member": while false the menu shows the orange
+ *  build-profile CTA in place of the avatar and the invite prompt opens the
+ *  build-profile popup instead of sending. Matches the server's profileComplete
+ *  gate (app/index.ts) one-for-one. */
+export function selectProfileBuilt(profile: UserProfile | null | undefined): boolean {
+  return !!(profile && profile.bio && profile.bio.trim() !== '')
 }
 
 export function selectIsHidden(profile: UserProfile | null | undefined): boolean {

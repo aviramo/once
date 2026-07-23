@@ -240,6 +240,11 @@ export const OVERLAY = {
   // hamburger, a sheet's close X). Consumed via chromeReserve() so the card
   // underneath reserves exactly the room the chrome occupies.
   chromeGap: SM,
+  // How far in from the START/END edge floating chrome sits: the home
+  // hamburger's `start`, the card's report flag at `end`, and a sheet's close X
+  // all land on this one gutter so the hamburger visually BECOMES the X when a
+  // sheet opens over it (same line, both axes). The page gutter, MD.
+  chromeInset: MD,
   // How far the finger must travel before a sideways drag on home is claimed
   // as "open the menu drawer" (below it the touch is still up for grabs).
   menuDragSlop: SM,

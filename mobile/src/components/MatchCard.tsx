@@ -16,6 +16,7 @@ import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
 import { RoundButton } from './RoundButton'
+import { Button } from './Button'
 import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
@@ -88,10 +89,12 @@ function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: (
 // Replaces the old "tap bio → BottomSheet popup" flow. The bio bubble itself
 // becomes the editor: a multiline TextInput styled byte-identically to the
 // read-only bio Text, so when it isn't focused it looks exactly like static
-// text. Tapping anywhere drops the caret at that character natively. There is
-// no save button — editing auto-commits on blur (keyboard dismissed / tap
-// outside / focus lost). Sub-min input is discarded and reverts to the last
-// committed value, matching the popup's old "can't save below minimum" rule.
+// text. Tapping anywhere drops the caret at that character natively. While
+// focused, a footer bar under the field carries the char counter and an
+// explicit Update button (enabled only on a saveable change) — the ONLY save
+// path. Leaving the field without pressing it (keyboard dismissed / tap
+// outside / focus lost) discards the edit and reverts to the last committed
+// value, same as sub-min input. Nothing is saved on blur.
 export type BioEdit = {
   /** Last committed bio (server truth, '' when unset). */
   value: string
@@ -131,9 +134,14 @@ function BioField({
   const trimmedLen = draft.trim().length
   const belowMin = trimmedLen < BIO_MIN
   const remaining = BIO_MAX - draft.length
+  // A real, saveable change: normalized draft differs from the committed
+  // value and clears the minimum. Drives the Update button's enabled state —
+  // reading the ref during render is fine, `draft` is what re-renders us.
+  const dirty = normalizeBio(draft) !== normalizeBio(committedRef.current)
+  const canSave = !belowMin && dirty && !saving
 
-  const handleBlur = useCallback(() => {
-    setFocused(false)
+  // The save routine, fired only by the Update button (never on blur).
+  const commit = useCallback(() => {
     const next = normalizeBio(draft)
     const prev = normalizeBio(committedRef.current)
     if (next === prev) {
@@ -149,6 +157,21 @@ function BioField({
     setDraft(next)
     onCommit(next)
   }, [draft, onCommit])
+
+  // Leaving the field without pressing Update discards the edit: revert the
+  // draft to the last committed value. Only the Update button saves.
+  const handleBlur = useCallback(() => {
+    setFocused(false)
+    setDraft(committedRef.current)
+  }, [])
+
+  // The only save path: commit, then drop the keyboard. commit() sets
+  // committedRef to the new value, so the blur that follows reverts to it
+  // (a no-op) rather than throwing the fresh save away.
+  const handleUpdate = useCallback(() => {
+    commit()
+    Keyboard.dismiss()
+  }, [commit])
 
   return (
     <>
@@ -168,9 +191,17 @@ function BioField({
         onBlur={handleBlur}
       />
       {focused ? (
-        <Text style={[styles.bioCounter, !belowMin && remaining < 20 && styles.bioCounterWarn]}>
-          {belowMin ? t('bio.min') : remaining}
-        </Text>
+        <View style={styles.bioFooter}>
+          <Text style={[styles.bioCounter, !belowMin && remaining < 20 && styles.bioCounterWarn]}>
+            {belowMin ? t('bio.min') : remaining}
+          </Text>
+          <Button
+            label={t('bio.update')}
+            onPress={handleUpdate}
+            size="md"
+            disabled={!canSave}
+          />
+        </View>
       ) : null}
     </>
   )
@@ -534,6 +565,26 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     bioFocusedRef.current = true
     scrollBioIntoView()
   }, [scrollBioIntoView])
+  // While the bio editor is focused, a tap outside it (a photo, the family
+  // chip) is CONSUMED to close the editor and does nothing else — no photo
+  // popup, no family sheet. Only a second tap, now that editing is closed,
+  // performs the tap's real action. Without this the editor stays open AND
+  // the tapped affordance fires at once, which reads as a confusing
+  // double-action. bioFocusedRef stays true until the keyboard actually
+  // hides, so it's still set at the moment this outside tap lands.
+  const swallowTapWhileEditing = useCallback(() => {
+    if (!bioFocusedRef.current) return false
+    Keyboard.dismiss()
+    return true
+  }, [])
+  const handlePhotoTap = useCallback((imageIndex: number) => {
+    if (swallowTapWhileEditing()) return
+    onPhotoTap?.(imageIndex)
+  }, [swallowTapWhileEditing, onPhotoTap])
+  const handleFamilyTap = useCallback(() => {
+    if (swallowTapWhileEditing()) return
+    onFamilyTap?.()
+  }, [swallowTapWhileEditing, onFamilyTap])
   useEffect(() => {
     if (!bioEditable) return
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
@@ -728,7 +779,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               {onPhotoTap && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => onPhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
+                  onPress={() => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
                 />
               )}
             </>
@@ -801,7 +852,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                       renderIcon={c => <KidsIcon color={c} />}
                       text={familyChipText}
                       onPhoto
-                      onPress={onFamilyTap}
+                      onPress={onFamilyTap ? handleFamilyTap : undefined}
                     />
                   </View>
                 ) : null}
@@ -855,7 +906,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               {onPhotoTap && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => onPhotoTap(section.imageIndex)}
+                  onPress={() => handlePhotoTap(section.imageIndex)}
                 />
               )}
             </Animated.View>
@@ -1015,10 +1066,19 @@ const styles = StyleSheet.create({
     padding: 0,
     includeFontPadding: false,
   },
+  // Footer bar under the editor: char count on the start edge, Update button
+  // on the end edge (flips under RTL). Full bubble width so it reads as the
+  // editor's own toolbar rather than floating centered text.
+  bioFooter: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: MD,
+  },
   bioCounter: {
     fontSize: TEXT.sm,
     color: BLACK_STRONG,
-    textAlign: 'center',
   },
   bioCounterWarn: { color: INK },
   extraPhoto: {

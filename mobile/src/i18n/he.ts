@@ -35,6 +35,7 @@ export default {
   'ob.female': 'אישה',
   'ob.nicknameStep': 'איך קוראים לך?',
   'ob.next': 'המשך',
+  'ob.close': 'סגירה',
 
   // Onboarding step 2
   'ob.birthdate': 'תאריך לידה',
@@ -55,6 +56,7 @@ export default {
   'bio.placeholder': 'משפט, תחושה או רגע שמספרים עליך...',
   'bio.submit': 'המשך',
   'bio.min': 'מינימום 20 תווים',
+  'bio.update': 'עדכון',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
   // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
@@ -120,6 +122,7 @@ export default {
   'about.feature4.title': 'הסכמה הדדית תמיד',
   'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד.',
   'settings.profile': 'עריכת הפרופיל',
+  'settings.buildProfile': 'בניית הפרופיל',
   'settings.account': 'חשבון',
   'settings.visibilityVisible': 'גלוי',
   'settings.visibilityHidden': 'מוסתר',
@@ -331,7 +334,7 @@ export default {
   'credits.invite.joined.one': 'חבר אחד הצטרף דרכך.',
   'credits.invite.joined.many': '{n} חברים הצטרפו דרכך.',
   // Text that rides along with the link in the OS share sheet.
-  'credits.invite.shareText': 'בוא לונס, אפליקציית היכרויות של אחד על אחד:',
+  'credits.invite.shareText': 'כדאי לך להוריד את Once.',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',
@@ -779,6 +782,9 @@ export default {
   'home.waitingFirstInLineSubtext': 'נעדכן אותך כשתהיה תשובה.',
   'home.waitingFirstInLineSubtext_m': 'נעדכן אותך כשהוא יענה.',
   'home.waitingFirstInLineSubtext_f': 'נעדכן אותך כשהיא תענה.',
+  'home.buildProfileTitle': 'בנ{ה|י} קודם פרופיל',
+  'home.buildProfileDesc': 'כדי לשלוח הזמנה צריך פרופיל עם תמונות ותיאור קצר. זה לוקח דקה.',
+  'home.buildProfileConfirm': 'בניית הפרופיל',
   'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
   'home.cancelWaitingBtn': 'ביטול הזמנה',
   'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין.',
@@ -838,6 +844,7 @@ export default {
   'chat.endChat': 'סיום',
   'chat.leave': 'עזיבה',
   'chat.a11y.close': 'סגירת הצ\'אט',
+  'chat.a11y.closeImage': 'סגירת התמונה',
   'chat.a11y.menu': 'אפשרויות צ\'אט',
   'chat.report': 'דיווח',
   'chat.reportTitle': 'דיווח על המשתמש',

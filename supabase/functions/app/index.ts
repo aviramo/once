@@ -19,6 +19,16 @@ const updatable = ["weekStart", "os", "lang", "push_token", "location_custom", "
 // the symmetric counterpart to others() dropping them from match pools.
 const requiresPresence = ["find", "invite", "add", "approve"];
 
+// Actions that SEND (an invitation or a broadcast) and therefore require a
+// BUILT profile — the profile-completion counterpart to requiresPresence.
+// A user may look (find) the moment their account exists (name/gender/DOB),
+// but may not surface to anyone until they have finished building a profile.
+// The gate-aware mobile build already blocks these CTAs (the orange "build
+// profile" step replaces the menu avatar, and the invite prompt opens a
+// "build a profile first" popup instead of sending), so a correct current
+// client never reaches here; this closes the loop for direct API calls.
+const requiresProfile = ["invite", "add"];
+
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
     if (searchable.includes(k)) (user as unknown as Record<string, unknown>)[k] = v;
@@ -45,6 +55,22 @@ function applyBodyFields(user: User, body: Record<string, unknown>) {
 function availabilityState(u: unknown): string {
   const rel = (u as { relations?: { availability?: { state?: string } } } | null | undefined)?.relations;
   return rel?.availability?.state ?? "available";
+}
+
+// Is this user's profile BUILT — at least one photo AND a non-empty bio? This
+// is the single completion marker the whole feature turns on: onboarding saves
+// the bio last (mobile selectProfileBuilt reads the same field), photos and bio
+// are committed together, and a browse-only user (account created, profile not
+// built) has zero images. Gates the SEND actions (requiresProfile) and the
+// self-seed in /app/start below, so a not-yet-built user can look but is never
+// seen, seeded a viewer, or allowed to invite. others() already drops a
+// zero-image user from every match pool, so this is the symmetric half.
+function profileComplete(u: User): boolean {
+  const data = u.data as { images?: unknown[]; bio?: unknown } | null | undefined;
+  const imgs = data?.images;
+  const bio = data?.bio;
+  return Array.isArray(imgs) && imgs.length >= 1
+    && typeof bio === "string" && bio.trim() !== "";
 }
 
 // Does this user hold an invitation whose clock has already run out, in either
@@ -204,6 +230,16 @@ Deno.serve(async (req) => {
       return log.error(key, "unavailable", 403);
     }
 
+    // Profile-built gate (symmetric to the presence gate above). A browse-only
+    // user — account created, profile not yet built — can look but must not be
+    // able to SEND an invitation or broadcast until they finish. The mobile
+    // build blocks the CTA client-side; this closes the loop for old builds and
+    // direct API calls. Rejected as a logged precondition, not a silent 4xx.
+    if (requiresProfile.includes(key) && !profileComplete(user)) {
+      await user.persist(log);
+      return log.error(key, "profile_incomplete", 403);
+    }
+
     // Re-seed-on-skip: when a skip (find / ignore) detaches the caller from the
     // user they were watching, that user may drop to zero viewers. Capture them
     // now (pre-skip page1 target) so we can seed one fresh viewer for them after
@@ -311,7 +347,10 @@ Deno.serve(async (req) => {
         // gated / no idle candidate), so the guard here is just a cheap
         // pre-check. Auto-find above never fills A's own viewer list, so it
         // is safe to run after it.
-        if (availableNow) {
+        // Gated on profileComplete: a browse-only user must never be seeded a
+        // viewer (that is what would make an unbuilt profile visible to, and
+        // invitable by, someone else). They can look; they are not looked at.
+        if (availableNow && profileComplete(user)) {
           const userAfter = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string; profiles?: unknown[] } } };
           const p2state = userAfter.relations?.page2?.state ?? "free";
           const profiles = userAfter.relations?.page2?.profiles;

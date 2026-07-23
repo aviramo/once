@@ -1,46 +1,12 @@
 import { useEffect } from 'react'
 import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
-import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppStatusBar } from '../src/components/AppStatusBar'
-
-// The green band behind the OS status bar.
-//
-// Android 15 (targetSdk 35) enforces edge-to-edge and IGNORES every API that
-// used to colour the status bar — `androidStatusBar.backgroundColor` in
-// app.json and expo-status-bar's `backgroundColor` prop are both no-ops there.
-// So the app draws the strip itself.
-//
-// Deliberately ABSOLUTE and pointerEvents="none": it paints over the top strip
-// without taking layout space. If it were a normal child it would push every
-// screen down by the inset, and screens that already pad by `insets.top` (home's
-// floating chrome, the sheets) would end up double-inset.
-//
-// It is a vertical FADE, not a flat fill: solid green under the system glyphs
-// at the top, dissolving to nothing at the bottom edge, so the band meets
-// whatever the screen is (a photo, a beige page) without drawing a hard line
-// across it.
-function StatusBarBand() {
-  const { top } = useSafeAreaInsets()
-  if (top <= 0) return null
-  return (
-    <View pointerEvents="none" style={[styles.statusBand, { height: top }]}>
-      <Svg width="100%" height="100%">
-        <Defs>
-          <LinearGradient id="statusBand" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={GREEN} stopOpacity={1} />
-            <Stop offset="1" stopColor={GREEN} stopOpacity={0} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#statusBand)" />
-      </Svg>
-    </View>
-  )
-}
+import { StatusBarBand } from '../src/components/StatusBarBand'
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
@@ -60,13 +26,13 @@ import {
 import { supabase } from '../src/lib/supabase'
 import { consumeMagicLinkUrl } from '../src/lib/authRedirect'
 import { useAuthStore } from '../src/stores/authStore'
-import { useUserStore, selectNeedsOnboarding } from '../src/stores/userStore'
+import { useUserStore, selectNeedsAccount } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-import { GREEN, BG } from '../src/colors'
+import { BG } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -112,8 +78,10 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // The !profileLoading guard in each routing condition prevents redirecting
   // while the fetch is still in flight. index.tsx owns the *first* decision
-  // (this effect bails while segments is empty) — see selectNeedsOnboarding.
-  const needsOnboarding = selectNeedsOnboarding(profile)
+  // (this effect bails while segments is empty) — see selectNeedsAccount.
+  // Only the ACCOUNT (not a built profile) gates /home: a user with an account
+  // but no photos/bio belongs on /home, browsing.
+  const needsAccount = selectNeedsAccount(profile)
 
   // ── Routing guard ─────────────────────────────────────────────────────
   // `segments` is intentionally excluded from the dependency array.
@@ -137,19 +105,22 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       target = '/login'
     } else if (user && onAuthScreen) {
       if (profileLoading || !profileFetched) return  // wait for profile fetch to complete
-      target = needsOnboarding ? '/onboarding' : '/home'
-    } else if (user && !profileLoading && needsOnboarding && !onOnboarding && !onAuthScreen) {
+      target = needsAccount ? '/onboarding' : '/home'
+    } else if (user && !profileLoading && needsAccount && !onOnboarding && !onAuthScreen) {
       target = '/onboarding'
-    } else if (user && !profileLoading && !needsOnboarding && onOnboarding) {
-      target = '/home'
     }
+    // NOTE: there is deliberately NO reactive "account exists && on onboarding
+    // → /home" branch. Once the account exists the user may VOLUNTARILY reopen
+    // /onboarding (the menu's orange build-profile CTA) to add photos + bio;
+    // onboarding.tsx routes itself to /home when they finish or back out. A
+    // reactive redirect here would bounce them straight out of that flow.
 
     if (!target) return
     const targetSeg = target.replace(/^\//, '')
     if (current === targetSeg) return             // already there
     router.replace(target)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, needsOnboarding, profileLoading, profileFetched])
+  }, [user, loading, needsAccount, profileLoading, profileFetched])
 
   useEffect(() => {
     const timeout = setTimeout(() => setUser(null), 5000)
@@ -299,13 +270,3 @@ export default function RootLayout() {
   )
 }
 
-const styles = StyleSheet.create({
-  statusBand: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    elevation: 100,
-  },
-})

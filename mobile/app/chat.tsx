@@ -9,8 +9,8 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
-import { GestureDetector, Gesture } from 'react-native-gesture-handler'
-import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler'
+import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
@@ -20,6 +20,11 @@ import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
 import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_STRONG, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
+import { PullPane, usePullBehavior } from '../src/components/PullPane'
+import { RisingCard } from '../src/components/RisingCard'
+import { SheetHeader } from '../src/components/OverlaySheet'
+import { AppStatusBar } from '../src/components/AppStatusBar'
+import { StatusBarBand } from '../src/components/StatusBarBand'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
 
@@ -1758,7 +1763,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         </View>
       </View>
 
-      {lightboxUri && <LightboxModal uri={lightboxUri} onClose={() => setLightboxUri(null)} />}
+      {lightboxUri && <LightboxModal uri={lightboxUri} topInset={insets.top} onClose={() => setLightboxUri(null)} />}
     </View>
   )
 }
@@ -2397,7 +2402,13 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
   const iconColor = isMine ? WHITE : BLACK
-  const barActive = isMine ? WHITE_STRONG : PRIMARY
+  // Progress is shown as strong-vs-faint WITHIN the bubble's own ink family, so
+  // both directions read the same way: mine is bright-vs-dim white on the orange
+  // bubble, theirs is strong-vs-half green on the green bubble. Orange (PRIMARY)
+  // is the SENDER's action colour; painting a received message's played bars
+  // orange made them look like they belonged to me, which is what broke the
+  // coherence, the played half of a voice note must stay in its bubble's hue.
+  const barActive = isMine ? WHITE_STRONG : GREEN
   const barInactive = isMine ? WHITE_MID : GREEN_HALF
   const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
@@ -2482,103 +2493,205 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
 // ── Event strip ──────────────────────────────────────────────────────────
 // ── Lightbox ──────────────────────────────────────────────────────────────
 
-function LightboxModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+// Zoom bounds for the lightbox: a pinch caps here, and a double-tap toggles
+// between rest (1) and this preset. Single definitions, referenced by both
+// gestures below.
+const LIGHTBOX_MAX_ZOOM = 4
+const LIGHTBOX_DOUBLE_TAP_ZOOM = 2.5
+
+// Full-screen image viewer. It rises from the bottom like every card surface
+// and swipes down to close, so it composes the SAME sanctioned pieces as
+// OverlaySheet — PullPane + usePullBehavior (the one swipe-down mechanism,
+// never a hand-rolled Pan) + RisingCard (the bottom-up mount motion) +
+// SheetHeader (the floating close X at top-START). It is NOT an OverlaySheet
+// itself because it must float ABOVE the chat sheet's solid header, which only
+// a Modal (its own native window) achieves; and OverlaySheet's lifetime is
+// `open`-driven with an off-screen parked rest state, which a Modal has no
+// equivalent for.
+//
+// Pinch/double-tap zoom coexists with the swipe-down close by reusing the
+// pull's own `scrollAtTop` flag as the arbiter: while zoomed it is set false,
+// so a one-finger drag PANS the enlarged image instead of closing; back at
+// rest it is true, so a downward drag closes. (The X always closes regardless.)
+function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: number; onClose: () => void }) {
+  const { height: screenH } = Dimensions.get('window')
+  // SheetHeader's measured bottom, so a drag starting on the floating header
+  // still pulls (the sheet activation's header-vs-scroll rule).
+  const headerBottom = useSharedValue(0)
+
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  const noop = useCallback(() => {}, [])
+  const pull = usePullBehavior({
+    activation: 'sheet',
+    enabled: true,
+    onCommit: noop,
+    commit: 'slideOff',
+    axis: 'y',
+    headerBottom,
+  })
+
+  // A Modal is a separate window with no parked-off-screen rest state, so —
+  // unlike an in-tree OverlaySheet — nothing keeps it mounted through the fall.
+  // Unmount only once the card has fully ridden off the bottom, so neither a
+  // committed swipe nor the X button cuts the motion short.
+  useAnimatedReaction(
+    () => pull.pullY.value,
+    v => { if (v >= screenH) runOnJS(onCloseRef.current)() },
+  )
+
+  // The X button rides the card off with the SAME motion (and pullY) as a
+  // committed swipe, so both close paths animate identically.
+  const slideClose = useCallback(() => {
+    tap()
+    pull.pullY.value = withTiming(screenH)
+  }, [pull.pullY, screenH])
+
+  // The cream backdrop fades out as the card falls, so the frame before unmount
+  // is already transparent — no hard cut back to the chat behind it.
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: 1 - Math.min(1, pull.pullY.value / screenH),
+  }))
+
+  // ── Zoom ─────────────────────────────────────────────────────────────
   const scale = useSharedValue(1)
   const savedScale = useSharedValue(1)
   const tx = useSharedValue(0)
   const ty = useSharedValue(0)
   const savedTx = useSharedValue(0)
   const savedTy = useSharedValue(0)
+  // true = a one-finger drag closes the sheet; false (while zoomed) = it pans.
+  const setCloseArmed = pull.setScrollAtTop
 
-  const pinch = Gesture.Pinch()
-    .onUpdate(e => {
-      scale.value = Math.max(1, Math.min(savedScale.value * e.scale, 5))
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value
-    })
+  const zoomGesture = useMemo(() => {
+    const resetZoom = () => {
+      'worklet'
+      scale.value = withTiming(1)
+      savedScale.value = 1
+      tx.value = withTiming(0)
+      ty.value = withTiming(0)
+      savedTx.value = 0
+      savedTy.value = 0
+    }
+    const pinch = Gesture.Pinch()
+      // Disarm the close for the whole pinch, so its finger motion can never
+      // start riding the card off while the user is scaling.
+      .onStart(() => runOnJS(setCloseArmed)(false))
+      .onUpdate(e => {
+        scale.value = Math.max(1, Math.min(savedScale.value * e.scale, LIGHTBOX_MAX_ZOOM))
+      })
+      .onEnd(() => {
+        savedScale.value = scale.value
+        if (scale.value <= 1) { resetZoom(); runOnJS(setCloseArmed)(true) }
+      })
+    // Moves the enlarged image; a no-op at rest, where the drag belongs to the
+    // pull (close) instead.
+    const imagePan = Gesture.Pan()
+      .onUpdate(e => {
+        if (scale.value <= 1) return
+        tx.value = savedTx.value + e.translationX
+        ty.value = savedTy.value + e.translationY
+      })
+      .onEnd(() => {
+        savedTx.value = tx.value
+        savedTy.value = ty.value
+      })
+    const doubleTap = Gesture.Tap()
+      .numberOfTaps(2)
+      .onEnd(() => {
+        if (scale.value > 1) {
+          resetZoom()
+          runOnJS(setCloseArmed)(true)
+        } else {
+          scale.value = withTiming(LIGHTBOX_DOUBLE_TAP_ZOOM)
+          savedScale.value = LIGHTBOX_DOUBLE_TAP_ZOOM
+          runOnJS(setCloseArmed)(false)
+        }
+      })
+    return Gesture.Simultaneous(pinch, imagePan, doubleTap)
+    // Shared values + setCloseArmed are stable; only rebuild is unnecessary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCloseArmed])
 
-  const pan = Gesture.Pan()
-    .minPointers(1)
-    .onUpdate(e => {
-      tx.value = savedTx.value + e.translationX
-      ty.value = savedTy.value + e.translationY
-    })
-    .onEnd(() => {
-      savedTx.value = tx.value
-      savedTy.value = ty.value
-    })
-
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      if (scale.value > 1) {
-        scale.value = withSpring(1)
-        savedScale.value = 1
-        tx.value = withSpring(0); ty.value = withSpring(0)
-        savedTx.value = 0; savedTy.value = 0
-      } else {
-        scale.value = withSpring(2.5)
-        savedScale.value = 2.5
-      }
-    })
-
-  const singleTap = Gesture.Tap()
-    .onEnd((_e, success) => {
-      if (success && scale.value <= 1) runOnJS(onClose)()
-    })
-
-  const gesture = Gesture.Simultaneous(
-    pinch,
-    pan,
-    Gesture.Exclusive(doubleTap, singleTap),
+  // The swipe-down close and the zoom gestures share one detector (PullPane's).
+  // Simultaneous, so the pull's own scrollAtTop gate — not gesture arbitration —
+  // decides whether a one-finger drag closes or pans.
+  const gesture = useMemo(
+    () => Gesture.Simultaneous(pull.gesture, zoomGesture),
+    [pull.gesture, zoomGesture],
   )
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
+  const imageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: scale.value },
+    ],
   }))
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={lbStyles.backdrop}>
-        <GestureDetector gesture={gesture}>
-          <ReAnimated.Image
-            source={{ uri }}
-            style={[lbStyles.image, animStyle]}
-            resizeMode="contain"
-          />
-        </GestureDetector>
-        <Pressable style={lbStyles.closeBtn} onPress={onClose} hitSlop={12}>
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.5} strokeLinecap="round">
-            <Path d="M18 6L6 18M6 6l12 12" />
-          </Svg>
-        </Pressable>
-      </View>
+    <Modal visible transparent animationType="fade" onRequestClose={slideClose} statusBarTranslucent>
+      {/* A Modal is its own native window, so the root layout's status bar
+          chrome does NOT reach it. Re-assert both here: light glyphs
+          (AppStatusBar) and the same green gradient band the rest of the app
+          draws behind the OS bar (StatusBarBand — passed the inset explicitly
+          since a Modal's SafeAreaProvider context may read it as 0). Without
+          the band the cream backdrop shows through the always-transparent
+          edge-to-edge status strip. */}
+      <AppStatusBar />
+      {/* RNGH gestures don't reach into a Modal (its own window) without a
+          GestureHandlerRootView inside it — same as BottomSheet. Without this
+          the swipe-down-to-close would silently do nothing on Android. */}
+      <GestureHandlerRootView style={lbStyles.root}>
+        <ReAnimated.View style={[lbStyles.backdrop, backdropStyle]} pointerEvents="none" />
+        <PullPane
+          gesture={gesture}
+          pullY={pull.pullY}
+          pulling={pull.pulling}
+          axis="y"
+          pointerEvents="box-none"
+        >
+          <RisingCard from="up" animateExit={false} style={lbStyles.card}>
+            <View style={lbStyles.body}>
+              <ReAnimated.Image source={{ uri }} style={[lbStyles.image, imageStyle]} resizeMode="contain" />
+            </View>
+            {/* Same floating X as every sheet, at top-START, over the photo. */}
+            <SheetHeader
+              floating
+              topInset={topInset}
+              onClose={slideClose}
+              closeAccessibilityLabel={t('chat.a11y.closeImage')}
+              onMeasured={h => { headerBottom.value = h }}
+            />
+          </RisingCard>
+        </PullPane>
+        <StatusBarBand topInset={topInset} />
+      </GestureHandlerRootView>
     </Modal>
   )
 }
 
 const lbStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: SURFACE_SUNK,
+  },
+  card: {
     flex: 1,
     backgroundColor: SURFACE_SUNK,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  body: {
+    flex: 1,
+    // Clip a zoomed/panned image to the card so it never spills past the frame.
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
     height: '100%',
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: 52,
-    end: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: WHITE_SOFT,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 })
 

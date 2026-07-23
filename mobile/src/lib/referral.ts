@@ -135,8 +135,10 @@ export async function shareReferral(profile: WithReferral): Promise<boolean> {
   const url = referralUrl(code)
   try {
     await Share.share({
-      // Android reads `message` only, so the URL has to be inside it.
-      message: `${t('credits.invite.shareText')} ${url}`,
+      // Android reads `message` only, so the URL has to be inside it. The
+      // newline puts the link on its own line so it unfurls into its own
+      // preview card below the invitation sentence.
+      message: `${t('credits.invite.shareText')}\n${url}`,
     })
     return true
   } catch {

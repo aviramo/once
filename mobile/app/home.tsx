@@ -4,12 +4,13 @@ import Animated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTi
 import { Text } from '../src/components/AppText'
 const AnimatedText = Animated.createAnimatedComponent(Text)
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
 import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from 'react-native-svg'
 import { invoke, markStartupComplete, publicImageUrl, API_TIMEOUT_MS } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
 import { matchImageUrls } from '../src/lib/profileImages'
-import { useUserStore, resolveLocationType, type Profile, type Page2Invite } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectProfileBuilt, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
@@ -744,6 +745,13 @@ const statusButtonStyles = StyleSheet.create({
 export default function HomePage() {
   const { top: topInset, bottom: bottomInset } = useSafeAreaInsets()
   const { profile } = useUserStore()
+  const router = useRouter()
+  // A browse-only user (account created, profile not yet built) reaches home and
+  // watches others freely, but may not SEND an invitation until they finish. The
+  // watching-card send button opens this popup instead; the server enforces the
+  // same rule (profileComplete). One marker, shared with the menu CTA.
+  const profileBuilt = selectProfileBuilt(profile)
+  const [buildProfileOpen, setBuildProfileOpen] = useState(false)
   // ── Single-screen shell ─────────────────────────────────────────────────
   // The app is ONE screen: page1 (home). Everything else rises over it as a
   // full-screen OverlaySheet and is dismissed by swiping down — the same
@@ -2250,7 +2258,13 @@ export default function HomePage() {
       // ends; the heart returns on every non-cancel exit, cancel forfeits it.
       costCredits={CREDIT_COST.invite}
       affordable={starsBalance >= CREDIT_COST.invite}
-      onAccept={() => { setStickyInvite(true); runAction('app/invite', 'invite-confirm') }}
+      // A not-yet-built profile cannot send: open the build-profile popup
+      // instead of the invite. Same gate the server enforces (profileComplete),
+      // so a bypass is rejected there too.
+      onAccept={() => {
+        if (!profileBuilt) { tap(); setBuildProfileOpen(true); return }
+        setStickyInvite(true); runAction('app/invite', 'invite-confirm')
+      }}
       // Tap-while-unaffordable opens the buy-extra picker instead of the
       // legacy faded-disabled no-op. The button stays styled as a normal
       // white CTA so the user sees it as actionable (user request 2026-06-01).
@@ -2968,6 +2982,16 @@ export default function HomePage() {
                 </View>
 
                 <ConfirmDialog
+                  visible={buildProfileOpen}
+                  title={genderize(t('home.buildProfileTitle'), isMale)}
+                  description={t('home.buildProfileDesc')}
+                  confirmLabel={t('home.buildProfileConfirm')}
+                  onConfirm={() => { setBuildProfileOpen(false); router.push('/onboarding') }}
+                  onCancel={() => setBuildProfileOpen(false)}
+                  draggable
+                />
+
+                <ConfirmDialog
                   visible={cancelConfirmOpen}
                   title={t('home.cancelWaitingTitle')}
                   description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
@@ -3187,7 +3211,7 @@ export default function HomePage() {
           titleTrailing={partnerOnline ? <PresenceDot /> : undefined}
           closeAccessibilityLabel={t('chat.a11y.close')}
           headerTrailing={
-            <Chip text={t('chat.endChat')} onPress={() => { tap(); setChatMenuOpen(true) }} />
+            <Chip tone="solid" text={t('chat.endChat')} onPress={() => { tap(); setChatMenuOpen(true) }} />
           }
         >
           <ChatPage
@@ -3297,7 +3321,7 @@ const styles = StyleSheet.create({
   // chip at top-END). `start` rather than `left` so it mirrors under RTL.
   hamburger: {
     position: 'absolute',
-    start: MD,
+    start: OVERLAY.chromeInset,
   },
   // The invite sheet's body is a full-bleed MatchCard that paints its own
   // background, so the sheet card underneath carries no fill or lift of its

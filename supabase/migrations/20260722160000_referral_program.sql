@@ -202,10 +202,11 @@ create or replace function public._referral_settle(p_referral_id uuid)
   set search_path to ''
 as $$
 declare
-  v_ref     record;
-  v_rel     jsonb;
-  v_today   int;
-  v_is_test boolean;
+  v_ref          record;
+  v_rel          jsonb;
+  v_today        int;
+  v_inviter_test boolean;
+  v_invitee_test boolean;
 begin
   select * into v_ref from public.referrals where id = p_referral_id for update;
   if not found or v_ref.credited_at is not null then return 'skipped'; end if;
@@ -214,11 +215,17 @@ begin
     return 'incomplete';
   end if;
 
-  -- Test-partition accounts never move real currency in either direction.
-  select bool_or(coalesce(u.is_test, false)) into v_is_test
-  from public.users u
-  where u.user_id in (v_ref.inviter_id, v_ref.invitee_id);
-  if coalesce(v_is_test, false) then
+  -- Partition rule: skip only when the two sides sit in DIFFERENT partitions.
+  -- The risk the test partition guards against is a test account minting
+  -- currency for a real one (or the reverse). A referral BETWEEN two test
+  -- accounts is sealed inside the sandbox, touches no real user's economy,
+  -- and is the only way the feature can be end-to-end tested on real devices
+  -- -- the first live test hit exactly this and was skipped.
+  select coalesce(inv.is_test, false), coalesce(ine.is_test, false)
+    into v_inviter_test, v_invitee_test
+  from public.users inv, public.users ine
+  where inv.user_id = v_ref.inviter_id and ine.user_id = v_ref.invitee_id;
+  if v_inviter_test is distinct from v_invitee_test then
     update public.referrals set qualified_at = coalesce(qualified_at, now())
     where id = p_referral_id;
     return 'skipped';

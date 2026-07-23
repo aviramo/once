@@ -164,6 +164,16 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** nothing to delete (no shim). Delete this note.
 - **Verify before removing:** check the live mobile version distribution, and `SELECT source, count(*) FROM referrals GROUP BY 1` to confirm claims are arriving.
 
+### Profile-built gate on `invite`/`add` + browse-before-onboarding (informational)
+
+- **Added:** 2026-07-23
+- **Reason:** New rule: a user browses on /home the moment their **account** exists (name/gender/DOB → `app/account`), and only needs a **built profile** (>= 1 photo AND a non-empty bio) to be seen or to SEND. Enforced at the edge: `requiresProfile = ["invite","add"]` rejects `profile_incomplete` (403), and the `/app/start` self-seed (`app_seed_viewer`) is gated on the same `profileComplete(user)`. This *tightens* a precondition, which CLAUDE.md calls breaking, but it cannot be staged Expand→Contract and has **zero live-build impact** (see below).
+- **Old shape (kept alive):** Nothing on the wire. The deployed mobile build (≤ current) forces onboarding to completion (a non-empty bio) *before* /home, so an old-build user can only reach the invite/add CTAs with a fully built profile — `profileComplete` is always true for them and the new gate never fires. The `others()` image gate already excluded a photo-less user from every pool, so the seed gate only closes the one path (self-seed) an old build never reaches while incomplete anyway.
+- **New shape (preferred):** Gate-aware mobile build routes on `selectNeedsAccount` (not `selectProfileBuilt`), lands account-only users on /home, shows the orange `settings.buildProfile` CTA in place of the menu avatar while `!selectProfileBuilt`, and opens the `home.buildProfile*` popup instead of sending an invite. Server `profileComplete` is the authority.
+- **Safe to remove after:** N/A — not a shim, a permanent gate. Delete this note once the browse-before-onboarding build is the live floor (nothing to remove in code).
+- **How to remove:** Nothing to delete. Drop this note.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key IN ('invite','add') AND value = 'profile_incomplete' AND created_at > now() - interval '14 days'` — hits would mean a real client is sending while unbuilt (expected only from the new build's direct-API edge cases, never the send button).
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.

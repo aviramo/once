@@ -7,7 +7,7 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
-import { PHOTO_CHROME, BORDER_STRONG, GREEN, GREEN_WASH, ORANGE, ORANGE_SOFT, ONLINE_GREEN, PRIMARY } from '../colors'
+import { PHOTO_CHROME, BORDER_STRONG, GREEN, GREEN_WASH, ORANGE, ORANGE_SOFT, ONLINE_GREEN, PRIMARY, WHITE } from '../colors'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
@@ -33,6 +33,10 @@ const TONES = {
   // so the chip sat outside the palette. GREEN_WASH is the solid half-green
   // that keeps it inside it.
   neutral:  { fg: GREEN,  bg: GREEN_WASH },
+  // Solid brand green with light ink: a chip that is a real "do this" control,
+  // not a fact swatch. The full-strength fill (not the GREEN_WASH tint) is what
+  // makes it read as a button rather than a label — used for the chat's "End".
+  solid:    { fg: WHITE,  bg: GREEN },
   // Orange on an orange wash — the positive hue, never the action green.
   positive: { fg: ORANGE, bg: ORANGE_SOFT },
   // "Do this" rather than "here is a fact". Same white tile as every other
@@ -130,7 +134,7 @@ export function Chip({
   // brand green rather than a neutral black. The `action` tone opts out of the
   // ink half: it wears the same white tile, and its orange ink is the whole of
   // what separates a "do this" from the facts beside it.
-  const asChrome = onPhoto && tone !== 'action'
+  const asChrome = onPhoto && tone !== 'action' && tone !== 'solid'
   const bgColor = asChrome ? PHOTO_CHROME : bg
   const glyphColor = asChrome ? GREEN : fg
   const Container: any = onPress ? Pressable : View

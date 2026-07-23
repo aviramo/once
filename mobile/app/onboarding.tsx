@@ -12,11 +12,13 @@ import { tap } from '../src/lib/haptics'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
+import { RoundButton } from '../src/components/RoundButton'
+import { CloseIcon } from '../src/components/icons'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { BG, INK, INK_3, BLACK, GREEN_SOFT, NEGATIVE, WHITE, SELECTION } from '../src/colors'
+import { BG, INK, INK_3, BLACK, GREEN, GREEN_SOFT, GREEN_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
 import { FIELD_SKIN } from '../src/field'
-import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT } from '../src/tokens'
+import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, ROUND_BUTTON_SIZE_SM, OVERLAY, ICON } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 
@@ -377,7 +379,12 @@ export default function OnboardingPage() {
     try {
       seededFromProfileRef.current = true
       await invoke('app/account', { birth_date: birthdate, name: name.trim(), is_male: isMale })
-      setStep(s => Math.min(TOTAL_STEPS, s + 1))
+      // Account created (row + derived matching fields). That is the only hard
+      // gate before /home: the user lands on home and browses immediately. The
+      // photo + bio steps are no longer forced here — they are reached later,
+      // on demand, via the menu's orange build-profile CTA (which re-enters
+      // this screen at step 4 through `initialStep`).
+      router.replace('/home')
     } catch (e: any) {
       setDateError(e?.message ?? 'error')
     } finally {
@@ -445,6 +452,11 @@ export default function OnboardingPage() {
       const bioValue = normalizeBio(bio)
       await invoke('app/profile', { bio: bioValue })
       useUserStore.getState().update({ bio: bioValue })
+      // Profile is now built (bio saved last, photos already flushed). The
+      // routing guard no longer reacts to this, so navigate home explicitly.
+      // Works for both entry paths: the linear first-time flow AND a later
+      // visit opened from the menu's orange build-profile CTA.
+      router.replace('/home')
     } catch {
       bioSubmittingRef.current = false
       setBioSubmitting(false)
@@ -657,6 +669,7 @@ export default function OnboardingPage() {
   }
 
   return (
+    <View style={styles.rootWrap}>
     <SafeAreaView style={styles.root}>
       {/* The shared green band with white glyphs, as on every other screen. */}
       <AppStatusBar />
@@ -712,13 +725,37 @@ export default function OnboardingPage() {
         onCancel={() => setBirthConfirmOpen(false)}
       />
     </SafeAreaView>
+    {/* Build-profile steps (photos / bio) are reached only from home, on demand
+        via the menu's build-profile CTA, so an account always exists here. A
+        close X (top-START, where every dismiss lives) bails back to home
+        without finishing. Deliberately NOT shown on the mandatory account
+        steps 1-3. */}
+    {step >= 4 && (
+      <View style={[styles.closeWrap, { top: insets.top + OVERLAY.chromeGap }]} pointerEvents="box-none">
+        <RoundButton
+          size={ROUND_BUTTON_SIZE_SM}
+          bg={GREEN_WASH}
+          shadow={false}
+          onPress={() => { tap(); router.replace('/home') }}
+          accessibilityLabel={t('ob.close')}
+        >
+          <CloseIcon color={GREEN} size={ICON.round} />
+        </RoundButton>
+      </View>
+    )}
+    </View>
   )
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  rootWrap: { flex: 1, backgroundColor: BG },
   root: { flex: 1, backgroundColor: BG },
+  // Close X for the build-profile steps: same gutter as every sheet's close
+  // (OVERLAY.chromeInset from the START edge); `top` is set inline off the
+  // safe-area inset so it lines up with the sheet chrome.
+  closeWrap: { position: 'absolute', start: OVERLAY.chromeInset },
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
   page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },

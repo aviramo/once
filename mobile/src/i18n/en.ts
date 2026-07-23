@@ -35,6 +35,7 @@ export default {
   'ob.female': 'Female',
   'ob.nicknameStep': "What's your name?",
   'ob.next': 'Continue',
+  'ob.close': 'Close',
 
   // Onboarding step 2
   'ob.birthdate': 'Date of Birth',
@@ -53,6 +54,7 @@ export default {
   'bio.placeholder': 'A sentence, a feeling, or a moment that represents you...',
   'bio.submit': 'Continue',
   'bio.min': 'Minimum 20 characters',
+  'bio.update': 'Update',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
   // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
@@ -118,6 +120,7 @@ export default {
   'about.feature4.title': 'Mutual consent, always',
   'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone.",
   'settings.profile': 'Edit your profile',
+  'settings.buildProfile': 'Build your profile',
   'settings.account': 'Account',
   'settings.visibilityVisible': 'Visible',
   'settings.visibilityHidden': 'Hidden',
@@ -319,7 +322,7 @@ export default {
   'credits.invite.joined.one': 'One friend joined through you.',
   'credits.invite.joined.many': '{n} friends joined through you.',
   // Text that rides along with the link in the OS share sheet.
-  'credits.invite.shareText': 'Join me on Once, the one on one dating app:',
+  'credits.invite.shareText': 'You should download Once.',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',
@@ -651,6 +654,9 @@ Next may surprise`,
   'home.waitingFirstInLineSubtext': 'We\'ll let you know if she responds.',
   'home.waitingFirstInLineSubtext_m': 'We\'ll let you know if he responds.',
   'home.waitingFirstInLineSubtext_f': 'We\'ll let you know if she responds.',
+  'home.buildProfileTitle': 'Build your profile first',
+  'home.buildProfileDesc': 'To send an invitation you need a profile with photos and a short bio. It only takes a minute.',
+  'home.buildProfileConfirm': 'Build my profile',
   'home.cancelWaitingTitle': 'Cancel invitation?',
   'home.cancelWaitingBtn': 'Cancel invitation',
   'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting.',
@@ -707,6 +713,7 @@ Next may surprise`,
   'chat.endChat': 'End',
   'chat.leave': 'Leave',
   'chat.a11y.close': 'Close chat',
+  'chat.a11y.closeImage': 'Close image',
   'chat.a11y.menu': 'Chat options',
   'chat.report': 'Report',
   'chat.reportTitle': 'Report user',

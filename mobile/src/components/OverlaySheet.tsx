@@ -28,7 +28,7 @@ import { RoundButton } from './RoundButton'
 import { CloseIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
-import { SM, MD, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { GREEN, GREEN_WASH, BG, SCRIM_BLACK, INK } from '../colors'
 
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
@@ -276,10 +276,11 @@ export function SheetHeader({
           size={ROUND_BUTTON_SIZE_SM}
           onPress={onClose}
           accessibilityLabel={closeAccessibilityLabel}
-          // On a solid bar the X wears the same pale-green tile as the header's
-          // trailing chip, so the two sides of the row read as one pair sitting
-          // symmetrically inside the page gutter. Floating over a photo it keeps
-          // RoundButton's default white chrome + shadow so it stays legible.
+          // On a solid bar the X wears the calm pale-green wash — a dismiss is
+          // the quiet default, so it never competes with a trailing control that
+          // may be a stronger action (chat's solid-green "End"). Floating over a
+          // photo it keeps RoundButton's default white chrome + shadow so it
+          // stays legible.
           bg={floating ? undefined : GREEN_WASH}
           shadow={!!floating}
         >
@@ -313,14 +314,14 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
-  // The horizontal inset is SM, not the page gutter: the chrome on this row is
-  // a circle and a chip, both of which carry their own visual padding, and they
-  // are meant to land on the same start/end line as the sheet body's content
-  // (the chat's bubbles) rather than sitting a gutter further in.
+  // The close X and any trailing control sit on OVERLAY.chromeInset, the same
+  // gutter as the home hamburger and the card's report flag. That alignment is
+  // load-bearing: opening a sheet over home, the hamburger becomes the X in the
+  // exact same spot rather than jumping a few pixels toward the edge.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SM,
+    paddingHorizontal: OVERLAY.chromeInset,
     paddingBottom: SM,
     gap: SM,
   },

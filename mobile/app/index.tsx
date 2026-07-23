@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouter, useRootNavigationState } from 'expo-router'
 import { useAuthStore } from '../src/stores/authStore'
-import { useUserStore, selectNeedsOnboarding } from '../src/stores/userStore'
+import { useUserStore, selectNeedsAccount } from '../src/stores/userStore'
 
 // Boot route — shown while the auth session resolves, then redirects to
 // /onboarding, /home or /login.
@@ -32,7 +32,7 @@ export default function Index() {
     navigated.current = true
     const target = !user
       ? '/login'
-      : selectNeedsOnboarding(profile) ? '/onboarding' : '/home'
+      : selectNeedsAccount(profile) ? '/onboarding' : '/home'
     requestAnimationFrame(() => {
       try {
         router.replace(target)

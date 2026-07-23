@@ -45,14 +45,13 @@ const REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
 const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/bugs", "/map"];
 
 function pickLocale(request: NextRequest): string {
+  // The admin panel is Hebrew-only (there is no in-app language switcher).
+  // An explicit NEXT_LOCALE cookie still wins — that is the seam a future
+  // switcher would use — but we deliberately do NOT fall back to the
+  // browser's Accept-Language, which was silently flipping the panel to
+  // English for admins whose browser lists en ahead of he. Default is he.
   const cookie = request.cookies.get("NEXT_LOCALE")?.value;
   if (cookie && hasLocale(cookie)) return cookie;
-  const accept = request.headers.get("accept-language") ?? "";
-  for (const part of accept.split(",")) {
-    const tag = part.split(";")[0].trim().toLowerCase();
-    if (tag.startsWith("he")) return "he";
-    if (tag.startsWith("en")) return "en";
-  }
   return defaultLocale;
 }
 

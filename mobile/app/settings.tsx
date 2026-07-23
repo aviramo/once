@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker'
 import Svg, { Path, Line, Circle, Rect } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
-import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, type LocationType } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, selectProfileBuilt, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
@@ -2879,6 +2879,14 @@ export default function SettingsPage({
 }: SettingsPageProps = {}) {
   const { profile } = useUserStore()
   const { user } = useAuthStore()
+  const router = useRouter()
+
+  // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
+  // not the avatar but an orange CTA into the build-profile flow. A browse-only
+  // user reaches settings freely (the menu is never gated), so this is their
+  // way to finish. Same completion marker the invite popup and the server gate
+  // use — one source of truth.
+  const profileBuilt = selectProfileBuilt(profile)
 
   const firstPhoto = profile?.images?.[0]?.normal
   const avatarUri = firstPhoto
@@ -2913,18 +2921,31 @@ export default function SettingsPage({
               by the same amount, so the image alone extends up behind the
               floating chrome. Everything below the card, and the caption on
               it, keep their positions. */}
-          <Pressable
-            style={[styles.profileCard, { height: PROFILE_CARD_HEIGHT + photoBleed }]}
-            onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
-          >
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.profileCardPlaceholder}>
-                <TabIcon tab="profile" color={BLACK_STRONG} />
-              </View>
-            )}
-          </Pressable>
+          {profileBuilt ? (
+            <Pressable
+              style={[styles.profileCard, { height: PROFILE_CARD_HEIGHT + photoBleed }]}
+              onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.profileCardPlaceholder}>
+                  <TabIcon tab="profile" color={BLACK_STRONG} />
+                </View>
+              )}
+            </Pressable>
+          ) : (
+            // Not-yet-built profile: no hero card. Plain page, one regular
+            // button sitting just below the sheet's close (X) chrome.
+            <View style={[styles.buildProfileWrap, { paddingTop: photoBleed + LG }]}>
+              <Button
+                label={t('settings.buildProfile')}
+                onPress={() => { tap(); router.push('/onboarding') }}
+                variant="primary"
+                size="lg"
+              />
+            </View>
+          )}
 
           <View style={styles.optionsWrap}>
             <PreferencesContent onOpenSubPage={onOpenSubPage} />
@@ -3038,6 +3059,10 @@ const styles = StyleSheet.create({
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
+  // Not-yet-built profile: no hero card, just the plain (beige) page. A regular
+  // button sits below the sheet's close (X) chrome; the inline paddingTop
+  // clears that chrome (photoBleed) so the button never hides under it.
+  buildProfileWrap: { paddingHorizontal: LG, paddingBottom: MD },
   // A plain white card. The GROUP's meaning is carried by its ink (orange
   // for the account/status rows), never by tinting the card itself.
   accentCard: { backgroundColor: 'transparent' },
