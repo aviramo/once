@@ -4,14 +4,15 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet } from './BottomSheet'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
-import { SM, MD, LG, RADII, RADIUS, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
-import { BLACK, WHITE, BLACK_STRONG, PRIMARY, PRIMARY_BG, BLACK_MID } from '../colors'
+import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
+import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, BLACK_MID } from '../colors'
+import { FIELD_SKIN } from '../field'
 
-// Every decision popup in the app is this one component. The action is
-// always communicated by a single carefully-chosen icon in the tinted
-// circle above the title — never by the buttons. The primary button is a
-// plain PRIMARY label with no icon in every scenario (destructive or not);
-// the icon at the top is what tells the user what they're about to do.
+// Every decision popup in the app is this one component. The TITLE carries
+// the action: there is no icon above it, and the buttons are plain labels in
+// every scenario (destructive or not). The tinted icon badge that used to sit
+// above the title was removed at the user's request (2026-07-21) — do not
+// reintroduce it, here or in any other popup.
 //
 // Informational variant: omit both `confirmLabel` and `cancelLabel` and the
 // button row is dropped entirely — the sheet becomes a notice the user
@@ -22,8 +23,8 @@ export function ConfirmDialog({
   description,
   cancelLabel,
   confirmLabel,
-  icon,
   confirmIconStart,
+  confirmTone,
   onCancel,
   onConfirm,
   busy,
@@ -43,16 +44,14 @@ export function ConfirmDialog({
   cancelLabel?: string
   /** Omit (together with `cancelLabel`) for a button-less info popup. */
   confirmLabel?: string
-  /** Action icon rendered in a tinted circle above the title. Required:
-   * every dialog communicates its action through this icon, since the
-   * buttons are uniform PRIMARY/secondary labels with no icons. Pass it
-   * sized to the convention: `<XIcon color={PRIMARY} size={32} />`. */
-  icon: ReactNode
   /** Opt-in icon/badge rendered INSIDE the confirm button before its label.
    * Deliberately breaks the "buttons carry no icon" convention for the one
    * case the user asked for it: the broadcast popup must show the credit
    * cost on its confirm button (see CLAUDE.md "Credits economy"). */
   confirmIconStart?: ReactNode
+  /** Marks this popup's confirm as an INVITE action, which is the one case
+   * that wears the orange instead of the default green. */
+  confirmTone?: 'positive'
   onCancel?: () => void
   onConfirm?: () => void
   busy?: boolean
@@ -79,6 +78,8 @@ export function ConfirmDialog({
   // field stays visible. Per-screen nudge — the global BottomSheet lift was
   // removed (see CLAUDE.md "Keyboard avoidance"); a single per-component
   // marginBottom does not over-shoot the way the old double-lift did.
+  // The extra MD is breathing room: lifting by exactly the keyboard height
+  // leaves the confirm button sitting flush on the top key row.
   const kbHeight = useKeyboardHeight()
 
   const dismiss = () => {
@@ -94,15 +95,12 @@ export function ConfirmDialog({
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
-      cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
+      cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight + MD } : undefined}
       // When draggable, the PRIMARY drag-handle bar (with its own top/bottom
       // margins) already supplies the top breathing room — drop the card's
       // own paddingTop so the gap above the icon isn't doubled up.
       contentStyle={[styles.card, draggable && styles.cardDraggable]}
     >
-      <View style={styles.iconWrap}>
-        <View style={styles.iconCircle}>{icon}</View>
-      </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
 
@@ -154,6 +152,7 @@ export function ConfirmDialog({
               <Button
                 label={confirmLabel}
                 iconStart={confirmIconStart}
+                tone={confirmTone}
                 onPress={() => { setPressed('confirm'); onConfirm?.() }}
                 variant="primary"
                 size="lg"
@@ -181,18 +180,6 @@ const styles = StyleSheet.create({
   cardDraggable: {
     paddingTop: 0,
   },
-  iconWrap: {
-    alignItems: 'center',
-    marginBottom: MD,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 999,
-    backgroundColor: PRIMARY_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   title: {
     fontSize: FSIZE.xl,
     fontWeight: WEIGHT.extrabold,
@@ -219,7 +206,7 @@ const styles = StyleSheet.create({
     borderRadius: RADII.sm,
     borderWidth: STROKE.thin,
     borderColor: BLACK_MID,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -239,11 +226,9 @@ const styles = StyleSheet.create({
     color: BLACK_STRONG,
   },
   noteInput: {
+    ...FIELD_SKIN,
     marginTop: MD,
     minHeight: 96,
-    borderWidth: STROKE.thin,
-    borderColor: BLACK_MID,
-    borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingVertical: SM,
     fontSize: FSIZE.md,

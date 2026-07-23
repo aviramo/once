@@ -8,7 +8,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
-import { PRIMARY, WHITE, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { BG, GREEN, INK, INK_2, INK_3 } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 import { legalUrl } from '../src/lib/links'
@@ -126,9 +126,7 @@ export default function LoginPage() {
 
   return (
     <View style={styles.root}>
-      {/* Deep-wine PRIMARY surface: the app-wide white status-bar chrome
-          (AppStatusBar default) blends into the screen rather than
-          contrasting against it. */}
+      {/* The shared green band with white glyphs, as on every other screen. */}
       <AppStatusBar />
       <SafeAreaView style={styles.content} edges={['top', 'left', 'right']}>
         <View style={[styles.flex, { paddingBottom: kbHeight }]}>
@@ -176,7 +174,7 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
   content: {
     flex: 1,
@@ -198,13 +196,13 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: TEXT.xxxl,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: INK,
     letterSpacing: -1.4,
   },
   brandSlogan: {
     fontSize: TEXT.lg,
     fontWeight: WEIGHT.semibold,
-    color: WHITE_STRONG,
+    color: INK_2,
     letterSpacing: -0.2,
     marginTop: XS,
   },
@@ -222,12 +220,12 @@ const styles = StyleSheet.create({
   },
   legalText: {
     fontSize: TEXT.sm,
-    color: WHITE_MID,
+    color: INK_3,
     textAlign: 'center',
     lineHeight: lh(TEXT.sm),
   },
   legalLink: {
     textDecorationLine: 'underline',
-    color: WHITE_STRONG,
+    color: GREEN,
   },
 })

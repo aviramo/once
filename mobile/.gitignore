@@ -43,3 +43,7 @@ GoogleService-Info.plist
 # generated native folders
 /ios
 /android
+# Gradle output of the local Expo modules under modules/. The SOURCE there is
+# tracked (it is the install-referrer native module); only the build/ tree a
+# local `gradlew` run leaves behind is not.
+modules/*/android/build/

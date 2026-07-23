@@ -30,47 +30,31 @@ export default {
   'auth.legalPrivacy': 'Privacy Policy',
 
   // Onboarding step 1
-  'ob.welcome': "Let's start with you",
   'ob.whoAreYou': 'How do you identify?',
   'ob.male': 'Male',
   'ob.female': 'Female',
   'ob.nicknameStep': "What's your name?",
-  'ob.nicknamePlaceholder': 'This name will appear on your profile',
-  'ob.nicknameField': 'First name',
   'ob.next': 'Continue',
+  'ob.close': 'Close',
 
   // Onboarding step 2
   'ob.birthdate': 'Date of Birth',
-  'ob.howOld': 'How old are you?',
-  'ob.day': 'Day',
-  'ob.month': 'Month',
-  'ob.year': 'Year',
   'ob.minAge': 'Minimum age to register is 18',
   'ob.createAccount': 'Create account',
   'ob.createAccount_m': 'Create account',
   'ob.createAccount_f': 'Create account',
+  'ob.birthConfirm': 'Your birthday is {date} and you are {age}?',
+  'ob.birthConfirmFix': 'Fix',
 
   // Onboarding photo
-  'photo.title': 'Profile Photos',
   'photo.sub': 'Add 2-6 photos',
-  'photo.confirm': 'Confirm & Continue',
-  'photo.almostDone': 'One more step and we are done',
+  'photo.uploadFailed': 'Photo upload failed. You cannot continue without a photo, please try again.',
 
   // Onboarding bio
-  'bio.title': 'Your moment',
-  'bio.emphasis': 'This is the first thing people will see on your profile',
   'bio.placeholder': 'A sentence, a feeling, or a moment that represents you...',
-  'bio.tip': '✦ Authenticity attracts more than anything else',
   'bio.submit': 'Continue',
   'bio.min': 'Minimum 20 characters',
-
-  // Onboarding step 6 — optional invite code to join a group.
-  'ob.inviteTitle': 'Got an invite code?',
-  'ob.inviteHint': 'If someone invited you to a group, enter their code here. You can also skip.',
-  'ob.invitePlaceholder': '6 digits',
-  'ob.inviteSkip': 'Skip',
-  'ob.inviteJoin': 'Join',
-  'ob.inviteInvalid': 'Invalid or inactive code',
+  'bio.update': 'Update',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
   // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
@@ -118,7 +102,6 @@ export default {
   'settings.preferences': 'Menu',
   'settings.searchPreferences': 'Search preferences',
   'settings.myInfo': 'My info',
-  'settings.settings': 'Settings',
   'settings.appSettings': 'App',
   'settings.about': 'A Different Way to Meet',
   'settings.profileSubtitle': 'Edit your profile',
@@ -137,10 +120,17 @@ export default {
   'about.feature4.title': 'Mutual consent, always',
   'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone.",
   'settings.profile': 'Edit your profile',
+  'settings.buildProfile': 'Build your profile',
   'settings.account': 'Account',
-  'settings.credits': 'Hearts',
-  // Suffix word in the hearts-row value when the user has extras, e.g.
-  // "1/3 + 5 extra". Distinct word so "+ 5" doesn't read as math.
+  'settings.visibilityVisible': 'Visible',
+  'settings.visibilityHidden': 'Hidden',
+  // Watcher chip on the visibility row. The number alone says nothing, so the
+  // chip carries the whole phrase.
+  'settings.watchersOne': '1 person watching you',
+  'settings.watchersMany': '{count} people watching you',
+  'settings.credits': 'Credits',
+  // Suffix word in the credits-row value when the user has extras, e.g.
+  // "1/1 + 5 extra". Distinct word so "+ 5" doesn't read as math.
   'settings.creditsExtraSuffix': 'extra',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'My groups',
@@ -149,15 +139,19 @@ export default {
   'settings.groupsMore': 'more...',
   'settings.groupsEmpty': "You haven't joined any group yet.",
   'settings.groupsDisabled': 'Disabled',
+  'settings.groupsAdd': 'Add a group',
   'settings.groupsJoinTitle': 'Join a group',
   'settings.groupsJoinHint': "Enter the code you got from the group's manager. You can be a member of several groups at once.",
   'settings.groupsCodePlaceholder': '6 digits',
   'settings.groupsJoinAction': 'Join',
   'settings.groupsInviteInvalid': 'Invalid or inactive code',
+  'settings.groupsBack': 'Back',
+  'settings.groupsLeaveTitle': 'Leave {name}?',
+  'settings.groupsLeaveDesc': 'You can join again later with the group code.',
+  'settings.groupsLeaveConfirm': 'Leave group',
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'Report a bug',
   'bugReport.title': 'Report a bug',
-  'bugReport.desc': 'Hit a problem? Tell us what happened and we\'ll look into it.',
   'bugReport.placeholder': 'Describe the bug...',
   'bugReport.attach': 'Attach a photo',
   'bugReport.attachChange': 'Change photo',
@@ -233,10 +227,15 @@ export default {
   'settings.photoEditReplace': 'Replace',
   'settings.photoEditDelete': 'Delete',
   'settings.photoMinTwo': 'At least 2 photos required',
+  // Add-chips on the own-profile card, under the fact chips.
+  'settings.addPhoto': 'Add a photo',
+  'settings.addFamily': 'Family & kids',
   'family.title': 'Family & kids',
   'family.optional': 'optional',
   'family.hasKidsQuestion': 'Do you have kids?',
   'family.hasKidsYes': 'I have kids',
+  'family.hasKidsYesOne': 'I have one kid',
+  'family.hasKidsYesMany': 'I have {count} kids',
   'family.hasKidsNo': 'No kids',
   'family.isForKids': 'Interested in kids',
   'family.isForKidsMore': 'Interested in more kids',
@@ -283,56 +282,47 @@ export default {
   'family.summarySelfHasKids': 'I have kids',
   'family.summarySelfHasOneKid': 'I have one kid',
   'family.summarySelfHasNKids': 'I have {n} kids',
-  'family.wantsMore': 'wants more',
-  'family.doesntWantMore': "doesn't want more",
-  'family.wantsKids': 'wants some',
-  'family.doesntWantKids': "doesn't want any",
-  'family.selfWantsMore': 'want more',
+  'family.wantsMore': 'wants more kids',
+  'family.doesntWantMore': 'no more kids',
+  'family.wantsKids': 'wants kids',
+  'family.doesntWantKids': 'no kids wanted',
+  'family.selfWantsMore': 'want more kids',
   'family.selfDoesntWantMore': "don't want more",
-  'family.selfWantsKids': 'want some',
-  'family.selfDoesntWantKids': "don't want any",
-  'family.prefSeparator': ' and ',
+  'family.selfWantsKids': 'want kids',
+  'family.selfDoesntWantKids': "don't want kids",
   'family.overlapLabel': '{pct}% kid-free overlap',
-  'family.overlapChipSuffix': ', {pct}% overlap',
+  'family.overlapChip': '{pct}% overlap',
   'family.addKid': 'Add kid',
   'family.ageNotSet': 'No age',
   'family.ageFortyPlus': '40+',
-  'family.summaryFreeWeekend': ', free this weekend',
-  'family.summaryWithKidsWeekend': ', not free this weekend',
+  'family.summaryFreeWeekend': 'free weekend',
+  'family.summaryWithKidsWeekend': 'busy weekend',
   'common.gotIt': 'Got it',
-  // Count phrase with correct singular/plural, built by starsText() in
-  // lib/credits.ts. Used wherever a hearts amount is shown in prose.
-  'stars.count.one': '1 heart',
-  'stars.count.many': '{n} hearts',
-  // Hearts popup (opened from the settings hearts row). The description is
-  // assembled in code from these lines (so the renew line can be dropped
-  // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
-  // render bold in code. {balance} = the daily pool, {extra} = the
-  // purchased pool, {cap} = daily ceiling (currently 3).
-  // English is non-gendered (genderize() is a no-op without {m|f} markers).
-  'stars.popup.title': 'Your hearts',
-  'stars.popup.line.balance': 'You have {balance} in your daily allowance, which refills to {cap} every day.',
-  // Variant for the balance=0 case — reads "your hearts ran out" instead of
-  // the literal "you have 0 hearts" (user request 2026-06-01).
-  'stars.popup.line.balanceEmpty': 'Your hearts ran out in your daily allowance, which refills to {cap} every day.',
-  // {extra} expands via starsText → "5 hearts" / "1 heart" (carries the noun
-  // already). Template must NOT repeat "hearts", just append "extra".
-  'stars.popup.line.extra': 'You also have {extra} extra.',
-  // {when} carries its own "today at HH:MM" — no leading preposition in the template.
-  'stars.popup.line.renew': 'Your daily allowance refreshes {when}.',
+  // Count phrase with correct singular/plural, built by creditsText() in
+  // lib/credits.ts. Used wherever a credits amount is shown in prose.
+  'credits.count.one': '1 credit',
+  'credits.count.many': '{n} credits',
   // Relative next-grant day. Returned from formatNextGrant() — replaces the
   // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
-  'stars.grant.today': 'today at {time}',
-  'stars.grant.tomorrow': 'tomorrow at {time}',
-  'stars.popup.buyExtra': 'Buy extra hearts',
-  // Buy-extra picker (5/10/50 options, all "Free" for now, only 5 enabled).
-  'stars.buy.title': 'Buy extra hearts',
-  'stars.buy.desc': 'Hearts you buy are added on top of your daily allowance and never expire.',
-  'stars.buy.priceFree': 'Free',
-  'stars.buy.comingSoon': 'Coming soon',
-  // Shown on the active (3-hearts) option when the user already used today's
-  // buy slot — the once-per-grant-day gate.
-  'stars.buy.alreadyBoughtToday': 'Already bought today',
+  'credits.grant.today': 'today at {time}',
+  'credits.grant.tomorrow': 'tomorrow at {time}',
+  // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
+  // "coming soon") and inviting a friend is the only way to earn extra, so the
+  // copy talks about getting credits rather than buying them.
+  'credits.buy.title': 'More credits',
+  'credits.buy.desc': 'Credits you get are added on top of your daily allowance and never expire.',
+  'credits.buy.priceFree': 'Free',
+  'credits.buy.comingSoon': 'Coming soon',
+  // Invite row: the one active way to earn. The title is the action alone;
+  // the sub-line under it inside the same row carries WHEN the credit lands,
+  // so the row never reads as "tap and get a credit". genderize() is a no-op
+  // on English (no {m|f} marker) — single form.
+  'credits.invite.title': 'Invite a friend',
+  'credits.invite.joined.none': 'The credit arrives once your friend installs the app and completes a profile.',
+  'credits.invite.joined.one': 'One friend joined through you.',
+  'credits.invite.joined.many': '{n} friends joined through you.',
+  // Text that rides along with the link in the OS share sheet.
+  'credits.invite.shareText': 'You should download Once.',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',
@@ -396,57 +386,20 @@ export default {
   'home.noInternetTitle': 'No internet connection',
   'home.noInternetDesc': 'Once needs an internet connection to work. Please check your Wi-Fi or mobile data and try again.',
   'home.noInternetButton': 'Try again',
-  'home.nowVisibleDesc': 'Viewers of your profile appear here. If one of them sends an invitation, it will show up here.',
-  'home.nowVisibleWithOneWatcherDesc': 'Someone is looking at your profile right now and can send you an invitation. You\'ll get a notification when it arrives.',
-  'home.nowVisibleWithWatchersDesc': 'These people are looking at your profile right now. Any of them can send you an invitation. You\'ll get a notification when one arrives.',
-  'home.watchingMeRightNow': 'RIGHT NOW',
-  'home.watchingMeNew': 'New',
-  'home.watchingMeMorePeopleNearby': 'More people may appear soon',
-  'home.watchingMeAdd': 'Show me to people',
-  'home.watchingMeHiddenHeader': 'Hidden mode',
   // ViewersStatusCard (page2) — 5 states
-  'home.watchingMeVisibleEmptyTitle': 'Your stage is open',
-  'home.watchingMeVisibleEmptySubtitle': "You're visible to others. When someone comes to watch you, they'll appear here.",
-  'home.watchingMeVisibleWatchedTitle': "There are eyes on you",
-  'home.watchingMeVisibleWatchedSubtitle': "You're visible right now. Anyone who feels a connection can send you an invitation any moment.",
-  'home.watchingMeHiddenTitle': "You're off the radar",
-  'home.watchingMeHiddenSubtitle': "No one can see you right now. When you want to come back, you can open up to invitations.",
-  'home.watchingMeHiddenGoVisibleBtn': 'Switch to visible',
   // In-card trigger that opens the broadcast confirm popup. Reads as a
   // mode-switch (parallel to the go-visible label), NOT as the action verb;
   // the confirm popup's button (home.broadcastConfirmButton) keeps the
   // "broadcast me" wording.
-  'home.watchingMeVisibleBroadcastBtn': 'Switch to broadcast',
-  // Out-of-hearts auto-hide variant: shown when the user runs out of hearts
-  // (balance + extra = 0). The "go visible" button is replaced by the
-  // buy-extra CTA (stars.popup.buyExtra label).
-  'home.watchingMeNoHeartsTitle': 'You ran out of hearts',
-  'home.watchingMeNoHeartsSubtitle': "Without hearts you can't accept invitations. Buy extra hearts to get back into the game.",
-  'home.watchingMeBroadcastEmptyTitle': "You're on the air",
-  'home.watchingMeBroadcastEmptySubtitle': "Broadcast is live and you're getting extra exposure. When someone starts watching you, they'll appear here.",
-  'home.watchingMeBroadcastWatchedTitle': "You're in the spotlight",
-  'home.watchingMeBroadcastWatchedSubtitle': "Broadcast is live and you're getting extra exposure. An invitation can arrive any moment.",
   'home.premiumPopup.add': 'Show me to people',
   'home.premiumPopup.hide': 'Hide my profile',
   'home.premiumPopup.reveal': 'Show my profile',
-  'home.broadcastConfirmTitle': 'Switch to broadcast mode?',
-  'home.broadcastConfirmDesc': 'In broadcast mode, your profile gets extra visibility for 30 minutes, helping more nearby people discover you.',
-  'home.broadcastConfirmDescFree': 'Receiving invitations is free.',
-  'home.broadcastConfirmDescNoStars': 'No hearts are used when someone invites you.',
-  'home.broadcastConfirmButton': 'Broadcast me',
-  'home.exitBroadcastConfirmTitle': 'Stop broadcasting?',
   // English is non-gendered (single form); tg picks the same string for either is_male.
-  'home.exitBroadcastConfirmDesc': "You're currently broadcasting. Stopping will give up the visibility boost you currently have over other users.",
-  'home.exitBroadcastConfirmButton': 'Stop broadcast',
-  'home.hideConfirmTitle': 'Hide your profile?',
-  'home.hideConfirmDesc': 'All your watchers will be removed and notified.',
-  'home.hideConfirmButton': 'Hide',
-  'home.visibility.hidden': 'Hidden',
-  'home.visibility.visible': 'Visible',
-  'home.visibility.broadcast': 'Broadcast',
-  'home.removeWatcherTitle': 'Remove watcher?',
-  'home.removeWatcherDesc': 'You can\'t open this profile from here. If you remove them, they won\'t be able to keep watching you.',
-  'home.removeWatcherConfirm': 'Remove',
+  'settings.hideConfirmTitle': 'Hide your profile?',
+  'settings.hideConfirmDesc': 'All your watchers will be removed and notified.',
+  'settings.hideConfirmDescOne': 'Your 1 current watcher will be removed and notified.',
+  'settings.hideConfirmDescMany': 'Your {count} current watchers will be removed and notified.',
+  'settings.hideConfirmButton': 'Hide',
 
   // Home — match teaser
   'home.tapForMore': 'Back to the game',
@@ -692,15 +645,18 @@ Next may surprise`,
   'home.waitingTimerTitle': 'Your invitation is waiting for them',
   'home.waitingTimerTitle_m': 'Your invitation is waiting for him',
   'home.waitingTimerTitle_f': 'Your invitation is waiting for her',
-  'home.waitingTimerDesc': 'Meanwhile, he won\'t receive other invitations. Your heart only comes back to you if he declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_mm': 'Meanwhile, he won\'t receive other invitations. Your heart only comes back to you if he declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_mf': 'Meanwhile, she won\'t receive other invitations. Your heart only comes back to you if she declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_fm': 'Meanwhile, he won\'t receive other invitations. Your heart only comes back to you if he declines or doesn\'t respond in time.',
-  'home.waitingTimerDesc_ff': 'Meanwhile, she won\'t receive other invitations. Your heart only comes back to you if she declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_mm': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_mf': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_fm': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time.',
+  'home.waitingTimerDesc_ff': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time.',
   'home.waitingFirstInLine': 'You\'re first in line',
   'home.waitingFirstInLineSubtext': 'We\'ll let you know if she responds.',
   'home.waitingFirstInLineSubtext_m': 'We\'ll let you know if he responds.',
   'home.waitingFirstInLineSubtext_f': 'We\'ll let you know if she responds.',
+  'home.buildProfileTitle': 'Build your profile first',
+  'home.buildProfileDesc': 'To send an invitation you need a profile with photos and a short bio. It only takes a minute.',
+  'home.buildProfileConfirm': 'Build my profile',
   'home.cancelWaitingTitle': 'Cancel invitation?',
   'home.cancelWaitingBtn': 'Cancel invitation',
   'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting.',
@@ -715,11 +671,15 @@ Next may surprise`,
   'home.watchingAccept': 'Focus',
   'home.watchingAccept_m': 'Focus on him',
   'home.watchingAccept_f': 'Focus on her',
-  'home.watchingReject': 'Not now',
+  'home.watchingReject': 'Skip',
   'home.skipHintTitle': 'Swipe the card down to skip',
   'home.skipHintDesc': 'Next time, swipe the card down to quickly skip to another profile. Want to skip now?',
   'home.skipHintCancel': 'Got it',
   'home.skipHintConfirm': 'Skip',
+  // Shown in the rotating-headline slot for the duration of the first-time
+  // swipe-down tutorial, instead of that card's random skip line: while the
+  // card peeks down and reveals the slot, the text names the gesture.
+  'home.skipTutorialHint': 'Swipe down to skip',
   // Incoming-invite card (page2). English varies only by the inviter (he/she);
   // "you" is gender-neutral. Title: tg(key, inviterMale). Desc: tgg(key,
   // receiverMale, inviterMale) — _mm/_fm read he, _mf/_ff read she. Receiver
@@ -750,7 +710,11 @@ Next may surprise`,
   'chat.blockTitle': 'Block user',
   'chat.blockDesc': 'This user will be blocked and won\'t be able to contact you again. This action cannot be undone.',
   'chat.blockConfirm': 'Block',
-  'chat.leave': 'End chat',
+  'chat.endChat': 'End',
+  'chat.leave': 'Leave',
+  'chat.a11y.close': 'Close chat',
+  'chat.a11y.closeImage': 'Close image',
+  'chat.a11y.menu': 'Chat options',
   'chat.report': 'Report',
   'chat.reportTitle': 'Report user',
   'chat.reportDesc': 'Your report will be sent to our team for review. This user will be blocked and you will not be matched again. Any active connection between you will end.',
@@ -789,14 +753,11 @@ Next may surprise`,
   'home.hiddenHeader2': 'Once',
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
-  'home.broadcast.endsIn': 'Broadcast ends in {time}',
-  'home.tabs.home': 'Once',
-  'home.tabs.viewers': 'Viewers',
-  'home.tabs.hidden': 'Hidden',
-  'home.tabs.visible': 'Visible',
-  'home.tabs.broadcast': 'Live',
-  'home.tabs.invite': 'Invitation',
-  'home.tabs.chat': 'Chat',
+  // Accessibility labels for the floating shell chrome (no visible text).
+  'home.a11y.menu': 'Open menu',
+  'home.a11y.closeMenu': 'Close menu',
+  'home.a11y.closeInvite': 'Close invitation',
+  'home.a11y.closeProfile': 'Close profile',
   // On-photo age chip. English is non-gendered (just the number); Hebrew is
   // gendered via tg() (בן/בת) — see he.ts home.ageChip_m / _f.
   'home.ageChip': '{age}',
@@ -804,14 +765,6 @@ Next may surprise`,
   'home.loadingProfile': 'Loading profile data',
   'home.noOneNearbyTitle': 'No one nearby right now',
   'home.noOneNearbyDesc': 'We couldn\'t find anyone nearby right now. Try again soon, or change your search preferences',
-  'home.nowVisibleDesc_m': 'Viewers of your profile appear here. If one of them sends an invitation, it will show up here.',
-  'home.nowVisibleDesc_f': 'Viewers of your profile appear here. If one of them sends an invitation, it will show up here.',
-  'home.nowVisibleWithOneWatcherDesc_mm': 'Someone is looking at your profile right now and can send you an invitation. You\'ll get a notification when it arrives.',
-  'home.nowVisibleWithOneWatcherDesc_mf': 'Someone is looking at your profile right now and can send you an invitation. You\'ll get a notification when it arrives.',
-  'home.nowVisibleWithOneWatcherDesc_fm': 'Someone is looking at your profile right now and can send you an invitation. You\'ll get a notification when it arrives.',
-  'home.nowVisibleWithOneWatcherDesc_ff': 'Someone is looking at your profile right now and can send you an invitation. You\'ll get a notification when it arrives.',
-  'home.nowVisibleWithWatchersDesc_m': 'These people are looking at your profile right now. Any of them can send you an invitation. You\'ll get a notification when one arrives.',
-  'home.nowVisibleWithWatchersDesc_f': 'These people are looking at your profile right now. Any of them can send you an invitation. You\'ll get a notification when one arrives.',
   'settings.kidsLabel_m': 'Planning for kids?',
   'settings.kidsLabel_f': 'Planning for kids?',
   'settings.deleteConfirmDesc_m': 'All data, photos, and conversations will be permanently deleted. Active invitations, chats, and connections will be cancelled. This action cannot be undone.',
@@ -824,8 +777,6 @@ Next may surprise`,
   'settings.signOutYes_f': 'Sign out',
   'chat.inputPlaceholder_m': 'Write a message...',
   'chat.inputPlaceholder_f': 'Write a message...',
-  'ob.howOld_m': 'How old are you?',
-  'ob.howOld_f': 'How old are you?',
   'photo.sub_m': 'Add 2-6 photos',
   'photo.sub_f': 'Add 2-6 photos',
 

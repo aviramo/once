@@ -5,15 +5,15 @@ import * as ImagePicker from 'expo-image-picker'
 import { Text, TextInput } from './AppText'
 import { BottomSheet } from './BottomSheet'
 import { Button } from './Button'
-import { BugIcon, AddPhotoIcon, CloseBoldIcon } from './icons'
+import { CameraIcon, CloseBoldIcon } from './icons'
 import { invoke } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { tap } from '../lib/haptics'
 import { useUserStore } from '../stores/userStore'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { t } from '../i18n'
-import { BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY, DESTRUCTIVE } from '../colors'
-import { ICON, LG, MD, RADIUS, RADII, SM, TEXT, WEIGHT, XS } from '../tokens'
+import { SURFACE, GREEN, INK, PHOTO_CHROME, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY } from '../colors'
+import { STROKE, ICON, LG, MD, RADIUS, RADII, SM, TEXT, WEIGHT, XS } from '../tokens'
 
 // Bottom-sheet for reporting a bug: free text + one optional image. On submit
 // the image (if any) is uploaded to the private `bug-attachments` bucket, then
@@ -95,16 +95,14 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
       onDismiss={() => { if (!submitting) onDismiss() }}
       swipeToDismiss={!submitting}
       disableBackdropDismiss={submitting}
-      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
+      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight + MD } : undefined}
     >
       <View style={styles.card}>
-        <BugIcon color={PRIMARY} size={32} />
         <Text style={styles.title}>{t('bugReport.title')}</Text>
         {done ? (
           <Text style={styles.thanks}>{t('bugReport.thanks')}</Text>
         ) : (
           <>
-            <Text style={styles.desc}>{t('bugReport.desc')}</Text>
 
             <View style={styles.inputWrap}>
               <TextInput
@@ -136,7 +134,7 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
                 disabled={picking || submitting}
                 style={({ pressed }) => [styles.attach, pressed && styles.attachPressed]}
               >
-                <AddPhotoIcon color={PRIMARY} stroke={WHITE} size={ICON.lg} />
+                <CameraIcon color={GREEN} size={ICON.lg} />
                 <Text style={styles.attachLabel}>{t('bugReport.attach')}</Text>
               </Pressable>
             )}
@@ -161,19 +159,21 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
 }
 
 const styles = StyleSheet.create({
-  card: { padding: LG, alignItems: 'center' },
+  card: {
+    // No top padding: the sheet's drag handle already supplies the gap above
+    // the title (its own marginBottom). Adding padding here stacked on top of
+    // it and left a large dead band under the handle.
+    padding: LG,
+    paddingTop: 0,
+    alignItems: 'center',
+  },
   title: {
     fontSize: TEXT.xl,
     fontWeight: WEIGHT.extrabold,
     color: BLACK,
-    marginTop: SM,
-    textAlign: 'center',
-  },
-  desc: {
-    fontSize: TEXT.md,
-    color: BLACK_MID,
-    marginTop: XS,
-    marginBottom: LG,
+    // One rhythm down the sheet: the same MD gap separates title -> field ->
+    // attach -> send, so no pair reads as more related than another.
+    marginBottom: MD,
     textAlign: 'center',
   },
   thanks: {
@@ -186,7 +186,9 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     alignSelf: 'stretch',
-    backgroundColor: WHITE_SOFT,
+    backgroundColor: SURFACE,
+    borderWidth: STROKE.thin,
+    borderColor: GREEN,
     borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingVertical: SM,
@@ -207,10 +209,12 @@ const styles = StyleSheet.create({
     gap: SM,
     paddingVertical: MD,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: 'transparent',
+    borderWidth: STROKE.thin,
+    borderColor: GREEN,
   },
   attachPressed: { opacity: 0.6 },
-  attachLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  attachLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: GREEN },
   previewWrap: {
     alignSelf: 'stretch',
     marginTop: MD,
@@ -225,10 +229,10 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: RADII.pill,
-    backgroundColor: BLACK_STRONG,
+    backgroundColor: PHOTO_CHROME,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: { marginTop: SM, fontSize: TEXT.sm, color: DESTRUCTIVE, textAlign: 'center' },
-  submitWrap: { alignSelf: 'stretch', marginTop: LG },
+  error: { marginTop: SM, fontSize: TEXT.sm, color: INK, textAlign: 'center' },
+  submitWrap: { alignSelf: 'stretch', marginTop: MD },
 })

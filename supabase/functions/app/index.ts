@@ -3,6 +3,7 @@ import Tools from "../tools.ts";
 import User from "../user.ts";
 import {
   Notify,
+  Pages,
   PushPresence,
   PushToken,
   PUSH_BODY,
@@ -17,6 +18,16 @@ const updatable = ["weekStart", "os", "lang", "push_token", "location_custom", "
 // relations.availability.state ≠ 'available' — is server-blocked from these,
 // the symmetric counterpart to others() dropping them from match pools.
 const requiresPresence = ["find", "invite", "add", "approve"];
+
+// Actions that SEND (an invitation or a broadcast) and therefore require a
+// BUILT profile — the profile-completion counterpart to requiresPresence.
+// A user may look (find) the moment their account exists (name/gender/DOB),
+// but may not surface to anyone until they have finished building a profile.
+// The gate-aware mobile build already blocks these CTAs (the orange "build
+// profile" step replaces the menu avatar, and the invite prompt opens a
+// "build a profile first" popup instead of sending), so a correct current
+// client never reaches here; this closes the loop for direct API calls.
+const requiresProfile = ["invite", "add"];
 
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
@@ -46,49 +57,48 @@ function availabilityState(u: unknown): string {
   return rel?.availability?.state ?? "available";
 }
 
-// Auto-hide on zero hearts. When balance + extra has reached 0 and the user
-// is still discoverable (page2.state='free', not in chat, not within the
-// paid 30-min broadcast window), flip page2 to locked via app_lock2 so the
-// mobile hidden-state UI surfaces the "buy extra hearts" CTA. Idempotent
-// (app_lock2 is a no-op when page2.state is not 'free'), fire-and-forget so
-// the response isn't blocked. Returns the post-lock2 row if the lock
-// actually fired (so the response reflects the hidden state immediately);
-// falls through otherwise.
-//
-// The broadcast carve-out (user request 2026-06-01): a user who just spent
-// their last heart on app_add deliberately paid to be discoverable for the
-// 30-minute window. Auto-hiding right after would forfeit what they paid
-// for. The check runs on every endpoint, so once last_add_at falls outside
-// the 30-min window the next call will auto-hide them naturally.
-async function maybeAutoHide(
-  log: Log,
-  user: User,
-  after: Record<string, unknown> | undefined,
-): Promise<Record<string, unknown> | undefined> {
-  const u = (after ?? user.db.new) as {
-    relations?: {
-      credits?: { balance?: unknown; extra?: unknown };
-      page1?: { state?: string };
-      page2?: { state?: string };
-      last_add_at?: string;
-    };
-  };
-  const credits = u.relations?.credits;
-  const total = Number(credits?.balance ?? 0) + Number(credits?.extra ?? 0);
-  if (total > 0) return after;
-  if ((u.relations?.page2?.state ?? "free") !== "free") return after;
-  if ((u.relations?.page1?.state ?? "") === "chat") return after;
-  const lastAddAtRaw = u.relations?.last_add_at;
-  if (typeof lastAddAtRaw === "string" && lastAddAtRaw) {
-    const lastAddMs = Date.parse(lastAddAtRaw);
-    if (Number.isFinite(lastAddMs) && lastAddMs > Date.now() - 30 * 60_000) {
-      return after;
-    }
-  }
-  const result = await Tools.rpc(log, "app_lock2", { me_id: user.user_id });
-  if (result && !result.error && result.user) return result.user;
-  return after;
+// Is this user's profile BUILT — at least one photo AND a non-empty bio? This
+// is the single completion marker the whole feature turns on: onboarding saves
+// the bio last (mobile selectProfileBuilt reads the same field), photos and bio
+// are committed together, and a browse-only user (account created, profile not
+// built) has zero images. Gates the SEND actions (requiresProfile) and the
+// self-seed in /app/start below, so a not-yet-built user can look but is never
+// seen, seeded a viewer, or allowed to invite. others() already drops a
+// zero-image user from every match pool, so this is the symmetric half.
+function profileComplete(u: User): boolean {
+  const data = u.data as { images?: unknown[]; bio?: unknown } | null | undefined;
+  const imgs = data?.images;
+  const bio = data?.bio;
+  return Array.isArray(imgs) && imgs.length >= 1
+    && typeof bio === "string" && bio.trim() !== "";
 }
+
+// Does this user hold an invitation whose clock has already run out, in either
+// direction (page1 waiting as the inviter, page2 pending as the invitee)?
+// Pre-check only — cheap enough to run on every start/location/focus so the
+// app_expire_self round trip is spent solely on rows that actually need it.
+// app_expire_self re-checks expires_at under the row lock, so a false positive
+// here (clock skew, a concurrent extend) is a harmless no-op, never a
+// premature close.
+function isInviteLapsed(u: unknown): boolean {
+  const rel = (u as { relations?: Pages } | null | undefined)?.relations;
+  const lapsed = (at?: string | null) => !!at && Date.parse(at) <= Date.now();
+  return (
+    (rel?.page1?.state === "waiting" && lapsed(rel.page1.expires_at)) ||
+    (rel?.page2?.state === "pending" && lapsed(rel.page2.expires_at))
+  );
+}
+
+// Auto-hide on zero credits was REMOVED 2026-07-22 (credits rework). It used
+// to flip page2 to locked via app_lock2 the moment balance + extra hit 0, so a
+// user who ran out disappeared from the pool entirely — and therefore never
+// received the invitation that would have been the reason to pay. The economy
+// now works the other way round: a zero-credit user stays discoverable, the
+// incoming invite's accept button IS the paywall, and only an accept the
+// wallet could not cover (credits.unpaid_at, stamped in app_approve) takes
+// them out of others(). With a daily pool of 1 the old rule also hid anyone
+// who merely held a credit against a live invite. app_lock2 stays for the
+// EXPLICIT hide in settings.
 
 // Record the notification-presence signal into relations.push (drives the SQL
 // push_blocked() gate). Called from start/location/focus only. `notif_perm` is
@@ -220,6 +230,16 @@ Deno.serve(async (req) => {
       return log.error(key, "unavailable", 403);
     }
 
+    // Profile-built gate (symmetric to the presence gate above). A browse-only
+    // user — account created, profile not yet built — can look but must not be
+    // able to SEND an invitation or broadcast until they finish. The mobile
+    // build blocks the CTA client-side; this closes the loop for old builds and
+    // direct API calls. Rejected as a logged precondition, not a silent 4xx.
+    if (requiresProfile.includes(key) && !profileComplete(user)) {
+      await user.persist(log);
+      return log.error(key, "profile_incomplete", 403);
+    }
+
     // Re-seed-on-skip: when a skip (find / ignore) detaches the caller from the
     // user they were watching, that user may drop to zero viewers. Capture them
     // now (pre-skip page1 target) so we can seed one fresh viewer for them after
@@ -278,6 +298,25 @@ Deno.serve(async (req) => {
         // round-trip the client gets back.
         recordPushPresence(user, body);
         await user.persist(log);
+        // Lazy invitation expiry. The per-minute app_expire_sweep is the safety
+        // net for closed apps; for an app that is OPEN it is far too slow -- the
+        // client's countdown hits 00:00 and the card would sit there, live
+        // cancel button and all, until the next cron tick (up to 60s). The
+        // client fires this endpoint the moment its clock reaches zero, so the
+        // real state comes back in one round trip instead.
+        //
+        // Guarded by a cheap in-memory pre-check so the common call adds
+        // nothing; app_expire_self re-verifies expires_at under the lock and
+        // no-ops if the invite is still live (or was extended concurrently).
+        // Runs before app_availability so the recompute -- and the Realtime
+        // relations change the client renders from -- carries the closed state.
+        if (isInviteLapsed(user)) {
+          const expired = await Tools.rpc(log, "app_expire_self", { me_id: user.user_id });
+          if (expired && !expired.error) {
+            rpcUser = expired.user;
+            notifyList = [...notifyList, ...(expired.notify ?? [])];
+          }
+        }
         // Recompute the geo-availability gate from the just-persisted
         // location and surface it via relations.availability. Synchronous so
         // the /app/start (or /location, /focus) response — and the Realtime
@@ -308,7 +347,10 @@ Deno.serve(async (req) => {
         // gated / no idle candidate), so the guard here is just a cheap
         // pre-check. Auto-find above never fills A's own viewer list, so it
         // is safe to run after it.
-        if (availableNow) {
+        // Gated on profileComplete: a browse-only user must never be seeded a
+        // viewer (that is what would make an unbuilt profile visible to, and
+        // invitable by, someone else). They can look; they are not looked at.
+        if (availableNow && profileComplete(user)) {
           const userAfter = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string; profiles?: unknown[] } } };
           const p2state = userAfter.relations?.page2?.state ?? "free";
           const profiles = userAfter.relations?.page2?.profiles;
@@ -450,10 +492,12 @@ Deno.serve(async (req) => {
       }
 
       case "buy_extra": {
-        // Add `count` purchasable hearts to relations.credits.extra. Count is
-        // validated against the offered options (3/10/50). Pricing is mobile-
-        // side (currently all "Free"); once real payments are wired up,
-        // receipt verification happens before this RPC is invoked.
+        // Add `count` purchasable credits to relations.credits.extra. Count
+        // is validated against the offered options (3/10/50). Pricing is
+        // mobile-side (currently all "Free"); once real payments are wired
+        // up, receipt verification happens before this RPC is invoked. The
+        // RPC no longer gates on an empty wallet / one-buy-a-day: buying is
+        // always available (2026-07-22).
         const count = Number(body.count);
         if (!Number.isFinite(count) || ![3, 10, 50].includes(count)) {
           return log.error("buy_extra", "bad_count", 400);
@@ -461,6 +505,29 @@ Deno.serve(async (req) => {
         const result = await Tools.rpc(log, "app_buy_extra", { me_id: user.user_id, p_count: count });
         await user.persist(log);
         if (result?.error) return log.error("buy_extra", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
+      case "referral": {
+        // Claim the referral code the Play Install Referrer API handed the
+        // client on first launch. The invitee never sees or types it — this
+        // is a silent background call, so it must never surface an error to
+        // them. app_referral_attach is idempotent (unique(invitee_id)) and
+        // irreversible; a second call for an already-claimed account returns
+        // outcome 'already', not an error.
+        //
+        // NOT in requiresPresence: this fires during onboarding, before the
+        // gate has anything to say, and it starts no interaction.
+        const code = typeof body.code === "string" ? body.code.trim() : "";
+        if (!code) return log.error("referral", "no_code", 400);
+        const source = typeof body.source === "string" ? body.source : "unknown";
+        const result = await Tools.rpc(log, "app_referral_attach", {
+          me_id: user.user_id, p_code: code, p_source: source,
+        });
+        await user.persist(log);
+        if (result?.error) return log.error("referral", result.error, 400);
         rpcUser = result?.user;
         notifyList = result?.notify ?? [];
         break;
@@ -675,6 +742,21 @@ Deno.serve(async (req) => {
         await user.persist(log);
         if (result?.error) return log.error(key, result.error, 400);
         rpcUser = result?.user;
+        // Referral payout hook. Saving a profile is the round trip in which an
+        // invitee typically crosses the matchable gate (>= 1 image), which is
+        // exactly what qualifies their inviter for a credit. Fire-and-forget:
+        // it moves a THIRD PARTY's wallet and must never sit on the caller's
+        // critical path, and the inviter learns about it through Realtime +
+        // push, not through this response. No-op for the overwhelming majority
+        // of calls (no pending referral row). The per-minute app_referral_sweep
+        // is the safety net if this ever misses.
+        EdgeRuntime.waitUntil((async () => {
+          const q = await Tools.rpc(log, "app_referral_qualify", { me_id: user.user_id });
+          if (!q || q.error) return;
+          for (const n of (q.notify ?? []) as Notify[]) {
+            if (n.user_id) await firePush(log, n.user_id, n.code, user.user_id);
+          }
+        })());
         // family.isForKids and family.schedule both feed into matching
         // relevance, so re-pick when the user is idle with no page1 profile.
         // Re-read state from the rpcUser (app_save_profile may have updated it).
@@ -703,23 +785,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Auto-hide on zero hearts. After any RPC that may have charged the
-    // wallet (invite hold / approve / buy_extra), if balance + extra hit 0
-    // while the user is still discoverable, flip them to hidden so the
-    // mobile UI surfaces the buy-extra prompt. Cheap: most calls miss the
-    // total>0 short-circuit and never reach app_lock2.
-    //
-    // EXPLICIT EXCEPTION (user request 2026-06-01): `app_add` (= entering
-    // broadcast) NEVER triggers auto-hide, even when it was the call that
-    // brought the wallet to 0. The user just paid 1 heart for the 30-min
-    // broadcast window; auto-hiding immediately would forfeit that paid
-    // slot. `maybeAutoHide` ALSO carries an inner 30-min `last_add_at`
-    // window check as defense-in-depth (covers other endpoints firing
-    // during the paid window), but the user's mental model is "entering
-    // broadcast can't hide me" — implemented literally here.
-    if (key !== "add") {
-      rpcUser = await maybeAutoHide(log, user, rpcUser);
-    }
+    // (The zero-credit auto-hide that used to run here was removed in the
+    // 2026-07-22 credits rework — see the note where maybeAutoHide stood.)
 
     // Fire pushes behind waitUntil (never block response).
     for (const n of notifyList) {

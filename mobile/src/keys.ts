@@ -7,7 +7,12 @@
 export const STORAGE = {
   pushToken: 'once_push_token',
   selfAvatar: 'self-avatar-filename',
+  groups: 'my_groups',
   seenFlags: 'seen_flags',
+  /** Set once the install referrer has been claimed (or found to be absent),
+   *  so the Play Install Referrer round trip runs once per install and not on
+   *  every launch. See src/lib/referral.ts. */
+  referralClaimed: 'referral_claimed',
 } as const
 
 // One-time "seen" flag names stored inside the STORAGE.seenFlags JSON map

@@ -74,12 +74,19 @@ async function handleCron(log: Log) {
   // tick at/after 20:00 tops every user up to their tier cap. No pushes
   // (silent top-up), so nothing to dispatch.
   const grant = await Tools.rpc(log, "app_credits_grant", {});
+  // Referral payouts, safety net. The normal path is app_referral_qualify on
+  // the invitee's own save-profile round trip; this catches everything that
+  // path can't see (an old mobile build, a save that errored after the write,
+  // rows that hit the daily cap earlier and are now under it again). Bounded
+  // at 200 rows a tick and idempotent, so most ticks credit nothing.
+  const referrals = await Tools.rpc(log, "app_referral_sweep", {});
 
-  dispatch(log, [...(expire?.notify ?? []), ...(resync?.notify ?? [])]);
+  dispatch(log, [...(expire?.notify ?? []), ...(resync?.notify ?? []), ...(referrals?.notify ?? [])]);
 
   return log.success({
     processed: (expire?.processed ?? 0) + (resync?.processed ?? 0),
     credits_granted: grant?.processed ?? 0,
+    referrals_credited: referrals?.processed ?? 0,
   });
 }
 

@@ -9,22 +9,35 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
-import { GestureDetector, Gesture } from 'react-native-gesture-handler'
-import ReAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler'
+import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
-import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh } from '../src/tokens'
-import { BLACK, WHITE, DESTRUCTIVE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
+import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_STRONG, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
+import { PullPane, usePullBehavior } from '../src/components/PullPane'
+import { RisingCard } from '../src/components/RisingCard'
+import { SheetHeader } from '../src/components/OverlaySheet'
+import { AppStatusBar } from '../src/components/AppStatusBar'
+import { StatusBarBand } from '../src/components/StatusBarBand'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
+
+// Auto-growing message input: one line = one line-height, capped at 10 lines.
+// The floor keeps the empty field square-ish; the ceiling turns the field into
+// a scroll view once the text passes ten lines.
+const INPUT_VPAD = SM * 2
+const INPUT_MIN_HEIGHT = 44
+const INPUT_MAX_LINES = 10
+const INPUT_MAX_HEIGHT = lh(TEXT.md) * INPUT_MAX_LINES + INPUT_VPAD
 
 function buildRecWavePath(bars: number[], W: number, H: number): string {
   const n = bars.length
@@ -93,7 +106,7 @@ function formatTime(dateStr: string): string {
 // ── Icons (chat-specific only; shared icons live in src/components/icons.tsx) ─
 
 function CheckMark({ status, isMine }: { status: 'pending' | 'sent' | 'read'; isMine: boolean }) {
-  const c = isMine ? WHITE_STRONG : BLACK_MID
+  const c = isMine ? WHITE_STRONG : GREEN_HALF
   if (status === 'pending') {
     return (
       <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -138,6 +151,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const matchIsMale = match?.is_male ?? null
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
+  const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT)
   const [sending, setSending] = useState(false)
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   const [otherIsTyping, setOtherIsTyping] = useState(false)
@@ -225,7 +239,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
   }))
   const inputWrapBorderStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(attachAnim.value, [0, 1], [BLACK_SOFT, PRIMARY]),
+    borderColor: interpolateColor(attachAnim.value, [0, 1], [BORDER_STRONG, PRIMARY]),
   }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
@@ -860,6 +874,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     tap()
     setSending(true)
     setText('')
+    setInputHeight(INPUT_MIN_HEIGHT)
     hasTextShared.value = 0
     const now = new Date().toISOString()
     seenSet.current.add(userId + now)
@@ -1484,7 +1499,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             style={styles.retryRow}
             hitSlop={6}
           >
-            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={DESTRUCTIVE} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 9v4M12 17h.01" />
               <Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </Svg>
@@ -1524,7 +1539,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: MD, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={BLACK_SOFT} />
+              <ActivityIndicator size="small" color={GREEN_HALF} />
             </View>
           ) : null}
           ListEmptyComponent={!otherIsTyping ? (
@@ -1576,11 +1591,16 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               <View style={styles.inputAnimWrap}>
                 <TextInput
                   ref={inputRef}
-                  style={styles.input}
+                  style={[styles.input, { height: inputHeight }]}
                   value={text}
                   onChangeText={onInputChange}
+                  onContentSizeChange={e => {
+                    const h = e.nativeEvent.contentSize.height
+                    setInputHeight(Math.min(INPUT_MAX_HEIGHT, Math.max(INPUT_MIN_HEIGHT, h)))
+                  }}
+                  scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
-                  placeholderTextColor={BLACK_MID}
+                  placeholderTextColor={GREEN_HALF}
                   multiline
                   blurOnSubmit={false}
                   autoFocus={false}
@@ -1591,7 +1611,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
                 style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
               >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={GREEN_HALF} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </Svg>
               </Pressable>
@@ -1667,8 +1687,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 pressed && styles.sendBtnPressed,
               ]}
             >
-              <ReAnimated.View style={micIconStyle}><MicIcon /></ReAnimated.View>
-              <ReAnimated.View style={sendIconStyle}><SendIcon /></ReAnimated.View>
+              <ReAnimated.View style={micIconStyle}><MicIcon size={ICON.lg} /></ReAnimated.View>
+              <ReAnimated.View style={sendIconStyle}><SendIcon size={ICON.lg} /></ReAnimated.View>
             </Pressable>
 
             {recordPhase === 'recording' && (
@@ -1717,7 +1737,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   <Waveform
                     bars={previewBars}
                     height={28}
-                    inactiveColor={BLACK_MID}
+                    inactiveColor={GREEN_HALF}
                     activeColor={PRIMARY}
                     thumbColor={PRIMARY}
                     progressAnim={previewProgressAnim}
@@ -1735,7 +1755,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   {(() => { const s = Math.floor((previewPlaying ? previewPos : audioDuration) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}
                 </Text>
                 <Pressable onPress={handleSendAudio} style={styles.sendBtn}>
-                  <SendIcon />
+                  <SendIcon size={ICON.lg} />
                 </Pressable>
               </View>
             )}
@@ -1743,7 +1763,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         </View>
       </View>
 
-      {lightboxUri && <LightboxModal uri={lightboxUri} onClose={() => setLightboxUri(null)} />}
+      {lightboxUri && <LightboxModal uri={lightboxUri} topInset={insets.top} onClose={() => setLightboxUri(null)} />}
     </View>
   )
 }
@@ -1825,9 +1845,9 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
   ]
 
   const textColor = isMine ? WHITE : BLACK
-  const subColor = isMine ? WHITE_STRONG : BLACK_STRONG
-  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
-  const iconBg = isMine ? WHITE_SOFT : BLACK_SOFT
+  const subColor = isMine ? WHITE_STRONG : GREEN
+  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
+  const iconBg = isMine ? WHITE_SOFT : GREEN_SOFT
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -1912,7 +1932,7 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
+  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -2382,9 +2402,15 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
   const iconColor = isMine ? WHITE : BLACK
-  const barActive = isMine ? WHITE_STRONG : PRIMARY
-  const barInactive = isMine ? WHITE_MID : BLACK_MID
-  const timeColor = isMine ? WHITE_STRONG : BLACK_MID
+  // Progress is shown as strong-vs-faint WITHIN the bubble's own ink family, so
+  // both directions read the same way: mine is bright-vs-dim white on the orange
+  // bubble, theirs is strong-vs-half green on the green bubble. Orange (PRIMARY)
+  // is the SENDER's action colour; painting a received message's played bars
+  // orange made them look like they belonged to me, which is what broke the
+  // coherence, the played half of a voice note must stay in its bubble's hue.
+  const barActive = isMine ? WHITE_STRONG : GREEN
+  const barInactive = isMine ? WHITE_MID : GREEN_HALF
+  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
   const routeBtn = playing ? (
@@ -2413,7 +2439,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           <Pressable
             onPress={handlePlayPause}
             disabled={!ready}
-            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : BLACK_SOFT }]}
+            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : GREEN_SOFT }]}
             hitSlop={8}
           >
             {ready ? (
@@ -2467,117 +2493,219 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
 // ── Event strip ──────────────────────────────────────────────────────────
 // ── Lightbox ──────────────────────────────────────────────────────────────
 
-function LightboxModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+// Zoom bounds for the lightbox: a pinch caps here, and a double-tap toggles
+// between rest (1) and this preset. Single definitions, referenced by both
+// gestures below.
+const LIGHTBOX_MAX_ZOOM = 4
+const LIGHTBOX_DOUBLE_TAP_ZOOM = 2.5
+
+// Full-screen image viewer. It rises from the bottom like every card surface
+// and swipes down to close, so it composes the SAME sanctioned pieces as
+// OverlaySheet — PullPane + usePullBehavior (the one swipe-down mechanism,
+// never a hand-rolled Pan) + RisingCard (the bottom-up mount motion) +
+// SheetHeader (the floating close X at top-START). It is NOT an OverlaySheet
+// itself because it must float ABOVE the chat sheet's solid header, which only
+// a Modal (its own native window) achieves; and OverlaySheet's lifetime is
+// `open`-driven with an off-screen parked rest state, which a Modal has no
+// equivalent for.
+//
+// Pinch/double-tap zoom coexists with the swipe-down close by reusing the
+// pull's own `scrollAtTop` flag as the arbiter: while zoomed it is set false,
+// so a one-finger drag PANS the enlarged image instead of closing; back at
+// rest it is true, so a downward drag closes. (The X always closes regardless.)
+function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: number; onClose: () => void }) {
+  const { height: screenH } = Dimensions.get('window')
+  // SheetHeader's measured bottom, so a drag starting on the floating header
+  // still pulls (the sheet activation's header-vs-scroll rule).
+  const headerBottom = useSharedValue(0)
+
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  const noop = useCallback(() => {}, [])
+  const pull = usePullBehavior({
+    activation: 'sheet',
+    enabled: true,
+    onCommit: noop,
+    commit: 'slideOff',
+    axis: 'y',
+    headerBottom,
+  })
+
+  // A Modal is a separate window with no parked-off-screen rest state, so —
+  // unlike an in-tree OverlaySheet — nothing keeps it mounted through the fall.
+  // Unmount only once the card has fully ridden off the bottom, so neither a
+  // committed swipe nor the X button cuts the motion short.
+  useAnimatedReaction(
+    () => pull.pullY.value,
+    v => { if (v >= screenH) runOnJS(onCloseRef.current)() },
+  )
+
+  // The X button rides the card off with the SAME motion (and pullY) as a
+  // committed swipe, so both close paths animate identically.
+  const slideClose = useCallback(() => {
+    tap()
+    pull.pullY.value = withTiming(screenH)
+  }, [pull.pullY, screenH])
+
+  // The cream backdrop fades out as the card falls, so the frame before unmount
+  // is already transparent — no hard cut back to the chat behind it.
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: 1 - Math.min(1, pull.pullY.value / screenH),
+  }))
+
+  // ── Zoom ─────────────────────────────────────────────────────────────
   const scale = useSharedValue(1)
   const savedScale = useSharedValue(1)
   const tx = useSharedValue(0)
   const ty = useSharedValue(0)
   const savedTx = useSharedValue(0)
   const savedTy = useSharedValue(0)
+  // true = a one-finger drag closes the sheet; false (while zoomed) = it pans.
+  const setCloseArmed = pull.setScrollAtTop
 
-  const pinch = Gesture.Pinch()
-    .onUpdate(e => {
-      scale.value = Math.max(1, Math.min(savedScale.value * e.scale, 5))
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value
-    })
+  const zoomGesture = useMemo(() => {
+    const resetZoom = () => {
+      'worklet'
+      scale.value = withTiming(1)
+      savedScale.value = 1
+      tx.value = withTiming(0)
+      ty.value = withTiming(0)
+      savedTx.value = 0
+      savedTy.value = 0
+    }
+    const pinch = Gesture.Pinch()
+      // Disarm the close for the whole pinch, so its finger motion can never
+      // start riding the card off while the user is scaling.
+      .onStart(() => runOnJS(setCloseArmed)(false))
+      .onUpdate(e => {
+        scale.value = Math.max(1, Math.min(savedScale.value * e.scale, LIGHTBOX_MAX_ZOOM))
+      })
+      .onEnd(() => {
+        savedScale.value = scale.value
+        if (scale.value <= 1) { resetZoom(); runOnJS(setCloseArmed)(true) }
+      })
+    // Moves the enlarged image; a no-op at rest, where the drag belongs to the
+    // pull (close) instead.
+    const imagePan = Gesture.Pan()
+      .onUpdate(e => {
+        if (scale.value <= 1) return
+        tx.value = savedTx.value + e.translationX
+        ty.value = savedTy.value + e.translationY
+      })
+      .onEnd(() => {
+        savedTx.value = tx.value
+        savedTy.value = ty.value
+      })
+    const doubleTap = Gesture.Tap()
+      .numberOfTaps(2)
+      .onEnd(() => {
+        if (scale.value > 1) {
+          resetZoom()
+          runOnJS(setCloseArmed)(true)
+        } else {
+          scale.value = withTiming(LIGHTBOX_DOUBLE_TAP_ZOOM)
+          savedScale.value = LIGHTBOX_DOUBLE_TAP_ZOOM
+          runOnJS(setCloseArmed)(false)
+        }
+      })
+    return Gesture.Simultaneous(pinch, imagePan, doubleTap)
+    // Shared values + setCloseArmed are stable; only rebuild is unnecessary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCloseArmed])
 
-  const pan = Gesture.Pan()
-    .minPointers(1)
-    .onUpdate(e => {
-      tx.value = savedTx.value + e.translationX
-      ty.value = savedTy.value + e.translationY
-    })
-    .onEnd(() => {
-      savedTx.value = tx.value
-      savedTy.value = ty.value
-    })
-
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      if (scale.value > 1) {
-        scale.value = withSpring(1)
-        savedScale.value = 1
-        tx.value = withSpring(0); ty.value = withSpring(0)
-        savedTx.value = 0; savedTy.value = 0
-      } else {
-        scale.value = withSpring(2.5)
-        savedScale.value = 2.5
-      }
-    })
-
-  const singleTap = Gesture.Tap()
-    .onEnd((_e, success) => {
-      if (success && scale.value <= 1) runOnJS(onClose)()
-    })
-
-  const gesture = Gesture.Simultaneous(
-    pinch,
-    pan,
-    Gesture.Exclusive(doubleTap, singleTap),
+  // The swipe-down close and the zoom gestures share one detector (PullPane's).
+  // Simultaneous, so the pull's own scrollAtTop gate — not gesture arbitration —
+  // decides whether a one-finger drag closes or pans.
+  const gesture = useMemo(
+    () => Gesture.Simultaneous(pull.gesture, zoomGesture),
+    [pull.gesture, zoomGesture],
   )
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
+  const imageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: scale.value },
+    ],
   }))
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={lbStyles.backdrop}>
-        <GestureDetector gesture={gesture}>
-          <ReAnimated.Image
-            source={{ uri }}
-            style={[lbStyles.image, animStyle]}
-            resizeMode="contain"
-          />
-        </GestureDetector>
-        <Pressable style={lbStyles.closeBtn} onPress={onClose} hitSlop={12}>
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.5} strokeLinecap="round">
-            <Path d="M18 6L6 18M6 6l12 12" />
-          </Svg>
-        </Pressable>
-      </View>
+    <Modal visible transparent animationType="fade" onRequestClose={slideClose} statusBarTranslucent>
+      {/* A Modal is its own native window, so the root layout's status bar
+          chrome does NOT reach it. Re-assert both here: light glyphs
+          (AppStatusBar) and the same green gradient band the rest of the app
+          draws behind the OS bar (StatusBarBand — passed the inset explicitly
+          since a Modal's SafeAreaProvider context may read it as 0). Without
+          the band the cream backdrop shows through the always-transparent
+          edge-to-edge status strip. */}
+      <AppStatusBar />
+      {/* RNGH gestures don't reach into a Modal (its own window) without a
+          GestureHandlerRootView inside it — same as BottomSheet. Without this
+          the swipe-down-to-close would silently do nothing on Android. */}
+      <GestureHandlerRootView style={lbStyles.root}>
+        <ReAnimated.View style={[lbStyles.backdrop, backdropStyle]} pointerEvents="none" />
+        <PullPane
+          gesture={gesture}
+          pullY={pull.pullY}
+          pulling={pull.pulling}
+          axis="y"
+          pointerEvents="box-none"
+        >
+          <RisingCard from="up" animateExit={false} style={lbStyles.card}>
+            <View style={lbStyles.body}>
+              <ReAnimated.Image source={{ uri }} style={[lbStyles.image, imageStyle]} resizeMode="contain" />
+            </View>
+            {/* Same floating X as every sheet, at top-START, over the photo. */}
+            <SheetHeader
+              floating
+              topInset={topInset}
+              onClose={slideClose}
+              closeAccessibilityLabel={t('chat.a11y.closeImage')}
+              onMeasured={h => { headerBottom.value = h }}
+            />
+          </RisingCard>
+        </PullPane>
+        <StatusBarBand topInset={topInset} />
+      </GestureHandlerRootView>
     </Modal>
   )
 }
 
 const lbStyles = StyleSheet.create({
-  backdrop: {
+  root: {
     flex: 1,
-    backgroundColor: BLACK,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: SURFACE_SUNK,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: SURFACE_SUNK,
+  },
+  body: {
+    flex: 1,
+    // Clip a zoomed/panned image to the card so it never spills past the frame.
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
     height: '100%',
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: 52,
-    end: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: WHITE_SOFT,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 })
 
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: WHITE },
+  root: { flex: 1, backgroundColor: BG },
 
   body: { flex: 1 },
   messages: { flex: 1 },
   messagesContent: { padding: SM, flexGrow: 1 },
   emptyLabel: {
     marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
-    color: BLACK_MID, fontSize: TEXT.md, letterSpacing: 0.4,
+    color: GREEN_HALF, fontSize: TEXT.md, letterSpacing: 0.4,
   },
 
   msgWrap: { marginTop: XS },
@@ -2591,11 +2719,11 @@ const styles = StyleSheet.create({
     marginTop: XS,
     paddingVertical: XS,
   },
-  retryLabel: { fontSize: TEXT.xs, color: DESTRUCTIVE },
+  retryLabel: { fontSize: TEXT.xs, color: INK },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
-  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT },
-  daySepLabel: { fontSize: TEXT.xs, color: BLACK_STRONG },
+  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BORDER_STRONG },
+  daySepLabel: { fontSize: TEXT.xs, color: GREEN },
 
   bubble: {
     maxWidth: '80%',
@@ -2605,7 +2733,7 @@ const styles = StyleSheet.create({
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
   bubbleMineLast: { borderBottomEndRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: BLACK_SOFT },
+  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: GREEN_WASH },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), flexShrink: 1 },
   bubbleTextMine: { color: WHITE },
@@ -2613,17 +2741,19 @@ const styles = StyleSheet.create({
 
   inlineTime: { fontSize: TEXT.xs, lineHeight: lh(TEXT.xs), letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
-  inlineTimeTheirs: { color: BLACK_MID },
+  inlineTimeTheirs: { color: GREEN_HALF },
   bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
   textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginEnd: -SM },
 
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: MD, paddingHorizontal: MD },
-  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: BLACK_STRONG },
+  typingDot: { width: 7, height: 7, borderRadius: RADII.pill, backgroundColor: GREEN_HALF },
 
   // Outer wrapper: holds the single-row input + send button plus the
-  // dynamic bottom spacer that clears the nav bar / keyboard.
+  // dynamic bottom spacer that clears the nav bar / keyboard. Deliberately
+  // TRANSPARENT: a full-width white band under the row read as a second
+  // surface stacked on the sheet. The field's own pill is the only thing that
+  // should look like a control; the bar itself is just page.
   inputBarOuter: {
-    backgroundColor: WHITE,
     zIndex: 2,
   },
   inputRow: {
@@ -2639,12 +2769,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    minHeight: 44,
-    maxHeight: 174,
+    minHeight: INPUT_MIN_HEIGHT,
+    maxHeight: INPUT_MAX_HEIGHT,
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
-    borderColor: BLACK_SOFT,
-    backgroundColor: WHITE,
+    borderColor: BORDER_STRONG,
+    backgroundColor: SURFACE,
     paddingEnd: XS,
     overflow: 'hidden',
   },
@@ -2652,9 +2782,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 174,
+    // Height is driven imperatively from onContentSizeChange (see the input
+    // row); a `flex: 1` here made the field fill its parent instead of
+    // growing it from content, so it never expanded past one line.
+    width: '100%',
     paddingStart: MD,
     paddingEnd: SM,
     paddingVertical: SM,
@@ -2675,9 +2806,11 @@ const styles = StyleSheet.create({
 
   // Attach popup (inline, above input bar)
   attachBtn: {
-    width: 36, height: 36,
+    // Full single-line height so the icon centers on the text row; with
+    // alignItems 'flex-end' on the wrap it stays on the last line as the
+    // field grows. A fixed 36 + marginBottom sat 4px above center.
+    width: 36, height: INPUT_MIN_HEIGHT,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: SM,
   },
   attachBtnPressed: { opacity: 0.4 },
   attachBar: {
@@ -2747,14 +2880,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD,
     height: 32,
     borderRadius: 16,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   attachConfirmSendPressed: { opacity: 0.7 },
   attachConfirmSendLabel: {
     fontSize: TEXT.sm,
-    color: PRIMARY,
+    color: INK,
     fontWeight: WEIGHT.extrabold,
   },
 
@@ -2776,7 +2909,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: GREEN_WASH,
   },
   chatImageSpinnerOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -2816,9 +2949,9 @@ const styles = StyleSheet.create({
   },
   audioRouteBtn: {
     width: 32, height: 32,
-    borderRadius: 16,
+    borderRadius: RADII.pill,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: GREEN_WASH,
   },
   audioRouteBtnActive: {
     backgroundColor: PRIMARY,
@@ -2847,10 +2980,12 @@ const styles = StyleSheet.create({
   },
 
   // Recording / preview bar
+  // Opaque so it hides the text row underneath — the page colour, not white,
+  // now that the input bar itself carries no band.
   recordOverlay: {
     position: 'absolute',
     top: 0, start: 0, end: 0, bottom: 0,
-    backgroundColor: WHITE,
+    backgroundColor: BG,
   },
   recSideBtn: {
     width: 40, height: 49,
@@ -2865,7 +3000,7 @@ const styles = StyleSheet.create({
   recDot: {
     width: 8, height: 8,
     borderRadius: 4,
-    backgroundColor: DESTRUCTIVE,
+    backgroundColor: PRIMARY,
   },
   recTime: {
     fontSize: TEXT.md,
@@ -2944,18 +3079,18 @@ const styles = StyleSheet.create({
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
   scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
   scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  scheduleDayBubbleSelectedMine: { backgroundColor: WHITE, borderColor: WHITE },
+  scheduleDayBubbleSelectedMine: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
   scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
   scheduleDayLetter: { fontSize: TEXT.sm, color: BLACK },
   scheduleDayLetterMine: { color: WHITE },
   scheduleDayLetterSelected: { color: WHITE },
-  scheduleDayLetterSelectedMine: { color: PRIMARY },
-  scheduleDayLetterWeekend: { color: PRIMARY },
+  scheduleDayLetterSelectedMine: { color: WHITE },
+  scheduleDayLetterWeekend: { color: GREEN },
   scheduleDayLetterWeekendMine: { color: WHITE },
   scheduleDayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
   scheduleDayDateMine: { color: WHITE_STRONG },

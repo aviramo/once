@@ -2,7 +2,7 @@
   "expo": {
     "name": "Once",
     "slug": "syncwish",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#F2CCC1"
     },
     "ios": {
       "supportsTablet": false,
@@ -28,12 +28,12 @@
     "androidStatusBar": {
       "barStyle": "light-content",
       "translucent": false,
-      "backgroundColor": "#000000"
+      "backgroundColor": "#417A62"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#F2CCC1"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -60,7 +60,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#000000"
+          "color": "#E4573D"
         }
       ],
       "expo-web-browser",
@@ -79,7 +79,18 @@
           "iosUrlScheme": "com.googleusercontent.apps.243101157812-39cu77j7o0ukr8vvnl59mshsdelne3he"
         }
       ],
-      "./plugins/withAdiRegistration.js"
+      "./plugins/withAdiRegistration.js",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "extraPods": [
+              { "name": "GoogleUtilities", "modular_headers": true },
+              { "name": "RecaptchaInterop", "modular_headers": true }
+            ]
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},

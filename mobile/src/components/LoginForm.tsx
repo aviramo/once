@@ -7,8 +7,9 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { BLACK, WHITE, PRIMARY, BLACK_MID, DESTRUCTIVE, BORDER_SOFT, WHITE_MID, WHITE_STRONG } from '../colors'
-import { XS, SM, MD, RADIUS, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
+import { BLACK_STRONG, INK, INK_2, INK_3, SURFACE, BLACK, WHITE, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
+import { FIELD_SKIN } from '../field'
+import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -31,9 +32,11 @@ function AppleIcon({ color = BLACK }: { color?: string } = {}) {
   )
 }
 
-function MailIcon({ color = WHITE }: { color?: string } = {}) {
+// Raw <Svg>, not a Glyph: it never followed the OS font scale, which is what
+// a fixed-dp badge needs anyway (see ICON_CIRCLE_SIZE in tokens.ts).
+function MailIcon({ color = WHITE, size = 20 }: { color?: string; size?: number } = {}) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 6h16v12H4z" />
       <Path d="M4 7l8 6 8-6" />
     </Svg>
@@ -98,7 +101,7 @@ const ssoBtnStyles = StyleSheet.create({
     minHeight: BUTTON_MIN_HEIGHT,
     paddingVertical: SM,
     paddingHorizontal: BUTTON_MIN_HEIGHT,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     borderRadius: RADIUS,
     borderWidth: STROKE.thin,
     borderColor: BORDER_SOFT,
@@ -194,7 +197,7 @@ export function LoginForm({
     return (
       <View style={styles.body}>
         <View style={styles.successCircle}>
-          <MailIcon color={PRIMARY} />
+          <MailIcon color={INK} size={ICON.circle} />
         </View>
         <Text style={styles.title}>{t('auth.linkSent')}</Text>
         <Text style={styles.desc}>
@@ -203,10 +206,10 @@ export function LoginForm({
         <View style={{ marginTop: MD }}>
           <Button
             label={t('auth.linkResend')}
-            variant="onPrimaryGhost"
+            variant="secondary"
             size="lg"
             onPress={() => { setSentTo(null); setEmail(sentTo) }}
-            iconStart={<MailIcon color={WHITE} />}
+            iconStart={<MailIcon color={BLACK_STRONG} />}
           />
         </View>
       </View>
@@ -281,7 +284,7 @@ export function LoginForm({
         <Button
           label={isReviewEmail ? t('auth.reviewSubmit') : t('auth.sendLink')}
           onPress={isReviewEmail ? handleReview : handleEmail}
-          variant="onPrimary"
+          variant="primary"
           size="lg"
           loading={isReviewEmail ? loading === 'review' : loading === 'email'}
           disabled={
@@ -290,7 +293,7 @@ export function LoginForm({
               : (loading !== null && loading !== 'email') || !canSendEmail
           }
           silentDisabled={!isReviewEmail && loading !== null && loading !== 'email' && canSendEmail}
-          iconStart={<MailIcon color={PRIMARY} />}
+          iconStart={<MailIcon color={WHITE} />}
         />
       </View>
     </View>
@@ -304,7 +307,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FSIZE.xl,
     fontWeight: WEIGHT.extrabold,
-    color: WHITE,
+    color: INK,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
@@ -312,7 +315,7 @@ const styles = StyleSheet.create({
     marginTop: SM,
     fontSize: FSIZE.md,
     lineHeight: lh(FSIZE.md),
-    color: WHITE_STRONG,
+    color: INK_2,
     textAlign: 'center',
   },
   dividerRow: {
@@ -325,24 +328,21 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: WHITE_MID,
+    backgroundColor: BLACK_SOFT,
   },
   dividerText: {
     fontSize: FSIZE.sm,
-    color: WHITE_STRONG,
+    color: INK_3,
     letterSpacing: 0.2,
   },
   inputWrap: {
+    ...FIELD_SKIN,
     height: INPUT_MIN_HEIGHT,
-    borderRadius: RADIUS,
-    borderWidth: STROKE.thin,
-    borderColor: BORDER_SOFT,
-    backgroundColor: WHITE,
     paddingHorizontal: MD,
     justifyContent: 'center',
   },
   inputWrapError: {
-    borderColor: WHITE_MID,
+    borderColor: NEGATIVE,
   },
   input: {
     fontSize: FSIZE.md,
@@ -353,15 +353,15 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: SM,
     fontSize: FSIZE.sm,
-    color: DESTRUCTIVE,
+    color: INK,
     textAlign: 'center',
   },
   successCircle: {
     alignSelf: 'center',
-    width: 56,
-    height: 56,
+    width: ICON_CIRCLE_SIZE,
+    height: ICON_CIRCLE_SIZE,
     borderRadius: 999,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: MD,

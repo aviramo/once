@@ -124,7 +124,7 @@
         "signups": "Signups",
         "engagement": "Live engagement",
         "availability": "Availability",
-        "credits": "Hearts economy",
+        "credits": "Credits economy",
         "groups": "Groups",
         "funnel": "7-day funnel"
       },
@@ -148,10 +148,10 @@
         "unavailable": "Gated (group)",
         "unknownAvail": "No location yet",
         "noNotif": "Without notifications",
-        "balanceTotal": "Total heart balance",
-        "heldTotal": "Held hearts",
-        "extraTotal": "Total extra hearts",
-        "withExtra": "Users with extra hearts",
+        "balanceTotal": "Total credit balance",
+        "heldTotal": "Held credits",
+        "extraTotal": "Total purchased credits",
+        "withExtra": "Users with purchased credits",
         "rolesTotal": "Groups",
         "fSignups": "Signups",
         "fInvites": "Invites sent",
@@ -162,7 +162,7 @@
       },
       "hints": {
         "funnel": "Total over the last 7 days",
-        "extraShare": "{pct}% of users hold extra hearts"
+        "extraShare": "{pct}% of users hold purchased credits"
       },
       "viewAll": "All users →"
     },
@@ -310,8 +310,8 @@
       "new_30d": "Signed up in 30 days",
       "located": "With location",
       "broadcasting": "Broadcasting",
-      "held": "Held hearts",
-      "extra": "Holding extra hearts",
+      "held": "Held credits",
+      "extra": "Holding purchased credits",
       "no_notif": "Without notifications",
       "test": "Test users",
       "not_test": "Normal users"
@@ -393,7 +393,7 @@
       "report": "Reported a user",
       "notif": "Updated notification permission",
       "set_tier": "Switched plan",
-      "buy_extra": "Bought extra hearts",
+      "buy_extra": "Bought credits",
       "unknown": "Action"
     },
     "restrictionsMap": {
@@ -584,11 +584,11 @@
         "confirmUnmark": "Return this user to the normal pool? Their active pages will be released.",
         "fail": "Action failed"
       },
-      "hearts": {
-        "title": "Hearts",
+      "credits": {
+        "title": "Credits",
         "balanceLabel": "Daily allowance",
         "extraLabel": "Extra",
-        "hint": "The daily allowance is capped at 3 and refills at 20:00. Extra has no cap. The other credit fields (held, granted_on, next_grant_at, bought_on) are preserved.",
+        "hint": "The daily allowance is capped at 1 and refills at 20:00. Extra has no cap. The other credit fields (held, granted_on, next_grant_at, bought_on, unpaid_at) are preserved.",
         "save": "Save",
         "saving": "Saving…",
         "done": "Saved.",

@@ -12,45 +12,63 @@ import { t } from '../i18n'
 //   { balance:0..CREDIT_CAP, extra:0..N, held:0..N, granted_on?, next_grant_at? }
 // `balance` is the daily pool (refilled to CREDIT_CAP every 20:00 Asia/Jerusalem).
 // `extra` is the purchased pool (no cap), bought via /app/buy_extra.
-// Charging deducts balance FIRST, then extra; refunds restore balance up to
-// the cap and overflow lands in extra.
+// Charging deducts balance FIRST, then extra. A refund puts a PURCHASED
+// credit back into extra (bought credits never expire) but tops the daily
+// balance up only to the cap — a daily credit refunded into a full pool is
+// dropped, so a hold+refund cycle can never stockpile past the cap.
+//
+// The currency is called CREDITS and is drawn as a coin (CoinIcon). It used
+// to be called hearts and drawn as a heart, which collided with the heart on
+// the invite button — that one is the "like" affordance, not money.
 
 export const CREDIT_COST = {
   invite: 1,
   approve: 1,
   broadcast: 1,
-  // Cancelling forfeits the held heart instead of charging a new one. The
+  // Cancelling forfeits the held credit instead of charging a new one. The
   // spend already happened on send, so the cancel button shows no badge.
   cancel: 0,
 } as const
 
 export type CreditAction = keyof typeof CREDIT_COST
 
-/** Daily cap: balance refills up to this number every 20:00 Asia/Jerusalem. */
-export const CREDIT_CAP = 3
+/** Daily cap: balance refills up to this number every 20:00 Asia/Jerusalem.
+ *  One a day since 2026-07-22 (was 3) — the daily pool has to be a decision,
+ *  not a number nobody reaches. Mirrors SQL `_credits_cap()`. */
+export const CREDIT_CAP = 1
 
-/** Options offered by the buy-extra popup. Server validates against this
- *  exact set in app_buy_extra. The mobile popup currently surfaces the
- *  prices as "Free" for every option and only the 3-heart entry is enabled
- *  ("coming soon" badge on 10 / 50). When real pricing is wired up, swap
- *  the labels in i18n keys (`stars.buy.price.*`) and flip the `enabled`
- *  flags here. The 3/10/50 tier set is mirrored in the SQL `app_buy_extra`
- *  validation; change all three places together. */
+/** Options offered by the credits popup. Server validates against this exact
+ *  set in app_buy_extra. Every entry is DISABLED since 2026-07-22: the free
+ *  3-credit pack was the only live one, and handing out free credits on tap
+ *  is not an economy — inviting a friend replaced it as the way to earn
+ *  (REFERRAL_REWARD below). The rows stay visible with a "coming soon" badge
+ *  so the price list still reads as a price list once real payments land;
+ *  flip `enabled` back on then. The 3/10/50 set is mirrored in the SQL
+ *  `app_buy_extra` validation and in the edge dispatcher.
+ *
+ *  /app/buy_extra deliberately stays deployed and functional — the published
+ *  mobile build still renders the 3-credit row as enabled and calls it. See
+ *  BACKWARD_COMPAT.md. */
 export const BUY_EXTRA_OPTIONS = [
-  { count: 3,  enabled: true  },
+  { count: 3,  enabled: false },
   { count: 10, enabled: false },
   { count: 50, enabled: false },
 ] as const
 
+/** Credits paid to the inviter for each friend who installs and completes a
+ *  profile. Display only — the server credits it and enforces the daily cap.
+ *  Mirrors SQL `_referral_reward()`. */
+export const REFERRAL_REWARD = 1
+
 export type BuyExtraCount = (typeof BUY_EXTRA_OPTIONS)[number]['count']
 
-/** Localized, grammatically-correct "N hearts" phrase: singular for 1
- * ("לב אחד" / "1 heart"), plural otherwise. One source so every prose
- * mention of a hearts amount agrees in number. */
-export function starsText(n: number): string {
+/** Localized, grammatically-correct "N credits" phrase: singular for 1
+ * ("קרדיט אחד" / "1 credit"), plural otherwise. One source so every prose
+ * mention of a credits amount agrees in number. */
+export function creditsText(n: number): string {
   return n === 1
-    ? t('stars.count.one')
-    : t('stars.count.many').replace('{n}', String(n))
+    ? t('credits.count.one')
+    : t('credits.count.many').replace('{n}', String(n))
 }
 
 export type CreditsWallet = {
@@ -60,16 +78,25 @@ export type CreditsWallet = {
   extra: number
   /** Reserved against a live waiting invite (server-side accounting). Not
    * displayed; the spend already left balance / extra when the invite was
-   * sent. */
+   * sent. The server also tracks `held_extra` (how much of the hold came out
+   * of the purchased pool, so a refund returns it there rather than dropping
+   * it against a full daily pool) — server-only, never sent as a UI signal. */
   held?: number
   granted_on?: string | null
   /** ISO instant of the next 20:00 Asia/Jerusalem grant. Server-computed so
    * the client never does timezone math — it just formats this stamp. */
   next_grant_at?: string | null
   /** Grant-day date (YYYY-MM-DD) when the user last bought extras. Absent =
-   * never bought. The buy throttle (one purchase per 20:00 Asia/Jerusalem
-   * grant cycle) gates app_buy_extra on `bought_on !== current grant day`. */
+   * never bought. A record only — it stopped gating anything when the buy
+   * throttle was removed (2026-07-22). */
   bought_on?: string | null
+  /** Server-only mark: the user pressed accept on a live invitation and the
+   * wallet couldn't cover it. While it's set AND the wallet is empty the
+   * server keeps them out of `others()`, so nobody can invite someone who
+   * has already refused to pay. Every funding path (purchase / the 20:00
+   * grant / a refunded hold) clears it, so the block always lifts by itself.
+   * Not read by the client. */
+  unpaid_at?: string | null
 }
 
 type WithCredits = { relations?: { credits?: CreditsWallet | null } | null } | null | undefined
@@ -101,39 +128,13 @@ export function creditTotal(profile: WithCredits): number {
   return creditBalance(profile) + creditExtra(profile)
 }
 
-/** The current grant-day date (YYYY-MM-DD) — the date of the most recent
- * 20:00 Asia/Jerusalem boundary. Derived from `next_grant_at` (= next
- * boundary) by subtracting 24h and formatting in Asia/Jerusalem. Mirrors
- * SQL `_credits_grant_day()`. Returns null when the server hasn't set
- * next_grant_at yet (fresh user before the first cron tick). */
-function currentGrantDay(wallet: CreditsWallet): string | null {
-  const iso = wallet.next_grant_at
-  if (!iso) return null
-  const next = new Date(iso)
-  if (Number.isNaN(next.getTime())) return null
-  const prev = new Date(next.getTime() - 86_400_000)
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(prev)
-}
-
-/** True iff the user is allowed to buy extras right now. Mirrors the
- *  server's app_buy_extra gates:
- *    1. credits.extra === 0  (only when the extras pool is empty —
- *       regardless of the daily balance; user request 2026-06-01)
- *    2. credits.bought_on !== current grant day  (once per cycle)
- *  Once a buy succeeds, the server sets `bought_on` to the live grant_day,
- *  so subsequent reads of this predicate return false until the next 20:00
- *  Asia/Jerusalem boundary. */
-export function canBuyExtra(profile: WithCredits): boolean {
-  const c = readCredits(profile)
-  if (!c) return false
-  if ((c.extra ?? 0) > 0) return false
-  const day = currentGrantDay(c)
-  if (!day) return true
-  return (c.bought_on ?? '') !== day
-}
+// Buying used to be gated twice — allowed only while the wallet was EMPTY
+// ('has_credits') and only once per 20:00 grant cycle ('already_bought_today')
+// — because extras were framed as a recovery mechanism. Both gates were
+// dropped server-side on 2026-07-22 (app_buy_extra) and with them the client
+// mirrors `buyExtraBlock` / `canBuyExtra` / `currentGrantDay`. Buying is
+// always available now, in any quantity. `bought_on` survives on the wallet
+// as a record of the last purchase day; nothing reads it.
 
 /** The next grant moment formatted as a relative day word + clock time:
  * "היום ב-HH:MM" / "מחר ב-HH:MM" (or "today at HH:MM" / "tomorrow at HH:MM"),
@@ -154,8 +155,8 @@ export function formatNextGrant(profile: WithCredits): string {
   const today = new Date()
   const dayKey = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const diffDays = Math.round((dayKey(d) - dayKey(today)) / 86_400_000)
-  if (diffDays <= 0) return t('stars.grant.today').replace('{time}', clock)
-  if (diffDays === 1) return t('stars.grant.tomorrow').replace('{time}', clock)
+  if (diffDays <= 0) return t('credits.grant.today').replace('{time}', clock)
+  if (diffDays === 1) return t('credits.grant.tomorrow').replace('{time}', clock)
   // Fallback to the absolute short form for >24h grants.
   return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${clock}`
 }

@@ -56,3 +56,4 @@ Thumbs.db
 skills-lock.json
 
 .vercel
+.env*

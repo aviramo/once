@@ -1,36 +1,40 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Platform, TextInput as RNTextInput } from 'react-native'
+import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, TextInput as RNTextInput } from 'react-native'
 import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
 import * as ImagePicker from 'expo-image-picker'
-import Svg, { Path, Line, Circle, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
+import Svg, { Path, Line, Circle, Rect } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
-import { useUserStore, resolveLocationType, type LocationType } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, selectProfileBuilt, type LocationType } from '../src/stores/userStore'
 import { useAuthStore } from '../src/stores/authStore'
-import { t, tg, lang, genderize } from '../src/i18n'
+import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { MatchCard, type CardAction } from '../src/components/MatchCard'
-import { PullContext, type PullCtx } from '../src/components/HomeCard'
+import { MatchCard, type CardAddChip } from '../src/components/MatchCard'
+import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
+import type { OverlaySheetBody } from '../src/components/OverlaySheet'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from '../src/components/PhotoEditor'
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
-import { BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, DESTRUCTIVE_BG, BLACK_MID, PHOTO_TEXT_SHADOW } from '../src/colors'
-import { SlidersIcon, MapPinIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, AddPhotoIcon, FamilyKidsIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, HeartIcon, PencilIcon, BugIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, formatNextGrant, starsText, canBuyExtra, CREDIT_CAP } from '../src/lib/credits'
+import { iconScale, inkOffset } from '../src/fonts'
+import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { creditBalance, creditExtra, formatNextGrant, CREDIT_CAP } from '../src/lib/credits'
+import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BugReportPopup } from '../src/components/BugReportPopup'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
-import { PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from '../src/components/Chip'
+import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
+import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
@@ -150,19 +154,21 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Shared tappable settings row used across Preferences, Profile, App and the
 // Main Menu. Layout (logical order, flips automatically in RTL):
-//   [chevron] [label / title+subtitle] ... [value] [trailing icon | avatar]
+//   [chevron] [label / title+subtitle] ... [trailing icon | avatar]
+// The row has NO separate value column: a field's current value is baked into
+// the `label` as one whole sentence ("Available for women", "Up to 5 km").
+// Splitting it into label + value read as two disconnected fragments at the
+// row's size (user feedback 2026-07-20) — one text run reads as one statement.
 // Variants:
-//   - displayValue?      → orange right-aligned value (radius/age/gender/kids)
 //   - subtitle?          → small secondary text under the label (profile row)
 //   - avatar?            → image URI rendered as a circular avatar at the end
-//   - tone='accent'      → soft PRIMARY_BG halo behind the trailing icon
+//   - tone='accent'      → soft GREEN_SOFT halo behind the trailing icon
 // Press feedback fades in a BLACK_SOFT background; `grouped` rows inherit
 // rounding from their parent card so the press state stays inside the card.
 
 function SelectFieldRow({
   label,
   subtitle,
-  displayValue,
   onPress,
   icon,
   avatar,
@@ -170,10 +176,11 @@ function SelectFieldRow({
   tone = 'default',
   size = 'default',
   locked,
+  labelColor,
+  trailing,
 }: {
   label?: string
   subtitle?: string
-  displayValue?: string
   onPress: () => void | Promise<unknown>
   icon?: React.ReactNode
   avatar?: string
@@ -183,6 +190,14 @@ function SelectFieldRow({
   /** Dims the row content to signal the field is currently unavailable.
    * The row stays pressable so onPress can explain why. */
   locked?: boolean
+  /** Ink for the label. The menu splits its rows into two groups: the
+   * preferences you tune are GREEN, the account/status rows below them are
+   * ORANGE. Pass the same colour to this row's `icon` so the pair matches. */
+  labelColor?: string
+  /** Node parked at the row's END edge, beside the label (e.g. the watcher
+   * chip on the visibility row). A live quantity belongs on its own surface,
+   * not glued into the label string. */
+  trailing?: React.ReactNode
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
   const tapProps = useTapResponder(onPress, (pressed) => {
@@ -217,46 +232,37 @@ function SelectFieldRow({
           tone === 'accent' ? (
             <View style={styles.selectRowAccentIcon}>{icon}</View>
           ) : (
-            <View style={styles.selectRowIconWrap}>{icon}</View>
+            // A trailing node (the watcher chip) is taller than the label line,
+            // so it — not the label — sets the group height. Pinning the glyph
+            // to the first label line would then leave it floating above a
+            // vertically centred label; centre it instead, next to the chip it
+            // now shares the row with.
+            <View style={[styles.selectRowIconWrap, trailing ? styles.selectRowIconWrapCentered : null]}>{icon}</View>
           )
         ) : null
-        // The subtitle (e.g. the stars renewal note) must align with the
-        // LABEL TEXT, not under the leading icon. Indent it by the icon
-        // column's footprint + the label group's gap (MD) so its left edge
-        // lands exactly where the label starts.
-        const iconColW = avatar ? 44 : icon ? (tone === 'accent' ? 36 : ICON.md) : 0
-        const subtitleIndent = iconColW > 0 ? iconColW + MD : 0
+        // The subtitle (e.g. the stars renewal note) must align with the LABEL
+        // TEXT, not under the leading icon. It shares the label's column
+        // rather than being indented by a computed icon width: that estimate
+        // (`ICON.md` for a plain glyph) is only ever as good as its guess at
+        // what the icon actually renders, and any icon whose intrinsic width
+        // differs left the subtitle a few pixels off the label. Sharing the
+        // column makes the two flush by construction.
         return label != null ? (
           <View style={styles.selectRowTextCol}>
-            <View style={styles.selectRowLabelWrap}>
-              <View style={styles.selectRowLabelGroup}>
-                {renderedIcon}
-                <Text style={styles.selectRowLabel}>{label}</Text>
+            <View style={styles.selectRowLabelGroup}>
+              {renderedIcon}
+              <View style={styles.selectRowLabelStack}>
+                <Text style={[styles.selectRowLabel, labelColor ? { color: labelColor } : null]}>{label}</Text>
+                {subtitle ? (
+                  <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
+                ) : null}
               </View>
-              {displayValue != null ? (
-                <Text style={styles.selectRowValue}>{displayValue}</Text>
+              {trailing ? (
+                <View style={styles.selectRowTrailing}>{trailing}</View>
               ) : null}
             </View>
-            {subtitle ? (
-              <Text style={[styles.selectRowSubtitle, { marginStart: subtitleIndent }]}>{subtitle}</Text>
-            ) : null}
           </View>
-        ) : (
-          <>
-            {renderedIcon}
-            {/* Label-less variant: value fills the row and stays end-aligned
-                (the continuation-after-label positioning is a labelled-row
-                concern; this branch has no label to continue from). */}
-            <Text
-              style={[
-                styles.selectRowValue,
-                { flex: 1, textAlign: (isRTL && Platform.OS === 'ios') ? 'left' : 'right' },
-              ]}
-            >
-              {displayValue ?? ''}
-            </Text>
-          </>
-        )
+        ) : renderedIcon
       })()}
     </View>
   )
@@ -318,29 +324,29 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   if (tab === 'preferences') {
     // Magnifying glass
     return (
-      <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Circle cx="11" cy="11" r="7" />
         <Line x1="16.5" y1="16.5" x2="21" y2="21" />
-      </Svg>
+      </Glyph>
     )
   }
   if (tab === 'profile') {
     // Person — head + shoulders
     return (
-      <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Circle cx="12" cy="8" r="4" />
         <Path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-      </Svg>
+      </Glyph>
     )
   }
   // app → 2×2 grid (app icon)
   return (
-    <Svg width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="3" y="3" width="8" height="8" rx="2" />
       <Rect x="13" y="3" width="8" height="8" rx="2" />
       <Rect x="3" y="13" width="8" height="8" rx="2" />
       <Rect x="13" y="13" width="8" height="8" rx="2" />
-    </Svg>
+    </Glyph>
   )
 }
 
@@ -370,26 +376,34 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   const forMale = profile.is_for_male
   const forFemale = profile.is_for_female
   const genderDisplayValue = forMale && forFemale ? t('settings.genderBoth') : forMale ? t('settings.genderM') : t('settings.genderF')
-  // The gender field's LABEL is itself gendered by the user's own sex
+  // The gender field's opening word is itself gendered by the user's own sex
   // ("פנוי"/"פנויה"); English collapses to "Available" (genderize no-op).
-  const genderLabel = genderize(t('settings.preferredGender'), profile.is_male)
+  // The picker's option strings are standalone sentences ("For women"), so
+  // they need their initial lowered to continue this one ("Available for
+  // women"). No-op in Hebrew — the script has no case.
+  const genderLabel = `${genderize(t('settings.preferredGender'), profile.is_male)} ${lowerFirst(genderDisplayValue)}`
   const locationType = resolveLocationType(profile)
-  // Location row: the LABEL names the chosen anchor ("מהבית" / "מהמשרד" /
-  // "מהמיקום הנוכחי שלי"); the icon matches it; and the value column shows
-  // the picked address for home/work but NOTHING for the device case (the
-  // label already says it's the current location).
-  const locationFieldLabel =
+  // Location row: one sentence naming the chosen anchor ("מהבית" / "מהמשרד" /
+  // "מהמיקום הנוכחי שלי"), with the icon matching it. Home/work append the
+  // picked address; the device case appends nothing (the sentence already
+  // says it's the current location).
+  const locationFieldAnchor =
     locationType === 'home' ? t('settings.locationFromHome')
     : locationType === 'work' ? t('settings.locationFromWork')
     : t('settings.locationFromDevice')
-  const locationFieldValue =
+  const locationFieldAddress =
     locationType === 'home' ? (profile.location_label || t('settings.locationHome'))
     : locationType === 'work' ? (profile.location_label || t('settings.locationWork'))
     : undefined
+  // Comma, not a space: the address is an apposition on the anchor
+  // ("From home, 12 Rothschild St"), not a continuation of it.
+  const locationFieldLabel = locationFieldAddress
+    ? `${locationFieldAnchor}, ${locationFieldAddress}`
+    : locationFieldAnchor
   const locationFieldIcon =
-    locationType === 'home' ? <HomeGlyph color={WHITE} size={ICON.md} />
-    : locationType === 'work' ? <WorkGlyph color={WHITE} size={ICON.md} />
-    : <PinGlyph color={WHITE} size={ICON.md} />
+    locationType === 'home' ? <HomeGlyph color={GREEN} size={ICON.md} />
+    : locationType === 'work' ? <WorkGlyph color={GREEN} size={ICON.md} />
+    : <PinGlyph color={GREEN} size={ICON.md} />
   // An active page1/page2 interaction freezes the location field: 'watching'
   // (looking at a candidate), 'waiting' (outgoing invite), or 'pending'
   // (incoming invite on page2). Changing location mid-interaction would shift
@@ -407,40 +421,41 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         <SelectFieldRow
           grouped
           label={genderLabel}
-          displayValue={genderDisplayValue}
           onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon color={WHITE} />}
+          icon={<GenderIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          label={t('settings.ageRange')}
-          displayValue={ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}
+          label={`${t('settings.ageRange')} ${ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}`}
           onPress={() => setAgePopupVisible(true)}
-          icon={<SlidersIcon color={WHITE} />}
+          icon={<SlidersIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
-          // "עד {value}" normally; when unlimited the value column is empty
-          // and the label itself says "ללא הגבלת מרחק". (The zero/"ממש כאן"
-          // special-case was reverted at the user's request — it shows
-          // normally as label "עד" + value "ממש כאן".)
-          label={radius === Infinity ? t('settings.rangeUnlimitedLabel') : t('settings.range')}
-          displayValue={radius === Infinity ? undefined : formatRadius(radius)}
+          // "עד {value}" normally; unlimited has its own standalone sentence
+          // ("ללא הגבלת מרחק"). (The zero/"ממש כאן" special-case was reverted
+          // at the user's request — it reads normally as "עד ממש כאן".)
+          label={radius === Infinity
+            ? t('settings.rangeUnlimitedLabel')
+            : `${t('settings.range')} ${formatRadius(radius)}`}
           onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon color={WHITE} />}
+          icon={<RadiusIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={locationFieldLabel}
-          displayValue={locationFieldValue}
           locked={locationLocked}
           onPress={() => locationLocked
             ? setLocationLockedInfoVisible(true)
             : setLocationPopupVisible(true)}
           icon={locationFieldIcon}
+          labelColor={GREEN}
         />
       </View>
       <RadiusPopup
@@ -512,7 +527,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           user to finish the current view/invitation first. */}
       <ConfirmDialog
         visible={locationLockedInfoVisible}
-        icon={<MapPinIcon color={PRIMARY} size={32} />}
         title={t('settings.locationLockedTitle')}
         description={t('settings.locationLockedDesc')}
         draggable
@@ -561,9 +575,6 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     onDismiss()
   }, [onDismiss])
 
-  const signOutTap = useTapResponder(() => { tap(); dismissThen(onSignOutPress) })
-  const deleteTap = useTapResponder(() => { tapWarning(); dismissThen(onDeletePress) })
-
   if (!profile || !user) return null
 
   const age = profile.birth_date ? calcAge(profile.birth_date) : null
@@ -584,9 +595,9 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       visible={visible}
       onDismiss={onDismiss}
       onClosed={handleClosed}
-      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) }}
+      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + MD }}
     >
-      {/* Identity details as a plain stacked text list (PRIMARY on the white
+      {/* Identity details as a plain stacked text list (muted ink on the white
           sheet), not chip pills — one line per field, like a list. */}
       <View style={styles.accountPopupList}>
         {detailRows.map(r => (
@@ -600,24 +611,21 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
           </Text>
         ))}
       </View>
-      <View style={styles.accountActionsCard}>
-        <View style={styles.accountActionRow} {...signOutTap}>
-          <SignOutIcon color={BLACK} />
-          {/* Wrap label in flex:1 row so the Text auto-flips to the logical
-              start side on iOS RTL — more reliable than textAlign alone. */}
-          <View style={styles.accountActionTextWrap}>
-            <Text style={[styles.accountActionText, { color: BLACK }]} numberOfLines={1} ellipsizeMode="clip">{tg('settings.signOut', profile.is_male)}</Text>
-          </View>
-        </View>
-        {/* Soft dark hairline — the shared WHITE_SOFT divider is invisible on
-            the white popup surface. */}
-        <View style={[styles.accountActionDivider, { backgroundColor: BLACK_SOFT }]} />
-        <View style={styles.accountActionRow} {...deleteTap}>
-          <TrashIcon color={BLACK_MID} />
-          <View style={styles.accountActionTextWrap}>
-            <Text style={[styles.accountActionText, { color: BLACK_MID }]} numberOfLines={1} ellipsizeMode="clip">{t('settings.deleteAccount')}</Text>
-          </View>
-        </View>
+      {/* The same pair of full-width buttons the chat menu's leave/block sheet
+          uses: the action you opened this for is the solid primary, the
+          drastic and rarely-wanted one recedes to the muted secondary. */}
+      <View style={styles.accountActions}>
+        <Button
+          label={tg('settings.signOut', profile.is_male)}
+          iconStart={<SignOutIcon color={WHITE} />}
+          onPress={() => { tap(); dismissThen(onSignOutPress) }}
+        />
+        <Button
+          label={t('settings.deleteAccount')}
+          variant="secondary"
+          iconStart={<TrashIcon color={BLACK_STRONG} />}
+          onPress={() => { tapWarning(); dismissThen(onDeletePress) }}
+        />
       </View>
     </BottomSheet>
   )
@@ -632,9 +640,14 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
  * whose responses carry a fresh `groups` sidecar so the list updates in one
  * round trip per mutation.
  */
-function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
+function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }: {
   visible: boolean
   onDismiss: () => void
+  /** Which act to show. The sheet no longer lists the groups — the menu does
+   * that with chips — so it opens straight into joining or leaving. */
+  mode: 'join' | 'leave'
+  /** The group a chip was tapped on. Only read when mode is 'leave'. */
+  leaveGroup: Group | null
   // Lifted up to AppInlineContent so the settings menu row can render the
   // chained group names alongside this sheet, sharing one source of truth.
   // null = not yet loaded (initial fetch in flight); [] = loaded, empty.
@@ -678,6 +691,8 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       const result = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
       if (result?.groups) setGroups(result.groups)
       setCode('')
+      // Nothing left to show here once joined — the new chip appears in the menu.
+      onDismiss()
     } catch {
       setCodeError(t('settings.groupsInviteInvalid'))
     } finally {
@@ -697,6 +712,7 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       // Silently fail; the row stays. User can retry.
     } finally {
       setLeavingId(null)
+      onDismiss()
     }
   }
 
@@ -707,104 +723,113 @@ function GroupsPopup({ visible, onDismiss, groups, setGroups }: {
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
       contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
     >
-      <View style={groupsPopupStyles.header}>
-        <Text style={groupsPopupStyles.title}>{t('settings.groupsMine')}</Text>
-      </View>
-
-      <View style={groupsPopupStyles.mineSection}>
-        {!loaded || groups == null ? (
-          <ActivityIndicator color={BLACK_MID} style={{ marginVertical: MD }} />
-        ) : groups.length === 0 ? (
-          <Text style={groupsPopupStyles.empty}>{t('settings.groupsEmpty')}</Text>
-        ) : (
-          <View style={groupsPopupStyles.list}>
-            {groups.map((g, i) => (
-              <View key={g.id}>
-                <View style={groupsPopupStyles.row}>
-                  <View style={groupsPopupStyles.rowText}>
-                    <Text style={groupsPopupStyles.rowLabel} numberOfLines={1}>{g.name}</Text>
-                  </View>
-                  <Pressable
-                    onPress={() => onLeave(g.id)}
-                    disabled={leavingId !== null}
-                    hitSlop={TAP_SLOP}
-                    style={({ pressed }) => [groupsPopupStyles.rowAction, pressed ? { opacity: 0.5 } : null]}
-                  >
-                    {leavingId === g.id
-                      ? <ActivityIndicator color={BLACK_MID} size="small" />
-                      : <TrashIcon color={BLACK_MID} />
-                    }
-                  </Pressable>
-                </View>
-                {i < groups.length - 1 ? <View style={groupsPopupStyles.divider} /> : null}
-              </View>
-            ))}
+      {mode === 'leave' && leaveGroup ? (
+        <View style={groupsPopupStyles.step}>
+          <Text style={groupsPopupStyles.title}>
+            {t('settings.groupsLeaveTitle').replace('{name}', leaveGroup.name)}
+          </Text>
+          <Text style={groupsPopupStyles.hint}>{t('settings.groupsLeaveDesc')}</Text>
+          <View style={groupsPopupStyles.actions}>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsBack')}
+                onPress={() => { tap(); onDismiss() }}
+                disabled={leavingId !== null}
+                variant="secondary"
+                size="lg"
+              />
+            </View>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsLeaveConfirm')}
+                onPress={() => onLeave(leaveGroup.id)}
+                loading={leavingId !== null}
+                variant="primary"
+                size="lg"
+              />
+            </View>
           </View>
-        )}
-      </View>
-
-      <View style={groupsPopupStyles.sectionDivider} />
-
-      <View style={groupsPopupStyles.joinSection}>
-        <Text style={groupsPopupStyles.subheading}>{t('settings.groupsJoinTitle')}</Text>
-        <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
-        <View style={groupsPopupStyles.inputWrap}>
-          <TextInput
-            ref={codeInputRef}
-            style={groupsPopupStyles.input}
-            value={code}
-            onChangeText={(v) => {
-              const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
-              setCode(digits)
-              if (codeError) setCodeError(null)
-            }}
-            keyboardType="number-pad"
-            maxLength={INVITE_CODE_LEN}
-            placeholder={t('settings.groupsCodePlaceholder')}
-            placeholderTextColor={BLACK_MID}
-            autoComplete="off"
-            textContentType="none"
-            editable={!submitting}
-          />
         </View>
-        {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
-        <View style={{ marginTop: SM }}>
-          <Button
-            label={t('settings.groupsJoinAction')}
-            onPress={onJoin}
-            disabled={code.length !== INVITE_CODE_LEN || submitting}
-            loading={submitting}
-            variant="primary"
-            size="lg"
-          />
+      ) : (
+        <View style={groupsPopupStyles.step}>
+          <Text style={groupsPopupStyles.title}>{t('settings.groupsJoinTitle')}</Text>
+          <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
+          <View style={groupsPopupStyles.inputWrap}>
+            <TextInput
+              ref={codeInputRef}
+              style={groupsPopupStyles.input}
+              value={code}
+              onChangeText={(v) => {
+                const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
+                setCode(digits)
+                if (codeError) setCodeError(null)
+              }}
+              keyboardType="number-pad"
+              maxLength={INVITE_CODE_LEN}
+              placeholder={t('settings.groupsCodePlaceholder')}
+              placeholderTextColor={BLACK_MID}
+              autoComplete="off"
+              textContentType="none"
+              editable={!submitting}
+              autoFocus
+            />
+          </View>
+          {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
+          <View style={groupsPopupStyles.actions}>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsBack')}
+                onPress={() => { tap(); Keyboard.dismiss(); onDismiss() }}
+                disabled={submitting}
+                variant="secondary"
+                size="lg"
+              />
+            </View>
+            <View style={groupsPopupStyles.action}>
+              <Button
+                label={t('settings.groupsJoinAction')}
+                onPress={onJoin}
+                disabled={code.length !== INVITE_CODE_LEN || submitting}
+                loading={submitting}
+                variant="primary"
+                size="lg"
+              />
+            </View>
+          </View>
         </View>
-      </View>
+      )}
     </BottomSheet>
   )
 }
 
 const groupsPopupStyles = StyleSheet.create({
-  header: { paddingHorizontal: MD, paddingTop: SM, paddingBottom: XS },
-  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK },
-  mineSection: { paddingHorizontal: MD, paddingBottom: MD },
-  joinSection: { paddingHorizontal: MD, paddingTop: MD },
-  subheading: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  header: { paddingHorizontal: MD, paddingBottom: MD },
+  // The standard popup title: same size, weight and centring as every other
+  // sheet in the app, so this one stops looking like a section heading.
+  title: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: BLACK, textAlign: 'center', letterSpacing: -0.3 },
+  mineSection: { paddingHorizontal: MD, paddingBottom: LG },
+  joinSection: { paddingHorizontal: MD, paddingTop: LG },
+  // Join and leave steps: one titled block with its own actions row.
+  step: { paddingHorizontal: MD, paddingTop: SM },
+  actions: { flexDirection: 'row', gap: SM, marginTop: LG },
+  action: { flex: 1 },
   hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS, lineHeight: lh(TEXT.sm) },
-  empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM },
-  list: { borderRadius: RADIUS, backgroundColor: WHITE_SOFT, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: MD, paddingVertical: SM, gap: SM },
-  rowText: { flex: 1, minWidth: 0 },
-  rowLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK },
+  empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM, textAlign: 'center' },
+  // Wrap: as many chips per line as fit, centred. alignItems keeps a chip
+  // sized to its own content instead of stretching to the tallest on its line.
+  list: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: SM },
   rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
-  rowAction: { padding: SM },
-  divider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
+  // Reads as a field: a border and a white fill, not just a tinted block. The
+  // previous WHITE_SOFT-on-white panel gave no edge to aim at.
   inputWrap: {
-    marginTop: MD,
-    backgroundColor: WHITE_SOFT,
+    marginTop: LG,
+    backgroundColor: SURFACE,
+    borderWidth: 1.5,
+    borderColor: BLACK_MID,
     borderRadius: RADIUS,
     paddingHorizontal: MD,
-    paddingVertical: SM,
+    paddingVertical: MD,
   },
   input: {
     fontSize: TEXT.lg,
@@ -814,7 +839,7 @@ const groupsPopupStyles = StyleSheet.create({
     letterSpacing: 6,
     padding: 0,
   },
-  error: { marginTop: XS, fontSize: TEXT.sm, color: DESTRUCTIVE, textAlign: 'center' },
+  error: { marginTop: XS, fontSize: TEXT.sm, color: INK, textAlign: 'center' },
 })
 
 // ── App Tab ────────────────────────────────────────────────────────────────
@@ -912,7 +937,7 @@ const agePopupStyles = StyleSheet.create({
   },
   field: {
     flex: 1,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: GREEN_SOFT,
     borderRadius: RADIUS,
     paddingVertical: SM,
     paddingHorizontal: SM,
@@ -929,7 +954,7 @@ const agePopupStyles = StyleSheet.create({
     // selection tint is AppText's app-standard translucent SELECTION, so the
     // black number stays readable on it (the old bespoke solid-black
     // selectionColor + white-text flip rendered white-on-light, unreadable).
-    color: PRIMARY,
+    color: INK,
     textAlign: 'center',
     padding: 0,
     minWidth: 60,
@@ -1011,7 +1036,7 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
           <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
         </View>
         <View style={selectListStyles.checkSlot}>
-          {selected ? <CheckIcon color={PRIMARY} /> : null}
+          {selected ? <CheckIcon color={GREEN} /> : null}
         </View>
       </View>
       {!isLast ? <View style={selectListStyles.divider} /> : null}
@@ -1028,7 +1053,7 @@ const selectListStyles = StyleSheet.create({
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowIcon: { marginEnd: SM },
   label: { fontSize: TEXT.md, color: BLACK },
-  labelSelected: { color: PRIMARY, fontWeight: WEIGHT.semibold },
+  labelSelected: { color: GREEN, fontWeight: WEIGHT.extrabold },
   checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
 })
@@ -1311,28 +1336,28 @@ function LocationPopup({
         <>
           <SelectListRow
             label={t('settings.locationDevice')}
-            icon={<PinGlyph color={currentType === 'device' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            icon={<PinGlyph color={currentType === 'device' ? GREEN : BLACK_STRONG} size={ICON.md} />}
             selected={currentType === 'device'}
             isLast={false}
             onPress={handleMyLocation}
           />
           <SelectListRow
             label={t('settings.locationHome')}
-            icon={<HomeGlyph color={currentType === 'home' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            icon={<HomeGlyph color={currentType === 'home' ? GREEN : BLACK_STRONG} size={ICON.md} />}
             selected={currentType === 'home'}
             isLast={false}
             onPress={() => { setPendingType('home'); setStep('address') }}
           />
           <SelectListRow
             label={t('settings.locationWork')}
-            icon={<WorkGlyph color={currentType === 'work' ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            icon={<WorkGlyph color={currentType === 'work' ? GREEN : BLACK_STRONG} size={ICON.md} />}
             selected={currentType === 'work'}
             isLast={true}
             onPress={() => { setPendingType('work'); setStep('address') }}
           />
           {deviceBusy ? (
             <View style={locationPopupStyles.statusRow}>
-              <ActivityIndicator color={PRIMARY} />
+              <ActivityIndicator color={INK} />
               <Text style={locationPopupStyles.statusText}>{t('settings.locationFetchingDevice')}</Text>
             </View>
           ) : deviceError ? (
@@ -1355,7 +1380,7 @@ function LocationPopup({
             />
             {searching || selecting ? (
               <View style={locationPopupStyles.searchSpinner}>
-                <ActivityIndicator color={PRIMARY} />
+                <ActivityIndicator color={INK} />
               </View>
             ) : null}
           </View>
@@ -1427,7 +1452,7 @@ function ageLabel(n: number): string {
 }
 
 function FamilyToggleRow({ label, value, onValueChange }: { label: string; value: boolean; onValueChange: (v: boolean) => void }) {
-  const trackBg = value ? PRIMARY : BLACK_SOFT
+  const trackBg = value ? GREEN : BLACK_SOFT
   // Knob travel = track width 48 - knob width 24 - padding 4 = 20px.
   // OFF always rests at the knob's natural layout position (translateX 0):
   // the left edge in LTR, the right edge in RTL (the `start` side — layout is
@@ -1565,12 +1590,11 @@ function FamilyValuePopup({
 }
 
 export function FamilyKidsPopup({
-  visible, initial, initialIsForKids, saving, weekStart, isMale, onDismiss, onSave,
+  visible, initial, initialIsForKids, weekStart, isMale, onDismiss, onSave,
 }: {
   visible: boolean
   initial: FamilyData | null
   initialIsForKids: boolean | null
-  saving: boolean
   weekStart: number
   isMale: boolean | null
   onDismiss: () => void
@@ -1706,10 +1730,12 @@ export function FamilyKidsPopup({
 
   const dirty = !familyEqual(current, initial) || isForKids !== (initialIsForKids ?? null)
 
+  // Tapping outside closes the sheet on the same frame. The save is handed to
+  // the parent as fire-and-forget — waiting for the round trip to finish before
+  // closing made the popup feel stuck on a slow network.
   const handleDismiss = () => {
-    if (saving) return
     if (dirty) onSave(current, isForKids)
-    else onDismiss()
+    onDismiss()
   }
   const onPickerDismiss = () => setPickerTarget(null)
   const onPickerPick = (value: number) => {
@@ -1717,6 +1743,15 @@ export function FamilyKidsPopup({
     setKidAge(pickerTarget.index, value === AGE_CLEAR ? undefined : value)
     setPickerTarget(null)
   }
+
+  // The toggle label states the count back to the user, so the row doubles as
+  // the answer ("I have 2 kids") instead of just the question. Zero kids keeps
+  // the plain phrasing — the toggle can be on before any kid has been added.
+  const hasKidsLabel = kids.length === 0
+    ? t('family.hasKidsYes')
+    : kids.length === 1
+      ? t('family.hasKidsYesOne')
+      : t('family.hasKidsYesMany').replace('{count}', String(kids.length))
 
   const pickerTitle = !pickerTarget
     ? ''
@@ -1730,7 +1765,6 @@ export function FamilyKidsPopup({
     <BottomSheet
       visible={visible}
       onDismiss={handleDismiss}
-      disableBackdropDismiss={saving}
       cardWrapStyle={{ maxHeight: sheetMaxH }}
       contentStyle={familyStyles.sheet}
     >
@@ -1746,7 +1780,7 @@ export function FamilyKidsPopup({
                     row below). */}
                 <View>
                   <FamilyToggleRow
-                    label={t('family.hasKidsYes')}
+                    label={hasKidsLabel}
                     value={hasKids}
                     onValueChange={setHasKids}
                   />
@@ -1864,10 +1898,10 @@ export function FamilyKidsPopup({
 const familyStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   shadowGradient: { height: 60, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: BLACK },
+  shadowLayer: { flex: 1, backgroundColor: SURFACE_SUNK },
   gestureWrap: { flexShrink: 1 },
   sheet: {
-    backgroundColor: WHITE,
+    backgroundColor: BG,
     paddingTop: RADIUS,
     paddingHorizontal: SM,
     flexShrink: 1,
@@ -1893,8 +1927,8 @@ const familyStyles = StyleSheet.create({
   },
   toggleKnob: {
     width: 24, height: 24, borderRadius: 12,
-    backgroundColor: WHITE,
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
+    backgroundColor: SURFACE,
+    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
   section: { marginBottom: MD },
   subSection: {},
@@ -1905,16 +1939,14 @@ const familyStyles = StyleSheet.create({
   optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
   pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
-  pillSelected: { backgroundColor: PRIMARY },
+  pillSelected: { backgroundColor: GREEN },
   pillLabel: { fontSize: TEXT.sm, color: BLACK },
   pillLabelSelected: { color: WHITE },
   sectionPill: {
     paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: GREEN_SOFT,
   },
-  sectionPillDestructive: { backgroundColor: DESTRUCTIVE_BG },
-  sectionPillLabel: { fontSize: TEXT.sm, color: PRIMARY },
-  sectionPillLabelDestructive: { color: DESTRUCTIVE },
+  sectionPillLabel: { fontSize: TEXT.sm, color: INK },
   card: {
     backgroundColor: BLACK_SOFT,
     borderRadius: RADIUS,
@@ -1927,7 +1959,7 @@ const familyStyles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   dropdownLabel: { fontSize: TEXT.sm, color: BLACK },
-  dropdownValue: { fontSize: TEXT.sm, color: PRIMARY },
+  dropdownValue: { fontSize: TEXT.sm, color: INK },
   dropdownPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
 
   // "Days with kids" schedule. Title + weeks render inline with the rest of
@@ -1943,55 +1975,58 @@ const familyStyles = StyleSheet.create({
     paddingStart: MD, paddingEnd: SM,
   },
   kidChipMain: { paddingVertical: SM },
-  kidChipLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipLabel: { fontSize: TEXT.sm, color: INK },
   kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
   kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
   kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
+  // "+ Add kid" is the only ACTION among the kid chips (the rest are values
+  // you edit), so it is a solid filled pill rather than a dashed outline: the
+  // dashed version read as a placeholder slot, not as something you press.
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: 999,
-    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
+    backgroundColor: GREEN,
   },
-  kidChipAddLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  kidChipAddLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE },
 
   // + Add kid / + Add week button.
   addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addKidLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  addKidLabel: { fontSize: TEXT.sm, color: INK },
 
   weekHeader: { marginBottom: MD, gap: XS },
   weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
   weekLabel: { fontSize: TEXT.sm, color: BLACK },
   weekLabelEmphasis: { fontWeight: WEIGHT.extrabold },
   weekHint: { fontSize: TEXT.sm, color: BLACK_STRONG },
-  weekRemove: { fontSize: TEXT.sm, color: DESTRUCTIVE },
+  weekRemove: { fontSize: TEXT.sm, color: BLACK_STRONG },
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: WHITE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
   },
-  dayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  dayBubbleSelected: { backgroundColor: GREEN, borderColor: GREEN },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
-  dayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
-  dayLetterWeekend: { color: PRIMARY },
+  dayBubbleWeekend: { backgroundColor: GREEN_SOFT, borderColor: GREEN_SOFT },
+  dayLetterWeekend: { color: GREEN },
   dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
   dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
   addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
-  addWeekLabel: { fontSize: TEXT.sm, color: PRIMARY },
+  addWeekLabel: { fontSize: TEXT.sm, color: INK },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
-  // the sheet's ScrollView so the gray cards expanding/collapsing inside
-  // don't push it around. WHITE bg + same horizontal padding as the sheet
-  // so the popup reads as one continuous surface.
-  interestedBar: { backgroundColor: WHITE },
+  // the sheet's ScrollView so the cards expanding/collapsing inside don't
+  // push it around. Same tone + horizontal padding as the sheet, so the popup
+  // reads as one continuous surface.
+  interestedBar: { backgroundColor: BG },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
-    backgroundColor: WHITE,
+    backgroundColor: BG,
     paddingTop: RADIUS, paddingHorizontal: SM,
   },
   valuePopupTitle: {
@@ -2004,8 +2039,8 @@ const familyStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
   },
   valueRowLabel: { fontSize: TEXT.md, color: BLACK },
-  valueRowLabelSelected: { color: PRIMARY, fontWeight: WEIGHT.extrabold },
-  valueRowCheck: { fontSize: TEXT.md, color: PRIMARY, fontWeight: WEIGHT.extrabold },
+  valueRowLabelSelected: { color: INK, fontWeight: WEIGHT.extrabold },
+  valueRowCheck: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.extrabold },
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
@@ -2013,7 +2048,7 @@ const familyStyles = StyleSheet.create({
   triOptionLabel: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
   triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
-  triOptionPillSelected: { backgroundColor: PRIMARY },
+  triOptionPillSelected: { backgroundColor: GREEN },
   triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
   triOptionPillLabelSelected: { color: WHITE },
 })
@@ -2080,16 +2115,18 @@ function PhotoOptionsPopup({
       </Pressable>
 
       <Pressable
-        style={[
-          photoOptionsStyles.fullRow,
-          canDelete ? photoOptionsStyles.destructiveRow : photoOptionsStyles.disabledRow,
-        ]}
+        // Deliberately NOT gold: this sheet's rows are one set of choices and
+        // the gold made Delete read as a warning banner rather than a sibling
+        // of Move / Replace (user request 2026-07-20). Deleting a photo is
+        // reversible by re-adding one, and the confirm still gates it; the
+        // warning haptic below carries the caution instead of the colour.
+        style={[photoOptionsStyles.fullRow, !canDelete && photoOptionsStyles.disabledRow]}
         onPress={() => { if (canDelete) { tapWarning(); onDelete() } }}
       >
-        <PhotoTrashIcon color={canDelete ? DESTRUCTIVE : BLACK_STRONG} />
+        <PhotoTrashIcon color={canDelete ? BLACK : BLACK_STRONG} />
         <Text style={[
           photoOptionsStyles.fullRowLabel,
-          canDelete ? photoOptionsStyles.destructiveLabel : photoOptionsStyles.disabledLabel,
+          !canDelete && photoOptionsStyles.disabledLabel,
         ]}>
           {canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
         </Text>
@@ -2138,12 +2175,6 @@ const photoOptionsStyles = StyleSheet.create({
   fullRowLabel: {
     fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
   },
-  destructiveRow: {
-    backgroundColor: DESTRUCTIVE_BG,
-  },
-  destructiveLabel: {
-    color: DESTRUCTIVE,
-  },
   disabledRow: {
     opacity: 0.55,
   },
@@ -2176,7 +2207,8 @@ export function PreviewFieldPage({
   const { user } = useAuthStore()
   const [photoPopupImageIndex, setPhotoPopupImageIndex] = useState<number | null>(null)
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
-  const [familySaving, setFamilySaving] = useState(false)
+  // Serializes the background family writes (see handleSaveFamily).
+  const familySaveChain = useRef<Promise<void>>(Promise.resolve())
   const [bioSaving, setBioSaving] = useState(false)
   // True while the OS image picker is launching. launchImageLibraryAsync has a
   // cold-start delay (especially the very first time it loads the native
@@ -2370,15 +2402,24 @@ export function PreviewFieldPage({
 
     const { filename, uploaded } = processAndUploadPhotoDeferred(asset.uri, userId, token)
 
+    // Kept so a failed upload can put the previous photo BACK (see the catch
+    // below). The old file is still in storage and still valid -- only the
+    // reference is being swapped here.
     const current = useUserStore.getState().profile
+    const oldEntry = current?.images?.[targetIndex]
     if (current?.images) {
-      const oldFilename = current.images[targetIndex]?.normal
+      // Swap the slot optimistically -- processAndUploadPhotoDeferred already
+      // primed localPhotoUriCache with the picked URI, so the new photo renders
+      // straight away. The OLD photo's local cache + deferred marker are
+      // deliberately NOT torn down here: until the new upload lands, the old
+      // photo is still the one we fall back to. Tearing its state down eagerly
+      // meant a failed replace restored an entry with no local cache (visible
+      // flash), and -- worse -- replacing a photo that was ITSELF still
+      // uploading un-marked it from pendingDeferred, letting persistImages()
+      // write it to the server before its upload had landed. Both cleanups now
+      // live on the success path below.
       const next = [...current.images]
       next[targetIndex] = { normal: filename, hash: '' }
-      if (oldFilename) {
-        localPhotoUriCache.delete(oldFilename)
-        pendingDeferred.delete(oldFilename)
-      }
       useUserStore.getState().update({ images: next })
     }
 
@@ -2391,12 +2432,30 @@ export function PreviewFieldPage({
         const next = [...latest.images]
         next[idx] = { normal: filename, hash }
         useUserStore.getState().update({ images: next })
+        // The new photo is in storage now, so the old one is finally redundant.
+        // (Its file is left in storage: removes never delete, same as elsewhere.)
+        const oldFilename = oldEntry?.normal
+        if (oldFilename && !next.some(img => img.normal === oldFilename)) {
+          localPhotoUriCache.delete(oldFilename)
+          pendingDeferred.delete(oldFilename)
+        }
       })
       .catch(e => {
         console.error('Photo replace upload error:', e)
         const latest = useUserStore.getState().profile
         if (!latest) return
-        useUserStore.getState().update({ images: latest.images.filter(img => img.normal !== filename) })
+        // RESTORE the previous photo rather than just dropping the failed one.
+        // Filtering it out left the array one entry SHORTER, which is the one
+        // way to get below the 2-photo floor that handleDelete enforces: two
+        // failed replaces took a profile to zero photos, persistImages() wrote
+        // that to the server, and others(only_available) then dropped the user
+        // from everyone's pool with no indication anything had gone wrong.
+        const idx = latest.images.findIndex(img => img.normal === filename)
+        if (idx < 0) return
+        const next = [...latest.images]
+        if (oldEntry) next[idx] = oldEntry
+        else next.splice(idx, 1)
+        useUserStore.getState().update({ images: next })
       })
     inFlightUploads.current.add(tracker)
     tracker.finally(() => inFlightUploads.current.delete(tracker))
@@ -2429,25 +2488,26 @@ export function PreviewFieldPage({
   // When both toggles are off (no kids and not interested in kids), the
   // family entry has nothing to communicate — clear it so the profile
   // doesn't show an empty "No kids" card.
-  const handleSaveFamily = async (data: FamilyData, isForKids: boolean | null) => {
-    if (familySaving) return
-    setFamilySaving(true)
-    try {
-      if (inFlightUploads.current.size > 0) {
-        await Promise.all(Array.from(inFlightUploads.current))
-      }
-      const dropEntry = !data.hasKids && isForKids == null
-      const familyWithPref: FamilyData | null = dropEntry
-        ? null
-        : { ...data, ...(isForKids !== null ? { isForKids } : {}) }
-      update({ family: familyWithPref })
-      await invoke('app/profile', { family: familyWithPref })
-      setFamilyPopupVisible(false)
-    } catch (e) {
-      console.error('Save family error:', e)
-    } finally {
-      setFamilySaving(false)
-    }
+  //
+  // The popup has already closed by the time this runs: the local store is
+  // updated on this frame (so the card behind the sheet is correct at once) and
+  // the write goes out behind it. Saves are chained rather than dropped, so a
+  // reopen-edit-close while the previous request is still in flight can't race
+  // it or be silently lost.
+  const handleSaveFamily = (data: FamilyData, isForKids: boolean | null) => {
+    const dropEntry = !data.hasKids && isForKids == null
+    const familyWithPref: FamilyData | null = dropEntry
+      ? null
+      : { ...data, ...(isForKids !== null ? { isForKids } : {}) }
+    update({ family: familyWithPref })
+    familySaveChain.current = familySaveChain.current
+      .then(async () => {
+        if (inFlightUploads.current.size > 0) {
+          await Promise.all(Array.from(inFlightUploads.current))
+        }
+        await invoke('app/profile', { family: familyWithPref })
+      })
+      .catch(e => { console.error('Save family error:', e) })
   }
 
   return (
@@ -2468,18 +2528,23 @@ export function PreviewFieldPage({
               }}
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
               bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
-              actions={(() => {
-                const list: CardAction[] = []
+              // No round button on your own card: there is nobody to invite,
+              // and the adds moved into the chip column below.
+              actions={[]}
+              addChips={(() => {
+                const list: CardAddChip[] = []
                 if (photoAddEnabled) list.push({
                   key: 'photo',
-                  icon: photoPicking
-                    ? <ActivityIndicator color={WHITE} />
-                    : <AddPhotoIcon stroke={WHITE} size={ICON.huge} />,
+                  label: t('settings.addPhoto'),
+                  renderIcon: c => photoPicking
+                    ? <ActivityIndicator size="small" color={c} />
+                    : <CameraIcon color={c} size={ICON.sm} />,
                   onPress: () => { tap(); handleAddPhoto() },
                 })
                 if (familyAddEnabled) list.push({
                   key: 'family',
-                  icon: <FamilyKidsIcon stroke={WHITE} size={ICON.huge} />,
+                  label: t('settings.addFamily'),
+                  renderIcon: c => <KidsGlyph color={c} />,
                   onPress: () => { tap(); setFamilyPopupVisible(true) },
                 })
                 return list
@@ -2504,7 +2569,6 @@ export function PreviewFieldPage({
         visible={familyPopupVisible}
         initial={familyInitial}
         initialIsForKids={profile?.family?.isForKids ?? null}
-        saving={familySaving}
         weekStart={profile?.weekStart ?? defaultWeekStart(lang)}
         isMale={profile?.is_male ?? null}
         onDismiss={() => setFamilyPopupVisible(false)}
@@ -2524,30 +2588,74 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const { signOut } = useAuthStore()
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
   const [groupsPopupVisible, setGroupsPopupVisible] = useState(false)
+  // The groups sheet is opened straight into one of its two acts by the chip
+  // that was tapped: a group chip leaves it, the trailing chip joins a new one.
+  const [groupsMode, setGroupsMode] = useState<'join' | 'leave'>('join')
+  const [groupsLeaveTarget, setGroupsLeaveTarget] = useState<Group | null>(null)
+  const openJoinGroup = () => { tap(); setGroupsLeaveTarget(null); setGroupsMode('join'); setGroupsPopupVisible(true) }
+  const openLeaveGroup = (g: Group) => { tapWarning(); setGroupsLeaveTarget(g); setGroupsMode('leave'); setGroupsPopupVisible(true) }
   const [bugReportVisible, setBugReportVisible] = useState(false)
   // Lifted from GroupsPopup so the menu row can render the chained group
   // names from the same fetched list — one source of truth shared between
-  // the row label and the popup. null = initial fetch in flight.
-  const [groups, setGroups] = useState<Group[] | null>(null)
+  // the row label and the popup.
+  //
+  // Seeded from the persisted cache so the row paints its names with the
+  // screen rather than popping in when `app/my_groups` lands; the response
+  // then overwrites both. A failed fetch keeps the cached names (falling back
+  // to "no groups" only when there is nothing cached to show).
+  const cachedGroups = useCachedGroups()
+  const [fetchedGroups, setFetchedGroups] = useState<Group[] | null>(null)
+  const [groupsFetchFailed, setGroupsFetchFailed] = useState(false)
+  const groups = fetchedGroups ?? cachedGroups ?? (groupsFetchFailed ? [] : null)
+  const setGroups = useCallback((g: Group[]) => {
+    setFetchedGroups(g)
+    setCachedGroups(g)
+  }, [])
   useEffect(() => {
     let cancelled = false
     invoke<{ groups?: Group[] }>('app/my_groups')
       .then(data => { if (!cancelled) setGroups(data?.groups ?? []) })
-      .catch(() => { if (!cancelled) setGroups([]) })
+      .catch(() => { if (!cancelled) setGroupsFetchFailed(true) })
     return () => { cancelled = true }
-  }, [])
+  }, [setGroups])
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  // Hearts popup: explains balance + extra + next grant, and opens the
-  // buy-extra picker. The tier model retired 2026-06-01, so there is no
-  // free/pro switch here any more.
-  const [starsPopupVisible, setStarsPopupVisible] = useState(false)
+  // The credits row opens the buy picker DIRECTLY (2026-07-22). It used to
+  // open an explainer dialog first (balance + extra + next grant) whose only
+  // action was "more credits" — but the row itself already carries the
+  // balance in its label and the renewal time in its subtitle, so the dialog
+  // was a step that re-read what the user had just tapped.
   const [buyExtraOpen, setBuyExtraOpen] = useState(false)
+  // Visibility (visible <-> hidden). This row is the ONLY way back to visible
+  // now that page2 has no UI of its own, so it must stay reachable and must
+  // not silently fail. Going hidden kicks every watcher pinned to the user,
+  // so it is confirmed first; going visible is immediate.
+  const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
+  const [visibilityBusy, setVisibilityBusy] = useState(false)
+  const isHidden = selectIsHidden(profile)
+  // Visibility is NOT credit-gated any more. The server used to auto-hide a
+  // zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
+  // row routed an empty wallet to the buy picker instead of app/free2, which
+  // would have been undone in the same round trip. That auto-hide is gone
+  // (2026-07-22): being broke keeps you visible on purpose — the invitation
+  // you can't accept is the moment to buy.
+
+  const runVisibility = useCallback(async (endpoint: string) => {
+    if (visibilityBusy) return
+    setVisibilityBusy(true)
+    try { await invoke(endpoint) } catch (e) { console.error(e) }
+    finally { setVisibilityBusy(false); setHideConfirmOpen(false) }
+  }, [visibilityBusy])
+
+  const onVisibilityPress = useCallback(() => {
+    tap()
+    if (!isHidden) { setHideConfirmOpen(true); return }
+    runVisibility('app/free2')
+  }, [isHidden, runVisibility])
 
   const onOpenBuyExtra = useCallback(() => {
     tap()
-    setStarsPopupVisible(false)
     setBuyExtraOpen(true)
   }, [])
 
@@ -2576,41 +2684,19 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Hearts popup content. Two lines: current balance + extra, and the next
-  // grant time (dropped when unknown). The "buy more" button opens the
-  // BuyExtraPopup with 5/10/50 options. {balance} is the daily-pool count
-  // (refilled to CREDIT_CAP every 20:00 Asia/Jerusalem); {extra} is the
-  // purchased pool (no cap). Both render BOLD inside the otherwise-regular
-  // text. Hebrew verb gender resolved via genderize() inline markers.
+  // Watcher count drives two surfaces: the chip on the Visible row and
+  // the concrete ripple in the hide confirm. deriveCompat only fills the array
+  // while page2 is free, so a hidden user reads 0 without a separate guard.
+  const watcherCount = selectWatcherCount(profile)
+  const hideConfirmConfig = hideProfileConfirm(watcherCount)
+
+  // Credits row content: the daily pool as a fraction of its cap, the extras
+  // (purchased pool, no cap) when there are any, and the next grant time as
+  // the subtitle. This IS the credits explainer now — the dialog that used to
+  // spell the same numbers out in prose is gone.
   const heartsBalance = creditBalance(profile)
   const heartsExtra = creditExtra(profile)
   const nextGrant = formatNextGrant(profile)
-  const starsTok: Record<string, string> = {
-    '{balance}': starsText(heartsBalance),
-    '{extra}': starsText(heartsExtra),
-    '{cap}': starsText(CREDIT_CAP),
-    '{when}': nextGrant,
-  }
-  let starsEmKey = 0
-  const emLine = (template: string) =>
-    genderize(template, profile.is_male)
-      .split(/(\{balance\}|\{extra\}|\{cap\}|\{when\})/g)
-      .map(p => starsTok[p] !== undefined
-        ? <Text key={`em${starsEmKey++}`} style={styles.starsEm}>{starsTok[p]}</Text>
-        : p)
-  // Skip the "extra" line entirely when there are no extras — saying
-  // "you also have 0 extra hearts" reads as noise. The balance line swaps
-  // to a dedicated "you have NO hearts" copy at 0 instead of the literal
-  // "you have 0 hearts" (user feedback 2026-06-01).
-  const balanceLineKey = heartsBalance === 0
-    ? 'stars.popup.line.balanceEmpty'
-    : 'stars.popup.line.balance'
-  const starsBodyLines = [
-    emLine(t(balanceLineKey)),
-    ...(heartsExtra > 0 ? [emLine(t('stars.popup.line.extra'))] : []),
-    ...(nextGrant ? [emLine(t('stars.popup.line.renew'))] : []),
-  ]
-  const starsDesc = starsBodyLines.flatMap((ln, i) => (i === 0 ? ln : [' ', ...ln]))
 
   // Menu row label: chained group names (up to 3) with "more..." overflow,
   // or the "no groups" message when loaded-empty. While the initial fetch
@@ -2628,47 +2714,91 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   return (
     <>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
-        {/* Stars FIRST in the group (user request), then Account. Tapping
-            stars opens the stars/package popup (balance + renewal + plan). */}
+        {/* Visibility FIRST: it is a game-state control, not an account
+            detail, and it is the only path back to being discoverable. */}
+        {/* The state IS the label: "Visibility  Hidden" says the same thing
+            twice, and the eye glyph already names the field. */}
+        {/* The watcher count is a live quantity, so it rides its own chip
+            instead of a bare "(n)" glued to the label: a number in
+            parentheses says nothing about what it counts, the chip spells
+            it out ("3 watching you"). */}
         <SelectFieldRow
           grouped
-          label={t('settings.credits')}
+          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          trailing={!isHidden && watcherCount > 0 ? (
+            <Chip
+              text={watcherCount === 1
+                ? t('settings.watchersOne')
+                : t('settings.watchersMany').replace('{count}', String(watcherCount))}
+            />
+          ) : undefined}
+          onPress={onVisibilityPress}
+          // Optical size, not nominal: the eye is a flat lens that fills barely
+          // half its box vertically, so at the ICON.md every other row uses it
+          // reads visibly smaller than the person/groups/bug glyphs beside it.
+          // ICON.xxl matches their ink mass; the icon column keeps its fixed
+          // width, so the labels stay aligned.
+          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xxl} /> : <EyeOpenIcon color={GREEN} size={ICON.xxl} />}
+          labelColor={GREEN}
+        />
+        <View style={styles.accountActionDivider} />
+        {/* Credits, then Account. Tapping credits opens the buy picker
+            straight away. */}
+        <SelectFieldRow
+          grouped
+          // "לבבות ({balance}/{cap} + {extra} אקסטרה)": the daily pool reads as
+          // a fraction of its cap (it's the replenishable pool) and the extras
+          // carry an explicit word (otherwise "+ 5" reads as math, not "five
+          // extra"). Drop the extras tail when there are none — steady-state
+          // shows just "לבבות (1/3)" (user feedback 2026-06-01). The count
+          // stays parenthesised here because it is a fixed ratio the label
+          // already names; the Visible row's watcher count moved to a chip
+          // instead, since "3" alone never says what is being counted.
+          label={`${t('settings.credits')} (${heartsExtra > 0
+            ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
+            : `${heartsBalance}/${CREDIT_CAP}`})`}
           // Subtitle is the "renews {when}" note; dropped entirely when the
           // time is unknown (e.g. between rollout and the first cron tick).
           subtitle={nextGrant
             ? t('settings.creditsNext').replace('{when}', nextGrant)
             : undefined}
-          // Value: "{balance}/{cap} + {extra} אקסטרה" so the daily pool reads
-          // as a fraction of its cap (it's the replenishable pool) and the
-          // extras carry an explicit label (otherwise "+ 5" reads as math,
-          // not "five extra"). Drop the extras tail when there are none —
-          // steady-state shows just "1/3" (user feedback 2026-06-01).
-          displayValue={heartsExtra > 0
-            ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
-            : `${heartsBalance}/${CREDIT_CAP}`}
-          onPress={() => setStarsPopupVisible(true)}
-          icon={<HeartIcon color={WHITE} size={ICON.md} />}
+          onPress={onOpenBuyExtra}
+          icon={<CoinIcon color={GREEN} size={ICON.md} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={WHITE} />}
+          icon={<UserIcon color={GREEN} />}
+          labelColor={GREEN}
         />
         <View style={styles.accountActionDivider} />
-        <SelectFieldRow
-          grouped
-          label={groupsRowLabel}
-          onPress={() => setGroupsPopupVisible(true)}
-          icon={<GroupsIcon color={WHITE} />}
-        />
+        {/* Groups are chips right here rather than a label that opens a list:
+            the memberships are short, so showing them beats hiding them behind
+            a sheet. Tapping one asks to leave it; the trailing chip joins a
+            new one. */}
+        <View style={styles.groupsRow}>
+          <View style={styles.groupsRowIcon}><GroupsIcon color={GREEN} /></View>
+          <View style={styles.groupsChips}>
+            {(groups ?? []).map(g => (
+              <Chip key={g.id} text={g.name} onPress={() => openLeaveGroup(g)} />
+            ))}
+            <Chip
+              text={t('settings.groupsAdd')}
+              outlined
+              onPress={openJoinGroup}
+            />
+          </View>
+        </View>
         <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.bugReport')}
           onPress={() => setBugReportVisible(true)}
-          icon={<BugIcon color={WHITE} />}
+          icon={<BugIcon color={GREEN} />}
+          labelColor={GREEN}
         />
       </View>
       <AccountPopup
@@ -2680,6 +2810,8 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       <GroupsPopup
         visible={groupsPopupVisible}
         onDismiss={() => setGroupsPopupVisible(false)}
+        mode={groupsMode}
+        leaveGroup={groupsLeaveTarget}
         groups={groups}
         setGroups={setGroups}
       />
@@ -2688,8 +2820,17 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         onDismiss={() => setBugReportVisible(false)}
       />
       <ConfirmDialog
+        visible={hideConfirmOpen}
+        title={hideConfirmConfig.title}
+        description={hideConfirmConfig.description}
+        confirmLabel={hideConfirmConfig.confirmLabel}
+        onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
+        onConfirm={() => runVisibility('app/lock2')}
+        busy={visibilityBusy}
+        draggable
+      />
+      <ConfirmDialog
         visible={signOutDialog}
-        icon={<SignOutIcon color={PRIMARY} size={32} />}
         title={t('settings.signOutConfirmTitle')}
         description={tg('settings.signOutConfirmDesc', profile.is_male)}
         confirmLabel={tg('settings.signOutYes', profile.is_male)}
@@ -2699,27 +2840,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
       />
       <ConfirmDialog
         visible={deleteDialog}
-        icon={<TrashIcon color={PRIMARY} size={32} />}
         title={t('settings.deleteConfirmTitle')}
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
-        draggable
-      />
-      {/* Hearts popup. Heart icon, balance + extra + renew explainer. The
-          "buy extra" button is shown only when canBuyExtra (= wallet empty
-          AND not already bought this grant cycle, user request 2026-06-01);
-          otherwise the sheet is purely informational. */}
-      <ConfirmDialog
-        visible={starsPopupVisible}
-        icon={<HeartIcon color={PRIMARY} size={32} />}
-        title={t('stars.popup.title')}
-        description={starsDesc}
-        confirmLabel={canBuyExtra(profile) ? t('stars.popup.buyExtra') : undefined}
-        onCancel={() => setStarsPopupVisible(false)}
-        onConfirm={onOpenBuyExtra}
         draggable
       />
       <BuyExtraPopup
@@ -2732,21 +2858,56 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
 
 
-type SettingsPageProps = { topInset?: number; onBack?: () => void; onNavigateHome?: () => void; focused?: boolean; onOpenSubPage?: (config: SubPageConfig) => Promise<void>; embedded?: boolean }
+type SettingsPageProps = {
+  topInset?: number
+  /** Height of the floating sheet chrome drawn OVER this page. The profile
+   *  photo grows by this much and bleeds up behind the chrome, so the photo
+   *  fills to the very top of the screen while its bottom edge — and the
+   *  caption row on it — stay exactly where they were. 0 = opaque chrome
+   *  above the page, nothing to bleed behind. */
+  photoBleed?: number
+  onBack?: () => void
+  onNavigateHome?: () => void
+  focused?: boolean
+  onOpenSubPage?: (config: SubPageConfig) => Promise<void>
+  embedded?: boolean
+} & Partial<OverlaySheetBody>
 
-export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false }: SettingsPageProps = {}) {
+export default function SettingsPage({
+  topInset = 0, photoBleed = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false,
+  dismissGestureRef, onScrollAtTop, pulling,
+}: SettingsPageProps = {}) {
   const { profile } = useUserStore()
   const { user } = useAuthStore()
+  const router = useRouter()
+
+  // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
+  // not the avatar but an orange CTA into the build-profile flow. A browse-only
+  // user reaches settings freely (the menu is never gated), so this is their
+  // way to finish. Same completion marker the invite popup and the server gate
+  // use — one source of truth.
+  const profileBuilt = selectProfileBuilt(profile)
 
   const firstPhoto = profile?.images?.[0]?.normal
   const avatarUri = firstPhoto
     ? (localPhotoUriCache.get(firstPhoto) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user?.id ?? profile?.user_id}/normal/${firstPhoto}`)
     : undefined
 
-  return (
+  // Same wiring PreviewFieldPage uses: when this page is the body of an
+  // OverlaySheet, its scroll has to negotiate with the sheet's dismiss pan
+  // (PullScrollView reports at-top and drops scrollEnabled mid-pull) or the
+  // two fight and the content lands nudged after a swipe + snap-back.
+  const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
+    panRef: dismissGestureRef,
+    extraRefs: [],
+    setScrollAtTop: onScrollAtTop ?? (() => {}),
+    pulling: pulling ?? false,
+  } : null, [dismissGestureRef, onScrollAtTop, pulling])
+
+  const body = (
     <View style={styles.rootOuter}>
       <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['bottom', 'left', 'right']}>
-        <ScrollView
+        <PullScrollView
           style={styles.tabScroll}
           contentContainerStyle={[styles.tabContent, { paddingTop: 0 }]}
           showsVerticalScrollIndicator={false}
@@ -2754,46 +2915,37 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
           delaysContentTouches={false}
           bounces={false}
           overScrollMode="never"
+          scrollEventThrottle={16}
         >
-          <Pressable
-            style={styles.profileCard}
-            onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
-          >
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.profileCardPlaceholder}>
-                <TabIcon tab="profile" color={BLACK_STRONG} />
-              </View>
-            )}
-            {/* Symmetric top + bottom vignette — darkens the edges so the
-                center-aligned label rides over a clean transparent middle. */}
-            <Svg style={styles.profileCardScrim} pointerEvents="none" preserveAspectRatio="none" viewBox="0 0 1 1">
-              <Defs>
-                <SvgLinearGradient id="profileScrim" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={BLACK} stopOpacity="0.85" />
-                  <Stop offset="0.5" stopColor={BLACK} stopOpacity="0" />
-                  <Stop offset="1" stopColor={BLACK} stopOpacity="0.85" />
-                </SvgLinearGradient>
-              </Defs>
-              <Rect x="0" y="0" width="1" height="1" fill="url(#profileScrim)" />
-            </Svg>
-            <View style={styles.profileCardRow} pointerEvents="none">
-              {/* Dual-layer halo: wider BLACK stroke behind, WHITE stroke on
-                  top. Cross-platform replacement for filter:dropShadow, which
-                  rendered as a filled black square on iOS (the layer compositor
-                  treated the SVG view's bounds as opaque before applying the
-                  filter). The BLACK pencil stays inside the WHITE one's bounds
-                  because both viewBox/size are equal — only the stroke is wider. */}
-              <View style={styles.profileCardIconShadow}>
-                <View style={StyleSheet.absoluteFill}>
-                  <PencilIcon color={BLACK} size={ICON.xxl} strokeWidth={STROKE.base * 3} />
+          {/* The photo grows by `photoBleed` and the scrim + caption are inset
+              by the same amount, so the image alone extends up behind the
+              floating chrome. Everything below the card, and the caption on
+              it, keep their positions. */}
+          {profileBuilt ? (
+            <Pressable
+              style={[styles.profileCard, { height: PROFILE_CARD_HEIGHT + photoBleed }]}
+              onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.profileCardPlaceholder}>
+                  <TabIcon tab="profile" color={BLACK_STRONG} />
                 </View>
-                <PencilIcon color={WHITE} size={ICON.xxl} />
-              </View>
-              <Text style={styles.profileCardLabel} numberOfLines={1} ellipsizeMode="tail">{t('settings.profile')}</Text>
+              )}
+            </Pressable>
+          ) : (
+            // Not-yet-built profile: no hero card. Plain page, one regular
+            // button sitting just below the sheet's close (X) chrome.
+            <View style={[styles.buildProfileWrap, { paddingTop: photoBleed + LG }]}>
+              <Button
+                label={t('settings.buildProfile')}
+                onPress={() => { tap(); router.push('/onboarding') }}
+                variant="primary"
+                size="lg"
+              />
             </View>
-          </Pressable>
+          )}
 
           <View style={styles.optionsWrap}>
             <PreferencesContent onOpenSubPage={onOpenSubPage} />
@@ -2803,16 +2955,20 @@ export default function SettingsPage({ topInset = 0, onBack, onNavigateHome, foc
             </View>
           </View>
 
-        </ScrollView>
+        </PullScrollView>
       </SafeAreaView>
     </View>
   )
+
+  return pullCtx
+    ? <PullContext.Provider value={pullCtx}>{body}</PullContext.Provider>
+    : body
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: PRIMARY },
+  rootOuter: { flex: 1, backgroundColor: BG },
   root: { flex: 1 },
 
   header: {
@@ -2826,8 +2982,8 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE_SOFT, borderRadius: RADIUS, padding: XS,
   },
   tabItem: { flex: 1, paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS },
-  tabItemActive: { backgroundColor: WHITE },
-  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: WHITE },
+  tabItemActive: { backgroundColor: SURFACE },
+  tabPill: { position: 'absolute', top: XS, bottom: XS, borderRadius: RADIUS, backgroundColor: SURFACE },
 
   tabScroll: { flex: 1 },
   // No horizontal padding here: the profile card extends edge-to-edge, flush
@@ -2855,7 +3011,7 @@ const styles = StyleSheet.create({
 
   previewWrap: {
     flex: 1,
-    backgroundColor: PRIMARY,
+    backgroundColor: BG,
   },
 
   textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: WHITE_SOFT },
@@ -2890,14 +3046,12 @@ const styles = StyleSheet.create({
   // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
   // the subtle hairline `accountActionDivider` between siblings.
   accountLinksCard: {
-    backgroundColor: PRIMARY,
+    backgroundColor: 'transparent',
     marginBottom: MD,
   },
-  // Profile card reads as a menu row (icon + start-aligned label) at 2× the
-  // height of a regular row, with the user's photo as the background. The
-  // image fills the card, a soft scrim keeps the label legible, and the row
-  // content matches the visual language of the other `accountLinksCard`
-  // entries below it.
+  // The user's photo, uncaptioned, at 2× the height of a regular row: tapping
+  // it opens profile editing. No label and no scrim over it — the photo is the
+  // affordance, and anything drawn on it only fought the image.
   profileCard: {
     width: '100%', height: PROFILE_CARD_HEIGHT,
     overflow: 'hidden',
@@ -2905,28 +3059,13 @@ const styles = StyleSheet.create({
   },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Symmetric top + bottom vignette over the full card, so the centered
-  // icon + label sit on the cleaner transparent middle band.
-  profileCardScrim: { ...StyleSheet.absoluteFillObject },
-  // Icon at the start, label after it, gap MD. Fills the card and centers
-  // the row on the image's vertical midline (alignItems on the cross axis).
-  profileCardRow: {
-    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-    flexDirection: 'row', alignItems: 'center', gap: MD,
-    paddingHorizontal: MD,
-  },
-  // Sized to ICON.xxl so the absolutely-positioned halo layer (the wider
-  // BLACK PencilIcon) has the same bounds as the WHITE PencilIcon stacked on
-  // top of it. No filter — the legibility halo is the BLACK pencil rendered
-  // underneath (see profileCardRow JSX).
-  profileCardIconShadow: { width: ICON.xxl, height: ICON.xxl },
-  profileCardLabel: {
-    flexShrink: 1, fontSize: TEXT.lg, lineHeight: lh(TEXT.lg),
-    color: WHITE, fontWeight: WEIGHT.semibold, ...PHOTO_TEXT_SHADOW,
-  },
-  // Solid composite of PRIMARY_BG over WARM_WHITE — using the translucent
-  // PRIMARY_BG directly lets the card's shadow bleed through as a dark rim.
-  accentCard: { backgroundColor: PRIMARY },
+  // Not-yet-built profile: no hero card, just the plain (beige) page. A regular
+  // button sits below the sheet's close (X) chrome; the inline paddingTop
+  // clears that chrome (photoBleed) so the button never hides under it.
+  buildProfileWrap: { paddingHorizontal: LG, paddingBottom: MD },
+  // A plain white card. The GROUP's meaning is carried by its ink (orange
+  // for the account/status rows), never by tinting the card itself.
+  accentCard: { backgroundColor: 'transparent' },
   accountLinkRowInner: {
     flexDirection: 'row', alignItems: 'center', gap: MD,
     paddingHorizontal: MD, paddingVertical: MD,
@@ -2934,21 +3073,24 @@ const styles = StyleSheet.create({
   // Flat group, identical visual language to `accountLinksCard`: no frame,
   // no rounded corners, no shadow. Rows are separated by the hairline
   // `accountActionDivider`.
-  accountActionsCard: {
-    backgroundColor: WHITE, marginTop: SM,
-  },
-  accountActionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: MD,
-    paddingHorizontal: MD, paddingVertical: MD,
-  },
+  // The groups row: the shared leading-icon column, then a wrap of chips
+  // instead of a single label.
+  groupsRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: MD, paddingVertical: MD, gap: MD },
+  // A box exactly one chip tall so the glyph centres against the FIRST chip
+  // (the row wraps to more chip lines, and a hand-tuned margin drifted a few
+  // pixels above that first line). Same idea as selectRowIconWrap, measured
+  // against the chip's own exported height rather than a re-typed number.
+  groupsRowIcon: { height: CHIP_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  groupsChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: SM },
+  // Two stacked full-width buttons on the page gutter — the same spec as the
+  // chat menu's leave/block sheet (chatMenuStyles.sheet in home.tsx).
+  accountActions: { paddingHorizontal: MD, gap: SM },
   accountActionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
     marginStart: MD,
   },
-  accountActionTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  accountActionText: { fontSize: TEXT.md, color: WHITE, fontWeight: WEIGHT.semibold },
   // Account popup identity block: stacked text list (one field per line) in
-  // PRIMARY on the white sheet, replacing the old chip pills.
+  // muted ink on the white sheet, replacing the old chip pills.
   accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
   accountPopupListItem: {
     fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG,
@@ -2960,10 +3102,10 @@ const styles = StyleSheet.create({
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
     flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', gap: SM,
-    backgroundColor: PRIMARY, borderRadius: RADIUS,
+    backgroundColor: 'transparent', borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
-    shadowColor: BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
+    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.
@@ -2974,32 +3116,24 @@ const styles = StyleSheet.create({
   selectRowLarge: { paddingVertical: MD },
   selectRowLocked: { opacity: 0.45 },
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  // No `justifyContent: space-between`: the value must read as a CONTINUATION
-  // of the label text, so children pack from the start (label, then value)
-  // separated only by `columnGap` instead of being shoved to opposite edges.
-  selectRowLabelWrap: { flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', columnGap: SM },
-  // flexShrink:1 (not flex:1) + minWidth:0: the label group sizes to its
-  // content so the value can sit immediately after it, but it can still
-  // shrink below content width so a long label with no value (e.g.
-  // "מהמיקום הנוכחי שלי") wraps to a second line instead of clipping.
-  selectRowLabelGroup: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: MD },
+  // minWidth:0 so a long single-sentence label (e.g. "מהמיקום הנוכחי שלי")
+  // wraps to a second line instead of clipping.
+  // Stays 'center' so the taller leading elements (avatar, accent circle) keep
+  // centring against the label. Only the plain glyph opts out — see
+  // selectRowIconWrap's alignSelf.
+  selectRowLabelGroup: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: MD },
+  // Label + optional subtitle, stacked. Owns the whole width beside the icon
+  // so both texts share one start edge.
+  selectRowLabelStack: { flex: 1, minWidth: 0 },
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
-  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: WHITE, fontWeight: WEIGHT.semibold },
+  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
   // Force start-aligned ('left' under explicit writingDirection becomes
   // physically right in RTL after auto-flip). Without the explicit
   // writingDirection, iOS did not pick the container's RTL direction and the
   // subtitle ended up physically left under the hearts row.
-  selectRowSubtitle: { fontSize: TEXT.sm, color: WHITE_STRONG, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
-  // Bold emphasis span inside the stars-popup description (the dynamic
-  // values). Sits in ConfirmDialog's centered desc <Text>, so it inherits
-  // size/line-height and only overrides weight + (darker) colour.
-  starsEm: { fontWeight: WEIGHT.extrabold, color: BLACK },
+  selectRowSubtitle: { fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  // No `marginStart: 'auto'` / no forced right textAlign: the value flows
-  // right after the label as a continuation (its position is the only thing
-  // that changed; it stays its own element with its own colour/weight).
-  selectRowValue: { fontSize: TEXT.md, color: WHITE_STRONG, fontWeight: WEIGHT.semibold, flexShrink: 1, writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,
@@ -3009,7 +3143,25 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
-  selectRowIconWrap: { alignItems: 'center', justifyContent: 'center' },
+  // alignSelf:'flex-start' + a box exactly one label-line tall: the glyph
+  // centres against the FIRST line of a wrapped label instead of drifting into
+  // the gap between the two lines. Single-line labels are unaffected (the box
+  // then equals the group height, so top-align and centre coincide). iconScale
+  // keeps the box locked to the same OS font scale the label is capped at.
+  // alignSelf:'flex-start' + a box exactly one label-line tall pins the glyph to
+  // the FIRST line of a wrapped label instead of letting it drift into the gap
+  // between the two lines. marginTop lands it on that line's ink rather than on
+  // its line box (see inkOffset). Single-line labels are unaffected by the
+  // alignSelf — the box then equals the group height.
+  // The width is fixed to the nominal glyph size so every row's label starts at
+  // the same x even when a glyph is drawn larger than the column for optical
+  // reasons (the eye — see the visibility row). Overflow is centred, not
+  // clipped.
+  selectRowIconWrap: {
+    alignSelf: 'flex-start', width: ICON.md, height: iconScale(lh(TEXT.md)), marginTop: inkOffset(TEXT.md),
+    alignItems: 'center', justifyContent: 'center',
+  },
+  selectRowIconWrapCentered: { alignSelf: 'center', marginTop: 0 },
 
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,
@@ -3023,7 +3175,7 @@ const styles = StyleSheet.create({
   subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
   subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
   optionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: WHITE_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
     marginStart: MD,
   },
   subPageDesc: {

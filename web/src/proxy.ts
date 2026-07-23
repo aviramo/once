@@ -24,6 +24,20 @@ const STATIC_PAGES: Record<string, string> = {
   "/download/": "/download.html",
 };
 
+// Referral landing: /i/<CODE> is the link a user shares from the app's invite
+// row. On Android we bounce straight to the Play listing with the code packed
+// into `referrer`, which Play preserves through the install and hands back to
+// the app via the Install Referrer API on first launch — that is the whole
+// attribution mechanism, and it is why the invitee never has to type anything.
+// Everyone else (desktop, iPhone) falls through to the normal download page,
+// which offers the Play link on desktop and states plainly on iPhone that
+// Once is Android-only; a desktop install simply goes unattributed.
+//
+// Duplicated from public/download.html on purpose: that file is a static asset
+// served straight from /public and cannot import a shared constant.
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.aviramo.once";
+const REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
+
 // Paths that REQUIRE an authenticated session. The root `/` is auth-aware
 // (handled separately below); these are the panel sub-routes. A signed-out
 // visit redirects to /login with `?next=<intended>` so the deep-link
@@ -43,6 +57,23 @@ function pickLocale(request: NextRequest): string {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Referral link. Runs before anything else so it costs no session lookup.
+  const referral = REFERRAL_PATH_RE.exec(pathname);
+  if (referral) {
+    const code = referral[1].toUpperCase();
+    const isAndroid = /android/i.test(request.headers.get("user-agent") ?? "");
+    if (isAndroid) {
+      const play = new URL(PLAY_STORE_URL);
+      // searchParams encodes the '=' for us, so Play receives the raw
+      // referrer string "ref=<CODE>" exactly as the app expects to parse it.
+      play.searchParams.set("referrer", `ref=${code}`);
+      return NextResponse.redirect(play);
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = "/download.html";
+    return NextResponse.rewrite(url);
+  }
 
   // Legal / store-redirect static pages: serve straight from /public.
   const staticTarget = STATIC_PAGES[pathname];

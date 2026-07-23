@@ -43,6 +43,12 @@
   --accent-strong: #35634F;  /* pressed / hover green */
   --accent-soft: rgba(65, 122, 98, 0.12);
 
+  /* --- Illustrations (art.js) - the only colours the artwork may use --- */
+  --art-bg: var(--bg-2);        /* the surface an illustration sits on */
+  --art-line: var(--border);    /* drawn borders */
+  --art-tint: #E3EBE5;          /* soft green wash: photo wells, chips, bubbles */
+  --art-ghost: rgba(43, 79, 64, 0.10);  /* stand-in copy inside drawn cards */
+
   /* --- Lines (BORDER_SOFT / BORDER_STRONG) --- */
   --border: #E5DFD4;
   --border-strong: rgba(65, 122, 98, 0.38);
@@ -387,6 +393,16 @@ strong { color: var(--ink); font-weight: 600; }
   border-radius: var(--r-pill);
   background: var(--border-strong);
 }
+/* A slot that carries an illustration (art.js): the art fills the frame edge to
+   edge, so none of the placeholder chrome (tag, icon, caption) applies. */
+.media--art { padding: 0; gap: 0; background: var(--art-bg); }
+.art { inline-size: 100%; block-size: 100%; display: block; }
+.media--phone.media--art { --art-bg: var(--bg); }
+.media--phone.media--art::after { display: none; }
+/* App UI mirrors with the page like the rest of the layout does: in Hebrew the
+   menu, the cards and the invite swap edges. */
+[dir="rtl"] .media--art .art { transform: scaleX(-1); }
+
 .media--wide { aspect-ratio: 16 / 10; border-radius: var(--r-lg); width: 100%; }
 .media--square { aspect-ratio: 1 / 1; border-radius: var(--r-lg); width: 100%; }
 

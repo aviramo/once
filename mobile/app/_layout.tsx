@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
 import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppStatusBar } from '../src/components/AppStatusBar'
+import { StatusBarBand } from '../src/components/StatusBarBand'
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
@@ -24,12 +26,13 @@ import {
 import { supabase } from '../src/lib/supabase'
 import { consumeMagicLinkUrl } from '../src/lib/authRedirect'
 import { useAuthStore } from '../src/stores/authStore'
-import { useUserStore } from '../src/stores/userStore'
+import { useUserStore, selectNeedsAccount } from '../src/stores/userStore'
 import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/realtime'
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
+import { clearCachedGroups } from '../src/lib/groupsCache'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
-import { PRIMARY } from '../src/colors'
+import { BG } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -73,11 +76,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const segments = useSegments()
 
-  // Onboarding is needed when profile is absent (new user not yet in DB) or
-  // when it exists but bio is empty (partially completed). The !profileLoading
-  // guard in each routing condition prevents redirecting while the fetch is
-  // still in flight.
-  const needsOnboarding = !profile || !profile.bio
+  // The !profileLoading guard in each routing condition prevents redirecting
+  // while the fetch is still in flight. index.tsx owns the *first* decision
+  // (this effect bails while segments is empty) — see selectNeedsAccount.
+  // Only the ACCOUNT (not a built profile) gates /home: a user with an account
+  // but no photos/bio belongs on /home, browsing.
+  const needsAccount = selectNeedsAccount(profile)
 
   // ── Routing guard ─────────────────────────────────────────────────────
   // `segments` is intentionally excluded from the dependency array.
@@ -101,19 +105,22 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       target = '/login'
     } else if (user && onAuthScreen) {
       if (profileLoading || !profileFetched) return  // wait for profile fetch to complete
-      target = needsOnboarding ? '/onboarding' : '/home'
-    } else if (user && !profileLoading && needsOnboarding && !onOnboarding && !onAuthScreen) {
+      target = needsAccount ? '/onboarding' : '/home'
+    } else if (user && !profileLoading && needsAccount && !onOnboarding && !onAuthScreen) {
       target = '/onboarding'
-    } else if (user && !profileLoading && !needsOnboarding && onOnboarding) {
-      target = '/home'
     }
+    // NOTE: there is deliberately NO reactive "account exists && on onboarding
+    // → /home" branch. Once the account exists the user may VOLUNTARILY reopen
+    // /onboarding (the menu's orange build-profile CTA) to add photos + bio;
+    // onboarding.tsx routes itself to /home when they finish or back out. A
+    // reactive redirect here would bounce them straight out of that flow.
 
     if (!target) return
     const targetSeg = target.replace(/^\//, '')
     if (current === targetSeg) return             // already there
     router.replace(target)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, needsOnboarding, profileLoading, profileFetched])
+  }, [user, loading, needsAccount, profileLoading, profileFetched])
 
   useEffect(() => {
     const timeout = setTimeout(() => setUser(null), 5000)
@@ -145,6 +152,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         unsubscribeFromUserChanges()
         unregisterPushNotifications()
         clearSelfAvatar().catch(() => {})
+        clearCachedGroups().catch(() => {})
       }
     })
 
@@ -179,8 +187,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   // home-vs-onboarding and `router.replace` off `/login`. Leaving the
   // fully-mounted login screen visible during that wait makes it linger and
   // repaint ("flicker") before the hard `animation: 'none'` cut. Cover it
-  // with a full-bleed PRIMARY layer — the same wine as the login background
-  // and the home header, so login → hold → destination reads as one
+  // with a full-bleed BG layer — the same beige page as login and home, so
+  // login → hold → destination reads as one
   // continuous surface. It stays up only while the user is authenticated but
   // still sitting on `/login` (or the profile hasn't loaded yet), and drops
   // the instant the route changes, with the destination already painted
@@ -195,7 +203,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     <>
       {children}
       {authHandoff && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: PRIMARY }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
       )}
     </>
   )
@@ -237,7 +245,8 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: PRIMARY }}>
+    <SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: BG }}>
       {/* Global status bar: white text whenever the app is in the foreground.
           The OS automatically restores the system default when the app is
           backgrounded or closed — every app owns its own status bar style. */}
@@ -254,6 +263,10 @@ export default function RootLayout() {
           </LayoutAnimationConfig>
         </AuthProvider>
       </QueryClientProvider>
+      {/* Last child so it paints above every screen. */}
+      <StatusBarBand />
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   )
 }
+

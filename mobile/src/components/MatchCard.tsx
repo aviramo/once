@@ -3,21 +3,22 @@ import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, Platform } fr
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { PullScrollView, PullContext } from './HomeCard'
+import { PullScrollView, PullContext } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
 import { t, tg } from '../i18n'
-import { ageFromTitle } from '../lib/profileTitle'
+import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, QuoteIcon, CakeIcon, ShieldIcon, GroupsIcon } from './icons'
-import { RoundButton, ROUND_BUTTON_SIZE } from './RoundButton'
-import { SM, MD, RADIUS, ICON, TEXT, WEIGHT, lh } from '../tokens'
-import { BLACK, WHITE, BLACK_SOFT, BLACK_MID, BLACK_STRONG, DESTRUCTIVE } from '../colors'
+import { HeartIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
+import { RoundButton } from './RoundButton'
+import { Button } from './Button'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -36,20 +37,49 @@ const SCROLL_TO_END_MS = 1400
 // scroll-to-end behavior. Lets callers reuse the "teaser" affordance with a
 // custom icon (e.g. the page2 pending-invite question-mark) without
 // reimplementing the scroll.
+//
+// The stack is `column-reverse`, so actions[0] anchors at the BOTTOM and later
+// entries stack upward.
 export type CardAction = {
   key: string
   icon: React.ReactNode
   onPress?: () => void
   bg?: string
+  /** When true, a minimal unread dot is overlaid on the button's top-END arc
+   *  (the open-chat button uses it to signal new messages). */
+  badge?: boolean
 }
+
+// One "add this to your profile" chip in the own-profile preview's chip
+// column. Same Chip primitive as the fact chips above it — only the tone
+// differs — so an add row can never drift from the row it sits under.
+export type CardAddChip = {
+  key: string
+  label: string
+  renderIcon: (color: string) => React.ReactNode
+  onPress: () => void
+}
+
+// Minimal unread marker. Sized/placed to sit ON the round button's upper-END
+// arc (~11px in from each corner of the 76dp button), so it reads as attached
+// to the button rather than floating in the empty square corner. A solid GREEN
+// disc inside a WHITE ring: the ring is what separates it from the white
+// button below and from any photo behind it, and the brand orange keeps the
+// marker in the app's "good news" hue (a waiting message is news, not a
+// warning) and matches the chat glyph on the button it rides.
+const UNREAD_DOT_SIZE = 14
+const UNREAD_DOT_INSET = 4
 
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
   return (
     <View style={styles.actionStack}>
       {actions.map(a => (
-        <RoundButton key={a.key} bg={a.bg} onPress={a.onPress}>
-          {a.icon}
-        </RoundButton>
+        <View key={a.key} style={styles.actionItem}>
+          <RoundButton bg={a.bg} onPress={a.onPress}>
+            {a.icon}
+          </RoundButton>
+          {a.badge ? <View pointerEvents="none" style={styles.unreadDot} /> : null}
+        </View>
       ))}
     </View>
   )
@@ -59,10 +89,12 @@ function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: (
 // Replaces the old "tap bio → BottomSheet popup" flow. The bio bubble itself
 // becomes the editor: a multiline TextInput styled byte-identically to the
 // read-only bio Text, so when it isn't focused it looks exactly like static
-// text. Tapping anywhere drops the caret at that character natively. There is
-// no save button — editing auto-commits on blur (keyboard dismissed / tap
-// outside / focus lost). Sub-min input is discarded and reverts to the last
-// committed value, matching the popup's old "can't save below minimum" rule.
+// text. Tapping anywhere drops the caret at that character natively. While
+// focused, a footer bar under the field carries the char counter and an
+// explicit Update button (enabled only on a saveable change) — the ONLY save
+// path. Leaving the field without pressing it (keyboard dismissed / tap
+// outside / focus lost) discards the edit and reverts to the last committed
+// value, same as sub-min input. Nothing is saved on blur.
 export type BioEdit = {
   /** Last committed bio (server truth, '' when unset). */
   value: string
@@ -102,9 +134,14 @@ function BioField({
   const trimmedLen = draft.trim().length
   const belowMin = trimmedLen < BIO_MIN
   const remaining = BIO_MAX - draft.length
+  // A real, saveable change: normalized draft differs from the committed
+  // value and clears the minimum. Drives the Update button's enabled state —
+  // reading the ref during render is fine, `draft` is what re-renders us.
+  const dirty = normalizeBio(draft) !== normalizeBio(committedRef.current)
+  const canSave = !belowMin && dirty && !saving
 
-  const handleBlur = useCallback(() => {
-    setFocused(false)
+  // The save routine, fired only by the Update button (never on blur).
+  const commit = useCallback(() => {
     const next = normalizeBio(draft)
     const prev = normalizeBio(committedRef.current)
     if (next === prev) {
@@ -120,6 +157,21 @@ function BioField({
     setDraft(next)
     onCommit(next)
   }, [draft, onCommit])
+
+  // Leaving the field without pressing Update discards the edit: revert the
+  // draft to the last committed value. Only the Update button saves.
+  const handleBlur = useCallback(() => {
+    setFocused(false)
+    setDraft(committedRef.current)
+  }, [])
+
+  // The only save path: commit, then drop the keyboard. commit() sets
+  // committedRef to the new value, so the blur that follows reverts to it
+  // (a no-op) rather than throwing the fresh save away.
+  const handleUpdate = useCallback(() => {
+    commit()
+    Keyboard.dismiss()
+  }, [commit])
 
   return (
     <>
@@ -139,9 +191,17 @@ function BioField({
         onBlur={handleBlur}
       />
       {focused ? (
-        <Text style={[styles.bioCounter, !belowMin && remaining < 20 && styles.bioCounterWarn]}>
-          {belowMin ? t('bio.min') : remaining}
-        </Text>
+        <View style={styles.bioFooter}>
+          <Text style={[styles.bioCounter, !belowMin && remaining < 20 && styles.bioCounterWarn]}>
+            {belowMin ? t('bio.min') : remaining}
+          </Text>
+          <Button
+            label={t('bio.update')}
+            onPress={handleUpdate}
+            size="md"
+            disabled={!canSave}
+          />
+        </View>
       ) : null}
     </>
   )
@@ -285,8 +345,16 @@ type MatchCardProps = {
   /** Overlay action buttons stacked at the bottom-right of the hero photo,
    * starting at the heart's anchor and growing upward. When omitted, a
    * single heart button is rendered (tapping scrolls to the end of the
-   * card). The self-profile preview passes [add-photo, add-family]. */
+   * card). Pass `[]` for a card that carries no round action at all — the
+   * own-profile preview, whose adds are `addChips` instead. */
   actions?: CardAction[]
+  /** Add-affordances for the own-profile preview, rendered as one row of
+   * chips at the BOTTOM of the fact-chip column rather than as round buttons
+   * over the photo (user directive 2026-07-22). An "add" is a slot in the
+   * same list of facts the chips above it state, so it belongs in that
+   * column; the `action` tone is what keeps a "do this" from reading as
+   * "here is a fact". */
+  addChips?: CardAddChip[]
   /** When provided, a report (flag) RoundButton is overlaid at the TOP corner
    * of the hero photo (the chips side), in EVERY state — separate from the
    * bottom action stack so the report affordance lives in one consistent
@@ -320,6 +388,12 @@ type MatchCardProps = {
    * popping into view partway through the slide-up. Callers that omit it fall
    * back to the self-measured height + the opacity gate. */
   cardHeight?: number
+  /** The shell's safe-area top inset, when floating chrome is painted over this
+   * card (home's hamburger, an OverlaySheet's close X). Two things derive from
+   * it and must stay in lockstep, which is why it is one prop rather than two:
+   * the card's own top-END row lines up WITH the chrome, and the topBlock
+   * status card starts BELOW it. 0 / omitted = no chrome above the card. */
+  chromeInset?: number
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -340,13 +414,19 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   onFamilyTap,
   bioEdit,
   actions,
+  addChips,
   onReport,
   isForKids,
   viewerFamily,
   viewerLocationType,
   self = false,
   cardHeight,
+  chromeInset = 0,
 }: MatchCardProps, ref) {
+  // Top of the shell's floating chrome, and the bottom of the band it occupies.
+  // The card's top-END row aligns with the first; the topBlock clears the second.
+  const chromeTop = chromeInset > 0 ? chromeInset + OVERLAY.chromeGap : 0
+  const chromeBottom = chromeTop > 0 ? chromeTop + ROUND_BUTTON_SIZE_SM : 0
   // Stabilise imageUrls against profile-ref churn from periodic Realtime
   // updates (every-minute location refresh recreates page1.profile, even
   // when image filenames are identical). Memo on the joined filename list
@@ -406,7 +486,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const { bottom: safeBottomInset } = useSafeAreaInsets()
   // The first photo runs to the bottom of the card (callers pass bottomInset=0
   // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
-  // must clear the home indicator on its own.
+  // must clear the home indicator on its own. This offset is shared by the
+  // chips AND the heart, so the chips' extra breathing room is NOT added here
+  // — it lives on the chip column alone (infoLeft), or the heart rides up with
+  // it and leaves its anchored position.
   const overlayBottomOffset = Math.max(safeBottomInset, MD)
   const ready = effectiveCardH > 0
   const timeIso = match.last_seen
@@ -419,11 +502,19 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const hasDistance = match.distance != null && !isNaN(match.distance)
   const proximityStr = formatProximity(match.distance, timeIso, match.is_male, viewerType, subjectLocationType, hideTime)
   const proximityLive = isDistanceHere(match.distance) || (!hideTime && isLastSeenJustNow(timeIso))
-  // Age is shown as a small on-photo info chip (the name lives in the home
-  // tab, so neither name nor age is overlaid on the photo any more).
+  // Name and age are the two halves of the server's combined `title`, and both
+  // ride the first chips line. The name used to live in the home TAB; that
+  // strip was deleted with the pager (2026-07-19), which left the card showing
+  // a person with no name at all.
+  const nameChipText = nameFromTitle(match.title)
   const age = ageFromTitle(match.title)
   const ageChipText = age ? tg('home.ageChip', match.is_male).replace('{age}', age) : ''
+  // Name and age live in ONE chip ("נטע, בת 45"). Either half can be missing —
+  // an unnamed match, or one with no birth date — so the comma is applied by
+  // joining the present parts, never leaving a stray separator behind.
+  const identityChipText = [nameChipText, ageChipText].filter(Boolean).join(', ')
 
+  // Several facts in one label; Chip's phraseWrap decides where it breaks.
   const familyChipText = useMemo(
     () => buildFamilyChipText(match.family, isForKids, self, viewerFamily, match.is_male),
     [match.family, isForKids, self, viewerFamily, match.is_male],
@@ -474,6 +565,26 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     bioFocusedRef.current = true
     scrollBioIntoView()
   }, [scrollBioIntoView])
+  // While the bio editor is focused, a tap outside it (a photo, the family
+  // chip) is CONSUMED to close the editor and does nothing else — no photo
+  // popup, no family sheet. Only a second tap, now that editing is closed,
+  // performs the tap's real action. Without this the editor stays open AND
+  // the tapped affordance fires at once, which reads as a confusing
+  // double-action. bioFocusedRef stays true until the keyboard actually
+  // hides, so it's still set at the moment this outside tap lands.
+  const swallowTapWhileEditing = useCallback(() => {
+    if (!bioFocusedRef.current) return false
+    Keyboard.dismiss()
+    return true
+  }, [])
+  const handlePhotoTap = useCallback((imageIndex: number) => {
+    if (swallowTapWhileEditing()) return
+    onPhotoTap?.(imageIndex)
+  }, [swallowTapWhileEditing, onPhotoTap])
+  const handleFamilyTap = useCallback(() => {
+    if (swallowTapWhileEditing()) return
+    onFamilyTap?.()
+  }, [swallowTapWhileEditing, onFamilyTap])
   useEffect(() => {
     if (!bioEditable) return
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
@@ -636,7 +747,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 if (h > 0 && h !== topBlockHeight) setTopBlockHeight(h)
               }}
             >
-              {effectiveTopBlock}
+              {/* The reserved band is painted PRIMARY, not left transparent:
+                  every topBlock the app renders is a status card on the light
+                  BG, so a transparent gap would expose the backdrop as a stripe
+                  above it. If a topBlock ever ships a different background this
+                  needs to become a prop alongside `footerBg`. */}
+              <View style={chromeBottom > 0 ? { paddingTop: chromeBottom, backgroundColor: BG } : undefined}>
+                {effectiveTopBlock}
+              </View>
             </Animated.View>
             <Animated.View key="top-spacer" pointerEvents="none" style={animatedSpacerStyle} />
           </>
@@ -661,41 +779,32 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               {onPhotoTap && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => onPhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
+                  onPress={() => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
                 />
               )}
             </>
           )}
 
-          {/* Report (flag) button — overlaid at the TOP corner of the hero
-              photo, on the chips side (start), in every card state. Separate
-              from the bottom action stack so report lives in one consistent
-              place. Rendered at HALF the standard RoundButton diameter (with
-              a proportionally smaller glyph) so it reads as a quiet secondary
-              affordance, not a primary one. box-none so the padding margin
-              falls through to the photo and only the button itself is a tap
-              target. */}
-          {sections[0]?.type === 'photo' && onReport ? (
-            <View pointerEvents="box-none" style={styles.reportOverlay}>
-              <RoundButton size={ROUND_BUTTON_SIZE / 2} onPress={onReport}>
-                <ShieldIcon color={WHITE} fill={WHITE} size={ICON.xxl} />
-              </RoundButton>
-            </View>
-          ) : null}
+          {/* Top-END: the card's own chrome, in one row. Order in JSX (start
+              → end within the overlay container, which itself sits at the
+              screen END) is [group chip, report flag], so the report lands at
+              the SCREEN EDGE (outermost) and the group chip sits INSIDE it —
+              user directive 2026-07-20: "closest to the screen edge is the
+              report, then the group after". Either child is optional; the row
+              simply omits missing pieces.
 
-          {/* Group chip — overlaid at the TOP corner of the hero photo on the
-              side opposite the report flag, only when the snapshot carries a
-              shared-group name (server embeds it via make_profile when viewer
-              and subject share any group). Same on-photo Chip styling as the
-              bottom info chips, custom GroupsIcon to read as "same group". */}
-          {sections[0]?.type === 'photo' && match.group_name ? (
-            <View pointerEvents="box-none" style={styles.groupOverlay}>
-              <Chip
-                renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                text={match.group_name}
-                tone="neutral"
-                onPhoto
-              />
+              Top-START is deliberately left empty: the shell paints its
+              floating chrome there (home's hamburger, a sheet's close X). */}
+          {sections[0]?.type === 'photo' && onReport ? (
+            <View
+              pointerEvents="box-none"
+              style={[styles.topEndOverlay, chromeTop > 0 && { paddingTop: chromeTop }]}
+            >
+              {onReport ? (
+                <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
+                  <ShieldIcon color={GREEN} fill={GREEN} size={ICON.round} />
+                </RoundButton>
+              ) : null}
             </View>
           ) : null}
 
@@ -708,11 +817,17 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
             <View pointerEvents="box-none" style={styles.infoLeft}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
-                {ageChipText ? (
+                {/* Identity chip: name and age in ONE chip, led by the same
+                    person glyph the account row wears, so "who this is" reads
+                    identically wherever it appears. Deliberately NOT a cake —
+                    that glyph read as a birthday rather than as a fact.
+                    Either half may be missing, so the two are joined only
+                    when both are present. */}
+                {identityChipText ? (
                   <View style={styles.chipsLine}>
                     <Chip
-                      renderIcon={c => <CakeIcon color={c} size={ICON.sm} />}
-                      text={ageChipText}
+                      renderIcon={c => <UserIcon color={c} size={ICON.sm} />}
+                      text={identityChipText}
                       tone="neutral"
                       onPhoto
                     />
@@ -737,8 +852,26 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                       renderIcon={c => <KidsIcon color={c} />}
                       text={familyChipText}
                       onPhoto
-                      onPress={onFamilyTap}
+                      onPress={onFamilyTap ? handleFamilyTap : undefined}
                     />
+                  </View>
+                ) : null}
+                {/* The adds close the column: everything above states a fact
+                    about the profile, these offer the facts still missing.
+                    One wrap row, so they sit side by side and only break to a
+                    second line when the column is genuinely too narrow. */}
+                {addChips && addChips.length > 0 ? (
+                  <View style={styles.chipsLine}>
+                    {addChips.map(c => (
+                      <Chip
+                        key={c.key}
+                        renderIcon={c.renderIcon}
+                        text={c.label}
+                        tone="action"
+                        onPhoto
+                        onPress={c.onPress}
+                      />
+                    ))}
                   </View>
                 ) : null}
               </View>
@@ -773,7 +906,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               {onPhotoTap && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => onPhotoTap(section.imageIndex)}
+                  onPress={() => handlePhotoTap(section.imageIndex)}
                 />
               )}
             </Animated.View>
@@ -788,17 +921,24 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   : undefined}
               >
                 <View style={styles.aboutBubble}>
-                  <View style={styles.aboutQuoteOpen}>
-                    <QuoteIcon color={BLACK} size={ICON.xxl} />
-                  </View>
                   {bioEditable && bioEdit ? (
                     <BioField edit={bioEdit} onFocusRequested={onBioFocusRequested} />
                   ) : (
                     <Text style={styles.aboutText}>{section.value}</Text>
                   )}
-                  <View style={styles.aboutQuoteClose}>
-                    <QuoteIcon color={BLACK} size={ICON.xxl} />
-                  </View>
+                  {/* Shared groups live with the bio, not up in the chrome: a
+                      group in common is something you READ about this person,
+                      the same as their bio. A wrap row so more than one still
+                      lays out if the field ever carries several. */}
+                  {match.group_name ? (
+                    <View style={styles.aboutGroups}>
+                      <Chip
+                        renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                        text={match.group_name}
+                        tone="neutral"
+                      />
+                    </View>
+                  ) : null}
                 </View>
               </View>
             )
@@ -824,7 +964,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
   },
   hidden: {
     opacity: 0,
@@ -852,26 +992,41 @@ const styles = StyleSheet.create({
     gap: MD,
     padding: MD,
   },
-  reportOverlay: {
-    position: 'absolute',
-    top: 0,
-    start: 0,
-    padding: MD,
-  },
-  groupOverlay: {
+  topEndOverlay: {
     position: 'absolute',
     top: 0,
     end: 0,
     padding: MD,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SM,
   },
   infoLeft: {
     flex: 1,
     flexDirection: 'column',
+    // Breathing room under the chip column only. Deliberately here and not on
+    // the shared overlay padding: the heart is anchored to the card's bottom
+    // edge and must not move with the chips.
+    marginBottom: LG,
   },
   actionStack: {
     flexDirection: 'column-reverse',
     alignItems: 'center',
     gap: SM,
+  },
+  actionItem: {
+    position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: UNREAD_DOT_INSET,
+    end: UNREAD_DOT_INSET,
+    width: UNREAD_DOT_SIZE,
+    height: UNREAD_DOT_SIZE,
+    borderRadius: UNREAD_DOT_SIZE / 2,
+    backgroundColor: PRIMARY,
+    borderWidth: STROKE.base,
+    borderColor: WHITE,
   },
   chipsStack: {
     flexDirection: 'column',
@@ -888,19 +1043,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: MD,
   },
+  aboutGroups: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SM, marginTop: MD },
   aboutBubble: {
     alignSelf: 'stretch',
     alignItems: 'center',
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     paddingVertical: MD,
     paddingHorizontal: MD,
     gap: MD,
-  },
-  aboutQuoteOpen: {
-    alignSelf: 'flex-start',
-  },
-  aboutQuoteClose: {
-    alignSelf: 'flex-end',
   },
   aboutText: {
     fontSize: TEXT.md,
@@ -916,12 +1066,21 @@ const styles = StyleSheet.create({
     padding: 0,
     includeFontPadding: false,
   },
+  // Footer bar under the editor: char count on the start edge, Update button
+  // on the end edge (flips under RTL). Full bubble width so it reads as the
+  // editor's own toolbar rather than floating centered text.
+  bioFooter: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: MD,
+  },
   bioCounter: {
     fontSize: TEXT.sm,
     color: BLACK_STRONG,
-    textAlign: 'center',
   },
-  bioCounterWarn: { color: DESTRUCTIVE },
+  bioCounterWarn: { color: INK },
   extraPhoto: {
     width: '100%',
     backgroundColor: BLACK_SOFT,

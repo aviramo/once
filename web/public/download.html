@@ -7,6 +7,35 @@
   <meta name="robots" content="noindex, nofollow" />
   <title>Once | הורדת האפליקציה</title>
   <meta name="description" content="הורדת אפליקציית Once." />
+
+  <!-- Link-preview card. This page is what a shared link unfurls into: both
+       /download and every personal invite link (/i/<CODE>, rewritten here by
+       web/src/proxy.ts for any non-Android visitor, which includes WhatsApp's
+       crawler). Without these tags an invite pasted into WhatsApp showed a
+       bare title and no image.
+
+       og:url is deliberately ABSENT. It would have to be a fixed URL, and a
+       client that honours it over the shared link would send the invitee to
+       /download and silently drop the referral code, costing the inviter
+       their credit. Omitting it makes the shared URL the only destination.
+
+       The copy is static Hebrew even though the page localises itself from
+       ?lang= at runtime: a crawler never runs the script, so whatever is in
+       the markup is what every preview shows. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Once" />
+  <meta property="og:title" content="Once | מפגש אחד בזמן אמת" />
+  <meta property="og:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
+  <meta property="og:image" content="https://once-lake.vercel.app/og-invite.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Once — אדם אחד בכל פעם" />
+  <meta property="og:locale" content="he_IL" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Once | מפגש אחד בזמן אמת" />
+  <meta name="twitter:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
+  <meta name="twitter:image" content="https://once-lake.vercel.app/og-invite.png" />
+
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=11" />
   <link rel="icon" type="image/png" href="favicon.png?v=11" />
   <link rel="preconnect" href="https://fonts.googleapis.com">

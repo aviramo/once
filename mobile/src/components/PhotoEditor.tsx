@@ -17,12 +17,19 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SM, MD, RADIUS, STROKE } from '../tokens'
-import { BLACK, WHITE, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, WHITE_MID, WHITE_STRONG } from '../colors'
+import { SM, RADIUS, STROKE, ICON } from '../tokens'
+import { INK, INK_3, PHOTO_CHROME, SURFACE, BLACK_SOFT, WHITE_MID } from '../colors'
+import { FIELD_SKIN } from '../field'
 import { ConfirmDialog } from './ConfirmDialog'
 import { InfoIcon } from './icons'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
+
+// How many photos a profile may hold, and how many onboarding requires. The
+// grid, the picker limit and the onboarding CTA gate all read these — the
+// numbers were previously inlined at each of those sites.
+export const MAX_PHOTOS = 6
+export const MIN_PHOTOS = 2
 
 function uuidv4(): string {
   const bytes = new Uint8Array(16)
@@ -201,12 +208,13 @@ function PhotoCell({
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
       {replacing && (
         <View pointerEvents="none" style={photoStyles.replacingOverlay}>
-          <ActivityIndicator size="large" color={WHITE} />
+          {/* Dark ink: the scrim underneath is the opaque white PHOTO_CHROME. */}
+          <ActivityIndicator size="large" color={INK} />
         </View>
       )}
       {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
-          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={BLACK} strokeWidth={3} strokeLinecap="round">
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth={3} strokeLinecap="round">
             <Line x1="18" y1="6" x2="6" y2="18" />
             <Line x1="6" y1="6" x2="18" y2="18" />
           </Svg>
@@ -348,25 +356,10 @@ function PhotoGrid({
               </Svg>
             </View>
           )}
-          <ActivityIndicator size="small" color={PRIMARY} style={photoStyles.placeholderSpinner} />
+          <ActivityIndicator size="small" color={INK} style={photoStyles.placeholderSpinner} />
         </View>
       ))}
       {additionalChildren}
-      {(() => {
-        const pendingCount = uploads.filter(u => !u.filename).length
-        const addCount = Array.isArray(additionalChildren)
-          ? additionalChildren.length
-          : additionalChildren ? 1 : 0
-        const total = photos.length + pendingCount + addCount
-        const fillers = (3 - (total % 3)) % 3
-        return Array.from({ length: fillers }).map((_, i) => (
-          <View
-            key={`filler-${i}`}
-            style={[photoStyles.cell, photoStyles.filler]}
-            pointerEvents="none"
-          />
-        ))
-      })()}
     </View>
     </GestureDetector>
   )
@@ -449,6 +442,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     const run = async () => {
       const entries = Array.from(pendingUploads.current.values())
       if (entries.length === 0) return
+      const failed: string[] = []
 
       const userId = user?.id
       if (!userId) return
@@ -472,6 +466,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
           }
         } catch (e) {
           console.error('Deferred upload error:', e)
+          failed.push(lp.normalFilename)
           pendingDeferred.delete(lp.normalFilename)
           const state = useUserStore.getState().profile
           if (state) {
@@ -482,8 +477,18 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         localPhotoUriCache.delete(lp.normalFilename)
       }
 
+      // Persist whatever DID land, then surface the failure to the caller.
+      // Both of these used to be swallowed (`.catch(console.error)`), and that
+      // is how photo-less accounts got created: a failed upload drops the photo
+      // from the store (above), onboarding still saved the bio, and
+      // _layout.tsx gates the /home redirect on bio ALONE. The user landed in
+      // /home with `images: []` and never returned to onboarding, while
+      // others(only_available) requires >= 1 image, so they were permanently
+      // unmatchable. Callers that genuinely don't care (the unmount safety net)
+      // catch this themselves.
       const finalState = useUserStore.getState().profile
-      if (finalState) await invoke('app/profile', { images: finalState.images }).catch(console.error)
+      if (finalState) await invoke('app/profile', { images: finalState.images })
+      if (failed.length > 0) throw new Error(`photo upload failed (${failed.length})`)
     }
     const p = run().finally(() => { inFlightFlush.current = null })
     inFlightFlush.current = p
@@ -510,8 +515,8 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const pickPhoto = async (addIdx: number) => {
-    if (!user || photos.length >= 6) return
-    const maxPick = 6 - photos.length
+    if (!user || photos.length >= MAX_PHOTOS) return
+    const maxPick = MAX_PHOTOS - photos.length
     setPickingAddIdx(addIdx)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -724,17 +729,20 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         additionalChildren={
           (() => {
             const filledCount = photos.length + uploads.filter(u => !u.filename).length
-            const emptySlots = Math.max(0, 6 - filledCount)
+            // Two slots on an empty grid — that is the minimum the step asks
+            // for, so the requirement is visible as shape. After the first
+            // photo one slot trails the set, and none once it is full.
+            const emptySlots = filledCount === 0 ? MIN_PHOTOS : filledCount >= MAX_PHOTOS ? 0 : 1
             return Array.from({ length: emptySlots }).map((_, i) => (
               <Pressable
                 key={`add-${i}`}
-                style={photoStyles.add}
+                style={[photoStyles.cell, photoStyles.add]}
                 onPress={() => { if (pickingAddIdx !== null) return; tap(); pickPhoto(i) }}
               >
                 {pickingAddIdx === i ? (
-                  <ActivityIndicator size="small" color={PRIMARY} />
+                  <ActivityIndicator size="small" color={INK} />
                 ) : (
-                  <Svg pointerEvents="none" width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={BLACK_MID} strokeWidth={1.5} strokeLinecap="round">
+                  <Svg pointerEvents="none" width={ICON.xxl} height={ICON.xxl} viewBox="0 0 24 24" fill="none" stroke={INK_3} strokeWidth={STROKE.thin} strokeLinecap="round">
                     <Path d="M12 5v14M5 12h14" />
                   </Svg>
                 )}
@@ -745,7 +753,6 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
       />
       <ConfirmDialog
         visible={duplicateDialog}
-        icon={<InfoIcon color={PRIMARY} size={32} />}
         title={t('settings.duplicatePhotoTitle')}
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}
@@ -761,17 +768,24 @@ const photoStyles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    // Centered, with a real column gap. The previous layout was
+    // `space-between` plus invisible filler cells padding every partial row
+    // out to three — that only ever produced a left-aligned last row. With a
+    // gap the tiles centre on their own and the fillers are gone. 31% x3 +
+    // 2 gaps fits any container wider than 228px, so it never wraps to two.
+    justifyContent: 'center',
+    columnGap: SM,
     rowGap: SM,
-    marginTop: MD,
+    // No top margin: the gap above the grid belongs to the host layout, so
+    // the photo step's title→grid distance is the same single XL every other
+    // onboarding step puts between its title and its fields.
     overflow: 'visible',
   },
-  cell: { width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS, overflow: 'hidden' },
-  filler: { backgroundColor: 'transparent', borderWidth: 0, height: 0 },
+  cell: { width: '31%', aspectRatio: 3 / 4, borderRadius: RADIUS, overflow: 'hidden' },
   img: { width: '100%', height: '100%' },
   placeholderBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: WHITE,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -783,15 +797,17 @@ const photoStyles = StyleSheet.create({
   remove: {
     position: 'absolute', top: 6, end: 6,
     width: 24, height: 24, borderRadius: 12,
-    backgroundColor: WHITE_STRONG,
+    backgroundColor: PHOTO_CHROME,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
+  // Empty slot: a white surface behind the warm hairline — the same skin the
+  // onboarding name/date/bio fields and the login email field wear, since an
+  // empty slot is a field waiting to be filled. Geometry comes from `cell` so
+  // an add slot and a photo are the same tile.
   add: {
-    width: '31.5%', aspectRatio: 3 / 4, borderRadius: RADIUS,
-    backgroundColor: WHITE,
+    ...FIELD_SKIN,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed',
   },
   dropTarget: {
     ...StyleSheet.absoluteFillObject,
@@ -800,7 +816,7 @@ const photoStyles = StyleSheet.create({
   },
   replacingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: BLACK_STRONG,
+    backgroundColor: PHOTO_CHROME,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -809,7 +825,7 @@ const photoStyles = StyleSheet.create({
     top: '50%', start: '50%',
     width: 36, height: 36, marginStart: -18, marginTop: -18,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_STRONG,
+    backgroundColor: PHOTO_CHROME,
     alignItems: 'center', justifyContent: 'center',
   },
 })

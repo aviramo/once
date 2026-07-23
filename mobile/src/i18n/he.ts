@@ -30,47 +30,33 @@ export default {
   'auth.legalPrivacy': 'מדיניות הפרטיות',
 
   // Onboarding step 1
-  'ob.welcome': 'נתחיל ממך',
   'ob.whoAreYou': 'איך את/ה מזדהה?',
   'ob.male': 'גבר',
   'ob.female': 'אישה',
   'ob.nicknameStep': 'איך קוראים לך?',
-  'ob.nicknamePlaceholder': 'זה השם שיופיע בפרופיל שלך',
-  'ob.nicknameField': 'שם פרטי',
   'ob.next': 'המשך',
+  'ob.close': 'סגירה',
 
   // Onboarding step 2
   'ob.birthdate': 'תאריך לידה',
-  'ob.howOld': 'כמה את/ה בן/בת?',
-  'ob.day': 'יום',
-  'ob.month': 'חודש',
-  'ob.year': 'שנה',
   'ob.minAge': 'גיל מינימלי להרשמה הוא 18',
   'ob.createAccount': 'צור חשבון',
   'ob.createAccount_m': 'צור חשבון',
   'ob.createAccount_f': 'צרי חשבון',
+  'ob.birthConfirm': 'יום ההולדת שלך הוא {date} ואת/ה בן/בת {age}?',
+  'ob.birthConfirm_m': 'יום ההולדת שלך הוא {date} ואתה בן {age}?',
+  'ob.birthConfirm_f': 'יום ההולדת שלך הוא {date} ואת בת {age}?',
+  'ob.birthConfirmFix': 'תיקון',
 
   // Onboarding photo
-  'photo.title': 'תמונות פרופיל',
   'photo.sub': 'הוסף 2-6 תמונות',
-  'photo.confirm': 'אישור והמשך',
-  'photo.almostDone': 'עוד צעד אחד ומסיימים',
+  'photo.uploadFailed': 'העלאת התמונות נכשלה. בלי תמונה אי אפשר להמשיך, נסה שוב.',
 
   // Onboarding bio
-  'bio.title': 'הרגע שלך',
-  'bio.emphasis': 'זה הדבר הראשון שאנשים יראו בפרופיל שלך',
   'bio.placeholder': 'משפט, תחושה או רגע שמספרים עליך...',
-  'bio.tip': '✦ אותנטיות מושכת יותר מהכול',
   'bio.submit': 'המשך',
   'bio.min': 'מינימום 20 תווים',
-
-  // Onboarding step 6 — optional invite code to join a group.
-  'ob.inviteTitle': 'יש לך קוד הצטרפות?',
-  'ob.inviteHint': 'אם קיבלת קוד מאדם שהזמין אותך לקבוצה, הזן אותו כאן. אפשר גם לדלג.',
-  'ob.invitePlaceholder': '6 ספרות',
-  'ob.inviteSkip': 'דלג',
-  'ob.inviteJoin': 'הצטרפות',
-  'ob.inviteInvalid': 'הקוד שגוי או לא פעיל',
+  'bio.update': 'עדכון',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
   // h=home, w=work). dist.* carry a {d} distance placeholder; near.* are the
@@ -118,7 +104,6 @@ export default {
   'settings.preferences': 'תפריט',
   'settings.searchPreferences': 'העדפות חיפוש',
   'settings.myInfo': 'המידע שלי',
-  'settings.settings': 'הגדרות',
   'settings.appSettings': 'האפליקציה',
   'settings.about': 'דרך אחרת להכיר',
   'settings.profileSubtitle': 'עריכת הפרופיל שלך',
@@ -137,10 +122,17 @@ export default {
   'about.feature4.title': 'הסכמה הדדית תמיד',
   'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד.',
   'settings.profile': 'עריכת הפרופיל',
+  'settings.buildProfile': 'בניית הפרופיל',
   'settings.account': 'חשבון',
-  'settings.credits': 'לבבות',
-  // Suffix word in the hearts-row value when the user has extras, e.g.
-  // "1/3 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.
+  'settings.visibilityVisible': 'גלוי',
+  'settings.visibilityHidden': 'מוסתר',
+  // Watcher chip on the visibility row. The number alone says nothing, so the
+  // chip carries the whole phrase.
+  'settings.watchersOne': '1 צופה בך',
+  'settings.watchersMany': '{count} צופים בך',
+  'settings.credits': 'קרדיטים',
+  // Suffix word in the credits-row value when the user has extras, e.g.
+  // "1/1 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.
   'settings.creditsExtraSuffix': 'אקסטרה',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'הקבוצות שלי',
@@ -149,15 +141,19 @@ export default {
   'settings.groupsMore': 'עוד...',
   'settings.groupsEmpty': 'עוד לא הצטרפת לקבוצה.',
   'settings.groupsDisabled': 'מושבתת',
+  'settings.groupsAdd': 'הוספת קבוצה',
   'settings.groupsJoinTitle': 'הצטרפות לקבוצה',
   'settings.groupsJoinHint': 'הזן את הקוד שקיבלת ממנהל הקבוצה. אפשר להיות חבר בכמה קבוצות במקביל.',
   'settings.groupsCodePlaceholder': '6 ספרות',
   'settings.groupsJoinAction': 'הצטרפות',
   'settings.groupsInviteInvalid': 'הקוד שגוי או לא פעיל',
+  'settings.groupsBack': 'חזרה',
+  'settings.groupsLeaveTitle': 'לעזוב את {name}?',
+  'settings.groupsLeaveDesc': 'אפשר להצטרף שוב בהמשך בעזרת קוד הקבוצה.',
+  'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'דיווח על תקלה',
   'bugReport.title': 'דיווח על תקלה',
-  'bugReport.desc': 'נתקלת בבעיה? ספרו לנו מה קרה ונטפל בזה.',
   'bugReport.placeholder': 'תארו את התקלה...',
   'bugReport.attach': 'צירוף תמונה',
   'bugReport.attachChange': 'החלפת תמונה',
@@ -235,10 +231,15 @@ export default {
   'settings.photoEditReplace': 'החלפה',
   'settings.photoEditDelete': 'מחיקה',
   'settings.photoMinTwo': 'נדרשות לפחות 2 תמונות',
+  // Add-chips on the own-profile card, under the fact chips.
+  'settings.addPhoto': 'הוספת תמונה',
+  'settings.addFamily': 'משפחה וילדים',
   'family.title': 'משפחה וילדים',
   'family.optional': 'אופציונאלי',
   'family.hasKidsQuestion': 'יש לך ילדים?',
   'family.hasKidsYes': 'יש לי ילדים',
+  'family.hasKidsYesOne': 'יש לי ילד אחד',
+  'family.hasKidsYesMany': 'יש לי {count} ילדים',
   'family.hasKidsNo': 'אין לי ילדים',
   'family.isForKids_m': 'מעוניין בילדים',
   'family.isForKids_f': 'מעוניינת בילדים',
@@ -288,58 +289,52 @@ export default {
   'family.summarySelfHasKids': 'יש לי ילדים',
   'family.summarySelfHasOneKid': 'יש לי ילד אחד',
   'family.summarySelfHasNKids': 'יש לי {n} ילדים',
-  'family.wantsMore': 'ורוצה עוד',
-  'family.doesntWantMore': 'ולא רוצה עוד',
-  'family.wantsKids': 'ורוצה',
-  'family.doesntWantKids': 'ולא רוצה',
-  'family.selfWantsMore': 'ורוצה עוד',
-  'family.selfDoesntWantMore': 'ולא רוצה עוד',
-  'family.selfWantsKids': 'ורוצה',
-  'family.selfDoesntWantKids': 'ולא רוצה',
-  'family.prefSeparator': ' ',
+  'family.wantsMore': 'רוצה עוד',
+  'family.doesntWantMore': 'לא רוצה עוד',
+  'family.wantsKids': 'רוצה ילדים',
+  'family.doesntWantKids': 'לא רוצה ילדים',
+  'family.selfWantsMore': 'רוצה עוד',
+  'family.selfDoesntWantMore': 'לא רוצה עוד',
+  'family.selfWantsKids': 'רוצה ילדים',
+  'family.selfDoesntWantKids': 'לא רוצה ילדים',
   'family.overlapLabel': '{pct}% חפיפה בימים פנויים',
-  'family.overlapChipSuffix': ', {pct}% חפיפה',
+  'family.overlapChip': '{pct}% חפיפה',
   'family.addKid': 'הוספת ילד',
   'family.ageNotSet': 'ללא גיל',
   'family.ageFortyPlus': '40+',
-  'family.summaryFreeWeekend_m': ', פנוי בסופ״ש הקרוב',
-  'family.summaryFreeWeekend_f': ', פנויה בסופ״ש הקרוב',
-  'family.summaryWithKidsWeekend_m': ', לא פנוי בסופ״ש הקרוב',
-  'family.summaryWithKidsWeekend_f': ', לא פנויה בסופ״ש הקרוב',
+  'family.summaryFreeWeekend_m': 'פנוי בסופ״ש הקרוב',
+  'family.summaryFreeWeekend_f': 'פנויה בסופ״ש הקרוב',
+  'family.summaryWithKidsWeekend_m': 'לא פנוי בסופ״ש הקרוב',
+  'family.summaryWithKidsWeekend_f': 'לא פנויה בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
-  // Count phrase with correct singular/plural, built by starsText() in
-  // lib/credits.ts. Used wherever a hearts amount is shown in prose.
-  'stars.count.one': 'לב אחד',
-  'stars.count.many': '{n} לבבות',
-  // Hearts popup (opened from the settings hearts row). The description is
-  // assembled in code from these lines (so the renew line can be dropped
-  // when the next-grant time is unknown). {balance}/{extra}/{cap}/{when}
-  // render bold in code. {balance} = the daily pool, {extra} = the
-  // purchased pool, {cap} = daily ceiling (currently 3).
-  // Hebrew gendered via genderize() inline {male|female} markers.
-  'stars.popup.title': 'הלבבות שלך',
-  'stars.popup.line.balance': 'יש לך {balance} בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
-  // Variant for the balance=0 case — reads "your hearts ran out" instead of
-  // the literal "you have 0 hearts" (user request 2026-06-01).
-  'stars.popup.line.balanceEmpty': 'נגמרו לך הלבבות בחבילה היומית, שמתמלאת ל-{cap} בכל יום.',
-  // {extra} expands via starsText → "5 לבבות" / "לב אחד" (carries the noun
-  // already). Template must NOT repeat the noun, just append "אקסטרה".
-  'stars.popup.line.extra': 'בנוסף יש לך {extra} אקסטרה.',
-  // {when} carries its own "היום/מחר ב-HH:MM" — no leading "ב-" in the template.
-  'stars.popup.line.renew': 'החבילה היומית תתחדש {when}.',
+  // Count phrase with correct singular/plural, built by creditsText() in
+  // lib/credits.ts. Used wherever a credits amount is shown in prose.
+  'credits.count.one': 'קרדיט אחד',
+  'credits.count.many': '{n} קרדיטים',
   // Relative next-grant day. Returned from formatNextGrant() — replaces the
   // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
-  'stars.grant.today': 'היום ב-{time}',
-  'stars.grant.tomorrow': 'מחר ב-{time}',
-  'stars.popup.buyExtra': 'קניית לבבות אקסטרה',
-  // Buy-extra picker (5/10/50 options, all "Free" for now, only 5 enabled).
-  'stars.buy.title': 'קניית לבבות אקסטרה',
-  'stars.buy.desc': 'הלבבות שתקנה יתווספו ללבבות שיש לך כבר, ולא יתבטלו עם הזמן.',
-  'stars.buy.priceFree': 'חינם',
-  'stars.buy.comingSoon': 'בקרוב',
-  // Shown on the active (3-hearts) option when the user already used today's
-  // buy slot — the once-per-grant-day gate.
-  'stars.buy.alreadyBoughtToday': 'כבר נקנה היום',
+  'credits.grant.today': 'היום ב-{time}',
+  'credits.grant.tomorrow': 'מחר ב-{time}',
+  // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
+  // "coming soon") and inviting a friend is the only way to earn extra, so the
+  // copy talks about getting credits rather than buying them.
+  'credits.buy.title': 'עוד קרדיטים',
+  'credits.buy.desc': 'קרדיטים שתקבל מצטרפים לקרדיטים שכבר יש לך, ולא יתבטלו עם הזמן.',
+  'credits.buy.priceFree': 'חינם',
+  'credits.buy.comingSoon': 'בקרוב',
+  // Invite row: the one active way to earn. The title is the action alone;
+  // the sub-line under it inside the same row carries WHEN the credit lands,
+  // so the row never reads as "tap and get a credit". The verb is gendered by
+  // the user's own sex via the inline {male|female} marker, so the call site
+  // must use genderize() — tg() only resolves whole-string _m/_f keys and
+  // would print the marker as-is. The friend stays ungendered ("חבר" covers
+  // any friend you'd invite).
+  'credits.invite.title': '{הזמן|הזמיני} חבר',
+  'credits.invite.joined.none': 'הקרדיט מגיע כשהחבר מוריד את האפליקציה ומשלים פרופיל.',
+  'credits.invite.joined.one': 'חבר אחד הצטרף דרכך.',
+  'credits.invite.joined.many': '{n} חברים הצטרפו דרכך.',
+  // Text that rides along with the link in the OS share sheet.
+  'credits.invite.shareText': 'כדאי לך להוריד את Once.',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',
@@ -406,71 +401,20 @@ export default {
   'home.noInternetButton': 'נסה שוב',
   'home.noInternetButton_m': 'נסה שוב',
   'home.noInternetButton_f': 'נסי שוב',
-  'home.nowVisibleDesc': 'כאן יופיעו הצופים בפרופיל שלך. אם אחד מהם ישלח הזמנה, היא תופיע כאן.',
-  'home.nowVisibleWithOneWatcherDesc': 'מישהו מסתכל על הפרופיל שלך עכשיו ויכול לשלוח לך הזמנה. כשהיא תגיע, תקבל התראה.',
-  'home.nowVisibleWithWatchersDesc': 'אלה האנשים שמסתכלים על הפרופיל שלך עכשיו. כל אחד מהם יכול לשלוח לך הזמנה. כשהיא תגיע, תקבל התראה.',
-  'home.watchingMeRightNow': 'ממש עכשיו',
-  'home.watchingMeNew': 'חדש',
-  'home.watchingMeMorePeopleNearby': 'עוד אנשים יכולים להופיע בהמשך',
-  'home.watchingMeAdd': 'הצג אותי לאנשים',
-  'home.watchingMeHiddenHeader': 'במצב מוסתר',
   // ViewersStatusCard (page2) — 5 states × gender
-  'home.watchingMeVisibleEmptyTitle': 'הבמה שלך פתוחה',
-  'home.watchingMeVisibleEmptySubtitle_m': 'אתה גלוי לאחרים. כשמישהו ייכנס לראות אותך, הוא יופיע כאן.',
-  'home.watchingMeVisibleEmptySubtitle_f': 'את גלויה לאחרים. כשמישהו ייכנס לראות אותך, הוא יופיע כאן.',
-  'home.watchingMeVisibleWatchedTitle': 'יש עליך מבטים',
-  'home.watchingMeVisibleWatchedSubtitle_m': 'אתה גלוי עכשיו. מי שמרגיש חיבור יכול לשלוח לך הזמנה בכל רגע.',
-  'home.watchingMeVisibleWatchedSubtitle_f': 'את גלויה עכשיו. מי שמרגיש חיבור יכול לשלוח לך הזמנה בכל רגע.',
-  'home.watchingMeHiddenTitle_m': 'אתה מחוץ לרדאר',
-  'home.watchingMeHiddenTitle_f': 'את מחוץ לרדאר',
-  'home.watchingMeHiddenSubtitle_m': 'אף אחד לא רואה אותך כרגע. כשתרצה לחזור, אפשר להיפתח להזמנות.',
-  'home.watchingMeHiddenSubtitle_f': 'אף אחד לא רואה אותך כרגע. כשתרצי לחזור, אפשר להיפתח להזמנות.',
-  'home.watchingMeHiddenGoVisibleBtn': 'מעבר למצב גלוי',
   // In-card trigger that opens the broadcast confirm popup. Reads as a
   // mode-switch (parallel to the go-visible label), NOT as the action verb;
   // the confirm popup's button (home.broadcastConfirmButton) keeps the
   // "broadcast me" wording.
-  'home.watchingMeVisibleBroadcastBtn': 'מעבר למצב שידור',
-  // Out-of-hearts auto-hide variant (balance + extra = 0): the user is hidden
-  // because they have no hearts left to accept invites. The "go visible"
-  // button is replaced by a buy-extra CTA (stars.popup.buyExtra label).
-  'home.watchingMeNoHeartsTitle_m': 'נגמרו לך הלבבות',
-  'home.watchingMeNoHeartsTitle_f': 'נגמרו לך הלבבות',
-  'home.watchingMeNoHeartsSubtitle_m': 'בלי לבבות אי אפשר לקבל הזמנות. אפשר לקנות לבבות אקסטרה כדי לחזור למשחק.',
-  'home.watchingMeNoHeartsSubtitle_f': 'בלי לבבות אי אפשר לקבל הזמנות. אפשר לקנות לבבות אקסטרה כדי לחזור למשחק.',
-  'home.watchingMeBroadcastEmptyTitle_m': 'אתה באוויר',
-  'home.watchingMeBroadcastEmptyTitle_f': 'את באוויר',
-  'home.watchingMeBroadcastEmptySubtitle_m': 'השידור פעיל ואתה מקבל יותר חשיפה. כשמישהו יצפה בך, הוא יופיע כאן.',
-  'home.watchingMeBroadcastEmptySubtitle_f': 'השידור פעיל ואת מקבלת יותר חשיפה. כשמישהו יצפה בך, הוא יופיע כאן.',
-  'home.watchingMeBroadcastWatchedTitle_m': 'אתה באור עכשיו',
-  'home.watchingMeBroadcastWatchedTitle_f': 'את באור עכשיו',
-  'home.watchingMeBroadcastWatchedSubtitle_m': 'השידור פעיל, ואתה מקבל יותר חשיפה. הזמנה יכולה להגיע בכל רגע.',
-  'home.watchingMeBroadcastWatchedSubtitle_f': 'השידור פעיל, ואת מקבלת יותר חשיפה. הזמנה יכולה להגיע בכל רגע.',
   'home.premiumPopup.add': 'הצג אותי לאנשים',
   'home.premiumPopup.hide': 'הסתר את הפרופיל',
   'home.premiumPopup.reveal': 'הצג את הפרופיל',
-  'home.broadcastConfirmTitle': 'לעבור למצב שידור?',
-  'home.broadcastConfirmDesc': 'במצב שידור, הפרופיל שלך מקבל חשיפה נוספת למשך 30 דקות, ועוזר ליותר אנשים בקרבת מקום לגלות אותך.',
-  'home.broadcastConfirmDescFree': 'קבלת הזמנות היא בחינם.',
-  'home.broadcastConfirmDescNoStars': 'לא נעשה שימוש בלבבות כשמישהו מזמין אותך.',
-  'home.broadcastConfirmButton': 'שדר אותי',
-  'home.exitBroadcastConfirmTitle': 'להפסיק את השידור?',
   // Gendered (אתה / את). Picked via tg(_m/_f) against the caller's is_male.
-  'home.exitBroadcastConfirmDesc_m': 'אתה כעת במצב שידור, הפסקת השידור תסיר את היתרון היחסי שיש לך על משתמשים אחרים.',
-  'home.exitBroadcastConfirmDesc_f': 'את כעת במצב שידור, הפסקת השידור תסיר את היתרון היחסי שיש לך על משתמשים אחרים.',
-  'home.exitBroadcastConfirmButton': 'הפסקת שידור',
-  'home.hideConfirmTitle': 'להסתיר את הפרופיל?',
-  'home.hideConfirmDesc': 'כל הצופים בך יוסרו ויקבלו על כך התראה.',
-  'home.hideConfirmButton': 'הסתרה',
-  'home.visibility.hidden': 'מוסתר',
-  'home.visibility.visible': 'גלוי',
-  'home.visibility.broadcast': 'שידור',
-  'home.removeWatcherTitle': 'להסיר מהצופים?',
-  'home.removeWatcherDesc_mm': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסיר, הוא לא יוכל להמשיך לצפות בך.',
-  'home.removeWatcherDesc_mf': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסיר, היא לא תוכל להמשיך לצפות בך.',
-  'home.removeWatcherDesc_fm': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסירי, הוא לא יוכל להמשיך לצפות בך.',
-  'home.removeWatcherDesc_ff': 'אי אפשר לפתוח את הפרופיל מכאן. אם תסירי, היא לא תוכל להמשיך לצפות בך.',
-  'home.removeWatcherConfirm': 'להסיר',
+  'settings.hideConfirmTitle': 'להסתיר את הפרופיל?',
+  'settings.hideConfirmDesc': 'כל הצופים בך יוסרו ויקבלו על כך התראה.',
+  'settings.hideConfirmDescOne': 'הצופה שיש לך כרגע יוסר ויקבל על כך התראה.',
+  'settings.hideConfirmDescMany': '{count} הצופים שיש לך כרגע יוסרו ויקבלו על כך התראה.',
+  'settings.hideConfirmButton': 'הסתרה',
 
   // Home — match teaser
   'home.tapForMore': 'בחזרה למשחק',
@@ -489,8 +433,8 @@ export default {
 רגע אמיתי לא מחכה
 בוחרים פחות, מרגישים יותר
 מפגש אחד בלי מסכים פתוחים
-נוכחות היא הסינון החדש
-לא כולם, רק מי שמרגיש
+נוכחות משנה את כל התמונה
+לא כולם, רק אחד עכשיו
 כשהלב פנוי, משהו קורה
 שיחה אחת יכולה להספיק
 בלי משחקים, עם כוונה
@@ -501,9 +445,8 @@ export default {
 פחות אפשרויות, יותר בהירות
 חיבור צריך מקום לנשום
 לא לחפש, להיפגש
-מי שבפוקוס, מקבל לב
+מי שבפוקוס, מקבל מקום
 העולם זז, {אתה|את} {נוכח|נוכחת}
-רגע קטן, אפשרות גדולה
 כשזה קורה, זה עכשיו
 לא עוד החמצות שקטות
 פגישה מתחילה בהחלטה קטנה
@@ -527,7 +470,58 @@ export default {
 בלי לברוח לאפשרות הבאה
 להיות {פנוי|פנויה} באמת
 קשר מתחיל כשעוצרים
-רק רגע, רק אתם`,
+רק רגע, רק אתם
+מפגש טוב מתחיל בשקט
+משהו אמיתי מתחיל כאן
+{תן|תני} למישהו מקום
+הערב יכול להשתנות עכשיו
+כל מה שצריך הוא רגע
+מישהו חדש מחכה מעבר ללחיצה
+פחות להשוות, יותר להרגיש
+רגע אחד יכול להפתיע
+אין צורך לדעת מראש
+מספיק לבחור להיות כאן
+אולי החיבור הבא קרוב
+לפעמים צריך רק לעצור
+מפגש מתחיל כשנותנים מקום
+מישהו יכול להרגיש נכון
+הלב מזהה בלי רשימות
+חיבור קורה כשנשארים
+יש מקום למשהו חדש
+{פתח|פתחי} דלת לרגע
+לא כל רגע צריך הסבר
+לפעמים פשוט לוחצים ונפגשים
+מישהו יכול לשנות כיוון
+עכשיו אפשר לפגוש באמת
+פחות לחשוב, יותר להיות
+{תן|תני} לערב להפתיע
+החיבור הבא מתחיל כאן
+משהו חדש יכול להתחיל
+לא צריך למהר הלאה
+אדם אחד, תשומת לב מלאה
+אפשרות אחת, נוכחות שלמה
+אולי זה הרגע לעצור
+להיות פתוחים למה שיגיע
+הרגע הבא יכול להספיק
+לפעמים הקסם מתחיל בלחיצה
+כל פגישה מתחילה בסקרנות
+מישהו מחכה שתופיע
+יש מישהו שכדאי לפגוש
+{בחר|בחרי} רגע אחד אמיתי
+לא עוד מסך, מפגש
+לתת מקום למה שמגיע
+אולי מישהו מחפש בדיוק אותך
+עכשיו אפשר להתחיל מחדש
+מפגש אחד שווה ניסיון
+מישהו אחד, בלי הסחות
+הלב פתוח כשעוצרים
+להתחיל קטן, להרגיש גדול
+רגע אחד מחוץ לאינסוף
+פחות אפשרויות, יותר סיכוי
+{היה|היי} כאן באמת
+כל חיבור מתחיל באפשרות
+לפעמים הבא הוא הנכון
+ללחוץ ולראות מה קורה`,
   // Skip-feedback headline pool. One line is picked at random when a skip
   // starts (see home.tsx skipHeadlineIdx) and shown in the headline slot
   // above the centre button for the duration of that skip. Same newline-block
@@ -535,53 +529,103 @@ export default {
   'home.skipHeadlines': `ממשיכים הלאה
 לא הפעם
 אולי הבא
-רגע חדש
-הבא בדרך
-ממשיכים לחפש
-עוד מבט
-משחררים בעדינות
-מחפשים חיבור
-קדימה בשקט
-עוד ניסיון
 זה בסדר
-ממשיכים פתוח
-אולי בקרוב
-בודקים הלאה
-הכל טוב
-ממשיכים בנחת
-לא זה
-חיפוש נעים
+הכול טוב
 עוד אפשרות
-רגע ממשיך
-הדרך פתוחה
-ממשיכים קליל
-הבא מחכה
-עוד חיבור
-לא קרה
-מדפדפים הלאה
+הבא מסקרן
+ממשיכים בנחת
+משחררים בעדינות
 נשארים פתוחים
-אולי שם
-עוד מישהו
-ממשיכים בזרימה
-בחירה נקייה
-רגע עובר
-מחפשים קליק
-ממשיכים רגוע
-הבא בתור
-עוד הזדמנות
-לא מתאים
-הכל פתוח
-ממשיכים קדימה
+הבא יפתיע
+עוד מבט
 בלי לחץ
-עוד רגע
-אולי עכשיו
-חיבור אחר
-עוברים הלאה
-נשימה קטנה
+ממשיכים ברוגע
+אולי בהמשך
+הדרך פתוחה
+עוד הזדמנות
+קדימה בשקט
+הבא בדרך
+לא עכשיו
+ממשיכים בקלילות
+עוד מישהו
+אולי שם
+הכול פתוח
 ממשיכים לבדוק
-הלב יודע
+הרגע הבא
+בחירה טובה
 עוד סיכוי
-הבא יפתיע`,
+ממשיכים בזרימה
+אולי בקרוב
+הבא מחכה
+עוברים ברכות
+עוד כיוון
+נשארים סקרנים
+ממשיכים קדימה
+משהו אחר
+אולי אחר כך
+עוד פנים
+ממשיכים בעדינות
+לא מרגיש נכון
+פותחים לחדש
+עוד חיבור
+ממשיכים לבחור
+אולי הפעם
+הבא עשוי להתאים
+עוד רגע
+ממשיכים לגלות
+בחירה נקייה
+הבא יכול להפתיע
+משחררים וממשיכים
+עוד פתח
+אולי זה הבא
+ממשיכים פתוחים
+הבא אולי יתאים
+לא כרגע
+עוד מפגש
+הדרך ממשיכה
+ממשיכים בסקרנות
+אולי עוד מעט
+הבא ירגיש אחרת
+עוברים הלאה
+עוד ניסיון
+ממשיכים קליל
+הלב נשאר פתוח
+אולי מישהו אחר
+הבא יכול להתאים
+עוד בחירה
+ממשיכים בשקט
+לא מתאים עכשיו
+הכול אפשרי
+עוד רגע חדש
+ממשיכים רגוע
+אולי חיבור אחר
+הבא מרגיש קרוב
+עוד דלת
+פותחים אפשרות
+ממשיכים עם הלב
+לא הפעם הזו
+הבא כבר מגיע
+עוד משהו
+ממשיכים אל החדש
+אולי בפעם אחרת
+הכול עדיין פתוח
+הבא יכול להיות
+עוד אדם
+ממשיכים בקצב
+לא חייב להתאים
+אולי עוד אחד
+הבא עשוי להפתיע
+עוד הזדמנות בדרך
+ממשיכים למה שנכון
+לא צריך בכוח
+אולי הרגע הבא
+הבא מביא אפשרות
+עוד מקום לחדש
+ממשיכים בלי לחץ
+הבחירה ממשיכה
+אולי שם ירגיש
+הבא פותח דלת
+ממשיכים לאפשרות הבאה`,
   // Geo-availability gate. Shown in the rotating-headline slot when the
   // server marks the user outside every active area (unavailable) or inside
   // an area that has not opened yet (notYet). While shown, the side tab is
@@ -729,15 +773,18 @@ export default {
   'home.waitingTimerTitle': 'ההזמנה שלך מחכה לו',
   'home.waitingTimerTitle_m': 'ההזמנה שלך מחכה לו',
   'home.waitingTimerTitle_f': 'ההזמנה שלך מחכה לה',
-  'home.waitingTimerDesc': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
-  'home.waitingTimerDesc_mm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
-  'home.waitingTimerDesc_mf': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
-  'home.waitingTimerDesc_fm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
-  'home.waitingTimerDesc_ff': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הלב שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
+  'home.waitingTimerDesc': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
+  'home.waitingTimerDesc_mm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
+  'home.waitingTimerDesc_mf': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
+  'home.waitingTimerDesc_fm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן.',
+  'home.waitingTimerDesc_ff': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן.',
   'home.waitingFirstInLine': 'הראשון/ה בתור',
   'home.waitingFirstInLineSubtext': 'נעדכן אותך כשתהיה תשובה.',
   'home.waitingFirstInLineSubtext_m': 'נעדכן אותך כשהוא יענה.',
   'home.waitingFirstInLineSubtext_f': 'נעדכן אותך כשהיא תענה.',
+  'home.buildProfileTitle': 'בנ{ה|י} קודם פרופיל',
+  'home.buildProfileDesc': 'כדי לשלוח הזמנה צריך פרופיל עם תמונות ותיאור קצר. זה לוקח דקה.',
+  'home.buildProfileConfirm': 'בניית הפרופיל',
   'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
   'home.cancelWaitingBtn': 'ביטול הזמנה',
   'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין.',
@@ -754,11 +801,15 @@ export default {
   'home.watchingAccept': 'להתמקד',
   'home.watchingAccept_m': 'להתמקד בו',
   'home.watchingAccept_f': 'להתמקד בה',
-  'home.watchingReject': 'לא עכשיו',
+  'home.watchingReject': 'דילוג',
   'home.skipHintTitle': 'אפשר להחליק את הכרטיס למטה',
   'home.skipHintDesc': 'בפעם הבאה החליקו את הכרטיס למטה כדי לדלג במהירות לפרופיל אחר. רוצים לדלג עכשיו?',
   'home.skipHintCancel': 'הבנתי',
   'home.skipHintConfirm': 'לדלג',
+  // Shown in the rotating-headline slot for the duration of the first-time
+  // swipe-down tutorial, instead of that card's random skip line: while the
+  // card peeks down and reveals the slot, the text names the gesture.
+  'home.skipTutorialHint': 'דילוג בהחלקה למטה',
   // Incoming-invite card (page2). Title via tg(key, inviterMale) — only the
   // inviter's gender (הוא/היא + הזמין/הזמינה). Desc via tgg(key, receiverMale,
   // inviterMale) → suffix _<receiver><inviter>: receiver drives תחליטי/תחליט
@@ -790,7 +841,11 @@ export default {
   'chat.blockTitle': 'חסימת משתמש',
   'chat.blockDesc': 'המשתמש ייחסם ולא יוכל ליצור איתך קשר שוב. לא ניתן לבטל פעולה זו.',
   'chat.blockConfirm': 'חסימה',
-  'chat.leave': 'סיום צ\'אט',
+  'chat.endChat': 'סיום',
+  'chat.leave': 'עזיבה',
+  'chat.a11y.close': 'סגירת הצ\'אט',
+  'chat.a11y.closeImage': 'סגירת התמונה',
+  'chat.a11y.menu': 'אפשרויות צ\'אט',
   'chat.report': 'דיווח',
   'chat.reportTitle': 'דיווח על המשתמש',
   'chat.reportDesc': 'הדיווח יישלח לצוות שלנו לבדיקה. המשתמש ייחסם ולא תותאמו שוב. כל קשר פעיל ביניכם יסתיים.',
@@ -832,16 +887,11 @@ export default {
   'home.hiddenHeader2': 'Once',
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
-  'home.broadcast.endsIn': '{time} לסיום השידור',
-  'home.tabs.home': 'Once',
-  'home.tabs.viewers': 'צופים בי',
-  'home.tabs.hidden_m': 'מוסתר',
-  'home.tabs.hidden_f': 'מוסתרת',
-  'home.tabs.visible_m': 'גלוי',
-  'home.tabs.visible_f': 'גלויה',
-  'home.tabs.broadcast': 'בשידור',
-  'home.tabs.invite': 'הזמנה',
-  'home.tabs.chat': 'צ׳אט',
+  // Accessibility labels for the floating shell chrome (no visible text).
+  'home.a11y.menu': 'פתיחת התפריט',
+  'home.a11y.closeMenu': 'סגירת התפריט',
+  'home.a11y.closeInvite': 'סגירת ההזמנה',
+  'home.a11y.closeProfile': 'סגירת הפרופיל',
   // צ'יפ הגיל שמופיע על התמונה. מגדרי דרך tg(): בן/בת + הגיל.
   'home.ageChip_m': 'בן {age}',
   'home.ageChip_f': 'בת {age}',
@@ -851,14 +901,6 @@ export default {
   'home.noOneNearbyDesc': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
   'home.noOneNearbyDesc_m': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
   'home.noOneNearbyDesc_f': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
-  'home.nowVisibleDesc_m': 'כאן יופיעו הצופים בפרופיל שלך. אם אחד מהם ישלח הזמנה, היא תופיע כאן.',
-  'home.nowVisibleDesc_f': 'כאן יופיעו הצופים בפרופיל שלך. אם אחד מהם ישלח הזמנה, היא תופיע כאן.',
-  'home.nowVisibleWithOneWatcherDesc_mm': 'מישהו מסתכל על הפרופיל שלך עכשיו ויכול לשלוח לך הזמנה. כשהיא תגיע, תקבל התראה.',
-  'home.nowVisibleWithOneWatcherDesc_mf': 'מישהי מסתכלת על הפרופיל שלך עכשיו ויכולה לשלוח לך הזמנה. כשהיא תגיע, תקבל התראה.',
-  'home.nowVisibleWithOneWatcherDesc_fm': 'מישהו מסתכל על הפרופיל שלך עכשיו ויכול לשלוח לך הזמנה. כשהיא תגיע, תקבלי התראה.',
-  'home.nowVisibleWithOneWatcherDesc_ff': 'מישהי מסתכלת על הפרופיל שלך עכשיו ויכולה לשלוח לך הזמנה. כשהיא תגיע, תקבלי התראה.',
-  'home.nowVisibleWithWatchersDesc_m': 'אלה האנשים שמסתכלים על הפרופיל שלך עכשיו. כל אחד מהם יכול לשלוח לך הזמנה. כשהיא תגיע, תקבל התראה.',
-  'home.nowVisibleWithWatchersDesc_f': 'אלה האנשים שמסתכלים על הפרופיל שלך עכשיו. כל אחד מהם יכול לשלוח לך הזמנה. כשהיא תגיע, תקבלי התראה.',
   'settings.kidsLabel_m': 'מתכנן ילדים?',
   'settings.kidsLabel_f': 'מתכננת ילדים?',
   'settings.deleteConfirmDesc_m': 'כל המידע, התמונות והשיחות יימחקו לצמיתות. הזמנות פעילות, שיחות וצפיות יבוטלו. לא ניתן לבטל פעולה זו.',
@@ -871,8 +913,6 @@ export default {
   'settings.signOutYes_f': 'התנתקות',
   'chat.inputPlaceholder_m': 'כתוב הודעה...',
   'chat.inputPlaceholder_f': 'כתבי הודעה...',
-  'ob.howOld_m': 'בן כמה אתה?',
-  'ob.howOld_f': 'בת כמה את?',
   'photo.sub_m': 'הוסף 2-6 תמונות',
   'photo.sub_f': 'הוסיפי 2-6 תמונות',
 

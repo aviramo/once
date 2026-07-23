@@ -4,9 +4,9 @@ import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, DESTRUCTIVE, PREMIUM } from '../colors'
+import { GREEN, GREEN_SOFT, WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
 
-// App-wide button. Every pressable primary/secondary/destructive action goes
+// App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
 // everywhere.
 //
@@ -21,7 +21,7 @@ import { WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRO
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
 
-type Variant = 'primary' | 'secondary' | 'softDestructive' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
+type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -85,7 +85,7 @@ export function Button({
   const base = SIZE[size]
   const skin = VARIANT[variant]
   // Tone only overrides the fill of the primary variant. For
-  // secondary/destructive the tone is ignored — they already carry their
+  // secondary and the rest the tone is ignored — they already carry their
   // own semantic color.
   const toneSkin = variant === 'primary' && tone ? TONE[tone] : null
   // Variants on dark surfaces (onPrimary) look muddy under the global
@@ -201,6 +201,9 @@ const SIZE: Record<Size, { btn: object; labelArea: object; text: object }> = {
   },
 }
 
+// The ONE exception to "an action button is green": the invite pair (sending
+// an invitation, and accepting one). Those two are the app's whole point, so
+// they wear the action ORANGE while every other button stays green.
 const TONE: Record<Tone, { btn: object }> = {
   positive: {
     btn: { backgroundColor: PRIMARY },
@@ -216,17 +219,20 @@ const VARIANT: Record<Variant, {
   disabledBtn?: object
   disabledText?: { color: string }
 }> = {
+  // Disabled is a LIGHT GREEN fill carrying a FULL-STRENGTH green label, not
+  // the global opacity fade. Two separate problems that fade caused: the solid
+  // green washed out to near-invisible on the beige page, and a muted label on
+  // top of that was unreadable. The pale fill alone says "not yet"; the label
+  // stays legible so the user can still read what the action is.
   primary: {
-    btn: { backgroundColor: PRIMARY },
+    btn: { backgroundColor: GREEN },
     text: { color: WHITE },
+    disabledBtn: { backgroundColor: GREEN_SOFT },
+    disabledText: { color: GREEN },
   },
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
     text: { color: BLACK_STRONG, fontWeight: WEIGHT.semibold },
-  },
-  softDestructive: {
-    btn: { backgroundColor: BLACK_SOFT },
-    text: { color: DESTRUCTIVE },
   },
   soft: {
     btn: { backgroundColor: BLACK_STRONG },
@@ -236,15 +242,13 @@ const VARIANT: Record<Variant, {
     btn: { backgroundColor: BLACK },
     text: { color: WHITE },
   },
+  // Orange fill (the positive hue), so the label is white.
   premium: {
     btn: { backgroundColor: PREMIUM },
     text: { color: WHITE },
   },
-  // White button sized for placement on top of a PRIMARY-colored surface.
-  // The white fill keeps the CTA legible against the coral background.
-  // Disabled state swaps to a soft white wash + bright muted text so the
-  // button reads as "waiting on input" instead of the muddy grey blob
-  // produced by white-at-45%-opacity on pure-black.
+  // White button sized for placement on top of a PRIMARY (green) surface.
+  // The white fill keeps the CTA legible against the green.
   onPrimary: {
     btn: { backgroundColor: WHITE },
     text: { color: PRIMARY },

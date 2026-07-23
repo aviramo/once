@@ -116,6 +116,64 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** Nothing to delete in code (no shim). Delete this note once the new build is the live floor.
 - **Verify before removing:** check the live mobile version distribution; confirm the floor build shows the heart badge on the invite CTA (not the cancel CTA) and disables the invite button on insufficient balance.
 
+### Credits rework 2026-07-22 — old builds show a stale cap and a dead "out of hearts" path (informational)
+
+- **Added:** 2026-07-22 (migration `20260722120000_credits_one_per_day_open_purchase`)
+- **Reason:** Daily cap 3 → 1, both `app_buy_extra` gates removed, the dispatcher's zero-credit auto-hide deleted, and a new `credits.unpaid_at` mark drives candidacy in `others()`. None of it changes a response shape, a field name, or an endpoint, so there is no shim to stage — but the deployed mobile build renders three things differently and that window is recorded here.
+- **Old shape (kept alive):** Nothing on the wire. The deployed build:
+  - hardcodes `CREDIT_CAP = 3`, so the settings row reads "1/3" and the popup says "refills to 3 hearts" while the server grants 1. Cosmetic, self-corrects on update.
+  - mirrors the removed buy gates client-side (`buyExtraBlock`: wallet must be empty AND not bought this grant day) and hides the buy button otherwise. Strictly narrower than the server, so it never offers a tap the server rejects — old users simply see fewer chances to pay than the new build gives them.
+  - routes "go visible" to the buy popup when the wallet is empty (`outOfHearts`) and shows the `settings.visibilityHiddenNoHearts` subtitle. With the auto-hide gone a zero-credit user is no longer hidden, so that branch is simply unreachable rather than wrong.
+  - `credits.unpaid_at` is a new key inside the wallet; old clients ignore unknown keys.
+- **New shape (preferred):** `CREDIT_CAP = 1`; no client-side buy gate; visibility never credit-gated; `credits.*` i18n keys and a `CoinIcon` instead of the heart.
+- **Safe to remove after:** the build shipping `CREDIT_CAP = 1` is the live floor.
+- **How to remove:** Nothing to delete in code (no shim). Delete this note once that build is the floor.
+- **Verify before removing:** check the live mobile version distribution; confirm the floor build shows a coin (not a heart) on the invite cost badge.
+
+### `app_buy_extra` count set stays {3,10,50}
+
+- **Added:** 2026-07-22
+- **Reason:** The 2026-07-22 rework made the daily grant 1, which invites shrinking the smallest pack to 1 credit. It was deliberately NOT done: the deployed mobile build posts `{ count: 3 }` from its buy sheet, and narrowing the accepted set would 400 every one of those taps. The pack is 3 = three days of allowance.
+- **Old shape (kept alive):** `app_buy_extra` and the edge dispatcher both validate `count ∈ {3,10,50}`.
+- **New shape (preferred):** unchanged for now. If a 1-credit pack is ever wanted, it must be staged: accept `{1,3,10,50}` server-side first, ship the client that offers 1, and only drop 3 once that build is the live floor.
+- **Safe to remove after:** N/A — this is a constraint note, not a shim. Delete it if the pack set is ever intentionally changed under the staging rule above.
+- **How to remove:** delete this entry.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'buy_extra' AND created_at > now() - interval '14 days'` and check which counts appear in the bodies.
+
+### `app/buy_extra` endpoint kept alive after purchasing was switched off
+
+- **Added:** 2026-07-22 (referral program — migration `20260722160000_referral_program`)
+- **Reason:** Every `BUY_EXTRA_OPTIONS` entry flipped to `enabled: false`, so the new mobile build never posts `/app/buy_extra` — inviting a friend is now the only way to earn beyond the daily pool. The endpoint and RPC are deliberately left untouched: the deployed build (≤ 1.0.3) still renders the 3-credit row as tappable and calls it, and removing it would 400 those taps. Purely a *client-side* narrowing, so nothing needed staging — this entry is the cleanup reminder.
+- **Old shape (kept alive):** `public.app_buy_extra(me_id, p_count)` + the `case "buy_extra":` dispatcher branch, both validating `count ∈ {3,10,50}`. Old builds keep granting themselves 3 free credits per tap until they update.
+- **New shape (preferred):** no purchase path at all. Credits come from the 20:00 grant (`_credits_cap()` = 1) and from referrals (`_referral_reward()` = 1 per friend who installs AND completes a profile, capped at `_referral_daily_cap()` = 10 per grant day).
+- **Safe to remove after:** the build shipping the referral row (all buy options "coming soon") is the live floor. Note this supersedes the `app_buy_extra count set stays {3,10,50}` entry above — resolve both together.
+- **How to remove:**
+  - Remove the `case "buy_extra":` block from `supabase/functions/app/index.ts`.
+  - `DROP FUNCTION public.app_buy_extra(uuid, integer);` in a follow-up migration.
+  - Delete `BUY_EXTRA_OPTIONS` / `BuyExtraCount` / `onPick` from `mobile/src/lib/credits.ts` + `mobile/src/components/BuyExtraPopup.tsx`, leaving the referral row as the sheet's only content (and rename the component).
+  - **Only if real payments are never wired up.** If they are, flip `enabled` back on instead of deleting.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'buy_extra' AND created_at > now() - interval '14 days'`. Zero hits = safe.
+
+### Referral program — old builds never claim an install referrer (informational)
+
+- **Added:** 2026-07-22
+- **Reason:** The referral program is entirely additive server-side (new `users.referral_code` column, new `referrals` table, new `relations.referral` key, new `/app/referral` endpoint, new `referral` push code). No response shape, field, or endpoint changed, so there is no shim. This records the cross-version window only.
+- **Old shape (kept alive):** Nothing. Builds that predate the referral row never call `/app/referral`, so **an install attributable to a referral is simply never claimed if the invitee is on an old build** — but that cannot happen in practice, since a new install always gets the current store build. The real window is the *inviter* side: an old build has no invite row in its credits sheet, so those users cannot earn until they update. They ignore the unknown `referral_code` / `relations.referral` keys.
+- **New shape (preferred):** the credits sheet's top row shares `https://once-lake.vercel.app/i/<CODE>`; the invitee's first launch reads the Play install referrer and posts `/app/referral`.
+- **Safe to remove after:** the referral-row build is the live floor.
+- **How to remove:** nothing to delete (no shim). Delete this note.
+- **Verify before removing:** check the live mobile version distribution, and `SELECT source, count(*) FROM referrals GROUP BY 1` to confirm claims are arriving.
+
+### Profile-built gate on `invite`/`add` + browse-before-onboarding (informational)
+
+- **Added:** 2026-07-23
+- **Reason:** New rule: a user browses on /home the moment their **account** exists (name/gender/DOB → `app/account`), and only needs a **built profile** (>= 1 photo AND a non-empty bio) to be seen or to SEND. Enforced at the edge: `requiresProfile = ["invite","add"]` rejects `profile_incomplete` (403), and the `/app/start` self-seed (`app_seed_viewer`) is gated on the same `profileComplete(user)`. This *tightens* a precondition, which CLAUDE.md calls breaking, but it cannot be staged Expand→Contract and has **zero live-build impact** (see below).
+- **Old shape (kept alive):** Nothing on the wire. The deployed mobile build (≤ current) forces onboarding to completion (a non-empty bio) *before* /home, so an old-build user can only reach the invite/add CTAs with a fully built profile — `profileComplete` is always true for them and the new gate never fires. The `others()` image gate already excluded a photo-less user from every pool, so the seed gate only closes the one path (self-seed) an old build never reaches while incomplete anyway.
+- **New shape (preferred):** Gate-aware mobile build routes on `selectNeedsAccount` (not `selectProfileBuilt`), lands account-only users on /home, shows the orange `settings.buildProfile` CTA in place of the menu avatar while `!selectProfileBuilt`, and opens the `home.buildProfile*` popup instead of sending an invite. Server `profileComplete` is the authority.
+- **Safe to remove after:** N/A — not a shim, a permanent gate. Delete this note once the browse-before-onboarding build is the live floor (nothing to remove in code).
+- **How to remove:** Nothing to delete. Drop this note.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key IN ('invite','add') AND value = 'profile_incomplete' AND created_at > now() - interval '14 days'` — hits would mean a real client is sending while unbuilt (expected only from the new build's direct-API edge cases, never the send button).
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.
