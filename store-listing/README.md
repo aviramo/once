@@ -11,14 +11,20 @@ Default language: **Hebrew (Israel) — he-IL**. Add English (United States) —
 | Field in Play Console | File |
 |---|---|
 | App icon (512×512 PNG) | `mobile/assets/once-512.png` |
-| Feature graphic (1024×500 PNG) | `store-listing/feature-graphic-he.png` |
-| Phone screenshot 1 — hero / auth | `store-listing/screenshot-1-hero.png` |
-| Phone screenshot 2 — home (one candidate) | `store-listing/screenshot-2-home.png` |
-| Phone screenshot 3 — incoming invitation | `store-listing/screenshot-3-invitation.png` |
-| Phone screenshot 4 — chat | `store-listing/screenshot-4-chat.png` |
-| Phone screenshot 5 — viewers | `store-listing/screenshot-5-viewers.png` |
+| Feature graphic (1024×500 PNG) | `mobile/store/play-feature-graphic.png` |
+| Phone screenshot 1 — one person at a time | `store-listing/screenshot-1-one-person.png` |
+| Phone screenshot 2 — real time, here and now | `store-listing/screenshot-2-real-time.png` |
+| Phone screenshot 3 — friends and shared circles | `store-listing/screenshot-3-communities.png` |
+| Phone screenshot 4 — the kids schedule | `store-listing/screenshot-4-kids-schedule.png` |
 
 All screenshots are 1080×1920 (9:16). Play Console accepts 320–3840 px on each side.
+
+Each screenshot is a Hebrew headline over a phone whose screen restates a real app
+screen: the purple-on-beige palette (`mobile/src/colors.ts`), the dp tokens
+(`mobile/src/tokens.ts`), the app's own Noto Sans Hebrew faces, and real strings from
+`mobile/src/i18n/he.ts`. The chrome placement follows the card contract in `CLAUDE.md`
+(hamburger top-START, name/age chip top-END, fact chips bottom-START, small report
+under them, heart floating bottom-END).
 
 ---
 
@@ -117,8 +123,8 @@ Once is a different way to meet. Worth trying.
 3. Paste the Hebrew **App name**, **Short description**, **Full description** from the section above.
 4. **Graphics:**
    - App icon → upload `mobile/assets/once-512.png`.
-   - Feature graphic → upload `store-listing/feature-graphic-he.png`.
-   - Phone screenshots → upload all five `screenshot-*.png` files in order (1 → 5).
+   - Feature graphic → upload `mobile/store/play-feature-graphic.png`.
+   - Phone screenshots → upload all four `screenshot-*.png` files in order (1 → 4).
 5. Save → Play Console requires the page to pass validation before you can submit the change for review.
 6. After saving the Hebrew listing, click **Manage translations → Add your own translations**, pick *English (United States)*, and paste the English copy + reuse the same graphics.
 
@@ -126,9 +132,16 @@ Once is a different way to meet. Worth trying.
 
 ## Regenerating assets
 
-If you want to tweak copy/layout, both PowerShell scripts are checked in:
+Both generators are checked in:
 
-- `store-listing/make-feature-graphic.ps1` → produces `feature-graphic-he.png`
-- `store-listing/make-screenshots.ps1` → produces all 5 `screenshot-*.png`
-
-Both scripts have a UTF-8 BOM. Don't strip it — PowerShell 5.1 needs it to read Hebrew correctly.
+- `node store-listing/make-screenshots.mjs` → produces all 4 `screenshot-*.png`.
+  Renders HTML/CSS through headless Chrome (so Hebrew shaping and RTL are the
+  browser's job), embedding the app's Noto Sans Hebrew faces from
+  `mobile/node_modules/@expo-google-fonts` and the profile photos from
+  `web/public/media`. Headline copy, the mock chip text and the phone layout all
+  live at the top of that file. When the app's palette, tokens or card layout
+  change, re-read `mobile/src/colors.ts` / `tokens.ts` / `MatchCard.tsx` and re-run it.
+- `mobile/store/play-feature-graphic.svg` → the feature graphic, purple on beige,
+  matching the app icon and these screenshots. The landing page draws the same
+  picture from its own elements in `web/public/art.js`; the two are separate files,
+  so a change to one is not a change to the other.
