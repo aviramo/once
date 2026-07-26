@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=45" />
+  <link rel="stylesheet" href="styles.css?v=46" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -81,7 +81,7 @@
   <main id="main">
     <section class="hero">
       <div class="container">
-        <div id="sec-hero" class="hero-grid"></div>
+        <div id="sec-hero"></div>
       </div>
     </section>
 
@@ -109,7 +109,7 @@
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
-  <script src="art.js?v=3"></script>
+  <script src="art.js?v=4"></script>
   <script>
   (function () {
     'use strict';
@@ -159,7 +159,6 @@
           sub: 'כי הגיע הזמן לשבור את כל ההרגלים הישנים. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להחליט, ואז מדברים או ממשיכים.',
           ctaSecondary: 'לראות מה שונה כאן',
           pills: ['אדם אחד בכל פעם', 'זמן אמת', 'מעגלים משותפים', 'לוז של הורים'],
-          media: { name: 'מסך Once, אדם אחד', desc: 'מסך האפליקציה שבו מופיע אדם אחד בלבד, עם כפתור לשליחת הזמנה.' }
         },
         pillars: [
           {
@@ -232,7 +231,6 @@
           sub: "Because it's time to break every old habit. No feed, no swiping, no twenty open chats. One person on the screen, 10 minutes to decide, and then you either talk or you move on.",
           ctaSecondary: 'See what is different',
           pills: ['One person at a time', 'Real time', 'Shared circles', 'Parent schedules'],
-          media: { name: 'Once screen, one person', desc: 'The app screen showing a single person, with a button to send an invitation.' }
         },
         pillars: [
           {
@@ -311,8 +309,9 @@
 
     var T; // active language block
 
-    function media(m, kind, art) {
-      kind = kind || 'wide';
+    /* Every illustration on the page is one wide scene; a slot whose artwork key
+       is missing falls back to the labelled placeholder. */
+    function media(m, art) {
       var label = esc(m.name) + ': ' + esc(m.desc);
       var draw = art && window.ART && window.ART[art];
       var body = draw
@@ -321,7 +320,7 @@
           '<span class="media-icon">' + IC.image + '</span>' +
           '<span class="media-name">' + esc(m.name) + '</span>' +
           '<span class="media-desc">' + esc(m.desc) + '</span>';
-      return '<figure class="media media--' + kind + (draw ? ' media--art' : '') +
+      return '<figure class="media media--wide' + (draw ? ' media--art' : '') +
         ' reveal" role="img" aria-label="' + label + '">' + body + '</figure>';
     }
     function downloadBtn(cls, big) {
@@ -332,21 +331,21 @@
     }
 
     /* ---------- Section builders ---------- */
+    /* The hero carries NO illustration (user directive 2026-07-26): the stanza is
+       the first thing on the screen, with the artwork left to the four pillars. */
     function buildHero() {
       var s = T.hero;
-      return '' +
-        '<div class="hero-copy reveal">' +
+      return '<div class="hero-copy reveal">' +
           '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
           '<h1>' + titleHTML(s.title) + '</h1>' +
           '<p class="hero-sub">' + esc(s.sub) + '</p>' +
           '<div class="hero-cta">' +
             downloadBtn('btn-primary btn-lg') +
-            '<a class="btn btn-secondary btn-lg" href="#how">' + esc(s.ctaSecondary) + '</a>' +
+            '<a class="btn btn-secondary btn-lg" href="#' + PILLARS[0] + '">' + esc(s.ctaSecondary) + '</a>' +
           '</div>' +
           availability('hero-avail') +
           '<div class="hero-pills">' + s.pills.map(function (p) { return '<span class="pill">' + esc(p) + '</span>'; }).join('') + '</div>' +
-        '</div>' +
-        '<div class="hero-visual reveal">' + media(s.media, 'phone', 'hero') + '</div>';
+        '</div>';
     }
 
     /* Every pillar is the same section with the media on alternating sides, so
@@ -367,7 +366,7 @@
                   return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
                 }).join('') + '</div>' +
               '</div>' +
-              '<div class="split-visual reveal">' + media(s.media, 'wide', PILLARS[i]) + '</div>' +
+              '<div class="split-visual reveal">' + media(s.media, PILLARS[i]) + '</div>' +
             '</div>' +
           '</div>' +
         '</section>';
@@ -383,7 +382,7 @@
         '<p class="emphasis">' + titleHTML(s.emphasis) + '</p>' +
         '<div class="final-actions">' + downloadBtn('btn-primary', true) + '</div>' +
         availability() +
-        '<div class="final-media">' + media(s.media, 'wide', 'final') + '</div>' +
+        '<div class="final-media">' + media(s.media, 'final') + '</div>' +
         '<div class="contact"><span>' + esc(T.contact.label) + '</span> ' +
           '<a href="mailto:once.app.support@gmail.com?subject=' + encodeURIComponent(T.contact.subject) + '">once.app.support@gmail.com</a>' +
         '</div>' +

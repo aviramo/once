@@ -7,8 +7,8 @@
    literals, so the art always matches the app. Flat fills only, no gradients.
 
    Screens are designed once against a 300x617 phone and placed with device()
-   at whatever size a scene needs; scenes are 800x500 (wide), 800x450 (final)
-   or 300x617 (phone), matching the media aspect ratios in styles.css. */
+   at whatever size a scene needs; scenes are 800x500 (wide) or 800x450 (final),
+   matching the media aspect ratios in styles.css. */
 (function (w) {
   'use strict';
 
@@ -259,10 +259,10 @@
   }
 
   /* ---------- Canvas ---------- */
-  function svg(wd, ht, body, fill) {
+  function svg(wd, ht, body) {
     var sh = id('sh'), bl = id('bl');
-    return '<svg class="art" viewBox="0 0 ' + wd + ' ' + ht + '" preserveAspectRatio="xMidYMid ' +
-      (fill ? 'slice' : 'meet') + '" aria-hidden="true" focusable="false">' +
+    return '<svg class="art" viewBox="0 0 ' + wd + ' ' + ht + '" preserveAspectRatio="xMidYMid meet"' +
+      ' aria-hidden="true" focusable="false">' +
       '<defs>' +
       '<filter id="' + sh + '" x="-40%" y="-40%" width="180%" height="180%">' +
       '<feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="' + INK + '" flood-opacity="0.16"/></filter>' +
@@ -273,15 +273,9 @@
       '</svg>';
   }
   function wide(body) { return svg(800, 500, body); }
-  /* A phone artwork IS the device frame's content, so it fills it edge to edge:
-     a hair of crop beats a band of background along the top. */
-  function phone(body) { return svg(SW, SH, body, true); }
 
   /* ---------- Artworks ---------- */
   var ART = {};
-
-  /* Hero: the home screen itself - one person, one action. */
-  ART.hero = function () { return phone(SCREEN.home(F(0))); };
 
   /* Message 1, one person at a time: a crowd of profile cards around the one
      screen that is actually clear. The crowd is the habit being broken. */

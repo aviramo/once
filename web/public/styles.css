@@ -278,13 +278,7 @@ strong { color: var(--ink); font-weight: 600; }
 
 /* ---------- Hero ---------- */
 .hero { padding-block: clamp(48px, 8vw, 96px); overflow: clip; }
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
-  align-items: center;
-  gap: clamp(28px, 5vw, 64px);
-}
-.hero-copy { max-width: 620px; container-type: inline-size; }
+.hero-copy { max-width: 640px; container-type: inline-size; }
 .hero h1 { margin-bottom: 18px; }
 .hero h1 .accent { color: var(--brand); }
 /* The hero headline is a hard-broken stanza whose repetition only lands while
@@ -317,25 +311,6 @@ strong { color: var(--ink); font-weight: 600; }
   background: var(--accent);
 }
 
-/* Hero visual + "single spotlight" wildcard: a FLAT orange-tint disc behind
-   the phone (the app's ORANGE_SOFT wash). Never a gradient glow. */
-.hero-visual { position: relative; display: flex; justify-content: center; }
-.hero-visual::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline: 0;
-  margin-inline: auto;
-  inline-size: min(400px, 88%);
-  aspect-ratio: 1 / 1;
-  transform: translateY(-50%);
-  border-radius: 50%;
-  background: var(--brand-soft);
-  z-index: 0;
-  pointer-events: none;
-}
-.hero-visual .media { position: relative; z-index: 1; }
-
 /* ---------- Media placeholder component ---------- */
 .media {
   position: relative;
@@ -351,31 +326,10 @@ strong { color: var(--ink); font-weight: 600; }
   padding: 26px;
   overflow: hidden;
 }
-.media--phone {
-  inline-size: min(300px, 100%);
-  margin-inline: auto;
-  aspect-ratio: 9 / 18.5;
-  border-radius: var(--r-xl);
-  border-width: 8px;
-  border-color: var(--ink); /* deep green device frame */
-  background: var(--bg);
-}
-.media--phone::after { /* speaker/notch hint */
-  content: "";
-  position: absolute;
-  inset-block-start: 12px;
-  inset-inline: 0;
-  margin-inline: auto;
-  inline-size: 42px; block-size: 5px;
-  border-radius: var(--r-pill);
-  background: var(--border-strong);
-}
 /* A slot that carries an illustration (art.js): the art fills the frame edge to
    edge, so none of the placeholder chrome (tag, icon, caption) applies. */
 .media--art { padding: 0; gap: 0; background: var(--art-bg); }
 .art { inline-size: 100%; block-size: 100%; display: block; }
-.media--phone.media--art { --art-bg: var(--bg); }
-.media--phone.media--art::after { display: none; }
 /* App UI mirrors with the page like the rest of the layout does: in Hebrew the
    menu, the cards and the invite swap edges. */
 [dir="rtl"] .media--art .art { transform: scaleX(-1); }
@@ -390,7 +344,6 @@ strong { color: var(--ink); font-weight: 600; }
   color: var(--accent);
   flex: 0 0 auto;
 }
-.media--phone .media-icon { inline-size: 50px; block-size: 50px; }
 .media-name { font-weight: 700; font-size: 0.98rem; color: var(--ink); }
 .media-desc { font-size: 0.85rem; line-height: 1.5; color: var(--ink-2); max-width: 34ch; }
 .media-tag {
@@ -406,7 +359,6 @@ strong { color: var(--ink); font-weight: 600; }
   padding: 4px 9px;
   border-radius: var(--r-pill);
 }
-.media--phone .media-tag { inset-block-start: 22px; }
 
 /* ---------- Generic split (text + visual) ---------- */
 .split {
@@ -608,17 +560,15 @@ strong { color: var(--ink); font-weight: 600; }
   .header-actions { margin-inline-start: auto; gap: 8px; }
   .lang-btn { min-height: var(--ctl-h); padding-inline: 14px; }
 
-  .hero-grid { grid-template-columns: 1fr; }
-  .hero-visual { order: -1; margin-bottom: 8px; }
-  .hero-copy { max-width: none; }
 
   .split { grid-template-columns: 1fr; }
-  .split--media-start .split-visual { order: -1; }
-  .split-visual { order: -1; }
+  .split--media-start .split-visual, .split-visual { order: 0; }
 
 
   .mobile-cta { display: block; }
-  body.has-mobile-cta { padding-bottom: 84px; }
+  /* Just enough room that the floating button never sits on the footer text. The
+     button is 12px off the bottom edge, so a small tail is all it needs. */
+  body.has-mobile-cta { padding-bottom: 24px; }
 }
 
 @media (max-width: 560px) {
