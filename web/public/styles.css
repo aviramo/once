@@ -475,29 +475,15 @@ strong { color: var(--ink); font-weight: 600; }
 .callout .chip { background: var(--surface-sunk); border-color: transparent; }
 
 
-/* ---------- Final CTA ---------- */
+/* ---------- Final CTA ----------
+   NOT a card (user directive 2026-07-27): the message right before it already
+   arrives in a white card, and a second one stacked under it read badly. The
+   closing block is plain centred copy on the page itself — no white surface, no
+   border, no radius, no shadow and no brand rule across the top. */
 .final {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-lg);
-  padding: clamp(36px, 6vw, 72px) clamp(24px, 5vw, 60px);
+  padding: clamp(8px, 2vw, 20px) 0;
   text-align: center;
-  position: relative;
-  overflow: hidden;
 }
-/* A flat orange-tint rule across the top edge — the card's only decoration.
-   (Was a radial glow; the brand language is flat fills only.) */
-.final::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 0;
-  block-size: 4px;
-  background: var(--brand);
-  pointer-events: none;
-}
-.final > * { position: relative; }
 .final .lede { margin-inline: auto; margin-top: 14px; }
 .final-media { margin-top: clamp(32px, 5vw, 48px); max-width: 720px; margin-inline: auto; }
 .final-media .media--wide { aspect-ratio: 16 / 9; }
