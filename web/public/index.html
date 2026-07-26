@@ -384,12 +384,21 @@
     /* Every pillar is the same section with the media on alternating sides, so
        the four messages are one parameterised builder and never four near-copies.
        PILLARS is the single source of order: nav labels, section ids and artwork
-       keys all read from it. A pillar may carry an optional `note`, a callout
-       card that lifts one sub-message out of the body instead of burying it in
-       the paragraph. */
+       keys all read from it. A pillar may carry an optional `note`: a sub-message
+       that gets a headline of its own instead of being buried in the paragraph,
+       so it takes the visual side of the split and wraps the artwork in its own
+       card (title + text + drawing as one block). */
     function buildPillars() {
       return T.pillars.map(function (s, i) {
         var flip = i % 2 === 1;
+        var art = media(s.media, PILLARS[i]);
+        var visual = s.note
+          ? '<div class="callout">' +
+              '<div class="callout-title">' + icon(s.note.icon) + esc(s.note.title) + '</div>' +
+              '<p>' + esc(s.note.body) + '</p>' +
+              art +
+            '</div>'
+          : art;
         return '<section class="band' + (flip ? ' band--tint' : '') + '" id="' + PILLARS[i] + '">' +
           '<div class="container">' +
             '<div class="split' + (flip ? ' split--media-start' : '') + '">' +
@@ -397,15 +406,11 @@
                 '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
                 '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
                 '<p class="lede reveal">' + esc(s.body) + '</p>' +
-                (s.note ? '<div class="callout reveal">' +
-                    '<div class="callout-title">' + icon(s.note.icon) + esc(s.note.title) + '</div>' +
-                    '<p>' + esc(s.note.body) + '</p>' +
-                  '</div>' : '') +
                 '<div class="chips reveal">' + s.chips.map(function (c) {
                   return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
                 }).join('') + '</div>' +
               '</div>' +
-              '<div class="split-visual reveal">' + media(s.media, PILLARS[i]) + '</div>' +
+              '<div class="split-visual reveal">' + visual + '</div>' +
             '</div>' +
           '</div>' +
         '</section>';

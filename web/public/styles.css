@@ -405,18 +405,20 @@ strong { color: var(--ink); font-weight: 600; }
 .chip svg { color: var(--accent); }
 
 /* ---------- Callout ---------- */
-/* A pillar's `note`: one sub-message lifted OUT of the body paragraph onto its
-   own card, so it reads as a headline of its own and not as a clause. Flat
-   surface, a solid brand bar on the leading edge, no gradient. */
+/* A pillar's `note`: one sub-message lifted OUT of the body paragraph and given
+   a headline, a paragraph and the section's artwork inside a single card, so it
+   reads as a message of its own and not as a clause. It stands where the bare
+   media figure stands on the other pillars, so it carries that frame's chrome
+   (surface, border, shadow) plus a solid brand bar on the leading edge, and the
+   drawing inside it drops its own frame. Flat surface, no gradient. */
 .callout {
-  margin-top: 20px;
-  max-width: var(--measure);
-  padding: 18px 20px;
+  width: 100%;
+  padding: 20px;
   border: 1px solid var(--border);
   border-inline-start: 4px solid var(--brand);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 .callout-title {
   display: flex;
@@ -429,6 +431,16 @@ strong { color: var(--ink); font-weight: 600; }
 }
 .callout-title svg { color: var(--brand); flex: 0 0 auto; }
 .callout p { font-size: 1rem; line-height: 1.6; }
+/* The drawing sits straight on the card's own surface: no frame of its own and
+   no sunk beige panel behind it (user directive 2026-07-26). --art-bg is the
+   ground the drawing paints for itself, so re-pointing the token here (rather
+   than painting over it) moves both the figure and the SVG onto the white. */
+.callout .media {
+  --art-bg: var(--surface);
+  margin-top: 14px;
+  border: 0;
+  box-shadow: none;
+}
 
 
 /* ---------- Final CTA ---------- */
