@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { Text, TextInput } from './AppText'
 import { BottomSheet } from './BottomSheet'
 import { Button } from './Button'
-import { CameraIcon, CloseBoldIcon, SendIcon } from './icons'
+import { CameraIcon, CheckIcon, CloseBoldIcon, SendIcon } from './icons'
 import { invoke } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { tap } from '../lib/haptics'
@@ -101,7 +101,20 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
       <View style={styles.card}>
         <Text style={styles.title}>{t('bugReport.title')}</Text>
         {done ? (
-          <Text style={styles.thanks}>{t('bugReport.thanks')}</Text>
+          <>
+            <Text style={styles.thanks}>{t('bugReport.thanks')}</Text>
+            {/* Acknowledge button so the success notice has an explicit close,
+                not swipe-only. Same ✓ mark the ConfirmDialog confirm carries. */}
+            <View style={styles.submitWrap}>
+              <Button
+                label={t('common.gotIt')}
+                onPress={onDismiss}
+                iconStart={<CheckIcon color={WHITE} />}
+                variant="primary"
+                size="lg"
+              />
+            </View>
+          </>
         ) : (
           <>
 

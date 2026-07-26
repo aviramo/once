@@ -13,12 +13,24 @@ import type { Group } from './groups'
 export type MemberImage = { hash?: string; normal?: string } | null
 
 export type GroupMember = { user_id: string; name: string | null; image: MemberImage; owner?: boolean; manager?: boolean }
-export type OwnedGroup = { id: string; name: string; invite_code: string; is_public: boolean; members: number; is_owner?: boolean }
+// `requires_approval` gates joins (a link/search join becomes a pending request
+// an owner/manager must approve); `description` is the editable group blurb;
+// `pending` is the count of pending join requests (shown as a badge to staff).
+export type OwnedGroup = { id: string; name: string; invite_code: string; is_public: boolean; members: number; is_owner?: boolean; requires_approval?: boolean; description?: string | null; pending?: number }
 export type CreatedGroup = OwnedGroup & { owner: boolean }
+// One pending join request on a group the caller owns/manages.
+export type JoinRequestItem = { id: string; user_id: string; name: string | null; image: MemberImage; created_at: string }
 // invite_code is included for public groups (a public group is joinable by
 // anyone, so its code is not a secret) — lets "Join" from search reuse redeem.
-export type PublicGroup = { id: string; name: string; members: number; joined: boolean; invite_code?: string; owner_name?: string | null }
+// `requires_approval` flips Join → Request; `requested` is my own pending state.
+export type PublicGroup = { id: string; name: string; members: number; joined: boolean; invite_code?: string; owner_id?: string | null; owner_name?: string | null; owner_image?: MemberImage; description?: string | null; requires_approval?: boolean; requested?: boolean }
 export type Person = { user_id: string; name: string | null; image: MemberImage; requested: boolean; friend: boolean }
+// One row of the group chip's detail popup: a group the viewer and the profile
+// subject both belong to. `owner` is null for admin-owned groups.
+export type SharedGroupOwner = { user_id: string; name: string | null; image: MemberImage }
+// is_public / invite_code (public only) / description let a tapped row open the
+// same member sheet (JoinedGroupSheet) as the Communities hub.
+export type SharedGroup = { id: string; name: string; members: number; owner: SharedGroupOwner | null; is_public?: boolean; invite_code?: string | null; description?: string | null }
 export type FriendItem = { user_id: string; name: string | null; image: MemberImage }
 export type FriendRequestItem = { id: string; user_id: string; name: string | null; image: MemberImage }
 export type MyFriends = { friends: FriendItem[]; requests: FriendRequestItem[] }
@@ -27,9 +39,21 @@ export type MyFriends = { friends: FriendItem[]; requests: FriendRequestItem[] }
 // (maintained by triggers). Lets the hub + the settings row paint instantly
 // from the store — no query. Heavier lists (rosters, people search, the full
 // friends list) stay on-demand.
+// A group the caller belongs to (not owned/managed). Carries enough to paint
+// the hub row and drive the popup: type + member count, and the invite_code for
+// PUBLIC groups only (a public code is not a secret, so a member can share the
+// link); private groups get no code.
+export type JoinedGroup = { id: string; name: string; is_public?: boolean; members?: number; invite_code?: string | null; description?: string | null }
+
+// A group the caller has an outstanding join request on (requires_approval
+// group they hit Join/Request on). Same shape as JoinedGroup so the hub row
+// can render identically — only the meta line + tap action differ.
+export type PendingGroup = JoinedGroup
+
 export type CommunitiesSummary = {
   managed: OwnedGroup[]
-  joined: { id: string; name: string }[]
+  joined: JoinedGroup[]
+  pending: PendingGroup[]
   friends: number
   requests: number
 }
@@ -45,6 +69,7 @@ export function communitiesSummary(profile: WithCommunities): CommunitiesSummary
   return {
     managed: Array.isArray(c.managed) ? c.managed : [],
     joined: Array.isArray(c.joined) ? c.joined : [],
+    pending: Array.isArray(c.pending) ? c.pending : [],
     friends: typeof c.friends === 'number' ? c.friends : 0,
     requests: typeof c.requests === 'number' ? c.requests : 0,
   }
@@ -52,8 +77,11 @@ export function communitiesSummary(profile: WithCommunities): CommunitiesSummary
 
 // ── Communities (reuse the existing groups/user_groups machinery server-side) ──
 
-export const createGroup = (name: string, is_public: boolean): Promise<CreatedGroup> =>
-  invoke<{ group: CreatedGroup }>('app/create_group', { name, is_public }).then(r => r.group)
+export const createGroup = (
+  name: string, is_public: boolean,
+  opts?: { description?: string | null; requires_approval?: boolean },
+): Promise<CreatedGroup> =>
+  invoke<{ group: CreatedGroup }>('app/create_group', { name, is_public, ...opts }).then(r => r.group)
 
 export const ownedGroups = (): Promise<OwnedGroup[]> =>
   invoke<{ owned: OwnedGroup[] }>('app/owned_groups').then(r => r.owned ?? [])
@@ -68,11 +96,24 @@ export const removeMember = (group_id: string, user_id: string): Promise<GroupMe
 export const setManager = (group_id: string, user_id: string, make: boolean): Promise<GroupMember[]> =>
   invoke<{ members: GroupMember[] }>('app/set_manager', { group_id, user_id, make }).then(r => r.members ?? [])
 
+// name / is_public / requires_approval each omitted = unchanged. `description`
+// is applied only when the key is present (pass null to clear) — the server
+// keys off the key's presence, so undefined leaves it untouched.
 export const updateGroup = (
   group_id: string,
-  opts: { name?: string; is_public?: boolean },
+  opts: { name?: string; is_public?: boolean; description?: string | null; requires_approval?: boolean },
 ): Promise<CreatedGroup> =>
   invoke<{ group: CreatedGroup }>('app/update_group', { group_id, ...opts }).then(r => r.group)
+
+// Pending join requests for a group the caller owns/manages.
+export const groupRequests = (group_id: string): Promise<JoinRequestItem[]> =>
+  invoke<{ requests: JoinRequestItem[] }>('app/group_requests', { group_id }).then(r => r.requests ?? [])
+
+// Approve (join + notify the requester) or reject (silent) one pending request.
+// Returns the fresh roster + remaining requests for the group.
+export const respondJoin = (request_id: string, accept: boolean): Promise<{ members: GroupMember[]; requests: JoinRequestItem[] }> =>
+  invoke<{ members?: GroupMember[]; requests?: JoinRequestItem[] }>('app/respond_join', { request_id, accept })
+    .then(r => ({ members: r.members ?? [], requests: r.requests ?? [] }))
 
 export const deleteGroup = (group_id: string): Promise<unknown> =>
   invoke('app/delete_group', { group_id })
@@ -81,8 +122,11 @@ export const searchGroups = (q: string): Promise<PublicGroup[]> =>
   invoke<{ results: PublicGroup[] }>('app/search_groups', { q }).then(r => r.results ?? [])
 
 // Join by 6-digit code (existing endpoint; returns the fresh legacy group list).
-export const redeemInvite = (code: string): Promise<{ groups?: Group[] }> =>
-  invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
+// `join_status` distinguishes an instant join from a pending request on an
+// approval-gated group ('pending') and an existing membership ('already').
+export type JoinStatus = 'joined' | 'pending' | 'already'
+export const redeemInvite = (code: string): Promise<{ groups?: Group[]; join_status?: JoinStatus }> =>
+  invoke<{ groups?: Group[]; join_status?: JoinStatus }>('app/redeem_invite', { code })
 
 // Every group the caller belongs to (owned + joined). "Groups you're in" =
 // this minus the owned list. Reuses the existing legacy endpoint.
@@ -91,6 +135,13 @@ export const myGroups = (): Promise<Group[]> =>
 
 export const leaveGroup = (group_id: string): Promise<{ groups?: Group[] }> =>
   invoke<{ groups?: Group[] }>('app/leave_group', { group_id })
+
+// Requester withdraws their own pending join request on a group they've asked
+// to join. Idempotent — cancelling a request that no longer exists is a no-op
+// success. The store refreshes off the returned user row (which carries the
+// updated relations.communities.pending list), so hub + FindView repaint.
+export const cancelJoinRequest = (group_id: string): Promise<{ groups?: Group[] }> =>
+  invoke<{ groups?: Group[] }>('app/cancel_join', { group_id })
 
 // Deep-link join. A shared group invite link (once://g/<token> or the https
 // brand-site form) opens the app here; we pull the token out and redeem it.
@@ -115,6 +166,11 @@ export const myFriends = (): Promise<MyFriends> =>
 export const searchPeople = (q: string): Promise<Person[]> =>
   invoke<{ results: Person[] }>('app/search_people', { q }).then(r => r.results ?? [])
 
+// Groups the caller and `user_id` both belong to, smallest-first (same order
+// as the on-photo chip's named group). Backs the group chip's detail popup.
+export const sharedGroups = (user_id: string): Promise<SharedGroup[]> =>
+  invoke<{ groups: SharedGroup[] }>('app/shared_groups', { user_id }).then(r => r.groups ?? [])
+
 // 'requested' | 'friends' (auto-linked when a reverse request already existed)
 export const friendRequest = (user_id: string): Promise<string> =>
   invoke<{ status: string }>('app/friend_request', { user_id }).then(r => r.status)
@@ -124,3 +180,24 @@ export const friendRespond = (request_id: string, accept: boolean): Promise<{ st
 
 export const unfriend = (user_id: string): Promise<unknown> =>
   invoke('app/unfriend', { user_id })
+
+// Auto-link by invite code (the inviter's referral_code). Mutual, no approval.
+// 'linked' (new friend) | 'already' (were already friends) | 'self'. Returns
+// the caller's fresh friends roster so the screen can repaint.
+export const linkFriendByCode = (code: string): Promise<MyFriends> =>
+  invoke<MyFriends>('app/friend_link', { code })
+
+// Deep-link friend-connect. A friend invite link (once://f/<CODE> or the https
+// brand-site form) opens the app here; we pull the code out and link the pair.
+// No-op if the URL isn't a friend invite. Needs a session, so a failure (opened
+// before sign-in) is swallowed — the code is re-consumed off the cold-start URL
+// once signed in. The code is the referral_code alphabet: [A-Za-z0-9]{4,16}.
+export function parseFriendInviteCode(url: string): string | null {
+  const m = url.match(/(?:^|\/)f\/([A-Za-z0-9]{4,16})(?:[/?#]|$)/)
+  return m ? m[1].toUpperCase() : null
+}
+export async function consumeFriendInviteUrl(url: string): Promise<void> {
+  const code = parseFriendInviteCode(url)
+  if (!code) return
+  try { await linkFriendByCode(code) } catch { /* not signed in yet / bad code */ }
+}

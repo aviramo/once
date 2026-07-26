@@ -3,7 +3,8 @@ import { Share } from 'react-native'
 import { requireOptionalNativeModule } from 'expo-modules-core'
 
 import { invoke } from './api'
-import { referralUrl } from './links'
+import { referralUrl, friendInviteUrl } from './links'
+import { linkFriendByCode } from './communities'
 import { STORAGE } from '../keys'
 import { t } from '../i18n'
 
@@ -29,6 +30,30 @@ const InstallReferrer = requireOptionalNativeModule<{
 /** Query-parameter name the web redirect packs the code into, inside Play's
  *  `referrer` string. Must match web/src/proxy.ts. */
 const REFERRAL_PARAM = 'ref'
+/** Flag the /f/ friend-invite path sets in the install referrer ("f=1") so a
+ *  fresh install also links the pair as friends, not just attributes a credit.
+ *  Absent for the credit-only /i/ link. Must match web/src/proxy.ts. */
+const FRIEND_PARAM = 'f'
+
+/** Did this install referrer come from a friend-invite link (/f/)? Scans the
+ *  same urlencoded fragment as parseReferralCode for an "f=1" pair. */
+export function parseFriendFlag(referrer: string | null | undefined): boolean {
+  if (!referrer) return false
+  const scan = (s: string): boolean => {
+    for (const pair of s.split('&')) {
+      const eq = pair.indexOf('=')
+      if (eq <= 0) continue
+      try {
+        if (decodeURIComponent(pair.slice(0, eq)) === FRIEND_PARAM
+          && decodeURIComponent(pair.slice(eq + 1)).trim() === '1') return true
+      } catch { continue }
+    }
+    return false
+  }
+  if (scan(referrer)) return true
+  if (referrer.includes('%')) { try { return scan(decodeURIComponent(referrer)) } catch { return false } }
+  return false
+}
 
 /** Pull the referral code out of a Play install-referrer string. The string is
  *  a urlencoded query fragment ("ref=ABC1234", or "utm_source=...&ref=ABC1234"
@@ -101,6 +126,12 @@ export async function claimInstallReferral(): Promise<void> {
     // can't loop; the server is idempotent (one inviter per account, forever)
     // so a retry after a dropped response is harmless.
     await AsyncStorage.setItem(STORAGE.referralClaimed, String(attempts + 1))
+    // Friend-connect for a /f/ install (best-effort, independent of the credit
+    // claim below so a 'too_late' referral can't block it). Idempotent
+    // server-side; retried on later launches until the DONE mark lands.
+    if (parseFriendFlag(raw)) {
+      try { await linkFriendByCode(code) } catch { /* retried until DONE */ }
+    }
     await invoke('app/referral', { code, source: 'play_referrer' })
     await AsyncStorage.setItem(STORAGE.referralClaimed, DONE)
   } catch {
@@ -140,6 +171,22 @@ export async function shareReferral(profile: WithReferral): Promise<boolean> {
       // preview card below the invitation sentence.
       message: `${t('credits.invite.shareText')}\n${url}`,
     })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Share the FRIEND invite link (/f/<CODE>). Same per-user code as the credit
+ *  referral, a distinct path that auto-links the two as mutual friends when
+ *  opened with the app installed (and still attributes + links on a fresh
+ *  install). Same share text as shareReferral. */
+export async function shareFriendInvite(profile: WithReferral): Promise<boolean> {
+  const code = referralCode(profile)
+  if (!code) return false
+  const url = friendInviteUrl(code)
+  try {
+    await Share.share({ message: `${t('credits.invite.shareText')}\n${url}` })
     return true
   } catch {
     return false

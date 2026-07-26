@@ -41,6 +41,12 @@ const REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
 // the installed app (once://g/<TOKEN>) with a Play-store fallback. The invite's
 // opaque token stays in the URL — the user never sees or types a "code".
 const GROUP_PATH_RE = /^\/g\/(\d{6})\/?$/;
+// Friend invite link: /f/<CODE> serves a redirect page that hands off to the
+// installed app (once://f/<CODE>, which links the pair as mutual friends) with
+// a Play-store fallback that packs the code into the referrer (ref=<CODE>&f=1)
+// so a fresh install connects on first launch. CODE = the inviter's
+// referral_code (7-char, but accept the same 4..16 alnum window as /i/).
+const FRIEND_PATH_RE = /^\/f\/([A-Za-z0-9]{4,16})\/?$/;
 
 // Paths that REQUIRE an authenticated session. The root `/` is auth-aware
 // (handled separately below); these are the panel sub-routes. A signed-out
@@ -84,6 +90,14 @@ export async function proxy(request: NextRequest) {
   if (GROUP_PATH_RE.test(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/group.html";
+    return NextResponse.rewrite(url);
+  }
+
+  // Friend invite link. Same rewrite treatment as the group link — the browser
+  // keeps /f/<CODE> so friend.html's script can read the code off the path.
+  if (FRIEND_PATH_RE.test(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/friend.html";
     return NextResponse.rewrite(url);
   }
 

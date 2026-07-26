@@ -35,6 +35,11 @@ export interface Profile {
    * and the pair shares any group. Drives the on-photo group chip. Slim
    * viewer-list entries strip this. */
   group_name?: string | null
+  /** Count of ADDITIONAL shared groups beyond the one named in `group_name`
+   * (so 2 shared groups → 1). Server embeds it in make_profile alongside
+   * group_name; absent/NULL when the pair shares 0 or 1 groups. Drives the
+   * "+N" badge inside the group chip. */
+  group_extra?: number | null
 }
 
 export type LocationType = 'device' | 'home' | 'work'

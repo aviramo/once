@@ -99,10 +99,12 @@ export function dismissAllNotifications() {
  * The handler receives the notification `type` code (e.g. 'chat', 'invite-in').
  * Returns a cleanup function — call it on unmount.
  */
-export function addNotificationTapListener(handler: (type: string) => void): () => void {
+export function addNotificationTapListener(handler: (type: string, groupId?: string) => void): () => void {
   const sub = Notifications.addNotificationResponseReceivedListener(response => {
-    const type = response.notification.request.content.data?.type as string | undefined
-    if (type) handler(type)
+    const data = response.notification.request.content.data
+    const type = data?.type as string | undefined
+    const groupId = typeof data?.group_id === 'string' ? data.group_id : undefined
+    if (type) handler(type, groupId)
   })
   return () => sub.remove()
 }
@@ -117,6 +119,18 @@ export function getInitialNotificationType(): string | null {
     const r = Notifications.getLastNotificationResponse()
     const type = r?.notification.request.content.data?.type
     return typeof type === 'string' ? type : null
+  } catch {
+    return null
+  }
+}
+
+/** The `group_id` of the cold-start notification (group_join / group_approved
+ *  deep-link to a group), or null. Companion to getInitialNotificationType. */
+export function getInitialNotificationGroupId(): string | null {
+  try {
+    const r = Notifications.getLastNotificationResponse()
+    const gid = r?.notification.request.content.data?.group_id
+    return typeof gid === 'string' ? gid : null
   } catch {
     return null
   }

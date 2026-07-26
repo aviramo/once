@@ -513,15 +513,18 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
         }}
         onDismiss={() => setLocationPopupVisible(false)}
       />
-      {/* Location is frozen during an active interaction. This is a
-          button-less informational notice (dismiss by swipe / backdrop):
-          it just explains why the row didn't open the picker and tells the
-          user to finish the current view/invitation first. */}
+      {/* Location is frozen during an active interaction. Informational
+          notice: it just explains why the row didn't open the picker and
+          tells the user to finish the current view/invitation first. Carries
+          a single "got it" acknowledge button (default ✓) so there's an
+          explicit way to close it, on top of swipe / backdrop. */}
       <ConfirmDialog
         visible={locationLockedInfoVisible}
         title={t('settings.locationLockedTitle')}
         description={t('settings.locationLockedDesc')}
+        confirmLabel={t('common.gotIt')}
         draggable
+        onConfirm={() => setLocationLockedInfoVisible(false)}
         onCancel={() => setLocationLockedInfoVisible(false)}
       />
     </View>
@@ -2887,9 +2890,29 @@ export default function SettingsPage({
     pulling: pulling ?? false,
   } : null, [dismissGestureRef, onScrollAtTop, pulling])
 
+  // The photo grows by `photoBleed` so the image bleeds up behind the floating
+  // sheet chrome (the close X), filling to the very top of the screen.
+  const photoHeight = PROFILE_CARD_HEIGHT + photoBleed
+
   const body = (
     <View style={styles.rootOuter}>
       <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['bottom', 'left', 'right']}>
+        {/* The profile photo is the BACKMOST, FIXED layer: it stays pinned to
+            the top while the menu content scrolls UP and covers it (user
+            request 2026-07-26). pointerEvents 'none' so the transparent spacer
+            in the scroll below owns the tap (open profile) and the scroll
+            gesture, while the photo shows through behind it. */}
+        {profileBuilt ? (
+          <View style={[styles.profileCardFixed, { height: photoHeight }]} pointerEvents="none">
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.profileCardPlaceholder}>
+                <TabIcon tab="profile" color={BLACK_STRONG} />
+              </View>
+            )}
+          </View>
+        ) : null}
         <PullScrollView
           style={styles.tabScroll}
           contentContainerStyle={[styles.tabContent, { paddingTop: 0 }]}
@@ -2900,23 +2923,15 @@ export default function SettingsPage({
           overScrollMode="never"
           scrollEventThrottle={16}
         >
-          {/* The photo grows by `photoBleed` and the scrim + caption are inset
-              by the same amount, so the image alone extends up behind the
-              floating chrome. Everything below the card, and the caption on
-              it, keep their positions. */}
           {profileBuilt ? (
+            // Transparent spacer sitting over the fixed photo: tapping it opens
+            // profile editing, dragging it scrolls, and the photo behind shows
+            // through. As the user scrolls, this spacer rides up and the opaque
+            // content body below rises to cover the pinned photo.
             <Pressable
-              style={[styles.profileCard, { height: PROFILE_CARD_HEIGHT + photoBleed }]}
+              style={{ height: photoHeight }}
               onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
-            >
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
-              ) : (
-                <View style={styles.profileCardPlaceholder}>
-                  <TabIcon tab="profile" color={BLACK_STRONG} />
-                </View>
-              )}
-            </Pressable>
+            />
           ) : (
             // Not-yet-built profile: no hero card. Plain page, one regular
             // button sitting just below the sheet's close (X) chrome.
@@ -2930,11 +2945,15 @@ export default function SettingsPage({
             </View>
           )}
 
-          <View style={styles.optionsWrap}>
-            <PreferencesContent onOpenSubPage={onOpenSubPage} />
+          {/* Opaque body: its solid BG fill is what covers the fixed photo as
+              the list scrolls up over it. */}
+          <View style={styles.scrollBody}>
+            <View style={styles.optionsWrap}>
+              <PreferencesContent onOpenSubPage={onOpenSubPage} />
 
-            <View style={{ marginTop: XL }}>
-              <AppInlineContent onBack={onBack} onNavigateHome={onNavigateHome} onOpenSubPage={onOpenSubPage} />
+              <View style={{ marginTop: XL }}>
+                <AppInlineContent onBack={onBack} onNavigateHome={onNavigateHome} onOpenSubPage={onOpenSubPage} />
+              </View>
             </View>
           </View>
 
@@ -3032,14 +3051,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     marginBottom: MD,
   },
-  // The user's photo, uncaptioned, at 2× the height of a regular row: tapping
-  // it opens profile editing. No label and no scrim over it — the photo is the
-  // affordance, and anything drawn on it only fought the image.
-  profileCard: {
-    width: '100%', height: PROFILE_CARD_HEIGHT,
+  // The user's photo, uncaptioned, at 2x the height of a regular row. It is the
+  // BACKMOST, FIXED layer: pinned to the top of the sheet behind the scroll,
+  // the content body scrolls up and covers it. No label and no scrim over it,
+  // the photo is the affordance (the transparent spacer over it owns the tap).
+  profileCardFixed: {
+    position: 'absolute', top: 0, start: 0, end: 0,
     overflow: 'hidden',
     backgroundColor: WHITE_SOFT,
   },
+  // Opaque wrapper around the scrolling menu content: its solid BG is what
+  // hides the fixed photo behind it as the list rises over the photo.
+  scrollBody: { backgroundColor: BG },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
   // Not-yet-built profile: no hero card, just the plain (beige) page. A regular

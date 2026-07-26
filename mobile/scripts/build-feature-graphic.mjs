@@ -5,13 +5,15 @@ import path from 'node:path'
 // ─────────────────────────────────────────────────────────────────────────
 // Google Play FEATURE GRAPHIC — 1024×500, no text, flat colour only.
 //
-// The scene, left → right, is the app in one breath:
-//   the brand mark (one moment, ringed by its countdown) → two chat bubbles
-//   → the single match card, with the orange heart on it.
+// One abstract image for one idea: ONE-ON-ONE, IN REAL TIME.
+//   the brand's "1" stands as the hero, ringed by a live countdown and pulse
+//   rings radiating out (the moment is happening now, and it is timed); a few
+//   hearts drift from it toward a single profile card — the one person the
+//   moment brings, with a heart on it. No chat, no deck: the idea, abstracted.
 //
-// Every colour is parsed out of src/colors.ts, exactly like build-icons.mjs,
-// so the store art can never drift from the app's palette.
-// Run: `node scripts/build-feature-graphic.mjs`.
+// The "1" glyph geometry is PARSED from build-icons.mjs and the palette from
+// src/colors.ts, so the store art can never drift from the real app icon or
+// the app's colours. Run: `node scripts/build-feature-graphic.mjs`.
 // ─────────────────────────────────────────────────────────────────────────
 
 const root = path.resolve(
@@ -20,125 +22,108 @@ const root = path.resolve(
 )
 const out = path.join(root, 'store')
 
+// ── Palette: the app's own tokens, never re-typed ────────────────────────────
 const colorsSrc = fs.readFileSync(path.join(root, 'src', 'colors.ts'), 'utf8')
 const token = (name) => {
   const m = colorsSrc.match(new RegExp(`export const ${name}\\s*=\\s*'(#[0-9A-Fa-f]{6})'`))
   if (!m) throw new Error(`colors.ts: token ${name} not found (or no longer a plain hex)`)
   return m[1]
 }
+const BG = token('BG') // beige ground — the same ground the app icon sits on
+const SURFACE = token('SURFACE') // lightest beige — the card body
+const WHITE = token('WHITE') // ink on the purple heart button
+const INK = token('INK') // the regular purple
+const GREEN_HALF = token('GREEN_HALF') // muted purple
+const ORANGE = token('ORANGE') // the brand-mark purple — the "1" and the heart
+const GROUND = token('PRIMARY_GROUND') // pale purple: pulse rings, photo wash, card lip
 
-const BG = token('BG')
-const WHITE = token('WHITE')
-const SURFACE_LIFT = token('SURFACE_LIFT')
-const INK = token('INK')
-const GREEN = token('GREEN')
-const GREEN_HALF = token('GREEN_HALF')
-const GREEN_WASH = token('GREEN_WASH')
-const ORANGE = token('ORANGE')
-const GROUND = token('PRIMARY_GROUND')
+// ── The "1" glyph: the real icon geometry, parsed from build-icons.mjs ────────
+// (that file runs file-writing side effects on import, so we read it as text —
+// its GLYPH/STROKE stay the single source of truth for the mark.)
+const iconSrc = fs.readFileSync(path.join(root, 'scripts', 'build-icons.mjs'), 'utf8')
+const GLYPH = iconSrc.match(/const GLYPH = '([^']+)'/)?.[1]
+const STROKE = Number(iconSrc.match(/const STROKE = (\d+)/)?.[1])
+if (!GLYPH || !STROKE) throw new Error('build-icons.mjs: could not parse GLYPH / STROKE')
 
 const W = 1024
 const H = 500
 
-// ── The mark, left ────────────────────────────────────────────────────────
-const MARK = { x: 236, y: 250, r: 108, ring: 9.5, bar: { w: 31, h: 126 } }
+// Hero "1" centre (it is drawn from a 1024 icon canvas centred on 512,512).
+const HERO = { x: 360, y: 250, s: 0.5 }
+const one = `<g transform="translate(${HERO.x},${HERO.y}) scale(${HERO.s}) translate(-512,-512)" fill="none" stroke="${ORANGE}" stroke-width="${STROKE}" stroke-linecap="round" stroke-linejoin="round"><path d="${GLYPH}"/></g>`
 
-// Concentric beige rings behind it — the same circle repeated outward, which
-// is the icon's own geometry used as pattern rather than a second motif.
-const halo = [176, 236, 300, 372]
+// ── Live pulse: rings radiating out of the mark, in real time ─────────────────
+const ripple = [200, 250, 300, 350]
   .map(
     (r, i) =>
-      `<circle cx="${MARK.x}" cy="${MARK.y}" r="${r}" fill="none" stroke="${BG}" stroke-width="${9 - i}"/>`,
+      `<circle cx="${HERO.x}" cy="${HERO.y}" r="${r}" fill="none" stroke="${GROUND}" stroke-width="${10 - i * 1.6}"/>`,
   )
   .join('')
 
-const mark = `
-  <circle cx="${MARK.x}" cy="${MARK.y}" r="${MARK.r}" fill="${ORANGE}" stroke="${BG}" stroke-width="${MARK.ring}"/>
-  <rect x="${MARK.x - MARK.bar.w / 2}" y="${MARK.y - MARK.bar.h / 2}" width="${MARK.bar.w}" height="${MARK.bar.h}" rx="${MARK.bar.w / 2}" fill="${BG}"/>
-`
-
-// The countdown: a green arc riding just outside the mark, open at the top —
-// the invitation timer that gives the "once" its edge.
-const timerR = MARK.r + 26
+// ── Countdown arc: the moment is timed. A purple sweep open at the top, with a
+// short muted remainder, hugging the mark. The "once" edge, abstracted.
 const arc = (from, to, r, color, w) => {
   const p = (deg) => {
     const a = ((deg - 90) * Math.PI) / 180
-    return `${(MARK.x + r * Math.cos(a)).toFixed(2)},${(MARK.y + r * Math.sin(a)).toFixed(2)}`
+    return `${(HERO.x + r * Math.cos(a)).toFixed(2)},${(HERO.y + r * Math.sin(a)).toFixed(2)}`
   }
   const large = to - from > 180 ? 1 : 0
   return `<path d="M ${p(from)} A ${r},${r} 0 ${large} 1 ${p(to)}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`
 }
-const timer = arc(18, 292, timerR, GREEN, 11) + arc(300, 350, timerR, ORANGE, 11)
+const countdown = arc(22, 300, 172, ORANGE, 11) + arc(310, 350, 172, GREEN_HALF, 11)
 
-// ── The match card, right ─────────────────────────────────────────────────
-const CARD = { x: 624, y: 72, w: 292, h: 356, r: 30 }
-const cx = CARD.x + CARD.w / 2
-const photo = { x: CARD.x + 18, y: CARD.y + 18, w: CARD.w - 36, h: 214, r: 22 }
-const head = { x: cx, y: photo.y + 92, r: 40 }
-
-const bar = (y, w, fill) =>
-  `<rect x="${CARD.x + 26}" y="${y}" width="${w}" height="14" rx="7" fill="${fill}"/>`
-
+// ── The one profile card the moment brings ───────────────────────────────────
+// A single card (never a deck): one person at a time. A pale-purple photo wash
+// with a purple silhouette, two lines, and the orange heart on it.
+const CARD = { x: 712, y: 96, w: 196, h: 308, r: 26 }
+const ccx = CARD.x + CARD.w / 2
+const photo = { x: CARD.x + 16, y: CARD.y + 16, w: CARD.w - 32, h: 150, r: 18 }
+const head = { x: ccx, y: photo.y + 66, r: 30 }
+const line = (y, w, fill) =>
+  `<rect x="${CARD.x + 22}" y="${y}" width="${w}" height="12" rx="6" fill="${fill}"/>`
 const heart = (x, y, s, fill) =>
   `<path transform="translate(${x},${y}) scale(${s}) translate(-12,-12)" fill="${fill}" d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>`
 
-// ONE card, never a stack: the product shows a single person at a time, so
-// the art must not imply a deck to swipe through. SURFACE_LIFT paints the
-// thin lifted lip under it instead.
 const card = `
-  <g transform="rotate(-3 ${cx} ${CARD.y + CARD.h / 2})">
-    <rect x="${CARD.x - 7}" y="${CARD.y - 7}" width="${CARD.w + 14}" height="${CARD.h + 14}" rx="${CARD.r + 7}" fill="${SURFACE_LIFT}"/>
-  </g>`
-
-const face = `
-  <g transform="rotate(-3 ${cx} ${CARD.y + CARD.h / 2})">
-    <rect x="${CARD.x}" y="${CARD.y}" width="${CARD.w}" height="${CARD.h}" rx="${CARD.r}" fill="${WHITE}"/>
-    <rect x="${photo.x}" y="${photo.y}" width="${photo.w}" height="${photo.h}" rx="${photo.r}" fill="${GREEN_WASH}"/>
+  <g transform="rotate(-4 ${ccx} ${CARD.y + CARD.h / 2})">
+    <rect x="${CARD.x - 6}" y="${CARD.y - 6}" width="${CARD.w + 12}" height="${CARD.h + 12}" rx="${CARD.r + 6}" fill="${GROUND}"/>
+    <rect x="${CARD.x}" y="${CARD.y}" width="${CARD.w}" height="${CARD.h}" rx="${CARD.r}" fill="${SURFACE}"/>
+    <rect x="${photo.x}" y="${photo.y}" width="${photo.w}" height="${photo.h}" rx="${photo.r}" fill="${GROUND}"/>
     <clipPath id="ph"><rect x="${photo.x}" y="${photo.y}" width="${photo.w}" height="${photo.h}" rx="${photo.r}"/></clipPath>
     <g clip-path="url(#ph)">
-      <circle cx="${head.x}" cy="${head.y}" r="${head.r}" fill="${GREEN}"/>
-      <path d="M ${head.x - 82} ${photo.y + photo.h + 6} a 82,74 0 0 1 164,0 z" fill="${GREEN}"/>
+      <circle cx="${head.x}" cy="${head.y}" r="${head.r}" fill="${INK}"/>
+      <path d="M ${head.x - 58} ${photo.y + photo.h + 4} a 58,52 0 0 1 116,0 z" fill="${INK}"/>
     </g>
-    ${bar(CARD.y + 258, 132, INK)}
-    ${bar(CARD.y + 288, 196, GREEN_HALF)}
-    ${bar(CARD.y + 314, 148, GREEN_WASH)}
-    <circle cx="${CARD.x + CARD.w - 6}" cy="${CARD.y + CARD.h - 58}" r="43" fill="${ORANGE}"/>
-    ${heart(CARD.x + CARD.w - 6, CARD.y + CARD.h - 58, 1.9, WHITE)}
+    ${line(CARD.y + 186, 104, INK)}
+    ${line(CARD.y + 212, 140, GREEN_HALF)}
+    ${line(CARD.y + 234, 92, GROUND)}
+    <circle cx="${CARD.x + CARD.w - 6}" cy="${CARD.y + CARD.h - 46}" r="32" fill="${ORANGE}"/>
+    ${heart(CARD.x + CARD.w - 6, CARD.y + CARD.h - 46, 1.4, WHITE)}
   </g>`
 
-// ── The conversation, between them ────────────────────────────────────────
-const dots = (x, y, fill) =>
-  [0, 1, 2].map((i) => `<circle cx="${x + i * 22}" cy="${y}" r="6.5" fill="${fill}"/>`).join('')
+// ── Hearts drifting from the mark toward the card ─────────────────────────────
+const hearts = `
+  ${heart(556, 322, 1.5, ORANGE)}
+  ${heart(628, 210, 2.0, INK)}
+  ${heart(674, 330, 1.2, GREEN_HALF)}`
 
-const bubble = (x, y, w, h, fill, tailLeft) => `
-  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>
-  <circle cx="${tailLeft ? x + 10 : x + w - 10}" cy="${y + h + 6}" r="9" fill="${fill}"/>
-  <circle cx="${tailLeft ? x - 4 : x + w + 4}" cy="${y + h + 18}" r="4.5" fill="${fill}"/>`
-
-const chat = `
-  ${bubble(430, 148, 128, 56, WHITE, true)}
-  ${dots(463, 176, GREEN_HALF)}
-  ${bubble(446, 268, 128, 56, ORANGE, false)}
-  ${dots(479, 296, WHITE)}`
-
-// ── Sparks ────────────────────────────────────────────────────────────────
+// ── A few quiet marks for air (kept clear of the card) ────────────────────────
+const dot = (x, y, r, fill) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/>`
 const sparks = `
-  ${heart(596, 108, 1.5, ORANGE)}
-  ${heart(430, 372, 1.15, GREEN)}
-  ${heart(940, 452, 1.0, ORANGE)}
-  <circle cx="560" cy="410" r="9" fill="${WHITE}"/>
-  <circle cx="612" cy="60" r="6" fill="${GREEN}"/>
-  <circle cx="88" cy="86" r="11" fill="${ORANGE}"/>
-  <circle cx="118" cy="430" r="7" fill="${GREEN}"/>`
+  ${dot(150, 96, 11, ORANGE)}
+  ${dot(198, 142, 6, INK)}
+  ${dot(112, 402, 8, GREEN_HALF)}
+  ${dot(624, 96, 7, ORANGE)}
+  ${dot(600, 418, 6, GREEN_HALF)}
+  ${dot(966, 430, 8, INK)}`
 
 const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="${W}" height="${H}" fill="${GROUND}"/>
-  ${halo}
-  ${timer}
-  ${mark}
-  ${chat}
+  <rect width="${W}" height="${H}" fill="${BG}"/>
+  ${ripple}
+  ${countdown}
+  ${one}
+  ${hearts}
   ${card}
-  ${face}
   ${sparks}
 </svg>`
 

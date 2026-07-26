@@ -132,7 +132,10 @@ export type Pages = {
   push?: PushPresence;
 };
 
-export type Notify = { user_id: string; code: string; actor_id?: string };
+// `group_id` / `group_name` ride on group-lifecycle notifications (group_join,
+// group_approved) so firePush can interpolate the group name into the body and
+// stamp the push payload with the group id the mobile tap handler deep-links to.
+export type Notify = { user_id: string; code: string; actor_id?: string; group_id?: string; group_name?: string };
 
 // Push title source. Two regimes:
 //   1. Active-interaction codes (invite-in, match, extended, chat) are NOT in this
@@ -195,6 +198,18 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'referral': 'הצטרף דרך ההזמנה שלך, קיבלת קרדיט',
     'friend_request': 'נשלחה אליך בקשת חברות',
     'friend_accept': 'בקשת החברות שלך אושרה',
+    // Auto-link via an invite link (no request/approval). Actor = the friend
+    // who opened the link, so firePush titles it with THEIR name.
+    'friend_link_m': 'הצטרף אליך כחבר ב-Once',
+    'friend_link_f': 'הצטרפה אליך כחברה ב-Once',
+    'friend_link': 'הצטרף אליך כחבר ב-Once',
+    // Group join-approval. {group} is interpolated with the group name in
+    // firePush. group_join is gendered on the requester (the actor); the push
+    // payload carries group_id so tapping deep-links to that group.
+    'group_join_m': 'ביקש להצטרף לקבוצה {group}',
+    'group_join_f': 'ביקשה להצטרף לקבוצה {group}',
+    'group_join': 'ביקש להצטרף לקבוצה {group}',
+    'group_approved': 'בקשתך להצטרף לקבוצה {group} אושרה',
   },
   en: {
     'invite-in': 'Chat invitation',
@@ -215,6 +230,9 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'referral': 'Joined with your invite. You earned a credit.',
     'friend_request': 'You have a new friend request',
     'friend_accept': 'Your friend request was accepted',
+    'friend_link': 'Connected with you as a friend on Once',
+    'group_join': 'Asked to join {group}',
+    'group_approved': 'Your request to join {group} was approved',
   },
 };
 

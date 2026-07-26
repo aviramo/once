@@ -169,12 +169,16 @@ export default {
   'communities.rowFriendsOnly': '{friends} friends',
   'communities.requestsChip': '{count} requests',
   'communities.managedBy': 'Managed by {name}',
+  'communities.sharedGroupsTitle': 'Shared groups',
   'communities.emptyManage': "You haven't created a group yet.",
   'communities.emptyIn': "You haven't joined a group yet.",
   'communities.loadError': 'Could not load, try again.',
 
   // My friends
-  'communities.inviteFriend': 'Invite a friend to once',
+  'communities.inviteFriend': 'Invite a friend',
+  // Caption under the invite button: connecting as friends pays both sides a
+  // credit (server credits it on every new friend link, see friend_link_credits).
+  'communities.inviteReward': 'For every friend who connects, you both get an extra credit.',
   'communities.linkFriend': 'Link an existing friend',
   'communities.friendsCount': '{count} friends',
   'communities.requestsSection': 'Friend requests',
@@ -208,9 +212,18 @@ export default {
   'communities.privacyNote': 'A private group never appears in search, you share the link yourself.',
   'communities.createAction': 'Create group',
   'communities.nameError': 'Please use a shorter name.',
+  'communities.description': 'Description',
+  'communities.descriptionPlaceholder': 'What the group is about',
+  'communities.descUpdate': 'Update',
+  'communities.joining': 'Joining',
+  'communities.approvalOff': 'Open',
+  'communities.approvalOffSub': 'Join instantly',
+  'communities.approvalOn': 'Needs approval',
+  'communities.approvalOnSub': 'A manager approves',
 
   // A group you manage
   'communities.shareInvite': 'Share invite link',
+  'communities.settings': 'Group settings',
   'communities.deleteGroup': 'Delete group',
   'communities.deleteTitle': 'Delete {name}?',
   'communities.deleteDesc': 'The group and all its memberships are removed. This cannot be undone.',
@@ -219,6 +232,13 @@ export default {
   'communities.removeMemberDesc': 'They can join again with the invite code.',
   'communities.makePublic': 'Make public',
   'communities.makePrivate': 'Make private',
+  'communities.approvalEnable': 'Require approval to join',
+  'communities.approvalDisable': 'Stop requiring approval',
+  'communities.approvalOnNote': 'People who ask to join wait for an owner or manager to approve.',
+  'communities.approvalOffNote': 'Anyone with the link joins instantly.',
+  'communities.requestsSectionJoin': 'Join requests ({count})',
+  'communities.approve': 'Approve',
+  'communities.declineJoin': 'Decline',
   'communities.owner': 'Owner',
   'communities.manager': 'Manager',
   'communities.makeManager': 'Make manager',
@@ -227,7 +247,7 @@ export default {
 
   // A group you are in
   'communities.leave': 'Leave group',
-  'communities.memberNote': 'Members rank higher for you. Only the owner sees the member list.',
+  'communities.memberNote': 'Members rank higher for you.',
 
   // Find or join
   'communities.findTitle': 'Join a group',
@@ -235,8 +255,14 @@ export default {
   'communities.orCode': 'or with an invite code',
   'communities.join': 'Join',
   'communities.joined': 'Joined',
+  'communities.requestJoin': 'Request to join',
+  'communities.pending': 'Pending approval',
+  'communities.pendingBadge': '{count} requests',
+  'communities.cancelJoinTitle': 'Cancel your request to join {name}?',
+  'communities.cancelJoinDesc': 'The request will be removed from the managers\' queue. You can always send a new one.',
+  'communities.cancelJoinConfirm': 'Yes, cancel the request',
   'communities.findNote': 'Only public groups appear in search.',
-  'communities.shareMessage': 'Join {name} on once: {link}',
+  'communities.shareMessage': 'Join {name}\n{link}',
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'Report a bug',
   'bugReport.title': 'Report a bug',
@@ -370,14 +396,20 @@ export default {
   'family.summarySelfHasKids': 'I have kids',
   'family.summarySelfHasOneKid': 'I have one kid',
   'family.summarySelfHasNKids': 'I have {n} kids',
-  'family.wantsMore': 'wants more kids',
-  'family.doesntWantMore': 'no more kids',
+  // "more" variants (lead already said "has N kids") drop the redundant "kids":
+  // "has 3 kids and wants more", mirroring Hebrew "רוצה עוד". The no-kids
+  // variants below keep "kids" because the lead there is "has no kids".
+  'family.wantsMore': 'wants more',
+  'family.doesntWantMore': "doesn't want more",
   'family.wantsKids': 'wants kids',
   'family.doesntWantKids': 'no kids wanted',
-  'family.selfWantsMore': 'want more kids',
+  'family.selfWantsMore': 'want more',
   'family.selfDoesntWantMore': "don't want more",
   'family.selfWantsKids': 'want kids',
   'family.selfDoesntWantKids': "don't want kids",
+  // Connector gluing the kids-preference phrase to the lead ("Has 3 kids and
+  // wants more") instead of a comma. Trailing space separates it from the label.
+  'family.prefConnector': 'and ',
   'family.overlapLabel': '{pct}% kid-free overlap',
   'family.overlapChip': '{pct}% overlap',
   'family.addKid': 'Add kid',
@@ -410,11 +442,11 @@ export default {
   // so the row never reads as "tap and get a credit". genderize() is a no-op
   // on English (no {m|f} marker) — single form.
   'credits.invite.title': 'Invite a friend',
-  'credits.invite.joined.none': 'The credit arrives once your friend installs the app and creates an account.',
+  'credits.invite.joined.none': 'For every friend who connects with you, you both get an extra credit.',
   'credits.invite.joined.one': 'One friend joined through you.',
   'credits.invite.joined.many': '{n} friends joined through you.',
   // Text that rides along with the link in the OS share sheet.
-  'credits.invite.shareText': 'You should download Once.',
+  'credits.invite.shareText': 'Join me on Once',
   'settings.miles': 'mi',
   // genderize() is a no-op on English (no {m|f} marker) — single form.
   'settings.preferredGender': 'Available',

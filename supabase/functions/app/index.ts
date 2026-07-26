@@ -131,7 +131,13 @@ function pickGendered(table: Record<string, Record<string, string>>, code: strin
   return dict[code];
 }
 
-async function firePush(log: Log, target_user_id: string, code: string, actor_id: string) {
+async function firePush(
+  log: Log,
+  target_user_id: string,
+  code: string,
+  actor_id: string,
+  extra?: { group_id?: string; group_name?: string },
+) {
   type PushRow = { user_id: string; name: string | null; is_male: boolean | null; data?: { push_token?: unknown; lang?: string } };
   const data = await Tools.invoke(
     log,
@@ -163,15 +169,19 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
     ?? pickGendered(PUSH_BODY, code, lang, actorRow?.is_male ?? null)
     ?? "Once";
   const title = actorName;
-  const bodyText = stateText;
+  // Group-lifecycle bodies carry a {group} placeholder filled from the notify's
+  // group_name (see Notify). Harmless no-op for every other code.
+  const bodyText = extra?.group_name ? stateText.replace("{group}", extra.group_name) : stateText;
 
   const payload: Record<string, unknown> = {
     type: code,
-    collapseId: actor_id,
+    collapseId: extra?.group_id ?? actor_id,
     title,
     body: bodyText,
     channelId: "default",
   };
+  // The mobile tap handler deep-links to this group when present.
+  if (extra?.group_id) payload.group_id = extra.group_id;
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
   const res = await Tools.notify(entry, token, payload);
   // Expo says this token is dead (app uninstalled / push receipt revoked).
@@ -550,8 +560,12 @@ Deno.serve(async (req) => {
         await user.persist(log);
         if (result?.error) return log.error("redeem_invite", result.error, 400);
         rpcUser = result?.user;
+        // notify carries group_join pushes to owner+managers when the group is
+        // approval-gated (empty otherwise). join_status ∈ joined|pending|already
+        // lets the client render a "Pending" state instead of "Joined".
         notifyList = result?.notify ?? [];
         rpcGroups = result?.groups;
+        rpcExtra = { join_status: result?.join_status };
         break;
       }
 
@@ -567,6 +581,20 @@ Deno.serve(async (req) => {
         if (result?.error) return log.error("leave_group", result.error, 400);
         rpcUser = result?.user;
         notifyList = result?.notify ?? [];
+        rpcGroups = result?.groups;
+        break;
+      }
+
+      case "cancel_join": {
+        // Requester withdraws their own pending group-join request. Idempotent
+        // (cancelling a request that no longer exists is a no-op success).
+        // Silent — no push to owner/managers.
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("cancel_join", "no_group_id", 400);
+        const result = await Tools.rpc(log, "app_cancel_join", { me_id: user.user_id, p_group_id: group_id });
+        await user.persist(log);
+        if (result?.error) return log.error("cancel_join", result.error, 400);
+        rpcUser = result?.user;
         rpcGroups = result?.groups;
         break;
       }
@@ -591,7 +619,12 @@ Deno.serve(async (req) => {
       case "create_group": {
         const name = typeof body.name === "string" ? body.name : "";
         const is_public = body.is_public === true;
-        const result = await Tools.rpc(log, "app_create_group", { me_id: user.user_id, p_name: name, p_is_public: is_public });
+        const p_description = typeof body.description === "string" ? body.description : null;
+        const p_requires_approval = body.requires_approval === true;
+        const result = await Tools.rpc(log, "app_create_group", {
+          me_id: user.user_id, p_name: name, p_is_public: is_public,
+          p_description, p_requires_approval,
+        });
         await user.persist(log);
         if (result?.error) return log.error("create_group", result.error, 400);
         const { notify: _n, ...extra } = result ?? {};
@@ -645,7 +678,15 @@ Deno.serve(async (req) => {
         if (!group_id) return log.error("update_group", "no_group_id", 400);
         const p_name = typeof body.name === "string" ? body.name : null;
         const p_is_public = typeof body.is_public === "boolean" ? body.is_public : null;
-        const result = await Tools.rpc(log, "app_update_group", { me_id: user.user_id, p_group_id: group_id, p_name, p_is_public });
+        // Presence of the `description` key means "set it" (to a string or null
+        // to clear) — mirrors the `'bio' in body` null-clear pattern in profile.
+        const p_desc_provided = "description" in body;
+        const p_description = typeof body.description === "string" ? body.description : null;
+        const p_requires_approval = typeof body.requires_approval === "boolean" ? body.requires_approval : null;
+        const result = await Tools.rpc(log, "app_update_group", {
+          me_id: user.user_id, p_group_id: group_id, p_name, p_is_public,
+          p_description, p_desc_provided, p_requires_approval,
+        });
         await user.persist(log);
         if (result?.error) return log.error("update_group", result.error, 400);
         rpcExtra = result;
@@ -670,9 +711,48 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "group_requests": {
+        // Owner/manager reads the pending join requests for one group they run.
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("group_requests", "no_group_id", 400);
+        const result = await Tools.rpc(log, "app_group_requests", { me_id: user.user_id, p_group_id: group_id });
+        await user.persist(log);
+        if (result?.error) return log.error("group_requests", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "respond_join": {
+        // Owner/manager approves (join + push the requester) or rejects
+        // (silent) one pending join request by its id.
+        const request_id = typeof body.request_id === "string" ? body.request_id : null;
+        const accept = body.accept === true;
+        if (!request_id) return log.error("respond_join", "no_request_id", 400);
+        const result = await Tools.rpc(log, "app_respond_join", { me_id: user.user_id, p_request_id: request_id, p_accept: accept });
+        await user.persist(log);
+        if (result?.error) return log.error("respond_join", result.error, 400);
+        const { notify: _n, ...extra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = extra;
+        break;
+      }
+
       case "my_friends": {
         const result = await Tools.rpc(log, "app_my_friends", { me_id: user.user_id });
         await user.persist(log);
+        rpcExtra = result;
+        break;
+      }
+
+      case "shared_groups": {
+        // Read-only list backing the group chip's detail popup: every group the
+        // caller and `user_id` both belong to, each with owner + member count.
+        // Not in requiresPresence — it starts no interaction.
+        const other_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!other_id) return log.error("shared_groups", "no_user_id", 400);
+        const result = await Tools.rpc(log, "app_shared_groups", { me_id: user.user_id, p_other: other_id });
+        await user.persist(log);
+        if (result?.error) return log.error("shared_groups", result.error, 400);
         rpcExtra = result;
         break;
       }
@@ -717,6 +797,23 @@ Deno.serve(async (req) => {
         await user.persist(log);
         if (result?.error) return log.error("unfriend", result.error, 400);
         rpcExtra = result;
+        break;
+      }
+
+      case "friend_link": {
+        // Auto-link the caller to the owner of an invite code (the inviter's
+        // referral_code), reached by opening a /f/<CODE> link with the app
+        // installed (deep link) or on first launch after an install. Mutual,
+        // no request, no approval. Not in requiresPresence: a just-installed or
+        // geo-gated invitee must still be able to connect.
+        const code = typeof body.code === "string" ? body.code.trim() : "";
+        if (!code) return log.error("friend_link", "no_code", 400);
+        const result = await Tools.rpc(log, "app_friend_link_by_code", { me_id: user.user_id, p_code: code });
+        await user.persist(log);
+        if (result?.error) return log.error("friend_link", result.error, 400);
+        const { notify: _n, ...extra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = extra;
         break;
       }
 
@@ -955,7 +1052,7 @@ Deno.serve(async (req) => {
     // Fire pushes behind waitUntil (never block response).
     for (const n of notifyList) {
       if (!n.user_id || n.user_id === user.user_id) continue;
-      EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, user.user_id));
+      EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, user.user_id, { group_id: n.group_id, group_name: n.group_name }));
     }
 
     // Re-seed-on-skip (see skipReleased capture above). A skip that emptied the

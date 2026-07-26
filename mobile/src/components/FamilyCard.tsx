@@ -1,5 +1,6 @@
 import { t, tg, lang } from '../i18n'
-import { familyScheduleOverlap, familyWeekendKidStatus, type FamilyData } from '../lib/family'
+import { familyWeekendKidStatus, type FamilyData } from '../lib/family'
+import type { ChipSegment } from './Chip'
 
 // Lead phrase: the count is folded into the title so it reads as one fact
 // ("has 2 kids"). The "want (more) kids" preference is a SEPARATE phrase
@@ -15,7 +16,10 @@ import { familyScheduleOverlap, familyWeekendKidStatus, type FamilyData } from '
 function familyBaseTitle(data: { hasKids: boolean; count?: number }, self: boolean): string {
   if (!data.hasKids) return t(self ? 'family.summarySelfNoKids' : 'family.summaryNoKids')
   if (data.count === 1) return t(self ? 'family.summarySelfHasOneKid' : 'family.summaryHasOneKid')
-  if (data.count != null) {
+  // A count > 1 folds the number into the phrase ("has 3 kids"). Count 0 (the
+  // "has kids" toggle is on but no kid chips added yet) or unknown falls through
+  // to the plain "has kids" — never "has 0 kids".
+  if (data.count != null && data.count > 1) {
     const tmpl = t(self ? 'family.summarySelfHasNKids' : 'family.summaryHasNKids')
     return tmpl.replace('{n}', String(data.count))
   }
@@ -35,53 +39,59 @@ function familyPrefLabel(hasKids: boolean, isForKids: boolean, self: boolean): s
   return t(key)
 }
 
-// Shared "kids" chip text for any card that surfaces a Profile's family
-// alongside live distance/time chips.
+// Shared "kids" chip content for any card that surfaces a Profile's family
+// alongside live distance/time chips. Returns an interleaved list of text runs
+// and mini-chips (Chip renders them as a wrapping row):
 //
-// The facts — count + ages, the isForKids preference, the kid-free schedule
-// overlap, the upcoming-weekend status — are joined with plain commas into one
-// chip label. Each is a phrase that STANDS ALONE in the i18n table (no leading
-// connector, no leading comma), because the comma is the seam `phraseWrap` in
-// Chip.tsx breaks the label at when the narrow chips column can't hold it on
-// one line. Sentence-glued text ("Has 2 kids (7, -) and doesn't want more…")
-// is what used to break mid-phrase over five ragged lines.
+//   "יש לי 3 ילדים"  [0] [5] [?]  "ורוצה עוד"  [לא פנויה בסופ״ש הקרוב]
+//
+//   - the count lives in the lead phrase ("has 3 kids"); each kid's AGE is its
+//     own mini-chip in kids order, "?" for an age not set yet (user directive
+//     2026-07-26 — replaces the old parenthetical "(0, 5, -)" text);
+//   - the isForKids preference is a text run glued to the lead with a vav
+//     connector ("ורוצה עוד"), no comma;
+//   - the upcoming-weekend status is its own mini-chip.
+//
+// Args:
 //   - `family`: the rendered profile's family (snapshot or own data).
 //   - `isForKids`: explicit override; pass `undefined` to fall back to
 //     family.isForKids (the remote-snapshot path).
 //   - `self`: first-person phrasing for the own-profile preview.
-//   - `viewerFamily`: viewer's family for the schedule-overlap part; pass
-//     `null`/`undefined` to skip it (own preview / no kids).
 //   - `isMale`: the rendered profile's gender; used to gender the weekend
 //     status in Hebrew ("פנוי"/"פנויה", "לא פנוי"/"לא פנויה"). Null/
 //     undefined falls back to masculine, matching `tg`'s convention.
-export function buildFamilyChipText(
+export function buildFamilySegments(
   family: FamilyData | null | undefined,
   isForKids: boolean | null | undefined,
   self: boolean,
-  viewerFamily: FamilyData | null | undefined,
   isMale: boolean | null | undefined,
-): string {
-  if (!family) return ''
+): ChipSegment[] {
+  if (!family) return []
   const kids = family.kids ?? []
-  const count = family.kids?.length
-  const anyAgeSet = kids.some(k => k.age != null)
-  const ageStr = anyAgeSet
-    ? kids.map(k => (k.age != null ? String(k.age) : '-')).join(', ')
-    : null
-  const base = familyBaseTitle({ hasKids: family.hasKids, count }, self)
-  const parts = [ageStr ? `${base} (${ageStr})` : base]
+  const count = kids.length
+  const segments: ChipSegment[] = [{ text: familyBaseTitle({ hasKids: family.hasKids, count }, self) }]
+
+  // Ages as one dense cluster of mini-chips, in kids order — only when at least
+  // one age is known, so a profile with no ages set stays clean instead of a row
+  // of "?" pills. "?" stands in for an age not picked yet.
+  if (family.hasKids && kids.some(k => k.age != null)) {
+    segments.push({ badges: kids.map(k => (k.age != null ? String(k.age) : '?')), ltr: true })
+  }
 
   const effIsForKids = isForKids !== undefined ? isForKids : (family.isForKids ?? null)
-  if (effIsForKids != null) parts.push(familyPrefLabel(family.hasKids, effIsForKids, self))
-
-  const overlap =
-    viewerFamily?.hasKids && family.hasKids
-      ? familyScheduleOverlap(viewerFamily.schedule, family.schedule)
-      : null
-  if (overlap != null) parts.push(t('family.overlapChip').replace('{pct}', String(Math.round(overlap * 100))))
+  if (effIsForKids != null) {
+    // Glued to the lead with a vav connector ("ורוצה עוד"), no comma.
+    segments.push({ text: t('family.prefConnector') + familyPrefLabel(family.hasKids, effIsForKids, self) })
+  }
 
   const weekend = familyWeekendKidStatus(family.schedule, lang)
-  if (weekend) parts.push(tg(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend', isMale))
+  if (weekend) {
+    // Weekend status on its OWN line (user directive 2026-07-26): a forced break
+    // before the bold status run, so "busy weekend" never trails the kids
+    // sentence but always starts a fresh line under it.
+    segments.push({ br: true })
+    segments.push({ text: tg(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend', isMale), bold: true })
+  }
 
-  return parts.join(', ')
+  return segments
 }

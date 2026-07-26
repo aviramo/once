@@ -21,9 +21,9 @@ import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } fro
 import { FIELD_SKIN } from '../src/field'
 import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_SOFT, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
-import { PullPane, usePullBehavior } from '../src/components/PullPane'
+import { PullPane, usePullBehavior, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
-import { SheetHeader } from '../src/components/OverlaySheet'
+import { SheetHeader, type OverlaySheetBody } from '../src/components/OverlaySheet'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import { StatusBarBand } from '../src/components/StatusBarBand'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
@@ -189,9 +189,17 @@ type ChatPageProps = {
   // the home shell can show a green dot beside the chat tab icon.
   onOnlineChange?: (online: boolean) => void
   autoFocusInput?: boolean
+  // Wiring handed down by the enclosing OverlaySheet so the message list can
+  // tell the sheet's dismiss pan when a downward drag on the body should close
+  // it. The chat sheet opens with `dragFrom="header"` (see home.tsx), so only
+  // the header dismisses UNLESS this reports "at top" — which we do whenever a
+  // downward drag genuinely can't scroll: the inverted list is empty/fits the
+  // viewport, or it is scrolled to the oldest end with nothing more to page in.
+  // See the "Sheet dismiss coordination" block below.
+  sheetBody?: OverlaySheetBody
 }
 
-export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange, onOnlineChange, autoFocusInput }: ChatPageProps = {}) {
+export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange, onOnlineChange, autoFocusInput, sheetBody }: ChatPageProps = {}) {
   const insets = useSafeAreaInsets()
   const { profile } = useUserStore()
   const userId = profile?.user_id ?? ''
@@ -202,6 +210,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT)
+  // The composer field's actual rendered outer height at rest (single line). It
+  // depends on the device's font metrics / display scale, so a fixed number for
+  // the round send button never lines up. We measure the field and match it.
+  const [fieldRestHeight, setFieldRestHeight] = useState(INPUT_MIN_HEIGHT + STROKE.thin * 2)
   const [sending, setSending] = useState(false)
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   const [otherIsTyping, setOtherIsTyping] = useState(false)
@@ -944,10 +956,106 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const loadMoreRef = useRef(loadMore)
   useEffect(() => { loadMoreRef.current = loadMore }, [loadMore])
 
-  // ── Scroll handlers ───────────────────────────────────────────────────────
-  const handleScroll = useCallback((e: any) => {
-    scrollOffsetRef.current = e.nativeEvent.contentOffset.y
+  // ── Sheet dismiss coordination ────────────────────────────────────────────
+  // The chat is an inverted FlatList, so "scroll is at the top" can't gate the
+  // sheet's swipe-to-close the way it does for a normal body: at offset 0 the
+  // newest messages show and a downward drag scrolls into history — that must
+  // NOT be stolen. The sheet opens with dragFrom="header" and ChatPage overrides
+  // the at-top flag in the cases where a downward drag genuinely can't scroll and
+  // so should close the sheet instead:
+  //   • the list is empty, or its content fits the viewport (nothing to scroll);
+  //   • the list is scrolled to the OLDEST end (the visual top of the inverted
+  //     list, its max offset) AND there is nothing more to page in — i.e. the
+  //     user "reached the top" and keeps pulling down. That is the standard
+  //     pull-to-close-from-the-top, just at the inverted list's far end.
+  //
+  // Two mechanisms, because a downward drag reaches the dismiss pan two ways:
+  //   • Not scrollable (empty / fits): turn the list's own scroll OFF. There is
+  //     nothing to scroll, and with scroll disabled the drag falls straight
+  //     through to the (ancestor) dismiss pan.
+  //   • Scrollable but at the oldest end: scroll must STAY on (the user has to be
+  //     able to scroll back down), so instead the list runs over PullScrollView —
+  //     an RNGH ScrollView wired `simultaneousHandlers` to the dismiss pan — so
+  //     the pan can claim the boundary overscroll while the pinned native scroll
+  //     can't move. This is the same coordination every card surface uses.
+  // PullScrollView's own at-top probe (contentOffset.y < 8) is meaningless for an
+  // inverted list, so we feed it a no-op setScrollAtTop and drive the real flag
+  // ourselves below. `sheetBody` is a fresh object each render but its
+  // `onScrollAtTop` fn is stable — mirror through a ref.
+  const sheetBodyRef = useRef(sheetBody)
+  sheetBodyRef.current = sheetBody
+  const listLayoutH = useRef(0)
+  const listContentH = useRef(0)
+  // Message count read during render so syncScrollability (empty-deps) sees it.
+  const msgCountRef = useRef(0)
+  msgCountRef.current = reversedMessages.length
+  // Default scrollable=true: scroll stays on until the list has measured, so a
+  // populated chat never briefly disables its scroll in the frame before its
+  // content size lands.
+  const [listScrollable, setListScrollable] = useState(true)
+  const syncScrollability = useCallback(() => {
+    const empty = msgCountRef.current === 0
+    const measured = listLayoutH.current > 0 && listContentH.current > 0
+    // Fits = content no taller than the viewport → nothing to scroll. An empty
+    // list is that by definition (onContentSizeChange never lands a useful
+    // height for zero rows, so don't wait on a measurement for it).
+    const fits = empty || (measured && listContentH.current <= listLayoutH.current + 1)
+    // Disable the list's own scroll only when there is nothing to scroll.
+    setListScrollable(!fits)
+    // Distance from the OLDEST end (the inverted list's max offset / visual top).
+    const distFromOldest = listContentH.current - listLayoutH.current - scrollOffsetRef.current
+    const dismissable = fits
+      ? true
+      : !measured
+        ? false
+        : !hasMoreRef.current && distFromOldest <= 8
+    sheetBodyRef.current?.onScrollAtTop(dismissable)
   }, [])
+  // Re-assert after every (re)open: the sheet re-seeds scrollAtTop=false on open
+  // (dragFrom="header"), and its parent effect runs AFTER this child's, so a
+  // plain effect here would be clobbered. A rAF lands the report after that
+  // seed. On a first open onLayout/onContentSizeChange also fire and agree; this
+  // also covers the keep-mounted reopen, where neither re-fires because the
+  // parked list never re-lays-out.
+  useEffect(() => {
+    if (!isActive) return
+    const id = requestAnimationFrame(syncScrollability)
+    return () => cancelAnimationFrame(id)
+  }, [isActive, syncScrollability])
+  // Re-evaluate the moment the list empties or gets its first message, so the
+  // empty short-circuit above flips without waiting on a layout callback (which
+  // never fires usefully for zero rows).
+  useEffect(() => { syncScrollability() }, [reversedMessages.length, syncScrollability])
+
+  // The PullContext wiring for PullScrollView (scrollable-at-end path). Feed it a
+  // no-op setScrollAtTop — the real flag is driven by syncScrollability above.
+  const { dismissGestureRef, pulling: sheetPulling } = sheetBody ?? {}
+  const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
+    panRef: dismissGestureRef,
+    extraRefs: [],
+    setScrollAtTop: () => {},
+    pulling: !!sheetPulling,
+  } : null, [dismissGestureRef, sheetPulling])
+  // Keyed off the stable dismissGestureRef, NOT pullCtx: pullCtx's identity
+  // changes when `pulling` flips, and a new renderScrollComponent would remount
+  // the scroll view mid-drag. PullScrollView reads `pulling` from context.
+  const renderScrollComponent = useMemo(
+    () => dismissGestureRef ? (props: any) => <PullScrollView {...props} /> : undefined,
+    [dismissGestureRef],
+  )
+
+  // ── Scroll handlers ───────────────────────────────────────────────────────
+  // Capture offset + geometry from the scroll event (single source of truth for
+  // "how far from the oldest end"), then re-derive dismissability. Used for
+  // onScroll and the settle callbacks (throttled onScroll can land a few px
+  // short of the true end).
+  const handleScroll = useCallback((e: any) => {
+    const ne = e.nativeEvent
+    scrollOffsetRef.current = ne.contentOffset.y
+    if (ne.contentSize) listContentH.current = ne.contentSize.height
+    if (ne.layoutMeasurement) listLayoutH.current = ne.layoutMeasurement.height
+    syncScrollability()
+  }, [syncScrollability])
 
   const handleEndReached = useCallback(() => {
     if (hasMoreRef.current && !loadingMoreRef.current) loadMoreRef.current()
@@ -1632,16 +1740,30 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           the keyboard is open pushes the input row to sit exactly on top of
           the keyboard, regardless of platform-specific OS resize behavior. */}
       <View style={styles.body}>
+        <View style={styles.messagesArea}>
+        <PullContext.Provider value={pullCtx}>
         <FlatList
           ref={scrollRef}
           style={styles.messages}
           contentContainerStyle={styles.messagesContent}
           automaticallyAdjustKeyboardInsets={false}
+          // Route scroll through PullScrollView so the dismiss pan can run
+          // simultaneously and claim the boundary overscroll at the oldest end.
+          renderScrollComponent={renderScrollComponent}
           data={reversedMessages}
           keyExtractor={(item) => `${item.user_id}-${item.created_at}`}
           renderItem={renderItem}
           inverted
+          // When the content fits the viewport (empty / short chat) there is
+          // nothing to scroll, so disable scroll and let a body swipe-down fall
+          // through to the sheet's dismiss pan (see syncScrollability). An
+          // overflowing chat keeps scrolling and dismisses at the oldest end.
+          scrollEnabled={listScrollable}
           onScroll={handleScroll}
+          onScrollEndDrag={handleScroll}
+          onMomentumScrollEnd={handleScroll}
+          onLayout={e => { listLayoutH.current = e.nativeEvent.layout.height; syncScrollability() }}
+          onContentSizeChange={(_w, h) => { listContentH.current = h; syncScrollability() }}
           scrollEventThrottle={100}
           keyboardShouldPersistTaps="handled"
           onEndReached={handleEndReached}
@@ -1657,6 +1779,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             <Text style={styles.emptyLabel}>{t('chat.empty')}</Text>
           ) : null}
         />
+        </PullContext.Provider>
+          {/* Tapping the messages area dismisses the open attach menu. Mounted
+              only while it's open, so it never intercepts normal scroll/taps. */}
+          {attachMenuOpen && (
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setAttachMenuOpen(false)} />
+          )}
+        </View>
 
         {/* ── Input bar ──
             Fixed-height white footer with the input field and the send
@@ -1715,7 +1844,12 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           {/* Always render the text input row so the keyboard stays open while
               recording/previewing. The recording and preview UIs overlay on top. */}
           <View style={styles.inputRow}>
-            <ReAnimated.View style={[styles.inputWrap, inputWrapBorderStyle]} onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}>
+            <ReAnimated.View style={[styles.inputWrap, inputWrapBorderStyle]} onLayout={e => {
+              setInputWrapWidth(e.nativeEvent.layout.width)
+              // Only capture while the field is at its single-line rest height, so
+              // the button matches the resting field and doesn't grow with it.
+              if (inputHeight <= INPUT_MIN_HEIGHT) setFieldRestHeight(e.nativeEvent.layout.height)
+            }}>
               <View style={styles.inputAnimWrap}>
                 <TextInput
                   ref={inputRef}
@@ -1811,6 +1945,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               disabled={!!text.trim() && sending}
               style={({ pressed }) => [
                 styles.sendBtn,
+                { width: fieldRestHeight, height: fieldRestHeight },
                 !!text.trim() && sending && styles.sendBtnDisabled,
                 pressed && styles.sendBtnPressed,
               ]}
@@ -1839,7 +1974,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                     )}
                   </View>
                 </View>
-                <Pressable onPress={handleStopRecording} style={styles.sendBtn}>
+                <Pressable onPress={handleStopRecording} style={[styles.sendBtn, { width: fieldRestHeight, height: fieldRestHeight }]}>
                   <Svg width={20} height={20} viewBox="0 0 24 24" fill={WHITE}>
                     <Rect x={4} y={4} width={16} height={16} rx={3} />
                   </Svg>
@@ -1882,7 +2017,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 <Text style={styles.previewDuration} maxFontSizeMultiplier={FONT_SCALE.ui}>
                   {(() => { const s = Math.floor((previewPlaying ? previewPos : audioDuration) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}
                 </Text>
-                <Pressable onPress={handleSendAudio} style={styles.sendBtn}>
+                <Pressable onPress={handleSendAudio} style={[styles.sendBtn, { width: fieldRestHeight, height: fieldRestHeight }]}>
                   <SendIcon size={ICON.lg} />
                 </Pressable>
               </View>
@@ -2995,6 +3130,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
 
   body: { flex: 1 },
+  messagesArea: { flex: 1 },
   messages: { flex: 1 },
   messagesContent: { padding: SM, flexGrow: 1 },
   emptyLabel: {
@@ -3142,7 +3278,10 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   sendBtn: {
-    width: 49, height: 49, borderRadius: RADIUS,
+    // Match the composer field's OUTER box: its inner surface is INPUT_MIN_HEIGHT
+    // tall, and FIELD_SKIN's hairline adds STROKE.thin top + bottom. The send
+    // button has no border, so it needs those two strokes added to line up.
+    width: INPUT_MIN_HEIGHT + STROKE.thin * 2, height: INPUT_MIN_HEIGHT + STROKE.thin * 2, borderRadius: RADIUS,
     backgroundColor: PRIMARY,
     alignItems: 'center', justifyContent: 'center',
   },

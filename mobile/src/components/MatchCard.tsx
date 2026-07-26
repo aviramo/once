@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
 import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, Platform } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { PullScrollView, PullContext } from './PullPane'
@@ -9,16 +10,16 @@ const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
 import { t } from '../i18n'
 import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
-import { BIO_MIN, BIO_MAX, normalizeBio } from '../lib/bio'
+import { BIO_MIN, BIO_MAX } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
-import type { FamilyData } from '../lib/family'
-import { buildFamilyChipText } from './FamilyCard'
+import { buildFamilySegments } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { Button } from './Button'
+import { EditableText } from './EditableText'
 import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BIO_INK } from '../colors'
+import { BG, INK, SURFACE, BLACK, WHITE, GREEN, GREEN_HALF, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BIO_INK } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -120,96 +121,27 @@ function BioField({
    * bubble (own-profile editor with a single photo). */
   onPhoto?: boolean
 }) {
-  const { value, saving, onCommit } = edit
-  const [draft, setDraft] = useState(value)
-  const [focused, setFocused] = useState(false)
-  // Last value we consider authoritative locally — server truth until the
-  // user commits a change. Kept in a ref so blur logic reads the latest.
-  const committedRef = useRef(value)
-
-  // External value changes (Realtime profile refresh) sync into the draft
-  // only while not actively editing, so a server echo can't yank text out
-  // from under the user's caret.
-  useEffect(() => {
-    if (!focused) {
-      committedRef.current = value
-      setDraft(value)
-    }
-  }, [value, focused])
-
-  const trimmedLen = draft.trim().length
-  const belowMin = trimmedLen < BIO_MIN
-  const remaining = BIO_MAX - draft.length
-  // A real, saveable change: normalized draft differs from the committed
-  // value and clears the minimum. Drives the Update button's enabled state —
-  // reading the ref during render is fine, `draft` is what re-renders us.
-  const dirty = normalizeBio(draft) !== normalizeBio(committedRef.current)
-  const canSave = !belowMin && dirty && !saving
-
-  // The save routine, fired only by the Update button (never on blur).
-  const commit = useCallback(() => {
-    const next = normalizeBio(draft)
-    const prev = normalizeBio(committedRef.current)
-    if (next === prev) {
-      setDraft(committedRef.current)
-      return
-    }
-    // Below the minimum (includes fully cleared) → discard, restore previous.
-    if (next.trim().length < BIO_MIN) {
-      setDraft(committedRef.current)
-      return
-    }
-    committedRef.current = next
-    setDraft(next)
-    onCommit(next)
-  }, [draft, onCommit])
-
-  // Leaving the field without pressing Update discards the edit: revert the
-  // draft to the last committed value. Only the Update button saves.
-  const handleBlur = useCallback(() => {
-    setFocused(false)
-    setDraft(committedRef.current)
-  }, [])
-
-  // The only save path: commit, then drop the keyboard. commit() sets
-  // committedRef to the new value, so the blur that follows reverts to it
-  // (a no-op) rather than throwing the fresh save away.
-  const handleUpdate = useCallback(() => {
-    commit()
-    Keyboard.dismiss()
-  }, [commit])
-
+  // Thin wrapper over the shared EditableText: pass the bio's min/max, i18n
+  // labels and the card's bio styles so the card stays pixel-identical while
+  // the draft/commit/Update behavior lives in one place (also used by the group
+  // description editor).
   return (
-    <>
-      <TextInput
-        style={[onPhoto ? styles.photoBioText : styles.aboutText, styles.bioInput]}
-        value={draft}
-        onChangeText={v => setDraft(v.slice(0, BIO_MAX))}
-        maxLength={BIO_MAX}
-        multiline
-        scrollEnabled={false}
-        textAlign={onPhoto ? 'left' : 'center'}
-        textAlignVertical="top"
-        placeholder={t('bio.placeholder')}
-        placeholderTextColor={BLACK_MID}
-        editable={!saving}
-        onFocus={() => { setFocused(true); onFocusRequested() }}
-        onBlur={handleBlur}
-      />
-      {focused ? (
-        <View style={styles.bioFooter}>
-          <Text style={[styles.bioCounter, !belowMin && remaining < 20 && styles.bioCounterWarn]}>
-            {belowMin ? t('bio.min') : remaining}
-          </Text>
-          <Button
-            label={t('bio.update')}
-            onPress={handleUpdate}
-            size="md"
-            disabled={!canSave}
-          />
-        </View>
-      ) : null}
-    </>
+    <EditableText
+      value={edit.value}
+      saving={edit.saving}
+      onCommit={edit.onCommit}
+      min={BIO_MIN}
+      max={BIO_MAX}
+      placeholder={t('bio.placeholder')}
+      updateLabel={t('bio.update')}
+      minLabel={t('bio.min')}
+      textAlign={onPhoto ? 'left' : 'center'}
+      onFocusRequested={onFocusRequested}
+      inputStyle={[onPhoto ? styles.photoBioText : styles.aboutText, styles.bioInput]}
+      footerStyle={styles.bioFooter}
+      counterStyle={styles.bioCounter}
+      counterWarnStyle={styles.bioCounterWarn}
+    />
   )
 }
 
@@ -343,6 +275,9 @@ type MatchCardProps = {
   onPhotoTap?: (imageIndex: number) => void
   /** When provided, the family/kids card becomes tappable (own-profile preview). */
   onFamilyTap?: () => void
+  /** When provided, the shared-group chip becomes tappable and opens the
+   * shared-groups detail popup. Absent on the own-profile preview (no chip). */
+  onGroupsTap?: () => void
   /** When provided (and `self`), the bio bubble becomes an inline editor:
    * tap-to-place-caret, keyboard-aware scroll, auto-save on blur. Replaces
    * the old onBioTap popup. The bio section renders even when the bio is
@@ -380,10 +315,6 @@ type MatchCardProps = {
    * carry this. Used by the family card to extend the "No kids" header
    * with the user's intent. */
   isForKids?: boolean | null
-  /** Viewer's own family data (from userStore). Passed by remote-render call
-   * sites so the family card can show the kid-free schedule overlap. Own
-   * profile preview omits this — no overlap shown there. */
-  viewerFamily?: FamilyData | null
   /** Viewer's (A's) own location anchor type. The distance chip's icon is
    * driven by the *subject's* (B = `match`) anchor (pin/home/work); the text
    * stays live ("away") only when BOTH viewer and subject are 'device',
@@ -425,13 +356,13 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   footerBg,
   onPhotoTap,
   onFamilyTap,
+  onGroupsTap,
   bioEdit,
   actions,
   addChips,
   headingAction,
   onReport,
   isForKids,
-  viewerFamily,
   viewerLocationType,
   self = false,
   cardHeight,
@@ -469,6 +400,44 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // keyboard-driven scroll isn't snapped to a page boundary) without forking the
   // card's look otherwise.
   const [bioFocused, setBioFocused] = useState(false)
+  // ── Tap-to-toggle the on-photo fact chips (user directive 2026-07-26) ───────
+  // The fact-chip column (distance, family/kids, shared group) states important
+  // info but sits over the face. A tap on the photo fades the whole column out
+  // so the portrait is unobscured, and a second tap fades it back — the info is
+  // never removed, only one tap away. Gated to remote match cards: the
+  // own-profile preview (onPhotoTap set) taps photos to edit them instead, so it
+  // keeps its chips fixed. The floating heart/report/name ride ABOVE this and
+  // capture their own taps, so only a tap on the open photo toggles. Reset to
+  // visible on every profile swap so a hidden state can't carry into card B.
+  const chipsToggleable = !onPhotoTap
+  const [chipsHidden, setChipsHidden] = useState(false)
+  // Mirror of chipsHidden the scroll handler reads without re-subscribing.
+  const chipsHiddenRef = useRef(false)
+  const chipsOpacity = useSharedValue(1)
+  const toggleChips = useCallback(() => {
+    const next = !chipsHiddenRef.current
+    chipsHiddenRef.current = next
+    setChipsHidden(next)
+    chipsOpacity.value = withTiming(next ? 0 : 1)
+  }, [])
+  // Bring the chips back — used both on a fresh profile and whenever the user
+  // scrolls onto a different photo (user directive 2026-07-26): a hidden state
+  // must never persist past the photo it was toggled on. No-op when visible.
+  const revealChips = useCallback(() => {
+    if (!chipsHiddenRef.current) return
+    chipsHiddenRef.current = false
+    setChipsHidden(false)
+    chipsOpacity.value = withTiming(1)
+  }, [])
+  useEffect(() => {
+    chipsHiddenRef.current = false
+    setChipsHidden(false)
+    chipsOpacity.value = 1
+  }, [match.user_id])
+  const chipsAnimStyle = useAnimatedStyle(() => ({ opacity: chipsOpacity.value }))
+  // Which full-viewport photo page the scroll is resting on; a change reveals
+  // the chips again.
+  const photoPageRef = useRef(0)
   // Refs the inline-bio keyboard handling reads from JS callbacks. Declared up
   // here because bioOnSecondPhotoRef is assigned during render (below), before
   // the rest of the keyboard wiring.
@@ -590,15 +559,20 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // — it lives on the chip column alone (infoLeft), or the heart rides up with
   // it and leaves its anchored position.
   const overlayBottomOffset = Math.max(safeBottomInset, MD)
-  // Report affordance: the same round primitive as the hero heart (full
-  // ROUND_BUTTON_SIZE, huge glyph), kept GREEN, centered along the bottom of
-  // the LAST photo. Rendered on whichever photo section is last so it reads as
-  // "having seen the whole profile, flag it" rather than sitting in the shell
-  // chrome. Omitted for the own-profile preview (no onReport).
+  // Report affordance: DELIBERATELY NOT the hero-heart twin (user directive
+  // 2026-07-26 — the full-size GREEN tile mirrored the heart on the opposite
+  // corner and read as its equal). It is a secondary, "seen the whole profile,
+  // flag it" flag, so it wears the SMALL chrome circle (ROUND_BUTTON_SIZE_SM,
+  // the hamburger's size / ICON.round glyph) over a DARKER beige tile (BG, the
+  // page beige, vs the heart's lighter SURFACE) with a MUTED purple glyph
+  // (GREEN_HALF, not the heart's full INK) — three axes of de-emphasis so it
+  // recedes beside the heart. Bottom-anchored on the LAST photo, so its bottom
+  // edge still sits level with the heart's. Omitted for the own-profile
+  // preview (no onReport).
   const renderReportOverlay = () => onReport ? (
     <View pointerEvents="box-none" style={[styles.reportOverlay, { paddingBottom: overlayBottomOffset }]}>
-      <RoundButton onPress={onReport}>
-        <ShieldIcon color={GREEN} fill={GREEN} size={ICON.huge} />
+      <RoundButton onPress={onReport} size={ROUND_BUTTON_SIZE_SM} bg={BG}>
+        <ShieldIcon color={GREEN_HALF} fill={GREEN_HALF} size={ICON.round} />
       </RoundButton>
     </View>
   ) : null
@@ -626,9 +600,9 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const identityChipText = [nameChipText, age].filter(Boolean).join(', ')
 
   // Several facts in one label; Chip's phraseWrap decides where it breaks.
-  const familyChipText = useMemo(
-    () => buildFamilyChipText(match.family, isForKids, self, viewerFamily, match.is_male),
-    [match.family, isForKids, self, viewerFamily, match.is_male],
+  const familySegments = useMemo(
+    () => buildFamilySegments(match.family, isForKids, self, match.is_male),
+    [match.family, isForKids, self, match.is_male],
   )
 
   const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'
@@ -712,6 +686,20 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     if (swallowTapWhileEditing()) return
     onFamilyTap?.()
   }, [swallowTapWhileEditing, onFamilyTap])
+  const handleGroupsTap = useCallback(() => {
+    if (swallowTapWhileEditing()) return
+    onGroupsTap?.()
+  }, [swallowTapWhileEditing, onGroupsTap])
+  // The group chip lives INSIDE the card's scroll, so a plain Pressable onPress
+  // waits on the scroll / pull-to-skip pan before firing — a visible lag before
+  // the popup opens. A native RNGH tap recognizes immediately (and still yields
+  // to a real drag, which becomes the pull-to-skip pan). runOnJS so the JS
+  // handler fires directly. Disabled while the chips are hidden so a reveal-tap
+  // still passes through.
+  const groupsTapGesture = useMemo(
+    () => Gesture.Tap().runOnJS(true).onEnd((_e, success) => { if (success) handleGroupsTap() }),
+    [handleGroupsTap],
+  )
   useEffect(() => {
     if (!bioEditable) return
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
@@ -878,9 +866,27 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
         pagingEnabled={pagingAllowed && !hasTopBlock}
         snapToOffsets={pagingAllowed && hasTopBlock && snapOffsets.length > 1 ? snapOffsets : undefined}
         snapToAlignment="start"
+        // True Reels feel: ONE photo per swipe, always. Android's paging carries
+        // fling momentum across several pages on a fast flick, so a quick swipe
+        // skipped photos and settled two or three ahead. disableIntervalMomentum
+        // clamps every fling to the single adjacent snap point regardless of
+        // velocity, so a swipe settles on the NEXT photo and never skips it
+        // (user directive 2026-07-26). decelerationRate 'fast' lands that snap
+        // crisply. Applies to both the pagingEnabled and snapToOffsets branches.
+        disableIntervalMomentum
+        decelerationRate="fast"
         onScroll={(e: any) => {
           const y = e.nativeEvent.contentOffset.y
           scrollYRef.current = y
+          // Reveal the toggled-off chips the moment the scroll lands on a
+          // different photo page, so a hidden state never carries across photos.
+          if (chipsToggleable && photoHeight > 0) {
+            const page = Math.round(y / photoHeight)
+            if (page !== photoPageRef.current) {
+              photoPageRef.current = page
+              revealChips()
+            }
+          }
         }}
         onContentSizeChange={(_: number, h: number) => { contentHRef.current = h }}
         onLayout={(e: any) => { viewportHRef.current = e.nativeEvent.layout.height }}
@@ -929,12 +935,16 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 onSettle={onImageSettle}
                 darkenIfLight
               />
-              {onPhotoTap && (
+              {onPhotoTap ? (
                 <Pressable
                   style={StyleSheet.absoluteFill}
                   onPress={() => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
                 />
-              )}
+              ) : chipsToggleable ? (
+                // Remote match card: a tap on the open photo toggles the
+                // fact-chip column so the face can be seen unobscured.
+                <Pressable style={StyleSheet.absoluteFill} onPress={toggleChips} />
+              ) : null}
             </>
           )}
 
@@ -955,11 +965,21 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               column reserves a gap on the END side (floatingActionReserve) so a
               long chip wraps before reaching it. pointerEvents="box-none" so
               taps on empty regions fall through to the photo. */}
-          <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
+          <Animated.View
+            // box-none so taps on empty regions fall through to the photo's
+            // toggle Pressable. On a toggleable (remote) card the non-interactive
+            // fact lines below ALSO pass through (pointerEvents 'none') so a tap
+            // on them still hides/reveals the column; only an interactive chip
+            // (the group chip's popup, the own-profile family editor) captures
+            // its own tap. The own-profile preview isn't toggleable, so its
+            // lines stay box-none and its chips are tappable.
+            pointerEvents="box-none"
+            style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }, chipsAnimStyle]}
+          >
             <View pointerEvents="box-none" style={[styles.infoLeft, showFloatingAction && styles.floatingActionReserve]}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
                 {proximityStr ? (
-                  <View style={styles.chipsLine}>
+                  <View pointerEvents={chipsToggleable ? 'none' : 'box-none'} style={styles.chipsLine}>
                     <Chip
                       renderIcon={c => hasDistance
                         ? (subjectLocationType === 'work' ? <WorkIcon color={c} /> : subjectLocationType === 'home' ? <HomeIcon color={c} /> : <PinIcon color={c} />)
@@ -971,11 +991,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     />
                   </View>
                 ) : null}
-                {familyChipText ? (
-                  <View style={styles.chipsLine}>
+                {familySegments.length ? (
+                  <View pointerEvents={chipsToggleable ? 'none' : 'box-none'} style={styles.chipsLine}>
                     <Chip
                       renderIcon={c => <KidsIcon color={c} />}
-                      text={familyChipText}
+                      segments={familySegments}
                       onPhoto
                       onPress={onFamilyTap ? handleFamilyTap : undefined}
                     />
@@ -984,19 +1004,29 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 {/* Shared group: the last fact line, under family/kids. Same
                     on-photo tile as the chips above it. Moved here from the bio
                     bubble (2026-07-25) at the user's request so every fact reads
-                    together on the photo. */}
+                    together on the photo. Interactive via a native RNGH tap (not
+                    the Chip's Pressable) so the popup opens the instant it's
+                    tapped, without waiting on the scroll/pull pan. 'auto' so the
+                    gesture receives the touch while the chips are visible; when
+                    hidden it drops to 'none' so a reveal-tap passes through. */}
                 {match.group_name ? (
-                  <View style={styles.chipsLine}>
-                    <Chip
-                      renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                      text={match.group_name}
-                      onPhoto
-                    />
-                  </View>
+                  <GestureDetector gesture={groupsTapGesture}>
+                    <View
+                      pointerEvents={onGroupsTap && !chipsHidden ? 'auto' : (chipsToggleable ? 'none' : 'box-none')}
+                      style={styles.chipsLine}
+                    >
+                      <Chip
+                        renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                        text={match.group_name}
+                        plusCount={match.group_extra ?? undefined}
+                        onPhoto
+                      />
+                    </View>
+                  </GestureDetector>
                 ) : null}
               </View>
             </View>
-          </View>
+          </Animated.View>
         </Animated.View>
 
         {/* Rest of sections rendered in items order */}
@@ -1020,20 +1050,28 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 cachePolicy="memory-disk"
                 onSettle={onImageSettle}
               />
-              {onPhotoTap && (
+              {onPhotoTap ? (
                 <Pressable
                   style={StyleSheet.absoluteFill}
                   onPress={() => handlePhotoTap(section.imageIndex)}
                 />
-              )}
+              ) : chipsToggleable ? (
+                // Same toggle as the hero: a tap on this photo fades its bio chip
+                // out so the image is unobscured, and taps it back.
+                <Pressable style={StyleSheet.absoluteFill} onPress={toggleChips} />
+              ) : null}
               {/* Bio as a big BEIGE chip floated at the bottom of the second
                   photo, inset on every side. Its END inset clears the floating
                   heart (so it is never where the heart is); its bottom inset
-                  lifts it above the report button when this photo carries it. */}
+                  lifts it above the report button when this photo carries it. On
+                  a remote card it fades with the same tap-toggle as the fact
+                  chips (user directive 2026-07-26): the info clears off whichever
+                  photo the user is on. */}
               {section.key === secondPhotoKey && bioOnSecondPhoto ? (
-                <View
+                <Animated.View
                   // Interactive on the own-profile preview so the inline editor
-                  // inside catches taps; a plain non-interactive label otherwise.
+                  // inside catches taps; on a remote card it's non-interactive so
+                  // a tap falls through to the photo's toggle Pressable.
                   pointerEvents={bioEditable ? 'auto' : 'none'}
                   style={[
                     styles.photoBioCard,
@@ -1042,8 +1080,9 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                       // Reserve the report's lane only when a report actually
                       // renders here (never on the own-profile preview).
                       bottom: overlayBottomOffset + LG
-                        + (section.key === lastPhotoKey && onReport ? ROUND_BUTTON_SIZE + MD : 0),
+                        + (section.key === lastPhotoKey && onReport ? ROUND_BUTTON_SIZE_SM + MD : 0),
                     },
+                    chipsToggleable && chipsAnimStyle,
                   ]}
                 >
                   {bioEditable && bioEdit ? (
@@ -1051,7 +1090,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   ) : (
                     <Text style={styles.photoBioText}>{match.bio}</Text>
                   )}
-                </View>
+                </Animated.View>
               ) : null}
               {section.key === lastPhotoKey ? renderReportOverlay() : null}
             </Animated.View>
@@ -1119,20 +1158,42 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             // optional action chip (chat's "End") beside it on the START side.
             <View style={styles.headingRow}>
               {headingAction ? (
-                <Chip
-                  tone="solid"
-                  onPhoto
-                  text={headingAction.label}
-                  onPress={headingAction.onPress}
-                />
+                // "End chat" fades with the rest of the info set on a toggleable
+                // card (user directive 2026-07-26). While hidden its taps are
+                // off, so a tap where it sat reveals the overlays again instead
+                // of ending the chat by accident.
+                <Animated.View
+                  pointerEvents={chipsToggleable && chipsHidden ? 'none' : 'auto'}
+                  style={chipsToggleable && chipsAnimStyle}
+                >
+                  <Chip
+                    tone="solid"
+                    onPhoto
+                    text={headingAction.label}
+                    onPress={headingAction.onPress}
+                  />
+                </Animated.View>
               ) : null}
               {identityChipText ? (
-                <Chip
-                  text={identityChipText}
-                  tone="neutral"
-                  onPhoto
-                  bold
-                />
+                // The name/age chip fades with the fact chips on a toggleable
+                // (remote) card (user directive 2026-07-26): a tap on the photo
+                // clears the whole info set — facts AND identity — so the face is
+                // fully unobscured. flexShrink on the wrapper keeps the chip's
+                // shrink/wrap chain intact through the extra View; pointerEvents
+                // none on toggleable cards lets a tap here fall through to the
+                // photo instead of the chip swallowing it. The own-profile
+                // preview (not toggleable) is unaffected — opacity stays 1.
+                <Animated.View
+                  pointerEvents={chipsToggleable ? 'none' : 'auto'}
+                  style={[styles.identityChipWrap, chipsToggleable && chipsAnimStyle]}
+                >
+                  <Chip
+                    text={identityChipText}
+                    tone="neutral"
+                    onPhoto
+                    bold
+                  />
+                </Animated.View>
               ) : null}
             </View>
           ) : null}
@@ -1224,6 +1285,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'flex-end',
     gap: SM,
+  },
+  // Wraps the name/age chip so it can fade with the tap-toggle. flexShrink keeps
+  // the chip's shrink/wrap chain intact through the extra View (a plain wrapper
+  // would otherwise hide the shrink hint and let a long name overflow the row).
+  identityChipWrap: {
+    flexShrink: 1,
   },
   infoLeft: {
     flex: 1,

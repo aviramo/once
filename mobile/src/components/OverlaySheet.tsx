@@ -286,6 +286,7 @@ export function SheetHeader({
   onMeasured,
   closeIcon = 'close',
   closeAccessibilityLabel,
+  titleLines = 1,
 }: {
   title?: string
   titleTrailing?: ReactNode
@@ -300,6 +301,9 @@ export function SheetHeader({
    *  the drawer that slides off toward that edge. */
   closeIcon?: 'close' | 'back'
   closeAccessibilityLabel?: string
+  /** Max title lines before ellipsizing. Default 1; the communities sheet passes
+   *  2 so a long group name wraps instead of truncating. */
+  titleLines?: number
 }) {
   const DismissIcon = closeIcon === 'back' ? BackIcon : CloseIcon
   return (
@@ -335,7 +339,7 @@ export function SheetHeader({
       </View>
       {title ? (
         <View style={styles.titleWrap} pointerEvents="none">
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Text style={styles.title} numberOfLines={titleLines}>{title}</Text>
           {titleTrailing}
         </View>
       ) : null}
@@ -384,9 +388,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   // Equal-width side columns flank the centred title so it stays on the row's
-  // true centre no matter what each side holds.
+  // true centre no matter what each side holds. minWidth keeps a column from
+  // collapsing to zero under a long title (flex-basis 0 would otherwise let the
+  // title's column swallow the whole row and overlap the close/back button) —
+  // the title's own flexShrink + numberOfLines then ellipsizes it instead.
   side: {
     flex: 1,
+    minWidth: ROUND_BUTTON_SIZE_SM,
     flexDirection: 'row',
     alignItems: 'center',
   },

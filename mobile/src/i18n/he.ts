@@ -171,12 +171,16 @@ export default {
   'communities.rowFriendsOnly': '{friends} חברים',
   'communities.requestsChip': '{count} בקשות',
   'communities.managedBy': 'מנוהלת על ידי {name}',
+  'communities.sharedGroupsTitle': 'קבוצות משותפות',
   'communities.emptyManage': 'עוד לא יצרת קבוצה.',
   'communities.emptyIn': 'עוד לא הצטרפת לקבוצה.',
   'communities.loadError': 'טעינה נכשלה, נסה שוב.',
 
   // My friends
-  'communities.inviteFriend': 'הזמנת חבר לאפליקציה',
+  'communities.inviteFriend': 'הזמנת חבר',
+  // Caption under the invite button: connecting as friends pays both sides a
+  // credit (server credits it on every new friend link, see friend_link_credits).
+  'communities.inviteReward': 'על כל חבר שמתחבר, שניכם מקבלים קרדיט נוסף.',
   'communities.linkFriend': 'שיוך חבר קיים',
   'communities.friendsCount': '{count} חברים',
   'communities.requestsSection': 'בקשות חברות',
@@ -210,9 +214,18 @@ export default {
   'communities.privacyNote': 'קבוצה פרטית לא מופיעה בחיפוש, משתפים את הקישור באופן ידני.',
   'communities.createAction': 'יצירת הקבוצה',
   'communities.nameError': 'צריך שם קצר יותר.',
+  'communities.description': 'תיאור',
+  'communities.descriptionPlaceholder': 'על מה הקבוצה',
+  'communities.descUpdate': 'עדכון',
+  'communities.joining': 'הצטרפות',
+  'communities.approvalOff': 'פתוחה',
+  'communities.approvalOffSub': 'מצטרפים מיד',
+  'communities.approvalOn': 'דורשת אישור',
+  'communities.approvalOnSub': 'מנהל מאשר',
 
   // A group you manage
   'communities.shareInvite': 'שיתוף קישור הזמנה',
+  'communities.settings': 'הגדרות הקבוצה',
   'communities.deleteGroup': 'מחיקת הקבוצה',
   'communities.deleteTitle': 'למחוק את {name}?',
   'communities.deleteDesc': 'הקבוצה וכל החברויות בה יימחקו. אי אפשר לבטל.',
@@ -221,6 +234,13 @@ export default {
   'communities.removeMemberDesc': 'אפשר להצטרף שוב עם קוד ההזמנה.',
   'communities.makePublic': 'הפיכה לציבורית',
   'communities.makePrivate': 'הפיכה לפרטית',
+  'communities.approvalEnable': 'דרישת אישור להצטרפות',
+  'communities.approvalDisable': 'ביטול דרישת האישור',
+  'communities.approvalOnNote': 'מבקשי הצטרפות ימתינו לאישור מנהל או בעלים.',
+  'communities.approvalOffNote': 'כל מי שמקבל את הקישור מצטרף מיד.',
+  'communities.requestsSectionJoin': 'בקשות הצטרפות ({count})',
+  'communities.approve': 'אישור',
+  'communities.declineJoin': 'דחייה',
   'communities.owner': 'בעלים',
   'communities.manager': 'מנהל',
   'communities.makeManager': 'מינוי כמנהל',
@@ -229,7 +249,7 @@ export default {
 
   // A group you are in
   'communities.leave': 'עזיבת הקבוצה',
-  'communities.memberNote': 'חברי הקבוצה מופיעים אצלך בעדיפות גבוהה. רק המנהל רואה את רשימת החברים.',
+  'communities.memberNote': 'חברי הקבוצה מופיעים אצלך בעדיפות גבוהה.',
 
   // Find or join
   'communities.findTitle': 'הצטרפות לקבוצה',
@@ -237,8 +257,14 @@ export default {
   'communities.orCode': 'או בקוד הזמנה',
   'communities.join': 'הצטרפות',
   'communities.joined': 'חבר',
+  'communities.requestJoin': 'בקשת הצטרפות',
+  'communities.pending': 'ממתין לאישור',
+  'communities.pendingBadge': '{count} בקשות',
+  'communities.cancelJoinTitle': 'ביטול בקשת ההצטרפות ל{name}?',
+  'communities.cancelJoinDesc': 'הבקשה תוסר מהתור של מנהלי הקבוצה. תמיד אפשר לשלוח בקשה חדשה.',
+  'communities.cancelJoinConfirm': 'כן, לבטל את הבקשה',
   'communities.findNote': 'בחיפוש מופיעות רק קבוצות ציבוריות.',
-  'communities.shareMessage': 'הצטרפו לקבוצה {name} ב-once: {link}',
+  'communities.shareMessage': 'הצטרפו לקבוצה {name}\n{link}',
 
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'דיווח על תקלה',
@@ -386,6 +412,9 @@ export default {
   'family.selfDoesntWantMore': 'לא רוצה עוד',
   'family.selfWantsKids': 'רוצה ילדים',
   'family.selfDoesntWantKids': 'לא רוצה ילדים',
+  // Vav connector gluing the kids-preference phrase to the lead ("יש לי 3
+  // ילדים ורוצה עוד") instead of a comma. Attaches directly to the word.
+  'family.prefConnector': 'ו',
   'family.overlapLabel': '{pct}% חפיפה בימים פנויים',
   'family.overlapChip': '{pct}% חפיפה',
   'family.addKid': 'הוספת ילד',
@@ -423,11 +452,11 @@ export default {
   // would print the marker as-is. The friend stays ungendered ("חבר" covers
   // any friend you'd invite).
   'credits.invite.title': '{הזמן|הזמיני} חבר',
-  'credits.invite.joined.none': 'הקרדיט מגיע כשהחבר מוריד את האפליקציה ופותח חשבון.',
+  'credits.invite.joined.none': 'על כל חבר שמתחבר אליך, שניכם מקבלים קרדיט נוסף.',
   'credits.invite.joined.one': 'חבר אחד הצטרף דרכך.',
   'credits.invite.joined.many': '{n} חברים הצטרפו דרכך.',
   // Text that rides along with the link in the OS share sheet.
-  'credits.invite.shareText': 'כדאי לך להוריד את Once.',
+  'credits.invite.shareText': 'הצטרף אליי ל Once',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',

@@ -31,8 +31,7 @@ import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/r
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
-import { useChrome } from '../src/stores/chromeStore'
-import { consumeGroupInviteUrl } from '../src/lib/communities'
+import { consumeGroupInviteUrl, consumeFriendInviteUrl } from '../src/lib/communities'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
 import { BG } from '../src/colors'
 
@@ -173,11 +172,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false
     Linking.getInitialURL().then(url => {
-      if (!cancelled && url) { consumeMagicLinkUrl(url); consumeGroupInviteUrl(url) }
+      if (!cancelled && url) { consumeMagicLinkUrl(url); consumeGroupInviteUrl(url); consumeFriendInviteUrl(url) }
     })
     const sub = Linking.addEventListener('url', ({ url }) => {
       consumeMagicLinkUrl(url)
       consumeGroupInviteUrl(url)
+      consumeFriendInviteUrl(url)
     })
     return () => {
       cancelled = true
@@ -254,19 +254,15 @@ export default function RootLayout() {
     }
   }, [fontsLoaded])
 
-  // A full-screen beige sheet (Communities) flips the global chrome to dark
-  // glyphs + no purple band while it is open. See chromeStore.
-  const beigeTop = useChrome(s => s.beigeTop)
-
   if (!fontsLoaded) return null
 
   return (
     <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: BG }}>
-      {/* Global status bar: white glyphs over the purple band by default; dark
-          glyphs on a beige sheet (Communities). The OS restores the system
-          default when backgrounded — every app owns its own status bar style. */}
-      <AppStatusBar style={beigeTop ? 'dark' : 'light'} />
+      {/* Global status bar: white glyphs over the purple band, everywhere. The
+          OS restores the system default when backgrounded — every app owns its
+          own status bar style. */}
+      <AppStatusBar style="light" />
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           {/* Reanimated layout-animations (entering/exiting) race with Fabric's
@@ -279,9 +275,8 @@ export default function RootLayout() {
           </LayoutAnimationConfig>
         </AuthProvider>
       </QueryClientProvider>
-      {/* Last child so it paints above every screen. Suppressed while a beige
-          sheet owns the top (its flat page background replaces the band). */}
-      {!beigeTop && <StatusBarBand />}
+      {/* Last child so it paints above every screen. */}
+      <StatusBarBand />
     </GestureHandlerRootView>
     </SafeAreaProvider>
   )

@@ -12,7 +12,7 @@ import { nameFromTitle } from '../src/lib/profileTitle'
 import { matchImageUrls } from '../src/lib/profileImages'
 import { useUserStore, resolveLocationType, selectProfileBuilt, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
-import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
+import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, getInitialNotificationGroupId, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
@@ -22,6 +22,8 @@ import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUN
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
+import { SharedGroupsPopup } from '../src/components/SharedGroupsPopup'
+import { sharedGroups, type SharedGroup } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
@@ -33,7 +35,6 @@ import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/P
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
 import { CommunitiesPage } from '../src/components/CommunitiesPage'
-import { useChrome } from '../src/stores/chromeStore'
 import ChatPage from './chat'
 import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
@@ -490,14 +491,19 @@ const statusCardStyles = StyleSheet.create({
     textAlign: 'center',
     includeFontPadding: false,
   },
-  // The heading is no longer a standalone element. It rides at the start of
-  // the description as a period-terminated lead-in on the same line. Through
-  // AppText this picks the real NotoSansHebrew_800ExtraBold face (not a weak
-  // synthetic bold); full-white vs the body's dimmed white adds a second
-  // contrast step so the two ranks read clearly apart.
-  lead: {
+  // The heading sits on its own line above the body (user directive
+  // 2026-07-26). Through AppText this picks the real NotoSansHebrew_800ExtraBold
+  // face (not a weak synthetic bold); deeper green vs the body's dimmed green
+  // adds a second contrast step so the two ranks read clearly apart. A small
+  // gap below separates it from the body paragraph.
+  heading: {
+    fontSize: TEXT.lg,
+    lineHeight: lh(TEXT.lg),
     fontWeight: WEIGHT.extrabold,
     color: GREEN_DEEP,
+    textAlign: 'center',
+    includeFontPadding: false,
+    marginBottom: SM,
   },
   // The invitation countdown, sitting between the body text and the buttons.
   // Tabular figures so the digits don't jitter as the seconds tick.
@@ -514,19 +520,23 @@ const statusCardStyles = StyleSheet.create({
 })
 
 // Shared heading+body text for every StatusCard variant (InviteTimerCard /
-// EventMessageCard / ReplyingInviteCard). One AppText-backed paragraph (real weighted Noto faces, not synthetic): the
-// bold heading terminated with a period, a space, then the body — a single
-// flowing run so it wraps naturally but never hard-breaks between heading
-// and body. The period is only appended when the heading doesn't already
-// end in sentence punctuation, so a question-style heading won't read "?.".
+// EventMessageCard / ReplyingInviteCard). The bold heading gets its own line
+// (real weighted Noto ExtraBold face, not synthetic), a small gap, then the
+// body paragraph below it (user directive 2026-07-26 — heading was previously
+// an inline period-terminated lead-in on the same line as the body). Any
+// trailing sentence punctuation is stripped so the standalone heading never
+// carries a period.
 function StatusCardText({ title, description }: { title: string; description: string }) {
-  const head = title.trim()
-  const lead = /[.!?]$/.test(head) ? head : `${head}.`
+  const head = title.trim().replace(/[.!?]+$/, '')
   return (
-    <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
-      <Text style={statusCardStyles.lead}>{lead} </Text>
-      {description}
-    </AnimatedText>
+    <>
+      <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.heading} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {head}
+      </AnimatedText>
+      <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {description}
+      </AnimatedText>
+    </>
   )
 }
 
@@ -844,20 +854,30 @@ export default function HomePage() {
   //   page1 codes → home, i.e. no overlay
   const PAGE2_CODES = new Set(['invite-in', 'extended', 'expired-in', 'cancelled-in'])
   const CHAT_CODES = new Set(['chat', 'match'])
+  // Group-lifecycle pushes deep-link into the Communities sheet (group_join to
+  // the specific group's manage page, group_approved to the hub).
+  const GROUP_CODES = new Set(['group_join', 'group_approved'])
   const initialOverlayFromNotif = useMemo<Overlay | null>(() => {
     const type = getInitialNotificationType()
     if (!type) return null
-    return CHAT_CODES.has(type) ? 'chat' : null
+    if (CHAT_CODES.has(type)) return 'chat'
+    if (GROUP_CODES.has(type)) return 'communities'
+    return null
   }, [])
   useEffect(() => {
     if (initialOverlayFromNotif !== null) clearInitialNotification()
   }, [])
   // First-render only: a cold start while already in chat opens the chat
-  // overlay directly (user decision 2026-07-19). state→chat transitions during
-  // the session are owned by the chat-transition effect below.
+  // overlay directly (user decision 2026-07-19), and a group deep-link opens
+  // Communities (targeted at the group for group_join). state→chat transitions
+  // during the session are owned by the chat-transition effect below.
   useEffect(() => {
     if (initialOverlayFromNotif === 'chat' || useUserStore.getState().profile?.state === 'chat') {
       setOverlays(['chat'])
+    } else if (initialOverlayFromNotif === 'communities') {
+      const gid = getInitialNotificationGroupId()
+      if (gid) setCommunitiesTarget(gid)
+      setOverlays(['communities'])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -887,17 +907,13 @@ export default function HomePage() {
   const closeProfileSheet = useCallback(() => closeOverlay('profile'), [closeOverlay])
   const openCommunities = useCallback(() => openOverlay('communities'), [openOverlay])
   const closeCommunities = useCallback(() => closeOverlay('communities'), [closeOverlay])
+  // A group a notification tap wants the Communities sheet to open directly
+  // (group_join deep-link). CommunitiesPage drills into it on mount, then calls
+  // onTargetConsumed to clear this.
+  const [communitiesTarget, setCommunitiesTarget] = useState<string | null>(null)
   // The hub owns an internal view stack; hardware-back pops that first and only
   // asks the shell to close the sheet once it is back at its hub (returns false).
   const communitiesBackRef = useRef<() => boolean>(() => false)
-  // The Communities hub is a full-screen BEIGE sheet: while it's open the global
-  // status chrome flips to a flat beige top with dark glyphs and no purple band
-  // (see chromeStore). Reset on close / unmount.
-  useEffect(() => {
-    const { setBeigeTop } = useChrome.getState()
-    setBeigeTop(communitiesSheetOpen)
-    return () => setBeigeTop(false)
-  }, [communitiesSheetOpen])
 
   const shellWidth = useSharedValue(Dimensions.get('window').width)
 
@@ -960,8 +976,13 @@ export default function HomePage() {
   openOverlayRef.current = openOverlay
   const overlaysGatedRef = useRef(false)
   useEffect(() => {
-    return addNotificationTapListener(type => {
-      if (CHAT_CODES.has(type)) {
+    return addNotificationTapListener((type, groupId) => {
+      if (GROUP_CODES.has(type)) {
+        // group_join deep-links to the specific group's manage page; the menu
+        // is never gated, so Communities is always reachable.
+        if (type === 'group_join' && groupId) setCommunitiesTarget(groupId)
+        openOverlayRef.current('communities')
+      } else if (CHAT_CODES.has(type)) {
         if (!overlaysGatedRef.current) openOverlayRef.current('chat')
       } else if (!PAGE2_CODES.has(type)) {
         setOverlays([])
@@ -2104,6 +2125,18 @@ export default function HomePage() {
     setReportNote('')
     setReportTargetId(userId)
   }, [tap])
+  // Shared-groups popup: opened by tapping the on-photo group chip on any match
+  // card. The list is fetched HERE the instant the chip is tapped (not inside
+  // the popup on mount), so it loads in parallel with the sheet's slide-in and
+  // the content is usually ready by the time the sheet is up.
+  const [groupsOpen, setGroupsOpen] = useState(false)
+  const [groupsData, setGroupsData] = useState<SharedGroup[] | null>(null)
+  const openGroups = useCallback((userId: string) => {
+    tap()
+    setGroupsData(null)
+    setGroupsOpen(true)
+    sharedGroups(userId).then(setGroupsData).catch(() => setGroupsData([]))
+  }, [tap])
 
   const runAction = (
     endpoint: string,
@@ -2762,7 +2795,7 @@ export default function HomePage() {
       {/* Glyph colour only. The bar BACKGROUND can't be set under Android
           edge-to-edge (see AppStatusBar) — the paused "muted" tone comes from
           the page behind the band, not from a status-bar colour. */}
-      <AppStatusBar style={communitiesSheetOpen ? 'dark' : 'light'} />
+      <AppStatusBar style="light" />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
             {/* page1 — the only standalone screen, and ALL of it is the
                 drag-to-open-menu surface (see menuDragGesture). The detector
@@ -2931,7 +2964,6 @@ export default function HomePage() {
                         <View style={styles.matchPhoto}>
                           <MatchCard
                             match={preloadingMatch}
-                            viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
                             cardHeight={paneHeight}
@@ -2953,7 +2985,6 @@ export default function HomePage() {
                         <View style={styles.matchPhoto}>
                           <MatchCard
                             match={displayedMatch}
-                            viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
                             cardHeight={paneHeight}
@@ -2968,6 +2999,7 @@ export default function HomePage() {
                               ? { label: t('chat.endChat'), onPress: () => { tap(); setChatMenuOpen(true) } }
                               : undefined}
                             onReport={() => openReport(displayedMatch.user_id)}
+                            onGroupsTap={() => openGroups(displayedMatch.user_id)}
                             chromeInset={topInset}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
@@ -3166,6 +3198,15 @@ export default function HomePage() {
                   draggable
                 />
 
+                {/* Shared-groups list, opened by tapping a card's group chip.
+                    Same single-instance pattern as the report dialog above:
+                    driven by groupsTargetId, reused across every match card. */}
+                <SharedGroupsPopup
+                  visible={groupsOpen}
+                  groups={groupsData}
+                  onDismiss={() => setGroupsOpen(false)}
+                />
+
               </View>
 
               {/* Floating menu button. A sibling AFTER the card layers so it
@@ -3216,7 +3257,7 @@ export default function HomePage() {
               match={inviteCardMatch}
               actions={[]}
               onReport={() => openReport(inviteCardMatch.user_id)}
-              viewerFamily={profile?.family ?? null}
+              onGroupsTap={() => openGroups(inviteCardMatch.user_id)}
               viewerLocationType={resolveLocationType(profile)}
               bottomInset={0}
               chromeInset={topInset}
@@ -3239,8 +3280,12 @@ export default function HomePage() {
         {/* Chat. dragFrom='header' is REQUIRED: the message list is an
             inverted FlatList, so "scroll is at the top" is meaningless and
             without this every drag in the list would be stolen by the
-            dismiss pan. The 3-dot menu opens the leave/block sheet, which
-            stays in this file with runAction — see the sheet below.
+            dismiss pan. ChatPage refines that via the sheetBody it receives
+            below: it reports "at top" only while the list has nothing to
+            scroll into (empty / short chat), so a body swipe-down then closes
+            the sheet too, not only the header. The 3-dot menu opens the
+            leave/block sheet, which stays in this file with runAction — see
+            the sheet below.
 
             Rendered for the WHOLE lifetime of the chat state (`chatAvailable`),
             not just while open, and `keepMounted` so closing the sheet PARKS
@@ -3265,15 +3310,26 @@ export default function HomePage() {
           floatingHeader
           closeAccessibilityLabel={t('chat.a11y.close')}
         >
+          {(sheetBody) => (
           <ChatPage
             key={profile?.relations?.match?.user_id ?? 'no-match'}
             isActive={chatOpen && !menuOpen && !profileSheetOpen && !communitiesSheetOpen}
             onUnreadChange={setChatUnread}
             onOnlineChange={setPartnerOnline}
-            // Reserve the floating header's band so messages clear the close X.
-            topInset={sheetHeaderHeight(topInset)}
+            // No top inset at all: the message list starts at the very top edge
+            // of the screen and scrolls UNDER the OS status bar and the floating
+            // close X (user directive 2026-07-26). The list keeps its small
+            // content padding so the oldest message still has a hair of breathing
+            // room at the top.
+            topInset={0}
             autoFocusInput={chatJustStarted}
+            // Lets a body swipe-down dismiss the sheet when the message list
+            // can't scroll the drag (empty/fits, or scrolled to the oldest end);
+            // a mid-conversation drag keeps scrolling history. See ChatPage's
+            // syncScrollability.
+            sheetBody={sheetBody}
           />
+          )}
         </OverlaySheet>
         ) : null}
 
@@ -3370,6 +3426,8 @@ export default function HomePage() {
             <CommunitiesPage
               onClose={closeCommunities}
               onRegisterBack={fn => { communitiesBackRef.current = fn }}
+              initialGroupId={communitiesTarget}
+              onTargetConsumed={() => setCommunitiesTarget(null)}
               {...ctx}
             />
           )}

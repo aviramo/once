@@ -22,3 +22,11 @@ export const referralUrl = (code: string): string => `${BRAND_SITE}/i/${code}`
  *  bounces to the app (`once://g/<TOKEN>`, with a Play-store fallback); opening
  *  it in an installed app joins the group. */
 export const groupInviteUrl = (token: string): string => `${BRAND_SITE}/g/${token}`
+
+/** Friend invite link. Carries the inviter's referral code. web/src/proxy.ts
+ *  matches /f/<CODE> and bounces to the app (`once://f/<CODE>`, with a
+ *  Play-store fallback that packs the code into the install referrer); opening
+ *  it in an installed app links the two as mutual friends with no approval.
+ *  Same CODE as referralUrl (the per-user referral_code), a different path so
+ *  the friend-connect is distinct from the credit-only referral link. */
+export const friendInviteUrl = (code: string): string => `${BRAND_SITE}/f/${code}`

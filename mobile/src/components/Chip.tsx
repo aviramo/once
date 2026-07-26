@@ -6,7 +6,7 @@ import { Path, Circle, Rect } from 'react-native-svg'
 import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
-import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
+import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
 import { PHOTO_CHROME, GREEN, GREEN_WASH, ONLINE_GREEN, PRIMARY, PRIMARY_BG, WHITE, LIFT_SHADOW } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 
@@ -32,6 +32,11 @@ import { OUTLINE_SKIN } from '../field'
 // preference applied only at app startup.
 const isRTL = localeIsRTL
 
+// A label counts as RTL when it carries any Hebrew or Arabic letter. Drives the
+// "+N" word-flow row's direction off the label's OWN script (see the render),
+// independent of the UI locale.
+const RTL_SCRIPT = /[֐-׿؀-ۿ]/
+
 const TONES = {
   // Green ink on a pale GREEN tile. The fill used to be the muted alpha ramp,
   // which composites over the warm page into something the eye reads as grey —
@@ -53,6 +58,33 @@ const TONES = {
 } as const
 
 type ChipTone = keyof typeof TONES
+
+// A chip label made of interleaved text runs and a mini-chip cluster (the
+// pale-purple pill, same fabric as the "+N" groups badge). Used by the
+// family/kids chip so the ages ride as a dense little cluster of pills inside
+// the sentence ("I have 3 kids [0][5][?] and want more, **busy weekend**"). A
+// `text` segment carries a plain run (`bold` emphasises it — the weekend
+// status); a `badges` segment carries a tight cluster of mini-chips, `ltr`
+// forcing their numeric/"?" char order against an RTL paragraph.
+export type ChipSegment =
+  | { text: string; bold?: boolean }
+  | { badges: string[]; ltr?: boolean }
+  // A forced line break: a zero-height full-width spacer that pushes the
+  // segments after it onto their own line in the wrapping row (the weekend
+  // status wants to stand on a line of its own, not trail the kids sentence).
+  | { br: true }
+
+// The pale-purple mini-chip. Single source for both the "+N" groups hint and
+// the family chip's age/weekend pills so they read as one fabric.
+function Badge({ text, ltr = false }: { text: string; ltr?: boolean }) {
+  return (
+    <View style={styles.badge}>
+      <Text style={[styles.badgeText, ltr && styles.badgeTextLtr]} maxFontSizeMultiplier={FONT_SCALE.heading}>
+        {text}
+      </Text>
+    </View>
+  )
+}
 
 // ── Where a chip label is allowed to break ─────────────────────────────────
 // A chip label is a compound of short facts: "6.4 mi away, 1 day ago",
@@ -96,6 +128,12 @@ export function phraseWrap(label: string): string {
     }
   }
   phrases.push(label.slice(start))
+  // A single phrase has no sibling to stay separate from, so gluing it buys
+  // nothing — it only removes every word-break seam and forces a mid-word
+  // break when the phrase is too wide for the narrow column (a group name like
+  // "אוניברסיטת בן גוריון" split as "גורי/ון"). Keep its natural spaces so it
+  // wraps at a word boundary, never inside a word.
+  if (phrases.length === 1) return label
   return phrases
     .map(p => (p.length <= PHRASE_GLUE_MAX ? p.replace(/ /g, NBSP) : p))
     .join(' ')
@@ -111,17 +149,28 @@ export const CHIP_HEIGHT = lh(TEXT.sm) + 2 * SM
 export function Chip({
   renderIcon,
   text,
+  segments,
   tone = 'neutral',
   onPhoto = false,
   outlined = false,
   bold = false,
+  plusCount,
   renderTrailing,
   onPress,
 }: {
   renderIcon?: (color: string) => React.ReactNode
-  text: string
+  text?: string
+  /** Interleaved text runs + mini-chips, an alternative to the plain `text`
+   * label. When set, the chip renders these wrapping segments (used by the
+   * family/kids chip) and `text`/`plusCount`/`renderTrailing` are ignored. */
+  segments?: ChipSegment[]
   tone?: ChipTone
   onPhoto?: boolean
+  /** When > 0, renders a small light-purple "+N" pill AFTER the text, inside
+   * the same chip. Used by the group chip to hint that the pair shares more
+   * groups than the one named. The "+N" is composed here (single source) and
+   * mirrored under RTL so the plus stays on the reading-start side. */
+  plusCount?: number
   /** No fill, just a light green rule. For a chip that ADDS something rather
    * than reporting a fact — it reads as an empty slot waiting to be filled,
    * which a solid chip cannot. */
@@ -148,19 +197,75 @@ export function Chip({
   // chips (an empty add slot) stay flat.
   const tileShadow = onPhoto && !outlined
   const Container: any = onPress ? Pressable : View
+  // "+N": the mini-chip that chains right after the label's last word. It is
+  // nested INSIDE the label <Text> as an inline element — never a sibling flex
+  // item and never a split-per-word run. That keeps the whole label ONE bidi
+  // run (a Hebrew name renders correctly even in an LTR UI, instead of its words
+  // reordering by the flex engine) while the pill still flows after the final
+  // glyph and wraps with it. RTL mirrors the plus to the reading-start side
+  // ("1+"); `ltr` keeps the weak "+" glued to the digit.
+  // Direction follows the LABEL's OWN script, not the UI locale: the flex engine
+  // can't bidi-reorder words, so a locale-only direction reversed a Hebrew name
+  // in an English UI. The "+" sits on that script's reading-start side.
+  const nameDir: 'rtl' | 'ltr' | null = plusCount && text ? (RTL_SCRIPT.test(text) ? 'rtl' : 'ltr') : null
+  const plusPill = nameDir ? (nameDir === 'rtl' ? `${plusCount}+` : `+${plusCount}`) : null
   return (
     <Container
       onPress={onPress}
       style={[styles.chip, outlined ? styles.chipOutlined : { backgroundColor: bgColor }, tileShadow && styles.chipShadow]}
     >
       {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(fg)}</View> : null}
-      <Text
-        style={[styles.chipText, bold && styles.chipTextBold, { color: fg }]}
-        maxFontSizeMultiplier={FONT_SCALE.heading}
-      >
-        {phraseWrap(text)}
-      </Text>
-      {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(fg)}</View> : null}
+      {segments ? (
+        // A wrapping row of text runs + mini-chip clusters. Each text run is its
+        // own flex item so it wraps at word boundaries; a badge cluster flows
+        // inline. Same direction as the chip so items read start-to-end.
+        <View style={styles.segments}>
+          {segments.map((seg, i) =>
+            'br' in seg ? (
+              // Full-width zero-height spacer: forces the flex-wrap row to break
+              // here, so the following segment starts a fresh line.
+              <View key={i} style={styles.segmentBreak} />
+            ) : 'badges' in seg ? (
+              <View key={i} style={styles.badgeCluster}>
+                {seg.badges.map((b, j) => <Badge key={j} text={b} ltr={seg.ltr} />)}
+              </View>
+            ) : (
+              <Text
+                key={i}
+                style={[styles.chipText, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
+                maxFontSizeMultiplier={FONT_SCALE.heading}
+              >
+                {seg.text}
+              </Text>
+            ),
+          )}
+        </View>
+      ) : plusPill ? (
+        // Name + "+N": word-runs in a wrap row directed by the name's script, so
+        // the pill lands right after the final word in any UI locale.
+        <View style={[styles.nameFlow, { direction: nameDir! }]}>
+          {(text ?? '').split(/\s+/).filter(Boolean).map((w, i) => (
+            <Text
+              key={i}
+              style={[styles.chipText, bold && styles.chipTextBold, { color: fg }]}
+              maxFontSizeMultiplier={FONT_SCALE.heading}
+            >
+              {w}
+            </Text>
+          ))}
+          <Badge text={plusPill} ltr />
+        </View>
+      ) : (
+        <>
+          <Text
+            style={[styles.chipText, bold && styles.chipTextBold, { color: fg }]}
+            maxFontSizeMultiplier={FONT_SCALE.heading}
+          >
+            {phraseWrap(text ?? '')}
+          </Text>
+          {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(fg)}</View> : null}
+        </>
+      )}
     </Container>
   )
 }
@@ -251,7 +356,16 @@ const styles = StyleSheet.create({
   chip: {
     direction: isRTL ? 'rtl' : 'ltr',
     flexDirection: 'row',
-    alignItems: 'center',
+    // Top-align the row, NOT centre: a wrapped label is taller than the glyph
+    // box, and centring the row floats the icon into the middle of the whole
+    // chip instead of level with the FIRST line. The old spec centred here and
+    // leaned on the glyph wrapper's own `alignSelf:'flex-start'` to pull it back
+    // up — but that per-child override is silently dropped under the New Arch
+    // (Fabric), so the icon sat mid-chip on multi-line labels. Aligning at the
+    // parent makes it independent of that override. Single-line chips are
+    // unaffected: every child box (glyph wrapper + one-line text) is exactly one
+    // line tall, so flex-start and centre coincide.
+    alignItems: 'flex-start',
     gap: SM,
     paddingHorizontal: MD,
     paddingVertical: SM,
@@ -272,14 +386,14 @@ const styles = StyleSheet.create({
     paddingVertical: SM - STROKE.thin,
   },
   // Same treatment the settings select rows use (selectRowIconWrap): a box
-  // exactly one text-line tall, top-aligned, so the glyph centres against the
-  // FIRST line of a wrapped chip label instead of drifting into the gap
-  // between the two lines. marginTop lands it on that line's ink rather than
-  // on its line box. Single-line chips are unaffected — the box then equals
-  // the row height, so top-align and centre coincide. The cap matches the
-  // label's own maxFontSizeMultiplier so box and text scale together.
+  // exactly one text-line tall so the glyph centres against the FIRST line of a
+  // wrapped chip label instead of drifting into the gap between the two lines.
+  // The parent (`.chip`) top-aligns the row, so this box lands on the first
+  // line; marginTop then lands the glyph on that line's ink rather than on its
+  // line box. Single-line chips are unaffected — the box then equals the row
+  // height, so top-align and centre coincide. The cap matches the label's own
+  // maxFontSizeMultiplier so box and text scale together.
   glyphWrap: {
-    alignSelf: 'flex-start',
     height: iconScale(lh(TEXT.sm), FONT_SCALE.heading),
     marginTop: inkOffset(TEXT.sm, FONT_SCALE.heading),
     alignItems: 'center',
@@ -302,6 +416,71 @@ const styles = StyleSheet.create({
   // as the card's heading without growing the tile past the fact chips beside it.
   chipTextBold: {
     fontWeight: WEIGHT.extrabold,
+  },
+  // A small light-purple pill riding inside the chip after the label — the
+  // "+N more shared groups" hint. GREEN_WASH is the app's pale-purple soft-tile
+  // surface, so it reads as light purple against the beige chip tile. Its line
+  // height matches the label's first line (lh(TEXT.sm)) so, under the row's
+  // flex-start alignment, the pill sits level with line one of a wrapped label.
+  badge: {
+    backgroundColor: GREEN_WASH,
+    borderRadius: RADIUS,
+    paddingHorizontal: XS,
+    alignSelf: 'flex-start',
+  },
+  badgeText: {
+    fontSize: TEXT.xs,
+    lineHeight: lh(TEXT.sm),
+    fontWeight: WEIGHT.semibold,
+    color: GREEN,
+    textAlign: 'center',
+  },
+  // Forced LTR for numeric/punctuation pills (the "+N" hint, a kid's age, "?"):
+  // the char order is authoritative and the weak glyphs must not bidi-reorder
+  // against an RTL paragraph. Off for a phrase pill (the Hebrew weekend status),
+  // which follows the paragraph direction instead.
+  badgeTextLtr: {
+    writingDirection: 'ltr',
+  },
+  // The family chip's content: text runs + age/weekend mini-chips flowing as a
+  // wrapping row so each fact keeps its own pill and the sentence rewraps to the
+  // narrow column. Same direction as the chip so it reads start-to-end.
+  segments: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: SM,
+    rowGap: XS,
+    flexShrink: 1,
+  },
+  // The age pills packed tight as one inline unit (user directive 2026-07-26 —
+  // "denser"): a hair-gap between pills, well under the SM that separates the
+  // sentence's words, so [0][5][?] read as a single little group.
+  badgeCluster: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: XS,
+    rowGap: XS,
+  },
+  // Zero-height, full-width flex item: consumes the whole row so the next
+  // segment wraps below it (a hard line break inside the wrapping segments row).
+  segmentBreak: {
+    flexBasis: '100%',
+    height: 0,
+  },
+  // The group-name "+N" flow: word-runs + trailing pill. `direction` is set
+  // inline per label script (see render). columnGap approximates a word space
+  // (the words were split on whitespace, so the natural spaces are gone).
+  nameFlow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: XS,
+    rowGap: XS,
+    flexShrink: 1,
   },
   presenceDot: {
     width: PRESENCE_DOT_SIZE,
