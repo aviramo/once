@@ -99,14 +99,6 @@
       <div class="container"><div id="sec-how"></div></div>
     </section>
 
-    <section class="band" id="sec-psychology-wrap">
-      <div class="container"><div id="sec-psychology"></div></div>
-    </section>
-
-    <section class="band band--tint" id="sec-dualrole-wrap">
-      <div class="container"><div id="sec-dualrole"></div></div>
-    </section>
-
     <section class="band" id="sec-credits-wrap">
       <div class="container"><div id="sec-credits"></div></div>
     </section>
@@ -115,15 +107,19 @@
       <div class="container"><div id="sec-matching"></div></div>
     </section>
 
-    <section class="band" id="sec-safety-wrap">
+    <section class="band" id="sec-communities-wrap">
+      <div class="container"><div id="sec-communities"></div></div>
+    </section>
+
+    <section class="band band--tint" id="sec-safety-wrap">
       <div class="container"><div id="sec-safety"></div></div>
     </section>
 
-    <section class="band band--tint" id="faq">
+    <section class="band" id="faq">
       <div class="container"><div id="sec-faq"></div></div>
     </section>
 
-    <section class="band" id="sec-final-wrap">
+    <section class="band band--tint" id="sec-final-wrap">
       <div class="container"><div id="sec-final"></div></div>
     </section>
   </main>
@@ -140,7 +136,7 @@
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
-  <script src="art.js?v=1"></script>
+  <script src="art.js?v=2"></script>
   <script>
   (function () {
     'use strict';
@@ -234,27 +230,20 @@
             { title: 'מתחילים לדבר', body: 'כשההזמנה מתקבלת, נוצר Match והצ׳אט נפתח מיד.', media: { name: 'Match וצ׳אט', desc: 'מסך Match ומעבר לצ׳אט.' } }
           ]
         },
-        psychology: {
-          eyebrow: 'מאחורי החוויה',
-          title: { lines: ['פחות אפשרויות.', 'יותר תשומת לב.'], accent: true },
-          intro: 'Once לא מנסה לגרום לכם לבלות יותר זמן באפליקציה. היא מנסה ליצור רגע שבו אדם אחד באמת מקבל מקום.',
-          cards: [
-            { icon: 'sliders', title: 'פחות עומס בחירה', body: 'כשלא עוברים בין עשרות פרופילים, קל יותר להרגיש אם האדם שמולכם באמת מעניין אתכם.' },
-            { icon: 'coin', title: 'מחסור שיוצר משמעות', body: 'הקרדיטים מוגבלים, ולכן שליחת הזמנה היא החלטה ולא רפלקס.' },
-            { icon: 'clock', title: 'זמן אמת שיוצר נוכחות', body: 'חלון תגובה של 10 דקות שומר את שני הצדדים באותו רגע.' },
-            { icon: 'handshake', title: 'פעולה הדדית', body: 'כל משתמש יכול להיות גם מי שבוחר וגם מי שנבחר.' }
-          ],
-          emphasis: { lines: ['המטרה אינה להכיר יותר אנשים.', 'המטרה היא לתת יותר סיכוי לאדם אחד.'], accent: true },
-          media: { name: 'המנגנון הפסיכולוגי', desc: 'המחשה מופשטת של מעבר מרעש והצפה למיקוד ונוכחות.' }
-        },
-        dualRole: {
-          eyebrow: 'שני הצדדים חיים',
-          title: { lines: ['בזמן שאתם מתעניינים במישהו,', 'מישהו יכול להתעניין בכם.'], accent: true },
+        communities: {
+          eyebrow: 'הקהילות שלכם',
+          title: { lines: ['היכרות מתוך', 'העולם המשותף שלכם.'], accent: true },
           body: [
-            'הזמנה נכנסת יכולה להגיע בכל רגע, גם בזמן שאתם בוחנים אדם אחר.',
-            'כך החוויה אינה רשימה חד-צדדית של מועמדים. אתם יכולים ליזום, להיבחר ולהחליט בזמן אמת.'
+            'Once לא מציגה רק זרים אקראיים. אפשר לבנות קהילות ולהצטרף אליהן, מהעבודה, מהלימודים, מתחביב או מחוג החברים, ולפגוש אנשים מתוך אותם מעגלים.',
+            'אנשים מקהילה משותפת מופיעים אצלכם בעדיפות גבוהה יותר, כך שההיכרות מרגישה קרובה ורלוונטית יותר.'
           ],
-          media: { name: 'יוזם ונבחר בו-זמנית', desc: 'שני משתמשים שכל אחד יכול לשלוח ולקבל הזמנה באותו הזמן.' }
+          cards: [
+            { icon: 'users', title: 'קהילות משלכם', body: 'צרו קבוצה לעבודה, ללימודים או לתחביב, נהלו מי חבר בה והזמינו אנשים בקישור.' },
+            { icon: 'user', title: 'החברים שלכם', body: 'הזמינו חברים שאתם מכירים אישית או שייכו חברים קיימים, וכולכם תראו זה את זה קודם.' },
+            { icon: 'spark', title: 'עדיפות למעגלים משותפים', body: 'אנשים מאותה קהילה מקבלים דירוג גבוה יותר בהתאמה, לא רק קרבה גיאוגרפית.' },
+            { icon: 'shield', title: 'ציבורי או פרטי', body: 'קבוצה ציבורית שנמצאת בחיפוש, או פרטית עם קישור הזמנה ואישור הצטרפות. אתם בוחרים.' }
+          ],
+          media: { name: 'קהילות', desc: 'מסך הקהילות עם הקבוצות והחברים, ולצידו מעגל של אנשים מאותה קהילה המחוברים זה לזה.' }
         },
         credits: {
           eyebrow: 'מטבע של תשומת לב',
@@ -262,11 +251,6 @@
           body: [
             'שליחת הזמנה עולה קרדיט מתוך מלאי יומי מוגבל, וגם אישור הזמנה עולה קרדיט. המטרה אינה למנוע מכם לפנות לאנשים, אלא להפוך כל פנייה לפעולה מודעת.',
             'כאשר הזמנה נדחית או פגה, הקרדיט חוזר. כך האפליקציה מתגמלת כוונה ולא גלילה אוטומטית.'
-          ],
-          cards: [
-            { icon: 'refresh', title: 'מלאי שמתחדש בכל יום', body: 'מקבלים קרדיט חדש בכל יום.' },
-            { icon: 'coin', title: 'קרדיט אחד לכל הזמנה', body: 'כל הזמנה היא בחירה מודעת.' },
-            { icon: 'check', title: 'פחות פניות אקראיות', body: 'שולחים הזמנה רק כשבאמת מעוניינים.' }
           ],
           media: { name: 'קרדיטים', desc: 'ממשק הקרדיטים והמחשה של קרדיט שנשלח עם הזמנה.' }
         },
@@ -311,6 +295,7 @@
             { q: 'מה קורה כשהזמנה מתקבלת?', a: 'נוצר Match והצ׳אט נפתח מיד.' },
             { q: 'למה צריך להפעיל התראות?', a: 'האפליקציה מבוססת על תגובות בזמן אמת, ולכן ההתראות מאפשרות לא לפספס הזמנה.' },
             { q: 'האם אפשר לחסום או לדווח?', a: 'כן. אפשר לסיים שיחה, לחסום ולדווח דרך האפליקציה.' },
+            { q: 'מה הן קהילות?', a: 'קהילות הן קבוצות שאפשר ליצור או להצטרף אליהן, מהעבודה, מהלימודים או מחוג החברים. אנשים מקהילה משותפת מופיעים אצלכם בעדיפות גבוהה יותר.' },
             { q: 'האם Once פעילה בכל מקום?', a: 'Once נפתחת בהדרגה באזורים ובקהילות שונות. האפליקציה תציג לכם אם האזור שלכם פעיל.' }
           ]
         },
@@ -383,27 +368,20 @@
             { title: 'Start talking', body: 'When the invitation is accepted, a match is made and the chat opens right away.', media: { name: 'Match and chat', desc: 'A match screen leading into the chat.' } }
           ]
         },
-        psychology: {
-          eyebrow: 'Behind the experience',
-          title: { lines: ['Fewer options.', 'More attention.'], accent: true },
-          intro: "Once isn't trying to make you spend more time in the app. It's trying to create a moment where one person really gets space.",
-          cards: [
-            { icon: 'sliders', title: 'Less choice overload', body: "When you're not flipping through dozens of profiles, it's easier to feel whether the person in front of you actually interests you." },
-            { icon: 'coin', title: 'Scarcity that creates meaning', body: 'Credits are limited, so sending an invitation is a decision, not a reflex.' },
-            { icon: 'clock', title: 'Real time creates presence', body: 'A 10-minute response window keeps both sides in the same moment.' },
-            { icon: 'handshake', title: 'A mutual action', body: 'Every user can be both the one who chooses and the one who is chosen.' }
-          ],
-          emphasis: { lines: ['The goal is not to meet more people.', 'The goal is to give one person a better chance.'], accent: true },
-          media: { name: 'The psychology', desc: 'An abstract illustration of moving from noise and overload to focus and presence.' }
-        },
-        dualRole: {
-          eyebrow: 'Both sides are live',
-          title: { lines: ['While you take interest in someone,', 'someone can take interest in you.'], accent: true },
+        communities: {
+          eyebrow: 'Your communities',
+          title: { lines: ['Meet through', 'the world you share.'], accent: true },
           body: [
-            "An incoming invitation can arrive at any moment, even while you're considering someone else.",
-            "So the experience isn't a one-way list of candidates. You can initiate, be chosen, and decide in real time."
+            "Once doesn't only show random strangers. You can build communities and join them, from work, studies, a hobby, or your circle of friends, and meet people from those same circles.",
+            'People from a shared community appear higher for you, so the introduction feels closer and more relevant.'
           ],
-          media: { name: 'Initiator and chosen at once', desc: 'Two users, each able to send and receive an invitation at the same time.' }
+          cards: [
+            { icon: 'users', title: 'Communities of your own', body: 'Create a group for work, studies, or a hobby, manage who belongs, and invite people with a link.' },
+            { icon: 'user', title: 'Your friends', body: 'Invite friends you know personally or link existing ones, and you all see each other first.' },
+            { icon: 'spark', title: 'Priority for shared circles', body: 'People from the same community rank higher in matching, not just geographic proximity.' },
+            { icon: 'shield', title: 'Public or private', body: 'A public group that shows up in search, or a private one with an invite link and join approval. You choose.' }
+          ],
+          media: { name: 'Communities', desc: 'The communities screen with your groups and friends, beside a circle of people from the same community linked to each other.' }
         },
         credits: {
           eyebrow: 'A currency of attention',
@@ -411,11 +389,6 @@
           body: [
             'Sending an invitation costs a credit from a limited daily balance, and accepting one costs a credit too. The goal is not to stop you from reaching out, but to make every reach-out a conscious act.',
             'When an invitation is declined or expires, the credit comes back. The app rewards intent, not automatic scrolling.'
-          ],
-          cards: [
-            { icon: 'refresh', title: 'Balance renews daily', body: 'You get a fresh credit every day.' },
-            { icon: 'coin', title: 'One credit per invitation', body: 'Every invitation is a conscious choice.' },
-            { icon: 'check', title: 'Fewer random reach-outs', body: 'You send an invitation only when you truly mean it.' }
           ],
           media: { name: 'Credits', desc: 'The credits interface and an illustration of a credit sent with an invitation.' }
         },
@@ -460,6 +433,7 @@
             { q: 'What happens when an invitation is accepted?', a: 'A match is made and the chat opens right away.' },
             { q: 'Why do I need to enable notifications?', a: 'The app is based on real-time responses, so notifications let you not miss an invitation.' },
             { q: 'Can I block or report?', a: 'Yes. You can end a conversation, block, and report from inside the app.' },
+            { q: 'What are communities?', a: 'Communities are groups you can create or join, from work, studies, or your circle of friends. People from a shared community appear higher for you.' },
             { q: 'Is Once active everywhere?', a: 'Once opens gradually in different areas and communities. The app will show you whether your area is active.' }
           ]
         },
@@ -532,27 +506,20 @@
             { title: 'Начинаете общаться', body: 'Когда приглашение принято, создаётся совпадение и чат открывается сразу.', media: { name: 'Совпадение и чат', desc: 'Экран совпадения и переход в чат.' } }
           ]
         },
-        psychology: {
-          eyebrow: 'За кулисами опыта',
-          title: { lines: ['Меньше вариантов.', 'Больше внимания.'], accent: true },
-          intro: 'Once не пытается заставить вас проводить в приложении больше времени. Она пытается создать момент, где одному человеку действительно есть место.',
-          cards: [
-            { icon: 'sliders', title: 'Меньше перегрузки выбором', body: 'Когда вы не листаете десятки профилей, легче почувствовать, действительно ли человек перед вами вам интересен.' },
-            { icon: 'coin', title: 'Дефицит, создающий смысл', body: 'Кредитов ограниченное число, поэтому отправка приглашения, это решение, а не рефлекс.' },
-            { icon: 'clock', title: 'Реальное время создаёт присутствие', body: 'Окно ответа в 10 минут держит обе стороны в одном моменте.' },
-            { icon: 'handshake', title: 'Взаимное действие', body: 'Каждый пользователь может быть и тем, кто выбирает, и тем, кого выбирают.' }
-          ],
-          emphasis: { lines: ['Цель не в том, чтобы познакомиться с большим числом людей.', 'Цель в том, чтобы дать одному человеку больше шанса.'], accent: true },
-          media: { name: 'Психология', desc: 'Абстрактная иллюстрация перехода от шума и перегрузки к фокусу и присутствию.' }
-        },
-        dualRole: {
-          eyebrow: 'Живы обе стороны',
-          title: { lines: ['Пока вы интересуетесь кем-то,', 'кто-то может интересоваться вами.'], accent: true },
+        communities: {
+          eyebrow: 'Ваши сообщества',
+          title: { lines: ['Знакомства через', 'общий для вас мир.'], accent: true },
           body: [
-            'Входящее приглашение может прийти в любой момент, даже пока вы рассматриваете другого человека.',
-            'Так опыт не превращается в односторонний список кандидатов. Вы можете инициировать, быть выбранным и решать в реальном времени.'
+            'Once показывает не только случайных незнакомцев. Можно создавать сообщества и присоединяться к ним, с работы, учёбы, по хобби или из круга друзей, и знакомиться с людьми из тех же кругов.',
+            'Люди из общего сообщества показываются вам выше, поэтому знакомство ощущается ближе и уместнее.'
           ],
-          media: { name: 'Инициатор и выбранный одновременно', desc: 'Два пользователя, каждый из которых может отправлять и получать приглашение в одно и то же время.' }
+          cards: [
+            { icon: 'users', title: 'Собственные сообщества', body: 'Создайте группу для работы, учёбы или хобби, управляйте участниками и приглашайте людей по ссылке.' },
+            { icon: 'user', title: 'Ваши друзья', body: 'Пригласите друзей, которых знаете лично, или свяжите уже существующих, и вы все видите друг друга первыми.' },
+            { icon: 'spark', title: 'Приоритет общим кругам', body: 'Люди из одного сообщества выше в подборе, а не только по географической близости.' },
+            { icon: 'shield', title: 'Публичное или приватное', body: 'Публичная группа, которую находят в поиске, или приватная с пригласительной ссылкой и подтверждением вступления. Вы выбираете.' }
+          ],
+          media: { name: 'Сообщества', desc: 'Экран сообществ с группами и друзьями, рядом круг людей из одного сообщества, связанных между собой.' }
         },
         credits: {
           eyebrow: 'Валюта внимания',
@@ -560,11 +527,6 @@
           body: [
             'Отправка приглашения стоит кредит из ограниченного дневного запаса, и подтверждение приглашения тоже стоит кредит. Цель не в том, чтобы мешать вам обращаться к людям, а в том, чтобы каждое обращение было осознанным.',
             'Когда приглашение отклонено или истекло, кредит возвращается. Приложение вознаграждает намерение, а не автоматический скролл.'
-          ],
-          cards: [
-            { icon: 'refresh', title: 'Запас обновляется каждый день', body: 'Каждый день вы получаете новый кредит.' },
-            { icon: 'coin', title: 'Один кредит за приглашение', body: 'Каждое приглашение, это осознанный выбор.' },
-            { icon: 'check', title: 'Меньше случайных обращений', body: 'Вы отправляете приглашение, только когда действительно этого хотите.' }
           ],
           media: { name: 'Кредиты', desc: 'Интерфейс кредитов и иллюстрация кредита, отправленного с приглашением.' }
         },
@@ -609,6 +571,7 @@
             { q: 'Что происходит, когда приглашение принято?', a: 'Создаётся совпадение и чат открывается сразу.' },
             { q: 'Зачем включать уведомления?', a: 'Приложение основано на ответах в реальном времени, поэтому уведомления помогают не пропустить приглашение.' },
             { q: 'Можно заблокировать или пожаловаться?', a: 'Да. Внутри приложения можно завершить разговор, заблокировать и пожаловаться.' },
+            { q: 'Что такое сообщества?', a: 'Сообщества, это группы, которые можно создать или к которым можно присоединиться, с работы, учёбы или из круга друзей. Люди из общего сообщества показываются вам выше.' },
             { q: 'Once работает везде?', a: 'Once открывается постепенно в разных районах и сообществах. Приложение покажет вам, активен ли ваш район.' }
           ]
         },
@@ -726,33 +689,18 @@
         '<div class="section-cta reveal">' + downloadBtn('btn-primary', true) + '</div>';
     }
 
-    function buildPsychology() {
-      var s = T.psychology;
+    function buildCommunities() {
+      var s = T.communities;
       return '<div class="heading reveal">' +
           '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
           '<h2>' + titleHTML(s.title) + '</h2>' +
-          '<p class="lede" style="margin-inline:auto;margin-top:16px">' + esc(s.intro) + '</p>' +
+          '<div class="lede" style="margin-inline:auto;margin-top:16px">' + paras(s.body) + '</div>' +
         '</div>' +
         '<div class="card-grid card-grid--4">' + s.cards.map(function (c) {
           return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
             '<h3>' + esc(c.title) + '</h3><p>' + esc(c.body) + '</p></div>';
         }).join('') + '</div>' +
-        '<div class="split" style="margin-top:clamp(36px,5vw,56px)">' +
-          '<div class="split-text reveal"><p class="emphasis">' + titleHTML(s.emphasis) + '</p></div>' +
-          '<div class="split-visual reveal">' + media(s.media, 'wide', 'psychology') + '</div>' +
-        '</div>';
-    }
-
-    function buildDualRole() {
-      var s = T.dualRole;
-      return '<div class="split split--media-start">' +
-        '<div class="split-text">' +
-          '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
-          '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
-          '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
-        '</div>' +
-        '<div class="split-visual reveal">' + media(s.media, 'wide', 'dualRole') + '</div>' +
-      '</div>';
+        '<div class="reveal" style="margin-top:clamp(32px,5vw,52px);max-width:820px;margin-inline:auto">' + media(s.media, 'wide', 'communities') + '</div>';
     }
 
     function buildCredits() {
@@ -764,11 +712,7 @@
             '<div class="reveal measure" style="margin-top:16px">' + paras(s.body) + '</div>' +
           '</div>' +
           '<div class="split-visual reveal">' + media(s.media, 'wide', 'credits') + '</div>' +
-        '</div>' +
-        '<div class="card-grid card-grid--3" style="margin-top:clamp(28px,4vw,44px)">' + s.cards.map(function (c) {
-          return '<div class="card reveal"><div class="card-icon">' + icon(c.icon) + '</div>' +
-            '<h3>' + esc(c.title) + '</h3><p>' + esc(c.body) + '</p></div>';
-        }).join('') + '</div>';
+        '</div>';
     }
 
     function buildMatching() {
@@ -882,10 +826,9 @@
       set('sec-problem', buildProblem());
       set('sec-difference', buildDifference());
       set('sec-how', buildHow());
-      set('sec-psychology', buildPsychology());
-      set('sec-dualrole', buildDualRole());
       set('sec-credits', buildCredits());
       set('sec-matching', buildMatching());
+      set('sec-communities', buildCommunities());
       set('sec-safety', buildSafety());
       set('sec-faq', buildFaq());
       set('sec-final', buildFinal());

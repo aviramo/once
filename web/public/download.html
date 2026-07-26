@@ -65,6 +65,16 @@
       -moz-osx-font-smoothing: grayscale;
     }
     .wrap { width: 100%; max-width: 360px; }
+    /* The app's launcher icon, shown as a rounded app tile so the page opens on
+       the same mark the store listing and the home-screen icon carry. */
+    .app-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      display: block;
+      margin: 0 auto 18px;
+      box-shadow: var(--shadow-md);
+    }
     .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.5px; color: var(--brand); }
     .msg { margin-top: 14px; font-size: 16px; font-weight: 600; color: var(--ink-2); }
     .choices { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
@@ -97,6 +107,7 @@
 </head>
 <body class="no-js">
   <div class="wrap">
+    <img class="app-icon" src="app-icon.png?v=1" width="96" height="96" alt="Once" />
     <div class="brand-name">Once</div>
     <div class="msg" id="msg">מעבירים אותך לחנות&hellip;</div>
     <div class="choices">

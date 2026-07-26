@@ -219,6 +219,39 @@
       rect(20, 568, 260, 42, 21, ACCENT) + bar(110, 585, 80, 12, SURFACE, 0.92);
   };
 
+  /* Communities hub: my-friends (pinned) over the groups you manage / are in,
+     with create + find actions. Beige top, dark glyphs, no purple band. */
+  SCREEN.communities = function () {
+    // A short row of overlapping member faces, left to right.
+    var faces = function (x, y, r, list) {
+      return list.map(function (f, i) { return avatar(x + i * (r * 1.35), y, r, f, null, SURFACE); }).join('');
+    };
+    // One group row: rounded tile, a group thumbnail, a name line, a little
+    // cluster of member faces and a count.
+    var groupRow = function (y, thumb, list) {
+      return rect(20, y, 260, 76, 18, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') +
+        photo(32, y + 12, 52, 52, 14, thumb, null, 1.2, 0) +
+        bar(100, y + 18, 116, 12) +
+        faces(102, y + 48, 11, list) + bar(176, y + 44, 34, 9, INK, 0.4);
+    };
+    return rect(0, 0, SW, SH, 0, PAGE) +
+      // header: back chevron + title
+      line('M42 34l-10 10 10 10', INK, 3, op(0.7)) +
+      bar(62, 36, 92, 15, INK, 0.8) +
+      // my-friends, pinned (a distinct tinted tile)
+      rect(20, 74, 260, 84, 20, TINT) +
+      faces(54, 116, 18, [F(6), F(7), F(8)]) +
+      bar(150, 100, 94, 13) + bar(150, 126, 64, 10, INK, 0.4) +
+      // groups you manage
+      bar(24, 180, 118, 10, INK, 0.5) + groupRow(198, F(9), [F(10), F(11), F(12)]) +
+      // groups you are in
+      bar(24, 292, 118, 10, INK, 0.5) + groupRow(310, F(13), [F(14), F(15), F(16)]) +
+      // actions: create (solid) + find (outline)
+      rect(20, 406, 124, 46, 23, BRAND) + bar(52, 423, 60, 12, SURFACE, 0.92) +
+      rect(156, 406, 124, 46, 23, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') + bar(184, 423, 68, 11, INK, 0.45) +
+      rect(105, 598, 90, 5, 2.5, INK, op(0.35));
+  };
+
   /* ---------- Devices ---------- */
   /* A drawn phone with a screen inside it, scaled from the 300x617 design. */
   function device(x, y, s, inner, shadow) {
@@ -352,35 +385,26 @@
     );
   };
 
-  /* Psychology: noise settling into one calm, present moment. */
-  ART.psychology = function () {
-    var rows = [[92, 42, 0.24, 2, 11], [166, 29, 0.34, 2.5, 23], [240, 17, 0.46, 3, 37], [314, 7, 0.6, 3.5, 51]];
-    var body = rows.map(function (r) {
-      var rand = lcg(r[4]), pts = [], steps = 20;
-      for (var i = 0; i <= steps; i++) pts.push(n(60 + (680 / steps) * i) + ' ' + n(r[0] + (rand() * 2 - 1) * r[1]));
-      return line('M' + pts.join('L'), ACCENT, r[3], op(r[2]));
-    }).join('');
-
-    var dots = '', rand = lcg(7);
-    for (var i = 0; i < 26; i++) {
-      var y = 40 + rand() * 240;
-      dots += circle(50 + rand() * 700, y, 3 + rand() * 3, ACCENT, op(n(0.3 * (1 - (y - 40) / 280) + 0.05)));
-    }
-
-    return wide(dots + body + line('M60 400h268M472 400h268', INK, 5) +
-      ring(400, 400, 64, ACCENT, 3, op(0.28)) + avatar(400, 400, 46, F(22), null, SURFACE));
-  };
-
-  /* Dual role: both people can invite and be invited, at the same time. */
-  ART.dualRole = function () {
+  /* Communities: meeting through a shared circle. The hub on the START side;
+     on the other, members of one community linked to each other, with a friend
+     pair lit brand-purple - friends surface to each other first. */
+  ART.communities = function () {
+    var cx = 556, cy = 250, R = 150;
+    var ring6 = [
+      [cx, cy - R, F(3)], [cx + 132, cy - 74, F(4)], [cx + 132, cy + 74, F(5)],
+      [cx, cy + R, F(6)], [cx - 132, cy + 74, F(7)], [cx - 132, cy - 74, F(8)]
+    ];
+    var spokes = ring6.map(function (m) { return line('M' + cx + ' ' + cy + 'L' + m[0] + ' ' + m[1], LINE, 3, op(0.7)); }).join('');
+    // The two members on the END side are friends: a brand link between them.
+    var friendLink = line('M' + (cx + 132) + ' ' + (cy - 74) + 'L' + (cx + 132) + ' ' + (cy + 74), BRAND, 4, op(0.85));
+    var dots = ring6.map(function (m, i) { return avatar(m[0], m[1], 30, m[2], null, (i === 1 || i === 2) ? BRAND : SURFACE); }).join('');
     return wide(
-      device(96, 60, 0.62, SCREEN.home(F(2)), true) +
-      device(518, 60, 0.62, SCREEN.home(F(3)), true) +
-      line('M292 176Q400 108 508 176', ACCENT, 3, ' stroke-dasharray="8 9" opacity=".7"') +
-      line('M494 166l14 10-14 10', ACCENT, 3, op(0.7)) +
-      line('M508 344Q400 412 292 344', ACCENT, 3, ' stroke-dasharray="8 9" opacity=".7"') +
-      line('M306 334l-14 10 14 10', ACCENT, 3, op(0.7)) +
-      token(400, 142, 17) + token(400, 378, 17)
+      device(60, 44, 0.66, SCREEN.communities(), true) +
+      line('M266 250H396', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"') +
+      ring(cx, cy, R, ACCENT, 3, op(0.14)) +
+      spokes + friendLink + dots +
+      circle(cx, cy, 52, SURFACE, ' stroke="' + LINE + '" stroke-width="3"') +
+      group(usersGlyph(30), ' transform="translate(' + cx + ',' + cy + ')"')
     );
   };
 
