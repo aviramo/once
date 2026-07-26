@@ -78,16 +78,17 @@
        (a short desktop window with the QR), and auto margins never do. */
     .wrap { width: 100%; max-width: 360px; margin: auto; }
     /* The app's launcher icon, shown as a rounded app tile so the page opens on
-       the same mark the store listing and the home-screen icon carry. */
+       the same mark the store listing and the home-screen icon carry. It lies
+       straight on the page beige, with no lift under it (user directive
+       2026-07-27: a picture is not a shadowed rectangle). */
     .app-icon {
       width: 96px;
       height: 96px;
       border-radius: 22px;
       display: block;
       margin: 0 auto 18px;
-      box-shadow: var(--shadow-md);
     }
-    .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.5px; color: var(--brand); }
+    .brand-name { font-weight: 800; font-size: 31px; letter-spacing: -0.5px; color: var(--brand); }
     /* What the app is, in four beige-page-on-white tiles between the icon and
        the button — the same pill the app draws over a photo: flat surface,
        purple ink, one soft lift shadow, no gradient. */
@@ -107,7 +108,7 @@
       border-radius: 999px;
       background: var(--surface);
       color: var(--ink);
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 600;
       line-height: 1.2;
       letter-spacing: -0.2px;
@@ -133,7 +134,7 @@
       color: var(--brand-ink);
       border: none;
       font-family: inherit;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 800;
       letter-spacing: -0.2px;
       text-decoration: none;
@@ -152,14 +153,14 @@
     .more {
       display: inline-block;
       margin-top: 16px;
-      font-size: 15px;
+      font-size: 17px;
       font-weight: 600;
       color: var(--brand);
       text-decoration: underline;
       text-underline-offset: 4px;
       text-decoration-thickness: 1px;
     }
-    .note { display: none; margin-top: 18px; font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
+    .note { display: none; margin-top: 18px; font-size: 17px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
     .note strong { color: var(--ink); }
     /* Desktop only: scan-to-continue. The code encodes THIS page's URL, so a
        personal invite (/i/<CODE>) keeps its referral code across the hop from

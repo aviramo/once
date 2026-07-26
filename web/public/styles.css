@@ -30,8 +30,18 @@
      by scripts/build-icons.mjs and @imported at the top of this file. Do not
      re-declare a colour here — change it in colors.ts and rebuild the icons.
      Only web-specific aliases (which just point at a shared var) live below. */
-  --surface-sunk: var(--bg-2);  /* subtle inset — the same sunk beige */
-  --art-bg: var(--bg-2);        /* the surface an illustration sits on */
+  /* THE DARK BEIGE (--bg-2) IS NOT A FILL ON THIS SITE (user directive
+     2026-07-27). Every surface is either the page beige or white; a panel that
+     used to sink into the darker beige now sits on the page beige, and the
+     alternating band tint is dropped. Never point any of these back at --bg-2.
+     (The token still exists in tokens.css — it is the app's, and --border is
+     the same value as a hairline; only the FILLS are gone from this site.) */
+  --surface-sunk: var(--bg);    /* an inset panel: the page beige, never darker */
+  /* An illustration paints NO ground of its own (user directive 2026-07-27:
+     pictures sit straight on the surface, not in a shaded rectangle), so the
+     one full-bleed rect art.js draws is transparent and every drawing shows
+     whatever surface is behind it — page beige in a band, white in a callout. */
+  --art-bg: transparent;        /* the surface an illustration sits on */
   --art-line: var(--border);    /* drawn borders */
 
   /* --- Radii --- */
@@ -59,13 +69,18 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 /* scroll-padding clears the sticky header, so a nav link to a pillar lands on
    that band's eyebrow instead of parking it behind the bar. */
-html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 84px; }
+/* The whole page is sized off ONE root step (user directive 2026-07-27: the small
+   text was hard to read). A PERCENTAGE, not a px value, so a reader who raised
+   their browser's font size still gets it multiplied instead of overridden: 112.5%
+   of the 16px default = an 18px rem. Every `rem` below therefore lands ~12% larger
+   than it reads, and no per-rule size has to be re-tuned to keep the scale. */
+html { font-size: 112.5%; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 84px; }
 body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--ink);
   line-height: 1.6;
-  font-size: 17px;
+  font-size: 1.06rem;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -91,7 +106,11 @@ ul { list-style: none; }
 }
 section { position: relative; }
 .band { padding-block: clamp(64px, 10vw, 120px); }
-.band--tint { background: var(--bg-2); }
+/* The alternating tint is GONE with the dark beige: every band is the page
+   beige, and the white cards inside it are what separate one message from the
+   next. (Painting the band white instead would have swallowed those cards,
+   which are white themselves.) The class stays so the markup keeps working. */
+.band--tint { background: var(--bg); }
 
 /* ---------- Typography ---------- */
 h1, h2, h3 { line-height: 1.12; letter-spacing: -0.02em; font-weight: 700; color: var(--ink); }
@@ -100,7 +119,7 @@ h2 { font-size: clamp(1.7rem, 3.8vw, 2.6rem); }
 h3 { font-size: clamp(1.1rem, 2vw, 1.28rem); font-weight: 600; }
 p { color: var(--ink-2); }
 strong { color: var(--ink); font-weight: 600; }
-.lede { font-size: clamp(1.06rem, 1.6vw, 1.22rem); color: var(--ink-2); max-width: var(--measure); }
+.lede { font-size: clamp(1.12rem, 1.6vw, 1.26rem); color: var(--ink-2); max-width: var(--measure); }
 
 /* Eyebrow — small green label with a leading dot. Green because it is read,
    not pressed; orange stays reserved for the actions. */
@@ -108,7 +127,7 @@ strong { color: var(--ink); font-weight: 600; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--accent);
@@ -182,7 +201,7 @@ strong { color: var(--ink); font-weight: 600; }
   border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--brand-ink);
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.25;
@@ -209,20 +228,20 @@ strong { color: var(--ink); font-weight: 600; }
   padding: 9px 12px;
   border-radius: var(--r-pill);
   font-weight: 500;
-  font-size: 0.98rem;
+  font-size: 1.02rem;
   color: var(--ink-2);
   transition: color 0.18s var(--ease), background 0.18s var(--ease);
 }
 .nav-link:hover { color: var(--ink); background: var(--accent-soft); }
 .header-actions { display: flex; align-items: center; gap: 10px; margin-inline-start: 6px; }
 .login-link {
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 500;
   color: var(--ink-3);
   padding: 8px 6px;
 }
 .login-link:hover { color: var(--ink-2); }
-.header-cta { min-height: 44px; padding-inline: 20px; font-size: 0.98rem; }
+.header-cta { min-height: 46px; padding-inline: 20px; font-size: 1rem; }
 
 /* Language switcher */
 .lang-switcher { position: relative; }
@@ -235,7 +254,7 @@ strong { color: var(--ink); font-weight: 600; }
   border: 1px solid var(--border-strong);
   background: var(--surface);
   font-weight: 600;
-  font-size: 0.86rem;
+  font-size: 0.95rem;
   color: var(--ink-2);
 }
 .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -263,7 +282,7 @@ strong { color: var(--ink); font-weight: 600; }
   padding: 10px 12px;
   border-radius: var(--r-xs);
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: 1.02rem;
   color: var(--ink-2);
   text-align: start;
 }
@@ -285,11 +304,11 @@ strong { color: var(--ink); font-weight: 600; }
 .menu-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- Feature-graphic band ---------- */
-/* The Play listing's picture, full bleed under the header. --art-bg paints the
-   drawing on the page beige so the band reads as one surface with the hero, and
-   the two compositions swap on width: the long one on a wide screen, the store's
-   own 2:1 arrangement on a phone. */
-.banner { --art-bg: var(--bg); background: var(--bg); }
+/* The Play listing's picture, full bleed under the header. The drawing paints no
+   ground of its own, so the band reads as one surface with the hero, and the two
+   compositions swap on width: the long one on a wide screen, the store's own 2:1
+   arrangement on a phone. */
+.banner { background: var(--bg); }
 .banner .art { inline-size: 100%; block-size: auto; display: block; }
 .banner-art--compact { display: none; }
 .banner + .hero { padding-block-start: clamp(20px, 3vw, 40px); }
@@ -306,7 +325,7 @@ strong { color: var(--ink); font-weight: 600; }
    coefficient is the widest line's measured width (he 8.25em, en 8.83em) with a
    little margin. Browsers without container units fall back to the h1 clamp. */
 .hero h1 { font-size: min(3.55rem, 11cqi); }
-.hero-sub { font-size: clamp(1.06rem, 1.7vw, 1.25rem); color: var(--ink-2); max-width: 54ch; }
+.hero-sub { font-size: clamp(1.12rem, 1.7vw, 1.3rem); color: var(--ink-2); max-width: 54ch; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .hero-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
 
@@ -318,7 +337,7 @@ strong { color: var(--ink); font-weight: 600; }
   border-radius: var(--r-pill);
   background: var(--surface);
   border: 1px solid var(--border);
-  font-size: 0.88rem;
+  font-size: 0.98rem;
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -344,8 +363,18 @@ strong { color: var(--ink); font-weight: 600; }
   overflow: hidden;
 }
 /* A slot that carries an illustration (art.js): the art fills the frame edge to
-   edge, so none of the placeholder chrome (tag, icon, caption) applies. */
-.media--art { padding: 0; gap: 0; background: var(--art-bg); }
+   edge, so none of the placeholder chrome (tag, icon, caption) applies — AND
+   the frame itself is gone (user directive 2026-07-27). No card, no border, no
+   shadow, no fill: the drawing lies directly on the page. The chrome above is
+   kept for the labelled placeholder a missing artwork key falls back to. */
+.media--art {
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
 .art { inline-size: 100%; block-size: 100%; display: block; }
 /* App UI mirrors with the page like the rest of the layout does: in Hebrew the
    menu, the cards and the invite swap edges. */
@@ -361,13 +390,13 @@ strong { color: var(--ink); font-weight: 600; }
   color: var(--accent);
   flex: 0 0 auto;
 }
-.media-name { font-weight: 700; font-size: 0.98rem; color: var(--ink); }
-.media-desc { font-size: 0.85rem; line-height: 1.5; color: var(--ink-2); max-width: 34ch; }
+.media-name { font-weight: 700; font-size: 1.02rem; color: var(--ink); }
+.media-desc { font-size: 0.95rem; line-height: 1.5; color: var(--ink-2); max-width: 34ch; }
 .media-tag {
   position: absolute;
   inset-block-start: 12px;
   inset-inline-end: 12px;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--accent);
@@ -399,7 +428,7 @@ strong { color: var(--ink); font-weight: 600; }
   background: var(--surface);
   border: 1px solid var(--border);
   font-weight: 500;
-  font-size: 0.92rem;
+  font-size: 1rem;
   color: var(--ink);
 }
 .chip svg { color: var(--accent); }
@@ -425,18 +454,17 @@ strong { color: var(--ink); font-weight: 600; }
   align-items: center;
   gap: 9px;
   font-weight: 700;
-  font-size: 1.02rem;
+  font-size: 1.1rem;
   color: var(--ink);
   margin-bottom: 8px;
 }
 .callout-title svg { color: var(--brand); flex: 0 0 auto; }
-.callout p { font-size: 1rem; line-height: 1.6; }
+.callout p { font-size: 1.06rem; line-height: 1.6; }
 /* The drawing sits straight on the card's own surface: no frame of its own and
-   no sunk beige panel behind it (user directive 2026-07-26). --art-bg is the
-   ground the drawing paints for itself, so re-pointing the token here (rather
-   than painting over it) moves both the figure and the SVG onto the white. */
+   no panel behind it (user directive 2026-07-26). Nothing has to be re-pointed
+   here any more — --art-bg is transparent site-wide, so the drawing simply
+   shows the card's white. */
 .callout .media {
-  --art-bg: var(--surface);
   margin-top: 14px;
   border: 0;
   box-shadow: none;
@@ -474,7 +502,7 @@ strong { color: var(--ink); font-weight: 600; }
 .final-media { margin-top: clamp(32px, 5vw, 48px); max-width: 720px; margin-inline: auto; }
 .final-media .media--wide { aspect-ratio: 16 / 9; }
 
-.contact { margin-top: clamp(36px, 5vw, 52px); text-align: center; font-size: 0.95rem; color: var(--ink-2); }
+.contact { margin-top: clamp(36px, 5vw, 52px); text-align: center; font-size: 1.02rem; color: var(--ink-2); }
 .contact a { color: var(--brand); font-weight: 600; }
 .contact a:hover { color: var(--brand-strong); }
 
@@ -494,7 +522,7 @@ strong { color: var(--ink); font-weight: 600; }
   margin-bottom: 10px;
 }
 .legal p { margin-bottom: 12px; }
-.legal .updated { color: var(--ink-3); font-size: 0.92rem; margin-bottom: 8px; }
+.legal .updated { color: var(--ink-3); font-size: 1rem; margin-bottom: 8px; }
 .legal ul { display: grid; gap: 8px; margin-bottom: 12px; }
 .legal li {
   position: relative;
@@ -532,12 +560,12 @@ strong { color: var(--ink); font-weight: 600; }
   align-items: center;
   justify-content: center;
   gap: 8px 14px;
-  font-size: 0.92rem;
+  font-size: 1rem;
 }
 .footer-links a { color: var(--ink-2); }
 .footer-links a:hover { color: var(--brand); }
 .footer-links .sep { color: var(--ink-3); }
-.footer-copy { margin-top: 14px; font-size: 0.86rem; color: var(--ink-3); }
+.footer-copy { margin-top: 14px; font-size: 0.95rem; color: var(--ink-3); }
 
 /* ---------- Sticky mobile CTA ---------- */
 .mobile-cta {
@@ -576,7 +604,7 @@ strong { color: var(--ink); font-weight: 600; }
   text-align: center;
 }
 .dl-close { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; }
-.dl-title { font-weight: 800; font-size: 1.12rem; color: var(--ink); }
+.dl-title { font-weight: 800; font-size: 1.2rem; color: var(--ink); }
 .dl-note { margin-top: 10px; color: var(--ink-2); font-weight: 500; line-height: 1.5; }
 .dl-qr:not(:empty) { margin-top: 18px; display: flex; justify-content: center; }
 .dl-qr svg { inline-size: 190px; block-size: 190px; display: block; border-radius: var(--r-xs); }
@@ -647,9 +675,9 @@ strong { color: var(--ink); font-weight: 600; }
 }
 
 @media (max-width: 560px) {
-  .brand-tag { font-size: 0.66rem; padding: 3px 8px; margin-inline-start: 8px; }
+  .brand-tag { font-size: 0.78rem; padding: 3px 8px; margin-inline-start: 8px; }
 
-  body { font-size: 16px; }
+  body { font-size: 1rem; }
   :root { --ctl-h: 40px; }
   .brand-name { font-size: 1.3rem; }
   .header-actions { gap: 6px; }
@@ -695,7 +723,7 @@ strong { color: var(--ink); font-weight: 600; }
    middle of a label. One per row, all starting on the same edge. */
 #mobile-nav { display: flex; flex-direction: column; align-items: stretch; }
 .mobile-menu-panel .nav-link {
-  font-size: 1.08rem;
+  font-size: 1.14rem;
   padding: 14px 12px;
   border-radius: var(--r-sm);
   color: var(--ink);
