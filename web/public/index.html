@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=54" />
+  <link rel="stylesheet" href="styles.css?v=55" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -74,7 +74,9 @@
         </button>
       </div>
       <nav id="mobile-nav" aria-label="Mobile"></nav>
-      <a class="btn btn-primary" id="mobile-cta-inline" href="download.html">להורדת האפליקציה</a>
+      <!-- No download button in the drawer (user directive 2026-07-27): the
+           floating one at the bottom of the page is always there, so the menu
+           carries navigation and the login link only. -->
       <a class="login-link" id="mobile-login" href="/login">התחברות</a>
     </div>
   </div>
@@ -110,8 +112,10 @@
     </div>
   </footer>
 
-  <!-- Sticky mobile download CTA -->
-  <div class="mobile-cta is-hidden" id="mobile-cta">
+  <!-- Sticky mobile download CTA. It is the page's ONLY download button on a
+       phone (user directive 2026-07-27), so it is always on screen: it never
+       hides for another button, because there is no other button. -->
+  <div class="mobile-cta" id="mobile-cta">
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
@@ -371,10 +375,6 @@
       return '<figure class="media media--wide' + (draw ? ' media--art' : '') +
         ' reveal" role="img" aria-label="' + label + '">' + body + '</figure>';
     }
-    function downloadBtn(cls, big) {
-      return '<a class="btn ' + cls + (big ? ' btn-lg' : '') + '" href="' + DOWNLOAD_URL + '">' + esc(T.ui.download) + '</a>';
-    }
-
     /* ---------- Section builders ---------- */
     /* Both compositions are rendered and CSS shows the one that fits the width:
        the artwork is a drawing, so swapping it on a media query costs nothing and
@@ -387,16 +387,15 @@
     }
 
     /* The hero carries NO illustration (user directive 2026-07-26): the stanza is
-       the first thing on the screen, with the artwork left to the four pillars. */
+       the first thing on the screen, with the artwork left to the four pillars.
+       It carries NO download button either (user directive 2026-07-27): the ask
+       is the header button on a wide screen and the floating one on a phone. */
     function buildHero() {
       var s = T.hero;
       return '<div class="hero-copy reveal">' +
           '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
           '<h1>' + titleHTML(s.title) + '</h1>' +
           '<p class="hero-sub">' + esc(s.sub) + '</p>' +
-          '<div class="hero-cta">' +
-            downloadBtn('btn-primary btn-lg') +
-          '</div>' +
           '<div class="hero-pills">' + s.pills.map(function (p) { return '<span class="pill">' + esc(p) + '</span>'; }).join('') + '</div>' +
         '</div>';
     }
@@ -503,7 +502,6 @@
       document.getElementById('brand-tag').textContent = T.ui.tag;
       document.getElementById('dl-title').textContent = T.ui.download;
       document.getElementById('header-cta').textContent = T.ui.download;
-      document.getElementById('mobile-cta-inline').textContent = T.ui.download;
       document.getElementById('mobile-cta-btn').textContent = T.ui.download;
       document.getElementById('menu-toggle').setAttribute('aria-label', T.ui.menu);
       document.getElementById('menu-close').setAttribute('aria-label', T.ui.close);
@@ -530,7 +528,6 @@
       wireNavLinks();
       wireDownloadButtons();
       observeReveals();
-      observeCtaZones();
     }
 
     /* ---------- Reveal on scroll ---------- */
@@ -628,36 +625,15 @@
     /* ---------- Mobile menu ---------- */
     var mobileMenu = document.getElementById('mobile-menu');
     var menuToggle = document.getElementById('menu-toggle');
-    function openMenu() { mobileMenu.classList.add('open'); menuToggle.setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden'; syncMobileCta(); }
-    function closeMenu() { mobileMenu.classList.remove('open'); menuToggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; syncMobileCta(); }
+    function openMenu() { mobileMenu.classList.add('open'); menuToggle.setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden'; }
+    function closeMenu() { mobileMenu.classList.remove('open'); menuToggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }
     menuToggle.addEventListener('click', openMenu);
     document.getElementById('menu-close').addEventListener('click', closeMenu);
     Array.prototype.forEach.call(document.querySelectorAll('[data-close-menu]'), function (el) { el.addEventListener('click', closeMenu); });
-    document.getElementById('mobile-cta-inline').addEventListener('click', closeMenu);
 
-    /* ---------- Floating download CTA ----------
-       It slides away (and back) whenever a real download button is on screen,
-       so the same action is never offered twice at once. */
-    var CTA_ZONE_SEL = '.hero-cta';
-    var mobileCta = document.getElementById('mobile-cta');
-    var ctaIo = null;
-    var ctaZones = [];
-    function syncMobileCta() {
-      var blocked = mobileMenu.classList.contains('open') ||
-        ctaZones.some(function (z) { return z._ctaIn; });
-      mobileCta.classList.toggle('is-hidden', blocked);
-    }
-    function observeCtaZones() {
-      if (ctaIo) ctaIo.disconnect();
-      ctaZones = Array.prototype.slice.call(document.querySelectorAll(CTA_ZONE_SEL));
-      if (!('IntersectionObserver' in window)) { syncMobileCta(); return; }
-      ctaIo = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) { e.target._ctaIn = e.isIntersecting; });
-        syncMobileCta();
-      }, { rootMargin: '-10% 0px -12% 0px' });
-      ctaZones.forEach(function (z) { ctaIo.observe(z); });
-      syncMobileCta();
-    }
+    /* The floating download CTA has no show/hide logic any more (user directive
+       2026-07-27): it is the only download button on a phone, so it stays put.
+       The drawer paints over it when the menu is open, which is enough. */
 
     /* ---------- Header scrolled state ---------- */
     var header = document.getElementById('header');

@@ -326,7 +326,7 @@ strong { color: var(--ink); font-weight: 600; }
    little margin. Browsers without container units fall back to the h1 clamp. */
 .hero h1 { font-size: min(3.55rem, 11cqi); }
 .hero-sub { font-size: clamp(1.12rem, 1.7vw, 1.3rem); color: var(--ink-2); max-width: 54ch; }
-.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+/* No .hero-cta: the hero holds no download button (user directive 2026-07-27). */
 .hero-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
 
 .pill {
@@ -567,24 +567,18 @@ strong { color: var(--ink); font-weight: 600; }
 .footer-links .sep { color: var(--ink-3); }
 .footer-copy { margin-top: 14px; font-size: 0.95rem; color: var(--ink-3); }
 
-/* ---------- Sticky mobile CTA ---------- */
+/* ---------- Sticky mobile CTA ----------
+   ALWAYS on screen on a phone (user directive 2026-07-27): it is the only
+   download button there, so it never slides away. No is-hidden state. */
 .mobile-cta {
   position: fixed;
   inset-inline: 12px;
   inset-block-end: 12px;
   z-index: 55;
-  display: none;
+  display: none;      /* shown from the phone breakpoint down */
   box-shadow: var(--shadow-lg);
-  transition: transform 0.32s var(--ease), opacity 0.32s var(--ease);
 }
 .mobile-cta .btn { width: 100%; }
-/* Slides out of the way while a real download button is on screen (hero,
-   final CTA, mobile menu) so we never show the same action twice. */
-.mobile-cta.is-hidden {
-  transform: translateY(calc(100% + 12px));
-  opacity: 0;
-  pointer-events: none;
-}
 
 /* ---------- Download answer ---------- */
 /* What a press gets on a device that cannot install: the same note (and, on a
@@ -681,7 +675,6 @@ strong { color: var(--ink); font-weight: 600; }
   :root { --ctl-h: 40px; }
   .brand-name { font-size: 1.3rem; }
   .header-actions { gap: 6px; }
-  .hero-cta .btn { width: 100%; }
   .band { padding-block: clamp(48px, 12vw, 72px); }
 }
 
@@ -729,7 +722,6 @@ strong { color: var(--ink); font-weight: 600; }
   color: var(--ink);
   text-align: start;
 }
-.mobile-menu-panel .btn { margin-top: 12px; }
 /* Aligned with the links above it, not indented by the panel's own padding. */
 .mobile-menu-panel .login-link { margin-top: 12px; display: block; text-align: start; padding-inline: 12px; }
 .menu-close {
