@@ -52,21 +52,31 @@
        radius 12, flat purple fill, white text, no shadow. */
     :root { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; }
+    html { height: 100%; }
     body {
       font-family: "Noto Sans Hebrew", system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--ink);
       display: flex;
-      align-items: center;
       justify-content: center;
+      /* 100dvh, not 100vh: on a phone 100vh is the height the viewport would
+         have WITHOUT the browser chrome, so centring against it pushes the
+         block below the real middle of what is on screen. dvh tracks the
+         viewport actually visible. The vh line stays first as the fallback. */
       min-height: 100vh;
-      padding: 24px;
+      min-height: 100dvh;
+      /* Centre against the SAFE area, so a notch or a home indicator does not
+         drag the block off-centre either. */
+      padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+               calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
       text-align: center;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    .wrap { width: 100%; max-width: 360px; }
+    /* `margin: auto` and NOT `align-items: center`: both centre the block, but
+       align-items clips the top once the content is taller than the viewport
+       (a short desktop window with the QR), and auto margins never do. */
+    .wrap { width: 100%; max-width: 360px; margin: auto; }
     /* The app's launcher icon, shown as a rounded app tile so the page opens on
        the same mark the store listing and the home-screen icon carry. */
     .app-icon {
