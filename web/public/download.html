@@ -24,7 +24,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Once" />
   <meta property="og:title" content="Once | מפגש אחד בזמן אמת" />
-  <meta property="og:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להחליט." />
+  <meta property="og:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה." />
   <meta property="og:image" content="https://once-lake.vercel.app/og-image.png" />
   <meta property="og:image:width" content="1024" />
   <meta property="og:image:height" content="500" />
@@ -32,7 +32,7 @@
   <meta property="og:locale" content="he_IL" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Once | מפגש אחד בזמן אמת" />
-  <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להחליט." />
+  <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה." />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png" />
 
   <!-- Every asset path here is ROOT-ABSOLUTE on purpose. This page is also
@@ -147,6 +147,18 @@
       cursor: not-allowed;
       pointer-events: none;
     }
+    /* Way out to the marketing site, under the button. Same-origin "/" rather
+       than the once-lake host, so it keeps working on any deploy domain. */
+    .more {
+      display: inline-block;
+      margin-top: 16px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--brand);
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      text-decoration-thickness: 1px;
+    }
     .note { display: none; margin-top: 18px; font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
     .note strong { color: var(--ink); }
     /* Desktop only: scan-to-continue. The code encodes THIS page's URL, so a
@@ -187,6 +199,9 @@
     <div class="choices">
       <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">להורדת האפליקציה</a>
     </div>
+
+    <!-- Outside .choices: the button is dropped on desktop, this link is not. -->
+    <div><a class="more" href="/">פרטים נוספים באתר</a></div>
 
     <div class="note" id="note"></div>
     <div class="qr"><div class="qr-box" id="qr-box"></div></div>
