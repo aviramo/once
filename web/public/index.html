@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=47" />
+  <link rel="stylesheet" href="styles.css?v=48" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -36,6 +36,7 @@
     <div class="header-inner">
       <a class="brand" href="./" aria-label="Once">
         <span class="brand-name">Once</span>
+        <span class="brand-tag" id="brand-tag">בהרצה</span>
       </a>
 
       <nav class="nav" id="nav" aria-label="Primary"></nav>
@@ -154,7 +155,7 @@
         title: 'Once | אפליקציית היכרויות שלא מתנהגת כמו אפליקציית היכרויות',
         metaDescription: 'בלי פיד, בלי אינסוף החלקות ובלי עשרים שיחות פתוחות. Once מציגה אדם אחד בכל פעם, עם 10 דקות להחליט.',
         ogDescription: 'בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להחליט.',
-        ui: { preview: 'תצוגה מקדימה', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
+        ui: { tag: 'בהרצה', preview: 'תצוגה מקדימה', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
         /* One label per pillar, in pillar order. */
         nav: { links: ['אדם אחד', 'זמן אמת', 'מעגלים', 'הורים'], login: 'התחברות' },
         hero: {
@@ -225,7 +226,7 @@
         title: 'Once | A dating app that refuses to behave like a dating app',
         metaDescription: 'No feed, no endless swiping, no twenty open chats. Once shows you one person at a time, with 10 minutes to decide.',
         ogDescription: 'No feed and no endless swiping. One person at a time, 10 minutes to decide.',
-        ui: { preview: 'Preview', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
+        ui: { tag: 'Beta', preview: 'Preview', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
         nav: { links: ['One at a time', 'Real time', 'Circles', 'Parents'], login: 'Login' },
         hero: {
           eyebrow: 'One person. Right now.',
@@ -436,6 +437,7 @@
       set('mobile-nav', buildNav());
       document.getElementById('login-link').textContent = T.nav.login;
       document.getElementById('mobile-login').textContent = T.nav.login;
+      document.getElementById('brand-tag').textContent = T.ui.tag;
       document.getElementById('header-cta').textContent = T.ui.download;
       document.getElementById('mobile-cta-inline').textContent = T.ui.download;
       document.getElementById('mobile-cta-btn').textContent = T.ui.download;
