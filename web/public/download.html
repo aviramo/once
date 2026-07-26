@@ -19,13 +19,12 @@
        /download and silently drop the referral code, costing the inviter
        their credit. Omitting it makes the shared URL the only destination.
 
-       The copy is static Hebrew even though the page localises itself from
-       ?lang= at runtime: a crawler never runs the script, so whatever is in
-       the markup is what every preview shows. -->
+       The copy is static Hebrew: a crawler never runs the script, so whatever
+       is in the markup is what every preview shows. -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Once" />
   <meta property="og:title" content="Once | מפגש אחד בזמן אמת" />
-  <meta property="og:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
+  <meta property="og:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להחליט." />
   <meta property="og:image" content="https://once-lake.vercel.app/og-image.png" />
   <meta property="og:image:width" content="1024" />
   <meta property="og:image:height" content="500" />
@@ -33,13 +32,16 @@
   <meta property="og:locale" content="he_IL" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Once | מפגש אחד בזמן אמת" />
-  <meta name="twitter:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
+  <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להחליט." />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png" />
 
-  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=12" />
-  <link rel="icon" type="image/png" href="favicon.png?v=12" />
+  <!-- Every asset path here is ROOT-ABSOLUTE on purpose. This page is also
+       served (by rewrite, so the browser keeps the URL) at /i/<CODE>, where a
+       relative "tokens.css" would resolve to /i/tokens.css and 404. -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12" />
+  <link rel="icon" type="image/png" href="/favicon.png?v=12" />
   <!-- Shared colour tokens, generated from mobile/src/colors.ts. -->
-  <link rel="stylesheet" href="tokens.css?v=44" />
+  <link rel="stylesheet" href="/tokens.css?v=44" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;800&display=swap" rel="stylesheet">
@@ -76,8 +78,40 @@
       box-shadow: var(--shadow-md);
     }
     .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.5px; color: var(--brand); }
-    .msg { margin-top: 14px; font-size: 16px; font-weight: 600; color: var(--ink-2); }
-    .choices { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+    /* What the app is, in four beige-page-on-white tiles between the icon and
+       the button — the same pill the app draws over a photo: flat surface,
+       purple ink, one soft lift shadow, no gradient. */
+    .chips {
+      margin-top: 22px;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.2px;
+      box-shadow: var(--shadow-sm);
+    }
+    .chip::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--brand);
+      flex: none;
+    }
+    .choices { margin-top: 26px; display: flex; flex-direction: column; gap: 12px; }
     .btn {
       display: flex;
       align-items: center;
@@ -95,34 +129,65 @@
       text-decoration: none;
       cursor: pointer;
     }
+    /* iPhone: the button stays on the page so the layout does not shift, but
+       it is inert — no href, not focusable, not clickable. */
+    .btn[aria-disabled="true"] {
+      background: var(--ground);
+      color: var(--ink-3);
+      cursor: not-allowed;
+      pointer-events: none;
+    }
     .note { display: none; margin-top: 18px; font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
     .note strong { color: var(--ink); }
-    /* The Play button is hidden until JS decides this device can use it: an
-       iPhone gets the note alone, with nothing to install. */
-    .choices { display: none; }
-    .no-js .choices, .show .choices { display: flex; }
-    .no-js .note, .show .note, .show-unsupported .note { display: block; }
-    .no-js .msg, .show .msg, .show-unsupported .msg { display: none; }
+    /* Desktop only: scan-to-continue. The code encodes THIS page's URL, so a
+       personal invite (/i/<CODE>) keeps its referral code across the hop from
+       screen to phone instead of dropping the inviter's credit. */
+    .qr { display: none; margin-top: 16px; }
+    .qr-box {
+      display: inline-block;
+      padding: 12px;
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: var(--shadow-md);
+      line-height: 0;
+    }
+    .qr-box svg { display: block; width: 168px; height: 168px; }
+    .is-ios .note, .is-desktop .note { display: block; }
+    .is-desktop .qr { display: block; }
   </style>
 </head>
-<body class="no-js">
+<body>
   <div class="wrap">
-    <img class="app-icon" src="app-icon.png?v=1" width="96" height="96" alt="Once" />
+    <img class="app-icon" src="/app-icon.png?v=1" width="96" height="96" alt="Once" />
     <div class="brand-name">Once</div>
-    <div class="msg" id="msg">מעבירים אותך לחנות&hellip;</div>
+
+    <ul class="chips">
+      <li class="chip">אדם אחד בכל פעם</li>
+      <li class="chip">זמן אמת, כאן ועכשיו</li>
+      <li class="chip">חברים ומעגלים משותפים</li>
+      <li class="chip">התחשבות בלו&quot;ז עם ילדים</li>
+    </ul>
+
+    <!-- Nothing here navigates on load. The page never redirects on its own:
+         the only thing that leaves for the store is a press on this button. -->
     <div class="choices">
-      <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">הורדה ל&#8209;Android</a>
+      <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">להורדת האפליקציה</a>
     </div>
-    <!-- One note for every device: with the Play button on desktop, and alone
-         on an iPhone, where there is nothing to install. -->
-    <div class="note">Once זמינה למכשירי <strong>Android</strong> בלבד. אין תמיכה ב&#8209;iPhone.</div>
+
+    <div class="note" id="note"></div>
+    <div class="qr"><div class="qr-box" id="qr-box"></div></div>
   </div>
 
   <script>
     (function () {
       var ANDROID = "https://play.google.com/store/apps/details?id=com.aviramo.once";
-
-      document.body.className = "";
+      // A personal invite (/i/<CODE>) is rewritten to this page for every
+      // non-Android visitor, and the browser keeps the /i/<CODE> URL — so the
+      // code is still readable here and can ride the Play referrer, exactly as
+      // proxy.ts packs it for an Android visitor.
+      var REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
+      var NOTE_IOS = "Once אינה זמינה לאייפון.";
+      var NOTE_DESKTOP = "פתחו את הדף מהטלפון, או סרקו את הקוד:";
 
       var ua = navigator.userAgent || navigator.vendor || window.opera || "";
       var isAndroid = /android/i.test(ua);
@@ -131,15 +196,37 @@
       var isIOS = /iPad|iPhone|iPod/.test(ua) ||
         (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-      if (isAndroid) {
-        location.replace(ANDROID);
-      } else if (isIOS) {
-        // There is no iOS build. Say so instead of handing out a Play link
-        // the device cannot use.
-        document.body.className = "show-unsupported";
-      } else {
-        // Desktop / unknown: show the Play link plus the Android-only note.
-        document.body.className = "show";
+      var button = document.getElementById("android");
+      var referral = REFERRAL_PATH_RE.exec(location.pathname);
+      if (referral) {
+        button.href = ANDROID + "?referrer=" +
+          encodeURIComponent("ref=" + referral[1].toUpperCase());
+      }
+
+      var note = document.getElementById("note");
+
+      if (isIOS) {
+        // There is no iOS build, so the button has nowhere to go: say why and
+        // make it inert rather than handing out a link the device cannot use.
+        document.body.className = "is-ios";
+        note.textContent = NOTE_IOS;
+        button.removeAttribute("href");
+        button.setAttribute("aria-disabled", "true");
+      } else if (!isAndroid) {
+        // Desktop / unknown: installing happens on the phone, so point there
+        // and draw the scan code. The encoder is ~30KB and only desktop needs
+        // it, so it loads here and nowhere else.
+        document.body.className = "is-desktop";
+        note.textContent = NOTE_DESKTOP;
+        var script = document.createElement("script");
+        script.src = "/qr.js?v=1";
+        script.onload = function () {
+          document.getElementById("qr-box").innerHTML = window.OnceQR.svg(location.href, {
+            dark: "#33265B",
+            light: "#FFFFFF",
+          });
+        };
+        document.head.appendChild(script);
       }
     })();
   </script>
