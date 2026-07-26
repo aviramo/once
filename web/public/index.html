@@ -998,11 +998,21 @@
     /* ---------- Initial language ---------- */
     var params = new URLSearchParams(location.search);
     var urlLang = params.get('lang');
+    // Read the browser's whole ordered preference list, not just navigator.language:
+    // on Windows a Hebrew UI often still reports navigator.language as "en-US" while
+    // listing Hebrew further down navigator.languages. If the browser knows Hebrew
+    // (or Russian) at all, honour it — 'iw' is the legacy Hebrew code some send.
     var browserLang = (function () {
-      var l = (navigator.language || '').toLowerCase();
-      if (l.indexOf('he') === 0) return 'he';
-      if (l.indexOf('ru') === 0) return 'ru';
-      return 'en';
+      var list = (navigator.languages && navigator.languages.length)
+        ? navigator.languages
+        : [navigator.language || ''];
+      var hasHe = false, hasRu = false;
+      for (var i = 0; i < list.length; i++) {
+        var l = String(list[i]).toLowerCase();
+        if (l.indexOf('he') === 0 || l.indexOf('iw') === 0) hasHe = true;
+        else if (l.indexOf('ru') === 0) hasRu = true;
+      }
+      return hasHe ? 'he' : hasRu ? 'ru' : 'en';
     })();
     var initial = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang;
     render(initial);

@@ -124,6 +124,19 @@
     return rect(x, y, wd, ht, ht / 2, SURFACE) + bar(x + 14, y + 10, wd - 52, 10) +
       group(glyph, ' transform="translate(' + n(x + wd - 26) + ',' + n(y + 15) + ')"');
   }
+  /* A text-only chip: the same beige tile, one line of copy, no trailing glyph.
+     `bold` reads it a touch heavier - the name/age heading uses it. */
+  function plainChip(x, y, wd, bold) {
+    var ht = 30;
+    return rect(x, y, wd, ht, ht / 2, SURFACE) +
+      bar(x + 14, y + 10, wd - 28, bold ? 11 : 10, INK, bold ? 0.78 : 0.6);
+  }
+  /* The report button: deliberately de-emphasised beside the heart - the small
+     chrome size over the DARKER page beige with a MUTED shield, so it recedes
+     rather than mirroring the heart (user directive 2026-07-26). */
+  function reportBtn(cx, cy, r) {
+    return circle(cx, cy, r, PAGE) + group(shield(cx, cy, r * 0.62, ACCENT), op(0.5));
+  }
   function pinGlyph(s) {
     return line('M0 ' + n(-s) + 'c' + n(s * 0.6) + ' 0 ' + n(s) + ' ' + n(s * 0.44) + ' ' + n(s) + ' ' + n(s) +
       'c0 ' + n(s * 0.8) + ' ' + n(-s) + ' ' + n(s * 1.72) + ' ' + n(-s) + ' ' + n(s * 1.72) +
@@ -135,24 +148,29 @@
       line('M' + n(-s * 0.72) + ' ' + n(s * 0.7) + 'c0 ' + n(-s * 0.5) + ' ' + n(s * 0.32) + ' ' + n(-s * 0.78) + ' ' + n(s * 0.72) + ' ' + n(-s * 0.78) +
         's' + n(s * 0.72) + ' ' + n(s * 0.28) + ' ' + n(s * 0.72) + ' ' + n(s * 0.78), ACCENT, s * 0.26);
   }
-  function clockGlyph(s) {
-    return circle(0, 0, s * 0.8, 'none', ' stroke="' + ACCENT + '" stroke-width="' + n(s * 0.24) + '"') +
-      line('M0 ' + n(-s * 0.42) + 'V0l' + n(s * 0.32) + ' ' + n(s * 0.2), ACCENT, s * 0.24);
+  /* Two overlapping heads - the shared-group fact chip. */
+  function usersGlyph(s) {
+    return ring(-s * 0.42, 0, s * 0.4, ACCENT, n(s * 0.24)) + ring(s * 0.42, 0, s * 0.4, ACCENT, n(s * 0.24));
   }
 
   /* ---------- Screens (drawn against 300x617) ---------- */
   var SCREEN = {};
 
-  /* Home: one person, full bleed, with the shell chrome over it. */
+  /* Home: one person, full bleed, with the shell chrome over it. The match card
+     layout (2026-07-26): hamburger top-START, name/age heading chip top-END, the
+     fact chips (distance, family, shared group) stacked bottom-START, the small
+     de-emphasised report at the very bottom-START, and the heart (invite) floating
+     bottom-END. */
   SCREEN.home = function (face, o) {
     o = o || {};
     return photo(0, 0, SW, SH, 0, face || F(0), null, o.zoom, o.dy) +
       roundBtn(34, 42, 20, hamburger(34, 42, 18)) +
-      roundBtn(266, 42, 20, shield(266, 42, 13)) +
-      chip(126, 424, 158, userGlyph(9)) +
-      chip(160, 462, 124, clockGlyph(9)) +
-      chip(102, 500, 182, pinGlyph(7)) +
-      circle(46, 546, 30, BRAND) + heart(46, 546, 20) +
+      plainChip(166, 27, 118, true) +
+      chip(16, 404, 168, pinGlyph(7)) +
+      chip(16, 442, 150, userGlyph(9)) +
+      chip(16, 480, 120, usersGlyph(8)) +
+      reportBtn(36, 556, 20) +
+      circle(254, 546, 30, BRAND) + heart(254, 546, 20) +
       rect(105, 598, 90, 5, 2.5, INK, op(0.35));
   };
 
@@ -191,7 +209,7 @@
   SCREEN.report = function (face) {
     return photo(0, -2, SW, 396, 0, face || F(1), null, 1, -10) +
       roundBtn(34, 42, 20, hamburger(34, 42, 18)) +
-      roundBtn(266, 42, 20, shield(266, 42, 13, ACCENT)) +
+      plainChip(166, 27, 118, true) +
       rect(0, 370, SW, 280, 30, PAGE, ' filter="url(#SHADOW)"') +
       rect(138, 384, 24, 4, 2, INK, op(0.25)) +
       circle(150, 428, 30, TINT) + shield(150, 428, 18, ACCENT) +
