@@ -154,6 +154,10 @@
     .qr-box svg { display: block; width: 168px; height: 168px; }
     .is-ios .note, .is-desktop .note { display: block; }
     .is-desktop .qr { display: block; }
+    /* Desktop has nothing to install: the scan code IS the call to action,
+       so the button is dropped rather than shown next to it. */
+    .is-desktop .choices { display: none; }
+    .is-desktop .note { margin-top: 26px; }
   </style>
 </head>
 <body>
