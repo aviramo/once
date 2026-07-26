@@ -573,9 +573,12 @@ strong { color: var(--ink); font-weight: 600; }
 
 
   .mobile-cta { display: block; }
-  /* Just enough room that the floating button never sits on the footer text. The
-     button is 12px off the bottom edge, so a small tail is all it needs. */
-  body.has-mobile-cta { padding-bottom: 24px; }
+  /* The floating button is 56px tall and sits 12px off the bottom edge, so the page
+     has to end at least 68px clear of the footer text or it covers it. The footer's
+     own bottom padding gives that room back, so the tail below the copyright stays
+     small instead of turning into an empty band. */
+  body.has-mobile-cta { padding-bottom: 76px; }
+  body.has-mobile-cta .footer { padding-block-end: 14px; }
 }
 
 @media (max-width: 560px) {
@@ -622,14 +625,20 @@ strong { color: var(--ink); font-weight: 600; }
 [dir="rtl"] .mobile-menu-panel { transform: translateX(-6%); }
 .mobile-menu.open .mobile-menu-panel { transform: none; opacity: 1; }
 .mobile-menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+/* The links share the header's .nav-link, which is an inline element: inside the
+   drawer they have to be a column, or they flow into each other and wrap in the
+   middle of a label. One per row, all starting on the same edge. */
+#mobile-nav { display: flex; flex-direction: column; align-items: stretch; }
 .mobile-menu-panel .nav-link {
   font-size: 1.08rem;
   padding: 14px 12px;
   border-radius: var(--r-sm);
   color: var(--ink);
+  text-align: start;
 }
 .mobile-menu-panel .btn { margin-top: 12px; }
-.mobile-menu-panel .login-link { margin-top: 8px; display: inline-block; }
+/* Aligned with the links above it, not indented by the panel's own padding. */
+.mobile-menu-panel .login-link { margin-top: 12px; display: block; text-align: start; padding-inline: 12px; }
 .menu-close {
   inline-size: 40px; block-size: 40px;
   display: grid; place-items: center;
