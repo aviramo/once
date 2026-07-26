@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -24,20 +24,24 @@
   <meta name="twitter:title" content="Once | מפגש אחד בזמן אמת" />
   <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה." />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12" />
+  <!-- The site palette, generated from the app's colors — same source as every
+       other page here, so this hand-off flashes the app's own beige. -->
+  <link rel="stylesheet" href="/tokens.css?v=44" />
   <style>
     html, body { height: 100%; margin: 0; }
     body {
       font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: #F3EEE6; color: #33265B;
+      background: var(--bg); color: var(--ink);
       display: flex; align-items: center; justify-content: center;
       text-align: center; padding: 24px;
     }
     .card { max-width: 320px; }
     h1 { font-size: 20px; font-weight: 800; margin: 0 0 8px; }
-    p { font-size: 15px; color: #5C4A94; margin: 0 0 20px; line-height: 1.5; }
+    p { font-size: 15px; color: var(--accent); margin: 0 0 20px; line-height: 1.5; }
     a.btn {
       display: inline-block; text-decoration: none;
-      background: #6C3FB2; color: #fff; font-weight: 700;
+      background: var(--brand); color: var(--brand-ink); font-weight: 700;
       padding: 12px 22px; border-radius: 14px; font-size: 15px;
     }
   </style>
@@ -45,25 +49,14 @@
 <body>
   <div class="card">
     <h1>Once</h1>
-    <p id="msg">Opening the app…</p>
-    <a class="btn" id="fallback" href="https://play.google.com/store/apps/details?id=com.aviramo.once">Get Once</a>
+    <p>פותחים את האפליקציה…</p>
+    <!-- invite.js repoints this at the download page with the invite attached.
+         It is only the manual escape hatch: with no app to catch the link the
+         script forwards there on its own within a moment. -->
+    <a class="btn" id="fallback" href="/download">להורדת האפליקציה</a>
   </div>
-  <script>
-    (function () {
-      var PLAY = 'https://play.google.com/store/apps/details?id=com.aviramo.once';
-      var m = location.pathname.match(/\/g\/(\d{6})/);
-      var token = m ? m[1] : '';
-      var fallback = document.getElementById('fallback');
-      if (!token) { location.href = PLAY; return; }
-      // New installs still get attribution: pack the token into the Play
-      // referrer, mirroring the /i/ referral link.
-      fallback.href = PLAY + '?referrer=' + encodeURIComponent('grp=' + token);
-      // Hand off to the installed app; if nothing catches the scheme, the user
-      // stays on this page with the store button visible.
-      var t = setTimeout(function () { document.getElementById('msg').textContent = 'Get Once to join this group.'; }, 1500);
-      window.addEventListener('pagehide', function () { clearTimeout(t); });
-      location.href = 'once://g/' + token;
-    })();
-  </script>
+  <!-- Hand off to the installed app, else forward to the download page. Shared
+       with the friend invite (/f/) — same behaviour, different link shape. -->
+  <script src="/invite.js?v=1"></script>
 </body>
 </html>
