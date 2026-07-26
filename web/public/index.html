@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=46" />
+  <link rel="stylesheet" href="styles.css?v=47" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -79,6 +79,11 @@
   </div>
 
   <main id="main">
+    <!-- The Play listing's feature graphic, redrawn in art.js and run full bleed
+         under the header (user directive 2026-07-26): the elongated composition on
+         a wide screen, the store's own arrangement on a narrow one. -->
+    <section class="banner" id="sec-banner"></section>
+
     <section class="hero">
       <div class="container">
         <div id="sec-hero"></div>
@@ -109,7 +114,7 @@
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
-  <script src="art.js?v=4"></script>
+  <script src="art.js?v=5"></script>
   <script>
   (function () {
     'use strict';
@@ -152,12 +157,10 @@
         ui: { preview: 'תצוגה מקדימה', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
         /* One label per pillar, in pillar order. */
         nav: { links: ['אדם אחד', 'זמן אמת', 'מעגלים', 'הורים'], login: 'התחברות' },
-        availability: 'זמין כרגע באנדרואיד',
         hero: {
           eyebrow: 'אדם אחד. עכשיו.',
           title: { lines: ['אפליקציית היכרויות', 'שלא מתנהגת כמו', 'אפליקציית היכרויות'], accent: true },
           sub: 'כי הגיע הזמן לשבור את כל ההרגלים הישנים. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להחליט, ואז מדברים או ממשיכים.',
-          ctaSecondary: 'לראות מה שונה כאן',
           pills: ['אדם אחד בכל פעם', 'זמן אמת', 'מעגלים משותפים', 'לוז של הורים'],
         },
         pillars: [
@@ -195,13 +198,14 @@
             media: { name: 'מעגלים משותפים', desc: 'מסך הקהילות, ולצידו מעגל של אנשים מאותה קהילה המחוברים זה לזה.' }
           },
           {
-            eyebrow: 'הלוז שלכם עם הילדים',
+            eyebrow: 'הלוז והכוונות שלכם',
             title: { lines: ['האפליקציה יודעת', 'מתי אתם באמת פנויים.'], accent: true },
-            body: 'מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט.',
+            body: 'מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט. גם הכוונות לגבי ילדים נכנסות לחשבון: אם אתם רוצים ילדים, או עוד ילדים, זה משפיע על מי שתפגשו.',
             chips: [
               { icon: 'sliders', label: 'מסמנים פעם אחת' },
               { icon: 'eye', label: 'הלוז לא מוצג לאף אחד' },
-              { icon: 'clock', label: 'התאמה לפי ימים פנויים' }
+              { icon: 'clock', label: 'התאמה לפי ימים פנויים' },
+              { icon: 'users', label: 'כוונות לגבי ילדים' }
             ],
             media: { name: 'לוז משותף', desc: 'שני שבועות מסומנים זה מול זה, והיום שבו שני הצדדים פנויים מודגש.' }
           }
@@ -210,7 +214,6 @@
           eyebrow: 'הגיע הזמן להרגל חדש',
           title: { lines: ['אפשר להמשיך לגלול.', 'ואפשר להכיר מישהו.'], accent: true },
           body: 'Once נבנתה לאנשים שנמאס להם לגלול ורוצים סוף סוף להכיר.',
-          emphasis: { lines: ['אדם אחד. רגע אחד. החלטה אמיתית.'], accent: true },
           media: { name: 'מסכי האפליקציה', desc: 'שלושה מסכי אפליקציה המציגים מציאת אדם, הזמנה וצ׳אט.' }
         },
         contact: { label: 'שאלות? אפשר לכתוב לנו:', subject: 'שאלה ל-Once' },
@@ -224,12 +227,10 @@
         ogDescription: 'No feed and no endless swiping. One person at a time, 10 minutes to decide.',
         ui: { preview: 'Preview', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
         nav: { links: ['One at a time', 'Real time', 'Circles', 'Parents'], login: 'Login' },
-        availability: 'Currently available on Android',
         hero: {
           eyebrow: 'One person. Right now.',
           title: { lines: ['A dating app', 'that refuses to be', 'a dating app'], accent: true },
           sub: "Because it's time to break every old habit. No feed, no swiping, no twenty open chats. One person on the screen, 10 minutes to decide, and then you either talk or you move on.",
-          ctaSecondary: 'See what is different',
           pills: ['One person at a time', 'Real time', 'Shared circles', 'Parent schedules'],
         },
         pillars: [
@@ -267,13 +268,14 @@
             media: { name: 'Shared circles', desc: 'The communities screen, beside a circle of people from the same community linked to each other.' }
           },
           {
-            eyebrow: 'Your schedule with the kids',
+            eyebrow: 'Your schedule and intentions',
             title: { lines: ['The app knows', 'when you are actually free.'], accent: true },
-            body: 'Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat.',
+            body: 'Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat. Where you stand on children counts too: wanting kids, or more kids, shapes who you meet.',
             chips: [
               { icon: 'sliders', label: 'Marked once' },
               { icon: 'eye', label: 'Never shown to anyone' },
-              { icon: 'clock', label: 'Matched on free days' }
+              { icon: 'clock', label: 'Matched on free days' },
+              { icon: 'users', label: 'Where you stand on kids' }
             ],
             media: { name: 'A schedule that lines up', desc: 'Two marked weeks facing each other, with the day both sides are free highlighted.' }
           }
@@ -282,7 +284,6 @@
           eyebrow: 'Time for a new habit',
           title: { lines: ['You can keep scrolling.', 'Or you can meet someone.'], accent: true },
           body: 'Once was built for people who are done scrolling and finally want to meet someone.',
-          emphasis: { lines: ['One person. One moment. A real decision.'], accent: true },
           media: { name: 'App screens', desc: 'Three app screens showing finding a person, an invitation, and a chat.' }
         },
         contact: { label: 'Questions? Write to us:', subject: 'Question for Once' },
@@ -326,11 +327,18 @@
     function downloadBtn(cls, big) {
       return '<a class="btn ' + cls + (big ? ' btn-lg' : '') + '" href="' + DOWNLOAD_URL + '">' + esc(T.ui.download) + '</a>';
     }
-    function availability(inClass) {
-      return '<span class="availability ' + (inClass || '') + '">' + esc(T.availability) + '</span>';
-    }
 
     /* ---------- Section builders ---------- */
+    /* Both compositions are rendered and CSS shows the one that fits the width:
+       the artwork is a drawing, so swapping it on a media query costs nothing and
+       keeps each layout drawn for the shape it has to fill. */
+    function buildBanner() {
+      if (!window.ART) return '';
+      var rtl = T.dir === 'rtl';
+      return '<div class="banner-art banner-art--long">' + window.ART.bannerLong(rtl) + '</div>' +
+        '<div class="banner-art banner-art--compact">' + window.ART.banner(rtl) + '</div>';
+    }
+
     /* The hero carries NO illustration (user directive 2026-07-26): the stanza is
        the first thing on the screen, with the artwork left to the four pillars. */
     function buildHero() {
@@ -341,9 +349,7 @@
           '<p class="hero-sub">' + esc(s.sub) + '</p>' +
           '<div class="hero-cta">' +
             downloadBtn('btn-primary btn-lg') +
-            '<a class="btn btn-secondary btn-lg" href="#' + PILLARS[0] + '">' + esc(s.ctaSecondary) + '</a>' +
           '</div>' +
-          availability('hero-avail') +
           '<div class="hero-pills">' + s.pills.map(function (p) { return '<span class="pill">' + esc(p) + '</span>'; }).join('') + '</div>' +
         '</div>';
     }
@@ -373,15 +379,15 @@
       }).join('');
     }
 
+    /* The closing card states the case and shows the app; the download itself is
+       offered by the header and the floating button (user directive 2026-07-26),
+       so it repeats no button of its own. */
     function buildFinal() {
       var s = T.finalCta;
       return '<div class="final reveal">' +
         '<div class="eyebrow" style="margin-inline:auto">' + esc(s.eyebrow) + '</div>' +
         '<h2>' + titleHTML(s.title) + '</h2>' +
         '<p class="lede">' + esc(s.body) + '</p>' +
-        '<p class="emphasis">' + titleHTML(s.emphasis) + '</p>' +
-        '<div class="final-actions">' + downloadBtn('btn-primary', true) + '</div>' +
-        availability() +
         '<div class="final-media">' + media(s.media, 'final') + '</div>' +
         '<div class="contact"><span>' + esc(T.contact.label) + '</span> ' +
           '<a href="mailto:once.app.support@gmail.com?subject=' + encodeURIComponent(T.contact.subject) + '">once.app.support@gmail.com</a>' +
@@ -438,6 +444,7 @@
       var skip = document.getElementById('skip-link'); if (skip) skip.textContent = T.ui.skip;
 
       // sections
+      set('sec-banner', buildBanner());
       set('sec-hero', buildHero());
       set('sec-pillars', buildPillars());
       set('sec-final', buildFinal());
@@ -518,7 +525,7 @@
     /* ---------- Floating download CTA ----------
        It slides away (and back) whenever a real download button is on screen,
        so the same action is never offered twice at once. */
-    var CTA_ZONE_SEL = '.hero-cta, .final-actions';
+    var CTA_ZONE_SEL = '.hero-cta';
     var mobileCta = document.getElementById('mobile-cta');
     var ctaIo = null;
     var ctaZones = [];

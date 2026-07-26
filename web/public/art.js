@@ -277,6 +277,106 @@
   /* ---------- Artworks ---------- */
   var ART = {};
 
+  /* ---------- Store feature graphic ---------- */
+  /* Redrawn from mobile/store/play-feature-graphic.svg so the site band and the
+     Play listing are the same picture: the ringed "1", the broken dial around it,
+     three hearts, one profile card and a scatter of dots. Every element below is
+     defined ONCE and only placed differently by the two layouts, so the long
+     desktop band is the same drawing stretched along its length, not a redesign.
+     Colours come from the palette vars, which hold the same hex values the store
+     file hardcodes. */
+  var MUTED = 'var(--muted)';
+  var GROUND = 'var(--ground)';
+
+  /* The concentric rings, thinning outwards. The store file bleeds four of them
+     off its edges; on the page a stroke that stops dead against the header reads as
+     a cropping mistake, so the band draws `count` of them (three) at a scale that
+     keeps the outermost inside the canvas. */
+  function fgRings(cx, cy, s, count) {
+    return [[200, 10], [250, 8.4], [300, 6.8], [350, 5.2]].slice(0, count || 4).map(function (r) {
+      return ring(cx, cy, r[0] * s, GROUND, n(r[1] * s));
+    }).join('');
+  }
+  /* The dial: a long brand-purple sweep with a short muted one riding above it. */
+  function fgDial(cx, cy, s) {
+    var r = 172 * s, sw = n(11 * s);
+    return arc(cx, cy, r, 22, 300, BRAND, sw) + arc(cx, cy, r, 310, 350, MUTED, sw);
+  }
+  /* The "1" itself: one stroked polyline, drawn in the store file's own 1024 glyph
+     space so the shape stays identical at any size. */
+  function fgOne(cx, cy, s) {
+    return '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
+      ') translate(-512,-512)" fill="none" stroke="' + BRAND +
+      '" stroke-width="150" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M577 312 L447 412 M577 312 L577 712"/></g>';
+  }
+  /* The store graphic's heart (a filled Material heart, not the app's own). */
+  function fgHeart(cx, cy, s, fill) {
+    return '<path transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
+      ') translate(-12,-12)" fill="' + fill + '" d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>';
+  }
+  /* The profile card, tilted off true. Its innards keep the store file's absolute
+     coordinates and are moved as a whole, so the card is pixel-identical. */
+  function fgCard(cx, cy, s) {
+    var clip = id('fg');
+    return '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
+      ') translate(-810,-250) rotate(-4 810 250)">' +
+      rect(706, 90, 208, 320, 32, GROUND) +
+      rect(712, 96, 196, 308, 26, '#FAF6EE') +
+      rect(728, 112, 164, 150, 18, GROUND) +
+      '<clipPath id="' + clip + '">' + rect(728, 112, 164, 150, 18, '#000') + '</clipPath>' +
+      '<g clip-path="url(#' + clip + ')">' +
+        circle(810, 178, 30, ACCENT) +
+        path('M 752 266 a 58,52 0 0 1 116,0 z', ' fill="' + ACCENT + '"') +
+      '</g>' +
+      rect(734, 282, 104, 12, 6, ACCENT) +
+      rect(734, 308, 140, 12, 6, MUTED) +
+      rect(734, 330, 92, 12, 6, GROUND) +
+      circle(902, 358, 32, BRAND) +
+      fgHeart(902, 358, 1.4, SURFACE) +
+      '</g>';
+  }
+  function fgDots(list, s) {
+    return list.map(function (d) { return circle(d[0], d[1], n(d[2] * s), d[3]); }).join('');
+  }
+  /* The cluster the whole picture hangs off: rings, dial and the numeral. */
+  function fgCluster(cx, cy, s, rings) {
+    return fgRings(cx, cy, s, rings) + fgDial(cx, cy, s) + fgOne(cx, cy, 0.5 * s);
+  }
+
+  /* Under RTL the band swaps its two ends so the numeral leads from the reading
+     side, by MOVING each element rather than mirroring the canvas: a scaleX(-1)
+     would reverse the "1" itself (and the site does mirror other art that way).
+     `X(w)` returns the x-mapper for a canvas that wide. */
+  function X(w, rtl) { return function (x) { return rtl ? w - x : x; }; }
+
+  /* The store arrangement at full size, on a canvas 120 units taller than the
+     store's 500 with everything sitting 60 lower: same drawing, but with clear air
+     above it so the band is not shaved off by the header. */
+  ART.banner = function (rtl) {
+    var x = X(1024, rtl), dy = 60;
+    return svg(1024, 620,
+      fgCluster(x(360), 250 + dy, 1, 3) +
+      fgHeart(x(556), 322 + dy, 1.5, BRAND) + fgHeart(x(628), 210 + dy, 2, ACCENT) + fgHeart(x(674), 330 + dy, 1.2, MUTED) +
+      fgCard(x(810), 250 + dy, 1) +
+      fgDots([[x(150), 96 + dy, 11, BRAND], [x(198), 142 + dy, 6, ACCENT], [x(112), 402 + dy, 8, MUTED],
+        [x(624), 96 + dy, 7, BRAND], [x(600), 418 + dy, 6, MUTED], [x(966), 430 + dy, 8, ACCENT]], 1));
+  };
+
+  /* The same picture drawn along a wide band for desktop: identical elements,
+     scaled together and spread over the length instead of stacked into a 2:1 box.
+     6.4:1 keeps the band about 220px tall at a laptop width, so it sits under the
+     header without pushing the headline off the screen. */
+  ART.bannerLong = function (rtl) {
+    var s = 0.55, x = X(1920, rtl);
+    return svg(1920, 340,
+      fgCluster(x(300), 170, s, 3) +
+      fgHeart(x(780), 105, 1.5 * s, BRAND) + fgHeart(x(1070), 205, 2 * s, ACCENT) + fgHeart(x(1340), 110, 1.2 * s, MUTED) +
+      fgCard(x(1700), 170, 0.56) +
+      fgDots([[x(660), 260, 11, BRAND], [x(890), 70, 6, ACCENT], [x(1190), 265, 8, MUTED],
+        [x(1450), 85, 7, BRAND], [x(1530), 240, 6, MUTED], [x(1860), 115, 8, ACCENT]], s));
+  };
+
   /* Message 1, one person at a time: a crowd of profile cards around the one
      screen that is actually clear. The crowd is the habit being broken. */
   ART.one = function () {
