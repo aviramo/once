@@ -5,6 +5,7 @@
 // invite code + the base `Group` type stay in groups.ts (shared with the
 // onboarding step); this module is the richer communities surface.
 import { invoke } from './api'
+import { supabase } from './supabase'
 import type { Group } from './groups'
 
 // A member/person's main photo, as embedded by the server (data.images[0]).
@@ -143,19 +144,19 @@ export const leaveGroup = (group_id: string): Promise<{ groups?: Group[] }> =>
 export const cancelJoinRequest = (group_id: string): Promise<{ groups?: Group[] }> =>
   invoke<{ groups?: Group[] }>('app/cancel_join', { group_id })
 
-// Deep-link join. A shared group invite link (once://g/<token> or the https
-// brand-site form) opens the app here; we pull the token out and redeem it.
-// No-op if the URL isn't a group invite. Redeem needs a session, so a failure
-// (e.g. opened before sign-in) is swallowed — tapping the link again once
-// signed in joins.
+/** A deep link's path, without the fragment. Both invite parsers below read
+ *  this, never the raw URL: the magic-link return (`once://login-callback#
+ *  access_token=...`) carries opaque server-issued tokens in its fragment, and
+ *  an invite pattern matching by chance inside one would both misfire the join
+ *  AND, via +native-intent, swallow the URL that signs the user in. */
+const linkPath = (url: string): string => url.split('#')[0]
+
+// The token of a shared group invite link (once://g/<TOKEN>, or the https
+// brand-site form it bounces from). Redeeming it is the deep-link invite
+// machinery at the bottom of this file.
 export function parseGroupInviteToken(url: string): string | null {
-  const m = url.match(/(?:^|\/)g\/(\d{6})(?:[/?#]|$)/)
+  const m = linkPath(url).match(/(?:^|\/)g\/(\d{6})(?:[/?]|$)/)
   return m ? m[1] : null
-}
-export async function consumeGroupInviteUrl(url: string): Promise<void> {
-  const token = parseGroupInviteToken(url)
-  if (!token) return
-  try { await redeemInvite(token) } catch { /* not signed in yet / bad token */ }
 }
 
 // ── Friends (isolated new tables; "my friends" is derived, not a group) ──
@@ -187,17 +188,91 @@ export const unfriend = (user_id: string): Promise<unknown> =>
 export const linkFriendByCode = (code: string): Promise<MyFriends> =>
   invoke<MyFriends>('app/friend_link', { code })
 
-// Deep-link friend-connect. A friend invite link (once://f/<CODE> or the https
-// brand-site form) opens the app here; we pull the code out and link the pair.
-// No-op if the URL isn't a friend invite. Needs a session, so a failure (opened
-// before sign-in) is swallowed — the code is re-consumed off the cold-start URL
-// once signed in. The code is the referral_code alphabet: [A-Za-z0-9]{4,16}.
+// The code of a friend invite link (once://f/<CODE>, or the https brand-site
+// form it bounces from). Same CODE as the referral link (the inviter's
+// referral_code alphabet: [A-Za-z0-9]{4,16}), a different path. Redeeming it is
+// the deep-link invite machinery below.
 export function parseFriendInviteCode(url: string): string | null {
-  const m = url.match(/(?:^|\/)f\/([A-Za-z0-9]{4,16})(?:[/?#]|$)/)
+  const m = linkPath(url).match(/(?:^|\/)f\/([A-Za-z0-9]{4,16})(?:[/?]|$)/)
   return m ? m[1].toUpperCase() : null
 }
-export async function consumeFriendInviteUrl(url: string): Promise<void> {
-  const code = parseFriendInviteCode(url)
-  if (!code) return
-  try { await linkFriendByCode(code) } catch { /* not signed in yet / bad code */ }
+
+// ── Deep-link invites (once://g/<TOKEN>, once://f/<CODE>) ───────────────────
+//
+// The root URL listener (app/_layout.tsx) hands EVERY inbound deep link here,
+// the cold-start one and every in-session one, and this module is the ONLY place
+// an invite link is redeemed. The router side is separate and does nothing but
+// stay out of the way: app/+native-intent.tsx swallows these URLs so they never
+// navigate, and app/+not-found.tsx catches them if that ever fails to load
+// (before either existed the user landed on Expo's black "Unmatched Route" debug
+// screen and the join was invisible).
+//
+// Redeeming needs a session, so a link opened before sign-in stays parked and is
+// flushed by home, the first screen that only exists for a signed-in user.
+//
+// The outcome goes to whoever is watching — home opens the Communities sheet on
+// it, so the tap visibly did something. An outcome nobody was there to see is
+// HELD, not dropped: on a cold start the redeem finishes long before home
+// mounts, and watching from a mount picks it up either way.
+
+/** Which kind of invite was redeemed — all a screen needs to decide where to
+ *  land the user. A group join is shown by the hub either way: it lists a
+ *  freshly joined group and a still-pending request as their own rows. */
+export type InviteOutcome = { kind: 'group' | 'friend' }
+
+let pendingInvite: { kind: 'group' | 'friend'; code: string } | null = null
+let heldOutcome: InviteOutcome | null = null
+let inFlight: Promise<void> | null = null
+const inviteWatchers = new Set<(o: InviteOutcome) => void>()
+
+/** Watch for redeemed invites. Fires straight away with an outcome that landed
+ *  before this watcher existed. Returns the unsubscribe. */
+export function watchInvites(cb: (o: InviteOutcome) => void): () => void {
+  if (heldOutcome) { const o = heldOutcome; heldOutcome = null; cb(o) }
+  inviteWatchers.add(cb)
+  return () => { inviteWatchers.delete(cb) }
+}
+
+/** Park an inbound deep link's invite (when it carries one) and try to redeem
+ *  it immediately. Safe to call with any URL. */
+export function stashInviteUrl(url: string): void {
+  const token = parseGroupInviteToken(url)
+  const code = token ? null : parseFriendInviteCode(url)
+  if (token) pendingInvite = { kind: 'group', code: token }
+  else if (code) pendingInvite = { kind: 'friend', code }
+  else return
+  void flushPendingInvite()
+}
+
+/** Redeem a parked invite. Resolves once there is nothing in flight, so a second
+ *  caller joins the round trip already running instead of starting another.
+ *  No-op without a parked invite, and it stays parked when there is no session
+ *  yet so the next flush retries. */
+export function flushPendingInvite(): Promise<void> {
+  if (!inFlight) inFlight = redeemPendingInvite().finally(() => { inFlight = null })
+  return inFlight
+}
+
+function deliverOutcome(o: InviteOutcome): void {
+  if (inviteWatchers.size === 0) { heldOutcome = o; return }
+  inviteWatchers.forEach(w => w(o))
+}
+
+async function redeemPendingInvite(): Promise<void> {
+  const invite = pendingInvite
+  if (!invite) return
+  try {
+    // The session is checked BEFORE invoking: a call with no token 401s, and
+    // invoke reads a 401 as a dead session and signs the user out.
+    const { data } = await supabase.auth.getSession()
+    if (!data.session) return
+    if (invite.kind === 'group') await redeemInvite(invite.code)
+    else await linkFriendByCode(invite.code)
+    pendingInvite = null
+    deliverOutcome({ kind: invite.kind })
+  } catch {
+    // Left parked: a transient failure retries on the next flush, and a code
+    // that is simply invalid never redeems (no user-facing error — the link was
+    // not one this account can use).
+  }
 }

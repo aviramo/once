@@ -31,7 +31,7 @@ import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/r
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
-import { consumeGroupInviteUrl, consumeFriendInviteUrl } from '../src/lib/communities'
+import { stashInviteUrl } from '../src/lib/communities'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
 import { BG } from '../src/colors'
 
@@ -164,20 +164,25 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Magic-link return handler. The Supabase email link redirects to
-  // `once://login-callback#access_token=...&refresh_token=...`. Both the
-  // cold-start URL and any in-session URL are funnelled through
-  // consumeMagicLinkUrl, which calls supabase.auth.setSession — that fires
-  // onAuthStateChange above, which routes the user past /login.
+  // Inbound deep-link handler — the ONE place every URL the app is opened with
+  // is read (cold-start URL + in-session events). Expo Router routes the same
+  // URLs through its own tree; the invite links match no screen there, so
+  // app/+not-found.tsx only bounces them to the boot route.
+  //  · Magic-link return: the Supabase email link redirects to
+  //    `once://login-callback#access_token=...&refresh_token=...`.
+  //    consumeMagicLinkUrl calls supabase.auth.setSession, which fires
+  //    onAuthStateChange above and routes the user past /login.
+  //  · Group / friend invites (`once://g/<TOKEN>`, `once://f/<CODE>`):
+  //    stashInviteUrl parks the code and redeems it as soon as there is a
+  //    session (see the deep-link invite section in lib/communities).
   useEffect(() => {
     let cancelled = false
     Linking.getInitialURL().then(url => {
-      if (!cancelled && url) { consumeMagicLinkUrl(url); consumeGroupInviteUrl(url); consumeFriendInviteUrl(url) }
+      if (!cancelled && url) { consumeMagicLinkUrl(url); stashInviteUrl(url) }
     })
     const sub = Linking.addEventListener('url', ({ url }) => {
       consumeMagicLinkUrl(url)
-      consumeGroupInviteUrl(url)
-      consumeFriendInviteUrl(url)
+      stashInviteUrl(url)
     })
     return () => {
       cancelled = true

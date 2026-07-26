@@ -4,7 +4,7 @@ import { requireOptionalNativeModule } from 'expo-modules-core'
 
 import { invoke } from './api'
 import { referralUrl, friendInviteUrl } from './links'
-import { linkFriendByCode } from './communities'
+import { linkFriendByCode, redeemInvite } from './communities'
 import { STORAGE } from '../keys'
 import { t } from '../i18n'
 
@@ -32,65 +32,60 @@ const InstallReferrer = requireOptionalNativeModule<{
 const REFERRAL_PARAM = 'ref'
 /** Flag the /f/ friend-invite path sets in the install referrer ("f=1") so a
  *  fresh install also links the pair as friends, not just attributes a credit.
- *  Absent for the credit-only /i/ link. Must match web/src/proxy.ts. */
+ *  Absent for the credit-only /i/ link. Must match web/public/invite.js. */
 const FRIEND_PARAM = 'f'
+/** Param the /g/ group-invite path packs its token into ("grp=<TOKEN>") so a
+ *  fresh install joins the group on first launch. Its own key rather than
+ *  `ref`, where a six-digit group token would be indistinguishable from a
+ *  referral code. Must match web/public/invite.js + store.js. */
+const GROUP_PARAM = 'grp'
 
-/** Did this install referrer come from a friend-invite link (/f/)? Scans the
- *  same urlencoded fragment as parseReferralCode for an "f=1" pair. */
-export function parseFriendFlag(referrer: string | null | undefined): boolean {
-  if (!referrer) return false
-  const scan = (s: string): boolean => {
-    for (const pair of s.split('&')) {
-      const eq = pair.indexOf('=')
-      if (eq <= 0) continue
-      try {
-        if (decodeURIComponent(pair.slice(0, eq)) === FRIEND_PARAM
-          && decodeURIComponent(pair.slice(eq + 1)).trim() === '1') return true
-      } catch { continue }
-    }
-    return false
-  }
-  if (scan(referrer)) return true
-  if (referrer.includes('%')) { try { return scan(decodeURIComponent(referrer)) } catch { return false } }
-  return false
-}
-
-/** Pull the referral code out of a Play install-referrer string. The string is
- *  a urlencoded query fragment ("ref=ABC1234", or "utm_source=...&ref=ABC1234"
+/** Read one param out of a Play install-referrer string. The string is a
+ *  urlencoded query fragment ("ref=ABC1234", or "utm_source=...&ref=ABC1234"
  *  once other campaign params are in play), and an organic install carries
- *  something else entirely ("utm_medium=organic"), so anything unrecognised
- *  yields null rather than a guess. */
-export function parseReferralCode(referrer: string | null | undefined): string | null {
+ *  something else entirely ("utm_medium=organic"), so an absent param yields
+ *  null rather than a guess.
+ *
+ *  Play usually hands the referrer back decoded once, but not always — some
+ *  devices return it still encoded ("ref%3DABC1234"), where the whole string is
+ *  a single unsplittable token. One extra decode costs nothing and is the
+ *  difference between attributing that install and silently losing it. */
+function readReferrerParam(referrer: string | null | undefined, key: string): string | null {
   if (!referrer) return null
-
   const scan = (s: string): string | null => {
     for (const pair of s.split('&')) {
       const eq = pair.indexOf('=')
       if (eq <= 0) continue
-      let key: string, value: string
       try {
-        key = decodeURIComponent(pair.slice(0, eq))
-        value = decodeURIComponent(pair.slice(eq + 1))
+        if (decodeURIComponent(pair.slice(0, eq)) !== key) continue
+        return decodeURIComponent(pair.slice(eq + 1)).trim()
       } catch { continue }
-      if (key !== REFERRAL_PARAM) continue
-      const code = value.trim().toUpperCase()
-      if (/^[A-Z0-9]{4,16}$/.test(code)) return code
     }
     return null
   }
-
   const direct = scan(referrer)
-  if (direct) return direct
-
-  // Play usually hands the referrer back decoded once ("ref=ABC1234"), but not
-  // always — some devices return it still encoded ("ref%3DABC1234"), where the
-  // whole string is a single unsplittable token. One extra decode costs
-  // nothing and is the difference between attributing that install and
-  // silently losing it.
+  if (direct !== null) return direct
   if (referrer.includes('%')) {
     try { return scan(decodeURIComponent(referrer)) } catch { return null }
   }
   return null
+}
+
+/** Did this install referrer come from a friend-invite link (/f/)? */
+export function parseFriendFlag(referrer: string | null | undefined): boolean {
+  return readReferrerParam(referrer, FRIEND_PARAM) === '1'
+}
+
+/** The referral code an install came in with, or null when it carries none. */
+export function parseReferralCode(referrer: string | null | undefined): string | null {
+  const code = readReferrerParam(referrer, REFERRAL_PARAM)?.toUpperCase() ?? null
+  return code && /^[A-Z0-9]{4,16}$/.test(code) ? code : null
+}
+
+/** The group invite token an install came in with (/g/ link), or null. */
+export function parseGroupToken(referrer: string | null | undefined): string | null {
+  const token = readReferrerParam(referrer, GROUP_PARAM)
+  return token && /^\d{6}$/.test(token) ? token : null
 }
 
 const DONE = 'done'
@@ -115,7 +110,10 @@ export async function claimInstallReferral(): Promise<void> {
 
     const raw = await InstallReferrer.getInstallReferrer()
     const code = parseReferralCode(raw)
-    if (!code) {
+    // A /g/ group invite carries a token instead of a code: no credit to claim,
+    // but the install still owes the user the join they tapped for.
+    const group = parseGroupToken(raw)
+    if (!code && !group) {
       // A definitive "no referrer" (organic install, or sideloaded). The
       // answer will never change for this install, so stop asking.
       await AsyncStorage.setItem(STORAGE.referralClaimed, DONE)
@@ -129,10 +127,14 @@ export async function claimInstallReferral(): Promise<void> {
     // Friend-connect for a /f/ install (best-effort, independent of the credit
     // claim below so a 'too_late' referral can't block it). Idempotent
     // server-side; retried on later launches until the DONE mark lands.
-    if (parseFriendFlag(raw)) {
+    if (code && parseFriendFlag(raw)) {
       try { await linkFriendByCode(code) } catch { /* retried until DONE */ }
     }
-    await invoke('app/referral', { code, source: 'play_referrer' })
+    if (code) await invoke('app/referral', { code, source: 'play_referrer' })
+    // Deliberately NOT swallowed: unlike the credit claim, losing this would
+    // lose the whole point of the link, so a failure leaves the DONE mark unset
+    // and the join retries on the next launch (up to MAX_ATTEMPTS).
+    if (group) await redeemInvite(group)
     await AsyncStorage.setItem(STORAGE.referralClaimed, DONE)
   } catch {
     // Retried on the next launch, up to MAX_ATTEMPTS.

@@ -23,7 +23,7 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedGroupsPopup } from '../src/components/SharedGroupsPopup'
-import { sharedGroups, type SharedGroup } from '../src/lib/communities'
+import { sharedGroups, flushPendingInvite, watchInvites, type SharedGroup } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
@@ -854,29 +854,39 @@ export default function HomePage() {
   //   page1 codes → home, i.e. no overlay
   const PAGE2_CODES = new Set(['invite-in', 'extended', 'expired-in', 'cancelled-in'])
   const CHAT_CODES = new Set(['chat', 'match'])
-  // Group-lifecycle pushes deep-link into the Communities sheet (group_join to
-  // the specific group's manage page, group_approved to the hub).
+  // Group-lifecycle pushes carry the group_id and open THAT group: group_join on
+  // its manage page (where the join request waits), group_approved on its member
+  // sheet (the approved requester is a plain member, not staff). The sheet
+  // resolves which of the two from the caller's own membership.
   const GROUP_CODES = new Set(['group_join', 'group_approved'])
-  const initialOverlayFromNotif = useMemo<Overlay | null>(() => {
+  // Friend-lifecycle pushes open the friends list — where an incoming request's
+  // approve/decline lives, and where a new friend shows up.
+  const FRIEND_CODES = new Set(['friend_request', 'friend_accept', 'friend_link'])
+  // The launch notification is read DURING RENDER, group_id included: the effect
+  // below clears it, and effects run in declaration order, so reading the id
+  // later resolved to nothing and a targeted group deep-link opened the bare hub.
+  type InitialNotif = { overlay: Overlay; groupId: string | null; friends: boolean }
+  const initialNotif = useMemo<InitialNotif | null>(() => {
     const type = getInitialNotificationType()
     if (!type) return null
-    if (CHAT_CODES.has(type)) return 'chat'
-    if (GROUP_CODES.has(type)) return 'communities'
+    if (CHAT_CODES.has(type)) return { overlay: 'chat', groupId: null, friends: false }
+    if (GROUP_CODES.has(type)) return { overlay: 'communities', groupId: getInitialNotificationGroupId(), friends: false }
+    if (FRIEND_CODES.has(type)) return { overlay: 'communities', groupId: null, friends: true }
     return null
   }, [])
   useEffect(() => {
-    if (initialOverlayFromNotif !== null) clearInitialNotification()
+    if (initialNotif !== null) clearInitialNotification()
   }, [])
   // First-render only: a cold start while already in chat opens the chat
-  // overlay directly (user decision 2026-07-19), and a group deep-link opens
-  // Communities (targeted at the group for group_join). state→chat transitions
-  // during the session are owned by the chat-transition effect below.
+  // overlay directly (user decision 2026-07-19), and a group/friend deep-link
+  // opens Communities on its target. state→chat transitions during the session
+  // are owned by the chat-transition effect below.
   useEffect(() => {
-    if (initialOverlayFromNotif === 'chat' || useUserStore.getState().profile?.state === 'chat') {
+    if (initialNotif?.overlay === 'chat' || useUserStore.getState().profile?.state === 'chat') {
       setOverlays(['chat'])
-    } else if (initialOverlayFromNotif === 'communities') {
-      const gid = getInitialNotificationGroupId()
-      if (gid) setCommunitiesTarget(gid)
+    } else if (initialNotif?.overlay === 'communities') {
+      if (initialNotif.groupId) setCommunitiesTarget(initialNotif.groupId)
+      if (initialNotif.friends) setCommunitiesInitialView('friends')
       setOverlays(['communities'])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -906,7 +916,15 @@ export default function HomePage() {
   const openProfileSheet = useCallback(() => openOverlay('profile'), [openOverlay])
   const closeProfileSheet = useCallback(() => closeOverlay('profile'), [closeOverlay])
   const openCommunities = useCallback(() => openOverlay('communities'), [openOverlay])
+  // The hub's internal view to open on (a friend deep-link lands on the friends
+  // list). Keyed off the sheet being closed rather than off each closer, because
+  // hardware-back pops the overlay stack directly and would otherwise leave this
+  // set — opening Communities from the menu later would land on friends.
+  const [communitiesInitialView, setCommunitiesInitialView] = useState<'friends' | null>(null)
   const closeCommunities = useCallback(() => closeOverlay('communities'), [closeOverlay])
+  useEffect(() => {
+    if (!communitiesSheetOpen) setCommunitiesInitialView(null)
+  }, [communitiesSheetOpen])
   // A group a notification tap wants the Communities sheet to open directly
   // (group_join deep-link). CommunitiesPage drills into it on mount, then calls
   // onTargetConsumed to clear this.
@@ -978,9 +996,12 @@ export default function HomePage() {
   useEffect(() => {
     return addNotificationTapListener((type, groupId) => {
       if (GROUP_CODES.has(type)) {
-        // group_join deep-links to the specific group's manage page; the menu
-        // is never gated, so Communities is always reachable.
-        if (type === 'group_join' && groupId) setCommunitiesTarget(groupId)
+        // Both group codes deep-link to the group they name; the menu family is
+        // never gated, so Communities is always reachable.
+        if (groupId) setCommunitiesTarget(groupId)
+        openOverlayRef.current('communities')
+      } else if (FRIEND_CODES.has(type)) {
+        setCommunitiesInitialView('friends')
         openOverlayRef.current('communities')
       } else if (CHAT_CODES.has(type)) {
         if (!overlaysGatedRef.current) openOverlayRef.current('chat')
@@ -988,6 +1009,26 @@ export default function HomePage() {
         setOverlays([])
       }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Invite deep links ───────────────────────────────────────────────────
+  // A tapped group/friend invite link is parked by the root URL listener and
+  // redeemed as soon as a session exists (lib/communities). Home is the first
+  // screen that only exists for a signed-in user, so it flushes anything still
+  // parked (a link opened before sign-in) and shows the outcome: the Communities
+  // hub for a joined group, its friends list for a new friend, so the tap
+  // visibly did something instead of just landing on home. Watching covers both
+  // orders — a cold start redeems before this mount (the outcome is held for the
+  // watcher), an in-session tap long after it. The menu family is never gated,
+  // so this is always reachable.
+  useEffect(() => {
+    const stop = watchInvites(outcome => {
+      if (outcome.kind === 'friend') setCommunitiesInitialView('friends')
+      openOverlayRef.current('communities')
+    })
+    void flushPendingInvite()
+    return stop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -3427,6 +3468,7 @@ export default function HomePage() {
               onClose={closeCommunities}
               onRegisterBack={fn => { communitiesBackRef.current = fn }}
               initialGroupId={communitiesTarget}
+              initialView={communitiesInitialView}
               onTargetConsumed={() => setCommunitiesTarget(null)}
               {...ctx}
             />

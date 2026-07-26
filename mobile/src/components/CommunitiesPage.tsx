@@ -96,37 +96,68 @@ const titleFor = (v: CView): string => {
 }
 
 export function CommunitiesPage({
-  onClose, onRegisterBack, initialGroupId, onTargetConsumed,
+  onClose, onRegisterBack, initialGroupId, initialView, onTargetConsumed,
   dismissGestureRef, onScrollAtTop, headerBottomShared, pulling,
 }: OverlaySheetBody & {
   onClose: () => void
   onRegisterBack: (fn: () => boolean) => void
   /** A group a notification tap wants to open directly (deep-link). */
   initialGroupId?: string | null
+  /** An internal view to open on instead of the hub (a redeemed friend invite
+   *  deep-link lands on the friends list). Back returns to the hub. */
+  initialView?: 'friends' | null
   onTargetConsumed?: () => void
 }) {
   const insets = useSafeAreaInsets()
   const profile = useUserStore(st => st.profile)
 
-  const [stack, setStack] = useState<CView[]>([{ k: 'hub' }])
+  const [stack, setStack] = useState<CView[]>(() => (
+    initialView ? [{ k: 'hub' }, { k: initialView }] : [{ k: 'hub' }]
+  ))
   const view = stack[stack.length - 1]
   const push = useCallback((v: CView) => setStack(sk => [...sk, v]), [])
   const pop = useCallback(() => setStack(sk => (sk.length > 1 ? sk.slice(0, -1) : sk)), [])
 
-  // Deep-link: open straight to a managed group's page (from a group_join push).
-  // Fetch the owned/managed groups, drill into the match, then clear the target.
+  // A deep-linked group the caller is only a MEMBER of opens the hub's member
+  // sheet rather than a stack view (that is the whole surface a member gets),
+  // so the resolved group is handed down to the hub.
+  const [joinedTarget, setJoinedTarget] = useState<JoinedGroup | null>(null)
+
+  // Deep-link straight to one group (a group_join / group_approved push). Staff
+  // land on its manage page, where the join request waits; a plain member lands
+  // on its member sheet. Resolved against the caller's own memberships rather
+  // than trusted from the push, so an approval for a group you have since left
+  // simply opens the hub. Cleared after the first resolve either way.
   useEffect(() => {
     if (!initialGroupId) return
     let alive = true
     ownedGroups()
-      .then(list => {
-        const g = list.find(x => x.id === initialGroupId)
-        if (alive && g) setStack([{ k: 'hub' }, { k: 'owned', group: g }])
+      .then(async list => {
+        const owned = list.find(x => x.id === initialGroupId)
+        if (owned) { if (alive) setStack([{ k: 'hub' }, { k: 'owned', group: owned }]); return }
+        // Not staff: prefer the denormalized summary (already on the profile, so
+        // no round trip, and it carries the full row the sheet renders). Fall
+        // back to the endpoint on a miss, not just on an old payload — an
+        // approval push can land before the profile refresh does, and the
+        // summary would still list the group as a pending request.
+        const joined = communitiesSummary(useUserStore.getState().profile)?.joined.find(g => g.id === initialGroupId)
+          ?? (await myGroups()).find(g => g.id === initialGroupId)
+        if (joined && alive) setJoinedTarget(joined)
       })
       .finally(() => onTargetConsumed?.())
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialGroupId])
+
+  // The friends deep-link (a friend_* push, or a redeemed /f/ invite link) is
+  // seeded into the initial stack above, which covers the usual case of the sheet
+  // opening for it. This covers the rest: it arriving while the sheet is already
+  // open, where there is no mount to seed.
+  const seededView = useRef(true)
+  useEffect(() => {
+    if (seededView.current) { seededView.current = false; return }
+    if (initialView) setStack([{ k: 'hub' }, { k: initialView }])
+  }, [initialView])
 
   // Hardware-back: pop the internal stack first; only at the hub let the sheet
   // close (return false so home's BackHandler falls through to closing it).
@@ -205,7 +236,13 @@ export function CommunitiesPage({
           scrollEventThrottle={16}
           onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => { scrollY.current = e.nativeEvent.contentOffset.y }}
         >
-          {view.k === 'hub' && <HubView push={push} />}
+          {view.k === 'hub' && (
+            <HubView
+              push={push}
+              initialJoined={joinedTarget}
+              onInitialJoinedConsumed={() => setJoinedTarget(null)}
+            />
+          )}
           {view.k === 'friends' && <FriendsView profile={profile} />}
           {view.k === 'find' && <FindView />}
           {view.k === 'create' && <CreateView onCreated={g => setStack([{ k: 'hub' }, { k: 'owned', group: g }])} />}
@@ -218,7 +255,13 @@ export function CommunitiesPage({
 }
 
 // ── Hub ────────────────────────────────────────────────────────────────────
-function HubView({ push }: { push: (v: CView) => void }) {
+function HubView({ push, initialJoined, onInitialJoinedConsumed }: {
+  push: (v: CView) => void
+  /** A deep-linked group the caller is a member of — its member sheet opens as
+   *  soon as the hub is on screen (a group_approved push). */
+  initialJoined?: JoinedGroup | null
+  onInitialJoinedConsumed?: () => void
+}) {
   // Instant: the summary rides in the user payload (relations.communities),
   // updated live over Realtime. Only when the server hasn't populated it yet
   // (old payload) do we fall back to the three endpoints.
@@ -241,7 +284,15 @@ function HubView({ push }: { push: (v: CView) => void }) {
 
   const data = summary ?? fallback
   const loading = data == null
-  const [joinedSheet, setJoinedSheet] = useState<JoinedGroup | null>(null)
+  const [joinedSheet, setJoinedSheet] = useState<JoinedGroup | null>(initialJoined ?? null)
+  // Open the deep-linked member group's sheet, and let the page forget the
+  // target straight away so popping back to the hub later doesn't reopen it.
+  useEffect(() => {
+    if (!initialJoined) return
+    setJoinedSheet(initialJoined)
+    onInitialJoinedConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialJoined])
   const [pendingConfirm, setPendingConfirm] = useState<PendingGroup | null>(null)
   const [pendingBusy, setPendingBusy] = useState(false)
   const doCancelJoin = async () => {
