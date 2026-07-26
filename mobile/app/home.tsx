@@ -922,8 +922,14 @@ export default function HomePage() {
   // set — opening Communities from the menu later would land on friends.
   const [communitiesInitialView, setCommunitiesInitialView] = useState<'friends' | null>(null)
   const closeCommunities = useCallback(() => closeOverlay('communities'), [closeOverlay])
+  // On the open→closed TRANSITION only. Not "whenever it is closed": the effects
+  // that route a cold-start push set the view and open the sheet in the same
+  // pass, so this one still sees `closed` on mount and would wipe the view it
+  // was launched with.
+  const communitiesWasOpen = useRef(false)
   useEffect(() => {
-    if (!communitiesSheetOpen) setCommunitiesInitialView(null)
+    if (communitiesWasOpen.current && !communitiesSheetOpen) setCommunitiesInitialView(null)
+    communitiesWasOpen.current = communitiesSheetOpen
   }, [communitiesSheetOpen])
   // A group a notification tap wants the Communities sheet to open directly
   // (group_join deep-link). CommunitiesPage drills into it on mount, then calls
