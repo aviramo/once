@@ -1,62 +1,38 @@
 /* ==========================================================================
    Once — marketing landing page
-   Palette: THE APP'S. Every value below is a copy of a constant in
-   `mobile/src/colors.ts` (the app's single source of truth for colour) — a
-   LIGHT scheme of warm beige pages and white cards, with two hues that each
-   own one job and never trade places:
+   Palette: THE APP'S, SHARED not copied. Every colour variable lives in
+   `tokens.css`, GENERATED from `mobile/src/colors.ts` (the single source of
+   truth) by `scripts/build-icons.mjs` and @imported just below — a LIGHT scheme
+   of warm beige pages and white cards, with two PURPLES that each own one job
+   and never trade places:
 
-     ORANGE (--brand)  = ACTION. Buttons, links, the accent word in a heading,
-                         the presence dot. Ink on orange is WHITE.
-     GREEN  (--ink / --accent) = INK + quiet decoration. Everything you read,
-                         plus the line-art icons, chips and step numbers.
+     BRAND (--brand)   = ACTION. Buttons, links, the accent word in a heading,
+                         the presence dot. A vivid purple; ink on it is WHITE.
+     ACCENT/INK        = the reading purple + quiet decoration. Everything you
+                         read, plus the line-art icons, chips and step numbers.
 
-   There are no greys: every muted step is a translucent green, exactly as in
-   the app. Flat only — no gradients, no frosted fills. One design system,
-   driven entirely by CSS custom properties. RTL/LTR: layout uses logical
-   properties so it mirrors automatically.
+   There are no greys: every muted step is a translucent ink purple, exactly as
+   in the app. Flat only — no gradients, no frosted fills. RTL/LTR: layout uses
+   logical properties so it mirrors automatically.
 
-   When a colour changes in `mobile/src/colors.ts`, change it here too.
+   To change a colour, edit `mobile/src/colors.ts` and rebuild the icons
+   (`cd mobile && node scripts/build-icons.mjs`) — never hardcode a hex here.
    ========================================================================== */
+
+@import "tokens.css";
 
 :root {
   color-scheme: light;
 
-  /* --- Surfaces / background (BG / SURFACE_LIFT / SURFACE / SURFACE_SUNK) --- */
-  --bg: #F6F3ED;            /* the page — warm off-white */
-  --bg-2: #EFEAE0;          /* alternating bands — SURFACE_SUNK */
-  --surface: #FFFFFF;       /* cards / panels / chips */
-  --surface-sunk: var(--bg-2);  /* subtle inset — the same sunk step, one value */
-
-  /* --- Ink / text (INK, INK_2, INK_3) — deep brand green, never black --- */
-  --ink: #2B4F40;
-  --ink-2: rgba(43, 79, 64, 0.72);  /* secondary / body */
-  --ink-3: rgba(43, 79, 64, 0.48);  /* muted: hints, captions */
-
-  /* --- Brand — the action orange (ORANGE / PRIMARY) --- */
-  --brand: #E4573D;
-  --brand-strong: #C7452D;  /* hover / active — pressed orange */
-  --brand-ink: #FFFFFF;     /* text on an orange fill */
-  --brand-soft: rgba(228, 87, 61, 0.14);  /* ORANGE_SOFT — tints, washes */
-
-  /* --- Accent — the reading green (GREEN / GREEN_SOFT) --- */
-  --accent: #417A62;
-  --accent-strong: #35634F;  /* pressed / hover green */
-  --accent-soft: rgba(65, 122, 98, 0.12);
-
-  /* --- Illustrations (art.js) - the only colours the artwork may use --- */
+  /* --- Colour is SHARED with the app --------------------------------------
+     Every colour variable (--bg, --ink, --brand, --accent, --border, the
+     shadows, …) is defined in tokens.css, GENERATED from mobile/src/colors.ts
+     by scripts/build-icons.mjs and @imported at the top of this file. Do not
+     re-declare a colour here — change it in colors.ts and rebuild the icons.
+     Only web-specific aliases (which just point at a shared var) live below. */
+  --surface-sunk: var(--bg-2);  /* subtle inset — the same sunk beige */
   --art-bg: var(--bg-2);        /* the surface an illustration sits on */
   --art-line: var(--border);    /* drawn borders */
-  --art-tint: #E3EBE5;          /* soft green wash: photo wells, chips, bubbles */
-  --art-ghost: rgba(43, 79, 64, 0.10);  /* stand-in copy inside drawn cards */
-
-  /* --- Lines (BORDER_SOFT / BORDER_STRONG) --- */
-  --border: #E5DFD4;
-  --border-strong: rgba(65, 122, 98, 0.38);
-
-  /* --- Shadows (single, soft, sparse — the app's SHEET_SHADOW family) --- */
-  --shadow-sm: 0 1px 2px rgba(43, 79, 64, 0.08);
-  --shadow-md: 0 10px 30px rgba(43, 79, 64, 0.10);
-  --shadow-lg: 0 24px 60px rgba(43, 79, 64, 0.14);
 
   /* --- Radii --- */
   --r-xs: 10px;
@@ -102,7 +78,7 @@ ul { list-style: none; }
   border-radius: 6px;
 }
 /* The app's SELECTION: a translucent green wash, never an opaque block. */
-::selection { background: rgba(65, 122, 98, 0.25); color: var(--ink); }
+::selection { background: var(--selection); color: var(--ink); }
 
 /* ---------- Layout helpers ---------- */
 .container {
@@ -789,7 +765,7 @@ strong { color: var(--ink); font-weight: 600; }
 .mobile-menu.open { display: block; }
 .mobile-menu-backdrop {
   position: absolute; inset: 0;
-  background: rgba(43, 79, 64, 0.42);
+  background: color-mix(in srgb, var(--ink) 42%, transparent);
   opacity: 0; transition: opacity 0.25s var(--ease);
 }
 .mobile-menu.open .mobile-menu-backdrop { opacity: 1; }

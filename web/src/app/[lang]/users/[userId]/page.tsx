@@ -115,7 +115,6 @@ export default async function UserDetailPage({
   // groups' members. 404 (not redirect) when a manager opens an out-of-scope
   // deep-link so the URL stays canonical for the admin who shared it.
   const scope = await requireViewerScope();
-  const user = scope.user;
   const isAdmin = scope.kind === "admin";
   if (scope.kind === "manager" && !scope.userIds.includes(userId)) notFound();
 

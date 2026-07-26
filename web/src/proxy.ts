@@ -37,6 +37,10 @@ const STATIC_PAGES: Record<string, string> = {
 // served straight from /public and cannot import a shared constant.
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.aviramo.once";
 const REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
+// Group invite link: /g/<TOKEN> serves a small redirect page that hands off to
+// the installed app (once://g/<TOKEN>) with a Play-store fallback. The invite's
+// opaque token stays in the URL — the user never sees or types a "code".
+const GROUP_PATH_RE = /^\/g\/(\d{6})\/?$/;
 
 // Paths that REQUIRE an authenticated session. The root `/` is auth-aware
 // (handled separately below); these are the panel sub-routes. A signed-out
@@ -72,6 +76,14 @@ export async function proxy(request: NextRequest) {
     }
     const url = request.nextUrl.clone();
     url.pathname = "/download.html";
+    return NextResponse.rewrite(url);
+  }
+
+  // Group invite link. Rewrite (not redirect) so the browser keeps /g/<TOKEN>
+  // and the page's script can read the token off the path. Static — no session.
+  if (GROUP_PATH_RE.test(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/group.html";
     return NextResponse.rewrite(url);
   }
 

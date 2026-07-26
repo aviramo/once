@@ -1,4 +1,4 @@
-import { t, tg } from '../i18n'
+import { t } from '../i18n'
 
 // "Just now" threshold — under this gap the user reads as currently online.
 // Also drives the green presence dot on the time chip (WatcherCard +
@@ -15,30 +15,9 @@ export function isLastSeenJustNow(iso: string | null | undefined): boolean {
   return diff != null && diff < SECONDS_JUST_NOW
 }
 
-export function formatLastSeen(iso: string | null | undefined, isMale: boolean | null | undefined): string {
-  const diff = ageSeconds(iso)
-  if (diff == null) return ''
-  if (diff < SECONDS_JUST_NOW) return tg('match.justNow', isMale)
-  if (diff < 3600) {
-    const n = Math.floor(diff / 60)
-    if (n === 1) return tg('match.minAgo', isMale)
-    return tg('match.minsAgo', isMale).replace('{n}', String(n))
-  }
-  if (diff < 86400) {
-    const n = Math.floor(diff / 3600)
-    if (n === 1) return tg('match.hrAgo', isMale)
-    if (n === 2) return tg('match.hrs2Ago', isMale)
-    return tg('match.hrsAgo', isMale).replace('{n}', String(n))
-  }
-  const n = Math.floor(diff / 86400)
-  if (n === 1) return tg('match.dayAgo', isMale)
-  if (n === 2) return tg('match.days2Ago', isMale)
-  return tg('match.daysAgo', isMale).replace('{n}', String(n))
-}
-
 // Relative-time tail for the merged proximity chip: genderless, no "online"
-// prefix ("just now" / "6 min ago"). The standalone status chip keeps
-// formatLastSeen; this is the piece formatProximity appends after distance.
+// prefix ("just now" / "6 min ago"). This is the piece formatProximity appends
+// after distance.
 export function formatAgo(iso: string | null | undefined): string {
   const diff = ageSeconds(iso)
   if (diff == null) return ''

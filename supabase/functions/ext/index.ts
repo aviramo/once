@@ -63,6 +63,16 @@ async function handleResync(log: Log) {
   return log.success({ processed: res?.processed ?? 0 });
 }
 
+// Hourly watching-card teardown. A drawn candidate left un-actioned for an hour
+// (page1 'watching' past its stamped expires_at) is flipped to a bare 'locked'
+// and pulled from the drawn person's viewer list. Own hourly schedule (not the
+// per-minute cron) — a 1h clock needs no finer granularity, and it keeps the
+// churn off the hot path. Bounded + capped-logged inside the RPC; no pushes.
+async function handleWatchSweep(log: Log) {
+  const res = await Tools.rpc(log, "app_expire_watch_sweep", {});
+  return log.success({ processed: res?.processed ?? 0, capped: res?.capped ?? false });
+}
+
 async function handleCron(log: Log) {
   const expire = await Tools.rpc(log, "app_expire_sweep", {});
   // Same resync the admin triggers on demand — here it's the per-minute
@@ -106,6 +116,7 @@ Deno.serve(async (req) => {
 
     if (route === "cron") return await handleCron(log);
     if (route === "resync") return await handleResync(log);
+    if (route === "watch") return await handleWatchSweep(log);
 
     return log.error("route", `unknown route: ${route}`, 404);
   } catch (err) {

@@ -1,172 +1,171 @@
-// ── Green & Orange on white — the single source of truth for colour ────────
+// ── Purples on beige — the single source of truth for colour ───────────────
 //
-// A LIGHT scheme: warm beige pages and sheets, with two hues that each own one
-// job and never trade places:
+// A LIGHT scheme. The whole palette is a handful of purples, THREE beiges, WHITE,
+// and one semi-transparent BLACK for shadows. Nothing else. The constant NAMES
+// `GREEN`/`ORANGE` are kept as legacy labels for their ROLES (like `BLACK`
+// aliasing the ink) — the values are purple, the jobs are unchanged:
 //
-//   ORANGE = ACTION.  Every surface the user acts on: primary buttons, the
-//                     heart, the home centre disc, selected states. Also the
-//                     positive signals (a like, presence, a positive delta) —
-//                     acting and good news are one hue. Ink on orange is WHITE.
-//   GREEN  = INK.     Everything you read: bios, popup titles, settings rows,
-//                     chip labels. Green is read, never pressed.
+//   INK/GREEN/PRIMARY = the ONE regular purple. Everything: all text, headings,
+//                      titles, SELECTED surfaces, AND every in-app action — the
+//                      buttons, the heart, presence, positive signals. Ink on a
+//                      filled one is WHITE (user directive 2026-07-25: one purple
+//                      in-app, no separate action hue).
+//   PRESSED = the darkest step. The ONLY place the deep purple survives: a button
+//                      momentarily HELD DOWN. Never text, never a resting fill.
+//   ORANGE  = the BRAND MARK only. #6C3FB2 survives solely on the launcher / store
+//                      icon disc + web --brand; nothing INSIDE the app uses it.
 //
-// THERE ARE NO GREYS. Every muted step — a divider, a placeholder, a disabled
-// label, a hairline — is a translucent GREEN, so the whole surface stays in
-// one family instead of drifting into neutral grey. The only true black left
-// is SCRIM_BLACK, for shadows.
+// The purples, dark → light:
+//   PRESSED           #33265B  pressed/hover ONLY (the one deep step)
+//   INK/GREEN/PRIMARY #5C4A94  EVERYTHING in-app: text, headings, selected, actions
+//   GREEN_HALF        #8A7DB2  muted: placeholders, hints, empty states
+//   ORANGE            #6C3FB2  the brand-mark disc (icon + web) ONLY
+//   PRIMARY_GROUND    #D1C2D9  pale surfaces: icon ground, washes, soft tiles
 //
-// On top of a PHOTO the chips go WHITE, because the photo underneath is
-// arbitrary and the chip has to supply its own contrast.
+// THERE ARE NO GREYS: every muted step is a translucent INK purple, so the
+// surface never drifts to neutral grey. Every `rgba()` below is one of these
+// at an opacity — transparency, not another colour.
 
-// ── Surfaces ───────────────────────────────────────────────────────────────
-export const BG           = '#F6F3ED'  // the page / a popup sheet — warm off-white
-export const SURFACE      = '#FFFFFF'  // cards, chips, list rows
-export const SURFACE_LIFT = '#FBF9F5'  // a barely-lifted band
-export const SURFACE_SUNK = '#EFEAE0'  // inset rows inside a sheet, input wells
+// ── Surfaces: three beiges + white ──────────────────────────────────────────
+// The scheme is warm end to end: even the surfaces that lift OFF the page are a
+// beige now, not white. Three warm steps, lightest → darkest:
+//   SURFACE  #FAF6EE  beige-3, the LIGHTEST: every surface that sits ABOVE the
+//                     page (cards, chips, list rows, fields, buttons, on-photo
+//                     chrome). A gentle warm lift off BG, where white used to be.
+//   BG       #F3EEE6  beige-1: the page itself, the sheets, the popups.
+//   BORDER   #E5DFD4  beige-2: the one hairline / rule, and inset wells.
+// WHITE is no longer a surface — it survives ONLY as ink/glyphs on a dark or
+// purple fill (see WHITE below).
+export const BG           = '#F3EEE6'  // beige-1: the page, sheets, popups
+export const SURFACE      = '#FAF6EE'  // beige-3 (LIGHTEST): cards, chips, rows, fields, buttons — the warm lift off the page
+export const SURFACE_LIFT = SURFACE    // a barely-lifted band = light beige over the page beige
+export const BORDER_SOFT  = '#E5DFD4'  // beige-2: the one hairline / rule colour
+export const SURFACE_SUNK = BORDER_SOFT // inset rows, input wells = the same beige-2
 
-// ── Ink ────────────────────────────────────────────────────────────────────
-// Text is the deep brand GREEN, never a neutral black. Every reading surface
-// in the app — a bio, a popup title, a settings row, a chip label — is inked
-// in this one colour, which is what makes green read as "the app's voice"
-// rather than as an accent sprinkled here and there.
-//
-// `BLACK` is the legacy name (~100 call sites predate the green scheme) and
-// aliases INK. One definition, two names, never two copies. It is NOT black:
-// for something that must actually subtract light, see SCRIM_BLACK.
-export const INK   = '#2B4F40'
+// ── Ink (the REGULAR brand purple) ───────────────────────────────────────────
+// Text is the brand PURPLE, never a neutral black. `BLACK` is the legacy name
+// (~100 call sites) and aliases INK. It is NOT black: the only real black is
+// SCRIM_BLACK, for shadows. INK is the MEDIUM purple #5C4A94 — the same value as
+// GREEN. All text, titles, headings and selected states are this one regular
+// purple; the deep #33265B is PRESSED, reserved for held-down states only
+// (user directive 2026-07-25).
+export const INK   = '#5C4A94'
 export const BLACK = INK
+// Pure white — INK ONLY now (text / glyphs / spinner arcs on a dark or purple
+// fill). Never a surface: every white tile became the light beige SURFACE above.
 export const WHITE = '#FFFFFF'
-export const INK_2 = 'rgba(43,79,64,0.72)'  // secondary / body
-export const INK_3 = 'rgba(43,79,64,0.48)'  // muted: hints, timestamps
+// The one deep step, HELD-DOWN states only (a pressed row/button). Never text,
+// never a resting fill — the sole survivor of the old darkest purple.
+export const PRESSED = '#33265B'
+export const INK_2 = 'rgba(92,74,148,0.72)'  // secondary / body
+export const INK_3 = 'rgba(92,74,148,0.48)'  // muted: hints, timestamps
 
-// ── Alpha overlay scales ───────────────────────────────────────────────────
-// BLACK_* is the MUTED GREEN ramp on a light surface (the name is legacy —
-// nothing here is black). WHITE_* is its counterpart on a dark or filled one.
-// Three tiers each — don't add intermediate values, "almost SOFT" reads
-// identically to SOFT and drifts across components.
-export const BLACK_SOFT   = 'rgba(43,79,64,0.10)'  // dividers, soft borders, tracks, inactive chip bg
-export const BLACK_MID    = 'rgba(43,79,64,0.32)'  // inactive bar/pill, spinner track, placeholder, checkbox border
-export const BLACK_STRONG = 'rgba(43,79,64,0.62)'  // muted icon, secondary label, disabled text
+// ── Muted INK ramp (INK at three opacities) ─────────────────────────────────
+// BLACK_* is the legacy name — nothing here is black, it is INK purple laid
+// translucent. WHITE_* is its counterpart on a dark or filled surface.
+export const BLACK_SOFT   = 'rgba(92,74,148,0.10)'  // dividers, soft borders, tracks, inactive chip bg
+export const BLACK_MID    = 'rgba(92,74,148,0.32)'  // inactive bar/pill, spinner track, placeholder, checkbox border
+export const BLACK_STRONG = 'rgba(92,74,148,0.62)'  // muted icon, secondary label, disabled text
 
-export const WHITE_SOFT   = 'rgba(255,255,255,0.20)'  // subtle fills on a dark/green surface
-export const WHITE_MID    = 'rgba(255,255,255,0.42)'  // borders, spinner track on a green fill
+export const WHITE_SOFT   = 'rgba(255,255,255,0.20)'  // subtle fills on a purple surface
+export const WHITE_MID    = 'rgba(255,255,255,0.42)'  // borders, spinner track on a purple fill
 export const WHITE_STRONG = 'rgba(255,255,255,0.86)'  // strong text / active state on a filled surface
 
-// ── GREEN — the action colour ──────────────────────────────────────────────
-// Primary buttons, selected states, headings, popup row icons. WHITE is the
-// ink that sits on a green fill; GREEN_DEEP is green used AS text on the
-// light page (a heading), where the button green is a touch light to read.
-export const GREEN        = '#417A62'
-export const GREEN_STRONG = '#35634F'  // pressed / hover
-// Green used AS text on the page. That is exactly what INK is, so this is an
-// alias — the same hex written twice would be free to drift.
-export const GREEN_DEEP   = INK
-export const GREEN_SOFT   = 'rgba(65,122,98,0.12)'  // faint green wash (chips, row fills)
+// ── GREEN (the REGULAR brand purple; legacy name) ────────────────────────────
+// Headings, selected states, popup row icons, chips. Same value as INK — the
+// text ink and the brand are ONE regular purple now. WHITE is the ink on a
+// filled brand surface. GREEN_DEEP folds into INK (a heading is the regular
+// purple, not a deeper one); GREEN_STRONG is the held-down PRESSED step (the
+// one place the deep purple survives).
+export const GREEN        = INK        // the regular purple = the text ink
+export const GREEN_STRONG = PRESSED    // pressed / hover = the deep step
+export const GREEN_DEEP   = INK        // this hue used AS page text = INK
+export const GREEN_SOFT   = 'rgba(92,74,148,0.12)'  // faint brand wash (chips, row fills)
+// Bio text on its beige band = the medium brand purple.
+export const BIO_INK = GREEN
 
-// ── Half-green ─────────────────────────────────────────────────────────────
-// The alpha ramp above keeps the hue on paper but loses it on screen: laid
-// over the warm page at 10-32% the mix desaturates and the eye reads plain
-// GREY. Where a muted element must still read GREEN — a placeholder, a hint,
-// an empty state, an incoming bubble — use these SOLID half-strength greens
-// instead of an alpha step. Two tiers, same discipline as the ramp: one ink,
-// one surface, no in-betweens.
-export const GREEN_HALF = '#6E9986'  // muted green INK: placeholders, hints, empty states
-export const GREEN_WASH = '#DCE9E1'  // muted green SURFACE: incoming bubbles, soft tiles
+// ── GREEN_HALF (purple #3 — muted) ───────────────────────────────────────────
+// Where a muted element must still read PURPLE (a placeholder, a hint, an empty
+// state) a low-alpha ink would desaturate to grey — so this is a SOLID
+// half-strength purple. GREEN_WASH is its pale-surface partner, folded into the
+// pale ground (purple #5) so incoming bubbles and soft tiles share it.
+export const GREEN_HALF = '#8A7DB2'  // muted purple INK: placeholders, hints, empty states
 
-// ── ORANGE — the positive colour ───────────────────────────────────────────
-// The heart, a like, presence, a positive delta. Status, not navigation.
-export const ORANGE       = '#E4573D'
-export const ORANGE_SOFT  = 'rgba(228,87,61,0.14)'
-// A lighter orange for SECONDARY text that belongs to the orange group (a row
-// subtitle under an orange label). Alpha rather than a second hex so it can
-// never drift away from ORANGE itself.
-export const ORANGE_MUTED = 'rgba(228,87,61,0.72)'
+// ── ORANGE (the brand-mark purple; legacy name) ──────────────────────────────
+// #6C3FB2 is now ONLY the app's brand mark: the launcher / store icon disc, the
+// splash, the favicon / og-image, and the web landing page's --brand. NOTHING
+// inside the app uses it anymore — every in-app action / positive / heart /
+// presence was unified onto the ONE regular purple (see PRIMARY below), so the UI
+// reads as a single purple while the icon keeps its established brand tone.
+export const ORANGE       = '#6C3FB2'
+export const ORANGE_SOFT  = 'rgba(108,63,178,0.14)'  // brand-mark wash (web only)
 
-// ── Primary brand ──────────────────────────────────────────────────────────
-// The brand fill IS the action orange — one value, so a "primary" surface and
-// an "action" surface can never drift apart. Ink on it is WHITE.
-export const PRIMARY      = ORANGE
-export const PRIMARY_BG   = ORANGE_SOFT
-// A solid, light brand-tinted surface for the rare full-screen case where a
-// translucent overlay would be wrong (the Android status bar cannot accept
-// alpha and would mismatch the screen underneath).
-export const PRIMARY_LIGHT = '#E8F0EB'
-// The brand GROUND: ORANGE laid over BG and flattened to a solid hex, because
-// the surfaces that use it — the launcher icon, the adaptive-icon background,
-// the splash screen (app.json) and the web favicon / og-image — are all places
-// alpha cannot go. `scripts/build-icons.mjs` recomputes this mix from ORANGE +
-// BG and refuses to build if this constant has drifted from it, so the value
-// is derived, never hand-picked.
-export const PRIMARY_GROUND = '#F2CCC1'  // ORANGE at 25% over BG
+// ── Primary brand (the in-app action purple) ─────────────────────────────────
+// The in-app action fill = the ONE regular purple (GREEN/INK #5C4A94), the SAME
+// value as every heading and selected surface. Buttons, the heart, chat "mine"
+// bubbles, chips and every positive signal are this single purple now (user
+// directive 2026-07-25) — the saturated #6C3FB2 stays on the brand ICON only.
+// A held-down button darkens to PRESSED; ink on the fill is WHITE.
+export const PRIMARY      = GREEN
+export const PRIMARY_BG   = GREEN_SOFT
 
-// ── Borders ────────────────────────────────────────────────────────────────
-export const BORDER_SOFT   = '#E5DFD4'  // hairlines on the warm page
-export const BORDER_STRONG = 'rgba(65,122,98,0.38)'  // a green outline (secondary button)
+// ── PRIMARY_GROUND (purple #5 — the pale step) ───────────────────────────────
+// ORANGE flattened over BG at 25% into a solid hex, for the surfaces where alpha
+// can't go: the launcher icon, adaptive-icon background, splash, web favicon /
+// og-image (app.json). `scripts/build-icons.mjs` recomputes this mix and refuses
+// to build if it has drifted, so it is derived, never hand-picked. Every other
+// pale-purple surface folds into it: incoming chat bubbles / soft tiles (GREEN_WASH).
+export const PRIMARY_GROUND = '#D1C2D9'  // ORANGE at 25% over BG
+export const GREEN_WASH     = PRIMARY_GROUND  // muted purple SURFACE: incoming bubbles, soft tiles
 
-// ── Header chrome ─────────────────────────────────────────────────────────
-// Flat, no gradients and no drop-shadow.
-export const HEADER_TEXT_SHADOW = 'rgba(0,0,0,0.18)'
-// Selected-tab gliding "lozenge": a borderless glass chip that slides behind
-// the active tab. A native BlurView (expo-blur) provides the material.
-export const HEADER_PILL_TINT = 'light' as const
-export const HEADER_PILL_INTENSITY = 55
-export const HEADER_PILL_SHADOW = '0px 6px 18px rgba(0,0,0,0.18)'
-export const HEADER_PILL_IOS_BASE = 'rgba(255,255,255,0.30)'
+// ── Status strip ─────────────────────────────────────────────────────────────
+// The fade behind the OS status glyphs (`StatusBarBand`), the regular INK
+// purple, applied at a 0.5 → 0 vertical fade in the component (stops live there).
+export const STATUS_BAND = INK
 
 // ── On-photo chrome ───────────────────────────────────────────────────────
-// Everything that sits ON TOP OF A PHOTO — the chips, every round overlay
-// button — is a WHITE tile carrying BLACK ink, exactly as in the reference
-// card. Opaque on purpose: the photo underneath is arbitrary, so the chip has
-// to supply its own contrast rather than hope the picture is dark enough.
-export const PHOTO_CHROME = '#FFFFFF'
-// The one opaque black in the palette, and the ONLY place black is allowed as
-// a fill. Not a brand colour: it exists for DROP SHADOWS and for SVG gradient
-// stops that darken a photo behind a caption — things whose job is to
-// subtract light. Never a surface, a border or text.
+// Everything ON TOP OF A PHOTO — the chips, every round overlay button — is a
+// light-beige tile (the same beige-3 SURFACE as every other lifted surface);
+// the photo underneath is arbitrary so it must supply its own contrast.
+export const PHOTO_CHROME = SURFACE
+
+// ── The one black: shadows only ──────────────────────────────────────────────
+// The ONLY black in the palette, and the only place black is allowed. Its job is
+// to SUBTRACT LIGHT: drop shadows (shadowColor = this, opacity set per elevation)
+// and the soft dark halo that keeps white on-photo glyphs legible over any photo.
+// Never a surface, a border, or text. PHOTO_INK_SHADOW is this same black baked
+// at the halo's opacity (a text/SVG shadow can't take a separate opacity prop),
+// and PHOTO_INK_SHADOW_FILTER is the ready-to-use CSS drop-shadow string.
 export const SCRIM_BLACK = '#000000'
+export const PHOTO_INK_SHADOW = 'rgba(0,0,0,0.9)'
+export const PHOTO_INK_SHADOW_FILTER = 'drop-shadow(0px 1px 4px rgba(0,0,0,0.9))'
+
+// The soft lift shadow every floating tile over a photo casts — the round
+// overlay buttons AND the on-photo chips — so they read as one fabric sitting
+// off the image. Discrete RN shadow props (not a boxShadow string) so it also
+// carries the Android `elevation` the buttons rely on. Single source: both
+// RoundButton and Chip spread this, never re-type the numbers.
+export const LIFT_SHADOW = {
+  shadowColor: SCRIM_BLACK,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.25,
+  shadowRadius: 8,
+  elevation: 6,
+} as const
 
 // ── Text selection ────────────────────────────────────────────────────────
-// Must stay translucent: an opaque highlight under the ink renders an
-// unreadable solid block. The caret stays opaque via cursorColor.
-export const SELECTION = 'rgba(65,122,98,0.25)'
-// The same role inverted, for an input whose text is WHITE on a dark or green
-// field, where the wash above would disappear.
-export const SELECTION_ON_DARK = 'rgba(255,255,255,0.28)'
+// Must stay translucent: an opaque highlight under the ink renders an unreadable
+// solid block. The caret stays opaque via cursorColor.
+export const SELECTION = 'rgba(92,74,148,0.25)'
 
 // ── Semantic signals ──────────────────────────────────────────────────────
-// POSITIVE is ORANGE by explicit instruction (2026-07-21): orange is the
-// app's "good news" hue, green is reserved for things you press. NEGATIVE
-// keeps its own red — it is the one meaning neither brand hue can carry.
-export const ONLINE_GREEN = ORANGE   // presence dot: someone is here NOW
-export const POSITIVE     = ORANGE   // an added-stars delta (+N)
-export const NEGATIVE     = '#C0392B' // a removed-stars delta (-N)
+// No red in the palette (2026-07-25): NEGATIVE, an error or a removed-stars
+// delta, is the regular INK purple. No second accent hue, and no deep tone —
+// the deep purple is PRESSED-only now (user directive 2026-07-25).
+export const ONLINE_GREEN = PRIMARY  // presence dot: someone is here NOW (the one purple)
+export const NEGATIVE     = INK      // an error / a removed-stars delta (-N)
 
 // ── Premium ──────────────────────────────────────────────────────────────
-// Paid / premium affordances are ORANGE — the same "good news" hue as the
-// heart, so buying reads as a positive, not as another navigation button.
-export const PREMIUM = ORANGE
+// Paid / premium affordances are the one action purple — the same hue as the heart.
+export const PREMIUM = PRIMARY
 
-// ── Illustration palette ──────────────────────────────────────────────────
-// The empty-state spot illustrations (telescope = "visible/scanning",
-// crescent moon = "hidden") are GREEN line-art on the light page. Both share
-// this one palette by contract (they are the same scene in two modes) —
-// defined once here, never re-inlined per component.
-//
-// NOTE: opaque, hand-tuned steps — NOT low-alpha. The shapes are already drawn
-// with per-path `opacity`; an alpha fill would double-composite against that
-// and against the page, muddying the ramp.
-//
-// Layered for depth, lightest → darkest:
-//   WASH   = the page itself — the moon's crescent cutout / lens-disc core,
-//            i.e. the parts "carved back to the background"
-//   CLOUD  pale green — drifting clouds, recede behind the figure
-//   LINE   mid green — tube/moon outline & shade, craters
-//   BODY   deep green — the tube / moon face, the anchor shape
-//   STRUCT deep green — tripod legs & mount, the load-bearing lines
-//   ACCENT orange — sparkles & lens ring: the one positive spark in the scene
-export const ILLUSTRATION_WASH   = BG
-export const ILLUSTRATION_CLOUD  = '#BBD2C6'
-export const ILLUSTRATION_BODY   = GREEN_DEEP
-export const ILLUSTRATION_LINE   = GREEN
-export const ILLUSTRATION_STRUCT = GREEN_DEEP
-export const ILLUSTRATION_ACCENT = ORANGE

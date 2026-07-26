@@ -43,9 +43,10 @@ export default {
   'ob.createAccount': 'צור חשבון',
   'ob.createAccount_m': 'צור חשבון',
   'ob.createAccount_f': 'צרי חשבון',
-  'ob.birthConfirm': 'יום ההולדת שלך הוא {date} ואת/ה בן/בת {age}?',
-  'ob.birthConfirm_m': 'יום ההולדת שלך הוא {date} ואתה בן {age}?',
-  'ob.birthConfirm_f': 'יום ההולדת שלך הוא {date} ואת בת {age}?',
+  'ob.birthConfirmTitle': 'אימות תאריך הלידה',
+  'ob.birthConfirm': 'יום ההולדת שלך הוא {date} ואת/ה בן/בת {age}.',
+  'ob.birthConfirm_m': 'יום ההולדת שלך הוא {date} ואתה בן {age}.',
+  'ob.birthConfirm_f': 'יום ההולדת שלך הוא {date} ואת בת {age}.',
   'ob.birthConfirmFix': 'תיקון',
 
   // Onboarding photo
@@ -54,7 +55,7 @@ export default {
 
   // Onboarding bio
   'bio.placeholder': 'משפט, תחושה או רגע שמספרים עליך...',
-  'bio.submit': 'המשך',
+  'bio.submit': 'סיום',
   'bio.min': 'מינימום 20 תווים',
   'bio.update': 'עדכון',
 
@@ -151,6 +152,94 @@ export default {
   'settings.groupsLeaveTitle': 'לעזוב את {name}?',
   'settings.groupsLeaveDesc': 'אפשר להצטרף שוב בהמשך בעזרת קוד הקבוצה.',
   'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
+
+  // Communities: the menu row + the full hub sheet and its sub-screens.
+  'communities.menuRow': 'קהילות',
+  'communities.title': 'קהילות',
+  'communities.myFriends': 'החברים שלי',
+  'communities.myFriendsSub': 'אנשים שאתה מכיר אישית',
+  'communities.manageSection': 'קבוצות שאני מנהל',
+  'communities.inSection': 'קבוצות שאני חבר בהן',
+  'communities.create': 'יצירת קבוצה',
+  'communities.find': 'חיפוש והצטרפות לקבוצה',
+  'communities.public': 'ציבורית',
+  'communities.private': 'פרטית',
+  'communities.membersCount': '{count} חברים',
+  'communities.oneMember': 'חבר אחד',
+  'communities.rowSummary': '{groups} קבוצות · {friends} חברים',
+  'communities.rowGroupsOnly': '{groups} קבוצות',
+  'communities.rowFriendsOnly': '{friends} חברים',
+  'communities.requestsChip': '{count} בקשות',
+  'communities.managedBy': 'מנוהלת על ידי {name}',
+  'communities.emptyManage': 'עוד לא יצרת קבוצה.',
+  'communities.emptyIn': 'עוד לא הצטרפת לקבוצה.',
+  'communities.loadError': 'טעינה נכשלה, נסה שוב.',
+
+  // My friends
+  'communities.inviteFriend': 'הזמנת חבר לאפליקציה',
+  'communities.linkFriend': 'שיוך חבר קיים',
+  'communities.friendsCount': '{count} חברים',
+  'communities.requestsSection': 'בקשות חברות',
+  'communities.accept': 'אישור',
+  'communities.decline': 'דחייה',
+  'communities.remove': 'הסרה',
+  'communities.noFriends': 'עוד אין לך חברים כאן.',
+  'communities.friendsHint': 'הזמן חברים או שייך חברים קיימים, ותראו זה את זה בעדיפות גבוהה.',
+  'communities.mutualNote': 'חברים שלך רואים זה את זה קודם, עם הסימון חבר משותף.',
+  'communities.unfriendTitle': 'להסיר את {name} מהחברים?',
+  'communities.unfriendDesc': 'אפשר לשייך שוב בהמשך.',
+  'communities.unfriendConfirm': 'הסרה',
+
+  // Link an existing friend
+  'communities.linkTitle': 'שיוך חבר',
+  'communities.searchPeople': 'חיפוש לפי שם',
+  'communities.request': 'בקשה',
+  'communities.requested': 'נשלח',
+  'communities.alreadyFriend': 'חבר',
+  'communities.searchHint': 'הקלד שם כדי לחפש.',
+  'communities.noResults': 'אין תוצאות.',
+  'communities.linkNote': 'הצד השני יקבל בקשה. אחרי אישור אתם מחוברים בשני הכיוונים.',
+
+  // Create a group
+  'communities.newGroup': 'קבוצה חדשה',
+  'communities.name': 'שם',
+  'communities.namePlaceholder': 'שם הקבוצה',
+  'communities.whoCanFind': 'מי יכול למצוא',
+  'communities.privateSub': 'בקישור בלבד',
+  'communities.publicSub': 'ניתנת לחיפוש',
+  'communities.privacyNote': 'קבוצה פרטית לא מופיעה בחיפוש, משתפים את הקישור באופן ידני.',
+  'communities.createAction': 'יצירת הקבוצה',
+  'communities.nameError': 'צריך שם קצר יותר.',
+
+  // A group you manage
+  'communities.shareInvite': 'שיתוף קישור הזמנה',
+  'communities.deleteGroup': 'מחיקת הקבוצה',
+  'communities.deleteTitle': 'למחוק את {name}?',
+  'communities.deleteDesc': 'הקבוצה וכל החברויות בה יימחקו. אי אפשר לבטל.',
+  'communities.deleteConfirm': 'מחיקה',
+  'communities.removeMemberTitle': 'להסיר את {name}?',
+  'communities.removeMemberDesc': 'אפשר להצטרף שוב עם קוד ההזמנה.',
+  'communities.makePublic': 'הפיכה לציבורית',
+  'communities.makePrivate': 'הפיכה לפרטית',
+  'communities.owner': 'בעלים',
+  'communities.manager': 'מנהל',
+  'communities.makeManager': 'מינוי כמנהל',
+  'communities.removeManager': 'הסרת ניהול',
+  'communities.removeFromGroup': 'הסרה מהקבוצה',
+
+  // A group you are in
+  'communities.leave': 'עזיבת הקבוצה',
+  'communities.memberNote': 'חברי הקבוצה מופיעים אצלך בעדיפות גבוהה. רק המנהל רואה את רשימת החברים.',
+
+  // Find or join
+  'communities.findTitle': 'הצטרפות לקבוצה',
+  'communities.findSearch': 'חיפוש קבוצה',
+  'communities.orCode': 'או בקוד הזמנה',
+  'communities.join': 'הצטרפות',
+  'communities.joined': 'חבר',
+  'communities.findNote': 'בחיפוש מופיעות רק קבוצות ציבוריות.',
+  'communities.shareMessage': 'הצטרפו לקבוצה {name} ב-once: {link}',
+
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'דיווח על תקלה',
   'bugReport.title': 'דיווח על תקלה',
@@ -319,6 +408,10 @@ export default {
   // "coming soon") and inviting a friend is the only way to earn extra, so the
   // copy talks about getting credits rather than buying them.
   'credits.buy.title': 'עוד קרדיטים',
+  // Same sheet, opened at the paywall moment (an invite/accept the user can't
+  // afford). There the title names the reason it appeared instead of the thing
+  // it offers. Reached from the settings credits row, it keeps the title above.
+  'credits.buy.emptyTitle': 'נגמרו לך הקרדיטים',
   'credits.buy.desc': 'קרדיטים שתקבל מצטרפים לקרדיטים שכבר יש לך, ולא יתבטלו עם הזמן.',
   'credits.buy.priceFree': 'חינם',
   'credits.buy.comingSoon': 'בקרוב',
@@ -330,7 +423,7 @@ export default {
   // would print the marker as-is. The friend stays ungendered ("חבר" covers
   // any friend you'd invite).
   'credits.invite.title': '{הזמן|הזמיני} חבר',
-  'credits.invite.joined.none': 'הקרדיט מגיע כשהחבר מוריד את האפליקציה ומשלים פרופיל.',
+  'credits.invite.joined.none': 'הקרדיט מגיע כשהחבר מוריד את האפליקציה ופותח חשבון.',
   'credits.invite.joined.one': 'חבר אחד הצטרף דרכך.',
   'credits.invite.joined.many': '{n} חברים הצטרפו דרכך.',
   // Text that rides along with the link in the OS share sheet.
@@ -802,10 +895,6 @@ export default {
   'home.watchingAccept_m': 'להתמקד בו',
   'home.watchingAccept_f': 'להתמקד בה',
   'home.watchingReject': 'דילוג',
-  'home.skipHintTitle': 'אפשר להחליק את הכרטיס למטה',
-  'home.skipHintDesc': 'בפעם הבאה החליקו את הכרטיס למטה כדי לדלג במהירות לפרופיל אחר. רוצים לדלג עכשיו?',
-  'home.skipHintCancel': 'הבנתי',
-  'home.skipHintConfirm': 'לדלג',
   // Shown in the rotating-headline slot for the duration of the first-time
   // swipe-down tutorial, instead of that card's random skip line: while the
   // card peeks down and reveals the slot, the text names the gesture.
@@ -841,7 +930,7 @@ export default {
   'chat.blockTitle': 'חסימת משתמש',
   'chat.blockDesc': 'המשתמש ייחסם ולא יוכל ליצור איתך קשר שוב. לא ניתן לבטל פעולה זו.',
   'chat.blockConfirm': 'חסימה',
-  'chat.endChat': 'סיום',
+  'chat.endChat': 'סיום צ\'אט',
   'chat.leave': 'עזיבה',
   'chat.a11y.close': 'סגירת הצ\'אט',
   'chat.a11y.closeImage': 'סגירת התמונה',
@@ -868,6 +957,14 @@ export default {
   'chat.scheduleTitle_m': 'הימים שאני פנוי (ללא ילדים)',
   'chat.scheduleTitle_f': 'הימים שאני פנויה (ללא ילדים)',
   'chat.retry': 'שלח שנית',
+  'chat.reply.image': 'תמונה',
+  'chat.reply.audio': 'הודעה קולית',
+  'chat.reply.location': 'מיקום',
+  'chat.reply.schedule': 'לוז',
+  'chat.reply.a11y': 'תגובה להודעה',
+  'chat.reply.you': 'את',
+  'chat.reply.you_m': 'אתה',
+  'chat.reply.you_f': 'את',
 
   // Push notifications
   'push.WATCHING': 'הזדמנות חדשה',
@@ -892,9 +989,6 @@ export default {
   'home.a11y.closeMenu': 'סגירת התפריט',
   'home.a11y.closeInvite': 'סגירת ההזמנה',
   'home.a11y.closeProfile': 'סגירת הפרופיל',
-  // צ'יפ הגיל שמופיע על התמונה. מגדרי דרך tg(): בן/בת + הגיל.
-  'home.ageChip_m': 'בן {age}',
-  'home.ageChip_f': 'בת {age}',
   'home.locatingDesc': 'סורק אנשים בסביבתך',
   'home.loadingProfile': 'טוען נתוני פרופיל',
   'home.noOneNearbyTitle': 'אין כרגע אנשים בסביבה',

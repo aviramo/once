@@ -27,7 +27,10 @@ import Animated, {
   Easing, runOnJS, type SharedValue,
 } from 'react-native-reanimated'
 import { I18nManager } from 'react-native'
-import { PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY } from '../tokens'
+import {
+  PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY,
+  PULL_TUTORIAL_START_DELAY_MS, PULL_TUTORIAL_HOLD_MS,
+} from '../tokens'
 import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
 
 /** Which way a surface is dragged away.
@@ -406,7 +409,7 @@ export function usePullBehavior(opts: {
     const finish = () => { setPulling(false); setTutorialPlaying(false) }
     pullY.value = withSequence(
       withTiming(peek),
-      withDelay(1000, withTiming(0, undefined, finished => {
+      withDelay(PULL_TUTORIAL_HOLD_MS, withTiming(0, undefined, finished => {
         'worklet'
         if (finished) runOnJS(finish)()
       })),
@@ -433,7 +436,7 @@ export function usePullBehavior(opts: {
           if (cancelled) return
           setTutorialPlaying(true)
           playTutorial()
-        }, 500)
+        }, PULL_TUTORIAL_START_DELAY_MS)
       } catch {}
     })()
     return () => { cancelled = true; if (timer) clearTimeout(timer) }

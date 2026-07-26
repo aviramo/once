@@ -7,18 +7,18 @@ import { PullScrollView, PullContext } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
-import { t, tg } from '../i18n'
+import { t } from '../i18n'
 import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
 import { BIO_MIN, BIO_MAX, normalizeBio } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import type { FamilyData } from '../lib/family'
 import { buildFamilyChipText } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, ShieldIcon, GroupsIcon, UserIcon } from './icons'
+import { HeartIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { Button } from './Button'
-import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG } from '../colors'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { BG, INK, SURFACE, BLACK, WHITE, GREEN, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BIO_INK } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -109,10 +109,16 @@ export type BioEdit = {
 function BioField({
   edit,
   onFocusRequested,
+  onPhoto = false,
 }: {
   edit: BioEdit
   /** Ask the parent card to scroll this field above the keyboard. */
   onFocusRequested: () => void
+  /** When rendered inside the on-photo beige chip (own-profile preview), the
+   * field styles itself byte-for-byte like the static remote bio: purple
+   * BIO_INK, START-aligned, larger. Otherwise it matches the white fallback
+   * bubble (own-profile editor with a single photo). */
+  onPhoto?: boolean
 }) {
   const { value, saving, onCommit } = edit
   const [draft, setDraft] = useState(value)
@@ -176,13 +182,13 @@ function BioField({
   return (
     <>
       <TextInput
-        style={[styles.aboutText, styles.bioInput]}
+        style={[onPhoto ? styles.photoBioText : styles.aboutText, styles.bioInput]}
         value={draft}
         onChangeText={v => setDraft(v.slice(0, BIO_MAX))}
         maxLength={BIO_MAX}
         multiline
         scrollEnabled={false}
-        textAlign="center"
+        textAlign={onPhoto ? 'left' : 'center'}
         textAlignVertical="top"
         placeholder={t('bio.placeholder')}
         placeholderTextColor={BLACK_MID}
@@ -348,13 +354,20 @@ type MatchCardProps = {
    * card). Pass `[]` for a card that carries no round action at all — the
    * own-profile preview, whose adds are `addChips` instead. */
   actions?: CardAction[]
-  /** Add-affordances for the own-profile preview, rendered as one row of
-   * chips at the BOTTOM of the fact-chip column rather than as round buttons
-   * over the photo (user directive 2026-07-22). An "add" is a slot in the
-   * same list of facts the chips above it state, so it belongs in that
-   * column; the `action` tone is what keeps a "do this" from reading as
-   * "here is a fact". */
+  /** Add-affordances for the own-profile preview, rendered as a COLUMN of
+   * chips PINNED to the card's top-END — outside the scroll, level with the
+   * sheet's close X and facing it across the card (user directive 2026-07-24).
+   * They are deliberately out of the bottom fact-chip column: everything down
+   * there states a fact about the profile, an add is a thing to do about it.
+   * The `action` tone is what keeps a "do this" from reading as "here is a
+   * fact". `chromeInset` is what lines them up with the X. */
   addChips?: CardAddChip[]
+  /** An action chip pinned BESIDE the name/age heading at the card's top-END
+   * (chat state only). A solid PURPLE tile with the same soft lift shadow the
+   * on-photo chips cast — today the "End chat" control, moved here from the
+   * chat sheet header (user directive 2026-07-26) so ending the conversation
+   * lives on the card, beside whom it ends. */
+  headingAction?: { label: string; onPress: () => void }
   /** When provided, a report (flag) RoundButton is overlaid at the TOP corner
    * of the hero photo (the chips side), in EVERY state — separate from the
    * bottom action stack so the report affordance lives in one consistent
@@ -415,6 +428,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   bioEdit,
   actions,
   addChips,
+  headingAction,
   onReport,
   isForKids,
   viewerFamily,
@@ -451,6 +465,16 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // memo doesn't thrash. In this mode the bio section always renders — even
   // with no bio yet — so the user can add one in place.
   const bioEditable = self && !!bioEdit
+  // True while the inline bio field holds focus — suppresses reels paging (so a
+  // keyboard-driven scroll isn't snapped to a page boundary) without forking the
+  // card's look otherwise.
+  const [bioFocused, setBioFocused] = useState(false)
+  // Refs the inline-bio keyboard handling reads from JS callbacks. Declared up
+  // here because bioOnSecondPhotoRef is assigned during render (below), before
+  // the rest of the keyboard wiring.
+  const bioPhotoYRef = useRef(0)          // content-Y of the 2nd photo section
+  const kbHeightRef = useRef(0)           // latest keyboard height
+  const bioOnSecondPhotoRef = useRef(false)
   const sections = useMemo((): CardSection[] => {
     const images = match.images ?? []
     const photos: CardSection[] = images
@@ -462,14 +486,89 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
         imageIndex: i,
         key: `photo-${img.normal}`,
       }))
+    // The bio is laid over the bottom of the SECOND photo (see render) as the
+    // beige chip, so photos 1 and 2 sit flush with no band between them (user
+    // directive 2026-07-25). This holds for the own-profile preview too: the
+    // inline editor renders INSIDE that same beige chip (user directive
+    // 2026-07-25), so a self card looks exactly like a match card. A standalone
+    // bubble survives only when there is no second photo to sit on (own-profile
+    // editor with a single photo, or a remote bio with one photo).
+    const bioAsBubble = photos.length < 2 && (bioEditable || !!match.bio)
     const built: CardSection[] = []
     if (photos.length > 0) built.push(photos[0])
-    if (match.bio || bioEditable) built.push({ type: 'bio', value: match.bio ?? '', key: 'bio' })
+    if (bioAsBubble) built.push({ type: 'bio', value: match.bio ?? '', key: 'bio' })
     for (let i = 1; i < photos.length; i++) built.push(photos[i])
     return built
   }, [match.user_id, match.images, imageUrls, match.bio, bioEditable])
 
   const photoCount = sections.filter(s => s.type === 'photo').length
+  // Key of the LAST photo section — the report button rides the bottom-center
+  // of that photo (user directive 2026-07-25), not the hero's top-END. When
+  // there is a single photo this resolves to the hero, so a one-photo profile
+  // still carries the report affordance.
+  const lastPhotoKey = useMemo(() => {
+    for (let i = sections.length - 1; i >= 0; i--) {
+      if (sections[i].type === 'photo') return sections[i].key
+    }
+    return null
+  }, [sections])
+  // Key of the SECOND photo — the remote bio is laid over its bottom (white
+  // text + shadow, like the chips) instead of a bubble between photos, so photos
+  // 1 and 2 sit flush. Null with <2 photos, where the bio falls back to a
+  // bubble (see the sections builder).
+  const secondPhotoKey = useMemo(() => {
+    const keys = sections.filter(s => s.type === 'photo').map(s => s.key)
+    return keys[1] ?? null
+  }, [sections])
+  // The bio rides the bottom of the 2nd photo as the beige chip whenever a 2nd
+  // photo exists — static text on a remote card, the inline editor on the
+  // own-profile preview (bioEditable), which renders even with an empty bio so
+  // one can be added in place. Mirrored into a ref for the keyboard-scroll math.
+  const bioOnSecondPhoto = !!secondPhotoKey && (bioEditable || !!match.bio)
+  bioOnSecondPhotoRef.current = bioOnSecondPhoto
+  // Key of the hero section (the first section, expected to be a photo). Used
+  // both as its React key and as its snap-offset key below.
+  const heroKey = sections[0]?.type === 'photo' ? sections[0].key : 'hero'
+  // ── Reels-style paging ─────────────────────────────────────────────────────
+  // Photos sit flush (no gaps) and each is a full viewport tall, so `pagingEnabled`
+  // makes a single swipe settle straight onto the next photo, like Reels. It's a
+  // pure content prop — the native gesture arbitration is unchanged, so the
+  // shell's pull-to-skip pan (a downward drag from the top) still wins there: at
+  // offset 0 the paged scroll can't move up (bounces are off) and yields to the
+  // pull. Disabled only in the own-bio editor, whose sections aren't full pages
+  // and whose keyboard-driven scroll must not be snapped to a page boundary.
+  // (An earlier `snapToOffsets` attempt broke the skip — its snap-to-start on the
+  // 0 offset claimed the top-edge down-drag; `pagingEnabled` has no such offset.)
+  // Reels paging is on everywhere now — including the own-profile preview, so it
+  // scrolls exactly like a match card (user directive 2026-07-25). It is
+  // suppressed ONLY while the inline bio field is focused, so a keyboard-driven
+  // scroll isn't snapped to a page boundary mid-edit.
+  const pagingAllowed = !bioFocused
+  // With a status card on top (invite sent / received / event message) the timer
+  // spacer pushes the photos down, so viewport-multiple `pagingEnabled` would
+  // land mid-photo (a swipe off the status card shows a sliver of the hero, not
+  // the whole photo). In those states we instead snap to the MEASURED section
+  // tops: 0 keeps the status card (with its cancel/reply button) reachable, and
+  // the hero's measured top lands the FIRST photo in full. Those states carry no
+  // pull-to-skip, so the snap machinery owning the top edge is harmless there.
+  const sectionYRef = useRef<Map<string, number>>(new Map())
+  const [measureTick, setMeasureTick] = useState(0)
+  const recordSectionY = useCallback((key: string, y: number) => {
+    const rounded = Math.round(y)
+    if (sectionYRef.current.get(key) === rounded) return
+    sectionYRef.current.set(key, rounded)
+    setMeasureTick(t => t + 1)
+  }, [])
+  const snapOffsets = useMemo(() => {
+    const tops = Array.from(sectionYRef.current.values())
+    return Array.from(new Set<number>([0, ...tops])).sort((a, b) => a - b)
+    // measureTick is the change signal for the ref-held map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measureTick])
+  // The heart/chat action floats FIXED over the card (never scrolls) — rendered
+  // as a pinned overlay after the ScrollView (user directive 2026-07-25). Both
+  // the reserved gap on the chip column and that overlay derive from this.
+  const showFloatingAction = sections[0]?.type === 'photo' && (actions ? actions.length > 0 : true)
   const loadedCount = useRef(0)
   useEffect(() => { loadedCount.current = 0 }, [match.user_id])
   useEffect(() => { if (photoCount === 0) onReady?.() }, [photoCount])
@@ -491,6 +590,18 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // — it lives on the chip column alone (infoLeft), or the heart rides up with
   // it and leaves its anchored position.
   const overlayBottomOffset = Math.max(safeBottomInset, MD)
+  // Report affordance: the same round primitive as the hero heart (full
+  // ROUND_BUTTON_SIZE, huge glyph), kept GREEN, centered along the bottom of
+  // the LAST photo. Rendered on whichever photo section is last so it reads as
+  // "having seen the whole profile, flag it" rather than sitting in the shell
+  // chrome. Omitted for the own-profile preview (no onReport).
+  const renderReportOverlay = () => onReport ? (
+    <View pointerEvents="box-none" style={[styles.reportOverlay, { paddingBottom: overlayBottomOffset }]}>
+      <RoundButton onPress={onReport}>
+        <ShieldIcon color={GREEN} fill={GREEN} size={ICON.huge} />
+      </RoundButton>
+    </View>
+  ) : null
   const ready = effectiveCardH > 0
   const timeIso = match.last_seen
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
@@ -508,11 +619,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // a person with no name at all.
   const nameChipText = nameFromTitle(match.title)
   const age = ageFromTitle(match.title)
-  const ageChipText = age ? tg('home.ageChip', match.is_male).replace('{age}', age) : ''
-  // Name and age live in ONE chip ("נטע, בת 45"). Either half can be missing —
-  // an unnamed match, or one with no birth date — so the comma is applied by
-  // joining the present parts, never leaving a stray separator behind.
-  const identityChipText = [nameChipText, ageChipText].filter(Boolean).join(', ')
+  // Name and age live in ONE chip, as bare "נטע, 45" — no gendered בן/בת prefix
+  // (2026-07-24). Either half can be missing — an unnamed match, or one with no
+  // birth date — so the comma is applied by joining the present parts, never
+  // leaving a stray separator behind.
+  const identityChipText = [nameChipText, age].filter(Boolean).join(', ')
 
   // Several facts in one label; Chip's phraseWrap decides where it breaks.
   const familyChipText = useMemo(
@@ -530,6 +641,11 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const slideAnim = useSharedValue(hasTopBlock ? 1 : 0)
   const animatedRef = useRef(false)
   const wasAbsentRef = useRef(false)
+  // Guards the scroll-to-top on a watching → waiting transition so it fires
+  // exactly once per transition. Separate from `animatedRef` (which gates the
+  // measurement-dependent slide-in) because the scroll fires FIRST, before the
+  // topBlock measures — see the transition effect below.
+  const scrolledForTopBlockRef = useRef(false)
   const scrollRef = useAnimatedRef<any>()
   const scrollYRef = useRef(0)
   // The pull pane (page1/page2) provides this context. `pullEngaged` is a
@@ -554,15 +670,26 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const bioFocusedRef = useRef(false)
   const [kbHeight, setKbHeight] = useState(0)
   const scrollBioIntoView = useCallback(() => {
-    // Land the bubble a hair below the viewport top. It's the section right
-    // after the hero, so a near-top offset is always clear of the keyboard
-    // regardless of keyboard height.
-    const target = Math.max(0, bioSectionYRef.current - MD)
     // Defer one tick so the focus-triggered layout/resize settles first.
-    setTimeout(() => scrollRef.current?.scrollTo({ y: target, animated: true }), 60)
-  }, [])
+    setTimeout(() => {
+      let target: number
+      if (bioOnSecondPhotoRef.current) {
+        // Bio on the 2nd photo: scroll so that photo's BOTTOM (where the beige
+        // chip sits) lands just above the keyboard. The extra kb-height bottom
+        // padding (kbPad) makes room to reach it. photoHeight ~= viewport.
+        const photoBottom = bioPhotoYRef.current + photoHeight
+        const visible = Math.max(1, viewportHRef.current - kbHeightRef.current)
+        target = Math.max(0, photoBottom - visible + MD)
+      } else {
+        // Bubble fallback (single photo): land it a hair below the viewport top.
+        target = Math.max(0, bioSectionYRef.current - MD)
+      }
+      scrollRef.current?.scrollTo({ y: target, animated: true })
+    }, 60)
+  }, [photoHeight])
   const onBioFocusRequested = useCallback(() => {
     bioFocusedRef.current = true
+    setBioFocused(true)
     scrollBioIntoView()
   }, [scrollBioIntoView])
   // While the bio editor is focused, a tap outside it (a photo, the family
@@ -590,13 +717,17 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
     const showSub = Keyboard.addListener(showEvt, e => {
-      setKbHeight(e.endCoordinates?.height ?? 0)
+      const h = e.endCoordinates?.height ?? 0
+      kbHeightRef.current = h
+      setKbHeight(h)
       // On Android the window resizes after the keyboard shows; re-assert the
-      // scroll target so the bubble ends up correctly placed post-reflow.
+      // scroll target so the field ends up correctly placed post-reflow.
       if (bioFocusedRef.current) scrollBioIntoView()
     })
     const hideSub = Keyboard.addListener(hideEvt, () => {
       bioFocusedRef.current = false
+      setBioFocused(false)
+      kbHeightRef.current = 0
       setKbHeight(0)
     })
     return () => { showSub.remove(); hideSub.remove() }
@@ -616,6 +747,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false })
     scrollYRef.current = 0
+    // Drop the previous card's measured section tops so its snap offsets can't
+    // carry into the new card before this one re-measures.
+    sectionYRef.current.clear()
+    setMeasureTick(t => t + 1)
   }, [match.user_id])
   const contentHRef = useRef(0)
   const viewportHRef = useRef(0)
@@ -657,6 +792,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     if (!hasTopBlock) {
       wasAbsentRef.current = true
       animatedRef.current = false
+      scrolledForTopBlockRef.current = false
       slideAnim.value = 0
       if (topBlockHeight !== 0) setTopBlockHeight(0)
       return
@@ -667,20 +803,29 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
       slideAnim.value = 1
       return
     }
-    // watching → waiting transition: wait until the timer block has measured
-    // before we move anything. If the user scrolled down (e.g. tapped the
-    // heart or the invite block sat at the bottom), scroll back to the top
-    // first, then start the timer's slide-in from above. Two coherent
-    // motions back-to-back: scroll up, then timer descends.
+    // watching → waiting transition (e.g. the invite popup just sent). Two
+    // coherent motions back-to-back: scroll up, then the timer descends.
+    //
+    // Scroll the card to the top the INSTANT the topBlock appears — the same
+    // React commit that drops the invite popup — WITHOUT waiting for the
+    // block to measure. Gating the scroll on `topBlockHeight` (its onLayout
+    // round-trip) made it visibly lag the popup's dismissal: on Android that
+    // layout pass is starved until the dismissing popup Modal finishes tearing
+    // down, so the user saw the popup fall, a pause, then the scroll, and read
+    // the gap as a freeze. The scroll target is always y=0, so it needs no
+    // measurement. The slide-in below still waits for the measured height.
     //
     // The scroll uses the native ScrollView animation (UI thread). The
     // earlier rAF-based easing competed with the JS thread for cycles
     // during the post-press React commit and looked stuttery.
+    if (!scrolledForTopBlockRef.current) {
+      scrolledForTopBlockRef.current = true
+      if (scrollYRef.current > 0) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true })
+      }
+    }
     if (animatedRef.current || topBlockHeight === 0) return
     animatedRef.current = true
-    if (scrollYRef.current > 0) {
-      scrollRef.current?.scrollTo({ y: 0, animated: true })
-    }
     // Slide-in uses Reanimated's default withTiming duration; the optional
     // onTopBlockShown callback fires from the same animation's completion
     // path so the parent doesn't have to mirror our timing.
@@ -726,6 +871,13 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
         nestedScrollEnabled
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
+        // Reels paging. Without a status card: `pagingEnabled` (full-viewport
+        // photos from offset 0; leaves the pull-to-skip untouched). With a status
+        // card: snap to the measured section tops so a swipe lands the first photo
+        // in full despite the timer spacer (see the note by `snapOffsets`).
+        pagingEnabled={pagingAllowed && !hasTopBlock}
+        snapToOffsets={pagingAllowed && hasTopBlock && snapOffsets.length > 1 ? snapOffsets : undefined}
+        snapToAlignment="start"
         onScroll={(e: any) => {
           const y = e.nativeEvent.contentOffset.y
           scrollYRef.current = y
@@ -761,8 +913,9 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
         )}
         {/* Hero: always the first section (expected to be a photo) */}
         <Animated.View
-          key={sections[0]?.type === 'photo' ? sections[0].key : 'hero'}
+          key={heroKey}
           style={{ height: photoHeight }}
+          onLayout={e => recordSectionY(heroKey, e.nativeEvent.layout.y)}
           exiting={onPhotoTap && sections[0]?.type === 'photo' ? FadeOut.duration(220) : undefined}
         >
           {sections[0]?.type === 'photo' && (
@@ -785,54 +938,26 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
-          {/* Top-END: the card's own chrome, in one row. Order in JSX (start
-              → end within the overlay container, which itself sits at the
-              screen END) is [group chip, report flag], so the report lands at
-              the SCREEN EDGE (outermost) and the group chip sits INSIDE it —
-              user directive 2026-07-20: "closest to the screen edge is the
-              report, then the group after". Either child is optional; the row
-              simply omits missing pieces.
+          {/* Report rides the bottom-center of the LAST photo, not the shell
+              chrome. When the profile has a single photo the hero IS the last
+              photo, so it carries the report here; otherwise it lands on the
+              trailing photo section below. Top-START/END are left to the shell
+              (home's hamburger, a sheet's close X). */}
+          {sections[0]?.type === 'photo' && sections[0].key === lastPhotoKey
+            ? renderReportOverlay()
+            : null}
 
-              Top-START is deliberately left empty: the shell paints its
-              floating chrome there (home's hamburger, a sheet's close X). */}
-          {sections[0]?.type === 'photo' && onReport ? (
-            <View
-              pointerEvents="box-none"
-              style={[styles.topEndOverlay, chromeTop > 0 && { paddingTop: chromeTop }]}
-            >
-              {onReport ? (
-                <RoundButton size={ROUND_BUTTON_SIZE_SM} onPress={onReport}>
-                  <ShieldIcon color={GREEN} fill={GREEN} size={ICON.round} />
-                </RoundButton>
-              ) : null}
-            </View>
-          ) : null}
-
-          {/* Two-column overlay at the bottom of the hero photo: left column
-              holds the name + chips stack (flex:1, so a long chip wraps its
-              text instead of colliding with the buttons); right column holds
-              the round-button stack (intrinsic width). A small gap separates
-              the groups. pointerEvents="box-none" so taps on empty regions
-              fall through to the photo. */}
+          {/* Bottom-of-hero overlay: the fact-chip stack. The name/age heading
+              no longer lives here — it is pinned FIXED to the card's top-END
+              (opposite the shell's hamburger), out of the scroll (see the
+              top-END column after the ScrollView). The heart/chat action also
+              floats fixed after the ScrollView so it never scrolls; the chip
+              column reserves a gap on the END side (floatingActionReserve) so a
+              long chip wraps before reaching it. pointerEvents="box-none" so
+              taps on empty regions fall through to the photo. */}
           <View pointerEvents="box-none" style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}>
-            <View pointerEvents="box-none" style={styles.infoLeft}>
+            <View pointerEvents="box-none" style={[styles.infoLeft, showFloatingAction && styles.floatingActionReserve]}>
               <View pointerEvents="box-none" style={styles.chipsStack}>
-                {/* Identity chip: name and age in ONE chip, led by the same
-                    person glyph the account row wears, so "who this is" reads
-                    identically wherever it appears. Deliberately NOT a cake —
-                    that glyph read as a birthday rather than as a fact.
-                    Either half may be missing, so the two are joined only
-                    when both are present. */}
-                {identityChipText ? (
-                  <View style={styles.chipsLine}>
-                    <Chip
-                      renderIcon={c => <UserIcon color={c} size={ICON.sm} />}
-                      text={identityChipText}
-                      tone="neutral"
-                      onPhoto
-                    />
-                  </View>
-                ) : null}
                 {proximityStr ? (
                   <View style={styles.chipsLine}>
                     <Chip
@@ -842,7 +967,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                       text={proximityStr}
                       tone="neutral"
                       onPhoto
-                      renderTrailing={proximityLive ? () => <PresenceDot /> : undefined}
+                      renderTrailing={proximityLive ? (c => <PresenceDot color={c} />) : undefined}
                     />
                   </View>
                 ) : null}
@@ -856,35 +981,21 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     />
                   </View>
                 ) : null}
-                {/* The adds close the column: everything above states a fact
-                    about the profile, these offer the facts still missing.
-                    One wrap row, so they sit side by side and only break to a
-                    second line when the column is genuinely too narrow. */}
-                {addChips && addChips.length > 0 ? (
+                {/* Shared group: the last fact line, under family/kids. Same
+                    on-photo tile as the chips above it. Moved here from the bio
+                    bubble (2026-07-25) at the user's request so every fact reads
+                    together on the photo. */}
+                {match.group_name ? (
                   <View style={styles.chipsLine}>
-                    {addChips.map(c => (
-                      <Chip
-                        key={c.key}
-                        renderIcon={c.renderIcon}
-                        text={c.label}
-                        tone="action"
-                        onPhoto
-                        onPress={c.onPress}
-                      />
-                    ))}
+                    <Chip
+                      renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                      text={match.group_name}
+                      onPhoto
+                    />
                   </View>
                 ) : null}
               </View>
             </View>
-
-            {sections[0]?.type === 'photo' && (() => {
-              const base: CardAction[] = actions ?? [{
-                key: 'like',
-                icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
-              }]
-              const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
-              return resolved.length > 0 ? <CardActionStack actions={resolved} /> : null
-            })()}
           </View>
         </Animated.View>
 
@@ -894,6 +1005,12 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             <Animated.View
               key={section.key}
               exiting={onPhotoTap ? FadeOut.duration(220) : undefined}
+              onLayout={e => {
+                recordSectionY(section.key, e.nativeEvent.layout.y)
+                if (bioEditable && section.key === secondPhotoKey) {
+                  bioPhotoYRef.current = e.nativeEvent.layout.y
+                }
+              }}
             >
               <LoadingImage
                 source={section.url}
@@ -909,6 +1026,34 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   onPress={() => handlePhotoTap(section.imageIndex)}
                 />
               )}
+              {/* Bio as a big BEIGE chip floated at the bottom of the second
+                  photo, inset on every side. Its END inset clears the floating
+                  heart (so it is never where the heart is); its bottom inset
+                  lifts it above the report button when this photo carries it. */}
+              {section.key === secondPhotoKey && bioOnSecondPhoto ? (
+                <View
+                  // Interactive on the own-profile preview so the inline editor
+                  // inside catches taps; a plain non-interactive label otherwise.
+                  pointerEvents={bioEditable ? 'auto' : 'none'}
+                  style={[
+                    styles.photoBioCard,
+                    {
+                      end: showFloatingAction ? ROUND_BUTTON_SIZE + MD + MD : MD,
+                      // Reserve the report's lane only when a report actually
+                      // renders here (never on the own-profile preview).
+                      bottom: overlayBottomOffset + LG
+                        + (section.key === lastPhotoKey && onReport ? ROUND_BUTTON_SIZE + MD : 0),
+                    },
+                  ]}
+                >
+                  {bioEditable && bioEdit ? (
+                    <BioField edit={bioEdit} onFocusRequested={onBioFocusRequested} onPhoto />
+                  ) : (
+                    <Text style={styles.photoBioText}>{match.bio}</Text>
+                  )}
+                </View>
+              ) : null}
+              {section.key === lastPhotoKey ? renderReportOverlay() : null}
             </Animated.View>
           )
           if (section.type === 'bio') {
@@ -926,19 +1071,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   ) : (
                     <Text style={styles.aboutText}>{section.value}</Text>
                   )}
-                  {/* Shared groups live with the bio, not up in the chrome: a
-                      group in common is something you READ about this person,
-                      the same as their bio. A wrap row so more than one still
-                      lays out if the field ever carries several. */}
-                  {match.group_name ? (
-                    <View style={styles.aboutGroups}>
-                      <Chip
-                        renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                        text={match.group_name}
-                        tone="neutral"
-                      />
-                    </View>
-                  ) : null}
                 </View>
               </View>
             )
@@ -956,6 +1088,66 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           <View style={{ flexGrow: 1, backgroundColor: footerBg }} />
         ) : null}
       </AnimatedPullScrollView>
+      {/* The heart/chat action, pinned over the card so it never scrolls: a
+          sibling of the ScrollView, anchored bottom-END at the same offset it
+          used to sit at inside the hero. The chip column reserves a matching
+          gap (infoLeftReserve) so nothing scrolls under it. */}
+      {showFloatingAction ? (
+        <View pointerEvents="box-none" style={[styles.actionStackFixed, { bottom: overlayBottomOffset }]}>
+          {(() => {
+            const base: CardAction[] = actions ?? [{
+              key: 'like',
+              icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
+            }]
+            const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
+            return <CardActionStack actions={resolved} />
+          })()}
+        </View>
+      ) : null}
+      {/* Top-END fixed column: the name/age heading, pinned opposite the
+          shell's hamburger (top-START) and OUT of the scroll so it stays put
+          while the profile scrolls under it (user directive 2026-07-25). On the
+          own-profile preview the add-chips follow it in the same column. Its
+          beige tile matches the round overlay buttons — same PHOTO_CHROME. */}
+      {identityChipText || headingAction || (addChips && addChips.length > 0) ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.topEndFixed, chromeTop > 0 && { paddingTop: chromeTop }]}
+        >
+          {identityChipText || headingAction ? (
+            // The heading row: the name/age chip pinned at the END, with the
+            // optional action chip (chat's "End") beside it on the START side.
+            <View style={styles.headingRow}>
+              {headingAction ? (
+                <Chip
+                  tone="solid"
+                  onPhoto
+                  text={headingAction.label}
+                  onPress={headingAction.onPress}
+                />
+              ) : null}
+              {identityChipText ? (
+                <Chip
+                  text={identityChipText}
+                  tone="neutral"
+                  onPhoto
+                  bold
+                />
+              ) : null}
+            </View>
+          ) : null}
+          {addChips?.map(c => (
+            <Chip
+              key={c.key}
+              renderIcon={c.renderIcon}
+              text={c.label}
+              tone="action"
+              onPhoto
+              onPress={c.onPress}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   )
 })
@@ -992,13 +1184,45 @@ const styles = StyleSheet.create({
     gap: MD,
     padding: MD,
   },
-  topEndOverlay: {
+  // Report button overlay: pinned to the bottom-START of the last photo — the
+  // opposite side from the floating heart/chat action (END), so it never sits in
+  // the middle (user directive 2026-07-25). paddingStart matches the heart's
+  // end inset; paddingBottom (overlayBottomOffset, set inline) matches the
+  // heart so both round buttons sit the same distance off the photo edge.
+  reportOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    start: 0,
+    end: 0,
+    paddingStart: MD,
+    alignItems: 'flex-start',
+  },
+  // Fixed top-END column: the name/age heading (always) with the own-profile
+  // add chips beneath it. Chrome, not content — a sibling of the scroll view
+  // (not a layer inside the hero), so it stays pinned to the card's top-END
+  // while the profile scrolls under it, opposite the shell's hamburger / level
+  // with a sheet's close X. Spans the full width so a long label wraps instead
+  // of overflowing; alignItems keeps the column parked on the END edge.
+  topEndFixed: {
     position: 'absolute',
     top: 0,
+    start: 0,
     end: 0,
     padding: MD,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: SM,
+  },
+  // The name/age heading row. alignSelf:'stretch' so it spans the fixed
+  // column's full width, letting justifyContent push the pair to the END edge
+  // and a long name chip flexShrink/wrap before crowding the action chip beside
+  // it. The action chip (chat's "End") leads, so under RTL the row mirrors and
+  // it lands on the correct physical side automatically.
+  headingRow: {
+    alignSelf: 'stretch',
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
     gap: SM,
   },
   infoLeft: {
@@ -1009,10 +1233,24 @@ const styles = StyleSheet.create({
     // edge and must not move with the chips.
     marginBottom: LG,
   },
+  // Reserve the END lane for the fixed floating action button, so on-photo text
+  // (the chip column AND the second-photo bio) wraps before reaching it — same
+  // footprint the in-flow action stack used to occupy: button width + old gap.
+  floatingActionReserve: {
+    marginEnd: ROUND_BUTTON_SIZE + MD,
+  },
   actionStack: {
     flexDirection: 'column-reverse',
     alignItems: 'center',
     gap: SM,
+  },
+  // The floating heart/chat action: pinned to the card's bottom-END so it never
+  // scrolls. `bottom` is set inline (overlayBottomOffset) to match the heart's
+  // old distance off the photo edge.
+  actionStackFixed: {
+    position: 'absolute',
+    end: MD,
+    alignItems: 'center',
   },
   actionItem: {
     position: 'relative',
@@ -1028,6 +1266,8 @@ const styles = StyleSheet.create({
     borderWidth: STROKE.base,
     borderColor: WHITE,
   },
+  // Gap between the frosted-glass chips (name + fact lines). SM keeps each
+  // frosted label a distinct, readable pill without the block feeling loose.
   chipsStack: {
     flexDirection: 'column',
     alignItems: 'flex-start',
@@ -1043,7 +1283,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: MD,
   },
-  aboutGroups: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SM, marginTop: MD },
+  // Bio as a big BEIGE chip floated at the bottom of the second photo, inset on
+  // every side (`start` here; `end` + `bottom` set inline so the END inset can
+  // clear the floating heart and the bottom inset can clear the report). Fully
+  // rounded like an oversized chip, padded on all sides.
+  photoBioCard: {
+    position: 'absolute',
+    start: MD,
+    backgroundColor: BG,
+    borderRadius: RADIUS,
+    padding: MD,
+  },
+  photoBioText: {
+    fontSize: TEXT.lg,
+    lineHeight: lh(TEXT.lg),
+    color: BIO_INK,
+    textAlign: 'left',
+  },
+  // Fallback bio bubble — only the own-profile editor and a bio with no second
+  // photo reach it (the remote bio is on-photo, above). Plain white card.
   aboutBubble: {
     alignSelf: 'stretch',
     alignItems: 'center',

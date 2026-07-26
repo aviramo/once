@@ -131,19 +131,6 @@ export function HamburgerIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}
   )
 }
 
-// Vertical ellipsis. Opens an actions menu from a header row (the chat sheet's
-// leave / block menu). Filled dots rather than stroked circles so it stays
-// legible at small sizes.
-export function DotsVerticalIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <Circle cx="12" cy="5" r="1.8" />
-      <Circle cx="12" cy="12" r="1.8" />
-      <Circle cx="12" cy="19" r="1.8" />
-    </Glyph>
-  )
-}
-
 // ── Field / list-row icons (gray stroke by default) ────────────────────────
 
 export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
@@ -249,26 +236,6 @@ export function GenderIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps =
   )
 }
 
-export function ResetIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <Path d="M3 3v5h5" />
-    </Glyph>
-  )
-}
-
-export function AppCalendarIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 5h18v16H3z" />
-      <Path d="M3 9h18" />
-      <Path d="M8 3v4" />
-      <Path d="M16 3v4" />
-    </Glyph>
-  )
-}
-
 // ── Account / system icons ─────────────────────────────────────────────────
 
 export function SignOutIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
@@ -281,6 +248,22 @@ export function SignOutIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+// Mirror of SignOutIcon (arrow INTO the frame instead of out) — the "join /
+// enter" mark. Paired with SignOutIcon so joining a group and leaving one read
+// as one in/out family. RTL-aware: the door and arrow flip so "in" always
+// points toward the frame, never off-screen.
+export function LogInIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <G rotation={isRTL ? 180 : 0} origin="12, 12">
+        <Path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+        <Polyline points="10 17 15 12 10 7" />
+        <Line x1="15" y1="12" x2="3" y2="12" />
+      </G>
+    </Glyph>
+  )
+}
+
 export function TrashIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
@@ -289,16 +272,6 @@ export function TrashIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
       <Path d="M10 11v6" />
       <Path d="M14 11v6" />
       <Path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </Glyph>
-  )
-}
-
-export function InfoIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="10" />
-      <Line x1="12" y1="16" x2="12" y2="12" />
-      <Line x1="12" y1="8" x2="12.01" y2="8" />
     </Glyph>
   )
 }
@@ -345,61 +318,34 @@ export function UserPlusIcon({ color = BLACK, size = ICON.md }: IconProps = {}) 
   )
 }
 
-// Two silhouettes — the "members of a group" mark used by the settings
-// "my groups" row. Visually distinct from UserIcon (single silhouette) so
-// the two adjacent rows in the account card don't read as the same icon.
-// Pencil glyph — "edit" affordance (settings profile card). Accepts an
-// optional strokeWidth so callers can render a wider dark copy behind a
-// thinner white copy to fake a halo (the cross-platform replacement for the
-// filter:dropShadow that rendered as a filled square on iOS).
-export function PencilIcon({ color = BLACK, size = ICON.md, strokeWidth = STROKE.base }: IconProps & { strokeWidth?: number } = {}) {
+// Silhouette with a minus — "remove this person" (unfriend, remove a group
+// member). The exact counterpart to UserPlusIcon: same body, the plus's
+// vertical stroke dropped so only the minus bar remains.
+export function UserMinusIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <Circle cx="9" cy="7" r="4" />
+      <Path d="M22 11h-6" />
     </Glyph>
   )
 }
 
+// Two silhouettes. The ink spans x 4..20 of the 24 box — the SAME span as
+// UserIcon — so the glyph sits optically centred in the leading-icon column
+// next to the other rows. (It was drawn spanning 1..17, which put its centre
+// 3 units left of the box centre and left it visibly out of the column.)
 export function GroupsIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M17 21v-2a4 4 0 0 0-3-3.87" />
-      <Path d="M13 3.13a4 4 0 0 1 0 7.75" />
-      <Path d="M15 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <Circle cx="8" cy="7" r="4" />
+      <Path d="M20 21v-2a4 4 0 0 0-3-3.87" />
+      <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <Path d="M18 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <Circle cx="11" cy="7" r="4" />
     </Glyph>
   )
 }
 
-// Age chip on the profile card. A bare number with the generic InfoIcon
-// didn't read as "age"; the candle-cake glyph makes it self-explanatory in
-// every language. Flame dots use the same near-zero round-capped trick as
-// InfoIcon's `12 → 12.01`.
-export function CakeIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8" />
-      <Path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1" />
-      <Line x1="2" y1="21" x2="22" y2="21" />
-      <Line x1="7" y1="8" x2="7" y2="11" />
-      <Line x1="12" y1="8" x2="12" y2="11" />
-      <Line x1="17" y1="8" x2="17" y2="11" />
-      <Line x1="7" y1="4" x2="7.01" y2="4" />
-      <Line x1="12" y1="4" x2="12.01" y2="4" />
-      <Line x1="17" y1="4" x2="17.01" y2="4" />
-    </Glyph>
-  )
-}
-
-export function MailIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Rect x="3" y="5" width="18" height="14" rx="2" />
-      <Path d="M3 7l9 7 9-7" />
-    </Glyph>
-  )
-}
 
 // Plain single-stroke camera. Also the glyph on the own-profile card's
 // "add a photo" chip, at the chips' shared ICON.sm baseline — the old filled
@@ -473,23 +419,6 @@ export function CoinIcon({ color = PRIMARY, size = ICON.md }: IconProps = {}) {
   )
 }
 
-// Question-mark glyph used in place of the heart on the page2 pending-invite
-// hero overlay button: same RoundButton shape and PRIMARY fill, signalling
-// "what is this?" rather than a chat or like affordance.
-export function QuestionIcon({
-  color = PRIMARY,
-  stroke = WHITE,
-  size = ICON.xxxl,
-}: IconProps & { stroke?: string } = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="10" />
-      <Path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" fill="none" />
-      <Path d="M12 17h.01" fill="none" />
-    </Glyph>
-  )
-}
-
 // ── Chat-specific icons ────────────────────────────────────────────────────
 
 export function SendIcon({ color = WHITE, size = ICON.xxl }: IconProps = {}) {
@@ -513,56 +442,11 @@ export function MicIcon({ color = WHITE, size = ICON.xxl }: IconProps = {}) {
 
 // ── Media transport ────────────────────────────────────────────────────────
 
-export function PlayIcon({ color = WHITE, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={stroke ? STROKE.thick : 0} strokeLinejoin="round">
-      <Path d="M8 5v14l11-7z" />
-    </Glyph>
-  )
-}
-
 export function PauseIcon({ color = WHITE, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={stroke ? STROKE.thick : 0} strokeLinejoin="round">
       <Rect x="6" y="5" width="4" height="14" rx="1" />
       <Rect x="14" y="5" width="4" height="14" rx="1" />
-    </Glyph>
-  )
-}
-
-export function SettingsIcon({ color = WHITE, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="3" />
-      <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </Glyph>
-  )
-}
-
-// Megaphone-style icon used as the broadcast affordance (premium "show me to
-// people" tile, broadcast-confirm popup icon). Single-stroke, currentColor so
-// it reads on both PREMIUM and disabled backgrounds.
-export function MegaphoneIcon({ color = WHITE, size = 28 }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
-      <Path d="M14 7a5 5 0 0 1 0 10" />
-      <Path d="M18 5a8 8 0 0 1 0 14" />
-    </Glyph>
-  )
-}
-
-// Megaphone with a diagonal cancel slash — "stop broadcasting" affordance.
-// Same body paths as MegaphoneIcon (kept in lockstep with it on purpose:
-// the off variant must read as the same glyph crossed out, not a
-// different megaphone).
-export function MegaphoneOffIcon({ color = WHITE, size = 28 }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 11v2a2 2 0 0 0 2 2h1l3 4h2v-12h-2l-3 4h-1a2 2 0 0 0-2 2z" />
-      <Path d="M14 7a5 5 0 0 1 0 10" />
-      <Path d="M18 5a8 8 0 0 1 0 14" />
-      <Path d="M2 2l20 20" />
     </Glyph>
   )
 }
@@ -611,19 +495,3 @@ export function InboxIcon({ color = WHITE, size = ICON.sm }: IconProps = {}) {
   )
 }
 
-// ── Typography ornaments ───────────────────────────────────────────────────
-
-// Paired block-quote indicator. Square viewBox with tight glyph bounds — when
-// laid out at size N the rendered footprint is NxN with no baseline / line-height
-// dead space (unlike a literal `"` text character whose line-box leaves empty
-// space above/below the visible glyph). Used by the bio bubble for the
-// top/bottom quotation marks, so the bubble can stack quote/text/quote with
-// uniform gaps.
-export function QuoteIcon({ color = PRIMARY, size = ICON.xxxl }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <Path d="M2 3 H11 V12 L8 21 H5 V13 H2 Z" />
-      <Path d="M13 3 H22 V12 L19 21 H16 V13 H13 Z" />
-    </Glyph>
-  )
-}

@@ -16,3 +16,9 @@ export const legalUrl = (page: LegalPage, lang: string): string =>
  *  `referrer` parameter, which is what makes attribution automatic. Anyone
  *  else lands on the normal download page. */
 export const referralUrl = (code: string): string => `${BRAND_SITE}/i/${code}`
+
+/** Group invite link. The group's opaque token rides in the URL path (never
+ *  shown as a "code" to the user). web/src/proxy.ts matches /g/<TOKEN> and
+ *  bounces to the app (`once://g/<TOKEN>`, with a Play-store fallback); opening
+ *  it in an installed app joins the group. */
+export const groupInviteUrl = (token: string): string => `${BRAND_SITE}/g/${token}`

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#F6F3ED" />
+  <meta name="theme-color" content="#F3EEE6" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Once | הורדת האפליקציה</title>
   <meta name="description" content="הורדת אפליקציית Once." />
@@ -36,23 +36,25 @@
   <meta name="twitter:description" content="אפליקציית היכרויות בלי אינסוף החלקות. אדם אחד בכל פעם, בזמן אמת." />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-invite.png" />
 
-  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=11" />
-  <link rel="icon" type="image/png" href="favicon.png?v=11" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=12" />
+  <link rel="icon" type="image/png" href="favicon.png?v=12" />
+  <!-- Shared colour tokens, generated from mobile/src/colors.ts. -->
+  <link rel="stylesheet" href="tokens.css?v=44" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
-    /* The app's own palette (mobile/src/colors.ts): a warm off-white page,
-       deep-green ink, orange action. No theme toggle. The button mirrors the
-       app's <Button>: 56px tall, radius 12, flat orange fill, white text,
-       no shadow. */
+    /* The app's own palette, SHARED via tokens.css (generated from
+       mobile/src/colors.ts): a warm beige page, deep-purple ink, purple action.
+       No theme toggle. The button mirrors the app's <Button>: 56px tall,
+       radius 12, flat purple fill, white text, no shadow. */
     :root { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
       font-family: "Noto Sans Hebrew", system-ui, -apple-system, sans-serif;
-      background: #F6F3ED;
-      color: #2B4F40;
+      background: var(--bg);
+      color: var(--ink);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -63,8 +65,8 @@
       -moz-osx-font-smoothing: grayscale;
     }
     .wrap { width: 100%; max-width: 360px; }
-    .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.5px; color: #E4573D; }
-    .msg { margin-top: 14px; font-size: 16px; font-weight: 600; color: rgba(43, 79, 64, 0.72); }
+    .brand-name { font-weight: 800; font-size: 28px; letter-spacing: -0.5px; color: var(--brand); }
+    .msg { margin-top: 14px; font-size: 16px; font-weight: 600; color: var(--ink-2); }
     .choices { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
     .btn {
       display: flex;
@@ -73,8 +75,8 @@
       min-height: 56px;
       padding: 8px 24px;
       border-radius: 12px;
-      background: #E4573D;
-      color: #FFFFFF;
+      background: var(--brand);
+      color: var(--brand-ink);
       border: none;
       font-family: inherit;
       font-size: 18px;
@@ -83,8 +85,8 @@
       text-decoration: none;
       cursor: pointer;
     }
-    .note { display: none; margin-top: 18px; font-size: 15px; font-weight: 600; line-height: 1.5; color: rgba(43, 79, 64, 0.72); }
-    .note strong { color: #2B4F40; }
+    .note { display: none; margin-top: 18px; font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
+    .note strong { color: var(--ink); }
     /* The Play button is hidden until JS decides this device can use it: an
        iPhone gets the note alone, with nothing to install. */
     .choices { display: none; }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, createContext } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, TextInput as RNTextInput } from 'react-native'
 import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
 import * as ImagePicker from 'expo-image-picker'
-import Svg, { Path, Line, Circle, Rect } from 'react-native-svg'
+import { Path, Line, Circle, Rect } from 'react-native-svg'
 import { invoke } from '../src/lib/api'
 import { tap, tapWarning } from '../src/lib/haptics'
 import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, selectProfileBuilt, type LocationType } from '../src/stores/userStore'
@@ -23,8 +23,9 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID } from '../src/colors'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, BugIcon, EyeOpenIcon, EyeOffIcon } from '../src/components/icons'
+import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, BORDER_SOFT } from '../src/colors'
+import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, BugIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, formatNextGrant, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
@@ -33,6 +34,7 @@ import { BottomSheet } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
+import { communitiesSummary } from '../src/lib/communities'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
 import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
@@ -45,20 +47,6 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 // double that. The card keeps the photo as its background but reads as one of
 // the menu buttons rather than a hero.
 const PROFILE_CARD_HEIGHT = (ICON.xxl + MD * 2) * 2
-
-// Provided by the shell (home.tsx) so section pages can share their inner
-// sub-page slide animation with the shell. The shell hosts the SharedValue
-// (so its swipe-back gesture worklet can drive it) and offers callbacks
-// for the section page to register open/close state and a finalize hook
-// that runs after a shell-driven swipe finishes the close animation.
-export type ShellInnerNav = {
-  // 0 = closed (no inner sub-page), 1 = inner sub-page fully covering section.
-  slideProgress: SharedValue<number>
-  // Section calls this on open/close so the shell knows whether to route
-  // hardware-back and swipe-back to the inner level.
-  setHandlers: (h: { isOpen: boolean; close: () => void; finalizeClose: () => void } | null) => void
-}
-export const ShellInnerNavContext = createContext<ShellInnerNav | null>(null)
 
 // Returns responder props that fire `onPress` only on clean taps (movement < TAP_SLOP).
 // `onPressStateChange` lets the caller drive a visual pressed-state (e.g. fade
@@ -149,12 +137,17 @@ export type AppSectionFieldConfig = {
   title: string
 }
 
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AccountFieldConfig | PreviewFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig
+export type CommunitiesFieldConfig = {
+  kind: 'communities'
+  title: string
+}
+
+export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AccountFieldConfig | PreviewFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig | CommunitiesFieldConfig
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Shared tappable settings row used across Preferences, Profile, App and the
 // Main Menu. Layout (logical order, flips automatically in RTL):
-//   [chevron] [label / title+subtitle] ... [trailing icon | avatar]
+//   [chevron] [label / title+subtitle] [trailing] ... [avatar]
 // The row has NO separate value column: a field's current value is baked into
 // the `label` as one whole sentence ("Available for women", "Up to 5 km").
 // Splitting it into label + value read as two disconnected fragments at the
@@ -190,13 +183,15 @@ function SelectFieldRow({
   /** Dims the row content to signal the field is currently unavailable.
    * The row stays pressable so onPress can explain why. */
   locked?: boolean
-  /** Ink for the label. The menu splits its rows into two groups: the
-   * preferences you tune are GREEN, the account/status rows below them are
-   * ORANGE. Pass the same colour to this row's `icon` so the pair matches. */
+  /** Ink for the label. The menu can tint a row's label (and its icon) to
+   * distinguish groups; pass the same colour to this row's `icon` so the pair
+   * matches. Since the app unified onto one purple, that tint is normally the
+   * regular purple. */
   labelColor?: string
-  /** Node parked at the row's END edge, beside the label (e.g. the watcher
-   * chip on the visibility row). A live quantity belongs on its own surface,
-   * not glued into the label string. */
+  /** Node rendered immediately after the label (e.g. the watcher chip on the
+   * visibility row), NOT pushed to the row's END edge: it annotates the label,
+   * so it reads as part of the same statement. A live quantity still belongs
+   * on its own surface, not glued into the label string. */
   trailing?: React.ReactNode
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
@@ -251,7 +246,7 @@ function SelectFieldRow({
           <View style={styles.selectRowTextCol}>
             <View style={styles.selectRowLabelGroup}>
               {renderedIcon}
-              <View style={styles.selectRowLabelStack}>
+              <View style={[styles.selectRowLabelStack, trailing ? styles.selectRowLabelStackTight : null]}>
                 <Text style={[styles.selectRowLabel, labelColor ? { color: labelColor } : null]}>{label}</Text>
                 {subtitle ? (
                   <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
@@ -425,7 +420,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           icon={<GenderIcon color={GREEN} />}
           labelColor={GREEN}
         />
-        <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={`${t('settings.ageRange')} ${ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}`}
@@ -433,7 +427,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           icon={<SlidersIcon color={GREEN} />}
           labelColor={GREEN}
         />
-        <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           // "עד {value}" normally; unlimited has its own standalone sentence
@@ -446,7 +439,6 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           icon={<RadiusIcon color={GREEN} />}
           labelColor={GREEN}
         />
-        <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={locationFieldLabel}
@@ -538,7 +530,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
 
 
 // ── Account Tab ────────────────────────────────────────────────────────────
-// Icons (SignOutIcon, TrashIcon, InfoIcon, UserIcon) imported from
+// Icons (SignOutIcon, TrashIcon, UserIcon) imported from
 // '../src/components/icons'.
 
 function formatBirthDate(iso: string): string {
@@ -597,18 +589,12 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       onClosed={handleClosed}
       contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + MD }}
     >
-      {/* Identity details as a plain stacked text list (muted ink on the white
-          sheet), not chip pills — one line per field, like a list. */}
+      {/* Identity details as chips, stacked one under the other — each pill
+          hugs its own text (alignItems:'flex-start' on the column), so the
+          block reads as a list of facts rather than a wrapping chip cloud. */}
       <View style={styles.accountPopupList}>
         {detailRows.map(r => (
-          <Text
-            key={r.label}
-            style={styles.accountPopupListItem}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {r.value}
-          </Text>
+          <Chip key={r.label} text={r.value} />
         ))}
       </View>
       {/* The same pair of full-width buttons the chat menu's leave/block sheet
@@ -658,7 +644,6 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
   const kbHeight = useKeyboardHeight()
   const codeInputRef = useRef<RNTextInput>(null)
 
-  const [loaded, setLoaded] = useState(groups != null)
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -667,16 +652,14 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
   useEffect(() => {
     if (!visible) return
     let cancelled = false
-    setLoaded(groups != null)
     setCode('')
     setCodeError(null)
     invoke<{ groups?: Group[] }>('app/my_groups')
       .then(data => {
         if (cancelled) return
         setGroups(data?.groups ?? [])
-        setLoaded(true)
       })
-      .catch(() => { if (!cancelled) setLoaded(true) })
+      .catch(() => { /* my_groups fetch failed; keep last-known groups */ })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
@@ -744,6 +727,7 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
                 label={t('settings.groupsLeaveConfirm')}
                 onPress={() => onLeave(leaveGroup.id)}
                 loading={leavingId !== null}
+                iconStart={<SignOutIcon color={WHITE} />}
                 variant="primary"
                 size="lg"
               />
@@ -791,6 +775,7 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
                 onPress={onJoin}
                 disabled={code.length !== INVITE_CODE_LEN || submitting}
                 loading={submitting}
+                iconStart={<LogInIcon color={WHITE} />}
                 variant="primary"
                 size="lg"
               />
@@ -821,13 +806,12 @@ const groupsPopupStyles = StyleSheet.create({
   rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
   sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
   // Reads as a field: a border and a white fill, not just a tinted block. The
-  // previous WHITE_SOFT-on-white panel gave no edge to aim at.
+  // previous WHITE_SOFT-on-white panel gave no edge to aim at. Skin comes from
+  // FIELD_SKIN like every other typing surface — it used to hand-roll its own
+  // 1.5px BLACK_MID rule, a heavier edge than the login field it sits beside.
   inputWrap: {
+    ...FIELD_SKIN,
     marginTop: LG,
-    backgroundColor: SURFACE,
-    borderWidth: 1.5,
-    borderColor: BLACK_MID,
-    borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingVertical: MD,
   },
@@ -1990,7 +1974,7 @@ const familyStyles = StyleSheet.create({
   kidChipAddLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE },
 
   // + Add kid / + Add week button.
-  addKidBtn: { paddingVertical: SM, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addKidBtn: { ...OUTLINE_SKIN, paddingVertical: SM, alignItems: 'center', borderStyle: 'dashed' },
   addKidLabel: { fontSize: TEXT.sm, color: INK },
 
   weekHeader: { marginBottom: MD, gap: XS },
@@ -2004,7 +1988,7 @@ const familyStyles = StyleSheet.create({
   dayBubble: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BORDER_SOFT,
   },
   dayBubbleSelected: { backgroundColor: GREEN, borderColor: GREEN },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
@@ -2015,7 +1999,7 @@ const familyStyles = StyleSheet.create({
   dayLetter: { fontSize: TEXT.sm, color: BLACK },
   dayLetterSelected: { color: WHITE },
   dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
-  addWeekBtn: { marginTop: MD, paddingVertical: MD, alignItems: 'center', borderRadius: RADIUS, borderWidth: STROKE.thin, borderColor: BLACK_SOFT, borderStyle: 'dashed' },
+  addWeekBtn: { ...OUTLINE_SKIN, marginTop: MD, paddingVertical: MD, alignItems: 'center', borderStyle: 'dashed' },
   addWeekLabel: { fontSize: TEXT.sm, color: INK },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the cards expanding/collapsing inside don't
@@ -2517,7 +2501,10 @@ export function PreviewFieldPage({
           <PullContext.Provider value={pullCtx}>
             <MatchCard
               match={previewData}
-
+              // Puts the pinned add chips on the same line as the sheet's
+              // floating close X. Only when the sheet owns the top inset —
+              // standalone, the root has already padded the card down past it.
+              chromeInset={dismissGestureRef ? insets.top : 0}
               bottomInset={0}
               isForKids={profile?.family?.isForKids ?? null}
               self
@@ -2582,7 +2569,7 @@ export function PreviewFieldPage({
 // Used by ProfileSectionPage and AppSectionPage to render a second-level
 // ── App Inline Content ─────────────────────────────────────────────────────
 
-function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, onOpenSubPage: _onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const router = useRouter()
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
@@ -2698,18 +2685,16 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const heartsExtra = creditExtra(profile)
   const nextGrant = formatNextGrant(profile)
 
-  // Menu row label: chained group names (up to 3) with "more..." overflow,
-  // or the "no groups" message when loaded-empty. While the initial fetch
-  // is in flight (groups === null) we render a single space so the row
-  // layout stays stable without exposing a misleading "no groups" flash.
-  const GROUPS_ROW_MAX = 3
-  const groupsRowLabel = groups == null
-    ? ' '
-    : groups.length === 0
-      ? t('settings.groupsNone')
-      : groups.length <= GROUPS_ROW_MAX
-        ? groups.map(g => g.name).join(', ')
-        : groups.slice(0, GROUPS_ROW_MAX).map(g => g.name).join(', ') + ', ' + t('settings.groupsMore')
+  // Communities row summary — read from the denormalized relations.communities
+  // field (instant, no query). Groups = managed + joined; a pending
+  // friend-requests chip rides the row like the visibility watcher chip.
+  const comm = communitiesSummary(profile)
+  const commGroups = comm ? comm.managed.length + comm.joined.length : 0
+  const commSubtitle = !comm ? undefined
+    : commGroups > 0 && comm.friends > 0 ? t('communities.rowSummary').replace('{groups}', String(commGroups)).replace('{friends}', String(comm.friends))
+    : commGroups > 0 ? t('communities.rowGroupsOnly').replace('{groups}', String(commGroups))
+    : comm.friends > 0 ? t('communities.rowFriendsOnly').replace('{friends}', String(comm.friends))
+    : undefined
 
   return (
     <>
@@ -2736,12 +2721,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           // Optical size, not nominal: the eye is a flat lens that fills barely
           // half its box vertically, so at the ICON.md every other row uses it
           // reads visibly smaller than the person/groups/bug glyphs beside it.
-          // ICON.xxl matches their ink mass; the icon column keeps its fixed
-          // width, so the labels stay aligned.
-          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xxl} /> : <EyeOpenIcon color={GREEN} size={ICON.xxl} />}
+          // ICON.xl is the optical half-step that matches their ink mass without
+          // over-shooting; the icon column keeps its fixed width, so the labels
+          // stay aligned.
+          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xl} /> : <EyeOpenIcon color={GREEN} size={ICON.xl} />}
           labelColor={GREEN}
         />
-        <View style={styles.accountActionDivider} />
         {/* Credits, then Account. Tapping credits opens the buy picker
             straight away. */}
         <SelectFieldRow
@@ -2766,7 +2751,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           icon={<CoinIcon color={GREEN} size={ICON.md} />}
           labelColor={GREEN}
         />
-        <View style={styles.accountActionDivider} />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
@@ -2774,25 +2758,21 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           icon={<UserIcon color={GREEN} />}
           labelColor={GREEN}
         />
-        <View style={styles.accountActionDivider} />
-        {/* Groups are chips right here rather than a label that opens a list:
-            the memberships are short, so showing them beats hiding them behind
-            a sheet. Tapping one asks to leave it; the trailing chip joins a
-            new one. */}
-        <View style={styles.groupsRow}>
-          <View style={styles.groupsRowIcon}><GroupsIcon color={GREEN} /></View>
-          <View style={styles.groupsChips}>
-            {(groups ?? []).map(g => (
-              <Chip key={g.id} text={g.name} onPress={() => openLeaveGroup(g)} />
-            ))}
-            <Chip
-              text={t('settings.groupsAdd')}
-              outlined
-              onPress={openJoinGroup}
-            />
-          </View>
-        </View>
-        <View style={styles.accountActionDivider} />
+        {/* Communities: a navigable row (like Account) that opens the full
+            hub — my friends, groups I manage, groups I'm in, create, find.
+            Superseded the inline group chips + join-by-code sheet, which now
+            live inside the hub. */}
+        <SelectFieldRow
+          grouped
+          label={t('communities.menuRow')}
+          subtitle={commSubtitle}
+          trailing={comm && comm.requests > 0
+            ? <Chip text={t('communities.requestsChip').replace('{count}', String(comm.requests))} />
+            : undefined}
+          onPress={() => onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })}
+          icon={<GroupsIcon color={GREEN} />}
+          labelColor={GREEN}
+        />
         <SelectFieldRow
           grouped
           label={t('settings.bugReport')}
@@ -2824,6 +2804,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         title={hideConfirmConfig.title}
         description={hideConfirmConfig.description}
         confirmLabel={hideConfirmConfig.confirmLabel}
+        confirmIconStart={<EyeOffIcon color={WHITE} />}
         onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
         onConfirm={() => runVisibility('app/lock2')}
         busy={visibilityBusy}
@@ -2834,6 +2815,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         title={t('settings.signOutConfirmTitle')}
         description={tg('settings.signOutConfirmDesc', profile.is_male)}
         confirmLabel={tg('settings.signOutYes', profile.is_male)}
+        confirmIconStart={<SignOutIcon color={WHITE} />}
         onCancel={() => setSignOutDialog(false)}
         onConfirm={onSignOutConfirmed}
         draggable
@@ -2843,6 +2825,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         title={t('settings.deleteConfirmTitle')}
         description={tg('settings.deleteConfirmDesc', profile.is_male)}
         confirmLabel={t('settings.deleteYes')}
+        confirmIconStart={<TrashIcon color={WHITE} />}
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
@@ -3043,8 +3026,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
     marginBottom: MD,
   },
-  // Flat group: no frame, no shadow, no rounded corners. Rows are separated by
-  // the subtle hairline `accountActionDivider` between siblings.
+  // Flat group: no frame, no shadow, no rounded corners, and no dividers,
+  // rows sit flush with only their own padding between them.
   accountLinksCard: {
     backgroundColor: 'transparent',
     marginBottom: MD,
@@ -3071,8 +3054,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   // Flat group, identical visual language to `accountLinksCard`: no frame,
-  // no rounded corners, no shadow. Rows are separated by the hairline
-  // `accountActionDivider`.
+  // no rounded corners, no shadow, no dividers.
   // The groups row: the shared leading-icon column, then a wrap of chips
   // instead of a single label.
   groupsRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: MD, paddingVertical: MD, gap: MD },
@@ -3085,18 +3067,12 @@ const styles = StyleSheet.create({
   // Two stacked full-width buttons on the page gutter — the same spec as the
   // chat menu's leave/block sheet (chatMenuStyles.sheet in home.tsx).
   accountActions: { paddingHorizontal: MD, gap: SM },
-  accountActionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
-    marginStart: MD,
-  },
-  // Account popup identity block: stacked text list (one field per line) in
-  // muted ink on the white sheet, replacing the old chip pills.
-  accountPopupList: { paddingHorizontal: MD, paddingBottom: MD, gap: XS },
-  accountPopupListItem: {
-    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_STRONG,
-    // 'left' = start of writing direction (physically right in RTL after
-    // auto-flip) — same correct-in-both-directions value the Chip text uses.
-    textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr',
+  // Account popup identity block: one chip per field, stacked vertically.
+  // alignItems:'flex-start' keeps each pill at its own text width instead of
+  // stretching it across the sheet.
+  accountPopupList: {
+    paddingHorizontal: MD, paddingBottom: MD, gap: XS,
+    alignItems: 'flex-start',
   },
 
   // Select field row — tappable row with label + value + forward chevron
@@ -3125,6 +3101,11 @@ const styles = StyleSheet.create({
   // Label + optional subtitle, stacked. Owns the whole width beside the icon
   // so both texts share one start edge.
   selectRowLabelStack: { flex: 1, minWidth: 0 },
+  // With a trailing node the stack stops claiming the leftover width, so the
+  // chip sits directly beside the label instead of being pushed to the row's
+  // far END edge. It still shrinks (and the label wraps) when the pair is
+  // wider than the row.
+  selectRowLabelStackTight: { flex: 0, flexShrink: 1 },
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
   selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
@@ -3133,7 +3114,7 @@ const styles = StyleSheet.create({
   // writingDirection, iOS did not pick the container's RTL direction and the
   // subtitle ended up physically left under the hearts row.
   selectRowSubtitle: { fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
-  selectRowTrailing: { flexDirection: 'row', alignItems: 'center', gap: SM },
+  selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,

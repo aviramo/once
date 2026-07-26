@@ -1,8 +1,4 @@
-import type { ReactNode } from 'react'
 import { t } from '../i18n'
-import { INK, PRIMARY } from '../colors'
-import { ICON } from '../tokens'
-import { EyeOffIcon } from './icons'
 
 // Confirm-popup copy for a press that is about to disrupt other users'
 // visibility into the actor. Going hidden kicks every watcher pinned to the

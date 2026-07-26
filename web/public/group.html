@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Once</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #F3EEE6; color: #33265B;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 24px;
+    }
+    .card { max-width: 320px; }
+    h1 { font-size: 20px; font-weight: 800; margin: 0 0 8px; }
+    p { font-size: 15px; color: #5C4A94; margin: 0 0 20px; line-height: 1.5; }
+    a.btn {
+      display: inline-block; text-decoration: none;
+      background: #6C3FB2; color: #fff; font-weight: 700;
+      padding: 12px 22px; border-radius: 14px; font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Once</h1>
+    <p id="msg">Opening the app…</p>
+    <a class="btn" id="fallback" href="https://play.google.com/store/apps/details?id=com.aviramo.once">Get Once</a>
+  </div>
+  <script>
+    (function () {
+      var PLAY = 'https://play.google.com/store/apps/details?id=com.aviramo.once';
+      var m = location.pathname.match(/\/g\/(\d{6})/);
+      var token = m ? m[1] : '';
+      var fallback = document.getElementById('fallback');
+      if (!token) { location.href = PLAY; return; }
+      // New installs still get attribution: pack the token into the Play
+      // referrer, mirroring the /i/ referral link.
+      fallback.href = PLAY + '?referrer=' + encodeURIComponent('grp=' + token);
+      // Hand off to the installed app; if nothing catches the scheme, the user
+      // stays on this page with the store button visible.
+      var t = setTimeout(function () { document.getElementById('msg').textContent = 'Get Once to join this group.'; }, 1500);
+      window.addEventListener('pagehide', function () { clearTimeout(t); });
+      location.href = 'once://g/' + token;
+    })();
+  </script>
+</body>
+</html>

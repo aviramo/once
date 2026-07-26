@@ -23,9 +23,6 @@ export const SEEN_FLAGS = {
   homeDemo: 'home_demo',
   /** Page2 pull-to-decline first-run demo choreography. */
   page2Demo: 'page2_demo',
-  /** The watching "not now" → skip-hint popup has been acknowledged via its
-   * "got it" button. Once set, "not now" skips directly (no popup). */
-  skipHintAck: 'skip_hint_ack',
 } as const
 
 // Per-conversation cache key for chat messages list.

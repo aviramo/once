@@ -30,8 +30,6 @@ export const CREDIT_COST = {
   cancel: 0,
 } as const
 
-export type CreditAction = keyof typeof CREDIT_COST
-
 /** Daily cap: balance refills up to this number every 20:00 Asia/Jerusalem.
  *  One a day since 2026-07-22 (was 3) — the daily pool has to be a decision,
  *  not a number nobody reaches. Mirrors SQL `_credits_cap()`. */

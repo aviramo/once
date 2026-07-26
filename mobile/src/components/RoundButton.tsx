@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
-import { PHOTO_CHROME, SCRIM_BLACK } from '../colors'
+import { PHOTO_CHROME, LIFT_SHADOW } from '../colors'
 import { ROUND_BUTTON_SIZE } from '../tokens'
 import { FONT_SCALE } from '../fonts'
 import { GlyphScale } from './icons'
@@ -98,13 +98,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shadow: {
-    shadowColor: SCRIM_BLACK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-  },
+  shadow: LIFT_SHADOW,
   disabled: {
     opacity: 0.4,
   },

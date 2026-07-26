@@ -43,7 +43,8 @@ export default {
   'ob.createAccount': 'Create account',
   'ob.createAccount_m': 'Create account',
   'ob.createAccount_f': 'Create account',
-  'ob.birthConfirm': 'Your birthday is {date} and you are {age}?',
+  'ob.birthConfirmTitle': 'Confirm your date of birth',
+  'ob.birthConfirm': 'Your birthday is {date} and you are {age} years old.',
   'ob.birthConfirmFix': 'Fix',
 
   // Onboarding photo
@@ -52,7 +53,7 @@ export default {
 
   // Onboarding bio
   'bio.placeholder': 'A sentence, a feeling, or a moment that represents you...',
-  'bio.submit': 'Continue',
+  'bio.submit': 'Finish',
   'bio.min': 'Minimum 20 characters',
   'bio.update': 'Update',
 
@@ -149,6 +150,93 @@ export default {
   'settings.groupsLeaveTitle': 'Leave {name}?',
   'settings.groupsLeaveDesc': 'You can join again later with the group code.',
   'settings.groupsLeaveConfirm': 'Leave group',
+
+  // Communities: the menu row + the full hub sheet and its sub-screens.
+  'communities.menuRow': 'Communities',
+  'communities.title': 'Communities',
+  'communities.myFriends': 'My friends',
+  'communities.myFriendsSub': 'People you personally know',
+  'communities.manageSection': 'Groups you manage',
+  'communities.inSection': "Groups you're in",
+  'communities.create': 'Create a group',
+  'communities.find': 'Find or join a group',
+  'communities.public': 'Public',
+  'communities.private': 'Private',
+  'communities.membersCount': '{count} members',
+  'communities.oneMember': '1 member',
+  'communities.rowSummary': '{groups} groups · {friends} friends',
+  'communities.rowGroupsOnly': '{groups} groups',
+  'communities.rowFriendsOnly': '{friends} friends',
+  'communities.requestsChip': '{count} requests',
+  'communities.managedBy': 'Managed by {name}',
+  'communities.emptyManage': "You haven't created a group yet.",
+  'communities.emptyIn': "You haven't joined a group yet.",
+  'communities.loadError': 'Could not load, try again.',
+
+  // My friends
+  'communities.inviteFriend': 'Invite a friend to once',
+  'communities.linkFriend': 'Link an existing friend',
+  'communities.friendsCount': '{count} friends',
+  'communities.requestsSection': 'Friend requests',
+  'communities.accept': 'Accept',
+  'communities.decline': 'Decline',
+  'communities.remove': 'Remove',
+  'communities.noFriends': "You don't have friends here yet.",
+  'communities.friendsHint': 'Invite friends or link existing ones, and you will see each other first.',
+  'communities.mutualNote': 'Friends of yours meet first, tagged mutual friend.',
+  'communities.unfriendTitle': 'Remove {name} from friends?',
+  'communities.unfriendDesc': 'You can link again later.',
+  'communities.unfriendConfirm': 'Remove',
+
+  // Link an existing friend
+  'communities.linkTitle': 'Link a friend',
+  'communities.searchPeople': 'Search by name',
+  'communities.request': 'Request',
+  'communities.requested': 'Sent',
+  'communities.alreadyFriend': 'Friend',
+  'communities.searchHint': 'Type a name to search.',
+  'communities.noResults': 'No results.',
+  'communities.linkNote': 'They get a request. Once accepted, you are linked both ways.',
+
+  // Create a group
+  'communities.newGroup': 'New group',
+  'communities.name': 'Name',
+  'communities.namePlaceholder': 'Group name',
+  'communities.whoCanFind': 'Who can find it',
+  'communities.privateSub': 'Link only',
+  'communities.publicSub': 'Searchable',
+  'communities.privacyNote': 'A private group never appears in search, you share the link yourself.',
+  'communities.createAction': 'Create group',
+  'communities.nameError': 'Please use a shorter name.',
+
+  // A group you manage
+  'communities.shareInvite': 'Share invite link',
+  'communities.deleteGroup': 'Delete group',
+  'communities.deleteTitle': 'Delete {name}?',
+  'communities.deleteDesc': 'The group and all its memberships are removed. This cannot be undone.',
+  'communities.deleteConfirm': 'Delete',
+  'communities.removeMemberTitle': 'Remove {name}?',
+  'communities.removeMemberDesc': 'They can join again with the invite code.',
+  'communities.makePublic': 'Make public',
+  'communities.makePrivate': 'Make private',
+  'communities.owner': 'Owner',
+  'communities.manager': 'Manager',
+  'communities.makeManager': 'Make manager',
+  'communities.removeManager': 'Remove as manager',
+  'communities.removeFromGroup': 'Remove from group',
+
+  // A group you are in
+  'communities.leave': 'Leave group',
+  'communities.memberNote': 'Members rank higher for you. Only the owner sees the member list.',
+
+  // Find or join
+  'communities.findTitle': 'Join a group',
+  'communities.findSearch': 'Search a group',
+  'communities.orCode': 'or with an invite code',
+  'communities.join': 'Join',
+  'communities.joined': 'Joined',
+  'communities.findNote': 'Only public groups appear in search.',
+  'communities.shareMessage': 'Join {name} on once: {link}',
   // Report a bug: row in the account card + the bug-report sheet.
   'settings.bugReport': 'Report a bug',
   'bugReport.title': 'Report a bug',
@@ -310,6 +398,10 @@ export default {
   // "coming soon") and inviting a friend is the only way to earn extra, so the
   // copy talks about getting credits rather than buying them.
   'credits.buy.title': 'More credits',
+  // Same sheet, opened at the paywall moment (an invite/accept the user can't
+  // afford). There the title names the reason it appeared instead of the thing
+  // it offers. Reached from the settings credits row, it keeps the title above.
+  'credits.buy.emptyTitle': "You're out of credits",
   'credits.buy.desc': 'Credits you get are added on top of your daily allowance and never expire.',
   'credits.buy.priceFree': 'Free',
   'credits.buy.comingSoon': 'Coming soon',
@@ -318,7 +410,7 @@ export default {
   // so the row never reads as "tap and get a credit". genderize() is a no-op
   // on English (no {m|f} marker) — single form.
   'credits.invite.title': 'Invite a friend',
-  'credits.invite.joined.none': 'The credit arrives once your friend installs the app and completes a profile.',
+  'credits.invite.joined.none': 'The credit arrives once your friend installs the app and creates an account.',
   'credits.invite.joined.one': 'One friend joined through you.',
   'credits.invite.joined.many': '{n} friends joined through you.',
   // Text that rides along with the link in the OS share sheet.
@@ -672,10 +764,6 @@ Next may surprise`,
   'home.watchingAccept_m': 'Focus on him',
   'home.watchingAccept_f': 'Focus on her',
   'home.watchingReject': 'Skip',
-  'home.skipHintTitle': 'Swipe the card down to skip',
-  'home.skipHintDesc': 'Next time, swipe the card down to quickly skip to another profile. Want to skip now?',
-  'home.skipHintCancel': 'Got it',
-  'home.skipHintConfirm': 'Skip',
   // Shown in the rotating-headline slot for the duration of the first-time
   // swipe-down tutorial, instead of that card's random skip line: while the
   // card peeks down and reveals the slot, the text names the gesture.
@@ -710,7 +798,7 @@ Next may surprise`,
   'chat.blockTitle': 'Block user',
   'chat.blockDesc': 'This user will be blocked and won\'t be able to contact you again. This action cannot be undone.',
   'chat.blockConfirm': 'Block',
-  'chat.endChat': 'End',
+  'chat.endChat': 'End Chat',
   'chat.leave': 'Leave',
   'chat.a11y.close': 'Close chat',
   'chat.a11y.closeImage': 'Close image',
@@ -737,6 +825,14 @@ Next may surprise`,
   'chat.scheduleTitle_m': "Days I'm free (no kids)",
   'chat.scheduleTitle_f': "Days I'm free (no kids)",
   'chat.retry': 'Tap to retry',
+  'chat.reply.image': 'Photo',
+  'chat.reply.audio': 'Voice message',
+  'chat.reply.location': 'Location',
+  'chat.reply.schedule': 'Schedule',
+  'chat.reply.a11y': 'Reply',
+  'chat.reply.you': 'You',
+  'chat.reply.you_m': 'You',
+  'chat.reply.you_f': 'You',
 
   // Push notifications
   'push.WATCHING': 'New opportunity',
@@ -758,9 +854,6 @@ Next may surprise`,
   'home.a11y.closeMenu': 'Close menu',
   'home.a11y.closeInvite': 'Close invitation',
   'home.a11y.closeProfile': 'Close profile',
-  // On-photo age chip. English is non-gendered (just the number); Hebrew is
-  // gendered via tg() (בן/בת) — see he.ts home.ageChip_m / _f.
-  'home.ageChip': '{age}',
   'home.locatingDesc': 'Scanning for people around you',
   'home.loadingProfile': 'Loading profile data',
   'home.noOneNearbyTitle': 'No one nearby right now',

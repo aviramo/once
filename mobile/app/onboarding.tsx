@@ -13,7 +13,7 @@ import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
 import { t, tg, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
 import { RoundButton } from '../src/components/RoundButton'
-import { CloseIcon } from '../src/components/icons'
+import { CloseIcon, UserPlusIcon, CheckIcon } from '../src/components/icons'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BG, INK, INK_3, BLACK, GREEN, GREEN_SOFT, GREEN_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
@@ -34,6 +34,19 @@ function birthdateInWords(yyyy: string, mm: string, dd: string): string {
   // literal "Invalid Date".
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleDateString(lang, { day: 'numeric', month: 'long' })
+}
+
+// The birth-confirmation body, with the day/month and the age rendered bold so
+// the two things the user is actually verifying stand out from the sentence
+// around them. The template carries {date}/{age} placeholders; we split on them
+// and wrap only those spans (nested <Text> inherits the desc size/colour and
+// overrides weight only).
+function birthConfirmBody(template: string, date: string, age: string) {
+  return template.split(/(\{date\}|\{age\})/).map((part, i) => {
+    if (part === '{date}') return <Text key={i} style={{ fontWeight: WEIGHT.extrabold, color: BLACK }}>{date}</Text>
+    if (part === '{age}') return <Text key={i} style={{ fontWeight: WEIGHT.extrabold, color: BLACK }}>{age}</Text>
+    return part
+  })
 }
 
 // Delay before auto-focusing a step's input after navigating to it. The step
@@ -586,6 +599,7 @@ export default function OnboardingPage() {
               onPress={onContinue}
               disabled={!dateValid}
               loading={submitting}
+              iconStart={<UserPlusIcon color={WHITE} />}
               variant="primary"
               size="lg"
             />
@@ -595,7 +609,7 @@ export default function OnboardingPage() {
     }
 
     if (s === 4) return (
-      <View style={styles.page}>
+      <View style={[styles.page, styles.withClose]}>
         <Text style={styles.title}>{tg('photo.sub', isMale === true)}</Text>
 
         <View style={styles.photoWrap} pointerEvents="box-none">
@@ -629,7 +643,7 @@ export default function OnboardingPage() {
       // the layout differed by device and still squeezed the field on the
       // screens in between.
       return (
-        <View style={styles.pageStretched}>
+        <View style={[styles.pageStretched, styles.withClose]}>
 
           <View style={[styles.fieldShell, styles.bioField, { flex: 1, minHeight: 0 }]}>
             <TextInput
@@ -657,6 +671,7 @@ export default function OnboardingPage() {
               onPress={onContinue}
               disabled={!bioValid}
               loading={bioSubmitting}
+              iconStart={<CheckIcon color={WHITE} />}
               variant="primary"
               size="lg"
             />
@@ -713,10 +728,14 @@ export default function OnboardingPage() {
 
       <ConfirmDialog
         visible={birthConfirmOpen}
-        title={tg('ob.birthConfirm', isMale === true)
-          .replace('{date}', birthdateInWords(yyyy, mm, dd))
-          .replace('{age}', String(age ?? ''))}
+        title={t('ob.birthConfirmTitle')}
+        description={birthConfirmBody(
+          tg('ob.birthConfirm', isMale === true),
+          birthdateInWords(yyyy, mm, dd),
+          String(age ?? ''),
+        )}
         confirmLabel={tg('ob.createAccount', isMale === true)}
+        confirmIconStart={<UserPlusIcon color={WHITE} />}
         cancelLabel={t('ob.birthConfirmFix')}
         // The popup closes on the tap; the spinner lives on the Create-account
         // button underneath, so the in-flight state is shown in one place
@@ -759,6 +778,11 @@ const styles = StyleSheet.create({
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
   page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },
+  // The build-profile steps (4 photos, 5 bio) carry a close X in the top-START
+  // gutter; without extra headroom the title/field tucks under it. Clear the
+  // whole chrome circle (gap + small round button) plus a section gap so the
+  // content opens comfortably below the X.
+  withClose: { paddingTop: OVERLAY.chromeGap + ROUND_BUTTON_SIZE_SM + LG },
   // The bio step's page. Its LG top padding is deliberately tighter than
   // `page`'s XL: those steps open on a title, this one opens straight onto the
   // field, which needs no headroom above it.
@@ -789,14 +813,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: MD,
   },
-  // Selected = a DEEP GREEN card carrying WHITE content, against the light
-  // green of the unselected ones. Same
-  // inversion the primary Button and the home centre button use. The
-  // unselected card is the faint gold wash above, so the two states differ by
-  // fill AND by ink, not by a subtle change of shade.
+  // Selected = the regular brand-purple card carrying WHITE content, against the
+  // light green of the unselected ones. Same inversion the primary Button and the
+  // home centre button use. The unselected card is the faint brand wash above, so
+  // the two states differ by fill AND by ink, not by a subtle change of shade.
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: INK,
+    backgroundColor: GREEN,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,

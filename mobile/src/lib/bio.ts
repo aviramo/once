@@ -6,9 +6,10 @@
 export const BIO_MIN = 20
 export const BIO_MAX = 150
 
-/** Trim surrounding whitespace and collapse 3+ consecutive newlines down to a
- * single blank line. Applied wherever a bio is committed so what we store and
- * what we render stay consistent regardless of entry point. */
+/** Trim surrounding whitespace and remove blank lines: any run of newlines
+ * (with only whitespace between them) collapses to a single line break, so a
+ * saved bio never carries empty lines. Applied wherever a bio is committed so
+ * what we store and what we render stay consistent regardless of entry point. */
 export function normalizeBio(s: string): string {
-  return s.trim().replace(/\n{3,}/g, '\n\n')
+  return s.trim().replace(/[ \t]*\n\s*/g, '\n')
 }

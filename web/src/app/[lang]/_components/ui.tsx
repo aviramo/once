@@ -1,6 +1,5 @@
 import Link from "next/link";
-import type { ComponentType, CSSProperties, ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Tone } from "@/lib/humanize";
 import { cn } from "@/lib/utils";
 
@@ -117,48 +116,6 @@ export function CardGrid({
   );
 }
 
-/* --------------------------------------------------------------- NavTile -- */
-
-type IconType = ComponentType<{ className?: string }>;
-
-/**
- * A module entry card for the dashboard hub — compact: an icon tile and the
- * headline count on one row, then title + description. Composes <Card> so
- * hover / href behaviour is never re-implemented.
- */
-export function NavTile({
-  icon: Icon,
-  title,
-  desc,
-  value,
-  href,
-}: {
-  icon: IconType;
-  title: string;
-  desc: string;
-  value?: ReactNode;
-  href: string;
-}) {
-  return (
-    <Card href={href} className="group p-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-5" />
-        </span>
-        {value != null ? (
-          <span className="text-2xl font-bold tabular-nums tracking-tight">
-            {value}
-          </span>
-        ) : null}
-      </div>
-      <h3 className="mt-3 text-sm font-semibold">{title}</h3>
-      <p className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="truncate">{desc}</span>
-        <ArrowLeft className="size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-primary ltr:-scale-x-100" />
-      </p>
-    </Card>
-  );
-}
 
 /* ------------------------------------------------------------------ Stat -- */
 

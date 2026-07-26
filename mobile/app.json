@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F2CCC1"
+      "backgroundColor": "#F3EEE6"
     },
     "ios": {
       "supportsTablet": false,
@@ -25,15 +25,10 @@
         "NSMicrophoneUsageDescription": "Once needs access to your microphone to record and send voice messages."
       }
     },
-    "androidStatusBar": {
-      "barStyle": "light-content",
-      "translucent": false,
-      "backgroundColor": "#417A62"
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F2CCC1"
+        "backgroundColor": "#F3EEE6"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -60,7 +55,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#E4573D"
+          "color": "#6C3FB2"
         }
       ],
       "expo-web-browser",
@@ -80,13 +75,23 @@
         }
       ],
       "./plugins/withAdiRegistration.js",
+      "./plugins/withRestrictedResizability.js",
       [
         "expo-build-properties",
         {
+          "android": {
+            "enableProguardInReleaseBuilds": true
+          },
           "ios": {
             "extraPods": [
-              { "name": "GoogleUtilities", "modular_headers": true },
-              { "name": "RecaptchaInterop", "modular_headers": true }
+              {
+                "name": "GoogleUtilities",
+                "modular_headers": true
+              },
+              {
+                "name": "RecaptchaInterop",
+                "modular_headers": true
+              }
             ]
           }
         }

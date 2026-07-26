@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, MapPin, Search, X } from "lucide-react";
 import { Avatar, EmptyState, StatusBadge } from "../../../_components/ui";
-import type { Tone } from "@/lib/humanize";
 import { relativeTime, dateTime } from "@/lib/relativeTime";
 import type { Locale } from "@/i18n/locales";
 import { cn } from "@/lib/utils";

@@ -5,15 +5,16 @@ import * as ImagePicker from 'expo-image-picker'
 import { Text, TextInput } from './AppText'
 import { BottomSheet } from './BottomSheet'
 import { Button } from './Button'
-import { CameraIcon, CloseBoldIcon } from './icons'
+import { CameraIcon, CloseBoldIcon, SendIcon } from './icons'
 import { invoke } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { tap } from '../lib/haptics'
 import { useUserStore } from '../stores/userStore'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { t } from '../i18n'
-import { SURFACE, GREEN, INK, PHOTO_CHROME, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE, WHITE_SOFT, PRIMARY } from '../colors'
-import { STROKE, ICON, LG, MD, RADIUS, RADII, SM, TEXT, WEIGHT, XS } from '../tokens'
+import { INK, PHOTO_CHROME, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, WHITE } from '../colors'
+import { FIELD_SKIN } from '../field'
+import { ICON, LG, MD, RADIUS, RADII, SM, TEXT, WEIGHT } from '../tokens'
 
 // Bottom-sheet for reporting a bug: free text + one optional image. On submit
 // the image (if any) is uploaded to the private `bug-attachments` bucket, then
@@ -129,14 +130,19 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
                 </Pressable>
               </View>
             ) : (
-              <Pressable
+              // A plain secondary button, not a hand-rolled outlined one: no
+              // button anywhere else in the app carries a rule, they separate
+              // by fill. Same size as Send below, so the pair reads as
+              // secondary + primary rather than as two unrelated objects.
+              <Button
+                label={t('bugReport.attach')}
                 onPress={onPickImage}
                 disabled={picking || submitting}
-                style={({ pressed }) => [styles.attach, pressed && styles.attachPressed]}
-              >
-                <CameraIcon color={GREEN} size={ICON.lg} />
-                <Text style={styles.attachLabel}>{t('bugReport.attach')}</Text>
-              </Pressable>
+                variant="secondary"
+                size="lg"
+                iconStart={<CameraIcon color={BLACK_STRONG} size={ICON.lg} />}
+                style={styles.attach}
+              />
             )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -147,6 +153,7 @@ export function BugReportPopup({ visible, onDismiss }: { visible: boolean; onDis
                 onPress={onSubmit}
                 disabled={!text.trim() || submitting}
                 loading={submitting}
+                iconStart={<SendIcon color={WHITE} />}
                 variant="primary"
                 size="lg"
               />
@@ -185,11 +192,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   inputWrap: {
+    // The standard typing surface, exactly as the login / onboarding fields
+    // wear it. It used to carry a full-strength GREEN rule, which read as a
+    // focused-error field shouting on an otherwise hairline-quiet sheet.
+    ...FIELD_SKIN,
     alignSelf: 'stretch',
-    backgroundColor: SURFACE,
-    borderWidth: STROKE.thin,
-    borderColor: GREEN,
-    borderRadius: RADIUS,
     paddingHorizontal: MD,
     paddingVertical: SM,
     minHeight: 120,
@@ -200,21 +207,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
     padding: 0,
   },
-  attach: {
-    alignSelf: 'stretch',
-    marginTop: MD,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SM,
-    paddingVertical: MD,
-    borderRadius: RADIUS,
-    backgroundColor: 'transparent',
-    borderWidth: STROKE.thin,
-    borderColor: GREEN,
-  },
-  attachPressed: { opacity: 0.6 },
-  attachLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: GREEN },
+  attach: { marginTop: MD },
   previewWrap: {
     alignSelf: 'stretch',
     marginTop: MD,

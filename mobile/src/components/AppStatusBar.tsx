@@ -1,19 +1,15 @@
 import { StatusBar } from 'expo-status-bar'
-import { GREEN } from '../colors'
 
-// Single source of truth for the OS status bar appearance.
+// Single source of truth for the OS status bar appearance: it sets the GLYPH
+// colour and nothing else. The purple band behind the glyphs is painted by the
+// app itself (`StatusBarBand`), not by the OS.
 //
-// The bar is a SOLID GREEN band across every screen, carrying WHITE system
-// icons, and the app starts BELOW it — nothing is drawn behind the bar.
-//
-// That requires `edgeToEdgeEnabled: false` in app.json. While it was true,
-// Android forced a transparent status bar and drew the app underneath it, so
-// `backgroundColor` here was silently ignored and the page tone showed through
-// no matter what this component asked for. If the bar ever goes see-through
-// again, check that flag before touching anything in this file.
-//
-// `style` stays a prop for the rare screen that paints its own bar background
-// and needs dark glyphs on it.
+// It sets ONLY `style` on purpose. The app runs edge-to-edge
+// (`android.edgeToEdgeEnabled: true`), where every bar-COLOUR API is a no-op:
+// `backgroundColor`/`translucent` here call `Window.setStatusBarColor` /
+// `setNavigationBarColor`, deprecated in Android 15 and ignored under
+// edge-to-edge. Google Play flags apps that still call them, so this file must
+// never pass a colour again — recolour the band component instead.
 //
 // expo-status-bar applies imperatively and never restores its value on
 // unmount, so a screen that forgets to set it would silently inherit whatever
@@ -21,19 +17,10 @@ import { GREEN } from '../colors'
 // rendering exactly one <AppStatusBar> per full-screen route — means the rule
 // is defined once and can't drift.
 export function AppStatusBar({
-  backgroundColor,
   style = 'light',
 }: {
-  /** Override only the bar background. */
-  backgroundColor?: string
-  /** Icon/text colour. Default 'light' — white glyphs on the green band. */
+  /** Icon/text colour. Default 'light' — white glyphs on the purple band. */
   style?: 'light' | 'dark'
 } = {}) {
-  return (
-    <StatusBar
-      style={style}
-      backgroundColor={backgroundColor ?? GREEN}
-      translucent={false}
-    />
-  )
+  return <StatusBar style={style} />
 }

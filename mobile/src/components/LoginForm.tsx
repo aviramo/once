@@ -7,9 +7,9 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { t } from '../i18n'
 import { FONT_SCALE } from '../fonts'
-import { BLACK_STRONG, INK, INK_2, INK_3, SURFACE, BLACK, WHITE, BLACK_MID, BLACK_SOFT, BORDER_SOFT, NEGATIVE, WHITE_MID } from '../colors'
+import { BLACK_STRONG, INK, INK_2, INK_3, SURFACE, BLACK, WHITE, BLACK_MID, BLACK_SOFT, NEGATIVE, WHITE_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
-import { XS, SM, MD, RADIUS, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, STROKE, MOTION, lh } from '../tokens'
+import { XS, SM, MD, ICON, ICON_CIRCLE_SIZE, TEXT as FSIZE, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, MOTION, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -98,13 +98,13 @@ function ProviderButton({ icon, label, onPress, loading, disabled }: {
 
 const ssoBtnStyles = StyleSheet.create({
   btn: {
+    // The provider buttons are the one place a button carries a rule: they
+    // must read as a white tile (the platform brand mark sits on it), so they
+    // wear the shared field skin rather than a fill of their own.
+    ...FIELD_SKIN,
     minHeight: BUTTON_MIN_HEIGHT,
     paddingVertical: SM,
     paddingHorizontal: BUTTON_MIN_HEIGHT,
-    backgroundColor: SURFACE,
-    borderRadius: RADIUS,
-    borderWidth: STROKE.thin,
-    borderColor: BORDER_SOFT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

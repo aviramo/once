@@ -18,7 +18,8 @@ import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
-import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_STRONG, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
+import { FIELD_SKIN } from '../src/field'
+import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_SOFT, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
 import { SendIcon, MicIcon } from '../src/components/icons'
 import { PullPane, usePullBehavior } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
@@ -27,6 +28,7 @@ import { AppStatusBar } from '../src/components/AppStatusBar'
 import { StatusBarBand } from '../src/components/StatusBarBand'
 import { chatCacheKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
+import { nameFromTitle } from '../src/lib/profileTitle'
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
@@ -63,6 +65,20 @@ function buildRecWavePath(bars: number[], W: number, H: number): string {
 type RecordPhase = 'idle' | 'recording' | 'preview'
 
 
+// A reply points at the message it answers via that message's identity
+// (user_id + created_at, the composite used everywhere else) and carries a
+// frozen preview snapshot so the quote renders without the original needing
+// to be loaded in the (paginated) list. `kind` picks the icon/label; `preview`
+// is a short text excerpt for text messages, absent for media.
+type ReplyKind = 'text' | 'image' | 'audio' | 'location' | 'schedule'
+const REPLY_PREVIEW_MAX = 140
+interface ReplySnapshot {
+  user_id: string
+  created_at: string
+  kind: ReplyKind
+  preview?: string | null
+}
+
 interface Message {
   user_id: string
   other_id: string
@@ -74,12 +90,46 @@ interface Message {
   audio_bars?: number[] | null
   audio_duration_ms?: number | null
   schedule?: { anchor: string; weeks: boolean[][] } | null
+  reply_to?: ReplySnapshot | null
   is_event?: boolean
   _pending?: boolean
   _failed?: boolean
   _localUri?: string  // optimistic image preview before upload completes
   _loadingLocation?: boolean  // spinner while GPS acquires precise fix
   _audioUri?: string  // local URI for optimistic audio preview
+}
+
+// Classify a message into a ReplyKind by the same content-dispatch order the
+// renderer uses, so a quote's icon always matches how the original renders.
+function replyKindOf(m: Message): ReplyKind {
+  if (m.audio_key || m._audioUri) return 'audio'
+  if (m.image_key || m._localUri) return 'image'
+  if (m.location || m._loadingLocation) return 'location'
+  if (m.schedule) return 'schedule'
+  return 'text'
+}
+
+// Freeze the snapshot stored on the reply we're about to send.
+function buildReplySnapshot(m: Message): ReplySnapshot {
+  const kind = replyKindOf(m)
+  return {
+    user_id: m.user_id,
+    created_at: m.created_at,
+    kind,
+    preview: kind === 'text' ? (m.text ?? '').slice(0, REPLY_PREVIEW_MAX) : null,
+  }
+}
+
+// The one-line label a quote shows for a non-text message (text quotes show
+// their excerpt instead). Reused by the bubble quote and the composer bar.
+function replyPreviewLabel(kind: ReplyKind): string {
+  switch (kind) {
+    case 'image': return t('chat.reply.image')
+    case 'audio': return t('chat.reply.audio')
+    case 'location': return t('chat.reply.location')
+    case 'schedule': return t('chat.reply.schedule')
+    default: return ''
+  }
 }
 
 // ── Date / time helpers ────────────────────────────────────────────────────
@@ -156,6 +206,17 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   const [otherIsTyping, setOtherIsTyping] = useState(false)
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null)
+  // The message the composer is currently answering (null = normal compose).
+  // Mirrored to a ref so the send handlers (memoized without replyTo in deps)
+  // can read-and-clear it without re-creating on every keystroke.
+  const [replyTo, setReplyTo] = useState<ReplySnapshot | null>(null)
+  const replyToRef = useRef<ReplySnapshot | null>(null)
+  useEffect(() => { replyToRef.current = replyTo }, [replyTo])
+  const takeReply = useCallback((): ReplySnapshot | undefined => {
+    const r = replyToRef.current
+    if (r) { replyToRef.current = null; setReplyTo(null) }
+    return r ?? undefined
+  }, [])
 
   // ── Cache helpers ──────────────────────────────────────────────────────
   const cacheKey = otherId ? chatCacheKey(otherId) : ''
@@ -239,7 +300,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
   }))
   const inputWrapBorderStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(attachAnim.value, [0, 1], [BORDER_STRONG, PRIMARY]),
+    borderColor: interpolateColor(attachAnim.value, [0, 1], [BORDER_SOFT, PRIMARY]),
   }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
@@ -355,6 +416,31 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
   // ── Reversed messages for inverted FlatList ──────────────────────────────
   const reversedMessages = useMemo(() => messages.reduceRight<Message[]>((acc, m) => { acc.push(m); return acc }, []), [messages])
+
+  // ── Reply-to-message ─────────────────────────────────────────────────────
+  // Arm the composer to answer `m`, and focus the field so the keyboard is
+  // ready. The quote snapshot is frozen here (see buildReplySnapshot).
+  const beginReply = useCallback((m: Message) => {
+    setReplyTo(buildReplySnapshot(m))
+    inputRef.current?.focus()
+  }, [])
+  // The message a quote-tap just jumped to, flashed briefly as a "here it is"
+  // hint. `n` is a nonce so tapping the same quote again re-triggers the flash;
+  // the whole thing is cleared after the pulse so it never lingers.
+  const [highlight, setHighlight] = useState<{ key: string; n: number } | null>(null)
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (highlightTimer.current) clearTimeout(highlightTimer.current) }, [])
+  // Jump to the original message a quote points at, when it's loaded in the
+  // list, and flash it. Silently no-ops if it's been paged out (older than the
+  // loaded page).
+  const scrollToOriginal = useCallback((snap: ReplySnapshot) => {
+    const idx = reversedMessages.findIndex(m => m.user_id === snap.user_id && m.created_at === snap.created_at)
+    if (idx < 0) return
+    scrollRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 })
+    setHighlight(prev => ({ key: snap.user_id + snap.created_at, n: (prev?.n ?? 0) + 1 }))
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlight(null), HIGHLIGHT_TOTAL_MS)
+  }, [reversedMessages])
 
   // Backward-clamp displayed timestamps so each bubble's time never exceeds
   // its newer neighbor's. The raw created_at value is whoever-sent-it's local
@@ -877,12 +963,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     setInputHeight(INPUT_MIN_HEIGHT)
     hasTextShared.value = 0
     const now = new Date().toISOString()
+    const reply = takeReply()
     seenSet.current.add(userId + now)
     newMsgKeysRef.current.add(userId + now)
-    setMessages(prev => [...prev, { user_id: userId, other_id: otherId, created_at: now, text: msg, _pending: true }])
+    setMessages(prev => [...prev, { user_id: userId, other_id: otherId, created_at: now, text: msg, reply_to: reply, _pending: true }])
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
     try {
-      await invoke('app/chat', { chat: { text: msg, created_at: now } })
+      await invoke('app/chat', { chat: { text: msg, reply_to: reply, created_at: now } })
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === now
           ? { ...m, _pending: false } : m
@@ -894,7 +981,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       ))
     }
     setSending(false)
-  }, [text, sending, userId, otherId])
+  }, [text, sending, userId, otherId, takeReply])
 
   const handleRetryText = useCallback(async (failedMsg: Message) => {
     if (!failedMsg.text || !userId || !otherId) return
@@ -903,7 +990,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         ? { ...m, _failed: false, _pending: true } : m
     ))
     try {
-      await invoke('app/chat', { chat: { text: failedMsg.text, created_at: failedMsg.created_at } })
+      await invoke('app/chat', { chat: { text: failedMsg.text, reply_to: failedMsg.reply_to ?? undefined, created_at: failedMsg.created_at } })
     } catch {
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === failedMsg.created_at
@@ -979,12 +1066,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     const localUri = manipResult.uri
     const key = `${userId}/${Date.now()}.jpg`
     const now = new Date().toISOString()
+    const reply = takeReply()
     // Optimistic bubble with local preview
     seenSet.current.add(userId + now)
     newMsgKeysRef.current.add(userId + now)
     setMessages(prev => [...prev, {
       user_id: userId, other_id: otherId, created_at: now,
-      image_key: key, _localUri: localUri, _pending: true,
+      image_key: key, reply_to: reply, _localUri: localUri, _pending: true,
     }])
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
     // Upload via ArrayBuffer — reliable with local file URIs on React Native
@@ -1000,7 +1088,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'chat-images/', { intermediates: true }).catch(() => {})
       await FileSystem.copyAsync({ from: localUri, to: cachedPath }).catch(() => {})
       signedUrlCache.current.set(key, cachedPath)
-      await invoke('app/chat', { chat: { image_key: key, created_at: now } })
+      await invoke('app/chat', { chat: { image_key: key, reply_to: reply, created_at: now } })
       setMessages(prev => prev.map(m =>
         m._pending && m.image_key === key
           ? { ...m, _pending: false } : m
@@ -1011,7 +1099,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ? { ...m, _pending: false, _failed: true } : m
       ))
     }
-  }, [userId, otherId, pickingImage])
+  }, [userId, otherId, pickingImage, takeReply])
 
   const handleRetryImage = useCallback(async (failedMsg: Message) => {
     const key = failedMsg.image_key
@@ -1033,7 +1121,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'chat-images/', { intermediates: true }).catch(() => {})
       await FileSystem.copyAsync({ from: localUri, to: cachedPath }).catch(() => {})
       signedUrlCache.current.set(key, cachedPath)
-      await invoke('app/chat', { chat: { image_key: key, created_at: failedMsg.created_at } })
+      await invoke('app/chat', { chat: { image_key: key, reply_to: failedMsg.reply_to ?? undefined, created_at: failedMsg.created_at } })
     } catch {
       setMessages(prev => prev.map(m =>
         m._pending && m.image_key === key
@@ -1048,12 +1136,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     if (perm.status !== 'granted') { tap(); return }
     // Show spinner bubble immediately while GPS acquires precise fix
     const now = new Date().toISOString()
+    const reply = takeReply()
     const loadingKey = userId + now
     seenSet.current.add(loadingKey)
     newMsgKeysRef.current.add(loadingKey)
     setMessages(prev => [...prev, {
       user_id: userId, other_id: otherId, created_at: now,
-      _pending: true, _loadingLocation: true,
+      reply_to: reply, _pending: true, _loadingLocation: true,
     }])
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
     let location: { lat: number; lng: number }
@@ -1091,7 +1180,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         : m,
     ))
     try {
-      await invoke('app/chat', { chat: { location, created_at: now } })
+      await invoke('app/chat', { chat: { location, reply_to: reply, created_at: now } })
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === now
           ? { ...m, _pending: false } : m
@@ -1102,7 +1191,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ? { ...m, _pending: false, _failed: true } : m
       ))
     }
-  }, [userId, otherId])
+  }, [userId, otherId, takeReply])
 
   const handleRetryLocation = useCallback(async (failedMsg: Message) => {
     if (!failedMsg.location || !userId || !otherId) return
@@ -1111,7 +1200,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         ? { ...m, _failed: false, _pending: true } : m
     ))
     try {
-      await invoke('app/chat', { chat: { location: failedMsg.location, created_at: failedMsg.created_at } })
+      await invoke('app/chat', { chat: { location: failedMsg.location, reply_to: failedMsg.reply_to ?? undefined, created_at: failedMsg.created_at } })
     } catch {
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === failedMsg.created_at
@@ -1137,16 +1226,17 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     const cleanWeeks = sched.weeks.filter(w => w.some(d => d))
     const snapshot = { anchor, weeks: cleanWeeks }
     const now = new Date().toISOString()
+    const reply = takeReply()
     const key = userId + now
     seenSet.current.add(key)
     newMsgKeysRef.current.add(key)
     setMessages(prev => [...prev, {
       user_id: userId, other_id: otherId, created_at: now,
-      schedule: snapshot, _pending: true,
+      schedule: snapshot, reply_to: reply, _pending: true,
     }])
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
     try {
-      await invoke('app/chat', { chat: { schedule: snapshot, created_at: now } })
+      await invoke('app/chat', { chat: { schedule: snapshot, reply_to: reply, created_at: now } })
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === now
           ? { ...m, _pending: false } : m
@@ -1157,7 +1247,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ? { ...m, _pending: false, _failed: true } : m
       ))
     }
-  }, [userId, otherId, myFamily])
+  }, [userId, otherId, myFamily, takeReply])
 
   const handleRetrySchedule = useCallback(async (failedMsg: Message) => {
     if (!failedMsg.schedule || !userId || !otherId) return
@@ -1166,7 +1256,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         ? { ...m, _failed: false, _pending: true } : m
     ))
     try {
-      await invoke('app/chat', { chat: { schedule: failedMsg.schedule, created_at: failedMsg.created_at } })
+      await invoke('app/chat', { chat: { schedule: failedMsg.schedule, reply_to: failedMsg.reply_to ?? undefined, created_at: failedMsg.created_at } })
       setMessages(prev => prev.map(m =>
         m._pending && m.user_id === userId && m.created_at === failedMsg.created_at
           ? { ...m, _pending: false } : m
@@ -1302,10 +1392,11 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     const localUri = audioUri
     const bars = previewBars.length >= 8 ? previewBars : null
     const durationMs = audioDuration > 0 ? audioDuration : null
+    const reply = takeReply()
     setMessages(prev => [...prev, {
       user_id: userId, other_id: otherId, created_at: now,
       audio_key: key, audio_bars: bars, audio_duration_ms: durationMs,
-      _audioUri: localUri, _pending: true,
+      reply_to: reply, _audioUri: localUri, _pending: true,
     }])
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
     previewPlayer.pause()
@@ -1326,7 +1417,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'chat-audio/', { intermediates: true }).catch(() => {})
       await FileSystem.copyAsync({ from: localUri, to: cachedAudioPath }).catch(() => {})
       signedAudioUrlCache.current.set(key, cachedAudioPath)
-      await invoke('app/chat', { chat: { audio_key: key, audio_bars: bars, audio_duration_ms: durationMs, created_at: now } })
+      await invoke('app/chat', { chat: { audio_key: key, audio_bars: bars, audio_duration_ms: durationMs, reply_to: reply, created_at: now } })
       setMessages(prev => prev.map(m =>
         m._pending && m.audio_key === key
           ? { ...m, _pending: false } : m
@@ -1337,7 +1428,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ? { ...m, _pending: false, _failed: true } : m
       ))
     }
-  }, [audioUri, userId, otherId, previewBars, audioDuration])
+  }, [audioUri, userId, otherId, previewBars, audioDuration, takeReply])
 
   const handleRetryAudio = useCallback(async (failedMsg: Message) => {
     const key = failedMsg.audio_key
@@ -1359,7 +1450,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'chat-audio/', { intermediates: true }).catch(() => {})
       await FileSystem.copyAsync({ from: localUri, to: cachedAudioPath }).catch(() => {})
       signedAudioUrlCache.current.set(key, cachedAudioPath)
-      await invoke('app/chat', { chat: { audio_key: key, audio_bars: failedMsg.audio_bars ?? null, audio_duration_ms: failedMsg.audio_duration_ms ?? null, created_at: failedMsg.created_at } })
+      await invoke('app/chat', { chat: { audio_key: key, audio_bars: failedMsg.audio_bars ?? null, audio_duration_ms: failedMsg.audio_duration_ms ?? null, reply_to: failedMsg.reply_to ?? undefined, created_at: failedMsg.created_at } })
     } catch {
       setMessages(prev => prev.map(m =>
         m._pending && m.audio_key === key
@@ -1415,6 +1506,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       <View style={[styles.msgWrap, isFirstInGroup && styles.msgWrapFirst]}>
         {showSep && <DaySeparator label={dateSeparatorLabel(msg.created_at)} />}
         {showNewSep && !showSep && <DaySeparator label={t('chat.newMessages')} bold />}
+        <HighlightFlash active={highlight?.key === msgAnimKey} pulse={highlight?.n ?? 0}>
+        <SwipeToReply enabled={!msg._failed} onReply={() => beginReply(msg)}>
         <View style={msg._failed ? styles.failedOpacity : undefined}>
           {msg.audio_key || msg._audioUri ? (
             <AudioBubble
@@ -1432,6 +1525,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               onAutoPlayConsumed={consumeAutoPlay}
               activePlayingKey={activePlayingKey}
               onPlayStart={handlePlayStart}
+              reply={msg.reply_to}
+              onReplyPress={() => msg.reply_to && scrollToOriginal(msg.reply_to)}
             />
           ) : msg.image_key || msg._localUri ? (
             <ImageBubble
@@ -1443,6 +1538,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               time={displayTime}
               onPress={uri => setLightboxUri(uri)}
               status={msgStatus}
+              reply={msg.reply_to}
+              onReplyPress={() => msg.reply_to && scrollToOriginal(msg.reply_to)}
             />
           ) : msg.location || msg._loadingLocation ? (
             <LocationBubble
@@ -1452,6 +1549,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               location={msg.location ?? null}
               time={displayTime}
               status={msgStatus}
+              reply={msg.reply_to}
+              onReplyPress={() => msg.reply_to && scrollToOriginal(msg.reply_to)}
             />
           ) : msg.schedule ? (
             <ScheduleBubble
@@ -1462,6 +1561,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               senderIsMale={isMine ? isMale : matchIsMale}
               time={displayTime}
               status={msgStatus}
+              reply={msg.reply_to}
+              onReplyPress={() => msg.reply_to && scrollToOriginal(msg.reply_to)}
             />
           ) : (
             <AnimatedBubble
@@ -1473,6 +1574,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 isLastInGroup && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
               ]}
             >
+              {msg.reply_to && (
+                <ReplyQuote
+                  snapshot={msg.reply_to}
+                  tone={isMine ? 'mine' : 'theirs'}
+                  onPress={() => msg.reply_to && scrollToOriginal(msg.reply_to)}
+                />
+              )}
               <View style={styles.bubbleTextRow}>
                 <Text style={[styles.bubbleText, isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs]}>
                   {msg.text}
@@ -1487,6 +1595,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             </AnimatedBubble>
           )}
         </View>
+        </SwipeToReply>
+        </HighlightFlash>
         {msg._failed && isMine && (
           <Pressable
             onPress={() => {
@@ -1510,7 +1620,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     )
   }, [reversedMessages, messages.length, firstNewIdx, userId, otherLastRead, getChatImageUrl, getChatAudioUrl,
       handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation, handleRetrySchedule,
-      isMale, matchIsMale, displayTimes,
+      isMale, matchIsMale, displayTimes, beginReply, scrollToOriginal, highlight,
       routedToEarpiece, toggleAudioRouting, autoPlayKey, handleAudioFinished, consumeAutoPlay,
       activePlayingKey, handlePlayStart])
 
@@ -1536,6 +1646,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           keyboardShouldPersistTaps="handled"
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
+          onScrollToIndexFailed={() => {}}
           ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: MD, alignItems: 'center' }}>
@@ -1556,6 +1667,23 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             bar lands just above whatever sits at the bottom of the screen
             via flex layout — no per-platform spacer needed. */}
         <View style={styles.inputBarOuter}>
+          {replyTo && (
+            <View style={styles.replyComposer}>
+              <View style={styles.replyComposerQuote}>
+                <ReplyQuote snapshot={replyTo} tone="composer" onPress={() => scrollToOriginal(replyTo)} />
+              </View>
+              <Pressable
+                onPress={() => { tap(); setReplyTo(null) }}
+                hitSlop={8}
+                accessibilityLabel={t('chat.reply.a11y')}
+                style={({ pressed }) => [styles.replyComposerClose, pressed && styles.attachBarItemPressed]}
+              >
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={GREEN_HALF} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M18 6L6 18M6 6l12 12" />
+                </Svg>
+              </Pressable>
+            </View>
+          )}
           {attachConfirm && (
             <View style={styles.attachConfirm}>
               <Text style={styles.attachConfirmText}>
@@ -1770,7 +1898,161 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
 // ── Small pieces ──────────────────────────────────────────────────────────
 
-function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPress, status }: {
+// ── Reply-to-message ───────────────────────────────────────────────────────
+
+// Finger travel that commits a swipe-to-reply. Local to the chat gesture,
+// distinct from the shell's PULL_* thresholds (which govern full-surface
+// pulls, not a per-bubble horizontal nudge).
+const REPLY_TRIGGER_PX = 56
+
+// Quote-tap highlight choreography, composed from MOTION tiers: a quick fade
+// in, a hold so the eye lands on it, then a gentle fade out — ~1s total. The
+// clear timer (HIGHLIGHT_TOTAL_MS) matches the sequence so state is dropped the
+// instant the pulse ends and never lingers.
+const HIGHLIGHT_HOLD_MS = MOTION.base * 2
+const HIGHLIGHT_TOTAL_MS = MOTION.fast + HIGHLIGHT_HOLD_MS + MOTION.base
+
+// A brief accent band behind a message row, used as the "here it is" cue when a
+// quote-tap scrolls to the original. Fades in, holds, fades out (see the MOTION
+// composition above); an off-screen row that scrolls into view plays it on
+// mount, and re-tapping the same quote re-fires it via the `pulse` nonce.
+function HighlightFlash({ active, pulse, children }: {
+  active: boolean
+  pulse: number
+  children: React.ReactNode
+}) {
+  const v = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (!active) return
+    Animated.sequence([
+      Animated.timing(v, { toValue: 1, duration: MOTION.fast, useNativeDriver: true }),
+      Animated.delay(HIGHLIGHT_HOLD_MS),
+      Animated.timing(v, { toValue: 0, duration: MOTION.base, useNativeDriver: true }),
+    ]).start()
+  }, [active, pulse])
+  return (
+    <View>
+      <Animated.View pointerEvents="none" style={[styles.highlightFlash, { opacity: v }]} />
+      {children}
+    </View>
+  )
+}
+
+function ReplyArrowIcon({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points="9,17 4,12 9,7" />
+      <Path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+    </Svg>
+  )
+}
+
+function ReplyKindIcon({ kind, color }: { kind: ReplyKind; color: string }) {
+  const p = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  switch (kind) {
+    case 'image': return <Svg {...p}><Rect x={3} y={5} width={18} height={14} rx={2.5} /><Circle cx={9} cy={11} r={2} /><Path d="M21 16l-4.5-4.5L8 19" /></Svg>
+    case 'audio': return <Svg {...p}><Rect x={9} y={3} width={6} height={11} rx={3} /><Path d="M6 11a6 6 0 0 0 12 0M12 17v3" /></Svg>
+    case 'location': return <Svg {...p}><Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" /><Circle cx={12} cy={9} r={2.5} /></Svg>
+    case 'schedule': return <Svg {...p}><Rect x={3} y={4.5} width={18} height={16} rx={2.5} /><Path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></Svg>
+    default: return null
+  }
+}
+
+// The frozen quote of the message being answered. Rendered both inside the
+// answering bubble (tone mine/theirs, matching the bubble it sits in) and in
+// the composer bar above the input (tone composer). `onPress` scrolls to the
+// original when it's loaded in the list.
+function ReplyQuote({ snapshot, tone, onPress }: {
+  snapshot: ReplySnapshot
+  tone: 'mine' | 'theirs' | 'composer'
+  onPress?: () => void
+}) {
+  const profile = useUserStore(s => s.profile)
+  // Resolve the quoted message's author to a display name: the partner's name
+  // (split from their combined title) or a gendered "You" for our own messages.
+  const senderName = snapshot.user_id === profile?.user_id
+    ? tg('chat.reply.you', profile?.is_male ?? null)
+    : nameFromTitle(profile?.relations?.match?.title)
+  const c = tone === 'mine'
+    ? { bg: WHITE_SOFT, bar: WHITE_STRONG, text: WHITE_STRONG }
+    : { bg: GREEN_SOFT, bar: PRIMARY, text: GREEN }
+  // A text quote always shows its written text (never the media label); media
+  // kinds show an icon + short label.
+  const isText = snapshot.kind === 'text'
+  const body = (
+    <View style={[styles.replyQuote, { backgroundColor: c.bg }]}>
+      <View style={[styles.replyQuoteBar, { backgroundColor: c.bar }]} />
+      <View style={styles.replyQuoteBody}>
+        {!!senderName && (
+          <Text style={[styles.replyQuoteName, { color: c.bar }]} numberOfLines={1}>
+            {senderName}
+          </Text>
+        )}
+        {isText ? (
+          <Text style={[styles.replyQuoteText, { color: c.text }]} numberOfLines={1}>
+            {snapshot.preview}
+          </Text>
+        ) : (
+          <View style={styles.replyQuoteMediaRow}>
+            <ReplyKindIcon kind={snapshot.kind} color={c.text} />
+            <Text style={[styles.replyQuoteText, { color: c.text }]} numberOfLines={1}>
+              {replyPreviewLabel(snapshot.kind)}
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  )
+  if (!onPress) return body
+  return <Pressable onPress={onPress} hitSlop={4}>{body}</Pressable>
+}
+
+// Wraps a bubble in the swipe-to-reply gesture: a short horizontal drag toward
+// the reveal edge slides the bubble and fades in a reply arrow behind it;
+// releasing past REPLY_TRIGGER_PX fires onReply. Horizontal-only activation
+// (failOffsetY) keeps the vertical FlatList scroll untouched. RTL mirrors the
+// direction. This is a per-bubble horizontal gesture — NOT a swipe-down, so it
+// does not belong to PullPane.
+function SwipeToReply({ enabled, onReply, children }: {
+  enabled: boolean
+  onReply: () => void
+  children: React.ReactNode
+}) {
+  const tx = useSharedValue(0)
+  const REVEAL = isRTL ? -1 : 1
+  const fire = useCallback(() => { tapMedium(); onReply() }, [onReply])
+  const pan = useMemo(() => Gesture.Pan()
+    .enabled(enabled)
+    .activeOffsetX(isRTL ? [-12, 9999] : [-9999, 12])
+    .failOffsetY([-14, 14])
+    .onUpdate(e => {
+      'worklet'
+      const d = e.translationX * REVEAL
+      tx.value = d > 0 ? Math.min(d, REPLY_TRIGGER_PX * 1.4) : 0
+    })
+    .onEnd(e => {
+      'worklet'
+      if (e.translationX * REVEAL >= REPLY_TRIGGER_PX) runOnJS(fire)()
+      tx.value = withTiming(0, { duration: MOTION.fast })
+    }), [enabled, fire])
+  const rowStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value * REVEAL }] }))
+  const iconStyle = useAnimatedStyle(() => {
+    const prog = Math.min(tx.value / REPLY_TRIGGER_PX, 1)
+    return { opacity: prog, transform: [{ scale: 0.6 + 0.4 * prog }] }
+  })
+  return (
+    <View>
+      <ReAnimated.View style={[styles.swipeReplyIcon, iconStyle]} pointerEvents="none">
+        <ReplyArrowIcon color={GREEN_HALF} />
+      </ReAnimated.View>
+      <GestureDetector gesture={pan}>
+        <ReAnimated.View style={rowStyle}>{children}</ReAnimated.View>
+      </GestureDetector>
+    </View>
+  )
+}
+
+function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPress, status, reply, onReplyPress }: {
   animate: boolean
   isMine: boolean
   isLast: boolean
@@ -1779,6 +2061,8 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
   time: string
   onPress?: (uri: string) => void
   status: 'pending' | 'failed' | 'sent' | 'read'
+  reply?: ReplySnapshot | null
+  onReplyPress?: () => void
 }) {
   const [uri, setUri] = useState<string | null>(msg._localUri ?? null)
 
@@ -1796,6 +2080,7 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
+      {reply && <ReplyQuote snapshot={reply} tone={isMine ? 'mine' : 'theirs'} onPress={onReplyPress} />}
       {uri ? (
         <Pressable onPress={() => !msg._pending && onPress?.(uri)} disabled={!onPress || msg._pending} style={{ width: '100%' }}>
           <Image source={{ uri }} style={styles.chatImage} resizeMode="cover" />
@@ -1820,13 +2105,15 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
   )
 }
 
-function LocationBubble({ animate, isMine, isLast, location, time, status }: {
+function LocationBubble({ animate, isMine, isLast, location, time, status, reply, onReplyPress }: {
   animate: boolean
   isMine: boolean
   isLast: boolean
   location: { lat: number; lng: number } | null
   time: string
   status: 'pending' | 'failed' | 'sent' | 'read'
+  reply?: ReplySnapshot | null
+  onReplyPress?: () => void
 }) {
   const handleOpen = () => {
     if (!location) return
@@ -1851,6 +2138,7 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
+      {reply && <ReplyQuote snapshot={reply} tone={isMine ? 'mine' : 'theirs'} onPress={onReplyPress} />}
       <Pressable onPress={handleOpen} style={styles.locationInner} disabled={!location}>
         <View style={[styles.locationIconWrap, { backgroundColor: iconBg }]}>
           {location ? (
@@ -1897,7 +2185,7 @@ function LocationBubble({ animate, isMine, isLast, location, time, status }: {
 // the chat bubble inverts this to highlight FREE (no-kids) days — that's the
 // useful signal for a partner reading the message. The header reads "Days I'm
 // free (no kids)" so the inversion is unambiguous.
-function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time, status }: {
+function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time, status, reply, onReplyPress }: {
   animate: boolean
   isMine: boolean
   isLast: boolean
@@ -1905,6 +2193,8 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
   senderIsMale: boolean | null | undefined
   time: string
   status: 'pending' | 'failed' | 'sent' | 'read'
+  reply?: ReplySnapshot | null
+  onReplyPress?: () => void
 }) {
   const viewerWeekStart = useUserStore(s => s.profile?.weekStart) ?? defaultWeekStart(appLang)
   const weekendSet = useMemo(() => new Set(weekendDays(appLang)), [])
@@ -1936,6 +2226,7 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
+      {reply && <ReplyQuote snapshot={reply} tone={isMine ? 'mine' : 'theirs'} onPress={onReplyPress} />}
       <Text style={[styles.scheduleTitle, isMine && styles.scheduleTitleMine]} numberOfLines={2}>
         {tg('chat.scheduleTitle', senderIsMale ?? null)}
       </Text>
@@ -2233,7 +2524,7 @@ function Waveform({
   )
 }
 
-function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgStatus, routedToEarpiece, onToggleRouting, autoPlayKey, onAudioFinished, onAutoPlayConsumed, activePlayingKey, onPlayStart }: {
+function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgStatus, routedToEarpiece, onToggleRouting, autoPlayKey, onAudioFinished, onAutoPlayConsumed, activePlayingKey, onPlayStart, reply, onReplyPress }: {
   animate: boolean
   isMine: boolean
   isLast: boolean
@@ -2248,6 +2539,8 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
   onAutoPlayConsumed: () => void
   activePlayingKey: string | null
   onPlayStart: (key: string) => void
+  reply?: ReplySnapshot | null
+  onReplyPress?: () => void
 }) {
   const [pos, setPos] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -2435,6 +2728,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     <View style={[styles.audioOuter, { justifyContent: isMine ? 'flex-end' : 'flex-start' }]}>
       {isMine && routeBtn}
       <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
+        {reply && <ReplyQuote snapshot={reply} tone={isMine ? 'mine' : 'theirs'} onPress={onReplyPress} />}
         <View style={styles.audioRow}>
           <Pressable
             onPress={handlePlayPause}
@@ -2721,8 +3015,59 @@ const styles = StyleSheet.create({
   },
   retryLabel: { fontSize: TEXT.xs, color: INK },
 
+  // ── Reply-to-message ──
+  // Accent band flashed behind a message row when a quote-tap lands on it. A
+  // slight horizontal bleed past the row padding so the cue reads as the whole
+  // message, not just the bubble; sits behind the bubble (opaque) so the tint
+  // shows in the row gutters around it.
+  highlightFlash: {
+    position: 'absolute',
+    top: 0, bottom: 0, start: -XS, end: -XS,
+    backgroundColor: PRIMARY_BG,
+    borderRadius: RADIUS,
+  },
+  // The reply arrow revealed behind a bubble as it's swiped, parked at the
+  // START edge (mirrors under RTL). Absolute so it doesn't shift layout.
+  swipeReplyIcon: {
+    position: 'absolute',
+    top: 0, bottom: 0, start: SM,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // The frozen quote block — inside a bubble and inside the composer bar. A
+  // translucent tile with a leading accent rule; colours are passed per-tone.
+  replyQuote: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: SM,
+    borderRadius: RADII.sm,
+    paddingVertical: XS,
+    paddingEnd: SM,
+    overflow: 'hidden',
+    marginBottom: XS,
+  },
+  replyQuoteBar: { width: 3, borderRadius: RADII.pill },
+  replyQuoteBody: { flex: 1, justifyContent: 'center' },
+  replyQuoteName: { fontSize: TEXT.xs, lineHeight: lh(TEXT.sm), fontWeight: WEIGHT.semibold },
+  replyQuoteMediaRow: { flexDirection: 'row', alignItems: 'center', gap: XS },
+  replyQuoteText: { fontSize: TEXT.sm, lineHeight: lh(TEXT.sm) },
+
+  // The composer bar above the input while answering a message.
+  replyComposer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SM,
+    paddingHorizontal: SM,
+    paddingTop: SM,
+  },
+  replyComposerQuote: { flex: 1 },
+  replyComposerClose: {
+    width: 32, height: 32,
+    borderRadius: RADII.pill,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
   daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
-  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BORDER_STRONG },
+  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BORDER_SOFT },
   daySepLabel: { fontSize: TEXT.xs, color: GREEN },
 
   bubble: {
@@ -2766,15 +3111,15 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   inputWrap: {
+    // The composer is a typing surface, so it wears the standard field skin.
+    // `borderColor` is then animated to PRIMARY while the attach bar is open
+    // (inputWrapBorderStyle) — the one allowed override, and it is state.
+    ...FIELD_SKIN,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
     minHeight: INPUT_MIN_HEIGHT,
     maxHeight: INPUT_MAX_HEIGHT,
-    borderRadius: RADIUS,
-    borderWidth: STROKE.thin,
-    borderColor: BORDER_STRONG,
-    backgroundColor: SURFACE,
     paddingEnd: XS,
     overflow: 'hidden',
   },
@@ -3079,7 +3424,7 @@ const styles = StyleSheet.create({
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BLACK_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BORDER_SOFT,
   },
   scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
   scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },

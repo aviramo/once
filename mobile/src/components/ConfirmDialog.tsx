@@ -7,12 +7,15 @@ import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
 import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, BLACK_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
+import { CloseIcon, CheckIcon } from './icons'
 
 // Every decision popup in the app is this one component. The TITLE carries
-// the action: there is no icon above it, and the buttons are plain labels in
-// every scenario (destructive or not). The tinted icon badge that used to sit
-// above the title was removed at the user's request (2026-07-21) — do not
-// reintroduce it, here or in any other popup.
+// the action: there is no icon above it. The two buttons each carry a leading
+// mark (cancel = ✕, confirm = ✓ by default, or a caller badge via
+// `confirmIconStart`) so the label holds still when a tap swaps the icon for
+// the spinner. The tinted icon badge that used to sit above the title was
+// removed at the user's request (2026-07-21) — do not reintroduce it, here or
+// in any other popup.
 //
 // Informational variant: omit both `confirmLabel` and `cancelLabel` and the
 // button row is dropped entirely — the sheet becomes a notice the user
@@ -44,10 +47,10 @@ export function ConfirmDialog({
   cancelLabel?: string
   /** Omit (together with `cancelLabel`) for a button-less info popup. */
   confirmLabel?: string
-  /** Opt-in icon/badge rendered INSIDE the confirm button before its label.
-   * Deliberately breaks the "buttons carry no icon" convention for the one
-   * case the user asked for it: the broadcast popup must show the credit
-   * cost on its confirm button (see CLAUDE.md "Credits economy"). */
+  /** Overrides the default confirm mark (✓) with a specific icon/badge before
+   * the label — e.g. the broadcast popup showing the credit cost on its
+   * confirm button (see CLAUDE.md "Credits economy"). Omit to get the default
+   * check. */
   confirmIconStart?: ReactNode
   /** Marks this popup's confirm as an INVITE action, which is the one case
    * that wears the orange instead of the default green. */
@@ -138,6 +141,7 @@ export function ConfirmDialog({
             <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
               <Button
                 label={cancelLabel}
+                iconStart={<CloseIcon color={BLACK_STRONG} />}
                 onPress={() => { setPressed('cancel'); onCancel?.() }}
                 variant="secondary"
                 size="lg"
@@ -151,7 +155,11 @@ export function ConfirmDialog({
             <View style={[styles.slot, confirmFlex != null && { flex: confirmFlex }]}>
               <Button
                 label={confirmLabel}
-                iconStart={confirmIconStart}
+                // Default confirm mark (✓) so the button carries an icon and
+                // the label never shifts when it swaps for the spinner. A
+                // caller that needs a specific badge (e.g. the credit cost)
+                // overrides it via `confirmIconStart`.
+                iconStart={confirmIconStart ?? <CheckIcon color={WHITE} />}
                 tone={confirmTone}
                 onPress={() => { setPressed('confirm'); onConfirm?.() }}
                 variant="primary"
@@ -188,10 +196,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   desc: {
+    // Regular purple, full strength: popup body text is the regular INK
+    // purple, never a faded step (user directive 2026-07-26). The muted
+    // BLACK_STRONG read as a washed-out grey on the beige sheet.
     marginTop: SM,
     fontSize: FSIZE.md,
     lineHeight: lh(FSIZE.md),
-    color: BLACK_STRONG,
+    color: BLACK,
     textAlign: 'center',
   },
   skipRow: {
@@ -200,6 +211,11 @@ const styles = StyleSheet.create({
     gap: SM,
     marginTop: MD,
   },
+  // The ONE outline in the app allowed to be darker than BORDER_SOFT, and it
+  // is not emphasis: an unchecked box IS its rule — there is no fill, no label
+  // inside it, nothing else to see — so at 20px the standard hairline leaves
+  // the control invisible. Every other outlined thing has a shape or a label
+  // carrying it and stays on BORDER_SOFT.
   checkbox: {
     width: 20,
     height: 20,
@@ -223,7 +239,7 @@ const styles = StyleSheet.create({
   },
   skipLabel: {
     fontSize: FSIZE.sm,
-    color: BLACK_STRONG,
+    color: BLACK,
   },
   noteInput: {
     ...FIELD_SKIN,

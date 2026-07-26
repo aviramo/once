@@ -17,8 +17,8 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { GREEN_DEEP, BG, GREEN, INK, SURFACE, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, BLACK_SOFT, SURFACE_SUNK } from '../src/colors'
-import { SM, MD, LG, XL, RADII, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
+import { GREEN_DEEP, BG, GREEN, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_SOFT } from '../src/colors'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
@@ -26,13 +26,14 @@ import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
-import { Chip, PresenceDot } from '../src/components/Chip'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { claimInstallReferral } from '../src/lib/referral'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/PullPane'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
+import { CommunitiesPage } from '../src/components/CommunitiesPage'
+import { useChrome } from '../src/stores/chromeStore'
 import ChatPage from './chat'
 import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
@@ -40,9 +41,8 @@ import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '
 import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
-import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale } from '../src/components/icons'
-import type { CardAction, MatchCardHandle } from '../src/components/MatchCard'
+import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale, CloseIcon, BackIcon, UserPlusIcon, ShieldIcon } from '../src/components/icons'
+import type { CardAction } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
 
@@ -102,7 +102,7 @@ function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }
         width: AVATAR_SIZE,
         height: AVATAR_SIZE,
         borderRadius: AVATAR_SIZE / 2,
-        borderWidth: 2,
+        borderWidth: STROKE.base,
         borderColor: PRIMARY,
       }, style]}
     />
@@ -430,6 +430,26 @@ function formatClock(secsLeft: number): string {
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+// True once `expiresAt` has passed. Unlike useSecsLeft this does NOT tick every
+// second — it schedules a single timeout for the exact remaining interval and
+// re-renders once at the boundary. Used for the silent watching-card expiry
+// (no visible countdown, so per-second re-renders of this large component would
+// be pure waste). Re-evaluates on mount too, so a card whose clock already
+// lapsed while the app was backgrounded renders as expired on the very first
+// paint — no flash, no wait for the hourly cron teardown or a network fetch.
+function useLapsed(expiresAt: string | null | undefined): boolean {
+  const target = expiresAt ? new Date(expiresAt).getTime() : 0
+  const [lapsed, setLapsed] = useState(() => (target ? Date.now() >= target : false))
+  useEffect(() => {
+    if (!target) { setLapsed(false); return }
+    if (Date.now() >= target) { setLapsed(true); return }
+    setLapsed(false)
+    const id = setTimeout(() => setLapsed(true), target - Date.now())
+    return () => clearTimeout(id)
+  }, [target])
+  return lapsed
+}
+
 // ── StatusCard scaffold ──────────────────────────────────────────────────
 // Visual scaffolding shared by InviteTimerCard (page1 invite timer), EventMessageCard
 // (terminal locked-message states) and ViewersStatusCard (Viewers empty-state).
@@ -546,6 +566,7 @@ function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, onLaps
           label={t('home.cancelWaitingBtn')}
           variant="primary"
           onPress={onCancel}
+          iconStart={<CloseIcon color={WHITE} />}
           loading={busy}
         />
       </Animated.View>
@@ -569,6 +590,7 @@ function EventMessageCard({ title, description, frozen, onContinue, busy }: { ti
           label={t('home.endedBack')}
           variant="primary"
           onPress={onContinue}
+          iconStart={<BackIcon color={WHITE} />}
           loading={busy}
         />
       </Animated.View>
@@ -579,16 +601,16 @@ function EventMessageCard({ title, description, frozen, onContinue, busy }: { ti
 // ── ReplyingInviteCard ───────────────────────────────────────────────────
 // The shared invitation card for BOTH sides of an invite:
 //   - page2 "you received an invitation" (topBlock) — the original use.
-//   - page1 "send her an invite?" (footerBlock) — the send prompt that used
-//     to be a bespoke title+lead+desc+button block. It is the same info
-//     component now: same StatusCard scaffold + spacings, no standalone
-//     heading (the title rides as a bold lead-in at the start of the body
-//     via StatusCardText), ghost decline + primary accept. The accept CTA
-//     carries the CreditCost badge (coin × N) both ways so the two sides of
-//     an invitation read as mirror actions and surface what they spend.
-// `footerInset` is supplied only by the page1 footer use: the card then
-// sits at the bottom of the MatchCard scroll, so its bottom padding must
-// clear the home indicator (never below the standard LG).
+//   - page1 "send her an invite?" (invite popup) — the send prompt raised by
+//     the hero heart in the watching state. It is the same info component:
+//     same StatusCard scaffold + spacings, no standalone heading (the title
+//     rides as a bold lead-in at the start of the body via StatusCardText),
+//     ghost decline + primary accept. The accept CTA carries the CreditCost
+//     badge (coin × N) both ways so the two sides of an invitation read as
+//     mirror actions and surface what they spend.
+// `footerInset` is supplied only by the page1 popup use: the card sits at the
+// bottom of a BottomSheet, so its bottom padding must clear the home indicator
+// (never below the standard LG).
 function ReplyingInviteCard({
   title,
   description,
@@ -608,7 +630,10 @@ function ReplyingInviteCard({
   title: string
   description: string
   acceptLabel: string
-  declineLabel: string
+  /** The ghost decline CTA. Omitted on the page1 send-prompt (user directive
+   * 2026-07-25: no Skip button there — the card is dismissed by swiping the
+   * sheet down, and a person is skipped by the page1 pull gesture instead). */
+  declineLabel?: string
   /** Live countdown for an INCOMING invitation (the page2 use). The page1
    * send-prompt has nothing ticking yet, so it passes none. */
   expiresAt?: string | null
@@ -623,7 +648,9 @@ function ReplyingInviteCard({
    * to the legacy faded-disabled look + silent no-op. */
   affordable?: boolean
   onAccept: () => void
-  onDecline: () => void
+  /** Fired by the decline CTA. Omitted together with `declineLabel` on the
+   * page1 send-prompt, which has no Skip button. */
+  onDecline?: () => void
   /** Tapped when the user is unaffordable. Routes to the buy-extra popup
    * so the user has a one-tap recovery path. When unset, the button silently
    * dims and does nothing on press. */
@@ -648,19 +675,21 @@ function ReplyingInviteCard({
       <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <View style={statusButtonStyles.btnRow}>
-          <View style={statusButtonStyles.btnDecline}>
-            <Button
-              variant="secondary"
-              label={declineLabel}
-              onPress={onDecline}
-              disabled={busy}
-              silentDisabled
-            />
-          </View>
+          {declineLabel != null && onDecline != null && (
+            <View style={statusButtonStyles.btnDecline}>
+              <Button
+                variant="secondary"
+                label={declineLabel}
+                onPress={onDecline}
+                disabled={busy}
+                silentDisabled
+              />
+            </View>
+          )}
           <View style={statusButtonStyles.btnAccept}>
-            {/* The invite pair — sending one and accepting one — is the only
-                action that wears the ORANGE. Every other button in the app is
-                green; these two are what the whole product is for. */}
+            {/* The invite pair keeps tone="positive" for intent, but since the
+                app unified onto one purple (2026-07-25) it resolves to the same
+                purple as every other button — no separate action hue anymore. */}
             <Button
               variant="primary"
               tone="positive"
@@ -773,7 +802,7 @@ export default function HomePage() {
   // Paint order is low → high: home < invite < chat < menu < profile sheet.
   // Menu sits above everything on purpose — it is the one surface that stays
   // reachable while the availability gate is on.
-  type Overlay = 'menu' | 'chat' | 'profile'
+  type Overlay = 'menu' | 'chat' | 'profile' | 'communities'
   const [overlays, setOverlays] = useState<Overlay[]>([])
   // Assigned during render, NOT in an effect: the BackHandler is registered
   // once with [] deps and reads this ref, so it must never lag a render.
@@ -782,6 +811,9 @@ export default function HomePage() {
   const menuOpen = overlays.includes('menu')
   const chatOpen = overlays.includes('chat')
   const profileSheetOpen = overlays.includes('profile')
+  // Communities hub: stacks on top of the menu (like the profile sheet). Its
+  // own internal view stack is popped first by hardware-back via the ref below.
+  const communitiesSheetOpen = overlays.includes('communities')
 
   const openOverlay = useCallback((kind: Overlay) => {
     tap()
@@ -853,6 +885,19 @@ export default function HomePage() {
   // closing it returns to the menu rather than all the way home.
   const openProfileSheet = useCallback(() => openOverlay('profile'), [openOverlay])
   const closeProfileSheet = useCallback(() => closeOverlay('profile'), [closeOverlay])
+  const openCommunities = useCallback(() => openOverlay('communities'), [openOverlay])
+  const closeCommunities = useCallback(() => closeOverlay('communities'), [closeOverlay])
+  // The hub owns an internal view stack; hardware-back pops that first and only
+  // asks the shell to close the sheet once it is back at its hub (returns false).
+  const communitiesBackRef = useRef<() => boolean>(() => false)
+  // The Communities hub is a full-screen BEIGE sheet: while it's open the global
+  // status chrome flips to a flat beige top with dark glyphs and no purple band
+  // (see chromeStore). Reset on close / unmount.
+  useEffect(() => {
+    const { setBeigeTop } = useChrome.getState()
+    setBeigeTop(communitiesSheetOpen)
+    return () => setBeigeTop(false)
+  }, [communitiesSheetOpen])
 
   const shellWidth = useSharedValue(Dimensions.get('window').width)
 
@@ -927,6 +972,7 @@ export default function HomePage() {
 
   const openShellSubPage = (config: SubPageConfig): Promise<void> => {
     if (config.kind === 'profileSection') openProfileSheet()
+    else if (config.kind === 'communities') openCommunities()
     return Promise.resolve()
   }
 
@@ -950,7 +996,11 @@ export default function HomePage() {
         // The drawer animates itself out on pullY, so Back must go through its
         // own closer rather than yanking it off the stack (which would make it
         // vanish with no motion).
-        if (stack[stack.length - 1] === 'menu') closeMenuRef.current()
+        const top = stack[stack.length - 1]
+        if (top === 'menu') closeMenuRef.current()
+        // The hub pops its own internal view first; only when it's back at the
+        // hub (ref returns false) do we close the whole sheet.
+        else if (top === 'communities' && communitiesBackRef.current()) { /* handled internally */ }
         else closeTopOverlay()
         return true
       }
@@ -960,23 +1010,23 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const state = profile?.state ?? null
+  // Watching cards carry a server-stamped page1.expires_at (1h from the draw).
+  // The client honours it LOCALLY: a lapsed watching card is treated as no card
+  // (null state + null match below), so it never renders — even on the first
+  // paint after returning from background, with no dependency on the hourly
+  // cron teardown or a fetch. Only 'watching' has this clock; 'waiting' keeps
+  // its own invite countdown. A watching row with no expires_at (old server
+  // rows, pre-stamp) yields null here and never lapses until it is re-drawn.
+  const rawState = profile?.state ?? null
+  const watchingExpiresAt = rawState === 'watching' ? (profile?.relations?.page1?.expires_at ?? null) : null
+  const watchingLapsed = useLapsed(watchingExpiresAt)
+  const state = watchingLapsed ? null : rawState
   const page2Raw = profile?.relations?.page2
   const page2InviteObj: Page2Invite | null = page2Raw && !Array.isArray(page2Raw) ? page2Raw as Page2Invite : null
   const page2PendingInvite = page2InviteObj?.state === 'pending' ? page2InviteObj : null
   const page2DeadInvite = (page2InviteObj?.state === 'missed' || page2InviteObj?.state === 'fail') ? page2InviteObj : null
   const rawPage1State = profile?.relations?.page1?.state
-  // Server-side v3 page2.state, preserved by deriveCompat. We need the raw
-  // value (free / pending / chat / locked) to drive the premium popup's
-  // hide/reveal toggle separately from the legacy shimmed page2 shape.
-  const page2State = (profile?.relations as { page2State?: 'free'|'pending'|'chat'|'locked' } | undefined)?.page2State
-  // Game mode "off" = both pages locked with no live partner or invite. This
-  // is the resting state the settings GameModeCard toggle commits to via
-  // app/pause. Used here only to flag the menu tab with a gray dot so the
-  // user knows they're paused from anywhere in the home shell.
   const page1Profile = (profile?.relations?.page1 as { profile?: { user_id?: string } } | undefined)?.profile
-  const gameModeOff = rawPage1State === 'locked' && page2State === 'locked'
-    && !page1Profile?.user_id && !page2InviteObj
   // Broadcast ("show me to people" / app_add) was RETIRED from the client on
   // 2026-07-19 with the single-screen redesign: the user no longer sees who is
   // watching them, so paying a heart to be added to strangers' lists had no
@@ -1497,7 +1547,10 @@ export default function HomePage() {
   // Photo card + buttons are siblings inside the same Animated.View, so they
   // translate together (both for the layout animation and for the pull
   // gesture below). No transA/transB / slot bookkeeping required.
-  const remoteMatch = profile?.relations?.match ?? null
+  // Gated by watchingLapsed for the same reason as `state` above: a lapsed
+  // watching card must drop its match so the promote effect clears
+  // displayedMatch and the card slides out to the play button.
+  const remoteMatch = (watchingLapsed ? null : profile?.relations?.match) ?? null
   const [displayedMatch, setDisplayedMatch] = useState<Profile | null>(remoteMatch)
 
   // Match currently being preloaded into a hidden MatchCard. Once that
@@ -2021,20 +2074,6 @@ export default function HomePage() {
   // through a ConfirmDialog first.
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
-  const [skipHintOpen, setSkipHintOpen] = useState(false)
-  // Once the user taps "got it" on the skip-hint popup it's acknowledged
-  // forever (persisted seen-flag): from then on "not now" skips directly,
-  // exactly as if they'd pressed the popup's "skip" — the popup never opens
-  // again. Loaded once on mount; flipped immediately on ack so the very next
-  // "not now" in the same session already skips.
-  const [skipHintAcked, setSkipHintAcked] = useState(false)
-  useEffect(() => {
-    hasSeenFlag(SEEN_FLAGS.skipHintAck).then(setSkipHintAcked).catch(() => {})
-  }, [])
-  // Drives the watching card's inner scroll back to the top when the user
-  // acknowledges the skip hint ("got it"), so the swipe-down-to-skip
-  // gesture they were just taught is armed again.
-  const watchingCardRef = useRef<MatchCardHandle>(null)
   // Out-of-hearts auto-hide flow: the settings visibility row surfaces a "buy
   // extra hearts" prompt instead of "go visible" when balance + extra is 0
   // (the server would re-hide immediately otherwise). Tapping opens this
@@ -2229,56 +2268,24 @@ export default function HomePage() {
   // routes through the same confirm dialog as the decline button, so the
   // swipe cannot discard an invitation by accident.
 
-  // Watching-state invite prompt lives inside the MatchCard scroll (passed
-  // as footerBlock), not in the pinned HomeButtons row. The "skip" button
-  // is gone — pull-to-skip on the card handles the same intent. It is the
-  // shared ReplyingInviteCard info component (same scaffold/spacings as the
-  // page2 side): the title rides as a bold lead-in into the body, so a
-  // single tap on the primary button sends the invite.
-  //
-  // After pressing send, we keep the block mounted for ~1.5s so it doesn't
-  // pop out from under the user's finger when realtime flips state to
-  // 'waiting'. The MatchCard's auto-scroll-to-top runs in parallel, so the
-  // block visibly slides off-screen below the viewport rather than vanishing
-  // in place.
-  const [stickyInvite, setStickyInvite] = useState(false)
-  useEffect(() => {
-    if (!stickyInvite) return
-    const id = setTimeout(() => setStickyInvite(false), 1500)
-    return () => clearTimeout(id)
-  }, [stickyInvite])
-  const showInviteBlock = (state === 'watching' || stickyInvite) && isMatchCardOpen
-  const watchingInviteButton = showInviteBlock ? (
-    <ReplyingInviteCard
-      title={tgg('home.inviteConfirmTitle' as any, isMale, matchIsMale).replace(/\{name\}/g, matchName)}
-      description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
-      acceptLabel={t('home.inviteConfirmOk')}
-      declineLabel={t('home.watchingReject')}
-      // Sending an invite costs 1 heart, held server-side until the invite
-      // ends; the heart returns on every non-cancel exit, cancel forfeits it.
-      costCredits={CREDIT_COST.invite}
-      affordable={starsBalance >= CREDIT_COST.invite}
-      // A not-yet-built profile cannot send: open the build-profile popup
-      // instead of the invite. Same gate the server enforces (profileComplete),
-      // so a bypass is rejected there too.
-      onAccept={() => {
-        if (!profileBuilt) { tap(); setBuildProfileOpen(true); return }
-        setStickyInvite(true); runAction('app/invite', 'invite-confirm')
-      }}
-      // Tap-while-unaffordable opens the buy-extra picker instead of the
-      // legacy faded-disabled no-op. The button stays styled as a normal
-      // white CTA so the user sees it as actionable (user request 2026-06-01).
-      onUnaffordable={() => { tap(); setBuyExtraOpen(true) }}
-      // "Not now": first time → teach via the skip-hint popup; after the
-      // user has acknowledged it once ("got it"), skip via the SAME ride-off
-      // as a swipe (page1Pull.commit → pullY rides to screenH, the card
-      // drops, then promote) so the button and the gesture are identical.
-      onDecline={() => { if (skipHintAcked) page1Pull.commit(); else { tap(); setSkipHintOpen(true) } }}
-      busy={busy}
-      acceptLoading={busy && pendingKey === 'invite-confirm'}
-      footerInset={bottomInset}
-    />
-  ) : null
+  // Watching-state invite prompt lives in a popup raised by the hero heart,
+  // NOT inside the MatchCard scroll (user directive 2026-07-25 — moved off the
+  // card entirely). Tapping the heart opens this BottomSheet; the card carries
+  // no footer block any more. The body is the shared ReplyingInviteCard info
+  // component (same scaffold/spacings as the page2 side): the title rides as a
+  // bold lead-in into the body, so a single tap on the primary button sends
+  // the invite.
+  const [invitePopupOpen, setInvitePopupOpen] = useState(false)
+  const openInvitePopup = useCallback(() => { tap(); setInvitePopupOpen(true) }, [])
+  // What to run once the popup has fully slid out. Set before closing so the
+  // follow-up (open the build-profile gate or the buy-extra picker) fires only
+  // AFTER this Modal is gone — two Modals presenting at once on the same stack
+  // silently drops the second.
+  const invitePopupIntentRef = useRef<null | 'build' | 'buy'>(null)
+  // Only meaningful while watching with the card up. Sending flips the state to
+  // 'waiting' over Realtime, which drops `visible` and slides the popup away on
+  // its own — no keep-alive timer needed the way the inline footer once was.
+  const invitePopupVisible = invitePopupOpen && state === 'watching' && isMatchCardOpen
 
   // ── Invitation lapse ─────────────────────────────────────────────────────
   // The clock reaching 00:00 is the only local signal that an invitation died —
@@ -2326,10 +2333,10 @@ export default function HomePage() {
   ) : null
 
   // Hero-photo overlay button on the page1 MatchCard:
-  //   - watching → heart only. The heart keeps its default scroll-to-invite
-  //     behaviour (no onPress → MatchCard falls back to slowScrollToEnd).
-  //     Pause is NOT on the card any more (2026-05-22, user request) — the
-  //     only game-mode pause control is the home pane's center circle.
+  //   - watching → heart only. Tapping it now opens the invite popup
+  //     (openInvitePopup); the old scroll-to-inline-footer behaviour is gone
+  //     with the footer. Pause is NOT on the card any more (2026-05-22, user
+  //     request) — the only game-mode pause control is the home pane's center.
   //   - chat     → OPEN CHAT. This used to be the end-chat X; that moved into
   //     the chat sheet's 3-dot menu on 2026-07-19, because ending the
   //     conversation belongs with the conversation, and the home card needs an
@@ -2350,6 +2357,9 @@ export default function HomePage() {
             {
               key: 'like',
               icon: <HeartIcon color={PRIMARY} stroke={PRIMARY} size={ICON.huge} />,
+              // The heart no longer scrolls to an inline invite footer; it
+              // raises the invite popup (footer moved off the card).
+              onPress: openInvitePopup,
             },
           ]
         : []
@@ -2749,12 +2759,10 @@ export default function HomePage() {
 
   return (
     <View style={styles.backdrop}>
-      {/* Paused recolors the status bar to flat BLACK_MID so the chrome reads
-          as "muted". Always rendered (not gated on gameModeOff) so the value
-          switches both ways: a gated mount would leave the status bar stuck
-          after resume, since expo-status-bar applies its value imperatively
-          and never restores prior values on unmount. */}
-      <AppStatusBar backgroundColor={gameModeOff ? BLACK_MID : undefined} />
+      {/* Glyph colour only. The bar BACKGROUND can't be set under Android
+          edge-to-edge (see AppStatusBar) — the paused "muted" tone comes from
+          the page behind the band, not from a status-bar colour. */}
+      <AppStatusBar style={communitiesSheetOpen ? 'dark' : 'light'} />
       <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
             {/* page1 — the only standalone screen, and ALL of it is the
                 drag-to-open-menu surface (see menuDragGesture). The detector
@@ -2944,13 +2952,21 @@ export default function HomePage() {
                       >
                         <View style={styles.matchPhoto}>
                           <MatchCard
-                            ref={watchingCardRef}
                             match={displayedMatch}
                             viewerFamily={profile?.family ?? null}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
                             cardHeight={paneHeight}
+                            // While waiting on a sent invitation the inviter sees
+                            // only the distance, never the last-seen time.
+                            hideTime={displayedCardMode === 'waiting'}
                             actions={page1CardActions}
+                            // Chat state: the "End chat" control rides beside the
+                            // name/age heading (moved off the chat sheet header,
+                            // 2026-07-26). Opens the same leave/block sheet.
+                            headingAction={state === 'chat'
+                              ? { label: t('chat.endChat'), onPress: () => { tap(); setChatMenuOpen(true) } }
+                              : undefined}
                             onReport={() => openReport(displayedMatch.user_id)}
                             chromeInset={topInset}
                             topBlock={
@@ -2972,8 +2988,6 @@ export default function HomePage() {
                                 />
                               ) : undefined
                             }
-                            footerBlock={watchingInviteButton}
-                            footerBg={watchingInviteButton ? PRIMARY : undefined}
                           />
                         </View>
                       </RisingCard>
@@ -2981,11 +2995,61 @@ export default function HomePage() {
                   </PullPane>
                 </View>
 
+                {/* Invite prompt popup — raised by the hero heart in the
+                    watching state (moved off the MatchCard footer 2026-07-25).
+                    Same ReplyingInviteCard body as the page2 incoming side.
+                    Follow-up actions that open ANOTHER Modal (build-profile
+                    gate, buy-extra picker) or ride the card off (skip) run from
+                    onClosed, after this sheet is gone, so no two Modals race. */}
+                <BottomSheet
+                  visible={invitePopupVisible}
+                  onDismiss={() => setInvitePopupOpen(false)}
+                  disableBackdropDismiss={busy}
+                  onClosed={() => {
+                    const intent = invitePopupIntentRef.current
+                    invitePopupIntentRef.current = null
+                    if (intent === 'build') { tap(); setBuildProfileOpen(true) }
+                    else if (intent === 'buy') { tap(); setBuyExtraOpen(true) }
+                  }}
+                >
+                  <ReplyingInviteCard
+                    title={tgg('home.inviteConfirmTitle' as any, isMale, matchIsMale).replace(/\{name\}/g, matchName)}
+                    description={inviteConfirmDesc.replace(/\{name\}/g, matchName)}
+                    acceptLabel={t('home.inviteConfirmOk')}
+                    // Sending an invite costs 1 heart, held server-side until the
+                    // invite ends; the heart returns on every non-cancel exit,
+                    // cancel forfeits it.
+                    costCredits={CREDIT_COST.invite}
+                    affordable={starsBalance >= CREDIT_COST.invite}
+                    // A not-yet-built profile cannot send: close the popup and
+                    // open the build-profile gate. Same rule the server enforces
+                    // (profileComplete), so a bypass is rejected there too.
+                    onAccept={() => {
+                      if (!profileBuilt) { invitePopupIntentRef.current = 'build'; setInvitePopupOpen(false); return }
+                      // Keep the popup up showing the accept spinner; Realtime
+                      // flips state → 'waiting', which slides it away.
+                      runAction('app/invite', 'invite-confirm')
+                    }}
+                    // Tap-while-unaffordable closes the popup and opens the
+                    // buy-extra picker (chained through onClosed to avoid a
+                    // double-Modal). The button stays a normal white CTA so the
+                    // user reads it as actionable (user request 2026-06-01).
+                    onUnaffordable={() => { invitePopupIntentRef.current = 'buy'; setInvitePopupOpen(false) }}
+                    // No Skip button here (user directive 2026-07-25): the popup
+                    // is dismissed by swiping the sheet down, and a person is
+                    // skipped by the page1 pull gesture instead.
+                    busy={busy}
+                    acceptLoading={busy && pendingKey === 'invite-confirm'}
+                    footerInset={bottomInset}
+                  />
+                </BottomSheet>
+
                 <ConfirmDialog
                   visible={buildProfileOpen}
                   title={genderize(t('home.buildProfileTitle'), isMale)}
                   description={t('home.buildProfileDesc')}
                   confirmLabel={t('home.buildProfileConfirm')}
+                  confirmIconStart={<UserPlusIcon color={WHITE} />}
                   onConfirm={() => { setBuildProfileOpen(false); router.push('/onboarding') }}
                   onCancel={() => setBuildProfileOpen(false)}
                   draggable
@@ -2996,6 +3060,7 @@ export default function HomePage() {
                   title={t('home.cancelWaitingTitle')}
                   description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
                   confirmLabel={t('home.cancelWaitingConfirm')}
+                  confirmIconStart={<CloseIcon color={WHITE} />}
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={runCancel}
                   busy={busy}
@@ -3007,39 +3072,9 @@ export default function HomePage() {
                   title={t('home.refuseReplyTitle')}
                   description={tg('home.refuseReplyDesc', page2InviteObj?.is_male ?? null)}
                   confirmLabel={t('home.refuseReplyConfirm')}
+                  confirmIconStart={<CloseIcon color={WHITE} />}
                   onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
                   onConfirm={() => runAction('app/decline', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
-                  busy={busy}
-                  draggable
-                />
-
-                <ConfirmDialog
-                  visible={skipHintOpen}
-                  title={t('home.skipHintTitle')}
-                  description={t('home.skipHintDesc')}
-                  // Secondary "got it": acknowledge the hint and scroll the
-                  // card back to the top so the user can perform the
-                  // swipe-down-to-skip gesture they were just taught (pull-
-                  // to-skip is gated on the inner scroll being at the top).
-                  cancelLabel={t('home.skipHintCancel')}
-                  // Primary: just skip now.
-                  confirmLabel={t('home.skipHintConfirm')}
-                  onCancel={() => {
-                    if (busy) return
-                    setSkipHintOpen(false)
-                    // Remember the acknowledgement: next "not now" skips
-                    // directly and this popup never opens again. Still
-                    // scrolls the card to top (the taught gesture is armed).
-                    setSkipHintAcked(true)
-                    markSeenFlag(SEEN_FLAGS.skipHintAck).catch(() => {})
-                    watchingCardRef.current?.scrollToTop()
-                  }}
-                  onConfirm={() => {
-                    setSkipHintOpen(false)
-                    // Same ride-off as a swipe (not a bare runIgnore that
-                    // would advance with no card-down motion).
-                    page1Pull.commit()
-                  }}
                   busy={busy}
                   draggable
                 />
@@ -3050,8 +3085,10 @@ export default function HomePage() {
                     icon-as-action-button), and is mirrored on page2. See
                     `centerNotice` and `noticeOverridesCard`. */}
 
-                {/* Chat-state actions menu (opened from the chat header's End
-                    chip). Exactly two full-width buttons: leaving is the action
+                {/* Chat-state actions menu (opened from the "End" chip pinned
+                    beside the name/age heading on the home card, 2026-07-26 —
+                    it used to live in the chat sheet header). Exactly two
+                    full-width buttons: leaving is the action
                     the user came here for, so it is the solid primary; blocking
                     is the drastic, rarely-wanted one and recedes to the muted
                     secondary. Report is a card-level affordance, not here.
@@ -3080,6 +3117,7 @@ export default function HomePage() {
                   title={t('home.leaveTitle')}
                   description={t('home.leaveDesc')}
                   confirmLabel={t('home.leaveConfirm')}
+                  confirmIconStart={<SignOutIcon color={WHITE} />}
                   onCancel={() => { if (!busy) setChatConfirmAction(null) }}
                   onConfirm={() => runAction('app/leave', 'leave', () => setChatConfirmAction(null))}
                   busy={busy && pendingKey === 'leave'}
@@ -3090,6 +3128,7 @@ export default function HomePage() {
                   title={t('chat.blockTitle')}
                   description={t('chat.blockDesc')}
                   confirmLabel={t('chat.blockConfirm')}
+                  confirmIconStart={<BlockIcon color={WHITE} />}
                   onCancel={() => { if (!busy) setChatConfirmAction(null) }}
                   onConfirm={() => runAction('app/block', 'block', () => setChatConfirmAction(null))}
                   busy={busy && pendingKey === 'block'}
@@ -3110,6 +3149,7 @@ export default function HomePage() {
                     placeholder: t('chat.reportPlaceholder'),
                   }}
                   confirmLabel={t('chat.reportConfirm')}
+                  confirmIconStart={<ShieldIcon color={WHITE} />}
                   onCancel={() => { if (!busy) { setReportTargetId(null); setReportNote('') } }}
                   onConfirm={() => {
                     const pid = reportTargetId
@@ -3164,7 +3204,7 @@ export default function HomePage() {
           activation="scrollPan"
           commit={page2PendingInvite ? 'confirm' : 'dismiss'}
           onClose={closeInviteOverlay}
-          isTop={!chatOpen && !menuOpen && !profileSheetOpen}
+          isTop={!chatOpen && !menuOpen && !profileSheetOpen && !communitiesSheetOpen}
           floatingHeader
           zIndex={OVERLAY.z.invite}
           cardStyle={styles.overlayCardBare}
@@ -3200,29 +3240,42 @@ export default function HomePage() {
             inverted FlatList, so "scroll is at the top" is meaningless and
             without this every drag in the list would be stolen by the
             dismiss pan. The 3-dot menu opens the leave/block sheet, which
-            stays in this file with runAction — see the sheet below. */}
+            stays in this file with runAction — see the sheet below.
+
+            Rendered for the WHOLE lifetime of the chat state (`chatAvailable`),
+            not just while open, and `keepMounted` so closing the sheet PARKS
+            ChatPage off-screen instead of unmounting it. That keeps its loaded
+            history, realtime + presence channels and cached messages alive, so
+            reopening is instant with no reload — a close/reopen no longer
+            remounts the component. When the chat actually ends, `chatAvailable`
+            flips false, this whole sheet leaves the tree, and ChatPage is torn
+            down for real (channels removed, timers cleared). */}
+        {chatAvailable ? (
         <OverlaySheet
           open={chatOpen}
           onClose={() => closeOverlay('chat')}
           dragFrom="header"
-          isTop={!menuOpen && !profileSheetOpen}
+          isTop={!menuOpen && !profileSheetOpen && !communitiesSheetOpen}
+          keepMounted
           zIndex={OVERLAY.z.chat}
-          title={matchName}
-          titleTrailing={partnerOnline ? <PresenceDot /> : undefined}
+          // No title bar: just a floating close X (beige round button, purple
+          // glyph — same chrome as the home hamburger) over the message list.
+          // The partner's name already rides every bubble; the "End Chat" chip
+          // lives on the home card behind this sheet (2026-07-26).
+          floatingHeader
           closeAccessibilityLabel={t('chat.a11y.close')}
-          headerTrailing={
-            <Chip tone="solid" text={t('chat.endChat')} onPress={() => { tap(); setChatMenuOpen(true) }} />
-          }
         >
           <ChatPage
             key={profile?.relations?.match?.user_id ?? 'no-match'}
-            isActive={chatOpen && !menuOpen && !profileSheetOpen}
+            isActive={chatOpen && !menuOpen && !profileSheetOpen && !communitiesSheetOpen}
             onUnreadChange={setChatUnread}
             onOnlineChange={setPartnerOnline}
-            topInset={0}
+            // Reserve the floating header's band so messages clear the close X.
+            topInset={sheetHeaderHeight(topInset)}
             autoFocusInput={chatJustStarted}
           />
         </OverlaySheet>
+        ) : null}
 
         {/* Menu. Above everything on purpose: it is the one surface that
             stays reachable while the availability gate is on. */}
@@ -3232,7 +3285,7 @@ export default function HomePage() {
           // Always mounted, parked off-screen — see the drawer note in home's
           // menu-drag block. `open` here means interactive, not mounted.
           keepMounted
-          isTop={!profileSheetOpen}
+          isTop={!profileSheetOpen && !communitiesSheetOpen}
           // The one drawer: it slides in from the START edge, where its own
           // hamburger sits, and closes back toward it. Every other sheet rises
           // from the bottom.
@@ -3278,6 +3331,13 @@ export default function HomePage() {
             is a full-bleed photo card, so the X floats over it. */}
         <OverlaySheet
           open={profileSheetOpen}
+          // Its body is a full-bleed MatchCard that owns a PullContext (via
+          // PreviewFieldPage), exactly like the invite sheet — so it takes the
+          // same 'scrollPan' activation. The default 'sheet' mode uses a
+          // manualActivation Pan that consumes the raw touch stream and swallows
+          // taps on the floating close X (that was the "close button doesn't
+          // work" bug).
+          activation="scrollPan"
           onClose={closeProfileSheet}
           floatingHeader
           zIndex={OVERLAY.z.subPage}
@@ -3294,9 +3354,33 @@ export default function HomePage() {
           )}
         </OverlaySheet>
 
+        {/* Communities hub, stacked ON TOP of the menu it was opened from —
+            swiping down closes it back to the menu. It owns an internal view
+            stack (hub -> friends / a group / create / find); the header shows a
+            back arrow while there's somewhere to go, and hardware-back pops that
+            internal stack via communitiesBackRef before the sheet closes. */}
+        <OverlaySheet
+          open={communitiesSheetOpen}
+          onClose={closeCommunities}
+          chromeless
+          zIndex={OVERLAY.z.subPage}
+          closeAccessibilityLabel={t('communities.title')}
+        >
+          {ctx => (
+            <CommunitiesPage
+              onClose={closeCommunities}
+              onRegisterBack={fn => { communitiesBackRef.current = fn }}
+              {...ctx}
+            />
+          )}
+        </OverlaySheet>
+
         <BuyExtraPopup
           visible={buyExtraOpen}
           onDismiss={() => setBuyExtraOpen(false)}
+          // On home the sheet only ever opens from an unaffordable action
+          // (onUnaffordable), so it always speaks as the paywall.
+          outOfCredits
         />
       </View>
     </View>
@@ -3385,7 +3469,7 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 2,
+    borderWidth: STROKE.base,
     borderColor: WHITE,
     backgroundColor: BLACK_SOFT,
     // overflow:hidden forces Android (New Arch/Fabric) to clip to the true

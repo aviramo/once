@@ -9,7 +9,10 @@ import { BUY_EXTRA_OPTIONS, type BuyExtraCount, creditsText } from '../lib/credi
 import { referralCode, referralJoined, shareReferral } from '../lib/referral'
 import { useUserStore } from '../stores/userStore'
 import { t, genderize } from '../i18n'
-import { INK, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, PRIMARY } from '../colors'
+import {
+  INK, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, PRIMARY,
+  GREEN, GREEN_STRONG, WHITE, WHITE_STRONG,
+} from '../colors'
 import { iconScale } from '../fonts'
 import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON, lh } from '../tokens'
 
@@ -22,7 +25,9 @@ import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON, lh } from '../tokens'
 // renders dimmed with a "coming soon" badge (handing out free credits on tap
 // was not an economy). The single live row is the referral one at the top:
 // share a personal link, and a credit lands once the invited friend installs
-// AND completes a profile. The reward is granted entirely server-side, so this
+// AND creates an account (the qualification gate was loosened from "profile
+// complete" to "a users row exists" on 2026-07-23 -- see the
+// _referral_profile_complete migration). The reward is granted server-side, so this
 // row only opens the OS share sheet — there is nothing to await and nothing to
 // optimistically show.
 //
@@ -33,7 +38,7 @@ import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON, lh } from '../tokens'
 // credit packs — they differ only in what leads and what trails, which is
 // exactly what props are for.
 function CreditRow({
-  icon, label, sublabel, trailing, disabled, onPress,
+  icon, label, sublabel, trailing, disabled, filled, onPress,
 }: {
   icon: ReactNode
   label: string
@@ -43,6 +48,10 @@ function CreditRow({
   sublabel?: string
   trailing: ReactNode
   disabled?: boolean
+  /** The row is the sheet's live action, so it wears the GREEN action fill and
+   *  everything inside it flips to white ink. A prop, not a forked row — the
+   *  geometry is identical and only the skin changes. */
+  filled?: boolean
   onPress?: () => void
 }) {
   return (
@@ -51,15 +60,22 @@ function CreditRow({
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        filled && styles.rowFilled,
         disabled && styles.rowDisabled,
-        pressed && !disabled && styles.rowPressed,
+        pressed && !disabled && (filled ? styles.rowFilledPressed : styles.rowPressed),
       ]}
     >
       <View style={styles.rowLead}>
         <View style={styles.rowIconWrap}>{icon}</View>
         <View style={styles.rowText}>
-          <Text style={[styles.rowCount, disabled && styles.rowCountDisabled]}>{label}</Text>
-          {sublabel ? <Text style={styles.rowSub}>{sublabel}</Text> : null}
+          <Text style={[
+            styles.rowCount,
+            filled && styles.rowCountFilled,
+            disabled && !filled && styles.rowCountDisabled,
+          ]}>{label}</Text>
+          {sublabel ? (
+            <Text style={[styles.rowSub, filled && styles.rowSubFilled]}>{sublabel}</Text>
+          ) : null}
         </View>
       </View>
       <View style={styles.rowTail}>{trailing}</View>
@@ -67,7 +83,14 @@ function CreditRow({
   )
 }
 
-export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
+  visible: boolean
+  onDismiss: () => void
+  /** Opened because an action (invite / accept) couldn't be afforded, rather
+   *  than from the settings credits row. Only the title changes: at the paywall
+   *  moment it names what just blocked the user. */
+  outOfCredits?: boolean
+}) {
   const [busy, setBusy] = useState<BuyExtraCount | null>(null)
   const profile = useUserStore(s => s.profile)
 
@@ -100,11 +123,12 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
       disableBackdropDismiss={busy != null}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>{t('credits.buy.title')}</Text>
+        <Text style={styles.title}>{t(outOfCredits ? 'credits.buy.emptyTitle' : 'credits.buy.title')}</Text>
         <Text style={styles.desc}>{t('credits.buy.desc')}</Text>
         <View style={styles.list}>
           <CreditRow
-            icon={<UserPlusIcon color={canInvite ? PRIMARY : BLACK_STRONG} size={ICON.md} />}
+            filled
+            icon={<UserPlusIcon color={WHITE} size={ICON.md} />}
             // genderize, NOT tg: the Hebrew title carries an inline
             // {הזמן|הזמיני} marker, and tg only ever looks up whole-string
             // _m/_f key variants — it found none, fell back to the raw
@@ -117,7 +141,7 @@ export function BuyExtraPopup({ visible, onDismiss }: { visible: boolean; onDism
                 : t('credits.invite.joined.many').replace('{n}', String(joined))}
             disabled={!canInvite || busy != null}
             onPress={onInvite}
-            trailing={<Text style={styles.rowBadge}>{t('credits.buy.priceFree')}</Text>}
+            trailing={<Text style={[styles.rowBadge, styles.rowBadgeFilled]}>{t('credits.buy.priceFree')}</Text>}
           />
 
           {BUY_EXTRA_OPTIONS.map(opt => {
@@ -164,8 +188,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   desc: {
+    // Regular purple, full strength: the muted BLACK_MID read as an
+    // unreadable grey wash on the beige sheet (user directive 2026-07-26 —
+    // popup body text is the regular INK purple, never a faded step).
     fontSize: TEXT.md,
-    color: BLACK_MID,
+    color: BLACK,
     marginTop: XS,
     marginBottom: LG,
     textAlign: 'center',
@@ -181,6 +208,11 @@ const styles = StyleSheet.create({
     backgroundColor: BLACK_SOFT,
   },
   rowPressed: { backgroundColor: BLACK_MID },
+  // The live action row: a solid GREEN button, the app's "you press this" hue,
+  // so the one thing that actually works here stops reading like the dead packs
+  // above it. Everything inside flips to white ink (see the *Filled styles).
+  rowFilled: { backgroundColor: GREEN },
+  rowFilledPressed: { backgroundColor: GREEN_STRONG },
   rowDisabled: { opacity: 0.45 },
   // flex (not flexShrink) so the text column claims the leftover width and
   // wraps, instead of pushing the trailing badge off the row.
@@ -206,11 +238,13 @@ const styles = StyleSheet.create({
   // label sets at the font's own metrics and the boxes no longer match it.
   rowCount: { fontSize: TEXT.lg, lineHeight: lh(TEXT.lg), fontWeight: WEIGHT.extrabold, color: BLACK },
   rowCountDisabled: { color: BLACK_MID },
+  rowCountFilled: { color: WHITE },
   // Second line of a row, indented to the label. Same recipe as the settings
   // `hint` style (app/settings.tsx) — TEXT.sm at lh() 1.4×. The lineHeight is
   // load-bearing: without it a wrapped two-line hint sets at the font's own
   // metrics and reads visibly cramped against the app's other body text.
   rowSub: { fontSize: TEXT.sm, color: BLACK_STRONG, lineHeight: lh(TEXT.sm), marginTop: XS },
+  rowSubFilled: { color: WHITE_STRONG },
   // The trailing badge rides the label's line too, for the same reason the
   // glyph does — leading and trailing chrome frame the heading, not the
   // two-line block.
@@ -224,4 +258,5 @@ const styles = StyleSheet.create({
   // Shared trailing badge: "coming soon" on the dead packs, "free" on the
   // invite row. One style so the two read as the same kind of tag.
   rowBadge: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_MID },
+  rowBadgeFilled: { color: WHITE_STRONG },
 })

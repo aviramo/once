@@ -1,10 +1,10 @@
-import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react'
+import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { FONT_SCALE } from '../fonts'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
-import { GREEN, GREEN_SOFT, WHITE, WHITE_SOFT, WHITE_STRONG, BLACK, PRIMARY, BLACK_SOFT, BLACK_STRONG, PREMIUM } from '../colors'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, SPINNER } from '../tokens'
+import { GREEN, GREEN_SOFT, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, BLACK, PRIMARY, PRESSED, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BORDER_SOFT, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
@@ -103,6 +103,12 @@ export function Button({
       ? cloneElement(iconStart as ReactElement<{ color?: string }>, { color: textColor })
       : iconStart
 
+  // Held-down feedback: the fill darkens to the variant's pressedBtn (the purple
+  // buttons → deep PRESSED). Only a live press on a non-blocked button shows it;
+  // a tone override supplies its own pressed fill so it wins over the variant.
+  const [pressed, setPressed] = useState(false)
+  const pressedBtn = pressed && !blocked ? (toneSkin?.pressedBtn ?? skin.pressedBtn ?? null) : null
+
   return (
     <View
       style={[
@@ -111,15 +117,19 @@ export function Button({
         base.btn,
         skin.btn,
         toneSkin?.btn,
+        pressedBtn,
         useVariantDisabled ? skin.disabledBtn : (disabled && !loading && !silentDisabled && styles.disabled),
         footer ? styles.btnWithFooter : null,
         style,
       ]}
       onStartShouldSetResponder={() => !blocked || hintable}
+      onResponderGrant={() => { if (!blocked) setPressed(true) }}
       onResponderRelease={() => {
+        setPressed(false)
         if (!blocked) onPress()
         else if (hintable) disabledHint!()
       }}
+      onResponderTerminate={() => setPressed(false)}
     >
         {/* Label area — sized identically whether or not a footer is present.
             Splitting it from the outer btn means a button-with-footer reads
@@ -127,7 +137,7 @@ export function Button({
             with the label squashed up to make room". */}
         <View pointerEvents="none" style={[styles.labelArea, base.labelArea]}>
           <View style={styles.labelRow}>
-            {startIcon ? <View>{startIcon}</View> : null}
+            {startIcon ? <View style={styles.startSlot}>{startIcon}</View> : null}
             <Text
               style={[styles.text, base.text, skin.text, useVariantDisabled && skin.disabledText]}
               numberOfLines={multiline ? 2 : 1}
@@ -170,6 +180,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SM,
   },
+  // Fixed-width start slot: whatever sits here (a provided iconStart or the
+  // loading Spinner) is centered inside exactly SPINNER.size. This is what
+  // keeps the label from shifting when a tap swaps the icon for the spinner —
+  // an icon smaller than the spinner still reserves the spinner's width, so
+  // icon → spinner → icon never nudges the text. Icons wider than the spinner
+  // (e.g. the credit-cost badge on the invite button) grow past the minWidth
+  // and are the one place a swap can still move the label.
+  startSlot: {
+    minWidth: SPINNER.size,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   text: {
     letterSpacing: -0.2,
     textAlign: 'center',
@@ -201,12 +223,14 @@ const SIZE: Record<Size, { btn: object; labelArea: object; text: object }> = {
   },
 }
 
-// The ONE exception to "an action button is green": the invite pair (sending
-// an invitation, and accepting one). Those two are the app's whole point, so
-// they wear the action ORANGE while every other button stays green.
-const TONE: Record<Tone, { btn: object }> = {
+// The `positive` tone once wore the action ORANGE for the invite pair; since the
+// app unified onto ONE purple (user directive 2026-07-25) it resolves to the same
+// PRIMARY as every other button, kept only so existing call sites stay valid.
+// Held down it darkens to PRESSED like every purple button.
+const TONE: Record<Tone, { btn: object; pressedBtn: object }> = {
   positive: {
     btn: { backgroundColor: PRIMARY },
+    pressedBtn: { backgroundColor: PRESSED },
   },
 }
 
@@ -218,6 +242,10 @@ const VARIANT: Record<Variant, {
   // under low alpha on a dark surface.
   disabledBtn?: object
   disabledText?: { color: string }
+  // Fill while the button is HELD DOWN. The purple fills darken to the deep
+  // PRESSED step (user directive 2026-07-25: pressing a button = dark purple);
+  // the recessive/beige ones step one shade darker so the press still reads.
+  pressedBtn?: object
 }> = {
   // Disabled is a LIGHT GREEN fill carrying a FULL-STRENGTH green label, not
   // the global opacity fade. Two separate problems that fade caused: the solid
@@ -229,31 +257,38 @@ const VARIANT: Record<Variant, {
     text: { color: WHITE },
     disabledBtn: { backgroundColor: GREEN_SOFT },
     disabledText: { color: GREEN },
+    pressedBtn: { backgroundColor: PRESSED },
   },
   secondary: {
     btn: { backgroundColor: BLACK_SOFT },
     text: { color: BLACK_STRONG, fontWeight: WEIGHT.semibold },
+    pressedBtn: { backgroundColor: BLACK_MID },
   },
   soft: {
     btn: { backgroundColor: BLACK_STRONG },
     text: { color: WHITE },
+    pressedBtn: { backgroundColor: PRESSED },
   },
   dark: {
     btn: { backgroundColor: BLACK },
     text: { color: WHITE },
+    pressedBtn: { backgroundColor: PRESSED },
   },
-  // Orange fill (the positive hue), so the label is white.
+  // The one action purple, so the label is white. Held down → deep PRESSED.
   premium: {
     btn: { backgroundColor: PREMIUM },
     text: { color: WHITE },
+    pressedBtn: { backgroundColor: PRESSED },
   },
-  // White button sized for placement on top of a PRIMARY (green) surface.
-  // The white fill keeps the CTA legible against the green.
+  // Light-beige button sized for placement on top of a PRIMARY surface.
+  // The beige fill (the same lift as every other surface) keeps the CTA legible
+  // against the purple. Held down it steps to the beige-2 rule tone.
   onPrimary: {
-    btn: { backgroundColor: WHITE },
+    btn: { backgroundColor: SURFACE },
     text: { color: PRIMARY },
     disabledBtn: { backgroundColor: WHITE_SOFT },
     disabledText: { color: WHITE_STRONG },
+    pressedBtn: { backgroundColor: BORDER_SOFT },
   },
   // Recessive companion to `onPrimary`: the secondary action when the
   // surface is PRIMARY-colored. Mirrors `secondary` (soft fill + muted
@@ -261,5 +296,6 @@ const VARIANT: Record<Variant, {
   onPrimaryGhost: {
     btn: { backgroundColor: WHITE_SOFT },
     text: { color: WHITE, fontWeight: WEIGHT.semibold },
+    pressedBtn: { backgroundColor: WHITE_MID },
   },
 }

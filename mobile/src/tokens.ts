@@ -105,6 +105,7 @@ export const ICON = {
   sm: 16,
   md: 18,
   lg: 20,
+  xl: 22,     // optical half-step — for glyphs whose ink fills less than their box
   xxl: 24,    // default glyph size — every standalone icon renders at this
   xxxl: 28,
   // The in-circle glyphs. All derive from GLYPH_CIRCLE_RATIO, so retuning the
@@ -165,15 +166,6 @@ export const PAN_FAIL_OFFSET_Y = -8        // upward drag cancels
 // "Once"/Settings the instant the drag reaches the commit point). One
 // constant so the commit point and every consumer can never drift apart.
 export const PULL_COMMIT_FRACTION = 0.5
-// Skip-gesture RESISTANCE (page1 skip / page2 decline only — NOT the profile
-// sheet, which should dismiss freely). The card follows the finger at this
-// fraction of its speed up to the commit point, so the user must drag
-// deliberately far for the card position to reach the half-screen threshold
-// — a stray short drag barely moves it and can't skip a person by accident.
-// Commit is keyed on the RESISTED card position (pullY), so this is also the
-// effective effort gate: required finger travel ≈ commit distance / this.
-// 1 = no resistance (legacy). Lower = firmer. Tune here only (single source).
-export const PULL_RESIST = 0.6
 // Spring that settles a pulled card back to rest when released short of the
 // commit threshold (page1 skip / page2 decline). Seeded with the finger's
 // release velocity (see usePullBehavior) so the snap-back CONTINUES the drag's
@@ -182,6 +174,14 @@ export const PULL_RESIST = 0.6
 // 2*sqrt(stiffness*mass)) → smooth, no bounce. Single source for every pull
 // surface so the release feel can never drift between them.
 export const PULL_SNAP_SPRING = { damping: 40, stiffness: 400, mass: 1 } as const
+// First-time swipe-down tutorial (usePullBehavior). NOT MOTION values: these
+// are gating delays around the demo, not the animation durations themselves
+// (the peek down / return up use the framework default `withTiming`).
+//   START_DELAY — waits out the card's SlideInDown so the two don't fight.
+//   HOLD        — how long the card rests at the peek, i.e. how long the user
+//                 has to read the "swipe down to skip" hint before it returns.
+export const PULL_TUTORIAL_START_DELAY_MS = 500
+export const PULL_TUTORIAL_HOLD_MS = 2_000
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,

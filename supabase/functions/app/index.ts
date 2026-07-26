@@ -211,6 +211,12 @@ Deno.serve(async (req) => {
     // settings sheet can render an up-to-date list without an extra round
     // trip after a mutation. Merged into the response body via log.success.
     let rpcGroups: unknown | undefined;
+    // Generic sidecar for the communities/friends read+write RPCs. Their
+    // return payloads carry data (group, members, friends, requests, results)
+    // rather than a fresh user row, so we merge those keys onto the response
+    // body alongside the (unchanged) user. `notify` is peeled off into
+    // notifyList; everything else rides here.
+    let rpcExtra: Record<string, unknown> | undefined;
 
     // Presence gate (symmetric direction). others() already drops a gated
     // user from everyone's pool; this stops a gated user from actively
@@ -578,6 +584,142 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── Communities & Friends (phase 1) ─────────────────────────────────
+      // All additive; none in requiresPresence (management, not interaction).
+      // Their RPC payloads carry data, not a fresh user row, so they peel
+      // `notify` into notifyList and merge the rest via rpcExtra.
+      case "create_group": {
+        const name = typeof body.name === "string" ? body.name : "";
+        const is_public = body.is_public === true;
+        const result = await Tools.rpc(log, "app_create_group", { me_id: user.user_id, p_name: name, p_is_public: is_public });
+        await user.persist(log);
+        if (result?.error) return log.error("create_group", result.error, 400);
+        const { notify: _n, ...extra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = extra;
+        break;
+      }
+
+      case "owned_groups": {
+        const result = await Tools.rpc(log, "app_owned_groups", { me_id: user.user_id });
+        await user.persist(log);
+        rpcExtra = { owned: result };
+        break;
+      }
+
+      case "group_members": {
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("group_members", "no_group_id", 400);
+        const result = await Tools.rpc(log, "app_group_members", { me_id: user.user_id, p_group_id: group_id });
+        await user.persist(log);
+        if (result?.error) return log.error("group_members", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "remove_member": {
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        const member_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!group_id || !member_id) return log.error("remove_member", "bad_args", 400);
+        const result = await Tools.rpc(log, "app_remove_member", { me_id: user.user_id, p_group_id: group_id, p_user_id: member_id });
+        await user.persist(log);
+        if (result?.error) return log.error("remove_member", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "set_manager": {
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        const member_id = typeof body.user_id === "string" ? body.user_id : null;
+        const make = body.make === true;
+        if (!group_id || !member_id) return log.error("set_manager", "bad_args", 400);
+        const result = await Tools.rpc(log, "app_set_manager", { me_id: user.user_id, p_group_id: group_id, p_user_id: member_id, p_make: make });
+        await user.persist(log);
+        if (result?.error) return log.error("set_manager", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "update_group": {
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("update_group", "no_group_id", 400);
+        const p_name = typeof body.name === "string" ? body.name : null;
+        const p_is_public = typeof body.is_public === "boolean" ? body.is_public : null;
+        const result = await Tools.rpc(log, "app_update_group", { me_id: user.user_id, p_group_id: group_id, p_name, p_is_public });
+        await user.persist(log);
+        if (result?.error) return log.error("update_group", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "delete_group": {
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("delete_group", "no_group_id", 400);
+        const result = await Tools.rpc(log, "app_delete_group", { me_id: user.user_id, p_group_id: group_id });
+        await user.persist(log);
+        if (result?.error) return log.error("delete_group", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "search_groups": {
+        const q = typeof body.q === "string" ? body.q : "";
+        const result = await Tools.rpc(log, "app_search_groups", { me_id: user.user_id, p_q: q });
+        await user.persist(log);
+        rpcExtra = { results: result };
+        break;
+      }
+
+      case "my_friends": {
+        const result = await Tools.rpc(log, "app_my_friends", { me_id: user.user_id });
+        await user.persist(log);
+        rpcExtra = result;
+        break;
+      }
+
+      case "search_people": {
+        const q = typeof body.q === "string" ? body.q : "";
+        const result = await Tools.rpc(log, "app_search_people", { me_id: user.user_id, p_q: q });
+        await user.persist(log);
+        rpcExtra = { results: result };
+        break;
+      }
+
+      case "friend_request": {
+        const target_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!target_id) return log.error("friend_request", "no_user_id", 400);
+        const result = await Tools.rpc(log, "app_friend_request", { me_id: user.user_id, p_target_id: target_id });
+        await user.persist(log);
+        if (result?.error) return log.error("friend_request", result.error, 400);
+        const { notify: _n, ...extra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = extra;
+        break;
+      }
+
+      case "friend_respond": {
+        const request_id = typeof body.request_id === "string" ? body.request_id : null;
+        const accept = body.accept === true;
+        if (!request_id) return log.error("friend_respond", "no_request_id", 400);
+        const result = await Tools.rpc(log, "app_friend_respond", { me_id: user.user_id, p_request_id: request_id, p_accept: accept });
+        await user.persist(log);
+        if (result?.error) return log.error("friend_respond", result.error, 400);
+        const { notify: _n, ...extra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = extra;
+        break;
+      }
+
+      case "unfriend": {
+        const other_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!other_id) return log.error("unfriend", "no_user_id", 400);
+        const result = await Tools.rpc(log, "app_unfriend", { me_id: user.user_id, p_other_id: other_id });
+        await user.persist(log);
+        if (result?.error) return log.error("unfriend", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
       case "extend": {
         const minutes = Number(body.minutes);
         if (!Number.isFinite(minutes)) return log.error("extend", "bad_minutes", 400);
@@ -636,7 +778,7 @@ Deno.serve(async (req) => {
       }
 
       case "chat": {
-        const chatBody = body.chat as { text?: unknown; image_key?: unknown; location?: unknown; audio_key?: unknown; audio_bars?: unknown; audio_duration_ms?: unknown; schedule?: unknown; created_at?: unknown } | undefined;
+        const chatBody = body.chat as { text?: unknown; image_key?: unknown; location?: unknown; audio_key?: unknown; audio_bars?: unknown; audio_duration_ms?: unknown; schedule?: unknown; reply_to?: unknown; created_at?: unknown } | undefined;
         const text = typeof chatBody?.text === "string" && chatBody.text.trim() !== "" ? chatBody.text.trim() : null;
         const image_key = typeof chatBody?.image_key === "string" && chatBody.image_key.trim() !== "" ? chatBody.image_key.trim() : null;
         const audio_key = typeof chatBody?.audio_key === "string" && chatBody.audio_key.trim() !== "" ? chatBody.audio_key.trim() : null;
@@ -697,6 +839,27 @@ Deno.serve(async (req) => {
         if (audio_key && !audio_key.startsWith(`${user.user_id}/`)) return log.error("chat", "invalid_audio_key", 403);
         const other_id = (user.relations?.page1 as { profile?: { user_id?: string } } | undefined)?.profile?.user_id ?? null;
         if (!other_id) return log.error("chat", "no_partner", 400);
+        // Reply snapshot: a frozen preview of the message this one answers. It is
+        // display-only (never joined against), so we sanitize rather than verify:
+        // clamp the preview, whitelist the kind, and require the quoted author to
+        // be one of the two participants (a client can't fabricate a third party).
+        const REPLY_KINDS = ["text", "image", "audio", "location", "schedule"];
+        const replyRaw = chatBody?.reply_to as { user_id?: unknown; created_at?: unknown; kind?: unknown; preview?: unknown } | null | undefined;
+        let reply_to: { user_id: string; created_at: string; kind: string; preview?: string } | null = null;
+        if (replyRaw && typeof replyRaw === "object") {
+          const ruid = typeof replyRaw.user_id === "string" ? replyRaw.user_id : null;
+          const rcreated = typeof replyRaw.created_at === "string" && Number.isFinite(Date.parse(replyRaw.created_at))
+            ? new Date(replyRaw.created_at).toISOString()
+            : null;
+          const kind = typeof replyRaw.kind === "string" && REPLY_KINDS.includes(replyRaw.kind) ? replyRaw.kind : null;
+          const preview = typeof replyRaw.preview === "string" && replyRaw.preview.trim() !== ""
+            ? replyRaw.preview.slice(0, 140)
+            : null;
+          if (ruid && rcreated && kind && (ruid === user.user_id || ruid === other_id)) {
+            reply_to = { user_id: ruid, created_at: rcreated, kind };
+            if (preview) reply_to.preview = preview;
+          }
+        }
         const row: Record<string, unknown> = { user_id: user.user_id, other_id };
         if (text) row.text = text;
         if (image_key) row.image_key = image_key;
@@ -705,6 +868,7 @@ Deno.serve(async (req) => {
         if (audio_key && audio_duration_ms) row.audio_duration_ms = audio_duration_ms;
         if (location) row.location = location;
         if (schedule) row.schedule = schedule;
+        if (reply_to) row.reply_to = reply_to;
         if (created_at) row.created_at = created_at;
         EdgeRuntime.waitUntil(
           Tools.invoke(log, "chat_insert", Tools.supabase.from("chat").insert(row)).then(() => {}),
@@ -820,8 +984,12 @@ Deno.serve(async (req) => {
     }
 
     const responseUser = rpcUser ?? user.db.new;
-    const responseBody = rpcGroups !== undefined
-      ? { ...(responseUser as Record<string, unknown>), groups: rpcGroups }
+    const responseBody = (rpcGroups !== undefined || rpcExtra !== undefined)
+      ? {
+          ...(responseUser as Record<string, unknown>),
+          ...(rpcGroups !== undefined ? { groups: rpcGroups } : {}),
+          ...(rpcExtra ?? {}),
+        }
       : responseUser;
     return log.success(responseBody);
   } catch (err) {

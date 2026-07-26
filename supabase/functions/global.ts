@@ -193,6 +193,8 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'referral_m': 'הצטרף דרך ההזמנה שלך, קיבלת קרדיט',
     'referral_f': 'הצטרפה דרך ההזמנה שלך, קיבלת קרדיט',
     'referral': 'הצטרף דרך ההזמנה שלך, קיבלת קרדיט',
+    'friend_request': 'נשלחה אליך בקשת חברות',
+    'friend_accept': 'בקשת החברות שלך אושרה',
   },
   en: {
     'invite-in': 'Chat invitation',
@@ -211,6 +213,8 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'area-open': 'The game has started. The app is now available in your area.',
     'area-closed': 'The app is no longer available in your area.',
     'referral': 'Joined with your invite. You earned a credit.',
+    'friend_request': 'You have a new friend request',
+    'friend_accept': 'Your friend request was accepted',
   },
 };
 

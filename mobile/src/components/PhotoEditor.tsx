@@ -21,7 +21,6 @@ import { SM, RADIUS, STROKE, ICON } from '../tokens'
 import { INK, INK_3, PHOTO_CHROME, SURFACE, BLACK_SOFT, WHITE_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { ConfirmDialog } from './ConfirmDialog'
-import { InfoIcon } from './icons'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
 

@@ -19,17 +19,17 @@
 
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { useSharedValue, type SharedValue } from 'react-native-reanimated'
+import { useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
 import { PullPane, usePullBehavior, type PullActivation, type PullAxis, type PullBehavior } from './PullPane'
 import { RisingCard } from './RisingCard'
 import { RoundButton } from './RoundButton'
-import { CloseIcon } from './icons'
+import { CloseIcon, BackIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
 import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { GREEN, GREEN_WASH, BG, SCRIM_BLACK, INK } from '../colors'
+import { GREEN, GREEN_WASH, SURFACE, SCRIM_BLACK, INK } from '../colors'
 
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
  *  the sheet's dismiss pan instead of fighting it. This is exactly the prop
@@ -75,6 +75,10 @@ export type OverlaySheetProps = {
   /** Header renders as transparent chrome floating OVER the body rather than
    *  as a solid bar above it. For sheets whose body is a full-bleed photo. */
   floatingHeader?: boolean
+  /** Overrides the solid header bar's background (default SURFACE). Chat's body
+   *  is the page BG, a shade darker than SURFACE, so its header takes BG too and
+   *  the two read as one continuous surface instead of a lighter top band. */
+  headerBg?: string
   title?: string
   /** Rendered at the end of the header row, opposite the close X. */
   headerTrailing?: ReactNode
@@ -120,6 +124,7 @@ export function OverlaySheet({
   isTop = true,
   chromeless,
   floatingHeader,
+  headerBg,
   title,
   headerTrailing,
   titleTrailing,
@@ -152,17 +157,42 @@ export function OverlaySheet({
   })
   const pull = externalPull ?? ownPull
 
-  // A 'slideOff' close parks pullY at the screen height. Without this reset a
-  // reopened sheet would mount already translated fully off-screen and never
-  // be seen. (Same hazard the page1 skip's reset covers.) Also (re)seeds
-  // scrollAtTop for the dragFrom policy on every open. Skipped for an external
-  // pull — see the `pull` prop: there, "open" does not imply "starts at 0".
-  const { reset, setScrollAtTop } = pull
+  // `keepMounted` with the sheet's OWN pull (no host `pull` prop): the body
+  // stays mounted across close/open, and its POSITION — not its mounting — is
+  // the open/closed state, exactly like the menu drawer. This lets a heavy
+  // body (ChatPage: history fetch, realtime + presence channels, cached
+  // messages) survive a close so reopening never remounts or reloads it. The
+  // caller unmounts the whole sheet (this component leaves the tree) when the
+  // surface is truly finished — e.g. the chat ending. The menu is `keepMounted`
+  // too but drives an EXTERNAL pull itself, so it opts out of the motion here.
+  const selfPark = keepMounted && !externalPull
+  const { reset, setScrollAtTop, pullY, screenSpan, slidOut } = pull
+  // First paint should not animate a park (mounting already-closed must not
+  // flash), but a first paint that mounts already-open (a fresh match raising
+  // chat) should still ride up.
+  const firstParkRef = useRef(true)
   useEffect(() => {
-    if (!open || externalPull) return
-    reset()
+    if (externalPull) return
+    if (!selfPark) {
+      // Mount/unmount sheets: RisingCard owns the rise. A 'slideOff' close
+      // parks pullY at screenSpan, so without this reset a reopened sheet would
+      // mount already translated off-screen. Also (re)seeds the dragFrom
+      // policy. Only on open — a closing sheet is unmounting anyway.
+      if (open) { reset(); setScrollAtTop(dragFrom !== 'header') }
+      return
+    }
+    // Own-pull keepMounted: pull-driven rise/park, so RisingCard's slide is
+    // disabled below (the transform and a layout animation would fight).
     setScrollAtTop(dragFrom !== 'header')
-  }, [open, dragFrom, externalPull, reset, setScrollAtTop])
+    slidOut.value = false
+    if (firstParkRef.current) {
+      firstParkRef.current = false
+      if (open) { pullY.value = screenSpan; pullY.value = withTiming(0) }
+      else pullY.value = screenSpan
+      return
+    }
+    pullY.value = withTiming(open ? 0 : screenSpan)
+  }, [open, dragFrom, externalPull, selfPark, reset, setScrollAtTop, pullY, screenSpan, slidOut])
 
   const ctx: OverlaySheetBody = {
     dismissGestureRef: pull.panRef,
@@ -177,7 +207,12 @@ export function OverlaySheet({
       titleTrailing={titleTrailing}
       trailing={headerTrailing}
       floating={floatingHeader}
+      barBg={headerBg}
       topInset={topInset}
+      // The 'x' drawer (the menu) closes back toward its START edge, so its
+      // dismiss control is a back arrow pointing that way rather than an X.
+      // Every other sheet rises from the bottom and closes with the plain X.
+      closeIcon={axis === 'x' ? 'back' : 'close'}
       closeAccessibilityLabel={closeAccessibilityLabel}
       onClose={() => { tap(); onClose() }}
       onMeasured={h => { headerBottom.value = h }}
@@ -197,8 +232,10 @@ export function OverlaySheet({
       {open || keepMounted ? (
         <RisingCard
           from={axis === 'x' ? 'side' : 'up'}
-          animateEnter={animateEnter}
-          animateExit={animateExit}
+          // selfPark drives the rise/park through pullY (above), so the layout
+          // slide must be off or the two transforms clobber each other.
+          animateEnter={selfPark ? false : animateEnter}
+          animateExit={selfPark ? false : animateExit}
           style={[styles.card, cardStyle]}
         >
           {floatingHeader ? (
@@ -243,26 +280,35 @@ export function SheetHeader({
   titleTrailing,
   trailing,
   floating,
+  barBg,
   topInset,
   onClose,
   onMeasured,
+  closeIcon = 'close',
   closeAccessibilityLabel,
 }: {
   title?: string
   titleTrailing?: ReactNode
   trailing?: ReactNode
   floating?: boolean
+  /** Solid-bar background override (default SURFACE via styles.headerBar). */
+  barBg?: string
   topInset: number
   onClose: () => void
   onMeasured?: (bottom: number) => void
+  /** 'close' (default) = the dismiss X. 'back' = a start-edge back arrow, for
+   *  the drawer that slides off toward that edge. */
+  closeIcon?: 'close' | 'back'
   closeAccessibilityLabel?: string
 }) {
+  const DismissIcon = closeIcon === 'back' ? BackIcon : CloseIcon
   return (
     <View
       style={[
         styles.header,
         { paddingTop: topInset + OVERLAY.chromeGap },
         floating ? styles.headerFloating : styles.headerBar,
+        !floating && barBg ? { backgroundColor: barBg } : null,
       ]}
       pointerEvents="box-none"
       onLayout={e => onMeasured?.(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
@@ -284,7 +330,7 @@ export function SheetHeader({
           bg={floating ? undefined : GREEN_WASH}
           shadow={!!floating}
         >
-          <CloseIcon color={GREEN} size={ICON.round} />
+          <DismissIcon color={GREEN} size={ICON.round} />
         </RoundButton>
       </View>
       {title ? (
@@ -303,7 +349,9 @@ export function SheetHeader({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: BG,
+    // The light-beige SURFACE (beige-3), a step lighter than the home page it
+    // rises over, so the sheet lifts off it instead of blending in.
+    backgroundColor: SURFACE,
     // Soft upward lift so the sheet reads as sitting above home.
     shadowColor: SCRIM_BLACK,
     shadowOffset: { width: 0, height: -3 },
@@ -326,7 +374,7 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   headerBar: {
-    backgroundColor: BG,
+    backgroundColor: SURFACE,
   },
   headerFloating: {
     position: 'absolute',
@@ -353,7 +401,7 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   title: {
-    // The header sits on BG, so the title is INK like every other heading.
+    // The header sits on the beige SURFACE, so the title is INK like every other heading.
     color: INK,
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),

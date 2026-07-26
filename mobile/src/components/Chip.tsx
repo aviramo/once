@@ -7,15 +7,20 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
-import { PHOTO_CHROME, BORDER_STRONG, GREEN, GREEN_WASH, ORANGE, ORANGE_SOFT, ONLINE_GREEN, PRIMARY, WHITE } from '../colors'
+import { PHOTO_CHROME, GREEN, GREEN_WASH, ONLINE_GREEN, PRIMARY, PRIMARY_BG, WHITE, LIFT_SHADOW } from '../colors'
+import { OUTLINE_SKIN } from '../field'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
 // lightweight fabric swatches instead of bordered stickers. When `onPhoto`
-// is set, the chip switches to the shared on-photo chrome: an opaque WHITE
-// tile carrying BLACK ink, so it stays readable over any colour photo. State-presence chips (online, proximate,
-// kids-affinity) add a `renderTrailing` dot via `PresenceDot`; it is handed
-// the chip's own ink colour, so on a photo the dot is gold like the label.
+// is set, the chip becomes a solid tile that MATCHES the round overlay buttons
+// — the same PHOTO_CHROME beige fill, with the tone's own ink (user directive
+// 2026-07-25, reverses the earlier transparent-white-ink-on-photo treatment):
+// chips and buttons now read as one fabric of beige tiles over the photo. The
+// `solid` tone is the exception — it keeps its full GREEN fill + white ink so
+// the chat's "End" still reads as a strong control, not a label. State-presence
+// chips (online, proximate, kids-affinity) add a `renderTrailing` dot via
+// `PresenceDot`; it is handed the chip's own ink colour.
 //
 // RTL strategy: use `direction:'rtl'` on the chip View (and the inner text
 // wrapper) so the Yoga node renders right-to-left regardless of whether
@@ -38,7 +43,7 @@ const TONES = {
   // makes it read as a button rather than a label — used for the chat's "End".
   solid:    { fg: WHITE,  bg: GREEN },
   // Orange on an orange wash — the positive hue, never the action green.
-  positive: { fg: ORANGE, bg: ORANGE_SOFT },
+  positive: { fg: PRIMARY, bg: PRIMARY_BG },
   // "Do this" rather than "here is a fact". Same white tile as every other
   // on-photo chip — the tile is the fabric of the card and an add-chip is not
   // a foreign object on it — but the ink is the brand orange instead of the
@@ -109,6 +114,7 @@ export function Chip({
   tone = 'neutral',
   onPhoto = false,
   outlined = false,
+  bold = false,
   renderTrailing,
   onPress,
 }: {
@@ -120,6 +126,10 @@ export function Chip({
    * than reporting a fact — it reads as an empty slot waiting to be filled,
    * which a solid chip cannot. */
   outlined?: boolean
+  /** Heavier label weight at the SAME chip size — used for the name/age heading
+   * chip so it reads as the card's heading without growing the tile past the
+   * fact chips beside it. */
+  bold?: boolean
   renderTrailing?: (color: string) => React.ReactNode
   /** When provided, the chip itself becomes the Pressable. Avoids an extra
    * wrapper View that would break the flexShrink chain — wrapping a
@@ -128,29 +138,29 @@ export function Chip({
   onPress?: () => void
 }) {
   const { fg, bg } = TONES[tone]
-  // On a photo the chip is the shared WHITE chrome tile carrying GREEN ink.
-  // The white tile is what supplies the contrast — the photo underneath is
-  // arbitrary — which is exactly what frees the label and glyph to be the
-  // brand green rather than a neutral black. The `action` tone opts out of the
-  // ink half: it wears the same white tile, and its orange ink is the whole of
-  // what separates a "do this" from the facts beside it.
-  const asChrome = onPhoto && tone !== 'action' && tone !== 'solid'
-  const bgColor = asChrome ? PHOTO_CHROME : bg
-  const glyphColor = asChrome ? GREEN : fg
+  // On a photo a chip is a solid tile that matches the round overlay buttons:
+  // the same PHOTO_CHROME beige fill, with the tone's own fg as ink. `solid`
+  // keeps its full GREEN fill + white ink so the chat's "End" still reads as a
+  // strong control, not a label.
+  const bgColor = onPhoto && tone !== 'solid' ? PHOTO_CHROME : bg
+  // A filled tile over a photo casts the same soft lift as the round overlay
+  // buttons, so chips and buttons read as one fabric off the image. Outlined
+  // chips (an empty add slot) stay flat.
+  const tileShadow = onPhoto && !outlined
   const Container: any = onPress ? Pressable : View
   return (
     <Container
       onPress={onPress}
-      style={[styles.chip, outlined ? styles.chipOutlined : { backgroundColor: bgColor }]}
+      style={[styles.chip, outlined ? styles.chipOutlined : { backgroundColor: bgColor }, tileShadow && styles.chipShadow]}
     >
-      {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(glyphColor)}</View> : null}
+      {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(fg)}</View> : null}
       <Text
-        style={[styles.chipText, { color: glyphColor }]}
+        style={[styles.chipText, bold && styles.chipTextBold, { color: fg }]}
         maxFontSizeMultiplier={FONT_SCALE.heading}
       >
         {phraseWrap(text)}
       </Text>
-      {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(glyphColor)}</View> : null}
+      {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(fg)}</View> : null}
     </Container>
   )
 }
@@ -248,14 +258,16 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     flexShrink: 1,
   },
+  // Same soft lift the round overlay buttons cast — applied to on-photo tiles so
+  // chips and buttons read as one fabric off the image (shared LIFT_SHADOW).
+  chipShadow: LIFT_SHADOW,
   // The rule is drawn OUTSIDE the padding box, so an outlined chip would sit
   // taller and wider than the filled chips beside it. Pull the padding in by
   // exactly the border width: same tokens, same outer rectangle, so a row of
   // chips keeps one height whichever variant it holds.
   chipOutlined: {
+    ...OUTLINE_SKIN,
     backgroundColor: 'transparent',
-    borderWidth: STROKE.thin,
-    borderColor: BORDER_STRONG,
     paddingHorizontal: MD - STROKE.thin,
     paddingVertical: SM - STROKE.thin,
   },
@@ -285,6 +297,11 @@ const styles = StyleSheet.create({
     // "align to where reading starts" in both directions.
     textAlign: 'left',
     writingDirection: isRTL ? 'rtl' : 'ltr',
+  },
+  // Heaviest weight at the ordinary chip size: the name/age heading chip reads
+  // as the card's heading without growing the tile past the fact chips beside it.
+  chipTextBold: {
+    fontWeight: WEIGHT.extrabold,
   },
   presenceDot: {
     width: PRESENCE_DOT_SIZE,
