@@ -404,7 +404,33 @@ strong { color: var(--ink); font-weight: 600; }
 }
 .chip svg { color: var(--accent); }
 
-/* ---------- Emphasis line ---------- */
+/* ---------- Callout ---------- */
+/* A pillar's `note`: one sub-message lifted OUT of the body paragraph onto its
+   own card, so it reads as a headline of its own and not as a clause. Flat
+   surface, a solid brand bar on the leading edge, no gradient. */
+.callout {
+  margin-top: 20px;
+  max-width: var(--measure);
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--brand);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.callout-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: 1.02rem;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.callout-title svg { color: var(--brand); flex: 0 0 auto; }
+.callout p { font-size: 1rem; line-height: 1.6; }
+
+
 /* ---------- Final CTA ---------- */
 .final {
   background: var(--surface);

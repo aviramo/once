@@ -215,14 +215,19 @@
             media: { name: 'מעגלים משותפים', desc: 'מסך הקהילות, ולצידו מעגל של אנשים מאותה קהילה המחוברים זה לזה.' }
           },
           {
-            eyebrow: 'הלוז והכוונות שלכם',
-            title: { lines: ['האפליקציה יודעת', 'מתי אתם באמת פנויים.'], accent: true },
-            body: 'מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט. גם הכוונות לגבי ילדים נכנסות לחשבון: אם אתם רוצים ילדים, או עוד ילדים, זה משפיע על מי שתפגשו.',
+            eyebrow: 'ילדים, משפחה והזמן שלכם',
+            title: { lines: ['יודעים מה אתם מחפשים,', 'ומתי אתם פנויים.'], accent: true },
+            body: 'רצון להקים משפחה הוא לא פרט קטן, ולכן הוא חלק מההתאמה. מסמנים פעם אחת אם אתם רוצים ילדים, לא רוצים, או שכבר יש לכם ואתם פתוחים לעוד, ו-Once מביאה קודם אנשים שמחפשים את אותו דבר.',
+            note: {
+              icon: 'clock',
+              title: 'לוז הורים',
+              body: 'ולהורים יש גם לוז. מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט.'
+            },
             chips: [
+              { icon: 'users', label: 'כוונות לגבי ילדים' },
               { icon: 'sliders', label: 'מסמנים פעם אחת' },
-              { icon: 'eye', label: 'הלוז לא מוצג לאף אחד' },
               { icon: 'clock', label: 'התאמה לפי ימים פנויים' },
-              { icon: 'users', label: 'כוונות לגבי ילדים' }
+              { icon: 'eye', label: 'הלוז לא מוצג לאף אחד' }
             ],
             media: { name: 'לוז משותף', desc: 'שני שבועות מסומנים זה מול זה, והיום שבו שני הצדדים פנויים מודגש.' }
           }
@@ -285,14 +290,19 @@
             media: { name: 'Shared circles', desc: 'The communities screen, beside a circle of people from the same community linked to each other.' }
           },
           {
-            eyebrow: 'Your schedule and intentions',
-            title: { lines: ['The app knows', 'when you are actually free.'], accent: true },
-            body: 'Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat. Where you stand on children counts too: wanting kids, or more kids, shapes who you meet.',
+            eyebrow: 'Kids, family and your time',
+            title: { lines: ['You know what you want,', 'and when you are free.'], accent: true },
+            body: 'Wanting a family is not a small detail, so it is part of the matching. Mark once whether you want kids, do not want them, or already have them and are open to more, and Once brings up the people looking for the same thing first.',
+            note: {
+              icon: 'clock',
+              title: 'The parent schedule',
+              body: 'And parents get a schedule too. Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat.'
+            },
             chips: [
+              { icon: 'users', label: 'Where you stand on kids' },
               { icon: 'sliders', label: 'Marked once' },
-              { icon: 'eye', label: 'Never shown to anyone' },
               { icon: 'clock', label: 'Matched on free days' },
-              { icon: 'users', label: 'Where you stand on kids' }
+              { icon: 'eye', label: 'Never shown to anyone' }
             ],
             media: { name: 'A schedule that lines up', desc: 'Two marked weeks facing each other, with the day both sides are free highlighted.' }
           }
@@ -374,7 +384,9 @@
     /* Every pillar is the same section with the media on alternating sides, so
        the four messages are one parameterised builder and never four near-copies.
        PILLARS is the single source of order: nav labels, section ids and artwork
-       keys all read from it. */
+       keys all read from it. A pillar may carry an optional `note`, a callout
+       card that lifts one sub-message out of the body instead of burying it in
+       the paragraph. */
     function buildPillars() {
       return T.pillars.map(function (s, i) {
         var flip = i % 2 === 1;
@@ -385,6 +397,10 @@
                 '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
                 '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
                 '<p class="lede reveal">' + esc(s.body) + '</p>' +
+                (s.note ? '<div class="callout reveal">' +
+                    '<div class="callout-title">' + icon(s.note.icon) + esc(s.note.title) + '</div>' +
+                    '<p>' + esc(s.note.body) + '</p>' +
+                  '</div>' : '') +
                 '<div class="chips reveal">' + s.chips.map(function (c) {
                   return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
                 }).join('') + '</div>' +
