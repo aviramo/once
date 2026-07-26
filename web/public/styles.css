@@ -441,6 +441,10 @@ strong { color: var(--ink); font-weight: 600; }
   border: 0;
   box-shadow: none;
 }
+/* The note's own chips close the card under the drawing. They sit on the card's
+   white, so they take the sunk beige as their fill to stay legible tiles. */
+.callout .chips { margin-top: 14px; }
+.callout .chip { background: var(--surface-sunk); border-color: transparent; }
 
 
 /* ---------- Final CTA ---------- */

@@ -221,14 +221,13 @@
             note: {
               icon: 'clock',
               title: 'לוז הורים',
-              body: 'ולהורים יש גם לוז. מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט.'
+              body: 'ולהורים יש גם לוז. מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט.',
+              chips: [
+                { icon: 'sliders', label: 'מסמנים פעם אחת' },
+                { icon: 'clock', label: 'התאמה לפי ימים פנויים' },
+                { icon: 'eye', label: 'הלוז לא מוצג לאף אחד' }
+              ]
             },
-            chips: [
-              { icon: 'users', label: 'כוונות לגבי ילדים' },
-              { icon: 'sliders', label: 'מסמנים פעם אחת' },
-              { icon: 'clock', label: 'התאמה לפי ימים פנויים' },
-              { icon: 'eye', label: 'הלוז לא מוצג לאף אחד' }
-            ],
             media: { name: 'לוז משותף', desc: 'שני שבועות מסומנים זה מול זה, והיום שבו שני הצדדים פנויים מודגש.' }
           }
         ],
@@ -296,14 +295,13 @@
             note: {
               icon: 'clock',
               title: 'The parent schedule',
-              body: 'And parents get a schedule too. Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat.'
+              body: 'And parents get a schedule too. Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat.',
+              chips: [
+                { icon: 'sliders', label: 'Marked once' },
+                { icon: 'clock', label: 'Matched on free days' },
+                { icon: 'eye', label: 'Never shown to anyone' }
+              ]
             },
-            chips: [
-              { icon: 'users', label: 'Where you stand on kids' },
-              { icon: 'sliders', label: 'Marked once' },
-              { icon: 'clock', label: 'Matched on free days' },
-              { icon: 'eye', label: 'Never shown to anyone' }
-            ],
             media: { name: 'A schedule that lines up', desc: 'Two marked weeks facing each other, with the day both sides are free highlighted.' }
           }
         ],
@@ -387,7 +385,14 @@
        keys all read from it. A pillar may carry an optional `note`: a sub-message
        that gets a headline of its own instead of being buried in the paragraph,
        so it takes the visual side of the split and wraps the artwork in its own
-       card (title + text + drawing as one block). */
+       card (title + text + drawing + its own chips as one block). Chips are the
+       same row either way, so a pillar and a note just hand it their own list. */
+    function chipRow(list) {
+      if (!list || !list.length) return '';
+      return '<div class="chips reveal">' + list.map(function (c) {
+        return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
+      }).join('') + '</div>';
+    }
     function buildPillars() {
       return T.pillars.map(function (s, i) {
         var flip = i % 2 === 1;
@@ -397,6 +402,7 @@
               '<div class="callout-title">' + icon(s.note.icon) + esc(s.note.title) + '</div>' +
               '<p>' + esc(s.note.body) + '</p>' +
               art +
+              chipRow(s.note.chips) +
             '</div>'
           : art;
         return '<section class="band' + (flip ? ' band--tint' : '') + '" id="' + PILLARS[i] + '">' +
@@ -406,9 +412,7 @@
                 '<div class="eyebrow reveal">' + esc(s.eyebrow) + '</div>' +
                 '<h2 class="reveal">' + titleHTML(s.title) + '</h2>' +
                 '<p class="lede reveal">' + esc(s.body) + '</p>' +
-                '<div class="chips reveal">' + s.chips.map(function (c) {
-                  return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
-                }).join('') + '</div>' +
+                chipRow(s.chips) +
               '</div>' +
               '<div class="split-visual reveal">' + visual + '</div>' +
             '</div>' +
