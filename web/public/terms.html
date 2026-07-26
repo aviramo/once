@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=44" />
+  <link rel="stylesheet" href="styles.css?v=45" />
 </head>
 <body>
   <header class="header">
@@ -42,7 +42,6 @@
         <ul class="lang-menu" id="lang-menu" role="listbox" hidden>
           <li><button type="button" role="option" data-lang="he">עברית<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
           <li><button type="button" role="option" data-lang="en">English<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
-          <li><button type="button" role="option" data-lang="ru">Русский<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
         </ul>
       </div>
     </div>
@@ -97,15 +96,13 @@
     const browserLang = (() => {
       const l = (navigator.language || '').toLowerCase()
       if (l.startsWith('he')) return 'he'
-      if (l.startsWith('ru')) return 'ru'
       return 'en'
     })()
-    const SUPPORTED = ['he', 'en', 'ru']
-    const LANG_CODE = { he: 'HE', en: 'EN', ru: 'RU' }
+    const SUPPORTED = ['he', 'en']
+    const LANG_CODE = { he: 'HE', en: 'EN' }
     const TITLES = {
       he: 'תנאי שימוש | Once',
-      en: 'Terms of Service | Once',
-      ru: 'Условия использования | Once'
+      en: 'Terms of Service | Once'
     }
     let lang = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang
 
@@ -113,7 +110,7 @@
       document.documentElement.lang = lang
       document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr'
       document.title = TITLES[lang]
-      const content = lang === 'he' ? contentHE : (lang === 'ru' ? contentRU : contentEN)
+      const content = lang === 'he' ? contentHE : contentEN
       document.getElementById('content').innerHTML = content
       document.getElementById('lang-label').textContent = LANG_CODE[lang]
       document.querySelectorAll('#lang-menu button').forEach(b => {
@@ -157,7 +154,6 @@
 
     const UPDATED_EN = 'Last updated: April 30, 2026'
     const UPDATED_HE = 'עודכן לאחרונה: 30 באפריל 2026'
-    const UPDATED_RU = 'Последнее обновление: 30 апреля 2026'
 
     const contentEN = `
       <h1>Terms of Service</h1>
@@ -239,47 +235,6 @@
       <h2>10. דין חל</h2>
       <p>תנאים אלה כפופים לחוקי מדינת ישראל. כל מחלוקת תידון בבתי המשפט בישראל.</p>
       <div class="contact">לשאלות ופניות: <a href="mailto:once.app.support@gmail.com?subject=שאלה%20על%20תנאי%20השימוש%20של%20Once">once.app.support@gmail.com</a></div>
-    `
-
-    const contentRU = `
-      <h1>Условия использования</h1>
-      <p class="updated">${UPDATED_RU}</p>
-      <h2>1. Принятие условий</h2>
-      <p>Используя Once ("Приложение"), вы соглашаетесь с этими Условиями использования. Если вы не согласны, пожалуйста, не используйте Приложение.</p>
-      <h2>2. Право использования</h2>
-      <p>Вам должно быть не менее 18 лет, чтобы использовать Once. Используя Приложение, вы подтверждаете, что вам 18 лет или больше.</p>
-      <h2>3. Ваша учётная запись</h2>
-      <ul>
-        <li>Вы несёте ответственность за безопасность вашей учётной записи.</li>
-        <li>Вы должны предоставлять точную и правдивую информацию о себе.</li>
-        <li>Вы не можете выдавать себя за других или создавать поддельные профили.</li>
-      </ul>
-      <h2>4. Допустимое использование</h2>
-      <p>Вы соглашаетесь не:</p>
-      <ul>
-        <li>Использовать Приложение в любых незаконных целях.</li>
-        <li>Преследовать, оскорблять или причинять вред другим пользователям.</li>
-        <li>Публиковать ложный, вводящий в заблуждение или неприемлемый контент.</li>
-        <li>Отправлять спам или нежелательные сообщения.</li>
-        <li>Пытаться получить доступ к учётным записям или данным других пользователей.</li>
-      </ul>
-      <h2>5. Контент</h2>
-      <ul>
-        <li>Вы сохраняете право собственности на контент, который публикуете.</li>
-        <li>Публикуя контент, вы предоставляете нам лицензию использовать его исключительно для работы Приложения.</li>
-        <li>Мы можем удалить контент, нарушающий эти Условия.</li>
-      </ul>
-      <h2>6. Подбор пар</h2>
-      <p>Once показывает вам по одному человеку за раз на основе ваших предпочтений и местоположения. Мы не гарантируем какие-либо совпадения, совместимость или отношения.</p>
-      <h2>7. Прекращение действия</h2>
-      <p>Мы можем приостановить или закрыть вашу учётную запись за нарушение этих Условий. Вы можете удалить свою учётную запись в любое время через настройки Приложения.</p>
-      <h2>8. Ограничение ответственности</h2>
-      <p>Once предоставляется "как есть" без каких-либо гарантий. Мы не несём ответственности за любой ущерб, возникший в результате использования вами Приложения, включая потерю данных или неудачные подключения.</p>
-      <h2>9. Изменения в условиях</h2>
-      <p>Мы можем периодически обновлять эти Условия. Продолжение использования Приложения после изменений означает ваше принятие обновлённых Условий.</p>
-      <h2>10. Применимое право</h2>
-      <p>Эти Условия регулируются законами Государства Израиль. Любые споры будут разрешаться в судах Израиля.</p>
-      <div class="contact">Вопросы? Свяжитесь с нами по адресу <a href="mailto:once.app.support@gmail.com?subject=Вопрос%20об%20условиях%20использования%20Once">once.app.support@gmail.com</a></div>
     `
 
     applyLang()

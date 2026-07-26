@@ -57,7 +57,9 @@
 
 /* ---------- Reset ---------- */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+/* scroll-padding clears the sticky header, so a nav link to a pillar lands on
+   that band's eyebrow instead of parking it behind the bar. */
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 84px; }
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -90,7 +92,6 @@ ul { list-style: none; }
 section { position: relative; }
 .band { padding-block: clamp(64px, 10vw, 120px); }
 .band--tint { background: var(--bg-2); }
-.band--soft { background: var(--surface-sunk); }
 
 /* ---------- Typography ---------- */
 h1, h2, h3 { line-height: 1.12; letter-spacing: -0.02em; font-weight: 700; color: var(--ink); }
@@ -100,7 +101,6 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.28rem); font-weight: 600; }
 p { color: var(--ink-2); }
 strong { color: var(--ink); font-weight: 600; }
 .lede { font-size: clamp(1.06rem, 1.6vw, 1.22rem); color: var(--ink-2); max-width: var(--measure); }
-.measure { max-width: var(--measure); }
 
 /* Eyebrow — small green label with a leading dot. Green because it is read,
    not pressed; orange stays reserved for the actions. */
@@ -123,10 +123,6 @@ strong { color: var(--ink); font-weight: 600; }
 }
 
 /* Section heading block */
-.heading { max-width: 760px; margin-inline: auto; text-align: center; }
-.heading .lede { margin-inline: auto; margin-top: 16px; }
-.heading--start { text-align: start; margin-inline: 0; }
-.heading--start .lede { margin-inline: 0; }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -158,8 +154,6 @@ strong { color: var(--ink); font-weight: 600; }
   border: 1px solid var(--border-strong);
 }
 .btn-secondary:hover { border-color: var(--accent-strong); color: var(--accent-strong); background: var(--accent-soft); transform: translateY(-2px); }
-.btn-ghost { min-height: 44px; color: var(--brand); font-weight: 600; padding-inline: 6px; }
-.btn-ghost:hover { color: var(--brand-strong); }
 .btn-lg { min-height: 58px; padding-inline: 32px; font-size: 1.08rem; }
 .btn svg { flex: 0 0 auto; }
 
@@ -290,9 +284,16 @@ strong { color: var(--ink); font-weight: 600; }
   align-items: center;
   gap: clamp(28px, 5vw, 64px);
 }
-.hero-copy { max-width: 620px; }
+.hero-copy { max-width: 620px; container-type: inline-size; }
 .hero h1 { margin-bottom: 18px; }
 .hero h1 .accent { color: var(--brand); }
+/* The hero headline is a hard-broken stanza whose repetition only lands while
+   every line keeps its own row, so it is sized off its OWN column (cqi) rather
+   than the viewport: the two-column band hands the copy a column much narrower
+   than the page, which is exactly where a vw-scaled headline re-wraps. The
+   coefficient is the widest line's measured width (he 8.25em, en 8.83em) with a
+   little margin. Browsers without container units fall back to the h1 clamp. */
+.hero h1 { font-size: min(3.55rem, 11cqi); }
 .hero-sub { font-size: clamp(1.06rem, 1.7vw, 1.25rem); color: var(--ink-2); max-width: 54ch; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .hero-avail { display: block; }
@@ -380,7 +381,6 @@ strong { color: var(--ink); font-weight: 600; }
 [dir="rtl"] .media--art .art { transform: scaleX(-1); }
 
 .media--wide { aspect-ratio: 16 / 10; border-radius: var(--r-lg); width: 100%; }
-.media--square { aspect-ratio: 1 / 1; border-radius: var(--r-lg); width: 100%; }
 
 .media-icon {
   inline-size: 56px; block-size: 56px;
@@ -417,77 +417,7 @@ strong { color: var(--ink); font-weight: 600; }
 }
 .split--media-start .split-visual { order: -1; }
 .split-visual { display: flex; justify-content: center; }
-
-/* ---------- Bullet / point lists ---------- */
-.points { display: grid; gap: 12px; margin-top: 24px; }
-.point {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.point svg { color: var(--accent); flex: 0 0 auto; margin-block-start: 3px; }
-
-/* ---------- Card grids ---------- */
-.card-grid {
-  display: grid;
-  gap: 18px;
-  margin-top: clamp(32px, 5vw, 52px);
-}
-.card-grid--2 { grid-template-columns: repeat(2, 1fr); }
-.card-grid--3 { grid-template-columns: repeat(3, 1fr); }
-.card-grid--4 { grid-template-columns: repeat(4, 1fr); }
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 26px 24px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease);
-}
-.card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
-.card-icon {
-  inline-size: 46px; block-size: 46px;
-  border-radius: 13px;
-  display: grid; place-items: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-  margin-bottom: 16px;
-}
-.card h3 { margin-bottom: 8px; }
-.card p { font-size: 0.96rem; }
-
-/* ---------- Numbered steps (how it works) ---------- */
-.steps { display: grid; gap: 18px; margin-top: clamp(32px, 5vw, 52px); }
-.steps--5 { grid-template-columns: repeat(5, 1fr); }
-.step {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 22px 20px 24px;
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-.step-num {
-  font-weight: 800;
-  font-size: 0.9rem;
-  color: var(--accent);
-  background: var(--accent-soft);
-  inline-size: 34px; block-size: 34px;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  margin-bottom: 16px;
-}
-.step h3 { font-size: 1.06rem; margin-bottom: 8px; }
-.step p { font-size: 0.93rem; }
-.step .media { margin-top: auto; }
-.step .media--wide { margin-top: 18px; }
-
-.section-cta { margin-top: clamp(32px, 5vw, 48px); display: flex; justify-content: center; }
+.split-text .lede { margin-top: 16px; }
 
 /* ---------- Chips row (matching / hearts facets) ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
@@ -505,24 +435,6 @@ strong { color: var(--ink); font-weight: 600; }
 }
 .chip svg { color: var(--accent); }
 
-/* ---------- Stat cards (hearts) ---------- */
-.stat {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 24px;
-  box-shadow: var(--shadow-sm);
-  text-align: center;
-}
-.stat-figure {
-  font-weight: 800;
-  font-size: 1.6rem;
-  color: var(--brand);
-  margin-bottom: 6px;
-  display: inline-flex; align-items: center; gap: 8px;
-}
-.stat p { font-size: 0.95rem; }
-
 /* ---------- Emphasis line ---------- */
 .emphasis {
   margin-top: clamp(28px, 4vw, 40px);
@@ -533,39 +445,6 @@ strong { color: var(--ink); font-weight: 600; }
   max-width: 24ch;
 }
 .emphasis .accent { color: var(--brand); }
-
-/* ---------- FAQ accordion ---------- */
-.faq-list { max-width: 780px; margin-inline: auto; margin-top: clamp(28px, 4vw, 44px); display: grid; gap: 12px; }
-.faq-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-.faq-item[open] { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
-.faq-item summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 18px 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  font-weight: 600;
-  font-size: 1.02rem;
-  color: var(--ink);
-}
-.faq-item summary::-webkit-details-marker { display: none; }
-.faq-icon {
-  flex: 0 0 auto;
-  inline-size: 22px; block-size: 22px;
-  color: var(--accent);
-  transition: transform 0.25s var(--ease);
-}
-.faq-item[open] .faq-icon { transform: rotate(45deg); }
-.faq-answer { padding: 0 22px 20px; }
-.faq-answer p { color: var(--ink-2); font-size: 0.98rem; }
 
 /* ---------- Final CTA ---------- */
 .final {
@@ -715,8 +594,6 @@ strong { color: var(--ink); font-weight: 600; }
    Responsive
    ========================================================================== */
 @media (max-width: 1024px) {
-  .card-grid--4 { grid-template-columns: repeat(2, 1fr); }
-  .steps--5 { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 860px) {
@@ -739,7 +616,6 @@ strong { color: var(--ink); font-weight: 600; }
   .split--media-start .split-visual { order: -1; }
   .split-visual { order: -1; }
 
-  .steps--5 { grid-template-columns: repeat(2, 1fr); }
 
   .mobile-cta { display: block; }
   body.has-mobile-cta { padding-bottom: 84px; }
@@ -750,7 +626,6 @@ strong { color: var(--ink); font-weight: 600; }
   :root { --ctl-h: 40px; }
   .brand-name { font-size: 1.3rem; }
   .header-actions { gap: 6px; }
-  .card-grid--2, .card-grid--3, .card-grid--4, .steps--5 { grid-template-columns: 1fr; }
   .hero-cta .btn, .final-actions .btn { width: 100%; }
   .band { padding-block: clamp(48px, 12vw, 72px); }
 }

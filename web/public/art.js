@@ -68,12 +68,6 @@
     return line('M' + pt(cx, cy, r, a0) + 'A' + r + ' ' + r + ' 0 ' + ((a1 - a0) > 180 ? 1 : 0) + ' 1 ' + pt(cx, cy, r, a1), stroke, sw, extra);
   }
 
-  /* Deterministic jitter, so noise art is identical on every render. */
-  function lcg(seed) {
-    var s = seed;
-    return function () { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; };
-  }
-
   /* ---------- Photo ---------- */
   /* A real profile photo, cropped to fill the box. `zoom` > 1 pushes in on the
      face; `dy` nudges the crop vertically. */
@@ -204,21 +198,6 @@
       rect(105, 606, 90, 5, 2.5, INK, op(0.3));
   };
 
-  /* Report: the safety sheet, one tap from every card. The sheet rises over the
-     person with a shield at its head, so the screen reads as safety at a glance. */
-  SCREEN.report = function (face) {
-    return photo(0, -2, SW, 396, 0, face || F(1), null, 1, -10) +
-      roundBtn(34, 42, 20, hamburger(34, 42, 18)) +
-      plainChip(166, 27, 118, true) +
-      rect(0, 370, SW, 280, 30, PAGE, ' filter="url(#SHADOW)"') +
-      rect(138, 384, 24, 4, 2, INK, op(0.25)) +
-      circle(150, 428, 30, TINT) + shield(150, 428, 18, ACCENT) +
-      bar(105, 470, 90, 14, INK, 0.75) +
-      rect(20, 500, 260, 56, 16, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') +
-      bar(38, 516, 190, 11, INK, 0.3) + bar(38, 536, 120, 11, INK, 0.3) +
-      rect(20, 568, 260, 42, 21, ACCENT) + bar(110, 585, 80, 12, SURFACE, 0.92);
-  };
-
   /* Communities hub: my-friends (pinned) over the groups you manage / are in,
      with create + find actions. Beige top, dark glyphs, no purple band. */
   SCREEN.communities = function () {
@@ -304,8 +283,9 @@
   /* Hero: the home screen itself - one person, one action. */
   ART.hero = function () { return phone(SCREEN.home(F(0))); };
 
-  /* Problem: a crowd of profile cards around the one that is actually clear. */
-  ART.problem = function () {
+  /* Message 1, one person at a time: a crowd of profile cards around the one
+     screen that is actually clear. The crowd is the habit being broken. */
+  ART.one = function () {
     var crowd = [
       [24, -34, F(8), 0.42], [156, -50, F(9), 0.38], [292, -62, F(10), 0.36], [438, -50, F(11), 0.38], [594, -34, F(12), 0.42],
       [-30, 74, F(13), 0.46], [46, 208, F(14), 0.6], [0, 342, F(15), 0.46], [124, 412, F(16), 0.44], [292, 444, null, 0.32],
@@ -317,78 +297,10 @@
     );
   };
 
-  /* Difference: the four principles - one person, one credit, a timer, an invitation. */
-  ART.principles = function () {
-    var tile = function (x, y) { return rect(x, y, 352, 196, 22, SURFACE, ' stroke="' + LINE + '" stroke-width="2"'); };
-
-    var one = group(miniCard(112, 84, 76, 100, null, 0.4) + miniCard(232, 84, 76, 100, null, 0.4)) +
-      miniCard(170, 74, 80, 116, F(2), 1, 1.5);
-
-    var credit = circle(590, 132, 58, TINT) + token(590, 132, 40);
-
-    var timer = circle(210, 368, 46, TINT) + ring(210, 368, 46, LINE, 8) + arc(210, 368, 46, 0, 250, BRAND, 8) +
-      line('M210 368V342M210 368l17 11', INK, 5) + circle(210, 368, 4.5, INK);
-
-    var invite = rect(500, 322, 180, 92, 22, SURFACE, ' stroke="' + LINE + '" stroke-width="2" filter="url(#SHADOW)"') +
-      avatar(534, 368, 26, F(21)) + bar(574, 348, 86, 12) + bar(574, 374, 62, 11, INK, 0.4) +
-      token(680, 322, 15, BRAND);
-
-    return wide(tile(34, 34) + tile(414, 34) + tile(34, 270) + tile(414, 270) + one + credit + timer + invite);
-  };
-
-  /* The step artworks are read at a card's width, so each one carries a single
-     large subject: legibility beats detail at that size. */
-
-  /* How, step 1: a short profile - a few photos and a few words. */
-  ART.step1 = function () {
-    return wide(
-      rect(180, 46, 440, 408, 44, SURFACE, ' stroke="' + LINE + '" stroke-width="3" filter="url(#SHADOW)"') +
-      photo(214, 80, 180, 180, 26, F(3), null, 1.25, 0) + rect(406, 80, 180, 180, 26, TINT) +
-      rect(214, 272, 180, 180, 26, TINT) + rect(406, 272, 180, 180, 26, TINT) +
-      line('M496 148v44M474 170h44M304 340v44M282 362h44M496 340v44M474 362h44', ACCENT, 8, op(0.45))
-    );
-  };
-
-  /* How, step 2: the search that ends on one candidate. */
-  ART.step2 = function () {
-    return wide(
-      ring(400, 250, 236, ACCENT, 5, op(0.16)) + ring(400, 250, 178, ACCENT, 5, op(0.26)) + ring(400, 250, 120, ACCENT, 5, op(0.38)) +
-      miniCard(288, 76, 224, 348, F(4), 1, 1.3)
-    );
-  };
-
-  /* How, step 3: two clear actions - move on, or invite. */
-  ART.step3 = function () {
-    return wide(
-      miniCard(288, 24, 224, 340, F(5), 1, 1.3) +
-      circle(300, 400, 72, SURFACE, ' stroke="' + LINE + '" stroke-width="3"') +
-      line('M276 376l48 48M324 376l-48 48', INK, 9, op(0.45)) +
-      circle(500, 400, 72, BRAND) + heart(500, 400, 46)
-    );
-  };
-
-  /* How, step 4: the ten-minute window. */
-  ART.step4 = function () {
-    return wide(
-      circle(400, 250, 176, TINT) + ring(400, 250, 176, LINE, 22) + arc(400, 250, 176, 0, 250, BRAND, 22) +
-      line('M400 250V148M400 250l66 42', INK, 16) + circle(400, 250, 16, INK)
-    );
-  };
-
-  /* How, step 5: the match, and the chat it opens. */
-  ART.step5 = function () {
-    return wide(
-      avatar(288, 148, 100, F(6), null, SURFACE) + avatar(512, 148, 100, F(7), null, SURFACE) +
-      token(400, 148, 42) +
-      rect(150, 302, 320, 68, 34, TINT) + bar(184, 328, 240, 16, INK, 0.45) +
-      rect(330, 394, 320, 68, 34, BRAND) + bar(376, 420, 220, 16, SURFACE, 0.9)
-    );
-  };
-
-  /* Communities: meeting through a shared circle. The hub on the START side;
+  /* Message 3, friends and shared circles: the hub on the START side;
      on the other, members of one community linked to each other, with a friend
      pair lit brand-purple - friends surface to each other first. */
-  ART.communities = function () {
+  ART.circles = function () {
     var cx = 556, cy = 250, R = 150;
     var ring6 = [
       [cx, cy - R, F(3)], [cx + 132, cy - 74, F(4)], [cx + 132, cy + 74, F(5)],
@@ -408,37 +320,49 @@
     );
   };
 
-  /* Credits: one invitation, one credit out of a small daily balance. */
-  ART.credits = function () {
+  /* Message 2, real time: the invitation as it lands, beside the ten-minute
+     window it lives inside. The dial is drawn part-spent, so the scene reads as
+     a clock already running rather than a decoration. */
+  ART.now = function () {
+    var cx = 578, cy = 250, R = 130;
     return wide(
-      device(310, 24, 0.62, SCREEN.invite(F(4), BRAND, true), true) +
-      token(150, 190, 40) + token(650, 190, 40) +
-      token(112, 330, 24, BRAND, 0.35) + token(688, 330, 24, BRAND, 0.35) +
-      line('M196 214Q250 268 296 300', BRAND, 3, ' stroke-dasharray="7 9" opacity=".6"') +
-      line('M604 214Q550 268 504 300', BRAND, 3, ' stroke-dasharray="7 9" opacity=".6"')
+      device(60, 22, 0.7, SCREEN.invite(F(4), BRAND, true), true) +
+      line('M282 250H428', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"') +
+      circle(cx, cy, R, TINT) + ring(cx, cy, R, LINE, 18) +
+      arc(cx, cy, R, 0, 250, BRAND, 18) +
+      line('M' + cx + ' ' + cy + 'V' + (cy - 90) + 'M' + cx + ' ' + cy + 'l60 38', INK, 13) +
+      circle(cx, cy, 13, INK)
     );
   };
 
-  /* Matching: the right person nearby, not a random pick. */
-  ART.matching = function () {
-    var grid = '';
-    for (var x = 128; x < 740; x += 68) grid += line('M' + x + ' 60V440', LINE, 2, op(0.6));
-    for (var y = 128; y < 440; y += 68) grid += line('M60 ' + y + 'H740', LINE, 2, op(0.6));
-
-    var spots = [[196, 160], [648, 146], [228, 380], [612, 372], [404, 100], [148, 268], [692, 274], [396, 412]];
-    var dots = spots.map(function (s, i) { return circle(s[0], s[1], 9, ACCENT, op(i % 2 ? 0.26 : 0.36)); }).join('');
-
+  /* Message 4, the schedule with the kids: two weeks facing each other, the days
+     the kids are home marked, and the one day BOTH sides are free lit in brand
+     purple. Same no-lettering rule as every other piece: a marked day is a tinted
+     cell with two small dots, a free day is an empty tile. */
+  ART.parents = function () {
+    var X0 = 216, STEP = 68, CELL = 58, RA = 178, RB = 278;
+    var FREE_COL = 3;
+    var withKids = [[0, 1, 4, 5], [1, 2, 5, 6]];
+    function day(i, y, marked, lit) {
+      var x = X0 + i * STEP, cx = x + CELL / 2, cy = y + CELL / 2;
+      return rect(x, y, CELL, CELL, 14, marked ? TINT : SURFACE,
+        ' stroke="' + (lit ? BRAND : LINE) + '" stroke-width="' + (lit ? 3 : 2) + '"') +
+        (marked ? circle(cx - 9, cy, 5, INK, op(0.3)) + circle(cx + 9, cy, 5, INK, op(0.3)) : '');
+    }
+    function week(y, marks, face) {
+      var cells = '';
+      for (var i = 0; i < 7; i++) cells += day(i, y, marks.indexOf(i) >= 0, i === FREE_COL);
+      return avatar(118, y + CELL / 2, 30, face, null, SURFACE) + cells;
+    }
+    var litX = X0 + FREE_COL * STEP;
     return wide(
-      rect(60, 60, 680, 380, 30, TINT) + grid + dots +
-      ring(400, 250, 92, ACCENT, 3, op(0.28)) + ring(400, 250, 148, ACCENT, 3, op(0.18)) + ring(400, 250, 204, ACCENT, 3, op(0.1)) +
-      avatar(300, 176, 34, F(11), 0.9, SURFACE) + avatar(508, 328, 34, F(16), 0.9, SURFACE) +
-      circle(400, 250, 56, SURFACE) + avatar(400, 250, 48, F(23), null, BRAND) +
-      circle(400, 250, 48, BRAND, op(0.001))
+      rect(60, 96, 680, 308, 30, SURFACE, ' stroke="' + LINE + '" stroke-width="2" filter="url(#SHADOW)"') +
+      bar(102, 132, 150, 14) +
+      rect(litX - 8, RA - 16, CELL + 16, RB + CELL - RA + 32, 20, BRAND, op(0.12)) +
+      week(RA, withKids[0], F(2)) + week(RB, withKids[1], F(3)) +
+      heart(litX + CELL / 2, (RA + CELL + RB) / 2, 20, BRAND)
     );
   };
-
-  /* Safety: end it, block, report - always one tap away. */
-  ART.safety = function () { return phone(SCREEN.report(F(5))); };
 
   /* Final: the three moments - meet, invite, talk. */
   ART.final = function () {

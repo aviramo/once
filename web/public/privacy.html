@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=44" />
+  <link rel="stylesheet" href="styles.css?v=45" />
 </head>
 <body>
   <header class="header">
@@ -42,7 +42,6 @@
         <ul class="lang-menu" id="lang-menu" role="listbox" hidden>
           <li><button type="button" role="option" data-lang="he">עברית<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
           <li><button type="button" role="option" data-lang="en">English<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
-          <li><button type="button" role="option" data-lang="ru">Русский<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
         </ul>
       </div>
     </div>
@@ -99,15 +98,13 @@
     const browserLang = (() => {
       const l = (navigator.language || '').toLowerCase()
       if (l.startsWith('he')) return 'he'
-      if (l.startsWith('ru')) return 'ru'
       return 'en'
     })()
-    const SUPPORTED = ['he', 'en', 'ru']
-    const LANG_CODE = { he: 'HE', en: 'EN', ru: 'RU' }
+    const SUPPORTED = ['he', 'en']
+    const LANG_CODE = { he: 'HE', en: 'EN' }
     const TITLES = {
       he: 'מדיניות פרטיות | Once',
-      en: 'Privacy Policy | Once',
-      ru: 'Политика конфиденциальности | Once'
+      en: 'Privacy Policy | Once'
     }
     let lang = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang
 
@@ -115,7 +112,7 @@
       document.documentElement.lang = lang
       document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr'
       document.title = TITLES[lang]
-      const content = lang === 'he' ? contentHE : (lang === 'ru' ? contentRU : contentEN)
+      const content = lang === 'he' ? contentHE : contentEN
       document.getElementById('content').innerHTML = content
       document.getElementById('lang-label').textContent = LANG_CODE[lang]
       document.querySelectorAll('#lang-menu button').forEach(b => {
@@ -159,7 +156,6 @@
 
     const UPDATED_EN = 'Last updated: April 30, 2026'
     const UPDATED_HE = 'עודכן לאחרונה: 30 באפריל 2026'
-    const UPDATED_RU = 'Последнее обновление: 30 апреля 2026'
 
     const contentEN = `
       <h1>Privacy Policy</h1>
@@ -245,49 +241,6 @@
       <h2>10. שינויים במדיניות</h2>
       <p>אנחנו עשויים לעדכן מדיניות פרטיות זו מעת לעת. נודיע לך על שינויים משמעותיים דרך האפליקציה. המשך השימוש לאחר שינויים מהווה קבלת המדיניות המעודכנת.</p>
       <div class="contact">שאלות בנוגע למידע שלך? פנה/י אלינו בכתובת <a href="mailto:once.app.support@gmail.com?subject=שאלה%20על%20מדיניות%20הפרטיות%20של%20Once">once.app.support@gmail.com</a></div>
-    `
-
-    const contentRU = `
-      <h1>Политика конфиденциальности</h1>
-      <p class="updated">${UPDATED_RU}</p>
-      <h2>1. Введение</h2>
-      <p>Once ("мы", "нас", "наш") управляет мобильным приложением Once. Эта Политика конфиденциальности объясняет, как мы собираем, используем и защищаем вашу личную информацию при использовании нашего Приложения.</p>
-      <h2>2. Какую информацию мы собираем</h2>
-      <ul>
-        <li><strong>Информация об учётной записи:</strong> имя, дата рождения, пол и предпочтения по полу, которые вы предоставляете при регистрации.</li>
-        <li><strong>Данные о местоположении:</strong> местоположение вашего устройства, используемое для поиска совпадений поблизости. Местоположение периодически обновляется во время использования Приложения.</li>
-        <li><strong>Содержимое профиля:</strong> фотографии и другой контент, который вы решаете загрузить.</li>
-        <li><strong>Данные об использовании:</strong> действия, которые вы выполняете в Приложении (поиск, приглашение, чат), и временные метки.</li>
-        <li><strong>Информация об устройстве:</strong> тип устройства, операционная система и токен push-уведомлений.</li>
-        <li><strong>Данные аутентификации:</strong> безопасно управляются через вход Google или Apple. Мы не храним пароли.</li>
-      </ul>
-      <h2>3. Как мы используем вашу информацию</h2>
-      <ul>
-        <li>Для предоставления и улучшения сервиса подбора пар.</li>
-        <li>Чтобы показывать ваш профиль потенциальным совпадениям поблизости.</li>
-        <li>Для отправки push-уведомлений о совпадениях, приглашениях и сообщениях.</li>
-        <li>Для обеспечения соблюдения наших Условий использования и безопасности Приложения.</li>
-        <li>Для анализа моделей использования и улучшения работы Приложения.</li>
-      </ul>
-      <h2>4. Данные о местоположении</h2>
-      <p>Ваше местоположение сохраняется и используется только для поиска совпадений рядом с вами. Мы не передаём ваше точное местоположение другим пользователям, они видят только приблизительное расстояние. Вы можете прекратить передачу местоположения, отозвав разрешение Приложения на доступ к местоположению в настройках вашего устройства.</p>
-      <h2>5. Передача информации</h2>
-      <p>Мы не продаём вашу личную информацию. Мы можем передавать данные с:</p>
-      <ul>
-        <li><strong>Поставщиками услуг</strong>, которые помогают нам управлять Приложением (включая Supabase для базы данных и аутентификации, а также Apple/Google для входа).</li>
-        <li><strong>Правоохранительными органами</strong>, если это требуется применимым законодательством или для защиты безопасности наших пользователей.</li>
-      </ul>
-      <h2>6. Хранение данных</h2>
-      <p>Мы храним ваши данные, пока ваша учётная запись активна. Когда вы удаляете свою учётную запись, ваш профиль и личные данные удаляются навсегда в течение 30 дней. Сообщения чата удаляются немедленно при удалении учётной записи.</p>
-      <h2>7. Ваши права</h2>
-      <p>У вас есть право получить доступ, исправить или удалить ваши личные данные. Вы можете удалить свою учётную запись непосредственно в настройках Приложения. По другим запросам свяжитесь с нами по адресу ниже.</p>
-      <h2>8. Безопасность</h2>
-      <p>Мы используем стандартные отраслевые меры безопасности, включая зашифрованные соединения и контроль доступа, для защиты ваших данных. Однако ни один метод передачи через интернет не является полностью безопасным.</p>
-      <h2>9. Конфиденциальность детей</h2>
-      <p>Once не предназначен для пользователей младше 18 лет. Мы сознательно не собираем личные данные несовершеннолетних. Если вы считаете, что несовершеннолетний создал учётную запись, пожалуйста, немедленно свяжитесь с нами.</p>
-      <h2>10. Изменения в этой политике</h2>
-      <p>Мы можем периодически обновлять эту Политику конфиденциальности. Мы уведомим вас о существенных изменениях через Приложение. Продолжение использования после изменений означает принятие обновлённой политики.</p>
-      <div class="contact">Вопросы о ваших данных? Свяжитесь с нами по адресу <a href="mailto:once.app.support@gmail.com?subject=Вопрос%20о%20Политике%20конфиденциальности%20Once">once.app.support@gmail.com</a></div>
     `
 
     applyLang()
