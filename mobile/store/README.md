@@ -1,6 +1,10 @@
-# Once — Google Play store listing pack
+# Once — store pack
 
-All assets and copy needed to fill in **Play Console → Grow users → Main store listing**.
+Everything the app stores need, in one place: the Play listing copy, the graphics, the
+generators that draw them, and the App Review captures under [apple-review/](apple-review/).
+
+The Play half of this file is all assets and copy needed to fill in
+**Play Console → Grow users → Main store listing**.
 
 Default language: **Hebrew (Israel) — he-IL**. Add English (United States) — en-US — as a translation afterwards.
 
@@ -10,12 +14,12 @@ Default language: **Hebrew (Israel) — he-IL**. Add English (United States) —
 
 | Field in Play Console | File |
 |---|---|
-| App icon (512×512 PNG) | `mobile/assets/once-512.png` |
+| App icon (512×512 PNG) | `mobile/store/once-512.png` |
 | Feature graphic (1024×500 PNG) | `mobile/store/play-feature-graphic.png` |
-| Phone screenshot 1 — one person at a time | `store-listing/screenshot-1-one-person.png` |
-| Phone screenshot 2 — real time, here and now | `store-listing/screenshot-2-real-time.png` |
-| Phone screenshot 3 — friends and shared circles | `store-listing/screenshot-3-communities.png` |
-| Phone screenshot 4 — the kids schedule | `store-listing/screenshot-4-kids-schedule.png` |
+| Phone screenshot 1 — one person at a time | `mobile/store/screenshot-1-one-person.png` |
+| Phone screenshot 2 — real time, here and now | `mobile/store/screenshot-2-real-time.png` |
+| Phone screenshot 3 — friends and shared circles | `mobile/store/screenshot-3-communities.png` |
+| Phone screenshot 4 — the kids schedule | `mobile/store/screenshot-4-kids-schedule.png` |
 
 All screenshots are 1080×1920 (9:16). Play Console accepts 320–3840 px on each side.
 
@@ -122,7 +126,7 @@ Once is a different way to meet. Worth trying.
 2. Set **Default language** to *Hebrew (Israel) — he-IL*.
 3. Paste the Hebrew **App name**, **Short description**, **Full description** from the section above.
 4. **Graphics:**
-   - App icon → upload `mobile/assets/once-512.png`.
+   - App icon → upload `mobile/store/once-512.png`.
    - Feature graphic → upload `mobile/store/play-feature-graphic.png`.
    - Phone screenshots → upload all four `screenshot-*.png` files in order (1 → 4).
 5. Save → Play Console requires the page to pass validation before you can submit the change for review.
@@ -134,14 +138,24 @@ Once is a different way to meet. Worth trying.
 
 Both generators are checked in:
 
-- `node store-listing/make-screenshots.mjs` → produces all 4 `screenshot-*.png`.
+- `node mobile/store/make-screenshots.mjs` → produces all 4 `screenshot-*.png`.
   Renders HTML/CSS through headless Chrome (so Hebrew shaping and RTL are the
   browser's job), embedding the app's Noto Sans Hebrew faces from
   `mobile/node_modules/@expo-google-fonts` and the profile photos from
   `web/public/media`. Headline copy, the mock chip text and the phone layout all
   live at the top of that file. When the app's palette, tokens or card layout
   change, re-read `mobile/src/colors.ts` / `tokens.ts` / `MatchCard.tsx` and re-run it.
-- `mobile/store/play-feature-graphic.svg` → the feature graphic, purple on beige,
+- `node mobile/scripts/build-feature-graphic.mjs` → writes both
+  `play-feature-graphic.svg` and `.png` here: the feature graphic, purple on beige,
   matching the app icon and these screenshots. The landing page draws the same
   picture from its own elements in `web/public/art.js`; the two are separate files,
   so a change to one is not a change to the other.
+
+---
+
+## Apple App Review
+
+[apple-review/](apple-review/) holds the demo-video captures for App Review, plus its own
+README describing each frame and the demo state applied to the live DB. Those are real
+captures from the running app on the owner's account, so they carry family photos and are
+deliberately **left untracked by git** — do not `git add` that folder.

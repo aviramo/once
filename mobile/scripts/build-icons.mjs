@@ -5,9 +5,14 @@ import path from 'node:path'
 // ─────────────────────────────────────────────────────────────────────────
 // SINGLE SOURCE OF TRUTH for the Once brand mark: the numeral "1" — a bold
 // round-capped stroke — in brand PURPLE on a warm BEIGE ground. Everything
-// below (every mobile icon, the web favicon(s), og-image and once-mark.svg)
-// is derived from the tokens + geometry in this file, so one edit regenerates
-// every asset in lockstep. Run: `node scripts/build-icons.mjs`.
+// below (every mobile icon, the store's 512, the web favicon(s), og-image and
+// once-mark.svg) is derived from the tokens + geometry in this file, so one
+// edit regenerates every asset in lockstep. Run: `node scripts/build-icons.mjs`.
+//
+// Each output is written where its consumer needs it, and nowhere twice:
+// mobile/assets = what the app binary ships (app.json points at these by
+// relative path), mobile/store = console upload art, web/public = what the site
+// serves. They are separate renders of one drawing, not copies of each other.
 //
 // Geometry lives in a 1024 viewBox centred on (512,512). The glyph is authored
 // at "scale 1" with generous built-in margins (it spans ~23% to ~77% of the
@@ -22,6 +27,7 @@ const root = path.resolve(
   '..',
 )
 const assets = path.join(root, 'assets')
+const store = path.join(root, 'store')
 const web = path.join(root, '..', 'web', 'public')
 const webApp = path.join(root, '..', 'web', 'src', 'app')
 const appJson = path.join(root, 'app.json')
@@ -65,10 +71,11 @@ const buf = (opts) => Buffer.from(markSvg(opts))
 const writePng = (opts, size, file) => sharp(buf(opts)).resize(size, size).png().toFile(file)
 
 // ── Mobile ────────────────────────────────────────────────────────────────
-// iOS launcher + store listing: full-bleed beige, glyph at authored size (its
-// built-in margins keep it clear of the squircle).
+// iOS launcher: full-bleed beige, glyph at authored size (its built-in margins
+// keep it clear of the squircle). assets/ holds only what the app binary ships;
+// the 512 the consoles ask for is a store asset, so it lands in store/.
 await writePng({ bg: BEIGE }, 1024, path.join(assets, 'icon.png'))
-await writePng({ bg: BEIGE }, 512, path.join(assets, 'once-512.png'))
+await writePng({ bg: BEIGE }, 512, path.join(store, 'once-512.png'))
 // Android adaptive foreground: transparent, glyph pulled into the launcher
 // safe zone (the inner ~61% circle) so no mask clips it. app.json's
 // adaptiveIcon.backgroundColor = BEIGE paints the ground the mask trims.
@@ -121,5 +128,5 @@ notif[1].color = PURPLE // Android tints the white glyph with this in the shade
 fs.writeFileSync(appJson, JSON.stringify(app, null, 2) + '\n')
 
 console.log(
-  `icons built ("1" ${PURPLE} on ${BEIGE}) → mobile: icon, once-512, splash-icon, adaptive-icon, notification-icon | web: favicon.png/.svg/.ico, og-image.png, once-mark.svg | app.json synced`,
+  `icons built ("1" ${PURPLE} on ${BEIGE}) → assets: icon, splash-icon, adaptive-icon, notification-icon | store: once-512 | web: favicon.png/.svg/.ico, og-image.png, once-mark.svg | app.json synced`,
 )

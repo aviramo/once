@@ -10,9 +10,9 @@
 // Rendered by headless Chrome (HTML/CSS, so Hebrew shaping + RTL are the
 // browser's job, not a hand-rolled text layout).
 //
-//   node store-listing/make-screenshots.mjs
+//   node mobile/store/make-screenshots.mjs
 //
-// Output: store-listing/screenshot-1..4-*.png
+// Output: mobile/store/screenshot-1..4-*.png
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const ROOT = resolve(HERE, '..')
+const ROOT = resolve(HERE, '..', '..')
 // Intermediate HTML is a build artefact, not a checked-in asset.
 const BUILD = join(tmpdir(), 'once-store-listing')
 const MEDIA = join(ROOT, 'web', 'public', 'media')
