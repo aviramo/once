@@ -252,6 +252,20 @@
       rect(x + wd * 0.08, y + wd * 0.08 + ht * 0.78, wd * 0.68, ht * 0.05, ht * 0.025, GHOST), op(o));
   }
 
+  /* A pile of profile cards: the habit Once does away with. Three cards leaning
+     on each other read as ONE object, so the scene stays quiet - only the card on
+     top carries a person, the ones behind it are blank, and the whole pile fades
+     back so nothing competes with the phone. `tilt` leans the pile (negate it to
+     mirror the pile on the other side of the phone). */
+  function cardPile(cx, cy, wd, face, tilt) {
+    var ht = wd * 1.31;
+    var lean = [[tilt * 2, -18, 0.22], [tilt, -9, 0.36], [0, 0, 0.6]];
+    return lean.map(function (l, i) {
+      return group(miniCard(cx - wd / 2, cy - ht / 2 + l[1], wd, ht, i === lean.length - 1 ? face : null, l[2], 1.35),
+        ' transform="rotate(' + n(l[0]) + ' ' + n(cx) + ' ' + n(cy) + ')"');
+    }).join('');
+  }
+
   /* A circular avatar, used wherever a person appears as a dot. */
   function avatar(cx, cy, r, face, o, stroke) {
     return photo(cx - r, cy - r, r * 2, r * 2, r, face, o, 1.25, 0) +
@@ -377,16 +391,14 @@
         [x(1450), 85, 7, BRAND], [x(1530), 240, 6, MUTED], [x(1860), 115, 8, ACCENT]], s));
   };
 
-  /* Message 1, one person at a time: a crowd of profile cards around the one
-     screen that is actually clear. The crowd is the habit being broken. */
+  /* Message 1, one person at a time: the pile of cards set aside on either side of
+     the one screen that is actually clear. Two quiet piles rather than a scatter of
+     faces - the section's own words are "no feed, no pile of cards", and a scene
+     that shouts about the habit competes with the person it is meant to leave alone. */
   ART.one = function () {
-    var crowd = [
-      [24, -34, F(8), 0.42], [156, -50, F(9), 0.38], [292, -62, F(10), 0.36], [438, -50, F(11), 0.38], [594, -34, F(12), 0.42],
-      [-30, 74, F(13), 0.46], [46, 208, F(14), 0.6], [0, 342, F(15), 0.46], [124, 412, F(16), 0.44], [292, 444, null, 0.32],
-      [702, 70, F(17), 0.46], [640, 208, F(18), 0.6], [688, 342, F(19), 0.46], [560, 412, F(20), 0.44], [440, 444, null, 0.32]
-    ];
     return wide(
-      crowd.map(function (g) { return miniCard(g[0], g[1], 116, 152, g[2], g[3], 1.4); }).join('') +
+      cardPile(146, 262, 156, F(9), -5) +
+      cardPile(654, 238, 156, F(14), 5) +
       device(325, 42, 0.68, SCREEN.home(F(1)), true)
     );
   };
