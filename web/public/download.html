@@ -192,30 +192,19 @@
     <div class="qr"><div class="qr-box" id="qr-box"></div></div>
   </div>
 
+  <!-- The store URL, the platform rules and the referral rule are shared with the
+       landing page, whose download button now does what this one does. -->
+  <script src="/store.js?v=1"></script>
   <script>
     (function () {
-      var ANDROID = "https://play.google.com/store/apps/details?id=com.aviramo.once";
-      // A personal invite (/i/<CODE>) is rewritten to this page for every
-      // non-Android visitor, and the browser keeps the /i/<CODE> URL — so the
-      // code is still readable here and can ride the Play referrer, exactly as
-      // proxy.ts packs it for an Android visitor.
-      var REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
       var NOTE_IOS = "Once אינה זמינה לאייפון.";
       var NOTE_DESKTOP = "פתחו את הדף מהטלפון, או סרקו את הקוד:";
 
-      var ua = navigator.userAgent || navigator.vendor || window.opera || "";
-      var isAndroid = /android/i.test(ua);
-      // iPadOS 13+ reports as "MacIntel" with a touch screen, so the platform
-      // check below catches modern iPads that no longer say "iPad" in the UA.
-      var isIOS = /iPad|iPhone|iPod/.test(ua) ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      var isAndroid = window.OnceStore.isAndroid;
+      var isIOS = window.OnceStore.isIOS;
 
       var button = document.getElementById("android");
-      var referral = REFERRAL_PATH_RE.exec(location.pathname);
-      if (referral) {
-        button.href = ANDROID + "?referrer=" +
-          encodeURIComponent("ref=" + referral[1].toUpperCase());
-      }
+      button.href = window.OnceStore.url();
 
       var note = document.getElementById("note");
 
@@ -235,10 +224,10 @@
         var script = document.createElement("script");
         script.src = "/qr.js?v=1";
         script.onload = function () {
-          document.getElementById("qr-box").innerHTML = window.OnceQR.svg(location.href, {
-            dark: "#33265B",
-            light: "#FFFFFF",
-          });
+          // THIS page's URL, so a personal invite keeps its referral code across
+          // the hop from screen to phone.
+          document.getElementById("qr-box").innerHTML =
+            window.OnceQR.svg(location.href, window.OnceStore.qrColors);
         };
         document.head.appendChild(script);
       }

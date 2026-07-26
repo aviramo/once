@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=49" />
+  <link rel="stylesheet" href="styles.css?v=50" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -115,6 +115,22 @@
     <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
+  <!-- What a download press answers with when the device cannot install: the
+       iPhone note, or the scan code for a desktop. On Android the buttons are
+       plain links to Play and this never opens. -->
+  <div class="dl" id="dl" hidden>
+    <div class="dl-backdrop" data-close-dl></div>
+    <div class="dl-card" role="dialog" aria-modal="true" aria-labelledby="dl-title">
+      <button class="menu-close dl-close" id="dl-close" type="button" aria-label="סגירה">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <div class="dl-title" id="dl-title">להורדת האפליקציה</div>
+      <p class="dl-note" id="dl-note"></p>
+      <div class="dl-qr" id="dl-qr"></div>
+    </div>
+  </div>
+
+  <script src="store.js?v=1"></script>
   <script src="art.js?v=5"></script>
   <script>
   (function () {
@@ -155,7 +171,7 @@
         title: 'Once | אפליקציית היכרויות שלא מתנהגת כמו אפליקציית היכרויות',
         metaDescription: 'בלי פיד, בלי אינסוף החלקות ובלי עשרים שיחות פתוחות. Once מציגה אדם אחד בכל פעם, עם 10 דקות להחליט.',
         ogDescription: 'בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להחליט.',
-        ui: { tag: 'בהרצה', preview: 'תצוגה מקדימה', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
+        ui: { tag: 'בהרצה', preview: 'תצוגה מקדימה', noteIOS: 'Once אינה זמינה לאייפון.', noteDesktop: 'פתחו את הדף מהטלפון, או סרקו את הקוד:', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
         /* One label per pillar, in pillar order. */
         nav: { links: ['אדם אחד', 'זמן אמת', 'מעגלים', 'הורים'], login: 'התחברות' },
         hero: {
@@ -226,7 +242,7 @@
         title: 'Once | A dating app that refuses to behave like a dating app',
         metaDescription: 'No feed, no endless swiping, no twenty open chats. Once shows you one person at a time, with 10 minutes to decide.',
         ogDescription: 'No feed and no endless swiping. One person at a time, 10 minutes to decide.',
-        ui: { tag: 'Beta', preview: 'Preview', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
+        ui: { tag: 'Beta', preview: 'Preview', noteIOS: 'Once is not available on iPhone.', noteDesktop: 'Open this page on your phone, or scan the code:', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
         nav: { links: ['One at a time', 'Real time', 'Circles', 'Parents'], login: 'Login' },
         hero: {
           eyebrow: 'One person. Right now.',
@@ -438,6 +454,7 @@
       document.getElementById('login-link').textContent = T.nav.login;
       document.getElementById('mobile-login').textContent = T.nav.login;
       document.getElementById('brand-tag').textContent = T.ui.tag;
+      document.getElementById('dl-title').textContent = T.ui.download;
       document.getElementById('header-cta').textContent = T.ui.download;
       document.getElementById('mobile-cta-inline').textContent = T.ui.download;
       document.getElementById('mobile-cta-btn').textContent = T.ui.download;
@@ -464,6 +481,7 @@
       });
 
       wireNavLinks();
+      wireDownloadButtons();
       observeReveals();
       observeCtaZones();
     }
@@ -505,13 +523,59 @@
     document.addEventListener('click', function (e) {
       if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) closeLangMenu();
     });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeLangMenu(); closeMenu(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeLangMenu(); closeMenu(); closeDl(); } });
     Array.prototype.forEach.call(langMenu.querySelectorAll('button'), function (btn) {
       btn.addEventListener('click', function () {
         var newLang = btn.getAttribute('data-lang');
         if (newLang !== CURRENT) { history.replaceState(null, '', '?lang=' + newLang); render(newLang); }
         closeLangMenu();
       });
+    });
+
+    /* ---------- Download press ----------
+       Every download button on this page does what the one on /download does,
+       instead of travelling there first (user directive 2026-07-26): Android
+       leaves for Play, and a device that cannot install gets the same answer that
+       page gives, in place. The markup keeps href="download.html" so a visitor
+       without JS still lands somewhere that works. */
+    var dl = document.getElementById('dl');
+    var dlNote = document.getElementById('dl-note');
+    var dlQr = document.getElementById('dl-qr');
+    var qrDrawn = false;
+
+    function closeDl() { dl.setAttribute('hidden', ''); document.body.style.overflow = ''; }
+    function openDl() {
+      dlNote.textContent = window.OnceStore.isIOS ? T.ui.noteIOS : T.ui.noteDesktop;
+      dl.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
+      if (window.OnceStore.isIOS || qrDrawn) return;
+      /* The encoder is ~30KB and only a desktop ever needs it, so it is fetched on
+         the first press and never on load. The code points straight at Play: this
+         page carries no referral code to preserve. */
+      qrDrawn = true;
+      var s = document.createElement('script');
+      s.src = 'qr.js?v=1';
+      s.onload = function () {
+        dlQr.innerHTML = window.OnceQR.svg(window.OnceStore.url(), window.OnceStore.qrColors);
+      };
+      document.head.appendChild(s);
+    }
+
+    function wireDownloadButtons() {
+      Array.prototype.forEach.call(document.querySelectorAll('a[href="' + DOWNLOAD_URL + '"]'), function (a) {
+        if (window.OnceStore.isAndroid) { a.href = window.OnceStore.url(); return; }
+        if (a.dataset.dlWired) return;
+        a.dataset.dlWired = '1';
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          closeMenu();
+          openDl();
+        });
+      });
+    }
+    document.getElementById('dl-close').addEventListener('click', closeDl);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-close-dl]'), function (el) {
+      el.addEventListener('click', closeDl);
     });
 
     /* ---------- Mobile menu ---------- */

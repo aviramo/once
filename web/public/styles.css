@@ -516,6 +516,29 @@ strong { color: var(--ink); font-weight: 600; }
   pointer-events: none;
 }
 
+/* ---------- Download answer ---------- */
+/* What a press gets on a device that cannot install: the same note (and, on a
+   desktop, the same scan code) the download page gives, without leaving the page.
+   Same surface language as every other tile here: flat beige-on-white, no glow. */
+.dl { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 20px; }
+.dl[hidden] { display: none; }
+.dl-backdrop { position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 42%, transparent); }
+.dl-card {
+  position: relative;
+  inline-size: min(360px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 26px 24px 28px;
+  text-align: center;
+}
+.dl-close { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; }
+.dl-title { font-weight: 800; font-size: 1.12rem; color: var(--ink); }
+.dl-note { margin-top: 10px; color: var(--ink-2); font-weight: 500; line-height: 1.5; }
+.dl-qr:not(:empty) { margin-top: 18px; display: flex; justify-content: center; }
+.dl-qr svg { inline-size: 190px; block-size: 190px; display: block; border-radius: var(--r-xs); }
+
 /* ---------- Skip link ---------- */
 .skip-link {
   position: fixed;
