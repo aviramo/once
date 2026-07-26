@@ -161,7 +161,9 @@
       ban: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="1.6"/><path d="M6.4 6.4l11.2 11.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
       flag: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M6 21V4M6 5h9l-1.5 3L15 11H6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       eye: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>',
-      forward: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M13 6l6 6-6 6M5 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      forward: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M13 6l6 6-6 6M5 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      pin: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M12 21.2c3.8-4 5.7-7 5.7-9.7a5.7 5.7 0 1 0-11.4 0c0 2.7 1.9 5.7 5.7 9.7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="11.2" r="2.3" stroke="currentColor" stroke-width="1.6"/></svg>',
+      pulse: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M3 12.2h3.6L9 6.4l3.4 11.2 2.2-5.4H21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
     };
 
     /* ---------- Translations (he = source) ---------- */
@@ -195,12 +197,22 @@
           {
             eyebrow: 'זמן אמת, כאן ועכשיו',
             title: { lines: ['לא מי שהיה פה פעם.', 'מי שפנוי עכשיו.'], accent: true },
-            body: 'ההזמנה מגיעה בהתראה ברגע שנשלחה, ויש 10 דקות להשיב לה. כשהיא מתקבלת הצ׳אט נפתח מיד. שום הזמנה לא נשארת תלויה שבוע.',
+            body: 'כל חיפוש מביא מישהו שנמצא קרוב אליכם ופעיל עכשיו, ולא פרופיל שנרשם פעם ונעלם. המרחק והזמן שבו האדם היה כאן לאחרונה הם הבסיס, ומעליהם נכנסים המעגלים המשותפים והזמן הפנוי שלכם.',
             chips: [
-              { icon: 'clock', label: '10 דקות להשיב להזמנה' },
-              { icon: 'spark', label: 'התראה ברגע שנשלחה' },
-              { icon: 'forward', label: 'בלי הזמנות תלויות' }
+              { icon: 'pin', label: 'קרוב אליכם' },
+              { icon: 'pulse', label: 'פעיל עכשיו' },
+              { icon: 'ban', label: 'בלי פרופילים נטושים' }
             ],
+            note: {
+              icon: 'clock',
+              title: 'ההזמנה חיה 10 דקות',
+              body: 'ההזמנה מגיעה בהתראה ברגע שנשלחה, ויש 10 דקות להשיב לה. כשהיא מתקבלת הצ׳אט נפתח מיד, ואם לא, היא נסגרת מעצמה. שום הזמנה לא נשארת תלויה שבוע.',
+              chips: [
+                { icon: 'spark', label: 'התראה ברגע שנשלחה' },
+                { icon: 'check', label: 'הצ׳אט נפתח מיד' },
+                { icon: 'forward', label: 'בלי הזמנות תלויות' }
+              ]
+            },
             media: { name: 'הזמנה בזמן אמת', desc: 'מסך הזמנה עם שעון ספירה לאחור, ולצידו טיימר של עשר דקות.' }
           },
           {
@@ -269,12 +281,22 @@
           {
             eyebrow: 'Real time, here and now',
             title: { lines: ['Not whoever was here once.', 'Whoever is free right now.'], accent: true },
-            body: 'The invitation arrives as a notification the moment it is sent, and you have 10 minutes to answer it. When it is accepted the chat opens right away. No invitation hangs for a week.',
+            body: 'Every search brings up someone who is near you and here right now, not a profile that signed up once and vanished. Distance and how recently a person was around come first, and your shared circles and free time build on top of that.',
             chips: [
-              { icon: 'clock', label: '10 minutes to answer' },
-              { icon: 'spark', label: 'Notified the moment it is sent' },
-              { icon: 'forward', label: 'Nothing left hanging' }
+              { icon: 'pin', label: 'Near you' },
+              { icon: 'pulse', label: 'Active right now' },
+              { icon: 'ban', label: 'No abandoned profiles' }
             ],
+            note: {
+              icon: 'clock',
+              title: 'An invitation lives 10 minutes',
+              body: 'The invitation arrives as a notification the moment it is sent, and you have 10 minutes to answer it. When it is accepted the chat opens right away, and when it is not, it closes by itself. No invitation hangs for a week.',
+              chips: [
+                { icon: 'spark', label: 'Notified the moment it is sent' },
+                { icon: 'check', label: 'The chat opens right away' },
+                { icon: 'forward', label: 'Nothing left hanging' }
+              ]
+            },
             media: { name: 'A real-time invitation', desc: 'An invitation screen with a countdown clock, beside a ten-minute timer.' }
           },
           {
