@@ -607,15 +607,22 @@ strong { color: var(--ink); font-weight: 600; }
 /* ---------- Sticky mobile CTA ----------
    ALWAYS on screen on a phone (user directive 2026-07-27): it is the only
    download button there, so it never slides away. No is-hidden state. */
+/* The button floats over whatever the page has scrolled to, and the question's
+   slab is the same purple the button is, so it needs an edge that does not
+   depend on what is behind it: a beige rim, the width of the page's own gutter
+   between tiles. Over the beige page (where it spends most of its life) the rim
+   is the page, so nothing changes; the moment it crosses the slab it becomes a
+   separate object again. */
 .mobile-cta {
   position: fixed;
   inset-inline: 12px;
   inset-block-end: 12px;
   z-index: 55;
   display: none;      /* shown from the phone breakpoint down */
-  box-shadow: var(--shadow-lg);
 }
-.mobile-cta .btn { width: 100%; }
+/* Rim and lift ride the button itself, not the wrapper, so they follow it when
+   a press nudges it down. */
+.mobile-cta .btn { width: 100%; box-shadow: 0 0 0 5px var(--bg), var(--shadow-lg); }
 
 /* ---------- Download answer ---------- */
 /* What a press gets on a device that cannot install: the same note (and, on a
