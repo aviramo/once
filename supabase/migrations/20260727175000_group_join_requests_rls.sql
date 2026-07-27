@@ -1,0 +1,13 @@
+-- 2026-07-27 — Enable RLS on public.group_join_requests (security advisor: CRITICAL).
+--
+-- The table was created on 2026-07-26 (20260726140000_group_approval_and_description.sql)
+-- without the ENABLE ROW LEVEL SECURITY line every other table in this schema has.
+-- Since public.* is exposed through PostgREST and anon/authenticated hold full
+-- table grants, the anon key (shipped inside the app) could SELECT / INSERT /
+-- UPDATE / DELETE pending join requests directly.
+--
+-- Same shape as friend_links / friend_requests / friend_credits / referrals:
+-- RLS on, zero policies => deny-all for anon+authenticated. Every real access
+-- path goes through the edge function with the service_role key, which bypasses
+-- RLS, so nothing in the app changes.
+ALTER TABLE public.group_join_requests ENABLE ROW LEVEL SECURITY;  -- service-role only
