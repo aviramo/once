@@ -85,12 +85,9 @@
     /* The page opens on the SAME picture the landing page opens on (user
        directive 2026-07-27) — the store feature graphic, drawn by art.js, not a
        second copy of it. It lies straight on the page beige with no lift under
-       it (a picture is not a shadowed rectangle). The wordmark leads ABOVE it
-       (user directive 2026-07-27): the drawing carries the ringed "1" but never
-       the name, so the name is the first thing read on the page. */
-    .banner-art { margin-top: 28px; }
+       it (a picture is not a shadowed rectangle). There is NO wordmark on this
+       page (user directive 2026-07-27) — the drawing opens it on its own. */
     .banner-art .art { display: block; width: 100%; height: auto; }
-    .brand-name { font-weight: 800; font-size: 58px; line-height: 1.1; letter-spacing: -1.5px; color: var(--brand); }
     /* What the app is, in four beige-page-on-white tiles between the wordmark
        and the button — the same pill the app draws over a photo: flat surface,
        purple ink, one soft lift shadow, no gradient. */
@@ -187,7 +184,6 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="brand-name">Once</div>
     <div class="banner-art" id="banner"></div>
 
     <ul class="chips">
@@ -200,7 +196,7 @@
     <!-- Nothing here navigates on load. The page never redirects on its own:
          the only thing that leaves for the store is a press on this button. -->
     <div class="choices">
-      <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">להורדת האפליקציה</a>
+      <a class="btn" id="android" href="https://play.google.com/store/apps/details?id=com.aviramo.once">להורדת Once</a>
     </div>
 
     <!-- Outside .choices: the button is dropped on desktop, this link is not. -->
