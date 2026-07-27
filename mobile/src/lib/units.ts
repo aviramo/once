@@ -66,7 +66,10 @@ export function formatDistance(
 // ("ממש כאן" / "ממש ליד הבית שלה") stands on its own. True live device↔device
 // proximity collapses both parts into a single "כאן ועכשיו". hideTime (chat /
 // locked-with-message states) drops the time tail; a missing distance drops
-// the distance part — the chip degrades to whichever part exists.
+// the distance part — the chip degrades to whichever part exists (user
+// directive 2026-07-27: time alone is fine, distance alone is fine, both is
+// both). Only when NEITHER half exists does it return '' — the caller's
+// "don't render the chip at all" signal.
 export function formatProximity(
   m: number | null | undefined,
   lastSeenIso: string | null | undefined,

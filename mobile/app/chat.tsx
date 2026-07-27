@@ -17,21 +17,28 @@ import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
-import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON } from '../src/tokens'
+import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM } from '../src/tokens'
 import { FIELD_SKIN } from '../src/field'
-import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_SOFT, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG } from '../src/colors'
-import { SendIcon, MicIcon } from '../src/components/icons'
+import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_SOFT, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW } from '../src/colors'
+import { SendIcon, MicIcon, ReplyIcon, CopyIcon } from '../src/components/icons'
+import { BottomSheet, SheetActionRow } from '../src/components/BottomSheet'
+import { copyToClipboard } from '../src/lib/clipboard'
 import { PullPane, usePullBehavior, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
 import { SheetHeader, type OverlaySheetBody } from '../src/components/OverlaySheet'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import { StatusBarBand } from '../src/components/StatusBarBand'
-import { chatCacheKey, chatLastReadKey } from '../src/keys'
+import { chatCacheKey, chatLastOpenedKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
 import { nameFromTitle } from '../src/lib/profileTitle'
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
+
+// How long the message list waits before mirroring itself to disk. Long enough
+// that a burst of arrivals is one write, short enough that the cache is never
+// meaningfully behind the screen. Backgrounding flushes it early.
+const CACHE_PERSIST_MS = 800
 
 // Auto-growing message input: one line = one line-height, capped at 10 lines.
 // The floor keeps the empty field square-ish; the ceiling turns the field into
@@ -72,6 +79,15 @@ type RecordPhase = 'idle' | 'recording' | 'preview'
 // is a short text excerpt for text messages, absent for media.
 type ReplyKind = 'text' | 'image' | 'audio' | 'location' | 'schedule'
 const REPLY_PREVIEW_MAX = 140
+// Typing indicator: how long the dots survive on the last received "typing"
+// broadcast, and how often we send one while the user keeps typing. The idle
+// window must comfortably outlast the send interval or the dots flicker
+// between two keystrokes.
+const TYPING_IDLE_MS = 3000
+const TYPING_SEND_EVERY_MS = 2000
+// Entrance offsets for the floating dots (also their exit target).
+const TYPING_RISE = 8
+const TYPING_ENTER_SCALE = 0.9
 interface ReplySnapshot {
   user_id: string
   created_at: string
@@ -216,6 +232,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [fieldRestHeight, setFieldRestHeight] = useState(INPUT_MIN_HEIGHT + STROKE.thin * 2)
   const [sending, setSending] = useState(false)
   const [otherIsOnline, setOtherIsOnline] = useState(false)
+  // The dots are chrome, not a message: they float next to the sheet's close X
+  // and are OUT of the list entirely (user directive 2026-07-27). Nothing about
+  // them touches layout, so showing/hiding them can never move the page — which
+  // is what made them jump when they lived in the list as its header row.
   const [otherIsTyping, setOtherIsTyping] = useState(false)
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null)
   // The message the composer is currently answering (null = normal compose).
@@ -237,25 +257,52 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     setMessagesRaw(update)
   }, [])
 
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Everything the write needs, parked so the flush can run from OUTSIDE the
+  // effect that scheduled it (backgrounding, below). `dirty` is what makes the
+  // debounce a debounce: filtering and serializing the whole list is the
+  // expensive part, so it happens once per flush, not once per message.
+  const persistInputRef = useRef<{ key: string; userId: string; otherId: string; messages: Message[] } | null>(null)
+  const persistDirtyRef = useRef(false)
+
+  const flushPersist = useCallback(() => {
+    if (persistTimerRef.current) { clearTimeout(persistTimerRef.current); persistTimerRef.current = null }
+    const input = persistInputRef.current
+    if (!persistDirtyRef.current || !input) return
+    persistDirtyRef.current = false
+    const clean = input.messages
+      .filter(m =>
+        !m._pending && !m._failed &&
+        ((m.user_id === input.userId && m.other_id === input.otherId) ||
+          (m.user_id === input.otherId && m.other_id === input.userId)),
+      )
+      .map(({ _pending, _failed, _localUri, _audioUri, _loadingLocation, ...rest }) => rest)
+    if (clean.length === 0) return
+    AsyncStorage.setItem(input.key, JSON.stringify(clean)).catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (!cacheKey || !userId || !otherId) return
+    persistInputRef.current = { key: cacheKey, userId, otherId, messages }
+    persistDirtyRef.current = true
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
-    persistTimerRef.current = setTimeout(() => {
-      const clean = messages
-        .filter(m =>
-          !m._pending && !m._failed &&
-          ((m.user_id === userId && m.other_id === otherId) ||
-            (m.user_id === otherId && m.other_id === userId)),
-        )
-        .map(({ _pending, _failed, _localUri, _audioUri, _loadingLocation, ...rest }) => rest)
-      if (clean.length > 0) AsyncStorage.setItem(cacheKey, JSON.stringify(clean)).catch(() => {})
-    }, 800)
+    persistTimerRef.current = setTimeout(flushPersist, CACHE_PERSIST_MS)
     return () => { if (persistTimerRef.current) clearTimeout(persistTimerRef.current) }
-  }, [messages, cacheKey, userId, otherId])
+  }, [messages, cacheKey, userId, otherId, flushPersist])
+
+  // The debounce is the only thing between a just-arrived message and the disk,
+  // and a process the OS kills from the background never gets to run it — the
+  // last message would be missing from the cache on the next launch. Leaving
+  // 'active' is the last moment we are guaranteed, so write there. Deliberately
+  // NOT flushed on unmount: unmount means the chat ended, and home.tsx is
+  // deleting this very key at that moment (see clearChatCache).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => { if (s !== 'active') flushPersist() })
+    return () => sub.remove()
+  }, [flushPersist])
 
   const scrollRef = useRef<FlatList>(null)
   const inputRef = useRef<any>(null)
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seenSet = useRef<Set<string>>(new Set())
   const initialLoaded = useRef(false)
   const newMsgKeysRef = useRef<Set<string>>(new Set())
@@ -436,6 +483,39 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     setReplyTo(buildReplySnapshot(m))
     inputRef.current?.focus()
   }, [])
+
+  // ── Message actions (long press) ─────────────────────────────────────────
+  // The swipe-to-reply gesture is easy to miss and easy to lose to the list's
+  // scroll, so a long press on any bubble opens the same reply as an explicit
+  // choice, alongside copy-the-text. The sheet is a Modal: a follow-up that
+  // touches the keyboard (reply focuses the composer) must run only after it
+  // has unmounted, so actions are stashed and fired from onClosed — the same
+  // chaining every other sheet in the app uses.
+  const [actionsMsg, setActionsMsg] = useState<Message | null>(null)
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const actionsAfterRef = useRef<(() => void) | null>(null)
+  const openMsgActions = useCallback((m: Message) => {
+    if (!msgActionsAvailable(m)) return
+    setActionsMsg(m)
+    setActionsOpen(true)
+  }, [])
+  const closeMsgActions = useCallback(() => setActionsOpen(false), [])
+  const handleActionsClosed = useCallback(() => {
+    const after = actionsAfterRef.current
+    actionsAfterRef.current = null
+    setActionsMsg(null)
+    after?.()
+  }, [])
+  const handleActionReply = useCallback((m: Message) => {
+    tap()
+    actionsAfterRef.current = () => beginReply(m)
+    setActionsOpen(false)
+  }, [beginReply])
+  const handleActionCopy = useCallback((m: Message) => {
+    tapSuccess()
+    copyToClipboard(m.text ?? '')
+    setActionsOpen(false)
+  }, [])
   // The message a quote-tap just jumped to, flashed briefly as a "here it is"
   // hint. `n` is a nonce so tapping the same quote again re-triggers the flash;
   // the whole thing is cleared after the pulse so it never lingers.
@@ -581,10 +661,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   // home pager shell on Android edge-to-edge, so we drive bottom padding
   // ourselves: the spacer below the input row grows by the keyboard height
   // when it's open, pushing the input row above the keyboard.
-  const safeBottom = Math.max(insets.bottom, 8)
-  const hasTextShared = useSharedValue(0)
-  const micIconStyle = useAnimatedStyle(() => ({ opacity: hasTextShared.value === 0 ? 1 : 0 }))
-  const sendIconStyle = useAnimatedStyle(() => ({ opacity: hasTextShared.value === 1 ? 1 : 0, position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }))
+  const safeBottom = bottomGap(insets.bottom, SM)
 
   const [kbHeight, setKbHeight] = useState(0)
   useEffect(() => {
@@ -631,6 +708,12 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     if (!cacheKey || !userId || !otherId) return
     AsyncStorage.getItem(cacheKey).then(raw => {
       if (cancelled || !raw) return
+      // The disk usually wins, but not always: on a warm connection with a
+      // short history the server load below can land first, and the user can
+      // have sent an optimistic message by now too. Either way the cache has
+      // become the STALE copy — it may only ever fill an empty list, never
+      // overwrite what is already on screen.
+      if (initialLoaded.current) return
       try {
         const cached = (JSON.parse(raw) as Message[]).filter(m =>
           (m.user_id === userId && m.other_id === otherId) ||
@@ -638,7 +721,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         )
         if (cached.length > 0) {
           cached.forEach(m => seenSet.current.add(m.user_id + m.created_at))
-          setMessagesRaw(cached)
+          setMessagesRaw(prev => prev.length > 0 ? prev : cached)
         }
       } catch {}
     })
@@ -689,7 +772,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     if (!userId || !otherId) return
     let cancelled = false
     ;(async () => {
-      const key = `chatLastOpened_${otherId}`
+      const key = chatLastOpenedKey(otherId)
       const lastOpened = (await AsyncStorage.getItem(key)) ?? new Date(0).toISOString()
       const { data } = await supabase
         .from('chat')
@@ -795,13 +878,17 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         if (key === otherId) setOtherIsOnline(true)
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
-        if (key === otherId) { setOtherIsOnline(false); setOtherIsTyping(false) }
+        if (key === otherId) {
+          setOtherIsOnline(false)
+          clearTimeout(typingTimerRef.current)
+          setOtherIsTyping(false)
+        }
       })
       .on('broadcast', { event: 'typing' }, ({ payload }: { payload: { uid: string } }) => {
         if (payload.uid === otherId) {
           setOtherIsTyping(true)
           clearTimeout(typingTimerRef.current)
-          typingTimerRef.current = setTimeout(() => setOtherIsTyping(false), 3000)
+          typingTimerRef.current = setTimeout(() => setOtherIsTyping(false), TYPING_IDLE_MS)
         }
       })
       .subscribe(async (status: string) => {
@@ -903,6 +990,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           else remaining.push(m)
         }
         setMessages([...resolved, ...remaining])
+        if (fresh.some(m => m.user_id === otherId)) {
+          clearTimeout(typingTimerRef.current)
+          setOtherIsTyping(false)
+        }
         requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
       })
   }, [userId, otherId])
@@ -917,10 +1008,14 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     return () => { sub.remove(); clearInterval(id) }
   }, [fetchMissed])
 
-  // Keyboard height and typing-indicator changes always scroll to bottom (offset 0 in inverted list).
+  // A keyboard height change scrolls back to the bottom (offset 0 in the
+  // inverted list). The typing indicator deliberately does NOT: it is the
+  // list's header, i.e. the bottom-most row of an inverted list, so at offset
+  // 0 it is already on screen, and firing an animated scroll here only raced
+  // the one the arriving message schedules and made the list lurch.
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
-  }, [otherIsTyping, kbHeight])
+  }, [kbHeight])
 
   // ── Load older messages ───────────────────────────────────────────────────
   const loadMore = useCallback(async () => {
@@ -1029,16 +1124,17 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
   // The PullContext wiring for PullScrollView (scrollable-at-end path). Feed it a
   // no-op setScrollAtTop — the real flag is driven by syncScrollability above.
-  const { dismissGestureRef, pulling: sheetPulling } = sheetBody ?? {}
+  const { dismissGestureRef, pullEngaged: sheetPullEngaged } = sheetBody ?? {}
+  const idlePull = useSharedValue(false)
   const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
     panRef: dismissGestureRef,
     extraRefs: [],
     setScrollAtTop: () => {},
-    pulling: !!sheetPulling,
-  } : null, [dismissGestureRef, sheetPulling])
-  // Keyed off the stable dismissGestureRef, NOT pullCtx: pullCtx's identity
-  // changes when `pulling` flips, and a new renderScrollComponent would remount
-  // the scroll view mid-drag. PullScrollView reads `pulling` from context.
+    pullEngaged: sheetPullEngaged ?? idlePull,
+  } : null, [dismissGestureRef, sheetPullEngaged, idlePull])
+  // Keyed off the stable dismissGestureRef, so a new renderScrollComponent can
+  // never remount the scroll view mid-drag. (pullCtx is stable now too — the
+  // engaged flag is a shared value — but the two must stay independent.)
   const renderScrollComponent = useMemo(
     () => dismissGestureRef ? (props: any) => <PullScrollView {...props} /> : undefined,
     [dismissGestureRef],
@@ -1069,7 +1165,6 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     setSending(true)
     setText('')
     setInputHeight(INPUT_MIN_HEIGHT)
-    hasTextShared.value = 0
     const now = new Date().toISOString()
     const reply = takeReply()
     seenSet.current.add(userId + now)
@@ -1573,9 +1668,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     // the field behind the recording overlay.
     if (recordPhase !== 'idle') return
     setText(value)
-    hasTextShared.value = value.trim().length > 0 ? 1 : 0
     const now = Date.now()
-    if (presenceChannelRef.current && now - lastTypingSentRef.current > 2000) {
+    if (presenceChannelRef.current && now - lastTypingSentRef.current > TYPING_SEND_EVERY_MS) {
       lastTypingSentRef.current = now
       presenceChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { uid: userId } })
     }
@@ -1583,6 +1677,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
 
   // ── Derived ──────────────────────────────────────────────────────────────
+  // The composer holds something sendable → the round button is Send, not Mic.
+  const hasText = text.trim().length > 0
   const firstNewIdx = useMemo(
     () => messages.findIndex(m => initialLoaded.current && !seenSet.current.has(m.user_id + m.created_at)),
     [messages],
@@ -1615,7 +1711,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         {showSep && <DaySeparator label={dateSeparatorLabel(msg.created_at)} />}
         {showNewSep && !showSep && <DaySeparator label={t('chat.newMessages')} bold />}
         <HighlightFlash active={highlight?.key === msgAnimKey} pulse={highlight?.n ?? 0}>
-        <SwipeToReply enabled={!msg._failed} onReply={() => beginReply(msg)}>
+        <SwipeToReply enabled={!msg._failed} onReply={() => beginReply(msg)} onLongPress={() => openMsgActions(msg)}>
         <View style={msg._failed ? styles.failedOpacity : undefined}>
           {msg.audio_key || msg._audioUri ? (
             <AudioBubble
@@ -1728,7 +1824,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     )
   }, [reversedMessages, messages.length, firstNewIdx, userId, otherLastRead, getChatImageUrl, getChatAudioUrl,
       handleRetryText, handleRetryImage, handleRetryAudio, handleRetryLocation, handleRetrySchedule,
-      isMale, matchIsMale, displayTimes, beginReply, scrollToOriginal, highlight,
+      isMale, matchIsMale, displayTimes, beginReply, openMsgActions, scrollToOriginal, highlight,
       routedToEarpiece, toggleAudioRouting, autoPlayKey, handleAudioFinished, consumeAutoPlay,
       activePlayingKey, handlePlayStart])
 
@@ -1769,17 +1865,26 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
           onScrollToIndexFailed={() => {}}
-          ListHeaderComponent={<TypingIndicator visible={otherIsTyping} />}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: MD, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={GREEN_HALF} />
             </View>
           ) : null}
-          ListEmptyComponent={!otherIsTyping ? (
-            <Text style={styles.emptyLabel}>{t('chat.empty')}</Text>
-          ) : null}
+          ListEmptyComponent={<Text style={styles.emptyLabel}>{t('chat.empty')}</Text>}
         />
         </PullContext.Provider>
+        {/* The dots are page chrome, not a message: they float on the sheet's
+            own header line, immediately inside the close X, and never enter
+            the list. Nothing they do can move a bubble (user directive
+            2026-07-27). Geometry mirrors SheetHeader — the X sits at
+            chromeInset from the START edge, chromeGap below the safe-area top,
+            and the row's own gap separates the two. */}
+        <View
+          pointerEvents="none"
+          style={[styles.typingFloat, { top: insets.top + OVERLAY.chromeGap }]}
+        >
+          <TypingIndicator visible={otherIsTyping} />
+        </View>
           {/* Tapping the messages area dismisses the open attach menu. Mounted
               only while it's open, so it never intercepts normal scroll/taps. */}
           {attachMenuOpen && (
@@ -1940,18 +2045,23 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 </ReAnimated.View>
               )}
             </ReAnimated.View>
+            {/* Mic or send, off the SAME state that renders the character in
+                the field. It used to be a second source of truth — a shared
+                value written alongside setText — which could sit at 0 while
+                the field already held text, leaving the mic up on a composed
+                message. One source can't drift, and it flips in the very
+                commit the character lands. */}
             <Pressable
-              onPress={() => text.trim() ? handleSend() : handleMicPress()}
-              disabled={!!text.trim() && sending}
+              onPress={() => hasText ? handleSend() : handleMicPress()}
+              disabled={hasText && sending}
               style={({ pressed }) => [
                 styles.sendBtn,
                 { width: fieldRestHeight, height: fieldRestHeight },
-                !!text.trim() && sending && styles.sendBtnDisabled,
+                hasText && sending && styles.sendBtnDisabled,
                 pressed && styles.sendBtnPressed,
               ]}
             >
-              <ReAnimated.View style={micIconStyle}><MicIcon size={ICON.lg} /></ReAnimated.View>
-              <ReAnimated.View style={sendIconStyle}><SendIcon size={ICON.lg} /></ReAnimated.View>
+              {hasText ? <SendIcon size={ICON.lg} /> : <MicIcon size={ICON.lg} />}
             </Pressable>
 
             {recordPhase === 'recording' && (
@@ -2026,6 +2136,15 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         </View>
       </View>
 
+      <MessageActionsSheet
+        msg={actionsMsg}
+        visible={actionsOpen}
+        onDismiss={closeMsgActions}
+        onClosed={handleActionsClosed}
+        onReply={handleActionReply}
+        onCopy={handleActionCopy}
+      />
+
       {lightboxUri && <LightboxModal uri={lightboxUri} topInset={insets.top} onClose={() => setLightboxUri(null)} />}
     </View>
   )
@@ -2070,15 +2189,6 @@ function HighlightFlash({ active, pulse, children }: {
       <Animated.View pointerEvents="none" style={[styles.highlightFlash, { opacity: v }]} />
       {children}
     </View>
-  )
-}
-
-function ReplyArrowIcon({ color }: { color: string }) {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Polyline points="9,17 4,12 9,7" />
-      <Path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-    </Svg>
   )
 }
 
@@ -2142,34 +2252,49 @@ function ReplyQuote({ snapshot, tone, onPress }: {
   return <Pressable onPress={onPress} hitSlop={4}>{body}</Pressable>
 }
 
-// Wraps a bubble in the swipe-to-reply gesture: a short horizontal drag toward
-// the reveal edge slides the bubble and fades in a reply arrow behind it;
-// releasing past REPLY_TRIGGER_PX fires onReply. Horizontal-only activation
-// (failOffsetY) keeps the vertical FlatList scroll untouched. RTL mirrors the
-// direction. This is a per-bubble horizontal gesture — NOT a swipe-down, so it
-// does not belong to PullPane.
-function SwipeToReply({ enabled, onReply, children }: {
+// Wraps a bubble in its two per-bubble gestures:
+//   • swipe-to-reply — a short horizontal drag toward the reveal edge slides the
+//     bubble and fades in a reply arrow behind it; releasing past
+//     REPLY_TRIGGER_PX fires onReply. Horizontal-only activation (failOffsetY)
+//     keeps the vertical FlatList scroll untouched. RTL mirrors the direction.
+//   • long press — opens the message-actions sheet (onLongPress), the explicit
+//     fallback for when the swipe is missed or lost to the scroll.
+// They race: a finger that travels activates the pan, a finger that rests
+// activates the long press, and only one of them can win. Both are per-bubble
+// and neither is a swipe-down, so neither belongs to PullPane.
+function SwipeToReply({ enabled, onReply, onLongPress, children }: {
   enabled: boolean
   onReply: () => void
+  onLongPress: () => void
   children: React.ReactNode
 }) {
   const tx = useSharedValue(0)
   const REVEAL = isRTL ? -1 : 1
   const fire = useCallback(() => { tapMedium(); onReply() }, [onReply])
-  const pan = useMemo(() => Gesture.Pan()
-    .enabled(enabled)
-    .activeOffsetX(isRTL ? [-12, 9999] : [-9999, 12])
-    .failOffsetY([-14, 14])
-    .onUpdate(e => {
-      'worklet'
-      const d = e.translationX * REVEAL
-      tx.value = d > 0 ? Math.min(d, REPLY_TRIGGER_PX * 1.4) : 0
-    })
-    .onEnd(e => {
-      'worklet'
-      if (e.translationX * REVEAL >= REPLY_TRIGGER_PX) runOnJS(fire)()
-      tx.value = withTiming(0, { duration: MOTION.fast })
-    }), [enabled, fire])
+  const fireLong = useCallback(() => { tapMedium(); onLongPress() }, [onLongPress])
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .enabled(enabled)
+      .activeOffsetX(isRTL ? [-12, 9999] : [-9999, 12])
+      .failOffsetY([-14, 14])
+      .onUpdate(e => {
+        'worklet'
+        const d = e.translationX * REVEAL
+        tx.value = d > 0 ? Math.min(d, REPLY_TRIGGER_PX * 1.4) : 0
+      })
+      .onEnd(e => {
+        'worklet'
+        if (e.translationX * REVEAL >= REPLY_TRIGGER_PX) runOnJS(fire)()
+        tx.value = withTiming(0, { duration: MOTION.fast })
+      })
+    const longPress = Gesture.LongPress()
+      .minDuration(LONG_PRESS_MS)
+      .onStart(() => {
+        'worklet'
+        runOnJS(fireLong)()
+      })
+    return Gesture.Race(pan, longPress)
+  }, [enabled, fire, fireLong])
   const rowStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value * REVEAL }] }))
   const iconStyle = useAnimatedStyle(() => {
     const prog = Math.min(tx.value / REPLY_TRIGGER_PX, 1)
@@ -2178,12 +2303,56 @@ function SwipeToReply({ enabled, onReply, children }: {
   return (
     <View>
       <ReAnimated.View style={[styles.swipeReplyIcon, iconStyle]} pointerEvents="none">
-        <ReplyArrowIcon color={GREEN_HALF} />
+        <ReplyIcon color={GREEN_HALF} />
       </ReAnimated.View>
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={gesture}>
         <ReAnimated.View style={rowStyle}>{children}</ReAnimated.View>
       </GestureDetector>
     </View>
+  )
+}
+
+// What a long press can offer for this message: replying (anything that isn't a
+// failed send, which has no server row to point a quote at) and copying (text
+// only). A message with neither — a failed image, say — never opens the sheet.
+function msgActionsAvailable(m: Message): boolean {
+  return !m._failed || !!m.text?.trim()
+}
+
+// The long-press sheet itself. Rows are the shared SheetActionRow, so it reads
+// as the same fabric as the photo-options sheet.
+function MessageActionsSheet({ msg, visible, onDismiss, onClosed, onReply, onCopy }: {
+  msg: Message | null
+  visible: boolean
+  onDismiss: () => void
+  onClosed: () => void
+  onReply: (m: Message) => void
+  onCopy: (m: Message) => void
+}) {
+  const insets = useSafeAreaInsets()
+  if (!msg) return null
+  return (
+    <BottomSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      onClosed={onClosed}
+      contentStyle={{ paddingHorizontal: SM, paddingBottom: bottomGap(insets.bottom, SM + SM) }}
+    >
+      {!msg._failed && (
+        <SheetActionRow
+          icon={<ReplyIcon color={INK} size={ICON.xxl} />}
+          label={t('chat.msgActions.reply')}
+          onPress={() => onReply(msg)}
+        />
+      )}
+      {!!msg.text?.trim() && (
+        <SheetActionRow
+          icon={<CopyIcon color={INK} size={ICON.xxl} />}
+          label={t('chat.msgActions.copy')}
+          onPress={() => onCopy(msg)}
+        />
+      )}
+    </BottomSheet>
   )
 }
 
@@ -2449,14 +2618,16 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
   )
 }
 
-// Three dots rising in a staggered loop — the same pattern iMessage/WhatsApp
-// use. Each dot runs its own Animated.loop with a delay so the wave is
-// smooth even if the component remounts mid-cycle.
+// The dots, floating on the header line beside the close X. It is absolutely
+// positioned chrome, so its whole show/hide costs the list exactly nothing —
+// no row appears, no height is released, no bubble moves. A message arriving
+// is then just a message arriving: it lifts the page with its own entrance,
+// the way every other message does.
 function TypingIndicator({ visible }: { visible: boolean }) {
   const [mounted, setMounted] = useState(visible)
   const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current
-  const translateY = useRef(new Animated.Value(visible ? 0 : 8)).current
-  const scale = useRef(new Animated.Value(visible ? 1 : 0.9)).current
+  const translateY = useRef(new Animated.Value(visible ? 0 : TYPING_RISE)).current
+  const scale = useRef(new Animated.Value(visible ? 1 : TYPING_ENTER_SCALE)).current
 
   useEffect(() => {
     if (visible) {
@@ -2469,15 +2640,15 @@ function TypingIndicator({ visible }: { visible: boolean }) {
     } else {
       Animated.parallel([
         Animated.timing(opacity, { toValue: 0, duration: MOTION.fast, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 8, duration: MOTION.fast, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.9, duration: MOTION.fast, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: TYPING_RISE, duration: MOTION.fast, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: TYPING_ENTER_SCALE, duration: MOTION.fast, useNativeDriver: true }),
       ]).start(({ finished }) => { if (finished) setMounted(false) })
     }
   }, [visible])
 
   if (!mounted && !visible) return null
   return (
-    <Animated.View style={[styles.msgWrap, styles.msgWrapFirst, { opacity, transform: [{ translateY }, { scale }] }]}>
+    <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
       <TypingDots />
     </Animated.View>
   )
@@ -2509,7 +2680,7 @@ function TypingDots() {
   })
 
   return (
-    <View style={[styles.bubble, styles.bubbleTheirs, styles.bubbleTheirsLast, styles.typingBubble]}>
+    <View style={styles.typingPill}>
       <Animated.View style={[styles.typingDot, dotStyle(a)]} />
       <Animated.View style={[styles.typingDot, dotStyle(b)]} />
       <Animated.View style={[styles.typingDot, dotStyle(c)]} />
@@ -3077,7 +3248,6 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
         <PullPane
           gesture={gesture}
           pullY={pull.pullY}
-          pulling={pull.pulling}
           axis="y"
           pointerEvents="box-none"
         >
@@ -3226,8 +3396,32 @@ const styles = StyleSheet.create({
   bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
   textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginEnd: -SM },
 
-  typingBubble: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: MD, paddingHorizontal: MD },
-  typingDot: { width: 7, height: 7, borderRadius: RADII.pill, backgroundColor: GREEN_HALF },
+  // Floating chrome on the sheet's header line: START edge + the close X's
+  // width + the header row's own gap puts it immediately inside that button.
+  // Never in the list, so it cannot move a single bubble (user directive
+  // 2026-07-27).
+  typingFloat: {
+    position: 'absolute',
+    start: OVERLAY.chromeInset + ROUND_BUTTON_SIZE_SM + SM,
+    alignItems: 'flex-start',
+  },
+  // Not a bubble — chrome standing beside the close X, so it takes that
+  // button's exact height and the regular purple with white dots, not the
+  // washed incoming-bubble purple (user directive 2026-07-27). Capsule radius:
+  // at the same height as a circular button, anything squarer reads as a
+  // mismatch next to it. Same LIFT_SHADOW that button casts (the one RoundButton
+  // and Chip already share), so the two float off the page as one fabric.
+  typingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SM,
+    height: ROUND_BUTTON_SIZE_SM,
+    paddingHorizontal: MD,
+    borderRadius: RADII.pill,
+    backgroundColor: PRIMARY,
+    ...LIFT_SHADOW,
+  },
+  typingDot: { width: 7, height: 7, borderRadius: RADII.pill, backgroundColor: WHITE },
 
   // Outer wrapper: holds the single-row input + send button plus the
   // dynamic bottom spacer that clears the nav bar / keyboard. Deliberately

@@ -134,27 +134,21 @@ export function creditTotal(profile: WithCredits): number {
 // always available now, in any quantity. `bought_on` survives on the wallet
 // as a record of the last purchase day; nothing reads it.
 
-/** The next grant moment formatted as a relative day word + clock time:
- * "היום ב-HH:MM" / "מחר ב-HH:MM" (or "today at HH:MM" / "tomorrow at HH:MM"),
- * or '' if unknown. next_grant_at is an absolute instant (server-computed at
- * the 20:00 Asia/Jerusalem boundary), so formatting it in the device's local
- * time is correct — no client-side timezone math. The day relativity is
- * computed against the device's local date too (correct for the user). For
- * the rare grant whose next-firing day is more than 1 day out (clock skew
- * across midnight) we fall back to the short "DD/MM HH:MM" form. */
-export function formatNextGrant(profile: WithCredits): string {
+/** The refill moment as a bare clock time, "HH:MM", or '' if unknown.
+ *
+ * No day word: the pool refills EVERY day at this hour, so "today at 17:00" /
+ * "tomorrow at 17:00" named a single occurrence of a standing appointment —
+ * longer to read and, past the hour, actively misleading about the rule. The
+ * hour alone states the rule.
+ *
+ * next_grant_at is an absolute instant (server-computed at the 20:00
+ * Asia/Jerusalem boundary), so formatting it in the device's local time is
+ * correct — no client-side timezone math. */
+export function formatGrantTime(profile: WithCredits): string {
   const iso = readCredits(profile)?.next_grant_at
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   const p = (n: number) => String(n).padStart(2, '0')
-  const clock = `${p(d.getHours())}:${p(d.getMinutes())}`
-  // Days between today's local-midnight and the grant's local-midnight.
-  const today = new Date()
-  const dayKey = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
-  const diffDays = Math.round((dayKey(d) - dayKey(today)) / 86_400_000)
-  if (diffDays <= 0) return t('credits.grant.today').replace('{time}', clock)
-  if (diffDays === 1) return t('credits.grant.tomorrow').replace('{time}', clock)
-  // Fallback to the absolute short form for >24h grants.
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${clock}`
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
 }

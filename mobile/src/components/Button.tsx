@@ -138,7 +138,10 @@ export function Button({
         <View pointerEvents="none" style={[styles.labelArea, base.labelArea]}>
           <View style={styles.labelRow}>
             {startIcon ? <View style={styles.startSlot}>{startIcon}</View> : null}
-            <Text
+            {/* Icon-only button: an empty label drops the Text entirely rather
+                than rendering a zero-width one, so the labelRow gap doesn't
+                push the glyph off the button's centre. */}
+            {label ? <Text
               style={[styles.text, base.text, skin.text, useVariantDisabled && skin.disabledText]}
               numberOfLines={multiline ? 2 : 1}
               adjustsFontSizeToFit={!multiline}
@@ -146,7 +149,7 @@ export function Button({
               maxFontSizeMultiplier={FONT_SCALE.ui}
             >
               {label}
-            </Text>
+            </Text> : null}
           </View>
         </View>
         {footer ? (

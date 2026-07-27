@@ -32,8 +32,9 @@ import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
 import { clearRosterCaches } from '../src/lib/rosterCache'
+import { clearAllChatCaches } from '../src/lib/chatCache'
 import { stashInviteUrl } from '../src/lib/communities'
-import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
+import { DEFAULT_FAMILY, FONT_SCALE, TEXT_START } from '../src/fonts'
 import { BG } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
@@ -49,7 +50,7 @@ function applyGlobalFont() {
   // @ts-expect-error
   Text.defaultProps.maxFontSizeMultiplier = FONT_SCALE.body
   // @ts-expect-error
-  Text.defaultProps.style = [{ fontFamily: DEFAULT_FAMILY }, Text.defaultProps.style]
+  Text.defaultProps.style = [{ fontFamily: DEFAULT_FAMILY, ...TEXT_START }, Text.defaultProps.style]
 
   // @ts-expect-error
   TextInput.defaultProps = TextInput.defaultProps || {}
@@ -59,7 +60,7 @@ function applyGlobalFont() {
   const prevStyle = TextInput.defaultProps.style
   // @ts-expect-error
   TextInput.defaultProps.style = [
-    { fontFamily: DEFAULT_FAMILY },
+    { fontFamily: DEFAULT_FAMILY, ...TEXT_START },
     prevStyle,
   ]
 }
@@ -74,7 +75,7 @@ const queryClient = new QueryClient({
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, loading, setUser } = useAuthStore()
-  const { profile, loading: profileLoading, fetched: profileFetched, fetch: fetchProfile, clear } = useUserStore()
+  const { profile, loading: profileLoading, fetched: profileFetched, fetch: fetchProfile, hydrate: hydrateProfile, clear } = useUserStore()
   const router = useRouter()
   const segments = useSegments()
 
@@ -132,6 +133,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = data.session?.user ?? null
       setUser(user)
       if (user) {
+        // Disk first, network second — both in flight at once. Whichever lands
+        // first paints; hydrate stands down if the fetch beat it. This is what
+        // lets a relaunch reach /home (and mount the chat sheet, which then
+        // reads its own cached transcript) without waiting on the round trip.
+        hydrateProfile(user.id)
         fetchProfile(user.id)
         subscribeToUserChanges(user.id)
         // Push registration is handled by the home screen notification flow
@@ -146,6 +152,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = session?.user ?? null
       setUser(user)
       if (user) {
+        hydrateProfile(user.id)
         fetchProfile(user.id)
         subscribeToUserChanges(user.id)
         // Push registration is handled by the home screen notification flow
@@ -156,6 +163,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSelfAvatar().catch(() => {})
         clearCachedGroups().catch(() => {})
         clearRosterCaches().catch(() => {})
+        clearAllChatCaches().catch(() => {})
       }
     })
 

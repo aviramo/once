@@ -49,6 +49,23 @@ export const TEXT = {
 // size — call sites that don't fit 1.4× simply keep their literal value.
 export const lh = (size: number): number => Math.round(size * 1.4)
 
+// THE air under the last thing on a surface — the one answer to "how much room
+// below the bottom button / last row".
+//
+// The rule: the device's bottom safe area ABSORBS the design gap, it never
+// stacks on top of it. An iPhone's home-indicator inset (34) is already a
+// generous band of empty space; adding the surface's own gap to it (the old
+// `Math.max(insets.bottom, SM) + MD` = 50, or a bare `insets.bottom + MD`)
+// pushed the content up off a visibly empty strip that no other iOS app has.
+// Android reports 0 here, which is why this only ever showed on iPhone and why
+// every one of these gaps was tuned blind to it.
+//
+// Pass the gap the surface wants when there is no safe area at all (Android):
+// `bottomGap(insets.bottom, SM + MD)` keeps Android at 24 and cuts iPhone from
+// 50 to 34. It is deliberately NOT additive — if a surface truly needs air
+// BELOW the home indicator, that is a different (and so far nonexistent) case.
+export const bottomGap = (safeInset: number, gap: number): number => Math.max(safeInset, gap)
+
 // ── Font weights ───────────────────────────────────────────────────────────
 // Two-tier weight scale. `fontWeight: '600'` should reference WEIGHT.semibold
 // instead of repeating the magic string.
@@ -195,6 +212,10 @@ export const PULL_SNAP_SPRING = { damping: 40, stiffness: 400, mass: 1 } as cons
 //                 has to read the "swipe down to skip" hint before it returns.
 export const PULL_TUTORIAL_START_DELAY_MS = 500
 export const PULL_TUTORIAL_HOLD_MS = 2_000
+// How long a finger must rest on a surface before it reads as a long press
+// (chat's message-actions sheet). A gesture threshold, not a MOTION duration:
+// it gates when a handler activates, it does not time an animation.
+export const LONG_PRESS_MS = 400
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,

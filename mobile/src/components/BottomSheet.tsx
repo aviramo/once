@@ -5,8 +5,9 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
-import { BG, BLACK_MID } from '../colors'
-import { MD, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, DRAG_HANDLE } from '../tokens'
+import { Text } from './AppText'
+import { BG, BLACK, BLACK_SOFT, BLACK_MID } from '../colors'
+import { MD, SM, RADIUS, TEXT, WEIGHT, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, DRAG_HANDLE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
 // exceed any sheet's height, so the sheet always begins fully hidden no matter
@@ -201,6 +202,29 @@ export function BottomSheet({
   )
 }
 
+// One choice inside a sheet: a full-width soft tile with a leading glyph and
+// its label. Every sheet that offers a list of actions (photo options, the
+// chat's long-press message actions) composes this, so the tile geometry and
+// its disabled treatment are defined once. The haptic stays at the call site —
+// a destructive row wants a different one from a neutral one.
+export function SheetActionRow({ icon, label, onPress, disabled }: {
+  icon: ReactNode
+  label: string
+  onPress: () => void
+  disabled?: boolean
+}) {
+  return (
+    <Pressable
+      style={[styles.actionRow, disabled && styles.actionRowDisabled]}
+      onPress={() => { if (!disabled) onPress() }}
+      accessibilityRole="button"
+    >
+      {icon}
+      <Text style={styles.actionRowLabel}>{label}</Text>
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
   rootView: { flex: 1 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
@@ -212,6 +236,22 @@ const styles = StyleSheet.create({
     // surface, not a white sheet of paper laid on the page.
     backgroundColor: BG,
     boxShadow: SHEET_SHADOW,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BLACK_SOFT,
+    borderRadius: RADIUS,
+    paddingVertical: MD,
+    paddingHorizontal: MD,
+    gap: MD,
+    marginBottom: SM,
+  },
+  actionRowDisabled: {
+    opacity: 0.55,
+  },
+  actionRowLabel: {
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
   },
   dragHandle: {
     alignSelf: 'center',

@@ -22,22 +22,22 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, bottomGap } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
 import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, BORDER_SOFT } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, formatNextGrant, CREDIT_CAP } from '../src/lib/credits'
+import { creditBalance, creditExtra, formatGrantTime, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { BottomSheet } from '../src/components/BottomSheet'
+import { BottomSheet, SheetActionRow } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { communitiesSummary, pendingApprovals, metaLine, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
 import { supportMailUrl } from '../src/lib/links'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
-import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
+import { Chip, CHIP_HEIGHT, phraseWrap, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
@@ -163,6 +163,7 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 function SelectFieldRow({
   label,
   subtitle,
+  detail,
   onPress,
   icon,
   avatar,
@@ -175,6 +176,9 @@ function SelectFieldRow({
 }: {
   label?: string
   subtitle?: string
+  /** Node under the label/subtitle, inside the same text column (the credits
+   * row's pool table). For content a plain `subtitle` string can't lay out. */
+  detail?: React.ReactNode
   onPress: () => void | Promise<unknown>
   icon?: React.ReactNode
   avatar?: string
@@ -252,6 +256,7 @@ function SelectFieldRow({
                 {subtitle ? (
                   <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
                 ) : null}
+                {detail}
               </View>
               {trailing ? (
                 <View style={styles.selectRowTrailing}>{trailing}</View>
@@ -260,6 +265,27 @@ function SelectFieldRow({
           </View>
         ) : renderedIcon
       })()}
+    </View>
+  )
+}
+
+// ── Credit pool line ───────────────────────────────────────────────────────
+// One pool of the credits row: what the pool is (and, for the daily one, when
+// it refills) on the START side, how many it holds on the END side. Two of
+// these stack under the credits label.
+//
+// The amounts sit on the row's END edge, so the pair reads as a column and the
+// whole block lines up on two edges instead of running on as loose sentences.
+// The amount is the only thing here at full label ink — it's the answer the
+// row is opened for; the words beside it are the caption, in the subtitle's
+// dimmer ink. `phraseWrap` keeps a caption that doesn't fit breaking at its
+// comma seam ("יומי," / "מתחדש היום ב-17:00") rather than mid-phrase, which is
+// what made the earlier one-string-per-pool version look ragged.
+function CreditPoolLine({ text, amount }: { text: string; amount: string }) {
+  return (
+    <View style={styles.creditPoolLine}>
+      <Text style={styles.creditPoolText}>{phraseWrap(text)}</Text>
+      <Text style={styles.creditPoolAmount}>{amount}</Text>
     </View>
   )
 }
@@ -456,12 +482,14 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
           labelColor={GREEN}
         />
       </View>
+      {/* The confirm glyph is ICON.md, the size every other button icon wears:
+          the icon's own 28 default made it tower over the label beside it. */}
       <ConfirmDialog
         visible={hideConfirmOpen}
         title={hideConfirmConfig.title}
         description={hideConfirmConfig.description}
         confirmLabel={hideConfirmConfig.confirmLabel}
-        confirmIconStart={<EyeOffIcon color={WHITE} />}
+        confirmIconStart={<EyeOffIcon color={WHITE} size={ICON.md} />}
         onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
         onConfirm={() => runVisibility('app/lock2')}
         busy={visibilityBusy}
@@ -712,7 +740,7 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       visible={visible}
       onDismiss={onDismiss}
       onClosed={handleClosed}
-      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + MD }}
+      contentStyle={{ paddingBottom: bottomGap(insets.bottom, SM + MD) }}
     >
       {/* Identity details as chips, stacked one under the other — each pill
           hugs its own text (alignItems:'flex-start' on the column), so the
@@ -829,7 +857,7 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
       visible={visible}
       onDismiss={onDismiss}
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
+      contentStyle={{ paddingBottom: bottomGap(insets.bottom, SM + SM) }}
     >
       {mode === 'leave' && leaveGroup ? (
         <View style={groupsPopupStyles.step}>
@@ -993,7 +1021,7 @@ function AgeRangePopup({
       visible={visible}
       onDismiss={handleDismiss}
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={[agePopupStyles.card, { paddingBottom: Math.max(insets.bottom, SM) + SM }]}
+      contentStyle={[agePopupStyles.card, { paddingBottom: bottomGap(insets.bottom, SM + SM) }]}
     >
       <View style={agePopupStyles.row}>
         <View style={agePopupStyles.field}>
@@ -1499,7 +1527,7 @@ function LocationPopup({
           <ScrollView
             style={{ flex: 1 }}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, SM) + SM }}
+            contentContainerStyle={{ paddingBottom: bottomGap(insets.bottom, SM + SM) }}
           >
             {predictions.map((p, i) => (
               <SelectListRow
@@ -1664,7 +1692,7 @@ function FamilyValuePopup({
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: Math.max(insets.bottom, SM) }]}
+      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: bottomGap(insets.bottom, SM) }]}
     >
       <Text style={familyStyles.valuePopupTitle}>{title}</Text>
       <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
@@ -1980,7 +2008,7 @@ export function FamilyKidsPopup({
                 />
               </View>
 
-              <View style={{ paddingBottom: Math.max(insets.bottom, SM) }} />
+              <View style={{ paddingBottom: bottomGap(insets.bottom, SM) }} />
 
       <FamilyValuePopup
         visible={pickerTarget != null}
@@ -2171,7 +2199,7 @@ function PhotoOptionsPopup({
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: Math.max(insets.bottom, SM) + SM }]}
+      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: bottomGap(insets.bottom, SM + SM) }]}
     >
       <View style={photoOptionsStyles.row}>
         <Pressable
@@ -2194,33 +2222,24 @@ function PhotoOptionsPopup({
         </Pressable>
       </View>
 
-      <Pressable
-        style={[photoOptionsStyles.fullRow, replacing && photoOptionsStyles.tileDisabled]}
-        onPress={() => { if (!replacing) { tap(); onReplace() } }}
-      >
-        {replacing
-          ? <ActivityIndicator color={BLACK} />
-          : <PhotoReplaceIcon color={BLACK} />}
-        <Text style={photoOptionsStyles.fullRowLabel}>{t('settings.photoEditReplace')}</Text>
-      </Pressable>
+      <SheetActionRow
+        icon={replacing ? <ActivityIndicator color={BLACK} /> : <PhotoReplaceIcon color={BLACK} />}
+        label={t('settings.photoEditReplace')}
+        disabled={replacing}
+        onPress={() => { tap(); onReplace() }}
+      />
 
-      <Pressable
-        // Deliberately NOT gold: this sheet's rows are one set of choices and
-        // the gold made Delete read as a warning banner rather than a sibling
-        // of Move / Replace (user request 2026-07-20). Deleting a photo is
-        // reversible by re-adding one, and the confirm still gates it; the
-        // warning haptic below carries the caution instead of the colour.
-        style={[photoOptionsStyles.fullRow, !canDelete && photoOptionsStyles.disabledRow]}
-        onPress={() => { if (canDelete) { tapWarning(); onDelete() } }}
-      >
-        <PhotoTrashIcon color={canDelete ? BLACK : BLACK_STRONG} />
-        <Text style={[
-          photoOptionsStyles.fullRowLabel,
-          !canDelete && photoOptionsStyles.disabledLabel,
-        ]}>
-          {canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
-        </Text>
-      </Pressable>
+      {/* Deliberately NOT gold: this sheet's rows are one set of choices and
+          the gold made Delete read as a warning banner rather than a sibling
+          of Move / Replace (user request 2026-07-20). Deleting a photo is
+          reversible by re-adding one, and the confirm still gates it; the
+          warning haptic below carries the caution instead of the colour. */}
+      <SheetActionRow
+        icon={<PhotoTrashIcon color={canDelete ? BLACK : BLACK_STRONG} />}
+        label={canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
+        disabled={!canDelete}
+        onPress={() => { tapWarning(); onDelete() }}
+      />
     </BottomSheet>
   )
 }
@@ -2252,32 +2271,13 @@ const photoOptionsStyles = StyleSheet.create({
   tileLabelDisabled: {
     color: BLACK_STRONG,
   },
-  fullRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: BLACK_SOFT,
-    borderRadius: RADIUS,
-    paddingVertical: MD,
-    paddingHorizontal: MD,
-    gap: MD,
-    marginBottom: SM,
-  },
-  fullRowLabel: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
-  },
-  disabledRow: {
-    opacity: 0.55,
-  },
-  disabledLabel: {
-    color: BLACK_STRONG,
-  },
 })
 
 // Full-screen pane showing the user's profile card preview, opened from the
 // profile tab via the sub-page mechanism.
 
 export function PreviewFieldPage({
-  config, onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, pulling, clipBottom: _clipBottom,
+  config, onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged, clipBottom: _clipBottom,
 }: {
   config: PreviewFieldConfig
   onBack: () => void
@@ -2289,7 +2289,8 @@ export function PreviewFieldPage({
   // (same protection page1/page2 get via usePullCtx). Without it the inner
   // ScrollView competes with the pan and keeps a few px of residual scroll
   // velocity, so after a swipe-down + snap-back the content lands nudged down.
-  pulling?: boolean
+  // A SHARED value: this page must not re-render because a drag started on it.
+  pullEngaged?: SharedValue<boolean>
   clipBottom?: boolean
 }) {
   const insets = useSafeAreaInsets()
@@ -2338,12 +2339,16 @@ export function PreviewFieldPage({
     }
   }
 
+  // Stable by construction (ref + callback + shared value), so a swipe on this
+  // page never re-renders it. `idlePull` only stands in when the page is not a
+  // sheet body at all and no drag can reach it.
+  const idlePull = useSharedValue(false)
   const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
     panRef: dismissGestureRef,
     extraRefs: [],
     setScrollAtTop: onScrollAtTop ?? (() => {}),
-    pulling: pulling ?? false,
-  } : null, [dismissGestureRef, onScrollAtTop, pulling])
+    pullEngaged: pullEngaged ?? idlePull,
+  } : null, [dismissGestureRef, onScrollAtTop, pullEngaged, idlePull])
 
   const previewData: Profile | null = useMemo(() => {
     if (!profile) return null
@@ -2749,13 +2754,13 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Credits row content: the daily pool as a fraction of its cap, the extras
-  // (purchased pool, no cap) when there are any, and the next grant time as
-  // the subtitle. This IS the credits explainer now — the dialog that used to
-  // spell the same numbers out in prose is gone.
+  // Credits row content: the daily pool as a fraction of its cap plus the hour
+  // it refills at, and the extras (purchased pool, no cap, no expiry). This IS
+  // the credits explainer now — the dialog that used to spell the same numbers
+  // out in prose is gone.
   const heartsBalance = creditBalance(profile)
   const heartsExtra = creditExtra(profile)
-  const nextGrant = formatNextGrant(profile)
+  const grantTime = formatGrantTime(profile)
 
   return (
     <>
@@ -2765,22 +2770,35 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             Communities.) */}
         <SelectFieldRow
           grouped
-          // "לבבות ({balance}/{cap} + {extra} אקסטרה)": the daily pool reads as
-          // a fraction of its cap (it's the replenishable pool) and the extras
-          // carry an explicit word (otherwise "+ 5" reads as math, not "five
-          // extra"). Drop the extras tail when there are none — steady-state
-          // shows just "לבבות (1/3)" (user feedback 2026-06-01). The count
-          // stays parenthesised here because it is a fixed ratio the label
-          // already names; the Visible row's watcher count moved to a chip
-          // instead, since "3" alone never says what is being counted.
-          label={`${t('settings.credits')} (${heartsExtra > 0
-            ? `${heartsBalance}/${CREDIT_CAP} + ${heartsExtra} ${t('settings.creditsExtraSuffix')}`
-            : `${heartsBalance}/${CREDIT_CAP}`})`}
-          // Subtitle is the "renews {when}" note; dropped entirely when the
-          // time is unknown (e.g. between rollout and the first cron tick).
-          subtitle={nextGrant
-            ? t('settings.creditsNext').replace('{when}', nextGrant)
-            : undefined}
+          // The label is the bare word; under it, ONE LINE PER POOL, each
+          // naming its pool with the amount on the row's END edge (user
+          // directive 2026-07-27). Two edges to read along, so two facts that
+          // used to be a parenthesised label tail — then a pair of wrapping
+          // chips, then two run-on sentences — sit as a small table instead.
+          // The refill hour rides INSIDE the daily line, the only pool it
+          // applies to; on a line of its own it looked like it governed the
+          // extras too, which never expire. The daily line drops just that
+          // clause when the hour is unknown (between rollout and the first cron
+          // tick). The extras line always renders: with none it turns into the
+          // invitation to get some (the row already opens the credits picker),
+          // so the empty state advertises the action instead of vanishing.
+          label={t('settings.credits')}
+          detail={
+            <View style={styles.creditPools}>
+              <CreditPoolLine
+                text={grantTime
+                  ? t('settings.creditsDailyNext').replace('{time}', grantTime)
+                  : t('settings.creditsDaily')}
+                amount={`${heartsBalance}/${CREDIT_CAP}`}
+              />
+              <CreditPoolLine
+                text={heartsExtra > 0
+                  ? t('settings.creditsExtra')
+                  : genderize(t('settings.creditsExtraNone'), profile.is_male)}
+                amount={String(heartsExtra)}
+              />
+            </View>
+          }
           onPress={onOpenBuyExtra}
           icon={<CoinIcon color={GREEN} size={ICON.md} />}
           labelColor={GREEN}
@@ -2862,11 +2880,12 @@ type SettingsPageProps = {
 
 export default function SettingsPage({
   topInset = 0, photoBleed = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false,
-  dismissGestureRef, onScrollAtTop, pulling,
+  dismissGestureRef, onScrollAtTop, pullEngaged,
 }: SettingsPageProps = {}) {
   const { profile } = useUserStore()
   const { user } = useAuthStore()
   const router = useRouter()
+  const { bottom: bottomInset } = useSafeAreaInsets()
 
   // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
   // not the avatar but an orange CTA into the build-profile flow. A browse-only
@@ -2884,12 +2903,13 @@ export default function SettingsPage({
   // OverlaySheet, its scroll has to negotiate with the sheet's dismiss pan
   // (PullScrollView reports at-top and drops scrollEnabled mid-pull) or the
   // two fight and the content lands nudged after a swipe + snap-back.
+  const idlePull = useSharedValue(false)
   const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
     panRef: dismissGestureRef,
     extraRefs: [],
     setScrollAtTop: onScrollAtTop ?? (() => {}),
-    pulling: pulling ?? false,
-  } : null, [dismissGestureRef, onScrollAtTop, pulling])
+    pullEngaged: pullEngaged ?? idlePull,
+  } : null, [dismissGestureRef, onScrollAtTop, pullEngaged, idlePull])
 
   // The photo grows by `photoBleed` so the image bleeds up behind the floating
   // sheet chrome (the close X), filling to the very top of the screen.
@@ -2897,7 +2917,14 @@ export default function SettingsPage({
 
   const body = (
     <View style={styles.rootOuter}>
-      <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['bottom', 'left', 'right']}>
+      {/* NO 'bottom' edge: reserving the safe area HERE shortens the scroll's
+          viewport, so the menu was permanently clipped a home-indicator's
+          height above the screen edge and rode over a dead beige band that
+          never scrolled away (iPhone only — Android reports 0 here, which is
+          why it went unseen). The inset belongs to the scroll CONTENT below,
+          where the list runs to the very bottom edge and only its last row is
+          held clear of the indicator. */}
+      <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['left', 'right']}>
         {/* The profile photo is the BACKMOST, FIXED layer: it stays pinned to
             the top while the menu content scrolls UP and covers it (user
             request 2026-07-26). pointerEvents 'none' so the transparent spacer
@@ -2916,7 +2943,7 @@ export default function SettingsPage({
         ) : null}
         <PullScrollView
           style={styles.tabScroll}
-          contentContainerStyle={[styles.tabContent, { paddingTop: 0 }]}
+          contentContainerStyle={[styles.tabContent, { paddingTop: 0, paddingBottom: bottomInset }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           delaysContentTouches={false}
@@ -3136,15 +3163,24 @@ const styles = StyleSheet.create({
   selectRowLabelStackTight: { flex: 0, flexShrink: 1 },
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
+  // Both texts own the stack's full width, so both depend on the app-wide
+  // reading direction (TEXT_START in src/fonts.ts) to land on the row's START
+  // edge, beside the icon that names them. The subtitle used to carry that pair
+  // inline while the label carried nothing, which is exactly why the label
+  // drifted to the row's far END on iOS.
   selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
-  // Force start-aligned ('left' under explicit writingDirection becomes
-  // physically right in RTL after auto-flip). Without the explicit
-  // writingDirection, iOS did not pick the container's RTL direction and the
-  // subtitle ended up physically left under the hearts row.
   // flexShrink:1 for the same reason the label carries it: a subtitle that
   // states several facts on one line (the communities counts) must be allowed
   // to shrink below its content width and wrap, not run off the row's edge.
-  selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.sm, color: INK_2, marginTop: XS },
+  // The credits row's pool table: one line per pool, caption on the START edge
+  // and amount on the END edge (justifyContent spreads them, so the amounts
+  // form a column without a hand-set column width). alignItems:'flex-start'
+  // keeps the amount on the caption's FIRST line when a caption wraps.
+  creditPools: { marginTop: XS, gap: XS },
+  creditPoolLine: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: MD },
+  creditPoolText: { flexShrink: 1, fontSize: TEXT.sm, lineHeight: lh(TEXT.sm), color: INK_2 },
+  creditPoolAmount: { flexShrink: 0, fontSize: TEXT.sm, lineHeight: lh(TEXT.sm), color: GREEN, fontWeight: WEIGHT.semibold },
   selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,

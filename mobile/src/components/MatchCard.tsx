@@ -18,7 +18,7 @@ import { HeartIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { Button } from './Button'
 import { EditableText } from './EditableText'
-import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, lh, bottomGap } from '../tokens'
 import { BG, INK, SURFACE, BLACK, WHITE, GREEN, GREEN_HALF, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BIO_INK } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -135,7 +135,10 @@ function BioField({
       placeholder={t('bio.placeholder')}
       updateLabel={t('bio.update')}
       minLabel={t('bio.min')}
-      textAlign={onPhoto ? 'left' : 'center'}
+      // On-photo: omitted, so the editor follows the writing direction exactly
+      // like the static bio it must be pixel-identical to. The white fallback
+      // bubble is centred text, so its editor is too.
+      textAlign={onPhoto ? undefined : 'center'}
       onFocusRequested={onFocusRequested}
       inputStyle={[onPhoto ? styles.photoBioText : styles.aboutText, styles.bioInput]}
       footerStyle={styles.bioFooter}
@@ -558,7 +561,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // chips AND the heart, so the chips' extra breathing room is NOT added here
   // — it lives on the chip column alone (infoLeft), or the heart rides up with
   // it and leaves its anchored position.
-  const overlayBottomOffset = Math.max(safeBottomInset, MD)
+  const overlayBottomOffset = bottomGap(safeBottomInset, MD)
   // Report affordance: DELIBERATELY NOT the hero-heart twin (user directive
   // 2026-07-26 — the full-size GREEN tile mirrored the heart on the opposite
   // corner and read as its equal). It is a secondary, "seen the whole profile,
@@ -581,7 +584,9 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
   // SINGLE merged phrase: anchor-aware distance + relative last-seen (see
   // formatProximity) — distance stays live ("ממך") only when both viewer and
-  // subject are 'device', else it reads as anchored to a fixed address.
+  // subject are 'device', else it reads as anchored to a fixed address. Either
+  // half may be missing and the chip still renders with the other one — only a
+  // phrase with NEITHER half comes back empty, and then the chip is dropped.
   const subjectLocationType = resolveLocationType(match)
   const viewerType: LocationType = viewerLocationType ?? 'device'
   const hasDistance = match.distance != null && !isNaN(match.distance)
@@ -1361,11 +1366,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     padding: MD,
   },
+  // No textAlign: the bio follows the app's writing direction (TEXT_START in
+  // src/fonts.ts) and lands on the START edge of the chip. It used to say
+  // textAlign:'left', which is only "start" once RN flips it — and that flip
+  // depends on the native view's layout direction, which on iOS left the bio
+  // physically LEFT inside an RTL card.
   photoBioText: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
     color: BIO_INK,
-    textAlign: 'left',
   },
   // Fallback bio bubble — only the own-profile editor and a bio with no second
   // photo reach it (the remote bio is on-photo, above). Plain white card.
@@ -1400,6 +1409,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: MD,
+    marginTop: MD,
   },
   bioCounter: {
     fontSize: TEXT.sm,

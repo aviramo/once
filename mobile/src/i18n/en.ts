@@ -130,9 +130,21 @@ export default {
   'settings.watchersOne': '1 person watching you',
   'settings.watchersMany': '{count} people watching you',
   'settings.credits': 'Credits',
-  // Suffix word in the credits-row value when the user has extras, e.g.
-  // "1/1 + 5 extra". Distinct word so "+ 5" doesn't read as math.
-  'settings.creditsExtraSuffix': 'extra',
+  // The two credit pools, one line each in the credits row: a caption naming
+  // the pool, and its amount on the line's END edge. Each caption says what
+  // makes its pool different, since the numbers alone never did: the daily one
+  // refills at a set hour ({time} is a bare "HH:MM" from formatGrantTime, and
+  // the ...Next variant is used whenever it's known, the normal case), the
+  // extras just stay. Kept short enough to hold one line in the drawer's
+  // narrow column: a caption that wraps is what made this block look ragged.
+  'settings.creditsDaily': 'Daily',
+  'settings.creditsDailyNext': 'Daily, refills at {time}',
+  'settings.creditsExtra': 'Extra, yours to keep',
+  // With no extras the same line becomes the invitation to get some: the row
+  // opens the credits picker anyway, so the empty state names the action
+  // instead of leaving a bare "0" with nothing to do about it. English has no
+  // gendered imperative, so the {male|female} marker Hebrew carries is absent.
+  'settings.creditsExtraNone': 'Tap to add extra',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'My groups',
   'settings.groupsMine': 'My groups',
@@ -151,9 +163,9 @@ export default {
   'settings.groupsLeaveDesc': 'You can join again later with the group code.',
   'settings.groupsLeaveConfirm': 'Leave group',
 
-  // Communities: the menu row + the full hub sheet and its sub-screens.
-  'communities.menuRow': 'Communities',
-  'communities.title': 'Communities',
+  // Circles: the menu row + the full hub sheet and its sub-screens.
+  'communities.menuRow': 'Circles',
+  'communities.title': 'Circles',
   'communities.myFriends': 'My friends',
   'communities.myFriendsSub': 'People you personally know',
   'communities.manageSection': 'Groups you manage',
@@ -287,7 +299,6 @@ export default {
   // support inbox, with this subject prefilled.
   'settings.support': 'Support',
   'support.mailSubject': 'Once support',
-  'settings.creditsNext': 'Renews {when}',
   'settings.preview': 'Preview',
   'settings.myProfile': 'Profile',
   'settings.photo': 'My Photos',
@@ -436,10 +447,6 @@ export default {
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': '1 credit',
   'credits.count.many': '{n} credits',
-  // Relative next-grant day. Returned from formatNextGrant() — replaces the
-  // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
-  'credits.grant.today': 'today at {time}',
-  'credits.grant.tomorrow': 'tomorrow at {time}',
   // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
   // "coming soon") and inviting a friend is the only way to earn extra, so the
   // copy talks about getting credits rather than buying them.
@@ -879,6 +886,8 @@ Next may surprise`,
   'chat.reply.you': 'You',
   'chat.reply.you_m': 'You',
   'chat.reply.you_f': 'You',
+  'chat.msgActions.reply': 'Reply to message',
+  'chat.msgActions.copy': 'Copy text',
 
   // Push notifications
   'push.WATCHING': 'New opportunity',

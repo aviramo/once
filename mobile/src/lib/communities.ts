@@ -29,9 +29,24 @@ export type GroupMember = { user_id: string; name: string | null; image: MemberI
 // settings menu row ("4 groups · 5 friends · 3 requests"). One separator, one
 // composer — empty/undefined segments drop out so a caller never has to build
 // the string conditionally.
-export const META_SEP = ' · '
+// Two rules govern where a meta line is allowed to wrap (user directive
+// 2026-07-27), and both are enforced with non-breaking spaces so any Text can
+// render the string as-is:
+//   1. A segment never breaks in half: "3 requests" keeps its number, instead
+//      of stranding the "3" at the end of a line with the word on the next. So
+//      the spaces INSIDE a segment are non-breaking.
+//   2. The interpunct travels DOWN with the fact it introduces, never dangling
+//      at the end of a line with nothing after it. So the dot is glued to the
+//      segment that follows it, and the one plain space in the whole string,
+//      the one BEFORE the dot, is the only place a wrap can land.
+// A one-line meta reads exactly as it always did: an NBSP paints as a space.
+const NBSP = '\u00A0'
+// The separator's visible mark, on its own: MetaText counts these to work out
+// which facts ended up on which line. Derived, so there is one interpunct.
+export const META_DOT = '\u00B7'
+export const META_SEP = ' ' + META_DOT + NBSP
 export const metaLine = (...parts: (string | false | null | undefined)[]): string =>
-  parts.filter(Boolean).join(META_SEP)
+  parts.filter(Boolean).map(p => (p as string).replace(/ /g, NBSP)).join(META_SEP)
 
 // The count wordings every meta line is built from — one definition each, so a
 // number reads the same in the menu row, the hub row and the popup. Each takes

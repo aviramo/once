@@ -39,7 +39,11 @@ export type OverlaySheetBody = {
   dismissGestureRef: React.MutableRefObject<GestureType | undefined>
   onScrollAtTop: (atTop: boolean) => void
   headerBottomShared: SharedValue<number>
-  pulling: boolean
+  /** True on the UI thread while the sheet's dismiss pan is being dragged. A
+   *  shared value, not a boolean: a body that re-rendered every time a drag
+   *  began stuttered the very swipe that started it. Feed it to a PullCtx and
+   *  PullScrollView takes it from there. */
+  pullEngaged: SharedValue<boolean>
 }
 
 export type OverlaySheetProps = {
@@ -198,7 +202,7 @@ export function OverlaySheet({
     dismissGestureRef: pull.panRef,
     onScrollAtTop: pull.setScrollAtTop,
     headerBottomShared: headerBottom,
-    pulling: pull.pulling,
+    pullEngaged: pull.pullEngaged,
   }
 
   const header = chromeless ? null : (
@@ -223,7 +227,6 @@ export function OverlaySheet({
     <PullPane
       gesture={pull.gesture}
       pullY={pull.pullY}
-      pulling={pull.pulling}
       axis={axis}
       style={[StyleSheet.absoluteFill, zIndex != null ? { zIndex } : null]}
       pointerEvents={open ? 'box-none' : 'none'}
@@ -317,10 +320,10 @@ export function SheetHeader({
       pointerEvents="box-none"
       onLayout={e => onMeasured?.(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
     >
-      {/* Both side columns are flex:1 (equal width), so the title sits at the
-          TRUE centre of the row regardless of how wide the trailing control is
-          — a text button ("End") no longer shoves the title off-centre the way
-          a fixed-width RoundButton used to keep it balanced only by luck. */}
+      {/* The side columns take their content's width and the TITLE takes the
+          rest, centring itself inside it. Both sides are the same width (the
+          close button and, opposite it, a spacer of exactly its size), so the
+          title still lands on the row's true centre. */}
       <View style={styles.side}>
         <RoundButton
           size={ROUND_BUTTON_SIZE_SM}
@@ -370,9 +373,13 @@ const styles = StyleSheet.create({
   // gutter as the home hamburger and the card's report flag. That alignment is
   // load-bearing: opening a sheet over home, the hamburger becomes the X in the
   // exact same spot rather than jumping a few pixels toward the edge.
+  // Columns hang from the TOP of the row, not its middle: a title that runs to
+  // a second line grows DOWNWARD and leaves the close button — and its own
+  // first line — exactly where they sit on a one-line header. Centring instead
+  // would slide the whole block up by half a line the moment a name wrapped.
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: OVERLAY.chromeInset,
     paddingBottom: SM,
     gap: SM,
@@ -387,13 +394,13 @@ const styles = StyleSheet.create({
     end: 0,
     backgroundColor: 'transparent',
   },
-  // Equal-width side columns flank the centred title so it stays on the row's
-  // true centre no matter what each side holds. minWidth keeps a column from
-  // collapsing to zero under a long title (flex-basis 0 would otherwise let the
-  // title's column swallow the whole row and overlap the close/back button) —
-  // the title's own flexShrink + numberOfLines then ellipsizes it instead.
+  // The side columns are exactly as wide as what they hold (the close button /
+  // the spacer that mirrors it) and never grow. They used to be flex:1, which
+  // is what truncated long titles: a shrinkable multi-line Text measures at its
+  // MIN-CONTENT width (its longest word), so the two growing columns swallowed
+  // all the leftover and the title was handed a column barely one word wide,
+  // ellipsizing a name that had room to fit twice over.
   side: {
-    flex: 1,
     minWidth: ROUND_BUTTON_SIZE_SM,
     flexDirection: 'row',
     alignItems: 'center',
@@ -401,11 +408,19 @@ const styles = StyleSheet.create({
   sideEnd: {
     justifyContent: 'flex-end',
   },
+  // Takes every pixel the two side columns leave and hands it all to the title
+  // (which centres its own glyphs), so the text wraps only at the real edge of
+  // the free space rather than at its longest word. The padding
+  // is what a one-line title would get from being centred against the close
+  // button (half the leftover of the button's height), applied as a top offset
+  // instead — so line one lands on the very same baseline whether the title is
+  // one line or three, and the rest of the name flows down under it.
   titleWrap: {
-    flexShrink: 1,
+    flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
+    paddingTop: (ROUND_BUTTON_SIZE_SM - lh(TEXT.lg)) / 2,
     gap: SM,
   },
   title: {
@@ -414,7 +429,14 @@ const styles = StyleSheet.create({
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
     fontWeight: WEIGHT.extrabold,
-    flexShrink: 1,
+    // flex:1 + textAlign, NOT a shrink-to-fit box centred by the parent. A Text
+    // that only shrinks is measured at its MIN-CONTENT width — its longest word
+    // — and keeps that width even once the row hands it the whole free span, so
+    // a name broke one word per line with half the row left empty beside it.
+    // Growing to the full span and centring the glyphs inside it wraps the text
+    // where the space actually ends.
+    flex: 1,
+    textAlign: 'center',
   },
   trailingSpacer: {
     width: ROUND_BUTTON_SIZE_SM,

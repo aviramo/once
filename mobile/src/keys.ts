@@ -26,6 +26,11 @@ export const STORAGE = {
    *  waits here — through sign-up, onboarding, and an app kill in the middle of
    *  either — until the first flush that finds a session. See communities.ts. */
   pendingInvite: 'pending_invite',
+  /** PREFIX, not a key: one entry per user_id, the last server snapshot of the
+   *  signed-in user's OWN row. Read on boot so /home paints (and the chat sheet
+   *  mounts) from disk instead of waiting out the `users` round trip. Wiped on
+   *  sign-out. See stores/userStore.ts. */
+  profilePrefix: 'profile_',
 } as const
 
 // One-time "seen" flag names stored inside the STORAGE.seenFlags JSON map
@@ -38,12 +43,31 @@ export const SEEN_FLAGS = {
   page2Demo: 'page2_demo',
 } as const
 
+// ── Per-conversation chat storage ─────────────────────────────────────────
+// Every local trace of one conversation, defined once as a prefix so the
+// sign-out sweep can find them all without re-typing the strings (see
+// lib/chatCache.ts).
+export const CHAT_KEY_PREFIX = {
+  /** The message list itself — what the chat paints on its first frame. */
+  cache: 'chatCache_',
+  /** Read-receipt timestamp: how far the PARTNER has read. */
+  lastRead: 'chatLastRead_',
+  /** When this device last opened the chat — decides which messages get the
+   *  "new messages" separator on the next open. */
+  lastOpened: 'chatLastOpened_',
+} as const
+
 // Per-conversation cache key for chat messages list.
 export function chatCacheKey(otherId: string): string {
-  return `chatCache_${otherId}`
+  return CHAT_KEY_PREFIX.cache + otherId
 }
 
 // Per-conversation read-receipt persisted timestamp.
 export function chatLastReadKey(otherId: string): string {
-  return `chatLastRead_${otherId}`
+  return CHAT_KEY_PREFIX.lastRead + otherId
+}
+
+// Per-conversation last-opened stamp.
+export function chatLastOpenedKey(otherId: string): string {
+  return CHAT_KEY_PREFIX.lastOpened + otherId
 }

@@ -264,6 +264,31 @@ export function LogInIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+// Curved arrow pointing back at a message — the chat's reply affordance. Shown
+// behind a bubble while it is swiped, and beside the Reply row in the
+// long-press message sheet. Mirrors under RTL like every other directional arrow.
+export function ReplyIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <G rotation={isRTL ? 180 : 0} origin="12, 12">
+        <Polyline points="9 17 4 12 9 7" />
+        <Path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+      </G>
+    </Glyph>
+  )
+}
+
+// Two stacked sheets — "copy this text". Used by the chat's long-press
+// message sheet.
+export function CopyIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="9" y="9" width="12" height="12" rx="2.5" />
+      <Path d="M5 15H4.5A2.5 2.5 0 0 1 2 12.5v-8A2.5 2.5 0 0 1 4.5 2h8A2.5 2.5 0 0 1 15 4.5V5" />
+    </Glyph>
+  )
+}
+
 export function TrashIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">

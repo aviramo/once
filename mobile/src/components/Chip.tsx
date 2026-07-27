@@ -142,12 +142,15 @@ export function phraseWrap(label: string): string {
     }
   }
   phrases.push(label.slice(start))
-  // A single phrase has no sibling to stay separate from, so gluing it buys
-  // nothing — it only removes every word-break seam and forces a mid-word
-  // break when the phrase is too wide for the narrow column (a group name like
-  // "אוניברסיטת בן גוריון" split as "גורי/ון"). Keep its natural spaces so it
-  // wraps at a word boundary, never inside a word.
-  if (phrases.length === 1) return label
+  // Note a SHORT single phrase is glued too, and that is load-bearing beyond
+  // tidy wrapping: a two-word label that fits ("just now", "1 min ago") was
+  // losing its last word on screen — the tile measured at the full width, then
+  // the breaker split the trailing word onto a second line that the one-line
+  // tile clips, leaving "just" plus an empty gap. A glued phrase offers no
+  // break to take. A LONG single phrase keeps its natural spaces (the map's
+  // PHRASE_GLUE_MAX guard): with no seam at all, a phrase too wide for the
+  // narrow column would break MID-WORD instead (a group name like
+  // "אוניברסיטת בן גוריון" split as "גורי/ון").
   return phrases
     .map(p => (p.length <= PHRASE_GLUE_MAX ? p.replace(/ /g, NBSP) : p))
     .join(' ')
@@ -419,13 +422,10 @@ const styles = StyleSheet.create({
     lineHeight: lh(TEXT.sm),
     fontWeight: WEIGHT.semibold,
     flexShrink: 1,
-    // textAlign:'left' is "start of writing direction": physically left in
-    // LTR, physically right in RTL (after auto-flip). textAlign:'right' is
-    // RN's RTL trap — it's interpreted as "end of writing direction" which
-    // is physically LEFT in RTL mode. So 'left' is the correct value for
-    // "align to where reading starts" in both directions.
-    textAlign: 'left',
-    writingDirection: isRTL ? 'rtl' : 'ltr',
+    // Start-aligned (physically right in RTL) comes from the app-wide reading
+    // direction — TEXT_START in src/fonts.ts, applied once in AppText. This
+    // used to re-declare it inline. NOTE textAlign:'right' would be RN's RTL
+    // trap: it means "end of writing direction", i.e. physically LEFT in RTL.
   },
   // Heaviest weight at the ordinary chip size: the name/age heading chip reads
   // as the card's heading without growing the tile past the fact chips beside it.

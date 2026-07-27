@@ -3,10 +3,39 @@
 //
 // Layout / spacing / radius tokens live in `./tokens.ts` — import from there.
 
-import { PixelRatio } from 'react-native'
+import { PixelRatio, type TextStyle } from 'react-native'
+import { isRTL } from './i18n'
 
 export const DEFAULT_FAMILY = 'NotoSansHebrew_400Regular'
 export const SINGLE_WEIGHT = false
+
+// THE reading direction of every piece of text in the app, applied ONCE in the
+// AppText wrapper (and in _layout's defaultProps safety net for stray RN Text).
+//
+// Why it has to be said out loud, on iOS: a Text with no explicit alignment
+// gets NSTextAlignmentNatural, and iOS resolves "natural" against the app's own
+// UI language — NOT against the Hebrew characters in the string, and NOT
+// against I18nManager.forceRTL. The bundle has no Hebrew localization, so
+// natural resolved to LEFT and every un-aligned label in an RTL layout was
+// pushed to the row's END edge: the settings rows' labels sat far from the icon
+// that names them, the communities rows' titles and section headings hugged the
+// wrong edge, and a Hebrew sentence's trailing punctuation bidi-flipped to the
+// wrong side. Setting baseWritingDirection is what makes "natural" mean "the
+// direction this app reads in" (RCTTextAttributes.effectiveParagraphStyle).
+//
+// `writingDirection` is an iOS-only style prop — Android's text pipeline never
+// reads it (it aligns per the string's own script, which is why Android has
+// always looked right), so this is an iOS fix with no Android side effects.
+//
+// Deliberately NOT paired with `textAlign: 'left'`. That pair only lands on the
+// start edge when the native view's layout direction is RTL, which depends on
+// forceRTL having propagated; the writing direction alone doesn't. A call site
+// that wants something OTHER than start-aligned (centred titles, a numeric
+// column, an LTR-pinned code field) still overrides both, since its own style
+// is applied after this one.
+export const TEXT_START: TextStyle = {
+  writingDirection: isRTL ? 'rtl' : 'ltr',
+}
 
 // How much each class of text is allowed to grow when the user bumps the OS
 // font-size slider. Pass as `maxFontSizeMultiplier` on <Text>/<TextInput>.

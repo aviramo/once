@@ -18,7 +18,7 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { GREEN_DEEP, BG, GREEN, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_SOFT } from '../src/colors'
-import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh, bottomGap } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
@@ -29,6 +29,7 @@ import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
 import { CreditCost } from '../src/components/CreditCost'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
+import { clearChatCache } from '../src/lib/chatCache'
 import { claimInstallReferral } from '../src/lib/referral'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/PullPane'
@@ -962,6 +963,12 @@ export default function HomePage() {
   // chatAvailable: state is 'chat'
   const chatAvailable = profile?.state === 'chat'
   const [chatJustStarted, setChatJustStarted] = useState(false)
+  // Last known chat partner, assigned DURING render (like overlaysRef): the
+  // store nulls `match` in the same update that drops `state` out of 'chat',
+  // so the leaving-chat effect would otherwise have no id left to clear the
+  // conversation's local cache with.
+  const chatPartnerRef = useRef('')
+  if (profile?.relations?.match?.user_id) chatPartnerRef.current = profile.relations.match.user_id
 
   // ── Geo-availability gate ───────────────────────────────────────────────
   // The server writes relations.availability from the admin-defined areas:
@@ -1574,6 +1581,11 @@ export default function HomePage() {
         Keyboard.dismiss()
         setChatUnread(0)
         setOverlays(prev2 => prev2.filter(o => o !== 'chat'))
+        // The conversation is over: its local transcript can never be shown
+        // again, so drop it instead of leaving one dead cache per past partner
+        // on the device. The server keeps the rows — a pair that matches again
+        // just re-fetches.
+        clearChatCache(chatPartnerRef.current)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2174,6 +2186,19 @@ export default function HomePage() {
   // user can report an inappropriate photo/bio before ever entering chat.
   const [chatMenuOpen, setChatMenuOpen] = useState(false)
   const [chatConfirmAction, setChatConfirmAction] = useState<'block' | 'leave' | null>(null)
+  // Both rows of that menu open ANOTHER Modal (the leave / block
+  // ConfirmDialog). Flipping the confirm on in the same tick as closing the
+  // menu races two Modals on the same parent stack: the confirm silently never
+  // presents, and because its `visible` stayed true the menu could not be
+  // reopened either (reported 2026-07-27). Stash the intent and fire it from
+  // BottomSheet.onClosed, after the menu's Modal has fully unmounted — the
+  // same chaining the invite popup and the settings sheet already use.
+  const chatMenuIntentRef = useRef<'block' | 'leave' | null>(null)
+  const handleChatMenuClosed = useCallback(() => {
+    const intent = chatMenuIntentRef.current
+    chatMenuIntentRef.current = null
+    if (intent) setChatConfirmAction(intent)
+  }, [])
   // User id to report, set by the flag button on ANY match card (page1
   // watching/waiting/chat/ended + page2 pending/dead-invite). One shared
   // report confirm is driven off this — the surface is detected server-side,
@@ -3017,7 +3042,6 @@ export default function HomePage() {
                   <PullPane
                     gesture={page1Pull.gesture}
                     pullY={page1Pull.pullY}
-                    pulling={page1Pull.pulling}
                     tutorialPlaying={page1Pull.tutorialPlaying}
                     pointerEvents={showHiddenPlaceholder ? 'none' : 'box-none'}
                     cardStyle={styles.matchCardWrap}
@@ -3192,18 +3216,19 @@ export default function HomePage() {
                 <BottomSheet
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
-                  contentStyle={[chatMenuStyles.sheet, { paddingBottom: Math.max(bottomInset, SM) + MD }]}
+                  onClosed={handleChatMenuClosed}
+                  contentStyle={[chatMenuStyles.sheet, { paddingBottom: bottomGap(bottomInset, SM + MD) }]}
                 >
                   <Button
                     label={t('chat.leave')}
                     iconStart={<SignOutIcon color={WHITE} />}
-                    onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('leave') }}
+                    onPress={() => { tap(); chatMenuIntentRef.current = 'leave'; setChatMenuOpen(false) }}
                   />
                   <Button
                     label={t('chat.block')}
                     variant="secondary"
                     iconStart={<BlockIcon color={BLACK_STRONG} />}
-                    onPress={() => { tap(); setChatMenuOpen(false); setChatConfirmAction('block') }}
+                    onPress={() => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) }}
                   />
                 </BottomSheet>
 
@@ -3501,7 +3526,7 @@ export default function HomePage() {
                   dismissGestureRef={selfCtx.dismissGestureRef}
                   onScrollAtTop={selfCtx.onScrollAtTop}
                   headerBottomShared={selfCtx.headerBottomShared}
-                  pulling={selfCtx.pulling}
+                  pullEngaged={selfCtx.pullEngaged}
                 />
               )}
               {...ctx}

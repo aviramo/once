@@ -132,9 +132,20 @@ export default {
   'settings.watchersOne': '1 צופה בך',
   'settings.watchersMany': '{count} צופים בך',
   'settings.credits': 'קרדיטים',
-  // Suffix word in the credits-row value when the user has extras, e.g.
-  // "1/1 + 5 אקסטרה". Distinct word so "+ 5" doesn't read as math.
-  'settings.creditsExtraSuffix': 'אקסטרה',
+  // The two credit pools, one line each in the credits row: a caption naming
+  // the pool, and its amount on the line's END edge. Each caption says what
+  // makes its pool different, since the numbers alone never did: the daily one
+  // refills at a set hour ({time} is a bare "HH:MM" from formatGrantTime, and
+  // the ...Next variant is used whenever it's known, the normal case), the
+  // extras just stay. Kept short enough to hold one line in the drawer's
+  // narrow column: a caption that wraps is what made this block look ragged.
+  'settings.creditsDaily': 'יומי',
+  'settings.creditsDailyNext': 'יומי, מתחדש ב-{time}',
+  'settings.creditsExtra': 'אקסטרה שנשארים איתך',
+  // With no extras the same line becomes the invitation to get some: the row
+  // opens the credits picker anyway, so the empty state names the action
+  // instead of leaving a bare "0" with nothing to do about it.
+  'settings.creditsExtraNone': '{לחץ|לחצי} להוספת אקסטרה',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'הקבוצות שלי',
   'settings.groupsMine': 'הקבוצות שלי',
@@ -153,9 +164,9 @@ export default {
   'settings.groupsLeaveDesc': 'אפשר להצטרף שוב בהמשך בעזרת קוד הקבוצה.',
   'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
 
-  // Communities: the menu row + the full hub sheet and its sub-screens.
-  'communities.menuRow': 'קהילות',
-  'communities.title': 'קהילות',
+  // Circles: the menu row + the full hub sheet and its sub-screens.
+  'communities.menuRow': 'מעגלים',
+  'communities.title': 'מעגלים',
   'communities.myFriends': 'החברים שלי',
   'communities.myFriendsSub': 'אנשים שאתה מכיר אישית',
   'communities.manageSection': 'קבוצות שאני מנהל',
@@ -289,8 +300,6 @@ export default {
   // support inbox, with this subject prefilled.
   'settings.support': 'תמיכה',
   'support.mailSubject': 'תמיכה Once',
-  // {when} now self-carries "היום ב-HH:MM" / "מחר ב-HH:MM" — no leading "ב-".
-  'settings.creditsNext': 'מתחדש {when}',
   'settings.preview': 'תצוגה מקדימה',
   'settings.myProfile': 'פרופיל',
   'settings.photo': 'התמונות שלי',
@@ -442,10 +451,6 @@ export default {
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': 'קרדיט אחד',
   'credits.count.many': '{n} קרדיטים',
-  // Relative next-grant day. Returned from formatNextGrant() — replaces the
-  // old absolute "DD/MM HH:MM" so the user reads a relative phrase.
-  'credits.grant.today': 'היום ב-{time}',
-  'credits.grant.tomorrow': 'מחר ב-{time}',
   // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
   // "coming soon") and inviting a friend is the only way to earn extra, so the
   // copy talks about getting credits rather than buying them.
@@ -1007,6 +1012,8 @@ export default {
   'chat.reply.you': 'את',
   'chat.reply.you_m': 'אתה',
   'chat.reply.you_f': 'את',
+  'chat.msgActions.reply': 'תגובה להודעה',
+  'chat.msgActions.copy': 'העתקת הטקסט',
 
   // Push notifications
   'push.WATCHING': 'הזדמנות חדשה',

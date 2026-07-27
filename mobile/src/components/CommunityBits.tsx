@@ -4,14 +4,14 @@
 // placeholder (DRY: one definition, two call sites). The count wording
 // (memberLabel and friends) is plain text with no JSX, so it lives beside the
 // rest of the communities text helpers in lib/communities.ts.
-import { useEffect } from 'react'
-import { Image, View, StyleSheet } from 'react-native'
+import { useEffect, useState } from 'react'
+import { Image, View, StyleSheet, type NativeSyntheticEvent, type StyleProp, type TextLayoutEventData, type TextStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Path } from 'react-native-svg'
 import { Text } from './AppText'
 import { Glyph } from './icons'
 import { publicImageUrl } from '../lib/api'
-import type { MemberImage } from '../lib/communities'
+import { META_SEP, META_DOT, type MemberImage } from '../lib/communities'
 import { XS, SM, MD, WEIGHT, PULSE, SKELETON } from '../tokens'
 import { GREEN, WHITE, BORDER_SOFT, SURFACE_SUNK } from '../colors'
 
@@ -73,6 +73,48 @@ export function SkeletonRows({ rows = SKELETON.maxRows, lines = 1 }: { rows?: nu
         )
       })}
     </Animated.View>
+  )
+}
+
+// ── Meta line ──────────────────────────────────────────────────────────────
+// Renders a metaLine() string, and is the ONE place that knows what happens to
+// it when it does not fit on one line (user directive 2026-07-27): the facts
+// re-flow across lines and the interpunct at a break DISAPPEARS, because a dot
+// with nothing after it separates nothing. Plain text cannot do that on its own
+// (a separator is a character like any other, and wherever the break lands it
+// keeps painting), so the string is laid out once, the lines it actually broke
+// into are read back, and it is re-rendered with hard newlines at exactly those
+// points and no separator across them.
+//
+// The reflow is a single extra pass and it cannot loop: dropping separators
+// only makes lines shorter, and the measured render is disabled the moment the
+// re-flowed text is in place. Anything it cannot account for (a platform that
+// reports no line text, a line clipped away by numberOfLines) leaves the
+// original string untouched, which is the old behaviour, not a broken one.
+export function MetaText({ text, style, numberOfLines }: { text: string; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
+  const [flowed, setFlowed] = useState<string | null>(null)
+  // A new string is a new measurement.
+  useEffect(() => { setFlowed(null) }, [text])
+
+  const reflow = (e: NativeSyntheticEvent<TextLayoutEventData>) => {
+    const lines = e.nativeEvent.lines
+    const parts = text.split(META_SEP)
+    if (lines.length < 2 || parts.length < 2) return
+    // Every part but the first wears the separator's dot glued to its front, so
+    // the dots ON a line count the parts that landed there.
+    let taken = 0
+    const rows = lines.map((l, i) => {
+      const n = (i === 0 ? 1 : 0) + ((l.text ?? '').split(META_DOT).length - 1)
+      return parts.slice(taken, (taken += n))
+    })
+    if (taken !== parts.length) return
+    setFlowed(rows.filter(r => r.length > 0).map(r => r.join(META_SEP)).join('\n'))
+  }
+
+  return (
+    <Text style={style} numberOfLines={numberOfLines} onTextLayout={flowed ? undefined : reflow}>
+      {flowed ?? text}
+    </Text>
   )
 }
 

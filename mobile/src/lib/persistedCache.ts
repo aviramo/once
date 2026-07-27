@@ -19,6 +19,10 @@ export type PersistedMap<T> = {
   useValue(id: string): T | null
   /** Same read, outside React. */
   get(id: string): T | null
+  /** Await the disk read and return the value (null on a cold miss). For a
+   *  caller that must ACT on the cached value once rather than re-render when
+   *  it lands — the boot profile hydrate. */
+  load(id: string): Promise<T | null>
   /** Overwrite from a server response. */
   set(id: string, value: T): void
   /** Forget one entry (the group was left or deleted). */
@@ -91,6 +95,11 @@ export function createPersistedMap<T>(
 
     get: (id) => mem.get(id) ?? null,
 
+    async load(id) {
+      await ensureLoaded(id)
+      return mem.get(id) ?? null
+    },
+
     set(id, value) {
       mem.set(id, value)
       loaded.add(id)
@@ -125,6 +134,7 @@ export function createPersistedMap<T>(
 export type PersistedValue<T> = {
   useValue(): T | null
   get(): T | null
+  load(): Promise<T | null>
   set(value: T): void
   clear(): Promise<void>
 }
@@ -143,6 +153,7 @@ export function createPersistedValue<T>(
   return {
     useValue: () => map.useValue(ONLY),
     get: () => map.get(ONLY),
+    load: () => map.load(ONLY),
     set: (value) => map.set(ONLY, value),
     clear: () => map.clearAll(),
   }

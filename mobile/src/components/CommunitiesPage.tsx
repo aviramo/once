@@ -4,8 +4,9 @@
 // "Communities" row). It is ONE sheet with an internal view stack — a hub that
 // drills into: my friends, link-a-friend, a group you manage, a group you're
 // in, create, and find/join. Swiping the sheet down (PullPane) closes the
-// whole surface; the header's start control is a back arrow that pops the
-// internal stack while there's somewhere to go, and the close X at the hub.
+// whole surface; the header's start control is a close X on EVERY page, since
+// every page leaves the same way, downward: at the hub it takes the sheet, and
+// above it, it rides one page off the bottom and pops it.
 //
 // Server: everything speaks to the phase-1 endpoints via src/lib/communities.
 // Communities reuse the existing groups machinery; "my friends" is the derived
@@ -29,7 +30,7 @@ import { t } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
 
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
-import { Avatar, SkeletonRows, AVATAR } from './CommunityBits'
+import { Avatar, SkeletonRows, MetaText, AVATAR } from './CommunityBits'
 import { MatchCard } from './MatchCard'
 import { rosters, joinRequests, friendsRoster, dropGroupCaches } from '../lib/rosterCache'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
@@ -47,7 +48,7 @@ import {
   type FriendItem, type CommunitiesSummary, type JoinedGroup, type PendingGroup,
   type JoinRequestItem, type CommunitiesTarget,
 } from '../lib/communities'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON } from '../tokens'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, bottomGap } from '../tokens'
 import { BG, SURFACE, INK, GREEN, GREEN_HALF, PRIMARY, BORDER_SOFT, GREEN_SOFT, WHITE, BLACK_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
 
@@ -93,7 +94,7 @@ export type SelfProfileRenderer = (ctx: {
   dismissGestureRef: React.MutableRefObject<GestureType | undefined>
   onScrollAtTop: (atTop: boolean) => void
   headerBottomShared: SharedValue<number>
-  pulling: boolean
+  pullEngaged: SharedValue<boolean>
 }) => React.ReactNode
 
 // ── View stack ─────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ const titleFor = (v: CView): string => {
 
 export function CommunitiesPage({
   onClose, onRegisterBack, target, onTargetConsumed, renderSelfProfile,
-  dismissGestureRef, onScrollAtTop, headerBottomShared, pulling,
+  dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged,
 }: OverlaySheetBody & {
   onClose: () => void
   onRegisterBack: (fn: () => boolean) => void
@@ -159,10 +160,10 @@ export function CommunitiesPage({
 }) {
   const insets = useSafeAreaInsets()
   const profile = useUserStore(st => st.profile)
-  // The air under a contained roster: the safe area plus one small step (XL was
-  // too much — user directive 2026-07-27). Both roster pages read this one
-  // value, so their lists end at exactly the same height.
-  const rosterGap = insets.bottom + SM
+  // The air under a contained roster: one small step, or the safe area where
+  // there is one (XL was too much — user directive 2026-07-27). Both roster
+  // pages read this one value, so their lists end at exactly the same height.
+  const rosterGap = bottomGap(insets.bottom, SM)
 
   const [stack, setStack] = useState<CView[]>(() => (
     target?.kind === 'friends' || target?.kind === 'friend' ? [{ k: 'hub' }, { k: 'friends' }] : [{ k: 'hub' }]
@@ -284,7 +285,7 @@ export function CommunitiesPage({
           // The hub rides the SHEET's pull (its swipe closes Communities); every
           // page above it owns a pull of its own that pops one level.
           sheetPanRef={i === 0 ? dismissGestureRef : undefined}
-          sheetPulling={i === 0 ? pulling : undefined}
+          sheetPullEngaged={i === 0 ? pullEngaged : undefined}
           onSheetScrollAtTop={i === 0 ? setLayer0AtTop : undefined}
           onHeaderMeasured={i === 0 ? (h => { layer0HeaderBottom.current = h; if (!deepRef.current) headerBottomShared.value = h }) : undefined}
           onBack={i === 0 ? onClose : pop}
@@ -311,7 +312,7 @@ export function CommunitiesPage({
 // every layer above owns a pull whose commit POPS one page, which is what makes
 // a swipe do exactly what Back does (user directive 2026-07-27).
 function PageLayer({
-  view, isTop, sheetPanRef, sheetPulling, onSheetScrollAtTop, onHeaderMeasured, onBack, registerClose,
+  view, isTop, sheetPanRef, sheetPullEngaged, onSheetScrollAtTop, onHeaderMeasured, onBack, registerClose,
   insets, rosterGap, profile, push, setStack, applyGroup, removeGroupViews,
   joinedTarget, onInitialJoinedConsumed, renderSelfProfile,
 }: {
@@ -319,7 +320,7 @@ function PageLayer({
   isTop: boolean
   /** Present only on the bottom layer: the sheet's own dismiss pan. */
   sheetPanRef?: React.MutableRefObject<GestureType | undefined>
-  sheetPulling?: boolean
+  sheetPullEngaged?: SharedValue<boolean>
   onSheetScrollAtTop?: (atTop: boolean) => void
   onHeaderMeasured?: (bottom: number) => void
   onBack: () => void
@@ -339,10 +340,15 @@ function PageLayer({
 }) {
   const isSheetLayer = !!sheetPanRef
   // The band a drag can start in and still take the page, whatever the inner
-  // scroll is doing. It is the title bar — plus, on the roster pages, the whole
-  // FIXED head above the list, since none of it scrolls and the list itself
-  // eats nearly the entire page once it is scrolled. Two sources, one value:
-  // whichever reaches lower wins, so neither measurement can clobber the other.
+  // scroll is doing. It may only ever cover chrome that DOES NOT SCROLL: the
+  // inner scroll always outranks the page pull (the iron rule), so the band is
+  // never allowed to sit over content a finger could have scrolled instead.
+  // It is the solid title bar — plus, on the roster pages, the whole FIXED head
+  // above the list, since none of it scrolls and the list itself eats nearly the
+  // entire page once it is scrolled. A FLOATING header contributes NOTHING: it
+  // hovers over the profile card's own scroll, so that strip belongs to the
+  // card, which reports at-top and hands the pull over by itself. Two sources,
+  // one value: whichever reaches lower wins, so neither can clobber the other.
   const headerBottom = useSharedValue(0)
   const barBottom = useRef(0)
   const rosterTop = useRef(0)
@@ -352,7 +358,7 @@ function PageLayer({
   // A page LEAVES by sliding off the bottom, and only then stops existing. The
   // commit does not pop: it flags `closing`, and the reaction below pops when
   // the surface has actually reached the bottom edge. That is what makes the
-  // back control feel like the manual pull carried on (user directive
+  // close X feel like the manual pull carried on (user directive
   // 2026-07-27) and what keeps a swipe from tearing the page out from under the
   // finger halfway down.
   const closing = useSharedValue(false)
@@ -373,18 +379,21 @@ function PageLayer({
     },
     [screenSpan, onBack],
   )
-  // The back control rides the page off exactly as a finger would; the bottom
+  // The close X rides the page off exactly as a finger would; the bottom
   // layer has no page under it, so its control closes the sheet outright.
   const commitPull = pull.commit
   const closePage = useCallback(() => {
     if (isSheetLayer) onBack()
     else commitPull()
   }, [isSheetLayer, onBack, commitPull])
+  // Every member is stable (a ref, a callback, a shared value), so this value is
+  // built once and never changes identity — a drag on this page re-renders
+  // nothing below it. See PullCtx.pullEngaged.
   const pullCtx = useMemo<PullCtx>(() => (
     isSheetLayer
-      ? { panRef: sheetPanRef!, extraRefs: [], setScrollAtTop: onSheetScrollAtTop ?? (() => {}), pulling: sheetPulling ?? false }
-      : { panRef: pull.panRef, extraRefs: [], setScrollAtTop: pull.setScrollAtTop, pulling: pull.pulling }
-  ), [isSheetLayer, sheetPanRef, onSheetScrollAtTop, sheetPulling, pull.panRef, pull.setScrollAtTop, pull.pulling])
+      ? { panRef: sheetPanRef!, extraRefs: [], setScrollAtTop: onSheetScrollAtTop ?? (() => {}), pullEngaged: sheetPullEngaged! }
+      : { panRef: pull.panRef, extraRefs: [], setScrollAtTop: pull.setScrollAtTop, pullEngaged: pull.pullEngaged }
+  ), [isSheetLayer, sheetPanRef, onSheetScrollAtTop, sheetPullEngaged, pull.panRef, pull.setScrollAtTop, pull.pullEngaged])
 
   // Keyboard auto-scroll: when the keyboard opens, scroll the focused input up
   // so it clears the keyboard. Compares the keyboard's real top edge
@@ -408,31 +417,36 @@ function PageLayer({
     return () => sub.remove()
   }, [isTop])
 
-  // A profile page is a full-bleed card: no title bar over it, just the back
-  // control floating on the photo (user directive 2026-07-27).
+  // A profile page is a full-bleed card: no title bar over it, just the close
+  // X floating on the photo (user directive 2026-07-27).
   const floatingChrome = view.k === 'request' || view.k === 'person' || view.k === 'self'
 
   const header = (
     <SheetHeader
       title={floatingChrome ? undefined : titleFor(view)}
-      // 2 lines only for a group name (may be long); the fixed labels are
-      // short and must stay on ONE line — with 2 lines a flexShrink title
-      // collapses to its longest word and a multi-word label like "Join a
-      // group" breaks apart ("Join a" / "group").
-      titleLines={view.k === 'owned' ? 2 : 1}
+      // A group's name is shown WHOLE (user directive 2026-07-27): as many
+      // lines as its 60 characters need, never an ellipsis. The header grows
+      // downward and its first line stays put, so a long name costs nothing but
+      // the room it takes. The fixed labels are short and stay on one line, so
+      // a two-word one never splits across two.
+      titleLines={view.k === 'owned' ? 0 : 1}
       topInset={insets.top}
       floating={floatingChrome}
       // Match the page background (BG), not the default light-beige SURFACE,
       // so the header blends into the Communities page instead of sitting on
       // a lighter band.
       barBg={BG}
-      closeIcon={isSheetLayer ? 'close' : 'back'}
+      // Every Communities page leaves by sliding DOWN, the hub included, so
+      // every page wears the X (user directive 2026-07-27). The arrow belongs
+      // to a surface that leaves sideways, i.e. only the menu drawer.
+      closeIcon="close"
       onClose={() => { tap(); closePage() }}
-      onMeasured={h => { barBottom.current = h; syncDragBand(); onHeaderMeasured?.(h) }}
+      // A floating header claims no drag band — see the note on `headerBottom`.
+      onMeasured={h => { barBottom.current = floatingChrome ? 0 : h; syncDragBand(); onHeaderMeasured?.(h) }}
     />
   )
 
-  // Everything that ends a page — the back control, the hardware back, an
+  // Everything that ends a page — the close X, the hardware back, an
   // action that finishes with it — leaves through the same slide.
   useEffect(() => { if (isTop) registerClose?.(closePage) }, [isTop, registerClose, closePage])
 
@@ -455,7 +469,7 @@ function PageLayer({
       dismissGestureRef: pull.panRef,
       onScrollAtTop: pull.setScrollAtTop,
       headerBottomShared: headerBottom,
-      pulling: pull.pulling,
+      pullEngaged: pull.pullEngaged,
     }) ?? null
   ) : view.k === 'owned' || view.k === 'requests' ? (
     // The two roster pages do NOT ride a page scroll: their heads stay put and
@@ -490,7 +504,7 @@ function PageLayer({
     <PullScrollView
       ref={scrollRef}
       style={s.scroll}
-      contentContainerStyle={[s.content, { paddingBottom: insets.bottom + XL }]}
+      contentContainerStyle={[s.content, { paddingBottom: bottomGap(insets.bottom, XL) }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={16}
@@ -528,7 +542,6 @@ function PageLayer({
     <PullPane
       gesture={pull.gesture}
       pullY={pull.pullY}
-      pulling={pull.pulling}
       style={StyleSheet.absoluteFill}
     >
       {/* Rises on push; NO exit animation — a page popped by a swipe has
@@ -730,7 +743,9 @@ export function JoinedGroupSheet({ group, onClose }: { group: JoinedGroup | null
     <>
       <BottomSheet visible={!!group && !confirm} onDismiss={onClose}>
         <View style={s.sheetWrap}>
-          <Text style={s.sheetTitle} numberOfLines={1}>{group?.name}</Text>
+          {/* Whole name, wrapping as far as it needs (user directive
+              2026-07-27) — a popup about one group never abbreviates which. */}
+          <Text style={s.sheetTitle}>{group?.name}</Text>
           {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
           <Text style={s.sheetNote}>{t('communities.memberNote')}</Text>
           {group?.is_public && group?.invite_code ? (
@@ -755,12 +770,7 @@ export function JoinedGroupSheet({ group, onClose }: { group: JoinedGroup | null
 }
 
 // A single tappable card row: leading icon/avatar, title + optional meta, chevron.
-// `centered` is for a row that reads as a single action rather than a list
-// entry (the group's settings entry): the label sits on the row's true middle.
-// That needs the trailing chevron to occupy the same lane width as the leading
-// icon — otherwise the text is only centered in the space left over, which
-// reads as very slightly off.
-function NavRow({ icon, title, meta, first, centered, style, onPress }: { icon?: React.ReactNode; title: string; meta?: string; first?: boolean; centered?: boolean; style?: StyleProp<ViewStyle>; onPress: () => void }) {
+function NavRow({ icon, title, meta, first, style, onPress }: { icon?: React.ReactNode; title: string; meta?: string; first?: boolean; style?: StyleProp<ViewStyle>; onPress: () => void }) {
   const [pressed, setPressed] = useState(false)
   return (
     <Pressable
@@ -770,11 +780,16 @@ function NavRow({ icon, title, meta, first, centered, style, onPress }: { icon?:
       style={[s.row, first && s.rowFirst, style, pressed && { backgroundColor: GREEN_SOFT }]}
     >
       {icon ? <View style={s.rowIcon}>{icon}</View> : null}
-      <View style={[s.rowText, centered && s.rowTextCentered]}>
-        <Text style={[s.rowTitle, centered && s.rowCenteredInk]} numberOfLines={2}>{title}</Text>
-        {meta ? <Text style={[s.rowMeta, centered && s.rowCenteredInk]} numberOfLines={1}>{meta}</Text> : null}
+      <View style={s.rowText}>
+        <Text style={s.rowTitle} numberOfLines={2}>{title}</Text>
+        {/* The meta line wraps to a SECOND line rather than ellipsizing (user
+            directive 2026-07-27): "open · 18 members · not accepting requests"
+            says nothing once it is cut mid-word. Two lines is the ceiling, a
+            row is still a row. MetaText is what drops the separator at the
+            break; a plain label with no separator in it renders unchanged. */}
+        {meta ? <MetaText text={meta} style={s.rowMeta} numberOfLines={2} /> : null}
       </View>
-      {centered ? <View style={s.rowIcon}><ChevGlyph /></View> : <ChevGlyph />}
+      <ChevGlyph />
     </Pressable>
   )
 }
@@ -1092,25 +1107,33 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
       <View style={s.ownedHead}>
         <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
 
-        {/* The config entry. The waiting queue used to sit beside it as a second
-            card; it now lives at the head of the roster instead (user directive
-            2026-07-27) — the people waiting to get in belong with the people
+        {/* Two WORDLESS buttons side by side (user directive 2026-07-27), where
+            a two-row card used to be: the gear opens the group's config, the eye
+            opens the play-here popup. Regular button height, split evenly, so
+            they read as one strip under the share button. The waiting queue used
+            to sit beside them as a second card; it now lives at the head of the
+            roster instead — the people waiting to get in belong with the people
             already in, not in the settings stack. */}
-        <View style={s.card}>
-          <NavRow first centered icon={<GearGlyph />} title={t('communities.settings')} onPress={onOpenSettings} />
-          {/* Manage without playing (user directive 2026-07-27). One row, and
-              only when it is ON does it say so — the sentence that explains it
-              lives in the popup it opens, not on a page whose whole job is the
-              roster underneath. It rides here rather than in Group settings
-              because that page is the GROUP's config; this is the caller's own
-              membership, and nothing about running the group changes. */}
-          <NavRow
-            centered
-            icon={<EyeOffIcon color={GREEN} size={ICON.md} />}
-            title={t('communities.hiddenTitle')}
-            meta={hidden ? t('communities.hiddenShort') : undefined}
-            onPress={() => setHiddenSheet(true)}
-          />
+        <View style={s.actionRow}>
+          <View style={s.actionSlot}>
+            <Button label="" variant="secondary" size="lg" iconStart={<GearGlyph />} onPress={onOpenSettings} />
+          </View>
+          {/* Manage without playing. With no label left to say it, the EYE alone
+              carries the state: open = playing here, crossed out = hidden. The
+              button keeps the same recessive skin either way (user directive
+              2026-07-27: no purple fill to mark it on) — the glyph is the whole
+              signal. The sentence that explains it lives in the popup it opens.
+              It rides here rather than in Group settings because that page is
+              the GROUP's config; this is the caller's own membership. */}
+          <View style={s.actionSlot}>
+            <Button
+              label=""
+              variant="secondary"
+              size="lg"
+              iconStart={hidden ? <EyeOffIcon color={GREEN} size={ICON.md} /> : <EyeOpenIcon color={GREEN} size={ICON.md} />}
+              onPress={() => setHiddenSheet(true)}
+            />
+          </View>
         </View>
         {/* No description here (user directive 2026-07-27): it only ate the
             roster's height, and it is one tap away in Group settings, where it
@@ -1169,11 +1192,15 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
         <View style={s.sheetWrap}>
           <Text style={s.sheetTitle}>{t('communities.hiddenTitle')}</Text>
           <Text style={s.sheetDesc}>{t('communities.hiddenSub')}</Text>
+          {/* The popup's one action is the regular purple button in BOTH
+              directions (user directive 2026-07-27): coming back to play is as
+              much the action of this sheet as leaving is, so it gets the same
+              fill rather than a recessive grey. */}
           <Button
             label={hidden ? t('communities.hiddenOff') : t('communities.hiddenOn')}
-            variant={hidden ? 'secondary' : 'primary'}
+            variant="primary"
             size="lg"
-            iconStart={hidden ? <EyeOpenIcon color={INK} size={ICON.md} /> : <EyeOffIcon color={WHITE} size={ICON.md} />}
+            iconStart={hidden ? <EyeOpenIcon color={WHITE} size={ICON.md} /> : <EyeOffIcon color={WHITE} size={ICON.md} />}
             loading={hiddenBusy}
             onPress={toggleHidden}
           />
@@ -1278,7 +1305,7 @@ function ProfilePage({ profile, userId, name, image, insets, caption, children }
           </View>
         </View>
       )}
-      <View style={[s.profileBar, { paddingBottom: insets.bottom + MD }]}>
+      <View style={[s.profileBar, { paddingBottom: bottomGap(insets.bottom, MD) }]}>
         {!!caption && <Text style={s.profileBarCaption} numberOfLines={2}>{caption}</Text>}
         {children}
       </View>
@@ -1686,6 +1713,10 @@ const s = StyleSheet.create({
   // MD apart, the same gap the page's blocks had while it all scrolled.
   ownedFill: { flex: 1, gap: MD },
   ownedHead: { gap: MD },
+  // The wordless pair under the share button: equal halves, the same MD gutter
+  // the head's blocks keep between them.
+  actionRow: { flexDirection: 'row', gap: MD },
+  actionSlot: { flex: 1 },
   // The roster is a FlatList, so `card` can't wrap it — the rows carry the card
   // themselves and only the ends are rounded. The list BOX carries the same
   // radius so a row clipped at the bottom edge is clipped round, not square.
@@ -1715,8 +1746,6 @@ const s = StyleSheet.create({
   rowFirst: { borderTopWidth: 0 },
   rowIcon: { width: AVATAR, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, minWidth: 0, gap: XS },
-  rowTextCentered: { alignItems: 'center' },
-  rowCenteredInk: { textAlign: 'center' },
   rowTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: INK },
   rowMeta: { fontSize: TEXT.sm, color: GREEN_HALF },
   section: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: GREEN_HALF, marginTop: MD, marginStart: XS },

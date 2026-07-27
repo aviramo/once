@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { createPersistedMap } from '../lib/persistedCache'
+import { STORAGE } from '../keys'
 import type { FamilyData } from '../lib/family'
 
 export interface Image {
@@ -183,9 +185,15 @@ interface UserProfile {
 interface UserStore {
   profile: UserProfile | null
   loading: boolean
-  /** True once the first fetch() for the current user has completed (success or failure). */
+  /** True once the profile is known — the first fetch() completed (success or
+   *  failure), OR hydrate() painted the last snapshot from disk. Boot routing
+   *  (index.tsx) waits on this, so the disk hit is what lets a relaunch skip
+   *  the `users` round trip before showing /home. */
   fetched: boolean
   fetch: (userId: string) => Promise<void>
+  /** Paint the last known profile from disk. Fills an EMPTY store only —
+   *  a landed server answer always wins. */
+  hydrate: (userId: string) => Promise<void>
   update: (patch: Partial<UserProfile>) => void
   applyServerUser: (data: Record<string, unknown> | null | undefined, source?: 'fetch' | 'invoke' | 'invoke:self' | 'realtime') => void
   clear: () => void
@@ -209,6 +217,32 @@ let lastAppliedLastSeen = 0
 let lastRawRelations: Pages | null = null
 
 const pending = new Map<keyof UserProfile, unknown>()
+
+// ── Boot-paint cache for the user's own row ────────────────────────────────
+// The profile decides EVERYTHING the first frame shows — /home vs /onboarding,
+// and whether the chat sheet is in the tree at all. Holding it in memory only
+// meant a relaunch sat on the beige hand-off cover for a full `users` round
+// trip before anything, including the chat's own on-disk transcript, could even
+// start loading. So the last snapshot is mirrored to disk and repainted on
+// boot; the fetch that follows overwrites it (stale-while-revalidate).
+//
+// What is stored is the POST-compat UserProfile (state / match / watchers
+// already derived), so hydrate is a straight assignment with nothing to re-run.
+const isUserProfile = (v: unknown): v is UserProfile =>
+  !!v && typeof v === 'object' && typeof (v as UserProfile).user_id === 'string'
+
+const profileCache = createPersistedMap<UserProfile>(STORAGE.profilePrefix, isUserProfile)
+
+const cacheProfile = (p: UserProfile | null | undefined) => {
+  if (isUserProfile(p)) profileCache.set(p.user_id, p)
+}
+
+/** `last_seen` rides through applyServerUser's raw spread but isn't on the
+ *  typed shape — read it defensively. */
+const lastSeenOf = (p: UserProfile | null | undefined): number => {
+  const v = (p as { last_seen?: string | null } | null | undefined)?.last_seen
+  return v ? Date.parse(v) : 0
+}
 
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
@@ -412,6 +446,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
+  hydrate: async (userId: string) => {
+    if (!userId || get().profile || get().fetched) return
+    const cached = await profileCache.load(userId)
+    // The network answer can land while the disk read is in flight, and it is
+    // authoritative — re-check after the await, never overwrite it.
+    if (!cached || cached.user_id !== userId || get().profile || get().fetched) return
+    // Realtime events older than the snapshot we just painted are stale by the
+    // same rule that governs a fetched profile.
+    const ts = lastSeenOf(cached)
+    if (ts > lastAppliedLastSeen) lastAppliedLastSeen = ts
+    set({ profile: cached, fetched: true })
+  },
+
   update: (patch) => {
     const prev = get().profile
     if (!prev) return
@@ -487,7 +534,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
       lastRawRelations = relations ?? null
       writeCompat(d, relations)
     }
-    if (!prev) { set({ profile: d as unknown as UserProfile }); return }
+    if (!prev) {
+      const first = d as unknown as UserProfile
+      cacheProfile(first)
+      set({ profile: first })
+      return
+    }
     const merged: Record<string, unknown> = { ...prev, ...d }
     for (const k of CLIENT_AUTHORED) {
       if (!pending.has(k)) continue
@@ -498,8 +550,16 @@ export const useUserStore = create<UserStore>((set, get) => ({
         merged[k as string] = pendingVal
       }
     }
-    set({ profile: merged as unknown as UserProfile })
+    const next = merged as unknown as UserProfile
+    cacheProfile(next)
+    set({ profile: next })
   },
 
-  clear: () => { pending.clear(); lastAppliedLastSeen = 0; lastRawRelations = null; set({ profile: null, fetched: false }) },
+  clear: () => {
+    pending.clear()
+    lastAppliedLastSeen = 0
+    lastRawRelations = null
+    void profileCache.clearAll()
+    set({ profile: null, fetched: false })
+  },
 }))

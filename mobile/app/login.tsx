@@ -9,7 +9,7 @@ import { supabase } from '../src/lib/supabase'
 import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
 import { BG, GREEN, INK, INK_2, INK_3 } from '../src/colors'
-import { XS, SM, MD, TEXT, WEIGHT, lh } from '../src/tokens'
+import { XS, SM, MD, TEXT, WEIGHT, lh, bottomGap } from '../src/tokens'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 import { legalUrl } from '../src/lib/links'
 
@@ -153,7 +153,7 @@ export default function LoginPage() {
             </View>
           </ScrollView>
 
-          <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 4 }]}>
+          <View style={[styles.bottom, { paddingBottom: bottomGap(insets.bottom, MD + XS) }]}>
             <Text style={styles.legalText}>
               {t('auth.legalPrefix')}{'\n'}
               <Text style={styles.legalLink} onPress={() => Linking.openURL(legalUrl('terms', lang))} accessibilityRole="link">

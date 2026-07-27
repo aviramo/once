@@ -1,12 +1,16 @@
 import { forwardRef } from 'react'
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps } from 'react-native'
-import { DEFAULT_FAMILY, FONT_SCALE, SINGLE_WEIGHT, WEIGHT_TO_FAMILY } from '../fonts'
+import { DEFAULT_FAMILY, FONT_SCALE, SINGLE_WEIGHT, TEXT_START, WEIGHT_TO_FAMILY } from '../fonts'
 import { BLACK, SELECTION } from '../colors'
 
 // Drop-in replacement for react-native's Text that applies Heebo as the
 // default font family and picks the correct weighted face (real bold, not
 // synthetic) based on the fontWeight in the provided style. Replaces the
 // monkey-patch of Text.render that stopped working under React 19.
+//
+// It is also where the app's reading direction is declared, once, for every
+// Text and TextInput in it — see TEXT_START in ../fonts. It goes FIRST in the
+// style array so a call site's own textAlign/writingDirection still wins.
 
 function flatten(style: any): any {
   if (!style) return {}
@@ -35,7 +39,7 @@ export const Text = forwardRef<RNText, TextProps>(function AppText(props, ref) {
       ref={ref}
       maxFontSizeMultiplier={FONT_SCALE.body}
       {...props}
-      style={[props.style, { fontFamily: family, ...weightOverride }]}
+      style={[TEXT_START, props.style, { fontFamily: family, ...weightOverride }]}
     />
   )
 })
@@ -49,7 +53,7 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function AppTex
       selectionColor={SELECTION}
       cursorColor={BLACK}
       {...props}
-      style={[props.style, { fontFamily: family, ...weightOverride }]}
+      style={[TEXT_START, props.style, { fontFamily: family, ...weightOverride }]}
     />
   )
 })
