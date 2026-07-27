@@ -349,16 +349,17 @@ strong { color: var(--ink); font-weight: 600; }
 
 /* ---------- The question ----------
    The one line on the page addressed to the reader, in the gap the hero used to
-   leave empty, and the only block that inverts the page: a filled brand-purple
-   slab where everything else is beige with white cards. It breaks the rhythm
-   with the palette the page already has (no new colour, no gradient, the same
-   --r-lg corners and the same drawn-vector art) rather than with a new style,
-   so it reads as a held breath between the stanza and the four messages. */
+   leave empty. It is a white card like every other card here (user directive
+   2026-07-27, reversing the filled purple slab): what makes it the odd one out
+   is what is IN it, not its colour, so the question is set at headline weight in
+   brand purple with the focus drawing beside it, and it carries no eyebrow, no
+   chips and no lede the four messages all have. */
 .ask { padding-block: clamp(24px, 4vw, 48px); }
 .ask-slab {
-  background: var(--brand);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   padding: clamp(28px, 4.5vw, 56px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
@@ -371,22 +372,18 @@ strong { color: var(--ink); font-weight: 600; }
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.02em;
-  color: var(--brand-ink);
+  color: var(--brand);
   max-width: 17ch;
 }
 .ask-a {
   margin-top: 16px;
   font-size: clamp(1.02rem, 1.4vw, 1.16rem);
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--ink-2);
   max-width: 44ch;
 }
-/* The drawing is the same art.js vocabulary, re-pointed: on the slab the lines
-   and the rims that are beige everywhere else have to be white, so the block
-   overrides the palette vars the artwork reads instead of holding colours of
-   its own. */
+/* On white the drawing needs no re-pointing: it reads the page palette like
+   every other scene, and the card's own surface is the rim colour of the faces. */
 .ask-art {
-  --art-line: rgba(255, 255, 255, 0.40);
-  --surface: #FFFFFF;
   aspect-ratio: 3 / 2;
   align-self: center;
   min-inline-size: 0;
@@ -607,22 +604,15 @@ strong { color: var(--ink); font-weight: 600; }
 /* ---------- Sticky mobile CTA ----------
    ALWAYS on screen on a phone (user directive 2026-07-27): it is the only
    download button there, so it never slides away. No is-hidden state. */
-/* The button floats over whatever the page has scrolled to, and the question's
-   slab is the same purple the button is, so it needs an edge that does not
-   depend on what is behind it: a beige rim, the width of the page's own gutter
-   between tiles. Over the beige page (where it spends most of its life) the rim
-   is the page, so nothing changes; the moment it crosses the slab it becomes a
-   separate object again. */
 .mobile-cta {
   position: fixed;
   inset-inline: 12px;
   inset-block-end: 12px;
   z-index: 55;
   display: none;      /* shown from the phone breakpoint down */
+  box-shadow: var(--shadow-lg);
 }
-/* Rim and lift ride the button itself, not the wrapper, so they follow it when
-   a press nudges it down. */
-.mobile-cta .btn { width: 100%; box-shadow: 0 0 0 5px var(--bg), var(--shadow-lg); }
+.mobile-cta .btn { width: 100%; }
 
 /* ---------- Download answer ---------- */
 /* What a press gets on a device that cannot install: the same note (and, on a

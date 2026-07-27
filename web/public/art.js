@@ -405,22 +405,20 @@
 
   /* The question under the hero: one person's whole attention closing in on one
      face. Same vocabulary as the message scenes - real photos, flat rings, the
-     dashed link that means "these two are connected" - but it is the only scene
-     drawn to be read over a filled slab, so every colour it uses is a var the
-     slab re-points at white. The crowd sits OUTSIDE the rings, faded and joined
-     to nobody: they are the twenty other conversations, and none of them is
-     looking at you. */
+     dashed link that means "these two are connected", the brand rim on whoever
+     is lit. The crowd sits OUTSIDE the rings, faded and joined to nobody: they
+     are the twenty other conversations, and none of them is looking at you. */
   ART.focus = function () {
     var cx = 336, cy = 200;
     return svg(600, 400,
       [[62, 52, 26, F(11)], [130, 342, 22, F(16)], [524, 66, 21, F(18)], [548, 328, 27, F(21)]]
-        .map(function (g) { return avatar(g[0], g[1], g[2], g[3], 0.24); }).join('') +
-      ring(cx, cy, 152, LINE, 3, op(0.45)) +
-      ring(cx, cy, 118, LINE, 4, op(0.7)) +
-      ring(cx, cy, 88, LINE, 6) +
-      line('M100 200H' + (cx - 152), LINE, 3, ' stroke-dasharray="7 9"') +
-      avatar(58, 200, 40, F(4), null, SURFACE) +
-      avatar(cx, cy, 62, F(1), null, SURFACE)
+        .map(function (g) { return avatar(g[0], g[1], g[2], g[3], 0.28); }).join('') +
+      ring(cx, cy, 152, ACCENT, 3, op(0.16)) +
+      ring(cx, cy, 118, ACCENT, 4, op(0.3)) +
+      ring(cx, cy, 88, ACCENT, 6, op(0.5)) +
+      line('M100 200H' + (cx - 152), ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"') +
+      avatar(58, 200, 40, F(4), null, ACCENT) +
+      avatar(cx, cy, 62, F(1), null, BRAND)
     );
   };
 
