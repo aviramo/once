@@ -159,7 +159,7 @@
       users: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><circle cx="9" cy="8.6" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M3.6 18.4a5.4 5.4 0 0 1 10.8 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M15.6 6.2a3 3 0 0 1 0 5.9M17 18.4a5.4 5.4 0 0 0-2.2-4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
       spark: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M12 3.5c.6 4 1.9 5.3 5.9 5.9-4 .6-5.3 1.9-5.9 5.9-.6-4-1.9-5.3-5.9-5.9 4-.6 5.3-1.9 5.9-5.9z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
       check: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.5"/><path d="M8.4 12.2l2.4 2.4 4.8-4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      sliders: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="7" r="2.1" fill="currentColor"/><circle cx="15" cy="12" r="2.1" fill="currentColor"/><circle cx="8" cy="17" r="2.1" fill="currentColor"/></svg>',
+      calendar: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><rect x="3.6" y="5.4" width="16.8" height="14" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M3.6 10h16.8M8.4 3.6v3.2M15.6 3.6v3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="15.2" y="12.6" width="3" height="3" rx="1" fill="currentColor"/></svg>',
       handshake: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M12 8l2-1.6a2.4 2.4 0 0 1 3 .2l3 2.7M12 8l-2-1.6a2.4 2.4 0 0 0-3 .2L4 9.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9.3v4.2l4 3.4a1.8 1.8 0 0 0 2.6-.3l.4-.5.7.5a1.7 1.7 0 0 0 2.4-.4l.3-.5.6.3a1.6 1.6 0 0 0 2-2.4L20 9.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       ban: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="1.6"/><path d="M6.4 6.4l11.2 11.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
       flag: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M6 21V4M6 5h9l-1.5 3L15 11H6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -237,9 +237,9 @@
               title: 'לוז הורים',
               body: 'ולהורים יש גם לוז. מסמנים פעם אחת את הימים שהילדים איתכם, והלוז נשמר פרטי ולא מוצג לאף משתמש. Once מעלה למעלה אנשים שהזמן הפנוי שלהם נופל יחד עם שלכם, ואם תרצו אפשר לשתף את הימים הפנויים בצ׳אט.',
               chips: [
-                { icon: 'sliders', label: 'מסמנים פעם אחת' },
                 { icon: 'clock', label: 'התאמה לפי ימים פנויים' },
-                { icon: 'eye', label: 'הלוז לא מוצג לאף אחד' }
+                { icon: 'calendar', label: 'התאמה לפי סופי שבוע' },
+                { icon: 'eye', label: 'הלו״ז לא מוצג לאף אחד' }
               ]
             },
             media: { name: 'לוז משותף', desc: 'שני שבועות מסומנים זה מול זה, והיום שבו שני הצדדים פנויים מודגש.' }
@@ -320,9 +320,9 @@
               title: 'The parent schedule',
               body: 'And parents get a schedule too. Mark the days the kids are with you once, and that schedule stays private and is never shown to any user. Once moves up people whose free time lands together with yours, and if you want to, you can share your free days in the chat.',
               chips: [
-                { icon: 'sliders', label: 'Marked once' },
                 { icon: 'clock', label: 'Matched on free days' },
-                { icon: 'eye', label: 'Never shown to anyone' }
+                { icon: 'calendar', label: 'Matched on weekends' },
+                { icon: 'eye', label: 'Your schedule is never shown' }
               ]
             },
             media: { name: 'A schedule that lines up', desc: 'Two marked weeks facing each other, with the day both sides are free highlighted.' }
