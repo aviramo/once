@@ -2,6 +2,11 @@
 
 This file is the **operational contract** for the project: how to act, publish, and structure the mobile UI. It deliberately does **not** re-document the data model, DB schema, or game logic in full — those live in the code and migrations and are the source of truth there. Introspect the live DB (RPC bodies via `pg_get_functiondef`) and read `supabase/functions/` + `mobile/src/` when you need the exact shape.
 
+## Reference docs (`docs/`)
+
+Aids for humans, never a source of truth — the code and migrations are. Rewrite them from the code when asked; never let one of them drive a code decision.
+- **`docs/APP_OVERVIEW.md`** — the app's explanation document (Hebrew): product, state machines, rules, server, client, site. Written for someone with no code access (a new person, or an external assistant like ChatGPT). The user asks for it to be refreshed periodically — on such a request, re-derive it from `HEAD` **plus the working tree**, keep its section structure, and update §16 ("what changed") + the version line in the header.
+
 ## Operational autonomy
 
 Claude has blanket upfront permission for every action it can perform locally or via available tooling. **Anything Claude can do alone, Claude does alone** — edit any file (incl. `app.json`/`eas.json`/`package.json`/`CLAUDE.md`), run `npm`/`eas`/git, apply Supabase migrations, deploy edge functions, hit any API with credentials it already has. Don't narrate intent or ask "should I run X?" — run it and report. Long-running commands (EAS builds, deploys) → run in background and keep working.
