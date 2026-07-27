@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=57" />
+  <link rel="stylesheet" href="styles.css?v=58" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -142,7 +142,7 @@
   </div>
 
   <script src="store.js?v=1"></script>
-  <script src="art.js?v=6"></script>
+  <script src="art.js?v=7"></script>
   <script>
   (function () {
     'use strict';
@@ -412,13 +412,20 @@
         '</div>';
     }
 
-    /* The one question on the page. It sits between the hero and the messages
-       and speaks to the reader instead of describing the product, so it is a
-       plain stanza with no card, no chips and no illustration. */
+    /* The one question on the page. It speaks to the reader instead of
+       describing the product, so it gets the one treatment nothing else on the
+       page has: a filled purple slab, inverted out of the beige, carrying the
+       focus drawing beside it. */
     function buildAsk() {
       var s = T.ask;
-      return '<p class="ask-q reveal">' + esc(s.question) + '</p>' +
-        '<p class="ask-a reveal">' + esc(s.answer) + '</p>';
+      var art = (window.ART && window.ART.focus)
+        ? '<div class="ask-art">' + window.ART.focus() + '</div>' : '';
+      return '<div class="ask-slab reveal">' +
+          '<div class="ask-copy">' +
+            '<p class="ask-q">' + esc(s.question) + '</p>' +
+            '<p class="ask-a">' + esc(s.answer) + '</p>' +
+          '</div>' + art +
+        '</div>';
     }
 
     /* Every pillar is the same section with the media on alternating sides, so

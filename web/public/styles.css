@@ -348,24 +348,54 @@ strong { color: var(--ink); font-weight: 600; }
 }
 
 /* ---------- The question ----------
-   The one line on the page addressed to the reader, in the gap the hero used
-   to leave empty. It borrows the hero's start alignment and the brand purple
-   of an accented headline, and carries nothing else: no card, no chips, no
-   drawing, so it reads as a pause between the stanza and the four messages. */
+   The one line on the page addressed to the reader, in the gap the hero used to
+   leave empty, and the only block that inverts the page: a filled brand-purple
+   slab where everything else is beige with white cards. It breaks the rhythm
+   with the palette the page already has (no new colour, no gradient, the same
+   --r-lg corners and the same drawn-vector art) rather than with a new style,
+   so it reads as a held breath between the stanza and the four messages. */
 .ask { padding-block: clamp(24px, 4vw, 48px); }
+.ask-slab {
+  background: var(--brand);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: clamp(28px, 4.5vw, 56px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: clamp(20px, 3vw, 44px);
+  overflow: hidden;
+}
 .ask-q {
-  font-size: clamp(1.4rem, 3vw, 2.05rem);
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: clamp(1.5rem, 3.4vw, 2.35rem);
+  font-weight: 800;
+  line-height: 1.15;
   letter-spacing: -0.02em;
-  color: var(--brand);
-  max-width: 20ch;
+  color: var(--brand-ink);
+  max-width: 17ch;
 }
 .ask-a {
-  margin-top: 14px;
-  font-size: clamp(1.05rem, 1.5vw, 1.18rem);
-  color: var(--ink-2);
-  max-width: var(--measure);
+  margin-top: 16px;
+  font-size: clamp(1.02rem, 1.4vw, 1.16rem);
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 44ch;
+}
+/* The drawing is the same art.js vocabulary, re-pointed: on the slab the lines
+   and the rims that are beige everywhere else have to be white, so the block
+   overrides the palette vars the artwork reads instead of holding colours of
+   its own. */
+.ask-art {
+  --art-line: rgba(255, 255, 255, 0.40);
+  --surface: #FFFFFF;
+  aspect-ratio: 3 / 2;
+  align-self: center;
+  min-inline-size: 0;
+}
+[dir="rtl"] .ask-art .art { transform: scaleX(-1); }
+@media (max-width: 860px) {
+  .ask-slab { grid-template-columns: 1fr; }
+  .ask-q, .ask-a { max-width: none; }
+  .ask-art { aspect-ratio: 16 / 9; }
 }
 
 /* ---------- Media placeholder component ---------- */
