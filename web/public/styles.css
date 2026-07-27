@@ -347,6 +347,27 @@ strong { color: var(--ink); font-weight: 600; }
   background: var(--accent);
 }
 
+/* ---------- The question ----------
+   The one line on the page addressed to the reader, in the gap the hero used
+   to leave empty. It borrows the hero's start alignment and the brand purple
+   of an accented headline, and carries nothing else: no card, no chips, no
+   drawing, so it reads as a pause between the stanza and the four messages. */
+.ask { padding-block: clamp(24px, 4vw, 48px); }
+.ask-q {
+  font-size: clamp(1.4rem, 3vw, 2.05rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--brand);
+  max-width: 20ch;
+}
+.ask-a {
+  margin-top: 14px;
+  font-size: clamp(1.05rem, 1.5vw, 1.18rem);
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
 /* ---------- Media placeholder component ---------- */
 .media {
   position: relative;

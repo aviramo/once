@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=56" />
+  <link rel="stylesheet" href="styles.css?v=57" />
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -91,6 +91,13 @@
       <div class="container">
         <div id="sec-hero"></div>
       </div>
+    </section>
+
+    <!-- One question between the hero and the messages (user directive
+         2026-07-27): the only line on the page that asks the reader something
+         instead of describing the product. -->
+    <section class="ask">
+      <div class="container"><div id="sec-ask"></div></div>
     </section>
 
     <!-- The page carries FOUR messages and nothing else (user directive
@@ -185,6 +192,10 @@
           sub: 'כי הגיע הזמן לשבור את כל ההרגלים הישנים. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס.',
           pills: ['אדם אחד בכל פעם', 'זמן אמת', 'מעגלים משותפים', 'לוז של הורים'],
         },
+        ask: {
+          question: 'מתי בפעם האחרונה מישהו שם עליכם את כל הפוקוס?',
+          answer: 'באפליקציות אחרות אתם אחד מעשרים שמדברים איתו במקביל. ב-Once יש רק אדם אחד בצד השני, ובאותו רגע אתם היחידים שהוא רואה.'
+        },
         pillars: [
           {
             eyebrow: 'אדם אחד בכל פעם',
@@ -267,6 +278,10 @@
           title: { lines: ['A dating app', 'that refuses to be', 'a dating app'], accent: true },
           sub: "Because it's time to break every old habit. No feed, no swiping, no twenty open chats. One person on the screen, 10 minutes to answer an invitation, and from there you stay focused.",
           pills: ['One person at a time', 'Real time', 'Shared circles', 'Parent schedules'],
+        },
+        ask: {
+          question: 'When was the last time someone gave you their whole attention?',
+          answer: 'On other apps you are one of twenty they are talking to at once. On Once there is a single person on the other side, and right now you are the only one they see.'
         },
         pillars: [
           {
@@ -397,6 +412,15 @@
         '</div>';
     }
 
+    /* The one question on the page. It sits between the hero and the messages
+       and speaks to the reader instead of describing the product, so it is a
+       plain stanza with no card, no chips and no illustration. */
+    function buildAsk() {
+      var s = T.ask;
+      return '<p class="ask-q reveal">' + esc(s.question) + '</p>' +
+        '<p class="ask-a reveal">' + esc(s.answer) + '</p>';
+    }
+
     /* Every pillar is the same section with the media on alternating sides, so
        the four messages are one parameterised builder and never four near-copies.
        PILLARS is the single source of order: nav labels, section ids and artwork
@@ -507,6 +531,7 @@
       // sections
       set('sec-banner', buildBanner());
       set('sec-hero', buildHero());
+      set('sec-ask', buildAsk());
       set('sec-pillars', buildPillars());
       set('sec-final', buildFinal());
 
