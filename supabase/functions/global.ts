@@ -210,6 +210,9 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'group_join_f': 'ביקשה להצטרף לקבוצה {group}',
     'group_join': 'ביקש להצטרף לקבוצה {group}',
     'group_approved': 'בקשתך להצטרף לקבוצה {group} אושרה',
+    // Nudge from the cron sweep: a queue nobody answered for two days. No
+    // actor, so the push title falls back to the app name.
+    'group_pending': '{count} בקשות הצטרפות מחכות לתשובה בקבוצה {group}',
   },
   en: {
     'invite-in': 'Chat invitation',
@@ -233,6 +236,7 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'friend_link': 'Connected with you as a friend on Once',
     'group_join': 'Asked to join {group}',
     'group_approved': 'Your request to join {group} was approved',
+    'group_pending': '{count} join requests are waiting in {group}',
   },
 };
 

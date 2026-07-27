@@ -1,9 +1,15 @@
 import Log from "../log.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
-import { PushToken, PUSH_BODY } from "../global.ts";
+import { PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
 
-async function firePush(log: Log, target_user_id: string, code: string, actor_id?: string) {
+async function firePush(
+  log: Log,
+  target_user_id: string,
+  code: string,
+  actor_id?: string,
+  extra?: { group_id?: string; group_name?: string; count?: number },
+) {
   type PushRow = { user_id: string; name: string | null; data?: { push_token?: unknown; lang?: string } };
   const ids = actor_id ? [target_user_id, actor_id] : [target_user_id];
   const data = await Tools.invoke(
@@ -26,15 +32,27 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
   if (!token || token.type !== "expo" || !token.token) return;
 
   const lang = typeof targetData?.lang === "string" ? targetData.lang : "he";
-  const bodyText = (PUSH_BODY[lang] ?? PUSH_BODY.he)[code] ?? "Once";
+  // Sweep pushes about a GROUP live in PUSH_TITLE with the rest of the group
+  // lifecycle (that is where {group} bodies are kept); everything else this
+  // function sends is a PUSH_BODY code.
+  const raw = (PUSH_TITLE[lang] ?? PUSH_TITLE.he)[code]
+    ?? (PUSH_BODY[lang] ?? PUSH_BODY.he)[code]
+    ?? "Once";
+  const bodyText = raw
+    .replace("{group}", extra?.group_name ?? "")
+    .replace("{count}", String(extra?.count ?? ""));
   const title = typeof actorRow?.name === "string" && actorRow.name ? actorRow.name : "Once";
 
   const payload: Record<string, unknown> = {
     type: code,
-    collapseId: actor_id ? `${code}:${actor_id}` : code,
+    collapseId: extra?.group_id ?? (actor_id ? `${code}:${actor_id}` : code),
     title,
     body: bodyText,
   };
+  // Same deep-link contract the app function uses: the tap handler routes on
+  // these two.
+  if (extra?.group_id) payload.group_id = extra.group_id;
+  if (actor_id) payload.actor_id = actor_id;
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
   const res = await Tools.notify(entry, token, payload);
   // Dead Expo token → clear it + recompute availability so the user leaves
@@ -46,10 +64,15 @@ async function firePush(log: Log, target_user_id: string, code: string, actor_id
   }
 }
 
-function dispatch(log: Log, notify: Array<{ user_id: string; code: string; actor_id?: string }>) {
+function dispatch(
+  log: Log,
+  notify: Array<{ user_id: string; code: string; actor_id?: string; group_id?: string; group_name?: string; count?: number }>,
+) {
   for (const n of notify) {
     if (!n.user_id) continue;
-    EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, n.actor_id));
+    EdgeRuntime.waitUntil(firePush(log, n.user_id, n.code, n.actor_id, {
+      group_id: n.group_id, group_name: n.group_name, count: n.count,
+    }));
   }
 }
 
@@ -90,8 +113,15 @@ async function handleCron(log: Log) {
   // rows that hit the daily cap earlier and are now under it again). Bounded
   // at 200 rows a tick and idempotent, so most ticks credit nothing.
   const referrals = await Tools.rpc(log, "app_referral_sweep", {});
+  // Join requests rot in queues. Two days without an answer and the staff get
+  // ONE nudge per group (user directive 2026-07-27), stamped on the rows so it
+  // never repeats. Most ticks nudge nobody.
+  const nudge = await Tools.rpc(log, "app_join_nudge_sweep", {});
 
-  dispatch(log, [...(expire?.notify ?? []), ...(resync?.notify ?? []), ...(referrals?.notify ?? [])]);
+  dispatch(log, [
+    ...(expire?.notify ?? []), ...(resync?.notify ?? []),
+    ...(referrals?.notify ?? []), ...(nudge?.notify ?? []),
+  ]);
 
   return log.success({
     processed: (expire?.processed ?? 0) + (resync?.processed ?? 0),

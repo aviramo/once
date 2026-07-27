@@ -76,7 +76,10 @@ export const PullContext = createContext<PullCtx | null>(null)
 export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestureHandlerProps>(
   (props, ref) => {
     const ctx = useContext(PullContext)
-    const { onScroll, onScrollEndDrag, onMomentumScrollEnd, scrollEnabled, ...rest } = props
+    const {
+      onScroll, onScrollBeginDrag, onScrollEndDrag,
+      onMomentumScrollBegin, onMomentumScrollEnd, scrollEnabled, ...rest
+    } = props
     // A freshly-mounted ScrollView is always at offset 0. `onScroll` does NOT
     // fire for that initial position, and a programmatic scrollTo on a card
     // swap doesn't reliably fire it either — so without this the pull
@@ -96,15 +99,34 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     const syncAtTop = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       ctx?.setScrollAtTop(e.nativeEvent.contentOffset.y < 8)
     }
+    // A scroll that is still FLYING is not "at the top", even for the frames
+    // where it passes offset 0 (user directive 2026-07-27: flinging the list
+    // back up must never hand the surface to the dismiss pan). The finger that
+    // catches a flick lands mid-momentum, and the pan latches its decision at
+    // touch-down — so the flag has to stay false for the whole ride and only
+    // tell the truth once the list has come to rest.
+    const momentum = useRef(false)
     const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      syncAtTop(e)
+      if (!momentum.current) syncAtTop(e)
       onScroll?.(e)
+    }
+    const handleMomentumScrollBegin = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      momentum.current = true
+      ctx?.setScrollAtTop(false)
+      onMomentumScrollBegin?.(e)
+    }
+    const handleScrollBeginDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      // A finger on the list cancels any momentum; from here the drag's own
+      // scroll events carry the truth again.
+      momentum.current = false
+      onScrollBeginDrag?.(e)
     }
     const handleScrollEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       syncAtTop(e)
       onScrollEndDrag?.(e)
     }
     const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      momentum.current = false
       syncAtTop(e)
       onMomentumScrollEnd?.(e)
     }
@@ -114,7 +136,9 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
         {...rest}
         ref={ref}
         onScroll={handleScroll}
+        onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={handleScrollEndDrag}
+        onMomentumScrollBegin={handleMomentumScrollBegin}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         nestedScrollEnabled
         simultaneousHandlers={ctx ? [ctx.panRef, ...ctx.extraRefs].filter(r => r.current) : undefined}
@@ -364,6 +388,18 @@ export function usePullBehavior(opts: {
   // tracks the finger continuously instead of snapping back when the inner
   // scroll briefly reports not-at-top.
   const activated = useSharedValue(false)
+  // Sheet only: where the PULL is measured from, and how much of the finger's
+  // travel was spent scrolling before it. A drag that begins mid-list scrolls
+  // the list to its top and only THEN takes the surface (user directive
+  // 2026-07-27), so the two cannot be the same point: without this the pull
+  // would open by everything the finger already spent on the list.
+  const dragOrigin = useSharedValue({ x: 0, y: 0 })
+  const pullBase = useSharedValue(0)
+  // Sheet only: does the inner scroll currently have nothing left to give
+  // (at its top, or the touch landed on chrome that never scrolls)? Not a
+  // touch-down latch: it flips both ways during a drag, and the frame it turns
+  // ON is where the pull re-origins.
+  const scrollSpent = useSharedValue(false)
   const [pulling, setPulling] = useState(false)
   const panRef = useRef<GestureType>(undefined as unknown as GestureType)
 
@@ -377,18 +413,20 @@ export function usePullBehavior(opts: {
   // that reopened without the reset would mount already translated off-screen.
   const reset = useCallback(() => { pullY.value = 0; slidOut.value = false }, [pullY, slidOut])
   // Programmatic commit — the EXACT ride-off the gesture's onEnd performs
-  // once the finger crossed commitDistance, so a BUTTON ("not now") skips
-  // with the IDENTICAL motion as a swipe (user: "tapping the skip button
-  // must drop the card like a swipe"). slidOut ⇒ the page1 promote reaction
-  // fires when the ride reaches the bottom; onCommit runs the skip itself.
-  // Guarded: scrollPan only, enabled only, no-op while already sliding.
+  // once the finger crossed commitDistance, so a BUTTON skips or closes with
+  // the IDENTICAL motion as a swipe (user: "tapping the skip button must drop
+  // the card like a swipe"; and 2026-07-27: a page closed by its back control
+  // must slide down as though the manual pull carried on). slidOut ⇒ the page1
+  // promote reaction fires when the ride reaches the bottom; onCommit runs the
+  // skip / close itself.
+  // Guarded: enabled only, no-op while already sliding.
   const commit = useCallback(() => {
-    if (activation !== 'scrollPan' || !enabled || slidOut.value) return
+    if (!enabled || slidOut.value) return
     slidOut.value = true
-    pullY.value = withTiming(screenH, { easing: Easing.out(Easing.cubic) })
+    pullY.value = withTiming(screenSpan, { easing: Easing.out(Easing.cubic) })
     onCommit()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activation, enabled, onCommit, screenH])
+  }, [enabled, onCommit, screenSpan])
 
   // Called unconditionally (rules of hooks); only handed out for scrollPan.
   const ctx = usePullCtx(panRef, scrollAtTopSV, pulling, engaged, pullY)
@@ -453,8 +491,13 @@ export function usePullBehavior(opts: {
         .onTouchesDown(e => {
           'worklet'
           activated.value = false
+          scrollSpent.value = false
+          pullBase.value = 0
           const tch = e.allTouches[0]
-          if (tch) swipeStart.value = { x: tch.absoluteX, y: tch.absoluteY }
+          if (tch) {
+            swipeStart.value = { x: tch.absoluteX, y: tch.absoluteY }
+            dragOrigin.value = { x: tch.absoluteX, y: tch.absoluteY }
+          }
         })
         .onTouchesMove((e, manager) => {
           'worklet'
@@ -464,33 +507,67 @@ export function usePullBehavior(opts: {
           if (activated.value) return
           const tch = e.allTouches[0]
           if (!tch) return
-          const dx = tch.absoluteX - swipeStart.value.x
-          const dy = tch.absoluteY - swipeStart.value.y
-          if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
           if (axis === 'x') {
             // No scrollAtTop gate here: a horizontal drag never competes with
             // a vertical scroll, so the body scrolls freely at any offset and
             // only a sideways-dominant drag takes the surface.
+            const dx = tch.absoluteX - swipeStart.value.x
+            const dy = tch.absoluteY - swipeStart.value.y
+            if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
             const toward = dx * AXIS_X_SIGN
             if (toward > 0 && Math.abs(dx) > Math.abs(dy) * 0.8) { activated.value = true; manager.activate(); return }
             manager.fail()
             return
           }
+          // The order of the two surfaces is fixed: the inner scroll goes
+          // FIRST and the page pull picks up where it runs out (user directive
+          // 2026-07-27). So "is the scroll spent?" is asked on every frame,
+          // never latched at touch-down — the finger may start halfway down a
+          // roster, scroll it to the top, and carry straight on into the pull
+          // without ever lifting.
           const inHeader = headerBottom ? swipeStart.value.y <= headerBottom.value : false
-          if (!scrollAtTopSV.value && !inHeader) { manager.fail(); return }
+          const spent = inHeader || scrollAtTopSV.value
+          if (!spent) {
+            // The list still has room, so this drag is ITS drag. Deliberately
+            // NOT manager.fail(): a failed gesture never comes back, and this
+            // one has to be able to take over the moment the list bottoms out
+            // at its top.
+            scrollSpent.value = false
+            return
+          }
+          if (!scrollSpent.value) {
+            // The frame the scroll ran out. Re-origin here so the pull opens
+            // from where the list stopped rather than jumping down by all the
+            // travel the finger already spent scrolling it.
+            scrollSpent.value = true
+            dragOrigin.value = { x: tch.absoluteX, y: tch.absoluteY }
+            pullBase.value = tch.absoluteY - swipeStart.value.y
+            return
+          }
+          const dx = tch.absoluteX - dragOrigin.value.x
+          const dy = tch.absoluteY - dragOrigin.value.y
+          if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
           if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 0.8) { activated.value = true; manager.activate(); return }
-          manager.fail()
+          // Sideways: nobody's. Upward: the scroll's — and left UNDECIDED, not
+          // failed, because the list will report not-at-top on the next frame
+          // and this same touch can still come back down into a pull.
+          if (Math.abs(dx) > Math.abs(dy)) manager.fail()
         })
         .onUpdate(e => {
           'worklet'
-          const drag = axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY
+          // `pullBase` is the travel that went into the inner scroll before the
+          // pull took over (0 for a drag that owned the surface from the start),
+          // so the surface tracks the finger 1:1 from the point it engaged.
+          const drag = axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY - pullBase.value
           if (drag <= 0) return
           pullY.value = drag
           if (!engaged.value) { engaged.value = true; runOnJS(setPulling)(true) }
         })
         .onEnd(e => {
           'worklet'
-          const travel = axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY
+          // Measured from where the pull engaged, exactly as onUpdate draws it,
+          // so the commit threshold is the distance the SURFACE moved.
+          const travel = axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY - pullBase.value
           const speed = axis === 'x' ? e.velocityX * AXIS_X_SIGN : e.velocityY
           const past = travel >= commitDistance
           const flick = speed > SWIPE_DISMISS_VELOCITY

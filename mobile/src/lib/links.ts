@@ -6,6 +6,14 @@
 // static marketing files; the pages read ?lang= client-side.
 const BRAND_SITE = 'https://once-lake.vercel.app'
 
+/** The support inbox published on the brand site (contact rows on the terms,
+ *  privacy and child-safety pages). The settings "support" row opens the
+ *  device mail composer straight at it. */
+export const SUPPORT_EMAIL = 'once.app.support@gmail.com'
+
+export const supportMailUrl = (subject: string): string =>
+  `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`
+
 export type LegalPage = 'terms' | 'privacy' | 'child-safety'
 
 export const legalUrl = (page: LegalPage, lang: string): string =>

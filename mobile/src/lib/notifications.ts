@@ -99,12 +99,15 @@ export function dismissAllNotifications() {
  * The handler receives the notification `type` code (e.g. 'chat', 'invite-in').
  * Returns a cleanup function — call it on unmount.
  */
-export function addNotificationTapListener(handler: (type: string, groupId?: string) => void): () => void {
+export function addNotificationTapListener(
+  handler: (type: string, groupId?: string, actorId?: string) => void,
+): () => void {
   const sub = Notifications.addNotificationResponseReceivedListener(response => {
     const data = response.notification.request.content.data
     const type = data?.type as string | undefined
     const groupId = typeof data?.group_id === 'string' ? data.group_id : undefined
-    if (type) handler(type, groupId)
+    const actorId = typeof data?.actor_id === 'string' ? data.actor_id : undefined
+    if (type) handler(type, groupId, actorId)
   })
   return () => sub.remove()
 }
@@ -131,6 +134,19 @@ export function getInitialNotificationGroupId(): string | null {
     const r = Notifications.getLastNotificationResponse()
     const gid = r?.notification.request.content.data?.group_id
     return typeof gid === 'string' ? gid : null
+  } catch {
+    return null
+  }
+}
+
+/** WHO the cold-start notification is about: the person who asked to join, or
+ *  the friend who just linked. What lets the tap land on that person's page
+ *  instead of on a list (server sends it as `actor_id` on every push). */
+export function getInitialNotificationActorId(): string | null {
+  try {
+    const r = Notifications.getLastNotificationResponse()
+    const aid = r?.notification.request.content.data?.actor_id
+    return typeof aid === 'string' ? aid : null
   } catch {
     return null
   }

@@ -137,6 +137,19 @@ export const SPINNER = {
   trackOpacity: 0.3,   // faint full circle behind the moving arc
 } as const
 
+// ── Switch ─────────────────────────────────────────────────────────────────
+// The one on/off switch (Switch.tsx): a rounded track with a knob that slides
+// between its ends. `travel` is derived, never a second literal — retuning the
+// track or the knob keeps the ON position correct on its own.
+
+export const SWITCH = {
+  width: 48,
+  height: 28,
+  knob: 24,
+  pad: XS,
+} as const
+export const SWITCH_TRAVEL = SWITCH.width - SWITCH.knob - SWITCH.pad * 2
+
 // ── Stroke widths ──────────────────────────────────────────────────────────
 
 export const STROKE = {
@@ -222,6 +235,30 @@ export const SEARCH_WATCHDOG_SLACK_MS = 6_000
 // a different lift fork via a prop, not by redefining the string.
 
 export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
+
+// ── Loading skeleton ───────────────────────────────────────────────────────
+// Geometry of the placeholder rows that stand in for a list while it loads
+// (SkeletonRows in CommunityBits.tsx). A skeleton row keeps the real row's
+// shape with the avatar and text swapped for beige bars, so the card holds the
+// size it is about to have instead of collapsing around a spinner. It breathes
+// on the app's one PULSE — no second rhythm, no shimmer sweep.
+
+export const SKELETON = {
+  // How many rows to paint. A caller that already knows the real count (it
+  // rides in on the row that opened the screen) passes it and gets that many,
+  // capped here so a 200-member group doesn't paint a screenful of beige.
+  maxRows: 6,
+  // Bar heights: the title line and the muted meta line beneath it.
+  barHeight: 12,
+  metaHeight: 10,
+  // Cycle of title-bar widths (fraction of the row) so consecutive rows look
+  // like names of different lengths. Deterministic on purpose: a random width
+  // would reshuffle every bar on every re-render.
+  widths: [0.62, 0.45, 0.7, 0.52, 0.66, 0.5],
+  // A meta bar is this much of its row's title bar, so the two lines stay in
+  // proportion whichever width the cycle handed the row.
+  metaOfTitle: 0.6,
+} as const
 
 // ── Misc UI dimensions ─────────────────────────────────────────────────────
 

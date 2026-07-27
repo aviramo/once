@@ -31,6 +31,7 @@ import { subscribeToUserChanges, unsubscribeFromUserChanges } from '../src/lib/r
 import { unregisterPushNotifications, dismissAllNotifications } from '../src/lib/notifications'
 import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
+import { clearRosterCaches } from '../src/lib/rosterCache'
 import { stashInviteUrl } from '../src/lib/communities'
 import { DEFAULT_FAMILY, FONT_SCALE } from '../src/fonts'
 import { BG } from '../src/colors'
@@ -154,6 +155,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         unregisterPushNotifications()
         clearSelfAvatar().catch(() => {})
         clearCachedGroups().catch(() => {})
+        clearRosterCaches().catch(() => {})
       }
     })
 

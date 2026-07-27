@@ -184,6 +184,19 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** Nothing to delete in code. Drop this note.
 - **Verify before removing:** check the live mobile version distribution; confirm the floor build renders the "Request to join" state. `SELECT count(*) FROM log WHERE key='redeem_invite' AND created_at > now() - interval '14 days'` shows redeem is still in use, but the pending path only triggers for groups an owner explicitly gated.
 
+### `app/bug_report` endpoint kept alive after the in-app report sheet was deleted
+
+- **Added:** 2026-07-27
+- **Reason:** "Report a bug" became "Support" (user directive 2026-07-27) and the in-app composer was deleted: the settings row now opens the device mail composer at `once.app.support@gmail.com` (`supportMailUrl` in `mobile/src/lib/links.ts`). The new build never posts `/app/bug_report` and never uploads to the `bug-attachments` bucket. The endpoint, the `app_bug_report` RPC, the `bug_reports` table and the web admin page at `/bugs` are deliberately untouched — the deployed build still carries the sheet, and removing them would break those users' sends and hide the reports already filed.
+- **Old shape (kept alive):** `case "bug_report":` in `supabase/functions/app/index.ts` → `app_bug_report(me_id, text, attachment_key)`, the private `bug-attachments` storage bucket, the `bug_reports` table, and the web admin `/bugs` page that reads them.
+- **New shape (preferred):** a `mailto:` to the support inbox. Support threads live in the mailbox, not in the DB.
+- **Safe to remove after:** the support-row build is the live floor **and** the existing `bug_reports` rows have been triaged (they are user data — read them before dropping anything).
+- **How to remove:**
+  - Remove the `case "bug_report":` block from `supabase/functions/app/index.ts`.
+  - `DROP FUNCTION public.app_bug_report(...)` in a follow-up migration; drop the `bug_reports` table and the `bug-attachments` bucket **only** after the rows are triaged.
+  - Delete `web/src/app/[lang]/bugs/` and its entry points in `web/src/app/[lang]/_components/AdminShell.tsx`.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'bug_report' AND created_at > now() - interval '14 days'`. Zero hits = no live sender left.
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.

@@ -10,16 +10,16 @@
 // the shared Avatar / memberLabel primitives, so an owner here looks identical
 // to a member in the Communities sheet. Ordered smallest-group-first.
 import { useState } from 'react'
-import { View, StyleSheet, ActivityIndicator, Pressable } from 'react-native'
+import { View, StyleSheet, Pressable } from 'react-native'
 import { Text } from './AppText'
 import { BottomSheet } from './BottomSheet'
-import { Avatar, memberLabel, AVATAR } from './CommunityBits'
+import { Avatar, SkeletonRows, AVATAR } from './CommunityBits'
 import { GroupsIcon } from './icons'
 import { JoinedGroupSheet } from './CommunitiesPage'
 import { tap } from '../lib/haptics'
-import { type SharedGroup } from '../lib/communities'
+import { memberLabel, type SharedGroup } from '../lib/communities'
 import { t } from '../i18n'
-import { XS, SM, MD, LG, RADIUS, TEXT, WEIGHT } from '../tokens'
+import { XS, SM, MD, RADIUS, TEXT, WEIGHT } from '../tokens'
 import { INK, GREEN, GREEN_HALF, GREEN_SOFT, SURFACE, BORDER_SOFT } from '../colors'
 
 export function SharedGroupsPopup({
@@ -35,7 +35,10 @@ export function SharedGroupsPopup({
         <View style={styles.wrap}>
           <Text style={styles.title}>{t('communities.sharedGroupsTitle')}</Text>
           {groups == null ? (
-            <View style={styles.loading}><ActivityIndicator color={GREEN} /></View>
+            // Same three-line rows the list is about to render, so the sheet
+            // opens at roughly its final height instead of growing under the
+            // user's thumb.
+            <View style={styles.card}><SkeletonRows rows={2} lines={3} /></View>
           ) : (
             <View style={styles.card}>
               {groups.map((g, i) => (
@@ -81,5 +84,4 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0, gap: XS },
   name: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: INK },
   meta: { fontSize: TEXT.sm, color: GREEN_HALF },
-  loading: { padding: LG, alignItems: 'center' },
 })

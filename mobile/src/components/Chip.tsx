@@ -69,10 +69,24 @@ type ChipTone = keyof typeof TONES
 export type ChipSegment =
   | { text: string; bold?: boolean }
   | { badges: string[]; ltr?: boolean }
-  // A forced line break: a zero-height full-width spacer that pushes the
-  // segments after it onto their own line in the wrapping row (the weekend
+  // A forced line break: the segments after it start a fresh line (the weekend
   // status wants to stand on a line of its own, not trail the kids sentence).
   | { br: true }
+
+// Split a segment list into lines at each `br`. The lines then render as a
+// COLUMN of wrapping rows rather than one row with a full-width spacer: a
+// flexBasis:'100%' break item makes the wrap row claim the entire available
+// width, which stretched the chip tile edge-to-edge instead of letting it hug
+// its text (user directive 2026-07-27). A column hugs the widest line.
+type ChipRun = Exclude<ChipSegment, { br: true }>
+function segmentLines(segments: ChipSegment[]): ChipRun[][] {
+  const lines: ChipRun[][] = [[]]
+  for (const seg of segments) {
+    if ('br' in seg) lines.push([])
+    else lines[lines.length - 1].push(seg)
+  }
+  return lines.filter(l => l.length)
+}
 
 // The pale-purple mini-chip. Single source for both the "+N" groups hint and
 // the family chip's age/weekend pills so they read as one fabric.
@@ -216,29 +230,30 @@ export function Chip({
     >
       {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(fg)}</View> : null}
       {segments ? (
-        // A wrapping row of text runs + mini-chip clusters. Each text run is its
-        // own flex item so it wraps at word boundaries; a badge cluster flows
-        // inline. Same direction as the chip so items read start-to-end.
-        <View style={styles.segments}>
-          {segments.map((seg, i) =>
-            'br' in seg ? (
-              // Full-width zero-height spacer: forces the flex-wrap row to break
-              // here, so the following segment starts a fresh line.
-              <View key={i} style={styles.segmentBreak} />
-            ) : 'badges' in seg ? (
-              <View key={i} style={styles.badgeCluster}>
-                {seg.badges.map((b, j) => <Badge key={j} text={b} ltr={seg.ltr} />)}
-              </View>
-            ) : (
-              <Text
-                key={i}
-                style={[styles.chipText, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
-                maxFontSizeMultiplier={FONT_SCALE.heading}
-              >
-                {seg.text}
-              </Text>
-            ),
-          )}
+        // A column of wrapping rows: one row per `br`-delimited line, each row a
+        // run of text + mini-chip clusters. Each text run is its own flex item
+        // so it wraps at word boundaries; a badge cluster flows inline. Same
+        // direction as the chip so items read start-to-end.
+        <View style={styles.segmentColumn}>
+          {segmentLines(segments).map((line, li) => (
+            <View key={li} style={styles.segments}>
+              {line.map((seg, i) =>
+                'badges' in seg ? (
+                  <View key={i} style={styles.badgeCluster}>
+                    {seg.badges.map((b, j) => <Badge key={j} text={b} ltr={seg.ltr} />)}
+                  </View>
+                ) : (
+                  <Text
+                    key={i}
+                    style={[styles.chipText, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
+                    maxFontSizeMultiplier={FONT_SCALE.heading}
+                  >
+                    {seg.text}
+                  </Text>
+                ),
+              )}
+            </View>
+          ))}
         </View>
       ) : plusPill ? (
         // Name + "+N": word-runs in a wrap row directed by the name's script, so
@@ -465,11 +480,15 @@ const styles = StyleSheet.create({
     columnGap: XS,
     rowGap: XS,
   },
-  // Zero-height, full-width flex item: consumes the whole row so the next
-  // segment wraps below it (a hard line break inside the wrapping segments row).
-  segmentBreak: {
-    flexBasis: '100%',
-    height: 0,
+  // The stack of `br`-delimited lines. alignItems:'flex-start' so each line hugs
+  // its own content and the chip tile ends up as wide as the WIDEST line, not as
+  // wide as the column it sits in.
+  segmentColumn: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    rowGap: XS,
+    flexShrink: 1,
   },
   // The group-name "+N" flow: word-runs + trailing pill. `direction` is set
   // inline per label script (see render). columnGap approximates a word space

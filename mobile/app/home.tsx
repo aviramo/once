@@ -12,7 +12,7 @@ import { nameFromTitle } from '../src/lib/profileTitle'
 import { matchImageUrls } from '../src/lib/profileImages'
 import { useUserStore, resolveLocationType, selectProfileBuilt, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
-import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, getInitialNotificationGroupId, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
+import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, getInitialNotificationGroupId, getInitialNotificationActorId, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
@@ -23,7 +23,7 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedGroupsPopup } from '../src/components/SharedGroupsPopup'
-import { sharedGroups, flushPendingInvite, watchInvites, type SharedGroup } from '../src/lib/communities'
+import { sharedGroups, flushPendingInvite, watchInvites, type SharedGroup, type CommunitiesTarget } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
@@ -858,20 +858,41 @@ export default function HomePage() {
   // its manage page (where the join request waits), group_approved on its member
   // sheet (the approved requester is a plain member, not staff). The sheet
   // resolves which of the two from the caller's own membership.
-  const GROUP_CODES = new Set(['group_join', 'group_approved'])
+  const GROUP_CODES = new Set(['group_join', 'group_approved', 'group_pending'])
   // Friend-lifecycle pushes open the friends list — where an incoming request's
   // approve/decline lives, and where a new friend shows up.
   const FRIEND_CODES = new Set(['friend_request', 'friend_accept', 'friend_link'])
-  // The launch notification is read DURING RENDER, group_id included: the effect
-  // below clears it, and effects run in declaration order, so reading the id
-  // later resolved to nothing and a targeted group deep-link opened the bare hub.
-  type InitialNotif = { overlay: Overlay; groupId: string | null; friends: boolean }
+  // A push about a PERSON lands on that person's page, with the buttons that
+  // page owns (user directive 2026-07-27): a join request opens the requester's
+  // profile with approve/decline, a new friend opens their page in My Friends.
+  // The 48h queue nudge opens the queue. Everything else keeps its old landing.
+  const communitiesTargetFor = useCallback(
+    (type: string, groupId?: string | null, actorId?: string | null): CommunitiesTarget | null => {
+      if (type === 'group_join' && groupId && actorId) return { kind: 'request', groupId, userId: actorId }
+      if (type === 'group_pending' && groupId) return { kind: 'queue', groupId }
+      if (GROUP_CODES.has(type) && groupId) return { kind: 'group', groupId }
+      if (type === 'friend_link' && actorId) return { kind: 'friend', userId: actorId }
+      if (FRIEND_CODES.has(type)) return { kind: 'friends' }
+      return null
+    },
+    // GROUP_CODES / FRIEND_CODES are module-level constants in this scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+  // The launch notification is read DURING RENDER, its ids included: the effect
+  // below clears it, and effects run in declaration order, so reading the ids
+  // later resolved to nothing and a targeted deep-link opened the bare hub.
+  type InitialNotif = { overlay: Overlay; target: CommunitiesTarget | null }
   const initialNotif = useMemo<InitialNotif | null>(() => {
     const type = getInitialNotificationType()
     if (!type) return null
-    if (CHAT_CODES.has(type)) return { overlay: 'chat', groupId: null, friends: false }
-    if (GROUP_CODES.has(type)) return { overlay: 'communities', groupId: getInitialNotificationGroupId(), friends: false }
-    if (FRIEND_CODES.has(type)) return { overlay: 'communities', groupId: null, friends: true }
+    if (CHAT_CODES.has(type)) return { overlay: 'chat', target: null }
+    if (GROUP_CODES.has(type) || FRIEND_CODES.has(type)) {
+      return {
+        overlay: 'communities',
+        target: communitiesTargetFor(type, getInitialNotificationGroupId(), getInitialNotificationActorId()),
+      }
+    }
     return null
   }, [])
   useEffect(() => {
@@ -885,8 +906,7 @@ export default function HomePage() {
     if (initialNotif?.overlay === 'chat' || useUserStore.getState().profile?.state === 'chat') {
       setOverlays(['chat'])
     } else if (initialNotif?.overlay === 'communities') {
-      if (initialNotif.groupId) setCommunitiesTarget(initialNotif.groupId)
-      if (initialNotif.friends) setCommunitiesInitialView('friends')
+      if (initialNotif.target) setCommunitiesTarget(initialNotif.target)
       setOverlays(['communities'])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -916,25 +936,20 @@ export default function HomePage() {
   const openProfileSheet = useCallback(() => openOverlay('profile'), [openOverlay])
   const closeProfileSheet = useCallback(() => closeOverlay('profile'), [closeOverlay])
   const openCommunities = useCallback(() => openOverlay('communities'), [openOverlay])
-  // The hub's internal view to open on (a friend deep-link lands on the friends
-  // list). Keyed off the sheet being closed rather than off each closer, because
-  // hardware-back pops the overlay stack directly and would otherwise leave this
-  // set — opening Communities from the menu later would land on friends.
-  const [communitiesInitialView, setCommunitiesInitialView] = useState<'friends' | null>(null)
   const closeCommunities = useCallback(() => closeOverlay('communities'), [closeOverlay])
-  // On the open→closed TRANSITION only. Not "whenever it is closed": the effects
-  // that route a cold-start push set the view and open the sheet in the same
-  // pass, so this one still sees `closed` on mount and would wipe the view it
-  // was launched with.
+  // Where a notification tap (or a redeemed invite link) wants the Communities
+  // sheet to land: a person's page, a queue, a group, or the friends list. The
+  // sheet seeds its whole page stack from it and then calls onTargetConsumed.
+  const [communitiesTarget, setCommunitiesTarget] = useState<CommunitiesTarget | null>(null)
+  // Cleared on the open→closed TRANSITION only. Not "whenever it is closed":
+  // the effects that route a cold-start push set the target and open the sheet
+  // in the same pass, so this one still sees `closed` on mount and would wipe
+  // the target it was launched with.
   const communitiesWasOpen = useRef(false)
   useEffect(() => {
-    if (communitiesWasOpen.current && !communitiesSheetOpen) setCommunitiesInitialView(null)
+    if (communitiesWasOpen.current && !communitiesSheetOpen) setCommunitiesTarget(null)
     communitiesWasOpen.current = communitiesSheetOpen
   }, [communitiesSheetOpen])
-  // A group a notification tap wants the Communities sheet to open directly
-  // (group_join deep-link). CommunitiesPage drills into it on mount, then calls
-  // onTargetConsumed to clear this.
-  const [communitiesTarget, setCommunitiesTarget] = useState<string | null>(null)
   // The hub owns an internal view stack; hardware-back pops that first and only
   // asks the shell to close the sheet once it is back at its hub (returns false).
   const communitiesBackRef = useRef<() => boolean>(() => false)
@@ -1000,14 +1015,15 @@ export default function HomePage() {
   openOverlayRef.current = openOverlay
   const overlaysGatedRef = useRef(false)
   useEffect(() => {
-    return addNotificationTapListener((type, groupId) => {
+    return addNotificationTapListener((type, groupId, actorId) => {
       if (GROUP_CODES.has(type)) {
-        // Both group codes deep-link to the group they name; the menu family is
+        // Every group code deep-links to the group it names; the menu family is
         // never gated, so Communities is always reachable.
-        if (groupId) setCommunitiesTarget(groupId)
+        const t = communitiesTargetFor(type, groupId, actorId)
+        if (t) setCommunitiesTarget(t)
         openOverlayRef.current('communities')
       } else if (FRIEND_CODES.has(type)) {
-        setCommunitiesInitialView('friends')
+        setCommunitiesTarget(communitiesTargetFor(type, groupId, actorId) ?? { kind: 'friends' })
         openOverlayRef.current('communities')
       } else if (CHAT_CODES.has(type)) {
         if (!overlaysGatedRef.current) openOverlayRef.current('chat')
@@ -1030,7 +1046,7 @@ export default function HomePage() {
   // so this is always reachable.
   useEffect(() => {
     const stop = watchInvites(outcome => {
-      if (outcome.kind === 'friend') setCommunitiesInitialView('friends')
+      if (outcome.kind === 'friend') setCommunitiesTarget({ kind: 'friends' })
       openOverlayRef.current('communities')
     })
     void flushPendingInvite()
@@ -3473,9 +3489,21 @@ export default function HomePage() {
             <CommunitiesPage
               onClose={closeCommunities}
               onRegisterBack={fn => { communitiesBackRef.current = fn }}
-              initialGroupId={communitiesTarget}
-              initialView={communitiesInitialView}
+              target={communitiesTarget}
               onTargetConsumed={() => setCommunitiesTarget(null)}
+              // Tapping myself in a group roster opens MY profile — the same
+              // editable preview the menu opens. It lives in the settings
+              // route, so home (which owns both) hands it in.
+              renderSelfProfile={selfCtx => (
+                <PreviewFieldPage
+                  config={{ kind: 'preview', title: t('settings.profile') }}
+                  onBack={selfCtx.onBack}
+                  dismissGestureRef={selfCtx.dismissGestureRef}
+                  onScrollAtTop={selfCtx.onScrollAtTop}
+                  headerBottomShared={selfCtx.headerBottomShared}
+                  pulling={selfCtx.pulling}
+                />
+              )}
               {...ctx}
             />
           )}

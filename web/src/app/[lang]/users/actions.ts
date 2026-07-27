@@ -151,6 +151,15 @@ export async function setUserHearts(
  * chat, kick viewers, refund held hearts), so nothing dangles. A failed
  * teardown is non-fatal — the flag itself is already committed and is what
  * governs future matching.
+ *
+ * Groups they OWN move with them. Since 20260727120000 the partition also
+ * covers communities, and a group carries its own `groups.is_test` (stamped
+ * from its creator) because it cannot be derived from the owner — five legacy
+ * groups have none. Leaving the groups behind would strand them on the far side
+ * of the boundary from their owner: the owner could no longer find their own
+ * group in search, and members on the new side could not redeem its code.
+ * Membership rows need no fixing — they are edges, and both endpoints are now
+ * partition-checked on every future write.
  */
 async function flipTest(
   admin: ReturnType<typeof createSupabaseAdmin>,
@@ -162,6 +171,14 @@ async function flipTest(
     .update({ is_test: value })
     .in("user_id", ids);
   if (error) return { ok: false, error: error.message };
+  // Owned groups follow the owner across the boundary. Non-fatal on failure for
+  // the same reason as the page teardown below: the user flag is already
+  // committed and is what governs matching.
+  const { error: groupError } = await admin
+    .from("groups")
+    .update({ is_test: value })
+    .in("owner_id", ids);
+  if (groupError) console.warn("[flipTest] owned-group partition flip failed:", groupError.message);
   for (const id of ids) {
     try {
       await admin.rpc("app_admin_release_page1", { p_user_id: id });

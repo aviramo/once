@@ -182,6 +182,10 @@ async function firePush(
   };
   // The mobile tap handler deep-links to this group when present.
   if (extra?.group_id) payload.group_id = extra.group_id;
+  // WHO the push is about. A join request opens that person's card with the
+  // approve/decline pair on it, and a new friend link opens that friend's page
+  // (user directive 2026-07-27: the tap lands on the person, not on a list).
+  payload.actor_id = actor_id;
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
   const res = await Tools.notify(entry, token, payload);
   // Expo says this token is dead (app uninstalled / push receipt revoked).
@@ -673,6 +677,22 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "set_group_hidden": {
+        // The caller steps out of the game inside ONE group they run: its
+        // members stop being offered to them and they stop being offered to its
+        // members (others() drops the pair both ways). A property of the
+        // caller's own membership, not of the group — nobody else is affected
+        // and every other group they are in is untouched.
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("set_group_hidden", "no_group_id", 400);
+        const hidden = body.hidden === true;
+        const result = await Tools.rpc(log, "app_set_group_hidden", { me_id: user.user_id, p_group_id: group_id, p_hidden: hidden });
+        await user.persist(log);
+        if (result?.error) return log.error("set_group_hidden", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
       case "update_group": {
         const group_id = typeof body.group_id === "string" ? body.group_id : null;
         if (!group_id) return log.error("update_group", "no_group_id", 400);
@@ -689,7 +709,11 @@ Deno.serve(async (req) => {
         });
         await user.persist(log);
         if (result?.error) return log.error("update_group", result.error, 400);
-        rpcExtra = result;
+        // Turning a group OPEN admits everyone who was queued, so this action
+        // can approve people — same push an individual approval sends.
+        const { notify: _gn, ...groupExtra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = groupExtra;
         break;
       }
 

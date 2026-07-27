@@ -13,6 +13,19 @@ export const STORAGE = {
    *  so the Play Install Referrer round trip runs once per install and not on
    *  every launch. See src/lib/referral.ts. */
   referralClaimed: 'referral_claimed',
+  /** PREFIX, not a key: one entry per group, `roster_<groupId>`. The member
+   *  list a group screen paints before `app/group_members` answers. Everything
+   *  under this prefix is wiped together on sign-out. See rosterCache.ts. */
+  rosterPrefix: 'roster_',
+  /** PREFIX: one entry per group, the pending join requests a staff member
+   *  paints before `app/group_requests` answers. */
+  joinRequestsPrefix: 'join_requests_',
+  /** The caller's own friends list + incoming requests (`app/my_friends`). */
+  friends: 'my_friends_roster',
+  /** An invite link opened before there was a session to redeem it with. It
+   *  waits here — through sign-up, onboarding, and an app kill in the middle of
+   *  either — until the first flush that finds a session. See communities.ts. */
+  pendingInvite: 'pending_invite',
 } as const
 
 // One-time "seen" flag names stored inside the STORAGE.seenFlags JSON map

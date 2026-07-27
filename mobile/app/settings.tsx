@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, TextInput as RNTextInput } from 'react-native'
+import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Linking, TextInput as RNTextInput } from 'react-native'
 import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,6 +13,7 @@ import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, 
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
+import { Switch } from '../src/components/Switch'
 import { MatchCard, type CardAddChip } from '../src/components/MatchCard'
 import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import type { OverlaySheetBody } from '../src/components/OverlaySheet'
@@ -25,16 +26,16 @@ import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, 
 import { iconScale, inkOffset } from '../src/fonts'
 import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, BORDER_SOFT } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, BugIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, formatNextGrant, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { BugReportPopup } from '../src/components/BugReportPopup'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
-import { communitiesSummary } from '../src/lib/communities'
+import { communitiesSummary, pendingApprovals, metaLine, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
+import { supportMailUrl } from '../src/lib/links'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
 import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
@@ -348,6 +349,127 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
 // ── Animated Toggle Button ─────────────────────────────────────────────────
 // Used for the gender chips (and anywhere else two-state pill buttons appear).
 // Animates background color, text color, and a small scale bump on press.
+
+// Visibility + Communities: the menu's FIRST group (user directive
+// 2026-07-27), standing above the preferences group with a full gap under it.
+// Both rows answer "who gets to see me" — one is the switch, the other the
+// circle — so they share one group, ahead of the search preferences and well
+// ahead of the account links at the bottom.
+function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+  const { profile } = useUserStore()
+  // Visibility (visible <-> hidden). This row is the ONLY way back to visible
+  // now that page2 has no UI of its own, so it must stay reachable and must
+  // not silently fail. Going hidden kicks every watcher pinned to the user,
+  // so it is confirmed first; going visible is immediate.
+  //
+  // Visibility is NOT credit-gated any more. The server used to auto-hide a
+  // zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
+  // row routed an empty wallet to the buy picker instead of app/free2, which
+  // would have been undone in the same round trip. That auto-hide is gone
+  // (2026-07-22): being broke keeps you visible on purpose — the invitation
+  // you can't accept is the moment to buy.
+  const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
+  const [visibilityBusy, setVisibilityBusy] = useState(false)
+  const isHidden = selectIsHidden(profile)
+
+  const runVisibility = useCallback(async (endpoint: string) => {
+    if (visibilityBusy) return
+    setVisibilityBusy(true)
+    try { await invoke(endpoint) } catch (e) { console.error(e) }
+    finally { setVisibilityBusy(false); setHideConfirmOpen(false) }
+  }, [visibilityBusy])
+
+  const onVisibilityPress = useCallback(() => {
+    tap()
+    if (!isHidden) { setHideConfirmOpen(true); return }
+    runVisibility('app/free2')
+  }, [isHidden, runVisibility])
+
+  if (!profile) return null
+
+  // Watcher count drives two surfaces: the chip on the Visible row and the
+  // concrete ripple in the hide confirm. deriveCompat only fills the array
+  // while page2 is free, so a hidden user reads 0 without a separate guard.
+  const watcherCount = selectWatcherCount(profile)
+  const hideConfirmConfig = hideProfileConfirm(watcherCount)
+
+  // Communities row summary — read from the denormalized relations.communities
+  // field (instant, no query). Friends first, then groups (= managed + joined),
+  // and anything waiting on MY answer (friend requests + join requests on
+  // groups I manage) is the last segment of the same line, the way a managed
+  // group row reads
+  // ("Approved · 17 members · 3 requests") — a decision someone else is
+  // waiting on is a fact about the row, not a badge beside it. An account with
+  // neither groups nor friends still says what the row is for instead of
+  // dropping to a bare label.
+  const comm = communitiesSummary(profile)
+  const commGroups = comm ? comm.managed.length + comm.joined.length : 0
+  const commRequests = pendingApprovals(comm)
+  const commSubtitle = !comm ? undefined
+    : metaLine(
+        comm.friends > 0 && friendLabel(comm.friends),
+        commGroups > 0 && groupLabel(commGroups),
+        commRequests > 0 && requestLabel(commRequests),
+      ) || t('communities.rowEmpty')
+
+  return (
+    <View style={styles.section}>
+      <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        {/* Visibility FIRST: it is a game-state control, not an account
+            detail, and it is the only path back to being discoverable. */}
+        {/* The state IS the label: "Visibility  Hidden" says the same thing
+            twice, and the eye glyph already names the field. */}
+        {/* The watcher count is a live quantity, so it rides its own chip
+            instead of a bare "(n)" glued to the label: a number in
+            parentheses says nothing about what it counts, the chip spells
+            it out ("3 watching you"). */}
+        <SelectFieldRow
+          grouped
+          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          trailing={!isHidden && watcherCount > 0 ? (
+            <Chip
+              text={watcherCount === 1
+                ? t('settings.watchersOne')
+                : t('settings.watchersMany').replace('{count}', String(watcherCount))}
+            />
+          ) : undefined}
+          onPress={onVisibilityPress}
+          // Optical size, not nominal: the eye is a flat lens that fills barely
+          // half its box vertically, so at the ICON.md every other row uses it
+          // reads visibly smaller than the person/groups/bug glyphs beside it.
+          // ICON.xl is the optical half-step that matches their ink mass without
+          // over-shooting; the icon column keeps its fixed width, so the labels
+          // stay aligned.
+          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xl} /> : <EyeOpenIcon color={GREEN} size={ICON.xl} />}
+          labelColor={GREEN}
+        />
+        {/* Communities: a navigable row (like Account) that opens the full
+            hub — my friends, groups I manage, groups I'm in, create, find.
+            Superseded the inline group chips + join-by-code sheet, which now
+            live inside the hub. */}
+        <SelectFieldRow
+          grouped
+          label={t('communities.menuRow')}
+          subtitle={commSubtitle}
+          onPress={() => onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })}
+          icon={<GroupsIcon color={GREEN} />}
+          labelColor={GREEN}
+        />
+      </View>
+      <ConfirmDialog
+        visible={hideConfirmOpen}
+        title={hideConfirmConfig.title}
+        description={hideConfirmConfig.description}
+        confirmLabel={hideConfirmConfig.confirmLabel}
+        confirmIconStart={<EyeOffIcon color={WHITE} />}
+        onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
+        onConfirm={() => runVisibility('app/lock2')}
+        busy={visibilityBusy}
+        draggable
+      />
+    </View>
+  )
+}
 
 function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile, update } = useUserStore()
@@ -1439,23 +1561,13 @@ function ageLabel(n: number): string {
 }
 
 function FamilyToggleRow({ label, value, onValueChange }: { label: string; value: boolean; onValueChange: (v: boolean) => void }) {
-  const trackBg = value ? GREEN : BLACK_SOFT
-  // Knob travel = track width 48 - knob width 24 - padding 4 = 20px.
-  // OFF always rests at the knob's natural layout position (translateX 0):
-  // the left edge in LTR, the right edge in RTL (the `start` side — layout is
-  // auto-flipped in RTL, transforms are not). ON slides toward the opposite
-  // end, so the switch mirrors correctly in Hebrew (knob moves left when on).
-  const KNOB_TRAVEL = 20
-  const knobX = value ? (isRTL ? -KNOB_TRAVEL : KNOB_TRAVEL) : 0
   return (
     <Pressable
       style={familyStyles.toggleRow}
       onPress={() => { tap(); onValueChange(!value) }}
     >
       <Text style={familyStyles.toggleLabel}>{label}</Text>
-      <View style={[familyStyles.toggleTrack, { backgroundColor: trackBg }]}>
-        <View style={[familyStyles.toggleKnob, { transform: [{ translateX: knobX }] }]} />
-      </View>
+      <Switch value={value} />
     </Pressable>
   )
 }
@@ -1908,15 +2020,6 @@ const familyStyles = StyleSheet.create({
     paddingHorizontal: MD,
   },
   toggleLabel: { fontSize: TEXT.md, color: BLACK },
-  toggleTrack: {
-    width: 48, height: 28, borderRadius: 999,
-    padding: XS, justifyContent: 'center',
-  },
-  toggleKnob: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: SURFACE,
-    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
-  },
   section: { marginBottom: MD },
   subSection: {},
   sectionTitle: { fontSize: TEXT.md, color: BLACK, marginBottom: SM },
@@ -2584,7 +2687,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const [groupsLeaveTarget, setGroupsLeaveTarget] = useState<Group | null>(null)
   const openJoinGroup = () => { tap(); setGroupsLeaveTarget(null); setGroupsMode('join'); setGroupsPopupVisible(true) }
   const openLeaveGroup = (g: Group) => { tapWarning(); setGroupsLeaveTarget(g); setGroupsMode('leave'); setGroupsPopupVisible(true) }
-  const [bugReportVisible, setBugReportVisible] = useState(false)
   // Lifted from GroupsPopup so the menu row can render the chained group
   // names from the same fetched list — one source of truth shared between
   // the row label and the popup.
@@ -2617,33 +2719,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   // balance in its label and the renewal time in its subtitle, so the dialog
   // was a step that re-read what the user had just tapped.
   const [buyExtraOpen, setBuyExtraOpen] = useState(false)
-  // Visibility (visible <-> hidden). This row is the ONLY way back to visible
-  // now that page2 has no UI of its own, so it must stay reachable and must
-  // not silently fail. Going hidden kicks every watcher pinned to the user,
-  // so it is confirmed first; going visible is immediate.
-  const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
-  const [visibilityBusy, setVisibilityBusy] = useState(false)
-  const isHidden = selectIsHidden(profile)
-  // Visibility is NOT credit-gated any more. The server used to auto-hide a
-  // zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
-  // row routed an empty wallet to the buy picker instead of app/free2, which
-  // would have been undone in the same round trip. That auto-hide is gone
-  // (2026-07-22): being broke keeps you visible on purpose — the invitation
-  // you can't accept is the moment to buy.
-
-  const runVisibility = useCallback(async (endpoint: string) => {
-    if (visibilityBusy) return
-    setVisibilityBusy(true)
-    try { await invoke(endpoint) } catch (e) { console.error(e) }
-    finally { setVisibilityBusy(false); setHideConfirmOpen(false) }
-  }, [visibilityBusy])
-
-  const onVisibilityPress = useCallback(() => {
-    tap()
-    if (!isHidden) { setHideConfirmOpen(true); return }
-    runVisibility('app/free2')
-  }, [isHidden, runVisibility])
-
   const onOpenBuyExtra = useCallback(() => {
     tap()
     setBuyExtraOpen(true)
@@ -2674,12 +2749,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Watcher count drives two surfaces: the chip on the Visible row and
-  // the concrete ripple in the hide confirm. deriveCompat only fills the array
-  // while page2 is free, so a hidden user reads 0 without a separate guard.
-  const watcherCount = selectWatcherCount(profile)
-  const hideConfirmConfig = hideProfileConfirm(watcherCount)
-
   // Credits row content: the daily pool as a fraction of its cap, the extras
   // (purchased pool, no cap) when there are any, and the next grant time as
   // the subtitle. This IS the credits explainer now — the dialog that used to
@@ -2688,50 +2757,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
   const heartsExtra = creditExtra(profile)
   const nextGrant = formatNextGrant(profile)
 
-  // Communities row summary — read from the denormalized relations.communities
-  // field (instant, no query). Groups = managed + joined; a pending
-  // friend-requests chip rides the row like the visibility watcher chip.
-  const comm = communitiesSummary(profile)
-  const commGroups = comm ? comm.managed.length + comm.joined.length : 0
-  const commSubtitle = !comm ? undefined
-    : commGroups > 0 && comm.friends > 0 ? t('communities.rowSummary').replace('{groups}', String(commGroups)).replace('{friends}', String(comm.friends))
-    : commGroups > 0 ? t('communities.rowGroupsOnly').replace('{groups}', String(commGroups))
-    : comm.friends > 0 ? t('communities.rowFriendsOnly').replace('{friends}', String(comm.friends))
-    : undefined
-
   return (
     <>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
-        {/* Visibility FIRST: it is a game-state control, not an account
-            detail, and it is the only path back to being discoverable. */}
-        {/* The state IS the label: "Visibility  Hidden" says the same thing
-            twice, and the eye glyph already names the field. */}
-        {/* The watcher count is a live quantity, so it rides its own chip
-            instead of a bare "(n)" glued to the label: a number in
-            parentheses says nothing about what it counts, the chip spells
-            it out ("3 watching you"). */}
-        <SelectFieldRow
-          grouped
-          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
-          trailing={!isHidden && watcherCount > 0 ? (
-            <Chip
-              text={watcherCount === 1
-                ? t('settings.watchersOne')
-                : t('settings.watchersMany').replace('{count}', String(watcherCount))}
-            />
-          ) : undefined}
-          onPress={onVisibilityPress}
-          // Optical size, not nominal: the eye is a flat lens that fills barely
-          // half its box vertically, so at the ICON.md every other row uses it
-          // reads visibly smaller than the person/groups/bug glyphs beside it.
-          // ICON.xl is the optical half-step that matches their ink mass without
-          // over-shooting; the icon column keeps its fixed width, so the labels
-          // stay aligned.
-          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xl} /> : <EyeOpenIcon color={GREEN} size={ICON.xl} />}
-          labelColor={GREEN}
-        />
         {/* Credits, then Account. Tapping credits opens the buy picker
-            straight away. */}
+            straight away. (Visibility moved to the menu's top group, beside
+            Communities.) */}
         <SelectFieldRow
           grouped
           // "לבבות ({balance}/{cap} + {extra} אקסטרה)": the daily pool reads as
@@ -2761,26 +2792,11 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           icon={<UserIcon color={GREEN} />}
           labelColor={GREEN}
         />
-        {/* Communities: a navigable row (like Account) that opens the full
-            hub — my friends, groups I manage, groups I'm in, create, find.
-            Superseded the inline group chips + join-by-code sheet, which now
-            live inside the hub. */}
         <SelectFieldRow
           grouped
-          label={t('communities.menuRow')}
-          subtitle={commSubtitle}
-          trailing={comm && comm.requests > 0
-            ? <Chip text={t('communities.requestsChip').replace('{count}', String(comm.requests))} />
-            : undefined}
-          onPress={() => onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })}
-          icon={<GroupsIcon color={GREEN} />}
-          labelColor={GREEN}
-        />
-        <SelectFieldRow
-          grouped
-          label={t('settings.bugReport')}
-          onPress={() => setBugReportVisible(true)}
-          icon={<BugIcon color={GREEN} />}
+          label={t('settings.support')}
+          onPress={() => { Linking.openURL(supportMailUrl(t('support.mailSubject'))).catch(() => {}) }}
+          icon={<SupportIcon color={GREEN} />}
           labelColor={GREEN}
         />
       </View>
@@ -2797,21 +2813,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         leaveGroup={groupsLeaveTarget}
         groups={groups}
         setGroups={setGroups}
-      />
-      <BugReportPopup
-        visible={bugReportVisible}
-        onDismiss={() => setBugReportVisible(false)}
-      />
-      <ConfirmDialog
-        visible={hideConfirmOpen}
-        title={hideConfirmConfig.title}
-        description={hideConfirmConfig.description}
-        confirmLabel={hideConfirmConfig.confirmLabel}
-        confirmIconStart={<EyeOffIcon color={WHITE} />}
-        onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
-        onConfirm={() => runVisibility('app/lock2')}
-        busy={visibilityBusy}
-        draggable
       />
       <ConfirmDialog
         visible={signOutDialog}
@@ -2949,7 +2950,11 @@ export default function SettingsPage({
               the list scrolls up over it. */}
           <View style={styles.scrollBody}>
             <View style={styles.optionsWrap}>
-              <PreferencesContent onOpenSubPage={onOpenSubPage} />
+              <AudienceContent onOpenSubPage={onOpenSubPage} />
+
+              <View style={{ marginTop: XL }}>
+                <PreferencesContent onOpenSubPage={onOpenSubPage} />
+              </View>
 
               <View style={{ marginTop: XL }}>
                 <AppInlineContent onBack={onBack} onNavigateHome={onNavigateHome} onOpenSubPage={onOpenSubPage} />
@@ -3136,7 +3141,10 @@ const styles = StyleSheet.create({
   // physically right in RTL after auto-flip). Without the explicit
   // writingDirection, iOS did not pick the container's RTL direction and the
   // subtitle ended up physically left under the hearts row.
-  selectRowSubtitle: { fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+  // flexShrink:1 for the same reason the label carries it: a subtitle that
+  // states several facts on one line (the communities counts) must be allowed
+  // to shrink below its content width and wrap, not run off the row's edge.
+  selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.sm, color: INK_2, marginTop: XS, textAlign: 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
   selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
