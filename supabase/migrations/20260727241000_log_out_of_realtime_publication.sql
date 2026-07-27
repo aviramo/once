@@ -1,0 +1,15 @@
+-- `log` was the single largest driver of Realtime WAL work: one row per HTTP
+-- request that reaches the edge function (360k inserts and climbing faster
+-- than anything else here), and every one of them had to be decoded and
+-- RLS-checked against every live subscription. Realtime WAL processing is
+-- already the top CPU consumer on this database, and that cost grows as
+-- (changes x subscribers), exactly the product a launch multiplies on both
+-- sides.
+--
+-- Nothing in the mobile app subscribes to `log`. The one subscriber is the
+-- admin user-detail page's events feed, which already carries a 10s polling
+-- fallback (pollMs={10000}), so it degrades to a 10s refresh instead of
+-- breaking. The other seven tables stay published: the app subscribes to
+-- users/chat/chat_reads and the admin site to
+-- users/groups/user_groups/group_managers/reports.
+ALTER PUBLICATION supabase_realtime DROP TABLE public.log;

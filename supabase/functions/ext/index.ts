@@ -35,10 +35,10 @@ async function firePush(
   // Sweep pushes about a GROUP live in PUSH_TITLE with the rest of the group
   // lifecycle (that is where {group} bodies are kept); everything else this
   // function sends is a PUSH_BODY code.
-  const raw = (PUSH_TITLE[lang] ?? PUSH_TITLE.he)[code]
+  const template = (PUSH_TITLE[lang] ?? PUSH_TITLE.he)[code]
     ?? (PUSH_BODY[lang] ?? PUSH_BODY.he)[code]
     ?? "Once";
-  const bodyText = raw
+  const bodyText = template
     .replace("{group}", extra?.group_name ?? "")
     .replace("{count}", String(extra?.count ?? ""));
   const title = typeof actorRow?.name === "string" && actorRow.name ? actorRow.name : "Once";
@@ -96,6 +96,16 @@ async function handleWatchSweep(log: Log) {
   return log.success({ processed: res?.processed ?? 0, capped: res?.capped ?? false });
 }
 
+// Hourly `log` retention. Every request that reaches an edge function writes a
+// row to `log`, which makes it the fastest growing table here by a wide margin,
+// and nothing reads past _log_ttl(). Own hourly schedule (not the per-minute
+// cron): the RPC is bounded per run, so an hourly tick drains any backlog over
+// a few ticks and steady state deletes one hour's worth. No pushes.
+async function handleLogPurge(log: Log) {
+  const res = await Tools.rpc(log, "app_log_purge", {});
+  return log.success({ processed: res?.processed ?? 0, capped: res?.capped ?? false });
+}
+
 async function handleCron(log: Log) {
   const expire = await Tools.rpc(log, "app_expire_sweep", {});
   // Same resync the admin triggers on demand — here it's the per-minute
@@ -147,6 +157,7 @@ Deno.serve(async (req) => {
     if (route === "cron") return await handleCron(log);
     if (route === "resync") return await handleResync(log);
     if (route === "watch") return await handleWatchSweep(log);
+    if (route === "purge") return await handleLogPurge(log);
 
     return log.error("route", `unknown route: ${route}`, 404);
   } catch (err) {

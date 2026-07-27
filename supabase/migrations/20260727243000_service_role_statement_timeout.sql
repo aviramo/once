@@ -1,0 +1,15 @@
+-- Everything that reaches the database from our own code runs as service_role:
+-- the edge functions (Tools uses the service key) and the admin site's server
+-- actions. It was the one role with no meaningful ceiling for a long time,
+-- which is how a saturated database turned into a pile-up on launch night; it
+-- was later capped at 20s, still long enough for one sick query to sit on a
+-- PostgREST pool slot through dozens of user-facing requests.
+--
+-- 10s, not the 8s the other roles carry: app_admin_reset has been measured at
+-- 7.9s and app_admin_reset_user at 6.8s, both service_role paths, so an 8s cap
+-- would abort real admin work. 10s clears those with headroom and still ends a
+-- runaway query long before it can matter.
+--
+-- Takes effect on new sessions; PostgREST's existing pooled connections keep
+-- 20s until they recycle.
+ALTER ROLE service_role SET statement_timeout = '10s';
