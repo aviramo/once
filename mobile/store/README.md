@@ -16,12 +16,21 @@ Default language: **Hebrew (Israel) — he-IL**. Add English (United States) —
 |---|---|
 | App icon (512×512 PNG) | `mobile/store/once-512.png` |
 | Feature graphic (1024×500 PNG) | `mobile/store/play-feature-graphic.png` |
-| Phone screenshot 1 — one person at a time | `mobile/store/screenshot-1-one-person.png` |
-| Phone screenshot 2 — real time, here and now | `mobile/store/screenshot-2-real-time.png` |
-| Phone screenshot 3 — friends and shared circles | `mobile/store/screenshot-3-communities.png` |
-| Phone screenshot 4 — the kids schedule | `mobile/store/screenshot-4-kids-schedule.png` |
+| Phone screenshot 1 — one person at a time | `mobile/store/google/screenshot-1-one-person.png` |
+| Phone screenshot 2 — real time, here and now | `mobile/store/google/screenshot-2-real-time.png` |
+| Phone screenshot 3 — friends and shared circles | `mobile/store/google/screenshot-3-communities.png` |
+| Phone screenshot 4 — the kids schedule | `mobile/store/google/screenshot-4-kids-schedule.png` |
 
-All screenshots are 1080×1920 (9:16). Play Console accepts 320–3840 px on each side.
+The same four frames exist per store, each **drawn** at that store's size (never an
+upscale of the other):
+
+| Folder | Size | Where it goes |
+|---|---|---|
+| `mobile/store/google/` | 1080×1920 (9:16) | Play Console phone screenshots (accepts 320–3840 px per side) |
+| `mobile/store/apple/` | 1284×2778 | App Store Connect, 6.5"/6.7" portrait |
+
+App Store Connect accepts 1242×2688, 2688×1242, 1284×2778 or 2778×1284 for these
+sizes; the portrait 1284×2778 set here is the one to upload.
 
 Each screenshot is a Hebrew headline over a phone whose screen restates a real app
 screen: the purple-on-beige palette (`mobile/src/colors.ts`), the dp tokens
@@ -128,7 +137,7 @@ Once is a different way to meet. Worth trying.
 4. **Graphics:**
    - App icon → upload `mobile/store/once-512.png`.
    - Feature graphic → upload `mobile/store/play-feature-graphic.png`.
-   - Phone screenshots → upload all four `screenshot-*.png` files in order (1 → 4).
+   - Phone screenshots → upload all four `google/screenshot-*.png` files in order (1 → 4).
 5. Save → Play Console requires the page to pass validation before you can submit the change for review.
 6. After saving the Hebrew listing, click **Manage translations → Add your own translations**, pick *English (United States)*, and paste the English copy + reuse the same graphics.
 
@@ -138,7 +147,11 @@ Once is a different way to meet. Worth trying.
 
 Both generators are checked in:
 
-- `node mobile/store/make-screenshots.mjs` → produces all 4 `screenshot-*.png`.
+- `node mobile/store/make-screenshots.mjs` → produces all 4 `screenshot-*.png` in
+  **both** `google/` (1080×1920) and `apple/` (1284×2778). The frame is authored in a
+  1080-wide design space: the headline block and margins scale with the frame width,
+  and the phone takes the height that is left, keeping its 9:19.5 screen. Adding a
+  store size is one entry in `TARGETS` at the top of that file.
   Renders HTML/CSS through headless Chrome (so Hebrew shaping and RTL are the
   browser's job), embedding the app's Noto Sans Hebrew faces from
   `mobile/node_modules/@expo-google-fonts` and the profile photos from
@@ -155,7 +168,8 @@ Both generators are checked in:
 
 ## Apple App Review
 
-[apple-review/](apple-review/) holds the demo-video captures for App Review, plus its own
+Not to be confused with [apple/](apple/), which is the four **listing** screenshots at
+App Store size. [apple-review/](apple-review/) holds the demo-video captures for App Review, plus its own
 README describing each frame and the demo state applied to the live DB. Those are real
 captures from the running app on the owner's account, so they carry family photos and are
 deliberately **left untracked by git** — do not `git add` that folder.

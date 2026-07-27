@@ -1,4 +1,8 @@
-// Google Play phone screenshots (1080x1920), one per store theme.
+// Phone screenshots for both stores, one per store theme.
+//
+// Two targets, same four frames, drawn (not upscaled) at each store's size:
+//   google/ 1080x1920  — Play Console phone screenshots
+//   apple/  1284x2778  — App Store Connect 6.5"/6.7" portrait
 //
 // Each frame is a Hebrew headline over a drawn phone whose screen is a faithful
 // restatement of a real app screen: the current purple-on-beige palette
@@ -12,7 +16,7 @@
 //
 //   node mobile/store/make-screenshots.mjs
 //
-// Output: mobile/store/screenshot-1..4-*.png
+// Output: mobile/store/<google|apple>/screenshot-1..4-*.png
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -46,21 +50,44 @@ const C = {
   MID: 'rgba(92,74,148,0.32)',
   WHITE: '#FFFFFF',
 }
-const LIFT = '0 8px 16px rgba(0,0,0,0.25)'  // LIFT_SHADOW at mockup scale
+
+// ── Targets ────────────────────────────────────────────────────────────────
+// Each store gets the same four frames DRAWN at its own size — never an
+// upscale of the other, so text and glyphs stay crisp in both listings.
+const TARGETS = [
+  { dir: 'google', W: 1080, H: 1920 },   // Play Console phone screenshots
+  { dir: 'apple', W: 1284, H: 2778 },    // App Store Connect 6.5"/6.7" portrait
+]
 
 // ── Geometry ───────────────────────────────────────────────────────────────
 // The whole phone stays inside the frame: the bottom chrome (heart, report,
 // gesture bar) is the point of these shots, so nothing bleeds off the edge.
-const W = 1080, H = 1920
-const BEZEL = 12
-const PHONE_TOP = 330, PHONE_H = 1550
-const SCREEN_H = PHONE_H - BEZEL * 2                    // 1526
-const SCREEN_W = Math.round(SCREEN_H * 9 / 19.5)        // 704 — a 9:19.5 phone
-const PHONE_W = SCREEN_W + BEZEL * 2
-// The app is designed against a 360dp-wide phone; every app token below is
-// quoted in dp and converted here, so the mockup can never drift from tokens.ts.
-const U = SCREEN_W / 360
+// The frame is authored in a 1080-wide design space: the headline block and
+// the margins scale with the frame's WIDTH, and the phone then takes all the
+// height that is left, keeping its 9:19.5 screen. A taller store size gets a
+// taller phone, never a stretched one.
+const DESIGN_W = 1080
+const CAP_BAND = 330    // design-space y of the phone's top edge
+const FOOT = 40         // design-space gap under the phone
+let W, H, px, BEZEL, PHONE_TOP, PHONE_H, SCREEN_W, SCREEN_H, PHONE_W, RADIUS, U
+
+const useTarget = t => {
+  W = t.W; H = t.H
+  const s = W / DESIGN_W
+  px = n => `${+(n * s).toFixed(1)}px`
+  BEZEL = Math.round(12 * s)
+  RADIUS = Math.round(52 * s)
+  PHONE_TOP = Math.round(CAP_BAND * s)
+  PHONE_H = H - PHONE_TOP - Math.round(FOOT * s)
+  SCREEN_H = PHONE_H - BEZEL * 2
+  SCREEN_W = Math.round(SCREEN_H * 9 / 19.5)            // a 9:19.5 phone
+  PHONE_W = SCREEN_W + BEZEL * 2
+  // The app is designed against a 360dp-wide phone; every app token below is
+  // quoted in dp and converted here, so the mockup can never drift from tokens.ts.
+  U = SCREEN_W / 360
+}
 const dp = n => `${+(n * U).toFixed(1)}px`
+const LIFT = () => `0 ${dp(4)} ${dp(8)} rgba(0,0,0,0.25)`   // LIFT_SHADOW at mockup scale
 
 // ── Assets ─────────────────────────────────────────────────────────────────
 const b64 = p => readFileSync(p).toString('base64')
@@ -141,7 +168,9 @@ const matchCard = ({ src, name, chips, flush }) => `
   </div>`
 
 // ── Frames ─────────────────────────────────────────────────────────────────
-const FRAMES = [
+// Built per target: every part above quotes dp(), which depends on the current
+// screen width, so the frames are re-composed for each store size.
+const frames = () => [
   {
     file: 'screenshot-1-one-person.png',
     title: 'אדם אחד בכל פעם',
@@ -223,7 +252,7 @@ const FRAMES = [
 ]
 
 // ── Page ───────────────────────────────────────────────────────────────────
-const css = `
+const css = () => `
 ${fontFace(400, '400Regular')}
 ${fontFace(600, '600SemiBold')}
 ${fontFace(800, '800ExtraBold')}
@@ -231,13 +260,13 @@ ${fontFace(800, '800ExtraBold')}
 html,body{width:${W}px;height:${H}px;overflow:hidden}
 body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 .frame{position:relative;width:${W}px;height:${H}px;background:${C.BG};overflow:hidden}
-.cap{padding:74px 76px 0}
-.cap h1{font-size:74px;font-weight:800;color:${C.INK};line-height:1.14;letter-spacing:-.5px}
-.cap p{margin-top:22px;font-size:33px;font-weight:400;color:${C.HALF};line-height:1.45;max-width:900px}
+.cap{padding:${px(74)} ${px(76)} 0}
+.cap h1{font-size:${px(74)};font-weight:800;color:${C.INK};line-height:1.14;letter-spacing:${px(-0.5)}}
+.cap p{margin-top:${px(22)};font-size:${px(33)};font-weight:400;color:${C.HALF};line-height:1.45;max-width:${px(900)}}
 
 .phone{position:absolute;top:${PHONE_TOP}px;left:${(W - PHONE_W) / 2}px;width:${PHONE_W}px;height:${PHONE_H}px;
-  background:${C.INK};border-radius:${BEZEL + 52}px;padding:${BEZEL}px;box-shadow:0 24px 60px rgba(92,74,148,.28)}
-.screen{position:relative;width:${SCREEN_W}px;height:${SCREEN_H}px;border-radius:52px;overflow:hidden;background:${C.BG}}
+  background:${C.INK};border-radius:${BEZEL + RADIUS}px;padding:${BEZEL}px;box-shadow:0 ${px(24)} ${px(60)} rgba(92,74,148,.28)}
+.screen{position:relative;width:${SCREEN_W}px;height:${SCREEN_H}px;border-radius:${RADIUS}px;overflow:hidden;background:${C.BG}}
 .stack{display:flex;flex-direction:column;height:100%;background:${C.BG}}
 
 /* status bar */
@@ -252,7 +281,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 .card{position:relative;flex:1;min-height:0;overflow:hidden}
 .screen>.card{height:100%}
 .card .hero{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.rb{position:absolute;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:${LIFT};z-index:4}
+.rb{position:absolute;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:${LIFT()};z-index:4}
 .rb.ham{top:${dp(52)};inset-inline-start:${dp(16)}}
 .rb.ham.shell{position:absolute;top:${dp(52)};z-index:7}
 .rb.report{bottom:${dp(16)};inset-inline-start:${dp(16)}}
@@ -265,7 +294,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 
 /* chip (mobile/src/components/Chip.tsx: radius 12, pad 8/16, gap 8, 14sp semibold) */
 .chip{display:flex;align-items:flex-start;gap:${dp(8)};background:${C.SURFACE};border-radius:${dp(12)};
-  padding:${dp(8)} ${dp(16)};box-shadow:${LIFT}}
+  padding:${dp(8)} ${dp(16)};box-shadow:${LIFT()}}
 .chip .cg{display:flex;align-items:center;height:${dp(20)}}
 .chip .ct{font-size:${dp(14)};line-height:${dp(20)};font-weight:600;color:${C.INK}}
 .chip.bold .ct{font-weight:800}
@@ -289,7 +318,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 /* shared-groups popup (SharedGroupsPopup over a BottomSheet — no backdrop dim:
    the sheet is transparent over the screen and floats on SHEET_SHADOW alone) */
 .sheet{position:absolute;left:0;right:0;bottom:0;background:${C.BG};border-radius:${dp(20)} ${dp(20)} 0 0;
-  padding:0 ${dp(16)} ${dp(28)};z-index:9;box-shadow:0 -8px 48px rgba(0,0,0,.12)}
+  padding:0 ${dp(16)} ${dp(28)};z-index:9;box-shadow:0 ${dp(-4)} ${dp(24)} rgba(0,0,0,.12)}
 .handle{width:${dp(48)};height:${dp(4)};border-radius:${dp(2)};background:${C.MID};margin:${dp(16)} auto}
 .sheet-title{font-size:${dp(18)};font-weight:800;color:${C.INK};text-align:center;padding-bottom:${dp(12)}}
 .sheet-card{background:${C.SURFACE};border-radius:${dp(12)};overflow:hidden}
@@ -302,7 +331,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 .sheet .homebar{bottom:${dp(8)}}
 `
 
-const page = f => `<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><style>${css}</style>
+const page = f => `<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><style>${css()}</style>
 <div class="frame">
   <div class="cap"><h1>${f.title}</h1><p>${f.sub}</p></div>
   <div class="phone"><div class="screen">${f.screen}</div></div>
@@ -310,15 +339,20 @@ const page = f => `<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8
 
 // ── Render ─────────────────────────────────────────────────────────────────
 mkdirSync(BUILD, { recursive: true })
-for (const f of FRAMES) {
-  const html = join(BUILD, f.file.replace('.png', '.html'))
-  writeFileSync(html, page(f), 'utf8')
-  const out = join(HERE, f.file)
-  execFileSync(CHROME, [
-    '--headless=new', '--disable-gpu', '--hide-scrollbars',
-    '--force-device-scale-factor=1', `--window-size=${W},${H}`,
-    '--virtual-time-budget=4000', '--default-background-color=00000000',
-    `--screenshot=${out}`, `file:///${html.replace(/\\/g, '/')}`,
-  ], { stdio: 'pipe' })
-  console.log(`wrote ${out}`)
+for (const t of TARGETS) {
+  useTarget(t)
+  const dir = join(HERE, t.dir)
+  mkdirSync(dir, { recursive: true })
+  for (const f of frames()) {
+    const html = join(BUILD, `${t.dir}-${f.file.replace('.png', '.html')}`)
+    writeFileSync(html, page(f), 'utf8')
+    const out = join(dir, f.file)
+    execFileSync(CHROME, [
+      '--headless=new', '--disable-gpu', '--hide-scrollbars',
+      '--force-device-scale-factor=1', `--window-size=${W},${H}`,
+      '--virtual-time-budget=4000', '--default-background-color=00000000',
+      `--screenshot=${out}`, `file:///${html.replace(/\\/g, '/')}`,
+    ], { stdio: 'pipe' })
+    console.log(`wrote ${out}  (${t.W}x${t.H})`)
+  }
 }
