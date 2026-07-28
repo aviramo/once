@@ -12,7 +12,7 @@
 // Communities reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, Share, Keyboard, Linking, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
+import { View, StyleSheet, Pressable, Share, Keyboard, Linking, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle, type TextStyle } from 'react-native'
 import { Path, Circle, Line, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text, TextInput } from './AppText'
@@ -25,7 +25,7 @@ import { Button } from './Button'
 import { RoundButton } from './RoundButton'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BottomSheet, SheetScroll, SheetTitle } from './BottomSheet'
-import { Glyph, GroupsIcon, TrashIcon, RankIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon } from './icons'
+import { Glyph, GroupsIcon, TrashIcon, RankIcon, KeyIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon } from './icons'
 import { ToggleRow } from './Switch'
 import { tap, tapWarning } from '../lib/haptics'
 import { t } from '../i18n'
@@ -43,7 +43,7 @@ import { EditableText } from './EditableText'
 import { GROUP_NAME_MAX, GROUP_DESCRIPTION_MAX, GROUP_LINK_MAX } from '../lib/groups'
 import {
   ownedGroups, myGroups, myFriends, groupMembers, removeMember, deleteGroup,
-  updateGroup, createGroup, searchGroups, redeemInvite, leaveGroup, setManager,
+  updateGroup, createGroup, searchGroups, redeemInvite, leaveGroup, setManager, transferOwner,
   friendRespond, unfriend, communitiesSummary, cancelJoinRequest,
   groupRequests, respondJoin, approveAllJoins, setGroupHidden,
   groupKind, groupKindFlags, GROUP_KINDS, DEFAULT_GROUP_KIND, type GroupKind,
@@ -813,19 +813,22 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
             tag={friendsWaiting ? requestLabel(data!.requests) : null}
             tagStrong
             first
+            // Never the last row of the card: an empty hub still puts the
+            // "no groups yet" sentence under it, inside the card, as a row.
             style={rosterRowStyle(0, false)}
             onPress={() => push({ k: 'friends' })}
           />
         )}
-        // Whatever follows the friends row closes the card off, so both states
-        // wear its white and its rounded bottom rather than a block of their own.
+        // Both the skeleton and the EMPTY sentence follow the friends row INSIDE
+        // the card and close it off: the sentence is the list's own row (user
+        // directive 2026-07-28), so it wears a strip's padding and centres in it.
         empty={(
           <>
-            <View style={[s.rosterRow, s.rosterRowLast]}>
-              {items == null
-                ? <SkeletonRows rows={3} lines={2} first={false} />
-                : <Empty text={t('communities.emptyGroups')} />}
-            </View>
+            {items == null ? (
+              <View style={[s.rosterRow, s.rosterRowLast]}>
+                <SkeletonRows rows={3} lines={2} first={false} />
+              </View>
+            ) : null}
             {/* ONLY while there is nothing to list (user directive 2026-07-28):
                 the two header controls, spelled out as buttons under the
                 sentence that says the page is empty. A page with rows on it
@@ -833,22 +836,27 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
                 a block of CTAs under it. Same two destinations, so a tap here
                 and a tap up there land on the same page. */}
             {items != null ? (
-              <View style={s.emptyActions}>
-                <Button
-                  label={t('communities.findTitle')}
-                  variant="primary"
-                  size="lg"
-                  iconStart={<SearchGlyph color={WHITE} />}
-                  onPress={() => push({ k: 'find' })}
-                />
-                <Button
-                  label={t('communities.create')}
-                  variant="secondary"
-                  size="lg"
-                  iconStart={<PlusGlyph color={INK_SUBTLE} />}
-                  onPress={() => push({ k: 'create' })}
-                />
-              </View>
+              <>
+                <View style={[s.row, s.rosterRow, s.rosterRowLast, s.emptyRow]}>
+                  <Empty text={t('communities.emptyGroups')} style={s.emptyRowText} />
+                </View>
+                <View style={s.emptyActions}>
+                  <Button
+                    label={t('communities.findTitle')}
+                    variant="primary"
+                    size="lg"
+                    iconStart={<SearchGlyph color={WHITE} />}
+                    onPress={() => push({ k: 'find' })}
+                  />
+                  <Button
+                    label={t('communities.create')}
+                    variant="secondary"
+                    size="lg"
+                    iconStart={<PlusGlyph color={INK_SUBTLE} />}
+                    onPress={() => push({ k: 'create' })}
+                  />
+                </View>
+              </>
             ) : null}
           </>
         )}
@@ -1890,8 +1898,9 @@ function PersonProfileView({ person, onDone, insets }: {
   onDone: () => void
   insets: { top: number; bottom: number }
 }) {
-  const [busy, setBusy] = useState<'manager' | 'remove' | null>(null)
+  const [busy, setBusy] = useState<'manager' | 'remove' | 'transfer' | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [confirmTransfer, setConfirmTransfer] = useState(false)
 
   if (person.kind === 'friend') {
     const f = person.friend
@@ -1932,8 +1941,17 @@ function PersonProfileView({ person, onDone, insets }: {
 
   const { group, member: m } = person
   const iAmOwner = !!group.is_owner
-  // The owner is untouchable, and a manager may only act on a plain member.
-  const canAct = !m.owner && (iAmOwner || !m.manager)
+  // Who the group is (promote/demote, hand it over) is the OWNER's alone (user
+  // directive 2026-07-28). Removing someone is the one action a manager keeps,
+  // and only on a PLAIN member: another manager is the owner's appointment, and
+  // the owner is untouchable even to himself (removing him would leave the group
+  // ownerless with no way back). The server draws the same two lines.
+  const canOwnerAct = iAmOwner && !m.owner
+  const canRemove = !m.owner && (iAmOwner || !m.manager)
+  // Removing is the emphasized action on a PLAIN member (user directive
+  // 2026-07-28) — for a manager it stays quiet, because the loud thing to do
+  // with an appointment is to take the appointment back, not the membership.
+  const removePrimary = canRemove && !m.manager
   const doSetManager = async () => {
     setBusy('manager'); tap()
     try { rosters.set(group.id, await setManager(group.id, m.user_id, !m.manager)) } finally { setBusy(null); onDone() }
@@ -1942,11 +1960,22 @@ function PersonProfileView({ person, onDone, insets }: {
     setBusy('remove'); tapWarning()
     try { rosters.set(group.id, await removeMember(group.id, m.user_id)) } finally { setBusy(null); setConfirmRemove(false); onDone() }
   }
+  // The group changes hands: the caller drops from owner to manager, so every
+  // owner-only affordance on the pages behind this one is now wrong. Drop the
+  // group's caches and pop back rather than trying to repaint them — the store
+  // already has the new truth from the response's user row.
+  const doTransfer = async () => {
+    setBusy('transfer'); tapWarning()
+    try {
+      await transferOwner(group.id, m.user_id)
+      dropGroupCaches(group.id)
+    } finally { setBusy(null); setConfirmTransfer(false); onDone() }
+  }
 
   return (
     <>
       <ProfilePage profile={m.profile} userId={m.user_id} name={m.name} image={m.image} insets={insets}>
-        {iAmOwner && canAct ? (
+        {canOwnerAct ? (
           <Button
             label={m.manager ? t('communities.removeManager') : t('communities.makeManager')}
             variant="primary" size="lg"
@@ -1955,10 +1984,19 @@ function PersonProfileView({ person, onDone, insets }: {
             onPress={doSetManager}
           />
         ) : null}
-        {canAct ? (
+        {canOwnerAct ? (
           <Button
-            label={t('communities.removeFromGroup')} variant="secondary" size="lg"
-            iconStart={<UserMinusIcon color={INK} />}
+            label={t('communities.transferOwner')} variant="secondary" size="lg"
+            iconStart={<KeyIcon color={INK} />}
+            loading={busy === 'transfer'} disabled={!!busy}
+            onPress={() => { tap(); setConfirmTransfer(true) }}
+          />
+        ) : null}
+        {canRemove ? (
+          <Button
+            label={t('communities.removeFromGroup')}
+            variant={removePrimary ? 'primary' : 'secondary'} size="lg"
+            iconStart={<UserMinusIcon color={removePrimary ? WHITE : INK} />}
             loading={busy === 'remove'} disabled={!!busy}
             onPress={() => { tap(); setConfirmRemove(true) }}
           />
@@ -1975,13 +2013,28 @@ function PersonProfileView({ person, onDone, insets }: {
         onConfirm={doRemove}
         draggable
       />
+      <ConfirmDialog
+        visible={confirmTransfer}
+        title={t('communities.transferOwnerTitle').replace('{name}', m.name ?? '')}
+        description={t('communities.transferOwnerDesc').replace('{name}', m.name ?? '')}
+        confirmLabel={t('communities.transferOwner')}
+        confirmIconStart={<KeyIcon color={WHITE} />}
+        busy={busy === 'transfer'}
+        onCancel={() => setConfirmTransfer(false)}
+        onConfirm={doTransfer}
+        draggable
+      />
     </>
   )
 }
 
 // ── Group settings (name / description / visibility / join policy / delete) ──
-// Reached from the manage page's settings summary row. Owner + managers edit
-// name/description/visibility/join-policy; only the owner can delete.
+// Reached from the manage page's settings summary row. OWNER ONLY, all of it
+// (user directive 2026-07-28): a manager answers join requests, he does not
+// reshape the group. What a manager gets on this page is the one row that is
+// about HIM rather than about the group, "hide me from the members here", and
+// nothing else. The server draws the same line (app_update_group and
+// app_remove_member are owner-only; app_set_group_hidden is not).
 function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup; onChanged: (g: OwnedGroup) => void; onDeleted: () => void }) {
   const kb = useKeyboardHeight()
   const iAmOwner = !!group.is_owner
@@ -2040,6 +2093,24 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
   const doDelete = async () => {
     setDeleting(true); tapWarning()
     try { await deleteGroup(group.id); dropGroupCaches(group.id); onDeleted() } finally { setDeleting(false); setConfirmDelete(false) }
+  }
+
+  // A manager's whole settings page: the one switch that is his rather than the
+  // group's. Everything below this belongs to the owner.
+  if (!iAmOwner) {
+    return (
+      <View style={{ gap: MD, marginBottom: kb }}>
+        <View style={s.card}>
+          <ToggleRow
+            label={t('communities.hiddenToggle')}
+            sub={t('communities.hiddenSub')}
+            value={hidden}
+            onValueChange={toggleHidden}
+            style={s.hiddenRow}
+          />
+        </View>
+      </View>
+    )
   }
 
   return (
@@ -2118,9 +2189,8 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
         />
       </View>
 
-      {iAmOwner ? (
-        <Button label={t('communities.deleteGroup')} variant="secondary" size="lg" iconStart={<TrashIcon color={INK} />} onPress={() => setConfirmDelete(true)} />
-      ) : null}
+      {/* Owner-only page from here up, so the delete needs no gate of its own. */}
+      <Button label={t('communities.deleteGroup')} variant="secondary" size="lg" iconStart={<TrashIcon color={INK} />} onPress={() => setConfirmDelete(true)} />
 
       <ConfirmDialog
         visible={confirmDelete}
@@ -2378,7 +2448,10 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
 }
 
 // ── shared bits ────────────────────────────────────────────────────────────
-const Empty = ({ text }: { text: string }) => <Text style={s.empty}>{text}</Text>
+// The sentence that stands in for a list. Inside a card it wears its own air
+// (`empty`); the hub hands it a `style` to flatten that, because there it is a
+// description over the buttons and the block around it does the spacing.
+const Empty = ({ text, style }: { text: string, style?: StyleProp<TextStyle> }) => <Text style={[s.empty, style]}>{text}</Text>
 
 // A bare glyph in a section heading — the play-here eye — has to sit on the
 // same vertical line as the page HEADER's controls above it (the gear), or the
@@ -2490,10 +2563,19 @@ const s = StyleSheet.create({
   pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS },
   pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
   sheetNote: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lhSm(), textAlign: 'center', marginTop: XS },
-  empty: { fontSize: TEXT.md, color: INK_MUTED, textAlign: 'center', paddingVertical: LG },
+  // The sentence that stands in for a list: it sits in the card the strips would
+  // have filled, so it takes the STRIP's gutter (`row`'s paddingHorizontal) —
+  // without it a long line wraps flush to the card's edges on a narrow screen or
+  // at a large font size.
+  empty: { fontSize: TEXT.md, color: INK_MUTED, textAlign: 'center', paddingVertical: LG, paddingHorizontal: MD },
   // The empty hub's two ways forward, under the card rather than in it: the card
   // is the list, and these are what to do when there is no list yet.
   emptyActions: { gap: SM, paddingTop: MD },
+  // The "no groups yet" sentence AS A ROW of that list (user directive
+  // 2026-07-28): it composes `row`, so it carries a group strip's padding and
+  // its hairline off the row above, and centres in the width it is given.
+  emptyRow: { justifyContent: 'center' },
+  emptyRowText: { flex: 1, paddingVertical: 0, paddingHorizontal: 0 },
   // The friends page's invite block: the reward line and the button it explains,
   // held together under the roster so the two never drift apart.
   friendsInvite: { gap: SM },

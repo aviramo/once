@@ -3,6 +3,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { UserPlusIcon } from './icons'
 import { tap } from '../lib/haptics'
 import { referralCode, shareFriendInvite } from '../lib/referral'
+import { formatGrantTime } from '../lib/credits'
 import { useUserStore } from '../stores/userStore'
 import { t, genderize } from '../i18n'
 import { WHITE } from '../colors'
@@ -18,12 +19,13 @@ import { WHITE } from '../colors'
 // packs (dead "coming soon" tiles since 2026-07-22, nothing was purchasable),
 // the paragraph above them, the "free" badge and the running joined count.
 //
-// Inviting is the only way to earn beyond the daily pool, and it is the SAME
-// offer the friends page makes at its own bottom edge — so this popup takes
-// that page's sentence verbatim (`communities.inviteReward`, one token, two
-// call sites) and shares the SAME friend-invite link (/f/), the one the
-// sentence describes: opened with the app installed it links the pair as
-// mutual friends, and the server pays both sides a credit for the link.
+// Its sentence is ITS OWN (`credits.buy.desc`, user directive 2026-07-28), not
+// the friends page's invite caption it used to borrow: this is where someone
+// lands with an empty wallet, so it answers the daily refill first (one credit,
+// at the hour it arrives) and only then offers the invite. Inviting is the only
+// way to earn beyond that pool, and the button shares the friend-invite link
+// (/f/) the sentence describes: opened with the app installed it links the pair
+// as mutual friends, and the server pays both sides a credit for the link.
 //
 // The reward lands server-side, so this only opens the OS share sheet — nothing
 // to await, nothing to optimistically show. /app/buy_extra + BUY_EXTRA_OPTIONS
@@ -39,6 +41,7 @@ export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
   outOfCredits?: boolean
 }) {
   const profile = useUserStore(s => s.profile)
+  const grantTime = formatGrantTime(profile)
 
   const onInvite = useCallback(() => {
     tap()
@@ -53,7 +56,9 @@ export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
       visible={visible}
       draggable
       title={t(outOfCredits ? 'credits.buy.emptyTitle' : 'credits.buy.title')}
-      description={t('communities.inviteReward')}
+      description={grantTime
+        ? t('credits.buy.desc').replace('{time}', grantTime)
+        : t('credits.buy.descNoTime')}
       // genderize, NOT tg: the Hebrew label carries an inline {הזמן|הזמיני}
       // marker, and tg only ever looks up whole-string _m/_f key variants — it
       // found none, fell back to the raw string, and the marker rendered

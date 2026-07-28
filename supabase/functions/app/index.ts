@@ -689,6 +689,22 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "transfer_owner": {
+        // The owner hands the group to one of its members. The new owner gets
+        // everything; the caller stays a plain MEMBER, so the group moves from
+        // their `managed` list to their `joined` one — hence the fresh user row
+        // rather than a roster (the caller can no longer read one).
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        const member_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!group_id || !member_id) return log.error("transfer_owner", "bad_args", 400);
+        const result = await Tools.rpc(log, "app_transfer_owner", { me_id: user.user_id, p_group_id: group_id, p_user_id: member_id });
+        await user.persist(log);
+        if (result?.error) return log.error("transfer_owner", result.error, 400);
+        rpcUser = result?.user;
+        notifyList = result?.notify ?? [];
+        break;
+      }
+
       case "set_group_hidden": {
         // The caller steps out of the game inside ONE group they run: its
         // members stop being offered to them and they stop being offered to its

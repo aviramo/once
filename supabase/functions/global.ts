@@ -213,6 +213,11 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     // Nudge from the cron sweep: a queue nobody answered for two days. No
     // actor, so the push title falls back to the app name.
     'group_pending': '{count} בקשות הצטרפות מחכות לתשובה בקבוצה {group}',
+    // Ownership succession: the owner deleted their account and app_delete_cleanup
+    // handed the group to its most senior manager, else its most senior member.
+    // The actor is already gone by the time the push fires, so the title falls
+    // back to the app name.
+    'group_owner': 'הקבוצה {group} עברה לניהול שלך',
   },
   en: {
     'invite-in': 'Chat invitation',
@@ -237,6 +242,7 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'group_join': 'Asked to join {group}',
     'group_approved': 'Your request to join {group} was approved',
     'group_pending': '{count} join requests are waiting in {group}',
+    'group_owner': 'You are now the owner of {group}',
   },
 };
 

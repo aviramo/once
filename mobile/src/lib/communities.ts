@@ -220,6 +220,12 @@ export const removeMember = (group_id: string, user_id: string): Promise<GroupMe
 export const setManager = (group_id: string, user_id: string, make: boolean): Promise<GroupMember[]> =>
   invoke<{ members: GroupMember[] }>('app/set_manager', { group_id, user_id, make }).then(r => r.members ?? [])
 
+// Hand the group to one of its members (owner only). The caller drops to a
+// plain MEMBER, so there is no roster to return: the response is the fresh user
+// row, which the store merges, moving the group from `managed` to `joined`.
+export const transferOwner = (group_id: string, user_id: string): Promise<unknown> =>
+  invoke('app/transfer_owner', { group_id, user_id })
+
 // name / is_public / requires_approval each omitted = unchanged. `description`
 // and `link` are applied only when the key is present (pass null to clear) —
 // the server keys off the key's presence, so undefined leaves them untouched.

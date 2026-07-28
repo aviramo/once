@@ -112,10 +112,13 @@ async function handleCron(log: Log) {
   // scheduled-launch + self-heal safety net (covers scheduled areas going
   // live, and anything an on-demand resync missed).
   const resync = await Tools.rpc(log, "app_area_resync", {});
-  // Daily credits top-up. app_credits_grant is idempotent per grant day
-  // (20:00 Asia/Jerusalem boundary) — most ticks update 0 rows; the first
-  // tick at/after 20:00 tops every user up to their tier cap. No pushes
-  // (silent top-up), so nothing to dispatch.
+  // The daily credit. app_credits_grant is idempotent per grant day (20:00
+  // Asia/Jerusalem boundary) — most ticks update 0 rows; the first tick at/after
+  // 20:00 stamps every user and pays the ONE credit to those holding nothing at
+  // all (balance + extra + held = 0, user directive 2026-07-28: it is not a
+  // top-up, and extra must not attract a free refill). `granted` counts who was
+  // actually paid, `processed` who was stamped. No pushes (silent), so nothing
+  // to dispatch.
   const grant = await Tools.rpc(log, "app_credits_grant", {});
   // Referral payouts, safety net. The normal path is app_referral_qualify on
   // the invitee's own save-profile round trip; this catches everything that
@@ -135,7 +138,7 @@ async function handleCron(log: Log) {
 
   return log.success({
     processed: (expire?.processed ?? 0) + (resync?.processed ?? 0),
-    credits_granted: grant?.processed ?? 0,
+    credits_granted: grant?.granted ?? 0,
     referrals_credited: referrals?.processed ?? 0,
   });
 }

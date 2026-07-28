@@ -112,6 +112,20 @@ export function RankIcon({ color = INK, size = ICON.md, down = false }: IconProp
   )
 }
 
+// Handing the keys over: the ownership-transfer mark. Deliberately NOT the rank
+// insignia above, which is the manager appointment. A rank is given from above
+// and can be taken back; the key is the group itself changing hands.
+export function KeyIcon({ color = INK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="7" cy="17" r="3.5" />
+      <Line x1="9.5" y1="14.5" x2="19.5" y2="4.5" />
+      <Line x1="16.5" y1="7.5" x2="18.5" y2="9.5" />
+      <Line x1="13.5" y1="10.5" x2="15.5" y2="12.5" />
+    </Glyph>
+  )
+}
+
 // ── Close / dots ───────────────────────────────────────────────────────────
 
 export function CloseIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {

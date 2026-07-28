@@ -26,8 +26,8 @@ import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, 
 import { iconScale, inkOffset } from '../src/fonts'
 import { INK_BODY, INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, formatGrantTime } from '../src/lib/credits'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
+import { creditTotal } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BottomSheet, SheetActionRow, SheetTitle } from '../src/components/BottomSheet'
@@ -37,7 +37,7 @@ import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { communitiesSummary, pendingApprovals, metaLine, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
 import { supportMailUrl } from '../src/lib/links'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
-import { Chip, CHIP_HEIGHT, phraseWrap, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
+import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
 
@@ -163,7 +163,6 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 function SelectFieldRow({
   label,
   subtitle,
-  detail,
   onPress,
   icon,
   avatar,
@@ -176,9 +175,6 @@ function SelectFieldRow({
 }: {
   label?: string
   subtitle?: string
-  /** Node under the label/subtitle, inside the same text column (the credits
-   * row's pool table). For content a plain `subtitle` string can't lay out. */
-  detail?: React.ReactNode
   onPress: () => void | Promise<unknown>
   icon?: React.ReactNode
   avatar?: string
@@ -270,34 +266,11 @@ function SelectFieldRow({
                     {trailing ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
                   </View>
                 ) : null}
-                {detail}
               </View>
             </View>
           </View>
         ) : renderedIcon
       })()}
-    </View>
-  )
-}
-
-// ── Credit pool line ───────────────────────────────────────────────────────
-// One pool of the credits row: what the pool is on the START side, how many it
-// holds on the END side. Two of these stack under the credits label.
-//
-// The amount is a SMALL CHIP on the row's opposite edge (user directive
-// 2026-07-28) — the same compact tile a group strip's role chip wears, so the
-// number reads as an object of its own against the caption instead of as the
-// last word of it. The caption beside it is the subtitle's dimmer ink, and the
-// chip sits on the caption's LAST line (see creditPoolLine's alignItems).
-// `phraseWrap` keeps a caption that doesn't fit breaking at a phrase seam
-// rather than mid-phrase.
-function CreditPoolLine({ text, amount }: { text: string; amount: string }) {
-  return (
-    <View style={styles.creditPoolLine}>
-      <Text style={styles.creditPoolText}>{phraseWrap(text)}</Text>
-      <View style={styles.creditPoolAmount}>
-        <Chip small text={amount} />
-      </View>
     </View>
   )
 }
@@ -395,6 +368,7 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
 // ahead of the account links at the bottom.
 function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
   const { profile } = useUserStore()
+  const router = useRouter()
   // Visibility (visible <-> hidden). This row is the ONLY way back to visible
   // now that page2 has no UI of its own, so it must stay reachable and must
   // not silently fail. Going hidden kicks every watcher pinned to the user,
@@ -409,6 +383,14 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
   const [visibilityBusy, setVisibilityBusy] = useState(false)
   const isHidden = selectIsHidden(profile)
+  // Communities are members-only: a browse-only account (profile not yet built)
+  // may not enter the hub at all, because every surface in there shows the user
+  // to other people (a group's member list, a friend request). Same marker the
+  // invite gate uses (selectProfileBuilt), so "full member" means one thing.
+  // The tap opens an explanation whose single button is the build flow, so the
+  // popup that says what is missing is also the way to fix it.
+  const profileBuilt = selectProfileBuilt(profile)
+  const [commGateOpen, setCommGateOpen] = useState(false)
 
   const runVisibility = useCallback(async (endpoint: string) => {
     if (visibilityBusy) return
@@ -497,7 +479,10 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
           // purple because something is WAITING here — the pale neutral one the
           // visibility row wears states a fact, this one asks for an answer.
           trailing={commRequests > 0 ? <Chip small text={requestLabel(commRequests)} tone="solid" /> : undefined}
-          onPress={() => onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })}
+          onPress={() => {
+            if (!profileBuilt) { setCommGateOpen(true); return }
+            return onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })
+          }}
           icon={<GroupsIcon color={INK} />}
           labelColor={INK}
         />
@@ -513,6 +498,19 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
         onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
         onConfirm={() => runVisibility('app/lock2')}
         busy={visibilityBusy}
+        draggable
+      />
+      {/* The one button is the build flow itself, wearing the same label as the
+          menu's own build-profile CTA: the popup that says what is missing is
+          also the way to fix it. Dismissed by swiping down / the backdrop. */}
+      <ConfirmDialog
+        visible={commGateOpen}
+        title={t('communities.gateTitle')}
+        description={t('communities.gateDesc')}
+        confirmLabel={t('settings.buildProfile')}
+        confirmIconStart={<UserPlusIcon color={WHITE} />}
+        onConfirm={() => { setCommGateOpen(false); router.push('/onboarding') }}
+        onCancel={() => setCommGateOpen(false)}
         draggable
       />
     </View>
@@ -2766,13 +2764,13 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Credits row content: what the daily pool holds plus the hour it refills at,
-  // and the extras (purchased pool, no cap, no expiry). This IS the credits
-  // explainer now — the dialog that used to spell the same numbers out in prose
-  // is gone.
-  const heartsBalance = creditBalance(profile)
-  const heartsExtra = creditExtra(profile)
-  const grantTime = formatGrantTime(profile)
+  // Credits row content: ONE number, the whole wallet (user directive
+  // 2026-07-28). The row used to carry a two-line pool table under the label —
+  // the daily pool with the hour it refills at, the extras beneath it — and it
+  // said more than the row needed to: what the user can spend is the total, and
+  // the split between the two pools is the buy picker's business, which the row
+  // opens anyway.
+  const heartsTotal = creditTotal(profile)
 
   return (
     <>
@@ -2782,28 +2780,12 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             Communities.) */}
         <SelectFieldRow
           grouped
-          // The label is the bare word; under it, ONE LINE PER POOL, each a
-          // caption on the START edge and its amount as a small chip on the
-          // opposite one (user directives 2026-07-27, 2026-07-28). The daily
-          // line says only WHEN it refills — the word "daily" is gone, the hour
-          // says it — and the amount is the plain count, not a fraction of the
-          // cap: what's left is the answer, what it's out of never was (user
-          // directive 2026-07-28). The daily caption empties out when the hour
-          // is unknown (between rollout and the first cron tick), leaving just
-          // its chip. The extras line is the bare word plus its count; the pool
-          // is uncapped and never expires, so there is nothing else to say.
+          // The label is the bare word and the whole wallet rides its own line
+          // as ONE small chip on the END edge (user directive 2026-07-28) — the
+          // same trailing tile the watcher/requests rows wear, so the count
+          // reads as a fact stated by the row rather than a table hung under it.
           label={t('settings.credits')}
-          detail={
-            <View style={styles.creditPools}>
-              <CreditPoolLine
-                text={grantTime
-                  ? t('settings.creditsDailyNext').replace('{time}', grantTime)
-                  : ''}
-                amount={String(heartsBalance)}
-              />
-              <CreditPoolLine text={t('settings.creditsExtra')} amount={String(heartsExtra)} />
-            </View>
-          }
+          trailing={<Chip small text={String(heartsTotal)} />}
           onPress={onOpenBuyExtra}
           icon={<CoinIcon color={INK} size={ICON.md} />}
           labelColor={INK}
@@ -3176,19 +3158,6 @@ const styles = StyleSheet.create({
   // states several facts on one line (the communities counts) must be allowed
   // to shrink below its content width and wrap, not run off the row's edge.
   selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.md, color: INK_BODY, marginTop: XS },
-  // The credits row's pool table: one line per pool, caption on the START edge
-  // and the amount chip on the END edge (justifyContent spreads them, so the
-  // chips form a column without a hand-set column width). alignItems:'flex-end'
-  // keeps the chip on the caption's LAST line when a caption wraps (user
-  // directive 2026-07-28) — it sits level with the bottom of the caption block,
-  // so the pool table's baseline stays a straight line.
-  creditPools: { marginTop: XS, gap: XS },
-  creditPoolLine: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: MD },
-  creditPoolText: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK_BODY },
-  // The chip must not shrink with the row, and a chip is flexShrink:1 in its own
-  // right — so it rides in a rigid wrapper rather than being shrunk to its
-  // digits' width by the caption beside it.
-  creditPoolAmount: { flexShrink: 0 },
   selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
   // One line of the label column, so an END-edge chip can ride it: the words
   // take the whole width and the chip sits at their end, facing them. Same

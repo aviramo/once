@@ -197,6 +197,26 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
   - Delete `web/src/app/[lang]/bugs/` and its entry points in `web/src/app/[lang]/_components/AdminShell.tsx`.
 - **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'bug_report' AND created_at > now() - interval '14 days'`. Zero hits = no live sender left.
 
+### Managers lost the group-config rights (informational)
+
+- **Added:** 2026-07-28
+- **Reason:** The owner/manager line was redrawn (user directive 2026-07-28): a manager answers join requests and removes plain members, and the only thing of his in the group's settings is "hide me from the members here". `app_update_group` went **owner-only** in migration `20260728190000_owner_only_admin_and_transfer.sql`. (`app_remove_member` went owner-only in that same migration and was put back to owner-or-manager the same day by `20260728200000_manager_removes_plain_members.sql`, so it never changed for a live client.) A permission tightening has to take effect the moment it deploys, so this is deliberately NOT staged Expand→Migrate→Contract; the entry records the cross-version window.
+- **Old shape (kept alive):** Nothing removed from the response shapes. The deployed mobile build still RENDERS the full settings page (name / description / link / kind editors) to a **manager**, and still offers the promote/demote button under the old `iAmOwner || !m.manager` rule. Those controls now come back `not_owner` (HTTP 400) instead of applying. Degraded UX for managers of someone else's group, in that one window; owners are unaffected, and nothing an old client can do corrupts state.
+- **New shape (preferred):** the new build gives a manager a settings page holding only the hide-me switch and a member page whose only action is "Remove from group" (plain members only), and gives the owner a third action, "Transfer ownership" (`/app/transfer_owner` → `app_transfer_owner`).
+- **Safe to remove after:** the build with the manager-restricted settings page is the live floor. Nothing to delete either way, this is a note.
+- **How to remove:** drop this entry.
+- **Verify before removing:** check the live mobile version distribution; `SELECT count(*) FROM log WHERE key = 'update_group' AND body->>'error' = 'not_owner' AND created_at > now() - interval '14 days'` should be zero once no old client is left driving those controls as a manager.
+
+### `group_owner` push code on old clients (informational)
+
+- **Added:** 2026-07-28
+- **Reason:** New push code, sent when a group changes hands: succession on account deletion (`app_delete_cleanup`) and an explicit `app_transfer_owner`. Purely additive.
+- **Old shape (kept alive):** Nothing. The title and body are rendered server-side (`PUSH_TITLE` in `supabase/functions/global.ts`), so an old build shows the notification correctly; it just does not deep-link on tap, because `group_owner` is not in its `GROUP_CODES` set, and the tap lands on home.
+- **New shape (preferred):** `GROUP_CODES` in `mobile/app/home.tsx` includes `group_owner`, so the tap opens that group.
+- **Safe to remove after:** the build whose `GROUP_CODES` carries `group_owner` is the live floor.
+- **How to remove:** drop this entry.
+- **Verify before removing:** check the live mobile version distribution.
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.

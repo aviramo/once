@@ -886,8 +886,10 @@ export default function HomePage() {
   // Group-lifecycle pushes carry the group_id and open THAT group: group_join on
   // its manage page (where the join request waits), group_approved on its member
   // sheet (the approved requester is a plain member, not staff). The sheet
-  // resolves which of the two from the caller's own membership.
-  const GROUP_CODES = new Set(['group_join', 'group_approved', 'group_pending'])
+  // resolves which of the two from the caller's own membership. group_owner is
+  // the succession push: the previous owner deleted their account and the group
+  // is now this user's, so the tap lands on it as staff.
+  const GROUP_CODES = new Set(['group_join', 'group_approved', 'group_pending', 'group_owner'])
   // Friend-lifecycle pushes open the friends list — where an incoming request's
   // approve/decline lives, and where a new friend shows up.
   const FRIEND_CODES = new Set(['friend_request', 'friend_accept', 'friend_link'])
@@ -1059,6 +1061,26 @@ export default function HomePage() {
   // `overlaysGated` depends on isPermMode, which is derived much further down.
   const openOverlayRef = useRef(openOverlay)
   openOverlayRef.current = openOverlay
+  // Communities are members-only, exactly as on the menu row that opens the hub:
+  // a browse-only account (profile not built) may not enter, because every
+  // surface in there shows the user to other people. The rule has to hold on the
+  // ROUTED entries too — a new user who installed through a friend's invite link
+  // is sent straight to the hub by watchInvites with no profile yet. Decided off
+  // a ref because the routers below are registered once with [] deps; while
+  // `profile` is still null nothing is decided (a cold start knows nothing yet)
+  // and the guard effect underneath catches it the moment the profile lands.
+  const [commGateOpen, setCommGateOpen] = useState(false)
+  const profileRef = useRef(profile)
+  profileRef.current = profile
+  const routeToCommunities = useCallback(() => {
+    if (profileRef.current && !selectProfileBuilt(profileRef.current)) { setCommGateOpen(true); return }
+    openOverlayRef.current('communities')
+  }, [])
+  useEffect(() => {
+    if (!profile || profileBuilt || !overlays.includes('communities')) return
+    closeCommunities()
+    setCommGateOpen(true)
+  }, [profile, profileBuilt, overlays, closeCommunities])
   const overlaysGatedRef = useRef(false)
   useEffect(() => {
     return addNotificationTapListener((type, groupId, actorId) => {
@@ -1067,10 +1089,10 @@ export default function HomePage() {
         // never gated, so Communities is always reachable.
         const t = communitiesTargetFor(type, groupId, actorId)
         if (t) setCommunitiesTarget(t)
-        openOverlayRef.current('communities')
+        routeToCommunities()
       } else if (FRIEND_CODES.has(type)) {
         setCommunitiesTarget(communitiesTargetFor(type, groupId, actorId) ?? { kind: 'friends' })
-        openOverlayRef.current('communities')
+        routeToCommunities()
       } else if (CHAT_CODES.has(type)) {
         if (!overlaysGatedRef.current) openOverlayRef.current('chat')
       } else if (!PAGE2_CODES.has(type)) {
@@ -1093,7 +1115,7 @@ export default function HomePage() {
   useEffect(() => {
     const stop = watchInvites(outcome => {
       if (outcome.kind === 'friend') setCommunitiesTarget({ kind: 'friends' })
-      openOverlayRef.current('communities')
+      routeToCommunities()
     })
     void flushPendingInvite()
     return stop
@@ -3230,6 +3252,22 @@ export default function HomePage() {
                   confirmIconStart={<UserPlusIcon color={WHITE} />}
                   onConfirm={() => { setBuildProfileOpen(false); router.push('/onboarding') }}
                   onCancel={() => setBuildProfileOpen(false)}
+                  draggable
+                />
+
+                {/* The Communities members-only gate, raised by the routed
+                    entries above (push tap / redeemed invite link). Same text
+                    and same way out as the menu row's own gate: the one button
+                    is the build flow, so the popup that says what is missing is
+                    also what fixes it. */}
+                <ConfirmDialog
+                  visible={commGateOpen}
+                  title={t('communities.gateTitle')}
+                  description={t('communities.gateDesc')}
+                  confirmLabel={t('settings.buildProfile')}
+                  confirmIconStart={<UserPlusIcon color={WHITE} />}
+                  onConfirm={() => { setCommGateOpen(false); router.push('/onboarding') }}
+                  onCancel={() => setCommGateOpen(false)}
                   draggable
                 />
 
