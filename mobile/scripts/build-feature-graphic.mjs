@@ -5,6 +5,11 @@ import path from 'node:path'
 // ─────────────────────────────────────────────────────────────────────────
 // Google Play FEATURE GRAPHIC — 1024×500, no text, flat colour only.
 //
+// This is ALSO the site's social share card: the same drawing is written to
+// web/public/og-image.png, so every page's og:image / twitter:image (all six
+// static pages already declare 1024×500) shows exactly the store art. One
+// drawing, both consumers — build-icons.mjs no longer writes an og-image.
+//
 // One abstract image for one idea: ONE-ON-ONE, IN REAL TIME.
 //   the brand's "1" stands as the hero, ringed by a live countdown and pulse
 //   rings radiating out (the moment is happening now, and it is timed); a few
@@ -21,6 +26,7 @@ const root = path.resolve(
   '..',
 )
 const out = path.join(root, 'store')
+const web = path.join(root, '..', 'web', 'public')
 
 // ── Palette: the app's own tokens, never re-typed ────────────────────────────
 const colorsSrc = fs.readFileSync(path.join(root, 'src', 'colors.ts'), 'utf8')
@@ -128,8 +134,14 @@ const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http
 
 fs.mkdirSync(out, { recursive: true })
 const file = path.join(out, 'play-feature-graphic.png')
-await sharp(Buffer.from(svg)).png().toFile(file)
+const png = await sharp(Buffer.from(svg)).png().toBuffer()
+fs.writeFileSync(file, png)
 fs.writeFileSync(path.join(out, 'play-feature-graphic.svg'), svg + '\n')
 
-const { size } = fs.statSync(file)
-console.log(`feature graphic → ${file} (${W}×${H}, ${(size / 1024).toFixed(0)} KB)`)
+// The site's share card is the same image, served from web/public.
+const og = path.join(web, 'og-image.png')
+fs.writeFileSync(og, png)
+
+console.log(
+  `feature graphic → ${file} + ${og} (${W}×${H}, ${(png.length / 1024).toFixed(0)} KB)`,
+)

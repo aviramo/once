@@ -5,7 +5,7 @@ import path from 'node:path'
 // ─────────────────────────────────────────────────────────────────────────
 // SINGLE SOURCE OF TRUTH for the Once brand mark: the numeral "1" — a bold
 // round-capped stroke — in brand PURPLE on the app's pale purple ground. Everything
-// below (every mobile icon, the store's 512, the web favicon(s), og-image and
+// below (every mobile icon, the store's 512, the web favicon(s) and
 // once-mark.svg) is derived from the tokens + geometry in this file, so one
 // edit regenerates every asset in lockstep. Run: `node scripts/build-icons.mjs`.
 //
@@ -116,12 +116,8 @@ ico.writeUInt32LE(icoPng.length, 14)
 ico.writeUInt32LE(22, 18) // offset of the image data
 fs.writeFileSync(path.join(webApp, 'favicon.ico'), Buffer.concat([ico, icoPng]))
 
-// og-image: the glyph centred on a 1200×630 card of the ground tint.
-const ogMark = await sharp(buf({ bg: null })).resize(360, 360).png().toBuffer()
-await sharp({ create: { width: 1200, height: 630, channels: 4, background: GROUND } })
-  .composite([{ input: ogMark, gravity: 'center' }])
-  .png()
-  .toFile(path.join(web, 'og-image.png'))
+// (og-image.png is NOT written here: the site's share card IS the Play feature
+// graphic, one drawing for both — see scripts/build-feature-graphic.mjs.)
 
 // Vector brand mark + SVG favicon (identical full-colour mark).
 const vector = markSvg({ bg: GROUND })
@@ -176,7 +172,7 @@ const tokensCss = `/* AUTO-GENERATED from mobile/src/colors.ts by scripts/build-
   --muted: ${token('INK_MUTED')};
   --ground: ${token('INK_PALE')};
   --art-tint: ${token('INK_PALE')};
-  --art-ghost: ${rgba('INK_HAZE')};
+  --art-ghost: ${token('PAGE')};
 
   /* Lines */
   --border: ${token('SURFACE_SUNK')};
@@ -212,5 +208,5 @@ for (const file of pages) {
 }
 
 console.log(
-  `icons built ("1" ${PURPLE} on ${GROUND}) → assets: icon, splash-icon, adaptive-icon, notification-icon | store: once-512 | web: favicon.png/.svg/.ico, og-image.png, once-mark.svg, tokens.css | app.json synced | theme-color: ${themed.join(', ') || 'already current'}`,
+  `icons built ("1" ${PURPLE} on ${GROUND}) → assets: icon, splash-icon, adaptive-icon, notification-icon | store: once-512 | web: favicon.png/.svg/.ico, once-mark.svg, tokens.css | app.json synced | theme-color: ${themed.join(', ') || 'already current'}`,
 )
