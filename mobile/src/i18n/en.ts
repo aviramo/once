@@ -130,21 +130,16 @@ export default {
   'settings.watchersOne': '1 person watching you',
   'settings.watchersMany': '{count} people watching you',
   'settings.credits': 'Credits',
-  // The two credit pools, one line each in the credits row: a caption naming
-  // the pool, and its amount on the line's END edge. Each caption says what
-  // makes its pool different, since the numbers alone never did: the daily one
-  // refills at a set hour ({time} is a bare "HH:MM" from formatGrantTime, and
-  // the ...Next variant is used whenever it's known, the normal case), the
-  // extras just stay. Kept short enough to hold one line in the drawer's
-  // narrow column: a caption that wraps is what made this block look ragged.
-  'settings.creditsDaily': 'Daily',
-  'settings.creditsDailyNext': 'Daily, refills at {time}',
-  'settings.creditsExtra': 'Extra, yours to keep',
-  // With no extras the same line becomes the invitation to get some: the row
-  // opens the credits picker anyway, so the empty state names the action
-  // instead of leaving a bare "0" with nothing to do about it. English has no
-  // gendered imperative, so the {male|female} marker Hebrew carries is absent.
-  'settings.creditsExtraNone': 'Tap to add extra',
+  // The two credit pools, one line each in the credits row: a caption, and the
+  // pool's amount as a small chip on the line's opposite edge. Both captions are
+  // as short as the fact allows (user directive 2026-07-28): the daily one names
+  // only the hour it refills at ({time} is a bare "HH:MM" from formatGrantTime),
+  // since the hour already says "daily" and the word did not; the extras one is
+  // the bare noun, the pool having no cap and no expiry to report. Short enough
+  // to hold one line in the drawer's narrow column: a caption that wraps is what
+  // made this block look ragged.
+  'settings.creditsDailyNext': 'Refills at {time}',
+  'settings.creditsExtra': 'Extra',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'My groups',
   'settings.groupsMine': 'My groups',
@@ -204,13 +199,11 @@ export default {
   'communities.inviteReward': 'For every friend who connects, you both get an extra credit.',
   'communities.linkFriend': 'Link an existing friend',
   'communities.friendsCount': '{count} friends',
-  'communities.requestsSection': 'Friend requests',
   'communities.accept': 'Accept',
   'communities.decline': 'Decline',
   'communities.remove': 'Remove',
   'communities.noFriends': "You don't have friends here yet.",
   'communities.friendsHint': 'Invite friends or link existing ones, and you will see each other first.',
-  'communities.mutualNote': 'Friends of yours meet first, tagged mutual friend.',
   'communities.unfriendTitle': 'Remove {name} from friends?',
   'communities.unfriendDesc': 'You can link again later.',
   'communities.unfriendConfirm': 'Remove',
@@ -248,13 +241,11 @@ export default {
   'communities.preview': 'Preview',
   // Manage without playing. The caller's OWN membership flag inside one group
   // they run: while it is on, they and that group's members never meet in the
-  // game. One row over the member list, and the sentence that explains it in
-  // the popup the row opens.
-  'communities.hiddenTitle': 'Stay out of the game here',
+  // game. A checkbox in Group settings, under the group's kind, with the
+  // sentence that explains it as its own sub-line.
+  'communities.hiddenToggle': 'Hide me from the group members',
   'communities.hiddenSub': 'The people in this group will not see you in the game, and you will not see them. You keep managing the group exactly as before.',
   'communities.hiddenShort': 'Not playing',
-  'communities.hiddenOn': 'Stay out of the game',
-  'communities.hiddenOff': 'Play here again',
   'communities.deleteGroup': 'Delete group',
   'communities.deleteTitle': 'Delete {name}?',
   'communities.deleteDesc': 'The group and all its memberships are removed. This cannot be undone.',
@@ -461,25 +452,18 @@ export default {
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': '1 credit',
   'credits.count.many': '{n} credits',
-  // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
-  // "coming soon") and inviting a friend is the only way to earn extra, so the
-  // copy talks about getting credits rather than buying them.
+  // Credits picker. Since 2026-07-28 it is a plain ConfirmDialog: this title,
+  // the friends page's own reward sentence (communities.inviteReward, shared
+  // token) and one action button. The dead 3/10/50 packs and the paragraph
+  // above them are gone.
   'credits.buy.title': 'More credits',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.
   'credits.buy.emptyTitle': "You're out of credits",
-  'credits.buy.desc': 'Credits you get are added on top of your daily allowance and never expire.',
-  'credits.buy.priceFree': 'Free',
-  'credits.buy.comingSoon': 'Coming soon',
-  // Invite row: the one active way to earn. The title is the action alone;
-  // the sub-line under it inside the same row carries WHEN the credit lands,
-  // so the row never reads as "tap and get a credit". genderize() is a no-op
-  // on English (no {m|f} marker) — single form.
+  // The popup's action button: the one active way to earn. genderize() is a
+  // no-op on English (no {m|f} marker) — single form.
   'credits.invite.title': 'Invite a friend',
-  'credits.invite.joined.none': 'For every friend who connects with you, you both get an extra credit.',
-  'credits.invite.joined.one': 'One friend joined through you.',
-  'credits.invite.joined.many': '{n} friends joined through you.',
   // Text that rides along with the link in the OS share sheet.
   'credits.invite.shareText': 'Join me on Once',
   'settings.miles': 'mi',

@@ -132,20 +132,16 @@ export default {
   'settings.watchersOne': '1 צופה בך',
   'settings.watchersMany': '{count} צופים בך',
   'settings.credits': 'קרדיטים',
-  // The two credit pools, one line each in the credits row: a caption naming
-  // the pool, and its amount on the line's END edge. Each caption says what
-  // makes its pool different, since the numbers alone never did: the daily one
-  // refills at a set hour ({time} is a bare "HH:MM" from formatGrantTime, and
-  // the ...Next variant is used whenever it's known, the normal case), the
-  // extras just stay. Kept short enough to hold one line in the drawer's
-  // narrow column: a caption that wraps is what made this block look ragged.
-  'settings.creditsDaily': 'יומי',
-  'settings.creditsDailyNext': 'יומי, מתחדש ב-{time}',
-  'settings.creditsExtra': 'אקסטרה שנשארים איתך',
-  // With no extras the same line becomes the invitation to get some: the row
-  // opens the credits picker anyway, so the empty state names the action
-  // instead of leaving a bare "0" with nothing to do about it.
-  'settings.creditsExtraNone': '{לחץ|לחצי} להוספת אקסטרה',
+  // The two credit pools, one line each in the credits row: a caption, and the
+  // pool's amount as a small chip on the line's opposite edge. Both captions are
+  // as short as the fact allows (user directive 2026-07-28): the daily one names
+  // only the hour it refills at ({time} is a bare "HH:MM" from formatGrantTime),
+  // since the hour already says "daily" and the word did not; the extras one is
+  // the bare noun, the pool having no cap and no expiry to report. Short enough
+  // to hold one line in the drawer's narrow column: a caption that wraps is what
+  // made this block look ragged.
+  'settings.creditsDailyNext': 'מתחדש ב-{time}',
+  'settings.creditsExtra': 'אקסטרה',
   // Groups: row in the account card, plus the "my groups" sheet (list + join input).
   'settings.groups': 'הקבוצות שלי',
   'settings.groupsMine': 'הקבוצות שלי',
@@ -205,13 +201,11 @@ export default {
   'communities.inviteReward': 'על כל חבר שמתחבר, שניכם מקבלים קרדיט נוסף.',
   'communities.linkFriend': 'שיוך חבר קיים',
   'communities.friendsCount': '{count} חברים',
-  'communities.requestsSection': 'בקשות חברות',
   'communities.accept': 'אישור',
   'communities.decline': 'דחייה',
   'communities.remove': 'הסרה',
   'communities.noFriends': 'עוד אין לך חברים כאן.',
   'communities.friendsHint': 'הזמן חברים או שייך חברים קיימים, ותראו זה את זה בעדיפות גבוהה.',
-  'communities.mutualNote': 'חברים שלך רואים זה את זה קודם, עם הסימון חבר משותף.',
   'communities.unfriendTitle': 'להסיר את {name} מהחברים?',
   'communities.unfriendDesc': 'אפשר לשייך שוב בהמשך.',
   'communities.unfriendConfirm': 'הסרה',
@@ -248,13 +242,11 @@ export default {
   // בדיוק כפי שכל אחד אחר רואה אותו.
   'communities.preview': 'תצוגה מקדימה',
   // ניהול בלי לשחק. דגל על החברות שלי בקבוצה אחת שאני מנהל: כשהוא דלוק, אני
-  // והחברים בקבוצה לא נפגשים במשחק. שורה אחת מעל רשימת החברים, וההסבר בפופאפ
-  // שהיא פותחת.
-  'communities.hiddenTitle': 'לא להשתתף במשחק כאן',
+  // והחברים בקבוצה לא נפגשים במשחק. צ'קבוקס בהגדרות הקבוצה, מתחת לסוג הקבוצה,
+  // וההסבר הוא שורת המשנה שלו.
+  'communities.hiddenToggle': 'להסתיר אותי מחברי הקבוצה',
   'communities.hiddenSub': 'החברים בקבוצה לא יראו אותך במשחק ואתה לא תראה אותם. אתה ממשיך לנהל את הקבוצה בדיוק כמו קודם.',
   'communities.hiddenShort': 'לא משחק',
-  'communities.hiddenOn': 'לצאת מהמשחק בקבוצה',
-  'communities.hiddenOff': 'לחזור לשחק בקבוצה',
   'communities.deleteGroup': 'מחיקת הקבוצה',
   'communities.deleteTitle': 'למחוק את {name}?',
   'communities.deleteDesc': 'הקבוצה וכל החברויות בה יימחקו. אי אפשר לבטל.',
@@ -465,28 +457,21 @@ export default {
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': 'קרדיט אחד',
   'credits.count.many': '{n} קרדיטים',
-  // Credits picker. Since 2026-07-22 nothing is purchasable (3/10/50 all show
-  // "coming soon") and inviting a friend is the only way to earn extra, so the
-  // copy talks about getting credits rather than buying them.
+  // Credits picker. Since 2026-07-28 it is a plain ConfirmDialog: this title,
+  // the friends page's own reward sentence (communities.inviteReward, shared
+  // token) and one action button. The dead 3/10/50 packs and the paragraph
+  // above them are gone.
   'credits.buy.title': 'עוד קרדיטים',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.
   'credits.buy.emptyTitle': 'נגמרו לך הקרדיטים',
-  'credits.buy.desc': 'קרדיטים שתקבל מצטרפים לקרדיטים שכבר יש לך, ולא יתבטלו עם הזמן.',
-  'credits.buy.priceFree': 'חינם',
-  'credits.buy.comingSoon': 'בקרוב',
-  // Invite row: the one active way to earn. The title is the action alone;
-  // the sub-line under it inside the same row carries WHEN the credit lands,
-  // so the row never reads as "tap and get a credit". The verb is gendered by
-  // the user's own sex via the inline {male|female} marker, so the call site
+  // The popup's action button: the one active way to earn. The verb is gendered
+  // by the user's own sex via the inline {male|female} marker, so the call site
   // must use genderize() — tg() only resolves whole-string _m/_f keys and
   // would print the marker as-is. The friend stays ungendered ("חבר" covers
   // any friend you'd invite).
   'credits.invite.title': '{הזמן|הזמיני} חבר',
-  'credits.invite.joined.none': 'על כל חבר שמתחבר אליך, שניכם מקבלים קרדיט נוסף.',
-  'credits.invite.joined.one': 'חבר אחד הצטרף דרכך.',
-  'credits.invite.joined.many': '{n} חברים הצטרפו דרכך.',
   // Text that rides along with the link in the OS share sheet.
   'credits.invite.shareText': 'הצטרף אליי ל Once',
   'settings.miles': 'מייל',

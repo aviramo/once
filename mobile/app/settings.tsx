@@ -13,7 +13,7 @@ import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, 
 import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { Switch } from '../src/components/Switch'
+import { ToggleRow } from '../src/components/Switch'
 import { MatchCard, type CardAddChip } from '../src/components/MatchCard'
 import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import type { OverlaySheetBody } from '../src/components/OverlaySheet'
@@ -27,7 +27,7 @@ import { iconScale, inkOffset } from '../src/fonts'
 import { INK_BODY, INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
-import { creditBalance, creditExtra, formatGrantTime, CREDIT_CAP } from '../src/lib/credits'
+import { creditBalance, creditExtra, formatGrantTime } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BottomSheet, SheetActionRow, SheetTitle } from '../src/components/BottomSheet'
@@ -281,23 +281,23 @@ function SelectFieldRow({
 }
 
 // ── Credit pool line ───────────────────────────────────────────────────────
-// One pool of the credits row: what the pool is (and, for the daily one, when
-// it refills) on the START side, how many it holds on the END side. Two of
-// these stack under the credits label.
+// One pool of the credits row: what the pool is on the START side, how many it
+// holds on the END side. Two of these stack under the credits label.
 //
-// The amounts sit on the row's END edge, so the pair reads as a column and the
-// whole block lines up on two edges instead of running on as loose sentences.
-// The amount is the only thing here at full label ink — it's the answer the
-// row is opened for; the words beside it are the caption, in the subtitle's
-// dimmer ink, and it sits on the caption's LAST line (see creditPoolLine's
-// alignItems). `phraseWrap` keeps a caption that doesn't fit breaking at its
-// comma seam ("יומי," / "מתחדש היום ב-17:00") rather than mid-phrase, which is
-// what made the earlier one-string-per-pool version look ragged.
+// The amount is a SMALL CHIP on the row's opposite edge (user directive
+// 2026-07-28) — the same compact tile a group strip's role chip wears, so the
+// number reads as an object of its own against the caption instead of as the
+// last word of it. The caption beside it is the subtitle's dimmer ink, and the
+// chip sits on the caption's LAST line (see creditPoolLine's alignItems).
+// `phraseWrap` keeps a caption that doesn't fit breaking at a phrase seam
+// rather than mid-phrase.
 function CreditPoolLine({ text, amount }: { text: string; amount: string }) {
   return (
     <View style={styles.creditPoolLine}>
       <Text style={styles.creditPoolText}>{phraseWrap(text)}</Text>
-      <Text style={styles.creditPoolAmount}>{amount}</Text>
+      <View style={styles.creditPoolAmount}>
+        <Chip small text={amount} />
+      </View>
     </View>
   )
 }
@@ -1612,18 +1612,6 @@ function ageLabel(n: number): string {
   return t('family.ageYears').replace('{n}', String(n))
 }
 
-function FamilyToggleRow({ label, value, onValueChange }: { label: string; value: boolean; onValueChange: (v: boolean) => void }) {
-  return (
-    <Pressable
-      style={familyStyles.toggleRow}
-      onPress={() => { tap(); onValueChange(!value) }}
-    >
-      <Text style={familyStyles.toggleLabel}>{label}</Text>
-      <Switch value={value} />
-    </Pressable>
-  )
-}
-
 // Yes / No pills with deselect-to-undecided. Both unselected = null (undecided).
 function FamilyTriOptionRow({
   label,
@@ -1930,7 +1918,7 @@ export function FamilyKidsPopup({
                     hasKids is off, against the static "Interested in kids"
                     row below). */}
                 <View>
-                  <FamilyToggleRow
+                  <ToggleRow
                     label={hasKidsLabel}
                     value={hasKids}
                     onValueChange={setHasKids}
@@ -2778,10 +2766,10 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
   if (!profile) return null
 
-  // Credits row content: the daily pool as a fraction of its cap plus the hour
-  // it refills at, and the extras (purchased pool, no cap, no expiry). This IS
-  // the credits explainer now — the dialog that used to spell the same numbers
-  // out in prose is gone.
+  // Credits row content: what the daily pool holds plus the hour it refills at,
+  // and the extras (purchased pool, no cap, no expiry). This IS the credits
+  // explainer now — the dialog that used to spell the same numbers out in prose
+  // is gone.
   const heartsBalance = creditBalance(profile)
   const heartsExtra = creditExtra(profile)
   const grantTime = formatGrantTime(profile)
@@ -2794,33 +2782,26 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             Communities.) */}
         <SelectFieldRow
           grouped
-          // The label is the bare word; under it, ONE LINE PER POOL, each
-          // naming its pool with the amount on the row's END edge (user
-          // directive 2026-07-27). Two edges to read along, so two facts that
-          // used to be a parenthesised label tail — then a pair of wrapping
-          // chips, then two run-on sentences — sit as a small table instead.
-          // The refill hour rides INSIDE the daily line, the only pool it
-          // applies to; on a line of its own it looked like it governed the
-          // extras too, which never expire. The daily line drops just that
-          // clause when the hour is unknown (between rollout and the first cron
-          // tick). The extras line always renders: with none it turns into the
-          // invitation to get some (the row already opens the credits picker),
-          // so the empty state advertises the action instead of vanishing.
+          // The label is the bare word; under it, ONE LINE PER POOL, each a
+          // caption on the START edge and its amount as a small chip on the
+          // opposite one (user directives 2026-07-27, 2026-07-28). The daily
+          // line says only WHEN it refills — the word "daily" is gone, the hour
+          // says it — and the amount is the plain count, not a fraction of the
+          // cap: what's left is the answer, what it's out of never was (user
+          // directive 2026-07-28). The daily caption empties out when the hour
+          // is unknown (between rollout and the first cron tick), leaving just
+          // its chip. The extras line is the bare word plus its count; the pool
+          // is uncapped and never expires, so there is nothing else to say.
           label={t('settings.credits')}
           detail={
             <View style={styles.creditPools}>
               <CreditPoolLine
                 text={grantTime
                   ? t('settings.creditsDailyNext').replace('{time}', grantTime)
-                  : t('settings.creditsDaily')}
-                amount={`${heartsBalance}/${CREDIT_CAP}`}
+                  : ''}
+                amount={String(heartsBalance)}
               />
-              <CreditPoolLine
-                text={heartsExtra > 0
-                  ? t('settings.creditsExtra')
-                  : genderize(t('settings.creditsExtraNone'), profile.is_male)}
-                amount={String(heartsExtra)}
-              />
+              <CreditPoolLine text={t('settings.creditsExtra')} amount={String(heartsExtra)} />
             </View>
           }
           onPress={onOpenBuyExtra}
@@ -3196,15 +3177,18 @@ const styles = StyleSheet.create({
   // to shrink below its content width and wrap, not run off the row's edge.
   selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.md, color: INK_BODY, marginTop: XS },
   // The credits row's pool table: one line per pool, caption on the START edge
-  // and amount on the END edge (justifyContent spreads them, so the amounts
-  // form a column without a hand-set column width). alignItems:'flex-end'
-  // keeps the amount on the caption's LAST line when a caption wraps (user
-  // directive 2026-07-28) — the fraction sits level with the bottom of the
-  // caption block, so the pool table's baseline stays a straight line.
+  // and the amount chip on the END edge (justifyContent spreads them, so the
+  // chips form a column without a hand-set column width). alignItems:'flex-end'
+  // keeps the chip on the caption's LAST line when a caption wraps (user
+  // directive 2026-07-28) — it sits level with the bottom of the caption block,
+  // so the pool table's baseline stays a straight line.
   creditPools: { marginTop: XS, gap: XS },
   creditPoolLine: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: MD },
   creditPoolText: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK_BODY },
-  creditPoolAmount: { flexShrink: 0, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK, fontWeight: WEIGHT.semibold },
+  // The chip must not shrink with the row, and a chip is flexShrink:1 in its own
+  // right — so it rides in a rigid wrapper rather than being shrunk to its
+  // digits' width by the caption beside it.
+  creditPoolAmount: { flexShrink: 0 },
   selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
   // One line of the label column, so an END-edge chip can ride it: the words
   // take the whole width and the chip sits at their end, facing them. Same

@@ -25,7 +25,8 @@ import { Button } from './Button'
 import { RoundButton } from './RoundButton'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BottomSheet, SheetScroll, SheetTitle } from './BottomSheet'
-import { Glyph, GroupsIcon, TrashIcon, RankIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon, EyeOffIcon, EyeOpenIcon } from './icons'
+import { Glyph, GroupsIcon, TrashIcon, RankIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon } from './icons'
+import { ToggleRow } from './Switch'
 import { tap, tapWarning } from '../lib/haptics'
 import { t } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
@@ -549,7 +550,7 @@ function PageLayer({
       headerBottomShared: headerBottom,
       pullEngaged: pull.pullEngaged,
     }) ?? null
-  ) : view.k === 'hub' || view.k === 'owned' || view.k === 'requests' || view.k === 'find' ? (
+  ) : view.k === 'hub' || view.k === 'owned' || view.k === 'requests' || view.k === 'find' || view.k === 'friends' ? (
     // The list pages do NOT ride a page scroll: whatever head they have stays
     // put and only the rows under it scroll, inside a box that ends `rosterGap`
     // above the page's end (user directive 2026-07-27; the hub joined them
@@ -560,6 +561,13 @@ function PageLayer({
     <View style={[s.scroll, s.content]}>
       {view.k === 'find' ? (
         <FindView query={findQuery} bottomInset={rosterGap} onDone={closePage} />
+      ) : view.k === 'friends' ? (
+        <FriendsView
+          profile={profile}
+          onOpenFriend={f => push({ k: 'person', person: { kind: 'friend', friend: f } })}
+          bottomInset={rosterGap}
+          onRosterTop={y => { rosterTop.current = y; syncDragBand() }}
+        />
       ) : view.k === 'hub' ? (
         <HubView
           push={push}
@@ -602,12 +610,6 @@ function PageLayer({
       scrollEventThrottle={16}
       onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => { scrollY.current = e.nativeEvent.contentOffset.y }}
     >
-      {view.k === 'friends' && (
-        <FriendsView
-          profile={profile}
-          onOpenFriend={f => push({ k: 'person', person: { kind: 'friend', friend: f } })}
-        />
-      )}
       {view.k === 'create' && <CreateView onCreated={g => setStack([{ k: 'hub' }, { k: 'owned', group: g }])} />}
       {view.k === 'settings' && <GroupSettingsView group={view.group} onChanged={applyGroup} onDeleted={() => removeGroupViews(view.group.id)} />}
     </PullScrollView>
@@ -943,31 +945,36 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
     <>
       <BottomSheet visible={!!group && !confirm} onDismiss={onClose} onClosed={onClosed}>
         <View style={s.sheetWrap}>
-          {/* Who runs the group leads the popup: their photo, "managed by
-              <them>" directly UNDER that photo (user directive 2026-07-28 — the
-              line belongs to the face above it, not stranded under the group's
-              name), and the group's own name on the line below. An admin-owned
-              group has no owner and simply shows neither. */}
-          {group?.owner ? (
-            <View style={s.sheetAvatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
-          ) : null}
-          {group?.owner?.name ? <Text style={s.sheetDesc}>{t('communities.managedBy').replace('{name}', group.owner.name)}</Text> : null}
-          {/* Whole name, wrapping as far as it needs (user directive
-              2026-07-27) — a popup about one group never abbreviates which. */}
-          <SheetTitle style={s.sheetTitle}>{group?.name}</SheetTitle>
-          {/* How big it is: the same fact the row it was opened from states, and
-              the one thing a searcher weighs a group by. Absent only on an old
-              summary payload that carried no count. */}
-          {group?.members != null ? <Text style={s.sheetDesc}>{memberLabel(group.members)}</Text> : null}
-          {/* The one part of this popup with no length to count on: what a
-              group wrote about itself can run for paragraphs. It takes whatever
-              height is left under the sheet's cap and scrolls inside it, so the
-              face, the name, the size and the action are ALWAYS on screen
-              (user directive 2026-07-28) — before this, a long description
-              pushed the popup's own head off the top of the display. */}
-          {group?.description ? (
-            <SheetScroll><Text style={s.sheetDesc}>{group.description}</Text></SheetScroll>
-          ) : null}
+          {/* The group's whole introduction is ONE scrolling block (user
+              directive 2026-07-28): the owner's face, "managed by <them>", the
+              name, the size and what the group wrote about itself scroll
+              TOGETHER. Scrolling only the description left the head pinned over
+              a moving strip of text, which read as two unrelated panes; this is
+              one piece of writing and it moves as one.
+              The block takes whatever height is left under the sheet's cap, so
+              it opens showing the head and the first lines, and the link, the
+              standing note and the action below it are ALWAYS on screen. */}
+          <SheetScroll>
+            <View style={s.sheetHead}>
+              {/* Who runs the group leads it: their photo, with "managed by
+                  <them>" directly UNDER that photo (user directive 2026-07-28 —
+                  the line belongs to the face above it, not stranded under the
+                  group's name). An admin-owned group has no owner and simply
+                  shows neither. */}
+              {group?.owner ? (
+                <View style={s.sheetAvatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
+              ) : null}
+              {group?.owner?.name ? <Text style={s.sheetDesc}>{t('communities.managedBy').replace('{name}', group.owner.name)}</Text> : null}
+              {/* Whole name, wrapping as far as it needs (user directive
+                  2026-07-27) — a popup about one group never abbreviates which. */}
+              <SheetTitle style={s.sheetTitle}>{group?.name}</SheetTitle>
+              {/* How big it is: the same fact the row it was opened from states,
+                  and the one thing a searcher weighs a group by. Absent only on
+                  an old summary payload that carried no count. */}
+              {group?.members != null ? <Text style={s.sheetDesc}>{memberLabel(group.members)}</Text> : null}
+              {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
+            </View>
+          </SheetScroll>
           <GroupLink url={group?.link} />
           {/* What this group is to me right now, in a sentence. A group I have
               not asked to join yet says nothing: the button below says it. */}
@@ -1248,7 +1255,19 @@ const rosterRowStyle = (index: number, last: boolean) => [
 ]
 
 // ── My friends ─────────────────────────────────────────────────────────────
-function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenFriend: (f: FriendItem) => void }) {
+// Built exactly like a group you manage (user directive 2026-07-28): the roster
+// is a CONTAINED box that ends above the page's bottom, and what the page can DO
+// sits under it, fixed, where a list of any length can never push it off the
+// screen. Incoming friend requests ride at the TOP of that same box, the way a
+// group's waiting queue does, rather than on a card of their own.
+function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
+  profile: StoreProfile
+  onOpenFriend: (f: FriendItem) => void
+  /** Air under the contained roster — see ContainedRoster / PageLayer. */
+  bottomInset: number
+  /** See ContainedRoster's `onTopMeasured`. */
+  onRosterTop?: (y: number) => void
+}) {
   const [busy, setBusy] = useState<string | null>(null)
 
   // Same two-tier read as a group roster: last visit's list paints, the round
@@ -1278,29 +1297,41 @@ function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenF
     try { await friendRespond(id, accept) } finally { setBusy(null); load() }
   }
 
-  return (
-    <View style={{ gap: MD }}>
-      {/* Single entry: share the friend-invite link. Opening it with the app
-          installed auto-links the pair as mutual friends (no request, no
-          approval). People-search + friend requests were removed 2026-07-26. */}
-      <Button label={t('communities.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
-      <Text style={s.sheetNote}>{t('communities.inviteReward')}</Text>
+  const requests = data?.requests ?? []
 
-      {data?.requests.length ? (
-        <>
-          <Text style={s.section}>{t('communities.requestsSection')}</Text>
-          <View style={s.card}>
-            {data.requests.map((r, i) => (
-              // The one strip that answers in place instead of opening
-              // something: its two pills ride the trailing lane.
+  return (
+    <View style={s.ownedFill}>
+      <ContainedRoster
+        data={friends}
+        bottomInset={0}
+        onTopMeasured={onRosterTop}
+        syncing={syncing}
+        keyOf={f => f.user_id}
+        // Knowing the count up front means a friendless account skips the
+        // placeholder entirely and goes straight to the empty line.
+        empty={(
+          <View style={[s.rosterRow, requests.length === 0 && s.rosterRowFirst, s.rosterRowLast]}>
+            {friends == null && friendCount !== 0
+              ? <SkeletonRows rows={friendCount ?? undefined} first={requests.length === 0} />
+              : <Empty text={t('communities.noFriends')} />}
+          </View>
+        )}
+        // Incoming friend requests, at the top of the same card the friends are
+        // in — the group page's waiting queue in its friends form. These are the
+        // one strips that answer IN PLACE instead of opening something: their
+        // two pills ride the trailing lane.
+        header={requests.length ? (
+          <>
+            {requests.map((r, i) => (
               <Strip
                 key={r.id}
                 first={i === 0}
+                style={rosterRowStyle(i, false)}
                 icon={<Avatar userId={r.user_id} name={r.name} image={r.image} />}
                 title={r.name ?? ''}
                 trailing={(
                   <>
-                    <Pressable style={[s.pillBtn, { backgroundColor: INK}]} onPress={() => respond(r.id, true)} disabled={!!busy}>
+                    <Pressable style={[s.pillBtn, { backgroundColor: INK }]} onPress={() => respond(r.id, true)} disabled={!!busy}>
                       <Text style={s.pillBtnInk}>{t('communities.accept')}</Text>
                     </Pressable>
                     <Pressable style={[s.pillBtn, { backgroundColor: INK_WASH }]} onPress={() => respond(r.id, false)} disabled={!!busy}>
@@ -1310,34 +1341,38 @@ function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenF
                 )}
               />
             ))}
-          </View>
-        </>
-      ) : null}
+          </>
+        ) : null}
+        row={(f, index, last) => {
+          // The request rows, when there are any, own the card's rounded top and
+          // the first hairline-free edge, so the people below them stay flat.
+          const first = index === 0 && requests.length === 0
+          return (
+            // No button on the row (user directive 2026-07-27): tapping opens
+            // the friend's profile, and removing them is decided there.
+            <Strip
+              first={first}
+              style={rosterRowStyle(first ? 0 : index + 1, last)}
+              icon={<Avatar userId={f.user_id} name={f.name} image={f.image} />}
+              title={f.name ?? ''}
+              onPress={() => onOpenFriend(f)}
+            />
+          )
+        }}
+      />
 
-      <Text style={s.section}>{friendCount == null ? ' ' : t('communities.friendsCount').replace('{count}', String(friendCount))}</Text>
-      <View style={s.card}>
-        {/* Knowing the count up front also means a friendless account skips the
-            placeholder entirely and goes straight to the empty line. */}
-        {friends == null && friendCount !== 0 ? (
-          <SkeletonRows rows={friendCount ?? undefined} />
-        ) : friendCount === 0 ? (
-          <Empty text={t('communities.noFriends')} />
-        ) : friends!.map((f, i) => (
-          // No button on the row (user directive 2026-07-27): tapping opens the
-          // friend's profile, and removing them is decided there.
-          <Strip
-            key={f.user_id}
-            first={i === 0}
-            icon={<Avatar userId={f.user_id} name={f.name} image={f.image} />}
-            title={f.name ?? ''}
-            onPress={() => onOpenFriend(f)}
-          />
-        ))}
-        {/* Last child, over the card's top edge: the list is the last visit's
-            and the answer is still out. See SyncBar. */}
-        <SyncBar visible={syncing} />
+      {/* The one way in, UNDER the list (user directive 2026-07-28), fixed: the
+          page is who you already have, and inviting is what you do after reading
+          it, the same order the group page puts its share link in. A roster of
+          any length scrolls inside the box above and can never push this off the
+          screen. What each friend is worth sits directly ABOVE the button, as
+          the reason to press it. Opening the link with the app installed
+          auto-links the pair as mutual friends (no request, no approval).
+          People-search + friend requests were removed 2026-07-26. */}
+      <View style={[s.friendsInvite, { marginBottom: bottomInset }]}>
+        <Text style={s.sheetNote}>{t('communities.inviteReward')}</Text>
+        <Button label={t('communities.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
       </View>
-      {data && data.friends.length > 0 ? <Text style={s.note}>{t('communities.mutualNote')}</Text> : null}
     </View>
   )
 }
@@ -1485,67 +1520,19 @@ function OwnedGroupView({ group, onChanged, onOpenRequests, onOpenMember, bottom
 
   const share = () => { tap(); Share.share({ message: t('communities.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) }) }
 
-  // "Stay out of the game here" — the row above the roster opens the popup that
-  // explains it and carries the single action. The answer is awaited (the popup
-  // stays put under its spinner) rather than applied optimistically: this one
-  // changes who the user meets, so it closes on the server's word, not before.
-  // `onChanged` keeps the group row (header, hub meta) in step.
-  const [hiddenSheet, setHiddenSheet] = useState(false)
-  const [hiddenBusy, setHiddenBusy] = useState(false)
-  const hidden = !!group.hidden
-  const toggleHidden = async () => {
-    setHiddenBusy(true); hidden ? tap() : tapWarning()
-    try { onChanged(await setGroupHidden(group.id, !hidden)); setHiddenSheet(false) } finally { setHiddenBusy(false) }
-  }
-
   const roleTag = (m: GroupMember) => m.owner ? t('communities.owner') : m.manager ? t('communities.manager') : null
 
   return (
     <View style={s.ownedFill}>
-      {/* Fixed head: share and the member heading STAY PUT — only the roster
-          below them scrolls (the waiting queue rides at its top). The gear that
-          used to sit here now rides the page HEADER, beside the group's name. */}
-      <View style={s.ownedHead}>
-        <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
-        {/* No description here (user directive 2026-07-27): it only ate the
-            roster's height, and it is one tap away in Group settings, where it
-            is also edited. */}
-
-        {/* The count rides in on the group row itself, so the heading is painted
-            from the first frame and only the roster below it waits. Opposite it,
-            on the same line, the play-here EYE (user directive 2026-07-28):
-            backgroundless, so the heading row carries it as chrome rather than
-            as a button strip of its own. Manage without playing — with no label
-            left to say it, the glyph alone carries the state: open = playing
-            here, crossed out = hidden, and the sentence that explains it lives
-            in the popup it opens. It rides beside the roster rather than in
-            Group settings because that page is the GROUP's config; this is the
-            caller's own membership, i.e. whether these very people meet you. */}
-        <View style={s.sectionRow}>
-          <Text style={[s.section, s.sectionFlat]}>{memberLabel(members?.length ?? group.members)}</Text>
-          <RoundButton
-            // Sized to the GLYPH, not to a chrome circle: with no background to
-            // draw, a ROUND_BUTTON_SIZE_SM box only stretched the heading row and
-            // pushed the roster down. The tap target is RoundButton's hitSlop.
-            size={ICON.xxl}
-            bg="transparent"
-            shadow={false}
-            style={s.headingGlyph}
-            onPress={() => { tap(); setHiddenSheet(true) }}
-            accessibilityLabel={t('communities.hiddenTitle')}
-          >
-            {/* ICON.xl, an optical half-step over the chrome default: the eye's
-                ink is a wide flat lens that fills barely half its box height, so
-                at the plain size it reads visibly smaller than every other
-                glyph. */}
-            {hidden ? <EyeOffIcon color={INK} size={ICON.xl} /> : <EyeOpenIcon color={INK} size={ICON.xl} />}
-          </RoundButton>
-        </View>
-      </View>
-
+      {/* The page is the roster and nothing above it (user directive
+          2026-07-28): the member-count heading and the play-here eye that used
+          to sit on it are both gone — the eye is a CHECKBOX in Group settings
+          now, under the group's kind, where the rest of the config lives, and
+          the count was a line the roster already shows by being itself. So the
+          list starts at the page's top edge and takes all of it. */}
       <ContainedRoster
         data={members}
-        bottomInset={bottomInset}
+        bottomInset={0}
         onTopMeasured={onRosterTop}
         syncing={syncing}
         keyOf={m => m.user_id}
@@ -1589,26 +1576,14 @@ function OwnedGroupView({ group, onChanged, onOpenRequests, onOpenMember, bottom
         }}
       />
 
-      {/* The explanation, where there is room for it: same popup shape a member
-          gets for a group they're in. One action, worded as what it will do. */}
-      <BottomSheet visible={hiddenSheet} onDismiss={() => setHiddenSheet(false)}>
-        <View style={s.sheetWrap}>
-          <SheetTitle style={s.sheetTitle}>{t('communities.hiddenTitle')}</SheetTitle>
-          <Text style={s.sheetDesc}>{t('communities.hiddenSub')}</Text>
-          {/* The popup's one action is the regular purple button in BOTH
-              directions (user directive 2026-07-27): coming back to play is as
-              much the action of this sheet as leaving is, so it gets the same
-              fill rather than a recessive grey. */}
-          <Button
-            label={hidden ? t('communities.hiddenOff') : t('communities.hiddenOn')}
-            variant="primary"
-            size="lg"
-            iconStart={hidden ? <EyeOpenIcon color={WHITE} /> : <EyeOffIcon color={WHITE} />}
-            loading={hiddenBusy}
-            onPress={toggleHidden}
-          />
-        </View>
-      </BottomSheet>
+      {/* Handing the group's link on sits UNDER the roster (user directive
+          2026-07-28), not above it: the page is the list of people, and the
+          invite is what you do after reading it. It rides the page's bottom
+          edge, `bottomInset` clear of it, which is the air the roster used to
+          carry. */}
+      <View style={{ marginBottom: bottomInset }}>
+        <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
+      </View>
     </View>
   )
 }
@@ -2011,6 +1986,12 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
   const kb = useKeyboardHeight()
   const iAmOwner = !!group.is_owner
   const [kind, setKind] = useState<GroupKind>(groupKind(group))
+  // "Hide me from the members here": the caller's OWN standing in the group,
+  // not the group's config — but it is a switch about this group, so it lives
+  // with the group's other switches (user directive 2026-07-28), directly under
+  // the kind, as a checkbox rather than a popup of its own. Optimistic like the
+  // kind above it, and reverted if the server refuses.
+  const [hidden, setHidden] = useState(!!group.hidden)
   const [savingName, setSavingName] = useState(false)
   const [savingDesc, setSavingDesc] = useState(false)
   const [savingLink, setSavingLink] = useState(false)
@@ -2032,6 +2013,10 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
       // roster it grew by has to be re-read.
       if (next === 'open') { joinRequests.set(group.id, []); rosters.drop(group.id) }
     } catch { setKind(prev) }
+  }
+  const toggleHidden = async (next: boolean) => {
+    setHidden(next)
+    try { onChanged(await setGroupHidden(group.id, next)) } catch { setHidden(!next) }
   }
   const saveName = async (next: string | null) => {
     if (!next) return  // min 1 keeps the field non-empty; guard anyway
@@ -2118,6 +2103,20 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
 
       <Text style={s.section}>{t('communities.kindLabel')}</Text>
       <KindChooser value={kind} onChange={chooseKind} />
+
+      {/* Manage without playing, as one checkbox: the members do not meet you
+          and you do not meet them, and you go on running the group exactly as
+          before. The sentence that used to be a popup's body is the row's own
+          sub-line now. */}
+      <View style={s.card}>
+        <ToggleRow
+          label={t('communities.hiddenToggle')}
+          sub={t('communities.hiddenSub')}
+          value={hidden}
+          onValueChange={toggleHidden}
+          style={s.hiddenRow}
+        />
+      </View>
 
       {iAmOwner ? (
         <Button label={t('communities.deleteGroup')} variant="secondary" size="lg" iconStart={<TrashIcon color={INK} />} onPress={() => setConfirmDelete(true)} />
@@ -2463,6 +2462,10 @@ const s = StyleSheet.create({
   // gives, and inside it only the description's SheetScroll declares a shrink of
   // its own, so that is where the whole overflow lands.
   sheetWrap: { paddingHorizontal: MD, paddingBottom: MD, gap: SM, flexShrink: 1 },
+  // The introduction inside the SheetScroll: it keeps the same SM rhythm the
+  // sheet body spaces its blocks by, so a head that scrolls looks exactly like
+  // the head that does not (a short group's popup is unchanged).
+  sheetHead: { gap: SM },
   sheetAvatar: { alignItems: 'center', paddingBottom: XS },
   // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
   sheetTitle: { paddingBottom: XS },
@@ -2486,12 +2489,17 @@ const s = StyleSheet.create({
   descInput: { minHeight: 54, paddingTop: 0 },
   pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS },
   pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
-  note: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lhSm(), marginStart: XS, marginTop: XS },
   sheetNote: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lhSm(), textAlign: 'center', marginTop: XS },
   empty: { fontSize: TEXT.md, color: INK_MUTED, textAlign: 'center', paddingVertical: LG },
   // The empty hub's two ways forward, under the card rather than in it: the card
   // is the list, and these are what to do when there is no list yet.
   emptyActions: { gap: SM, paddingTop: MD },
+  // The friends page's invite block: the reward line and the button it explains,
+  // held together under the roster so the two never drift apart.
+  friendsInvite: { gap: SM },
+  // The "hide me here" checkbox, in the settings card: one step taller than a
+  // bare toggle row, because it carries the sentence that explains it.
+  hiddenRow: { paddingVertical: MD },
   // The search page: the contained box takes the height, the note sits under it.
   findFill: { flex: 1, gap: SM },
   field: { ...FIELD_SKIN, flexDirection: 'row', alignItems: 'center', gap: SM, paddingHorizontal: MD, paddingVertical: MD },

@@ -143,7 +143,6 @@ export async function claimInstallReferral(): Promise<void> {
 
 type WithReferral = {
   referral_code?: string | null
-  relations?: { referral?: { joined?: number } | null } | null
 } | null | undefined
 
 /** The user's own invite code, straight off the users row. */
@@ -152,13 +151,11 @@ export function referralCode(profile: WithReferral): string | null {
   return typeof code === 'string' && code.length > 0 ? code : null
 }
 
-/** How many invited friends have actually joined and paid out. Maintained
- *  server-side on relations.referral.joined, so it arrives with every response
- *  and ticks up live over Realtime. */
-export function referralJoined(profile: WithReferral): number {
-  const n = profile?.relations?.referral?.joined
-  return typeof n === 'number' && n > 0 ? n : 0
-}
+// The running "how many joined through me" count (relations.referral.joined) is
+// still maintained server-side, but NOTHING in the app reads it any more: the
+// credits popup showed it and the user cut it (2026-07-28 — the offer is what
+// the popup is for, not a scoreboard). Read it off the profile again if a
+// surface ever wants it back.
 
 /** Open the OS share sheet with the user's personal invite link. Resolves to
  *  false when there is no code yet (a profile the server hasn't seeded). */
