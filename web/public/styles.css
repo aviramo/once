@@ -50,6 +50,21 @@
   --art-bg: transparent;        /* the surface an illustration sits on */
   --art-line: var(--border);    /* drawn borders */
 
+  /* --- The purple ramp, from the artwork into the TYPE ---------------------
+     The banner's ringed "1" is already drawn on steps of the one purple: pale
+     rings (--ground), a mid arc (--muted), the numeral itself. The headlines
+     were not — a long stanza in a single flat purple reads as a wall beside
+     that drawing (user directive 2026-07-28: vary the tone, one purple is too
+     long a run). These aliases are that ramp, pointing at the shared tokens:
+     no new hex, no second hue.
+     THE DEEP STEP (--brand-strong) IS NOT A TONE HERE (user directive
+     2026-07-28: the dark purple was rejected) — the play is the reading purple
+     against the ring purple, and nothing on this page darkens past --ink.
+     SOFT is LARGE TYPE ONLY, and only on a heading's first line: it clears 3:1
+     on the page at headline size and nothing smaller may take it. */
+  --tone-mid: var(--ink);
+  --tone-soft: var(--muted);
+
   /* --- Radii --- */
   --r-xs: 10px;
   --r-sm: 14px;
@@ -123,6 +138,13 @@ h1, h2, h3 { line-height: 1.12; letter-spacing: -0.02em; font-weight: 700; color
 h1 { font-size: clamp(2.15rem, 5.6vw, 3.55rem); font-weight: 800; }
 h2 { font-size: clamp(1.7rem, 3.8vw, 2.6rem); }
 h3 { font-size: clamp(1.1rem, 2vw, 1.28rem); font-weight: 600; }
+/* A stanza line (index.html's titleHTML wraps every hard-broken line in one).
+   Only the FIRST line is toned, one step lighter in the artwork's ring purple
+   (user directive 2026-07-28: that line and nothing else); every other line,
+   the accent one included, stays the full reading purple. */
+.tl { color: var(--tone-mid); }
+.tl--soft { color: var(--tone-soft); }
+h1 .accent, h2 .accent { color: var(--tone-mid); }
 p { color: var(--ink-2); }
 strong { color: var(--ink); font-weight: 600; }
 .lede { font-size: clamp(1.12rem, 1.6vw, 1.26rem); color: var(--ink-2); max-width: var(--measure); }
@@ -323,7 +345,9 @@ strong { color: var(--ink); font-weight: 600; }
 .hero { padding-block: clamp(48px, 8vw, 96px); overflow: clip; }
 .hero-copy { max-width: 640px; container-type: inline-size; }
 .hero h1 { margin-bottom: 18px; }
-.hero h1 .accent { color: var(--brand); }
+/* The hero stanza is the longest run of type on the page, so it is where the
+   ramp does the most work: mid, then the ring purple, then deep on the line
+   that lands. (It used to be three lines of the one --brand purple.) */
 /* The hero headline is a hard-broken stanza whose repetition only lands while
    every line keeps its own row, so it is sized off its OWN column (cqi) rather
    than the viewport: the two-column band hands the copy a column much narrower

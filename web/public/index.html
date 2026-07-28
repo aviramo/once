@@ -361,11 +361,19 @@
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
+    /* A headline is a hard-broken stanza, and a long stanza set in ONE flat purple
+       reads as a wall (user directive 2026-07-28). The ONLY variation is the
+       FIRST line, set one step lighter (the artwork's ring purple) so the stanza
+       opens quiet and lands full strength — nothing else in it changes tone, and
+       nothing on the page goes darker than the reading purple. The tones live in
+       styles.css; this only labels the lines. */
     function titleHTML(t) {
-      return (t.lines || []).map(function (ln, i) {
-        var isLast = i === t.lines.length - 1;
-        var txt = esc(ln);
-        return (t.accent && isLast) ? '<span class="accent">' + txt + '</span>' : txt;
+      var lines = t.lines || [];
+      return lines.map(function (ln, i) {
+        var isLast = i === lines.length - 1;
+        var cls = 'tl' + (i === 0 && lines.length > 1 ? ' tl--soft' : '') +
+          ((t.accent && isLast) ? ' accent' : '');
+        return '<span class="' + cls + '">' + esc(ln) + '</span>';
       }).join('<br>');
     }
     function paras(arr) { return (arr || []).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join(''); }
