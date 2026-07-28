@@ -1,6 +1,6 @@
 import { View, StyleSheet, I18nManager } from 'react-native'
 import { SWITCH, SWITCH_TRAVEL, RADII } from '../tokens'
-import { GREEN, BLACK_SOFT, SURFACE, SCRIM_BLACK } from '../colors'
+import { INK, SURFACE_SUNK, SURFACE, SHADOW_BLACK } from '../colors'
 
 // The ONE on/off switch: a track with a knob that slides to the far end when
 // on. Purely presentational — it renders state and nothing else, so the row
@@ -15,7 +15,7 @@ import { GREEN, BLACK_SOFT, SURFACE, SCRIM_BLACK } from '../colors'
 export function Switch({ value }: { value: boolean }) {
   const knobX = value ? (I18nManager.isRTL ? -SWITCH_TRAVEL : SWITCH_TRAVEL) : 0
   return (
-    <View style={[s.track, { backgroundColor: value ? GREEN : BLACK_SOFT }]}>
+    <View style={[s.track, { backgroundColor: value ? INK : SURFACE_SUNK }]}>
       <View style={[s.knob, { transform: [{ translateX: knobX }] }]} />
     </View>
   )
@@ -29,6 +29,6 @@ const s = StyleSheet.create({
   knob: {
     width: SWITCH.knob, height: SWITCH.knob, borderRadius: SWITCH.knob / 2,
     backgroundColor: SURFACE,
-    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
+    shadowColor: SHADOW_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
   },
 })

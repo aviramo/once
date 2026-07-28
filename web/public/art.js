@@ -118,7 +118,7 @@
     return rect(x, y, wd, ht, ht / 2, SURFACE) + bar(x + 14, y + 10, wd - 52, 10) +
       group(glyph, ' transform="translate(' + n(x + wd - 26) + ',' + n(y + 15) + ')"');
   }
-  /* A text-only chip: the same beige tile, one line of copy, no trailing glyph.
+  /* A text-only chip: the same white tile, one line of copy, no trailing glyph.
      `bold` reads it a touch heavier - the name/age heading uses it. */
   function plainChip(x, y, wd, bold) {
     var ht = 30;
@@ -126,7 +126,7 @@
       bar(x + 14, y + 10, wd - 28, bold ? 11 : 10, INK, bold ? 0.78 : 0.6);
   }
   /* The report button: deliberately de-emphasised beside the heart - the small
-     chrome size over the DARKER page beige with a MUTED shield, so it recedes
+     chrome size over the TINTED page purple with a MUTED shield, so it recedes
      rather than mirroring the heart (user directive 2026-07-26). */
   function reportBtn(cx, cy, r) {
     return circle(cx, cy, r, PAGE) + group(shield(cx, cy, r * 0.62, ACCENT), op(0.5));
@@ -199,7 +199,7 @@
   };
 
   /* Communities hub: my-friends (pinned) over the groups you manage / are in,
-     with create + find actions. Beige top, dark glyphs, no purple band. */
+     with create + find actions. Pale top, dark glyphs, no purple band. */
   SCREEN.communities = function () {
     // A short row of overlapping member faces, left to right.
     var faces = function (x, y, r, list) {
@@ -336,7 +336,7 @@
     return '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
       ') translate(-810,-250) rotate(-4 810 250)">' +
       rect(706, 90, 208, 320, 32, GROUND) +
-      rect(712, 96, 196, 308, 26, '#FAF6EE') +
+      rect(712, 96, 196, 308, 26, SURFACE) +
       rect(728, 112, 164, 150, 18, GROUND) +
       '<clipPath id="' + clip + '">' + rect(728, 112, 164, 150, 18, '#000') + '</clipPath>' +
       '<g clip-path="url(#' + clip + ')">' +

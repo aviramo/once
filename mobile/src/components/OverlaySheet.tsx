@@ -17,8 +17,8 @@
 // (BottomSheet.tsx is a different thing and stays: small dialogs anchored to
 // the bottom edge. This is for full-surface sheets.)
 
-import { useCallback, useEffect, useRef, type ReactNode } from 'react'
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
 import { useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
@@ -29,7 +29,9 @@ import { CloseIcon, BackIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
 import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { GREEN, GREEN_WASH, SURFACE, SCRIM_BLACK, INK } from '../colors'
+import { FONT_SCALE, inkOffset } from '../fonts'
+import { INK, PAGE, SURFACE, SHADOW_BLACK } from '../colors'
+import { SHEET_TITLE } from './BottomSheet'
 
 /** Wiring a scrollable sheet body needs so its inner scroll cooperates with
  *  the sheet's dismiss pan instead of fighting it. This is exactly the prop
@@ -80,7 +82,7 @@ export type OverlaySheetProps = {
    *  as a solid bar above it. For sheets whose body is a full-bleed photo. */
   floatingHeader?: boolean
   /** Overrides the solid header bar's background (default SURFACE). Chat's body
-   *  is the page BG, a shade darker than SURFACE, so its header takes BG too and
+   *  is the page PAGE, a shade darker than SURFACE, so its header takes PAGE too and
    *  the two read as one continuous surface instead of a lighter top band. */
   headerBg?: string
   title?: string
@@ -282,6 +284,7 @@ export function SheetHeader({
   title,
   titleTrailing,
   trailing,
+  center,
   floating,
   barBg,
   topInset,
@@ -294,6 +297,11 @@ export function SheetHeader({
   title?: string
   titleTrailing?: ReactNode
   trailing?: ReactNode
+  /** Takes the title's place and the whole span it would have had: for a page
+   *  whose heading IS a control (the communities search field). With this set
+   *  the end column is dropped unless there is a real `trailing` — the spacer
+   *  only ever existed to centre a title, and nothing is being centred. */
+  center?: ReactNode
   floating?: boolean
   /** Solid-bar background override (default SURFACE via styles.headerBar). */
   barBg?: string
@@ -309,6 +317,37 @@ export function SheetHeader({
   titleLines?: number
 }) {
   const DismissIcon = closeIcon === 'back' ? BackIcon : CloseIcon
+  // Where line one of the title sits, measured against the close button's
+  // circle. It cannot be a static style value, because the two do NOT grow
+  // together: the button is a fixed dp box whose glyph is capped at
+  // FONT_SCALE.ui, while the heading's line box follows the OS font scale. A
+  // padding computed from the unscaled token was therefore only ever right at
+  // font scale 1 — on a large-font device the line box grew, its top edge
+  // stayed put and every sheet title in the app sat visibly below the chrome
+  // beside it. So the line is measured the way the device will actually render
+  // it (same ceiling the Text itself carries, FONT_SCALE.body), and lifted by
+  // `inkOffset`: Noto's Hebrew ink sits below the centre of its line box, so
+  // box-centring alone still reads low against a glyph centred in a circle.
+  // A margin, not padding — Yoga clamps a negative padding to zero, and the
+  // offset genuinely goes negative once the line outgrows the button.
+  const { fontScale } = useWindowDimensions()
+  const titleTop =
+    (ROUND_BUTTON_SIZE_SM - Math.round(lh(TEXT.lg) * Math.min(fontScale, FONT_SCALE.body))) / 2
+    - inkOffset(TEXT.lg)
+  // Both side columns are padded out to the WIDER of the two, so the span left
+  // for the title is symmetric about the row and the title lands on the SCREEN's
+  // true centre — not on the centre of whatever is left between a lone close X
+  // and a pair of trailing controls, which pulled it visibly toward the start
+  // (user directive 2026-07-28). The INNER wrapper is what gets measured, never
+  // the padded column itself: measuring the column would feed its own padding
+  // back in and the wider side could then never shrink again.
+  const sideContent = useRef({ start: 0, end: 0 })
+  const [sideWidth, setSideWidth] = useState(ROUND_BUTTON_SIZE_SM)
+  const measureSide = (which: 'start' | 'end') => (e: LayoutChangeEvent) => {
+    sideContent.current[which] = e.nativeEvent.layout.width
+    const w = Math.max(sideContent.current.start, sideContent.current.end, ROUND_BUTTON_SIZE_SM)
+    setSideWidth(prev => (Math.abs(prev - w) < 1 ? prev : w))
+  }
   return (
     <View
       style={[
@@ -320,35 +359,42 @@ export function SheetHeader({
       pointerEvents="box-none"
       onLayout={e => onMeasured?.(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
     >
-      {/* The side columns take their content's width and the TITLE takes the
-          rest, centring itself inside it. Both sides are the same width (the
-          close button and, opposite it, a spacer of exactly its size), so the
-          title still lands on the row's true centre. */}
-      <View style={styles.side}>
-        <RoundButton
-          size={ROUND_BUTTON_SIZE_SM}
-          onPress={onClose}
-          accessibilityLabel={closeAccessibilityLabel}
-          // On a solid bar the X wears the calm pale-green wash — a dismiss is
-          // the quiet default, so it never competes with a trailing control that
-          // may be a stronger action (chat's solid-green "End"). Floating over a
-          // photo it keeps RoundButton's default white chrome + shadow so it
-          // stays legible.
-          bg={floating ? undefined : GREEN_WASH}
-          shadow={!!floating}
-        >
-          <DismissIcon color={GREEN} size={ICON.round} />
-        </RoundButton>
+      {/* Both side columns are held at the same width and the TITLE takes the
+          rest, centring itself inside it — so the title sits on the row's true
+          centre however much (or little) each side carries. */}
+      <View style={[styles.side, { minWidth: sideWidth }]}>
+        <View style={styles.sideInner} onLayout={measureSide('start')}>
+          <RoundButton
+            size={ROUND_BUTTON_SIZE_SM}
+            onPress={onClose}
+            accessibilityLabel={closeAccessibilityLabel}
+            // On a solid (white) bar the X wears the PAGE tint — the same pairing
+            // every chip uses off-photo, and quiet enough that a dismiss never
+            // competes with a trailing control that may be a stronger action
+            // (chat's solid-purple "End"). Floating over a photo it keeps
+            // RoundButton's default white chrome + shadow so it stays legible.
+            bg={floating ? undefined : PAGE}
+            shadow={!!floating}
+          >
+            <DismissIcon color={INK} size={ICON.round} />
+          </RoundButton>
+        </View>
       </View>
-      {title ? (
-        <View style={styles.titleWrap} pointerEvents="none">
+      {center ? (
+        <View style={styles.centerWrap}>{center}</View>
+      ) : title ? (
+        <View style={[styles.titleWrap, { marginTop: titleTop }]} pointerEvents="none">
           <Text style={styles.title} numberOfLines={titleLines}>{title}</Text>
           {titleTrailing}
         </View>
       ) : null}
-      <View style={[styles.side, styles.sideEnd]}>
-        {trailing ?? <View style={styles.trailingSpacer} />}
-      </View>
+      {center && !trailing ? null : (
+        <View style={[styles.side, styles.sideEnd, { minWidth: sideWidth }]}>
+          <View style={styles.sideInner} onLayout={measureSide('end')}>
+            {trailing ?? <View style={styles.trailingSpacer} />}
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -356,11 +402,11 @@ export function SheetHeader({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    // The light-beige SURFACE (beige-3), a step lighter than the home page it
-    // rises over, so the sheet lifts off it instead of blending in.
+    // The white SURFACE, a step lighter than the page tint it rises over, so
+    // the sheet lifts off home instead of blending into it.
     backgroundColor: SURFACE,
     // Soft upward lift so the sheet reads as sitting above home.
-    shadowColor: SCRIM_BLACK,
+    shadowColor: SHADOW_BLACK,
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
@@ -394,41 +440,46 @@ const styles = StyleSheet.create({
     end: 0,
     backgroundColor: 'transparent',
   },
-  // The side columns are exactly as wide as what they hold (the close button /
-  // the spacer that mirrors it) and never grow. They used to be flex:1, which
-  // is what truncated long titles: a shrinkable multi-line Text measures at its
-  // MIN-CONTENT width (its longest word), so the two growing columns swallowed
-  // all the leftover and the title was handed a column barely one word wide,
-  // ellipsizing a name that had room to fit twice over.
+  // The side columns hold their content plus whatever padding the opposite side
+  // needs to match them (`sideWidth` above), and never grow beyond it. They used
+  // to be flex:1, which is what truncated long titles: a shrinkable multi-line
+  // Text measures at its MIN-CONTENT width (its longest word), so the two
+  // growing columns swallowed all the leftover and the title was handed a column
+  // barely one word wide, ellipsizing a name that had room to fit twice over.
   side: {
-    minWidth: ROUND_BUTTON_SIZE_SM,
     flexDirection: 'row',
     alignItems: 'center',
   },
   sideEnd: {
     justifyContent: 'flex-end',
   },
+  // The measured box: exactly as wide as the controls it holds, so the width
+  // that feeds `sideWidth` is content, never content + matching padding.
+  sideInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   // Takes every pixel the two side columns leave and hands it all to the title
   // (which centres its own glyphs), so the text wraps only at the real edge of
-  // the free space rather than at its longest word. The padding
-  // is what a one-line title would get from being centred against the close
-  // button (half the leftover of the button's height), applied as a top offset
-  // instead — so line one lands on the very same baseline whether the title is
+  // the free space rather than at its longest word. The vertical offset — what
+  // a one-line title would get from being centred against the close button —
+  // rides on the element as `marginTop` rather than living here, because it
+  // depends on the OS font scale: see `titleTop` in SheetHeader. Applying it to
+  // the top means line one lands on the very same baseline whether the title is
   // one line or three, and the rest of the name flows down under it.
   titleWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'center',
-    paddingTop: (ROUND_BUTTON_SIZE_SM - lh(TEXT.lg)) / 2,
     gap: SM,
   },
   title: {
-    // The header sits on the beige SURFACE, so the title is INK like every other heading.
-    color: INK,
-    fontSize: TEXT.lg,
-    lineHeight: lh(TEXT.lg),
-    fontWeight: WEIGHT.extrabold,
+    // THE popup title, shared with every BottomSheet-based popup (SHEET_TITLE in
+    // BottomSheet.tsx) so a full-screen sheet's heading and a dialog's heading
+    // are the same rank of text. It already carries the INK the white SURFACE
+    // wants, the size and the weight; only the layout below is this header's own.
+    ...SHEET_TITLE,
     // flex:1 + textAlign, NOT a shrink-to-fit box centred by the parent. A Text
     // that only shrinks is measured at its MIN-CONTENT width — its longest word
     // — and keeps that width even once the row hands it the whole free span, so
@@ -440,5 +491,11 @@ const styles = StyleSheet.create({
   },
   trailingSpacer: {
     width: ROUND_BUTTON_SIZE_SM,
+  },
+  // A `center` slot is a CONTROL, not text: it takes the whole span the title
+  // would have had and lays itself out inside it, so nothing here centres or
+  // offsets it the way titleWrap does for a heading.
+  centerWrap: {
+    flex: 1,
   },
 })

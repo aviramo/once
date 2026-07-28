@@ -3,13 +3,19 @@
    Palette: THE APP'S, SHARED not copied. Every colour variable lives in
    `tokens.css`, GENERATED from `mobile/src/colors.ts` (the single source of
    truth) by `scripts/build-icons.mjs` and @imported just below — a LIGHT scheme
-   of warm beige pages and white cards, with two PURPLES that each own one job
-   and never trade places:
+   of PALE PURPLE pages and WHITE cards. There is no beige anywhere (user
+   directive 2026-07-28: the app and this site are purple + white, nothing
+   else), and there is only ONE purple:
 
      BRAND (--brand)   = ACTION. Buttons, links, the accent word in a heading,
-                         the presence dot. A vivid purple; ink on it is WHITE.
+                         the presence dot. Ink on it is WHITE.
      ACCENT/INK        = the reading purple + quiet decoration. Everything you
                          read, plus the line-art icons, chips and step numbers.
+
+   Both resolve to the SAME value now — the app's one INK purple. The two names
+   survive because the CSS below is written against them, and because they still
+   say which JOB a rule is doing; they are no longer two hues. Hover/pressed
+   steps down to the deep purple (--brand-strong / --accent-strong).
 
    There are no greys: every muted step is a translucent ink purple, exactly as
    in the app. Flat only — no gradients, no frosted fills. RTL/LTR: layout uses
@@ -30,17 +36,17 @@
      by scripts/build-icons.mjs and @imported at the top of this file. Do not
      re-declare a colour here — change it in colors.ts and rebuild the icons.
      Only web-specific aliases (which just point at a shared var) live below. */
-  /* THE DARK BEIGE (--bg-2) IS NOT A FILL ON THIS SITE (user directive
-     2026-07-27). Every surface is either the page beige or white; a panel that
-     used to sink into the darker beige now sits on the page beige, and the
-     alternating band tint is dropped. Never point any of these back at --bg-2.
-     (The token still exists in tokens.css — it is the app's, and --border is
-     the same value as a hairline; only the FILLS are gone from this site.) */
-  --surface-sunk: var(--bg);    /* an inset panel: the page beige, never darker */
+  /* THE SUNK STEP (--bg-2) IS NOT A FILL ON THIS SITE (user directive
+     2026-07-27). Every surface is either the pale purple page or white; a panel
+     that used to sink one step darker now sits on the page, and the alternating
+     band tint is dropped. Never point any of these back at --bg-2. (The token
+     still exists in tokens.css — it is the app's, and --border is the same
+     value as a hairline; only the FILLS are gone from this site.) */
+  --surface-sunk: var(--bg);    /* an inset panel: the page purple, never darker */
   /* An illustration paints NO ground of its own (user directive 2026-07-27:
      pictures sit straight on the surface, not in a shaded rectangle), so the
      one full-bleed rect art.js draws is transparent and every drawing shows
-     whatever surface is behind it — page beige in a band, white in a callout. */
+     whatever surface is behind it — the page purple in a band, white in a callout. */
   --art-bg: transparent;        /* the surface an illustration sits on */
   --art-line: var(--border);    /* drawn borders */
 
@@ -106,8 +112,8 @@ ul { list-style: none; }
 }
 section { position: relative; }
 .band { padding-block: clamp(64px, 10vw, 120px); }
-/* The alternating tint is GONE with the dark beige: every band is the page
-   beige, and the white cards inside it are what separate one message from the
+/* The alternating tint is GONE with the sunk step: every band is the page
+   purple, and the white cards inside it are what separate one message from the
    next. (Painting the band white instead would have swallowed those cards,
    which are white themselves.) The class stays so the markup keeps working. */
 .band--tint { background: var(--bg); }
@@ -518,7 +524,7 @@ strong { color: var(--ink); font-weight: 600; }
   box-shadow: none;
 }
 /* The note's own chips close the card under the drawing. They sit on the card's
-   white, so they take the sunk beige as their fill to stay legible tiles. */
+   white, so they take the sunk step as their fill to stay legible tiles. */
 .callout .chips { margin-top: 14px; }
 .callout .chip { background: var(--surface-sunk); border-color: transparent; }
 
@@ -617,7 +623,7 @@ strong { color: var(--ink); font-weight: 600; }
 /* ---------- Download answer ---------- */
 /* What a press gets on a device that cannot install: the same note (and, on a
    desktop, the same scan code) the download page gives, without leaving the page.
-   Same surface language as every other tile here: flat beige-on-white, no glow. */
+   Same surface language as every other tile here: flat purple-on-white, no glow. */
 .dl { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 20px; }
 .dl[hidden] { display: none; }
 .dl-backdrop { position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 42%, transparent); }

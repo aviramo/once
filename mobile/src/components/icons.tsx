@@ -1,7 +1,7 @@
 import { ComponentProps, createContext, useContext, type ReactNode } from 'react'
 import { I18nManager } from 'react-native'
 import Svg, { Path, Circle, Line, Polyline, Rect, G } from 'react-native-svg'
-import { INK, BLACK, BLACK_STRONG, WHITE, PRIMARY } from '../colors'
+import { INK, INK_SUBTLE, WHITE } from '../colors'
 import { ICON, STROKE } from '../tokens'
 import { iconScale, FONT_SCALE } from '../fonts'
 
@@ -39,7 +39,7 @@ export function Glyph({ width, height, ...rest }: ComponentProps<typeof Svg>) {
 }
 
 // Shared SVG icons used across the app. Every icon takes an optional `color`
-// (default = BLACK) and an optional `size`. If you need a new icon,
+// (default = INK) and an optional `size`. If you need a new icon,
 // add it here. Don't inline an Svg in a screen — the icon will end up
 // duplicated the first time someone uses it twice.
 
@@ -52,7 +52,7 @@ type IconProps = {
 
 // ── Chevrons / arrows ──────────────────────────────────────────────────────
 
-export function BackIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+export function BackIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
@@ -60,7 +60,7 @@ export function BackIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
   )
 }
 
-export function ChevronUpIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+export function ChevronUpIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="6 15 12 9 18 15" />
@@ -68,7 +68,7 @@ export function ChevronUpIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}
   )
 }
 
-export function ChevronDownIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+export function ChevronDownIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="6 9 12 15 18 9" />
@@ -76,7 +76,7 @@ export function ChevronDownIcon({ color = BLACK, size = ICON.xxl }: IconProps = 
   )
 }
 
-export function CheckIcon({ color = PRIMARY, size = ICON.xxl }: IconProps = {}) {
+export function CheckIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="5 12 10 17 19 7" />
@@ -84,9 +84,37 @@ export function CheckIcon({ color = PRIMARY, size = ICON.xxl }: IconProps = {}) 
   )
 }
 
+// The check twice over: one tick means "this one", two mean "all of them" —
+// the read-receipt mark everyone already reads that way. The queue's
+// approve-everyone control wears it (user directive 2026-07-28) so it can't be
+// mistaken for approving the person on top of the list.
+export function DoubleCheckIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points="2 12 7 17 18 6" />
+      {/* The trailing tick is drawn only from where it leaves the first one,
+          so the two read as a pair instead of one crossed-out scribble. */}
+      <Polyline points="13 16 14.5 17.5 22 10" />
+    </Glyph>
+  )
+}
+
+// A rank insignia: two chevrons stacked, the way a rank is worn on a sleeve.
+// The manager-appointment mark (user directive 2026-07-28) — "you're being
+// promoted", which a plain person glyph never said. `down` mirrors it into the
+// demotion glyph, so promote and demote are one shape read both ways.
+export function RankIcon({ color = INK, size = ICON.md, down = false }: IconProps & { down?: boolean } = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points={down ? '5 6 12 13 19 6' : '5 13 12 6 19 13'} />
+      <Polyline points={down ? '5 11 12 18 19 11' : '5 18 12 11 19 18'} />
+    </Glyph>
+  )
+}
+
 // ── Close / dots ───────────────────────────────────────────────────────────
 
-export function CloseIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+export function CloseIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Line x1="18" y1="6" x2="6" y2="18" />
@@ -103,7 +131,7 @@ export function CloseIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
 // lines on top. Underlay width = heavy + thick so the visible halo each side
 // is STROKE.thick/2 — byte-matching the heart's white-edge weight (no new
 // literal; both derive from the same STROKE tokens).
-export function CloseBoldIcon({ color = BLACK, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
+export function CloseBoldIcon({ color = INK, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
       {stroke ? (
@@ -121,7 +149,7 @@ export function CloseBoldIcon({ color = BLACK, stroke, size = ICON.xxl }: IconPr
 // Hamburger. The floating menu affordance on the home screen: three even
 // rounded rules at the same STROKE.base weight as CloseIcon, so the open glyph
 // and the close glyph of the menu sheet read as one pair.
-export function HamburgerIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}) {
+export function HamburgerIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round">
       <Line x1="4" y1="7" x2="20" y2="7" />
@@ -133,7 +161,7 @@ export function HamburgerIcon({ color = BLACK, size = ICON.xxl }: IconProps = {}
 
 // ── Field / list-row icons (gray stroke by default) ────────────────────────
 
-export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function SlidersIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <G rotation={90} origin="12, 12">
@@ -151,7 +179,7 @@ export function SlidersIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps 
   )
 }
 
-export function MapPinIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function MapPinIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -160,7 +188,7 @@ export function MapPinIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps =
   )
 }
 
-export function BellIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function BellIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z" />
@@ -169,7 +197,7 @@ export function BellIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {
   )
 }
 
-export function WifiOffIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function WifiOffIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Line x1="2" y1="2" x2="22" y2="22" />
@@ -185,7 +213,7 @@ export function WifiOffIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps 
 
 // Universal prohibition sign (circle + diagonal slash) — the "block" mark in
 // the chat-state menu. Same line-art family as the other list-row glyphs.
-export function BlockIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function BlockIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="12" r="10" />
@@ -202,7 +230,7 @@ export function BlockIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = 
 // its exact halo math, so it reads at the SAME stroke weight as sibling
 // on-photo glyphs): pass `stroke` for the haloed on-photo RoundButton
 // variant, omit it for the plain coral dialog icon.
-export function ShieldIcon({ color = BLACK, stroke, fill, size = ICON.xxl }: IconProps & { stroke?: string; fill?: string } = {}) {
+export function ShieldIcon({ color = INK, stroke, fill, size = ICON.xxl }: IconProps & { stroke?: string; fill?: string } = {}) {
   const shield = 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
@@ -214,7 +242,7 @@ export function ShieldIcon({ color = BLACK, stroke, fill, size = ICON.xxl }: Ico
   )
 }
 
-export function RadiusIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function RadiusIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="12" r="9" />
@@ -224,7 +252,7 @@ export function RadiusIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps =
   )
 }
 
-export function GenderIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps = {}) {
+export function GenderIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="10" r="5" />
@@ -238,7 +266,7 @@ export function GenderIcon({ color = BLACK_STRONG, size = ICON.md }: IconProps =
 
 // ── Account / system icons ─────────────────────────────────────────────────
 
-export function SignOutIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function SignOutIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -252,7 +280,7 @@ export function SignOutIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 // enter" mark. Paired with SignOutIcon so joining a group and leaving one read
 // as one in/out family. RTL-aware: the door and arrow flip so "in" always
 // points toward the frame, never off-screen.
-export function LogInIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function LogInIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <G rotation={isRTL ? 180 : 0} origin="12, 12">
@@ -267,7 +295,7 @@ export function LogInIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 // Curved arrow pointing back at a message — the chat's reply affordance. Shown
 // behind a bubble while it is swiped, and beside the Reply row in the
 // long-press message sheet. Mirrors under RTL like every other directional arrow.
-export function ReplyIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function ReplyIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <G rotation={isRTL ? 180 : 0} origin="12, 12">
@@ -280,7 +308,7 @@ export function ReplyIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 
 // Two stacked sheets — "copy this text". Used by the chat's long-press
 // message sheet.
-export function CopyIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function CopyIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="9" y="9" width="12" height="12" rx="2.5" />
@@ -289,7 +317,7 @@ export function CopyIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
-export function TrashIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function TrashIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Polyline points="3 6 5 6 21 6" />
@@ -302,7 +330,7 @@ export function TrashIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 }
 
 // Lifebuoy glyph — the settings "support" row and the support sheet header.
-export function SupportIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function SupportIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="12" r="10" />
@@ -315,7 +343,7 @@ export function SupportIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
   )
 }
 
-export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function UserIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -327,7 +355,7 @@ export function UserIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
 // Silhouette with a plus — "invite someone who isn't here yet", used by the
 // referral row in the credits popup. Deliberately built on UserIcon's body so
 // it reads as the same family, with the plus carrying the whole difference.
-export function UserPlusIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function UserPlusIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -341,7 +369,7 @@ export function UserPlusIcon({ color = BLACK, size = ICON.md }: IconProps = {}) 
 // Silhouette with a minus — "remove this person" (unfriend, remove a group
 // member). The exact counterpart to UserPlusIcon: same body, the plus's
 // vertical stroke dropped so only the minus bar remains.
-export function UserMinusIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function UserMinusIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -355,7 +383,7 @@ export function UserMinusIcon({ color = BLACK, size = ICON.md }: IconProps = {})
 // UserIcon — so the glyph sits optically centred in the leading-icon column
 // next to the other rows. (It was drawn spanning 1..17, which put its centre
 // 3 units left of the box centre and left it visibly out of the column.)
-export function GroupsIcon({ color = BLACK, size = ICON.md }: IconProps = {}) {
+export function GroupsIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M20 21v-2a4 4 0 0 0-3-3.87" />
@@ -414,7 +442,7 @@ export function PhotoTrashIcon({ color, size = ICON.xxl }: IconProps & { color: 
 // affordance; drawing money with the same glyph made the cost badge dissolve
 // into the button it sat on (renamed hearts -> credits, 2026-07-22).
 export function HeartIcon({
-  color = PRIMARY,
+  color = INK,
   stroke = color,
   size = ICON.xxxl,
 }: IconProps & { stroke?: string } = {}) {
@@ -430,7 +458,7 @@ export function HeartIcon({
 // sits on (the CreditCost capsule, a settings row, the buy sheet) without a
 // second colour or any gradient. Reads as a coin down to ICON.sm (16dp),
 // where a minted-face design would turn to mush.
-export function CoinIcon({ color = PRIMARY, size = ICON.md }: IconProps = {}) {
+export function CoinIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="12" r="9" strokeWidth={STROKE.thick} />

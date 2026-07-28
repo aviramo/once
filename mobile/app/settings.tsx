@@ -22,15 +22,15 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, bottomGap } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, bottomGap, SEARCH_DEBOUNCE_MS } from '../src/tokens'
 import { iconScale, inkOffset } from '../src/fonts'
-import { INK_2, BG, GREEN, GREEN_SOFT, INK, SCRIM_BLACK, SURFACE, SURFACE_SUNK, BLACK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, BLACK_SOFT, BLACK_STRONG, BLACK_MID, BORDER_SOFT } from '../src/colors'
+import { INK_BODY, INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
 import { creditBalance, creditExtra, formatGrantTime, CREDIT_CAP } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { BottomSheet, SheetActionRow } from '../src/components/BottomSheet'
+import { BottomSheet, SheetActionRow, SheetTitle } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
@@ -51,7 +51,7 @@ const PROFILE_CARD_HEIGHT = (ICON.xxl + MD * 2) * 2
 
 // Returns responder props that fire `onPress` only on clean taps (movement < TAP_SLOP).
 // `onPressStateChange` lets the caller drive a visual pressed-state (e.g. fade
-// in a BLACK_SOFT background) without losing the raw-responder behaviour that's
+// in a PAGE-tinted background) without losing the raw-responder behaviour that's
 // required for reliable taps inside ScrollView (Pressability cancels them on
 // RN 0.81).
 function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateChange?: (pressed: boolean) => void) {
@@ -156,8 +156,8 @@ export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFiel
 // Variants:
 //   - subtitle?          → small secondary text under the label (profile row)
 //   - avatar?            → image URI rendered as a circular avatar at the end
-//   - tone='accent'      → soft GREEN_SOFT halo behind the trailing icon
-// Press feedback fades in a BLACK_SOFT background; `grouped` rows inherit
+//   - tone='accent'      → soft INK_WASH halo behind the trailing icon
+// Press feedback fades in a PAGE background; `grouped` rows inherit
 // rounding from their parent card so the press state stays inside the card.
 
 function SelectFieldRow({
@@ -193,10 +193,9 @@ function SelectFieldRow({
    * matches. Since the app unified onto one purple, that tint is normally the
    * regular purple. */
   labelColor?: string
-  /** Node rendered immediately after the label (e.g. the watcher chip on the
-   * visibility row), NOT pushed to the row's END edge: it annotates the label,
-   * so it reads as part of the same statement. A live quantity still belongs
-   * on its own surface, not glued into the label string. */
+  /** A chip on the row's far END edge, riding its last text line (the watcher
+   * count, the waiting-requests count). A live quantity belongs on its own
+   * surface, not glued into the label string. */
   trailing?: React.ReactNode
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
@@ -232,14 +231,16 @@ function SelectFieldRow({
           tone === 'accent' ? (
             <View style={styles.selectRowAccentIcon}>{icon}</View>
           ) : (
-            // A trailing node (the watcher chip) is taller than the label line,
-            // so it — not the label — sets the group height. Pinning the glyph
-            // to the first label line would then leave it floating above a
-            // vertically centred label; centre it instead, next to the chip it
-            // now shares the row with.
-            <View style={[styles.selectRowIconWrap, trailing ? styles.selectRowIconWrapCentered : null]}>{icon}</View>
+            <View style={styles.selectRowIconWrap}>{icon}</View>
           )
         ) : null
+        // A chip rides the row's LAST TEXT LINE, at its END edge — the subtitle
+        // when there is one, the label when there is not — exactly as it does on
+        // the group strips this menu opens (CommunitiesPage's Strip, same
+        // geometry, same small tile). It is never glued beside the label and
+        // never centred against the whole row: centred it read as a control
+        // floating beside the button rather than as a fact stated by its line.
+        const trailingOnLabel = trailing && !subtitle
         // The subtitle (e.g. the stars renewal note) must align with the LABEL
         // TEXT, not under the leading icon. It shares the label's column
         // rather than being indented by a computed icon width: that estimate
@@ -251,16 +252,26 @@ function SelectFieldRow({
           <View style={styles.selectRowTextCol}>
             <View style={styles.selectRowLabelGroup}>
               {renderedIcon}
-              <View style={[styles.selectRowLabelStack, trailing ? styles.selectRowLabelStackTight : null]}>
-                <Text style={[styles.selectRowLabel, labelColor ? { color: labelColor } : null]}>{label}</Text>
+              <View style={styles.selectRowLabelStack}>
+                {/* `selectRowLineFill` only on the line that CARRIES the chip:
+                    it is what pushes the chip to the end, and a line without one
+                    has nothing to push against. */}
+                <View style={styles.selectRowTextLine}>
+                  <Text style={[styles.selectRowLabel, trailingOnLabel ? styles.selectRowLineFill : null, labelColor ? { color: labelColor } : null]}>{label}</Text>
+                  {trailingOnLabel ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
+                </View>
+                {/* A subtitle built by metaLine() (the communities row) loses
+                    its interpunct wherever it wraps, so no line starts or ends
+                    on a separator: the base Text does that for every string in
+                    the app (user directive 2026-07-28). */}
                 {subtitle ? (
-                  <Text style={styles.selectRowSubtitle}>{subtitle}</Text>
+                  <View style={styles.selectRowTextLine}>
+                    <Text style={[styles.selectRowSubtitle, trailing ? styles.selectRowLineFill : null]}>{subtitle}</Text>
+                    {trailing ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
+                  </View>
                 ) : null}
                 {detail}
               </View>
-              {trailing ? (
-                <View style={styles.selectRowTrailing}>{trailing}</View>
-              ) : null}
             </View>
           </View>
         ) : renderedIcon
@@ -278,7 +289,8 @@ function SelectFieldRow({
 // whole block lines up on two edges instead of running on as loose sentences.
 // The amount is the only thing here at full label ink — it's the answer the
 // row is opened for; the words beside it are the caption, in the subtitle's
-// dimmer ink. `phraseWrap` keeps a caption that doesn't fit breaking at its
+// dimmer ink, and it sits on the caption's LAST line (see creditPoolLine's
+// alignItems). `phraseWrap` keeps a caption that doesn't fit breaking at its
 // comma seam ("יומי," / "מתחדש היום ב-17:00") rather than mid-phrase, which is
 // what made the earlier one-string-per-pool version look ragged.
 function CreditPoolLine({ text, amount }: { text: string; amount: string }) {
@@ -431,11 +443,14 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
   const comm = communitiesSummary(profile)
   const commGroups = comm ? comm.managed.length + comm.joined.length : 0
   const commRequests = pendingApprovals(comm)
+  // What is WAITING is off the meta line (user directive 2026-07-28): it rides
+  // its own solid-purple chip, exactly as it does on every row of the hub the
+  // tap opens, so "someone is waiting on you" is said the one way in both
+  // places. The line keeps the standing facts, what I have.
   const commSubtitle = !comm ? undefined
     : metaLine(
         comm.friends > 0 && friendLabel(comm.friends),
         commGroups > 0 && groupLabel(commGroups),
-        commRequests > 0 && requestLabel(commRequests),
       ) || t('communities.rowEmpty')
 
   return (
@@ -454,6 +469,7 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
           label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
           trailing={!isHidden && watcherCount > 0 ? (
             <Chip
+              small
               text={watcherCount === 1
                 ? t('settings.watchersOne')
                 : t('settings.watchersMany').replace('{count}', String(watcherCount))}
@@ -466,8 +482,8 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
           // ICON.xl is the optical half-step that matches their ink mass without
           // over-shooting; the icon column keeps its fixed width, so the labels
           // stay aligned.
-          icon={isHidden ? <EyeOffIcon color={GREEN} size={ICON.xl} /> : <EyeOpenIcon color={GREEN} size={ICON.xl} />}
-          labelColor={GREEN}
+          icon={isHidden ? <EyeOffIcon color={INK} size={ICON.xl} /> : <EyeOpenIcon color={INK} size={ICON.xl} />}
+          labelColor={INK}
         />
         {/* Communities: a navigable row (like Account) that opens the full
             hub — my friends, groups I manage, groups I'm in, create, find.
@@ -477,9 +493,13 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
           grouped
           label={t('communities.menuRow')}
           subtitle={commSubtitle}
+          // The strips' own chip, exactly: the small tile, in full-strength
+          // purple because something is WAITING here — the pale neutral one the
+          // visibility row wears states a fact, this one asks for an answer.
+          trailing={commRequests > 0 ? <Chip small text={requestLabel(commRequests)} tone="solid" /> : undefined}
           onPress={() => onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })}
-          icon={<GroupsIcon color={GREEN} />}
-          labelColor={GREEN}
+          icon={<GroupsIcon color={INK} />}
+          labelColor={INK}
         />
       </View>
       {/* The confirm glyph is ICON.md, the size every other button icon wears:
@@ -489,7 +509,7 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
         title={hideConfirmConfig.title}
         description={hideConfirmConfig.description}
         confirmLabel={hideConfirmConfig.confirmLabel}
-        confirmIconStart={<EyeOffIcon color={WHITE} size={ICON.md} />}
+        confirmIconStart={<EyeOffIcon color={WHITE} />}
         onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
         onConfirm={() => runVisibility('app/lock2')}
         busy={visibilityBusy}
@@ -546,9 +566,9 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
     ? `${locationFieldAnchor}, ${locationFieldAddress}`
     : locationFieldAnchor
   const locationFieldIcon =
-    locationType === 'home' ? <HomeGlyph color={GREEN} size={ICON.md} />
-    : locationType === 'work' ? <WorkGlyph color={GREEN} size={ICON.md} />
-    : <PinGlyph color={GREEN} size={ICON.md} />
+    locationType === 'home' ? <HomeGlyph color={INK} size={ICON.md} />
+    : locationType === 'work' ? <WorkGlyph color={INK} size={ICON.md} />
+    : <PinGlyph color={INK} size={ICON.md} />
   // An active page1/page2 interaction freezes the location field: 'watching'
   // (looking at a candidate), 'waiting' (outgoing invite), or 'pending'
   // (incoming invite on page2). Changing location mid-interaction would shift
@@ -567,15 +587,19 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
           grouped
           label={genderLabel}
           onPress={() => setGenderPopupVisible(true)}
-          icon={<GenderIcon color={GREEN} />}
-          labelColor={GREEN}
+          icon={<GenderIcon color={INK} />}
+          labelColor={INK}
         />
         <SelectFieldRow
           grouped
-          label={`${t('settings.ageRange')} ${ageMin === ageMax ? `⁦${ageMin}⁩` : `⁦${ageMin} – ${ageMax}⁩`}`}
+          // No bidi isolate around the pair: natural bidi order puts the MIN
+          // first in reading direction (rightmost under RTL, leftmost under
+          // LTR). The old LRI/PDI wrap forced LTR and so read max-first in
+          // Hebrew (user directive 2026-07-28: revert to natural).
+          label={`${t('settings.ageRange')} ${ageMin === ageMax ? `${ageMin}` : `${ageMin} – ${ageMax}`}`}
           onPress={() => setAgePopupVisible(true)}
-          icon={<SlidersIcon color={GREEN} />}
-          labelColor={GREEN}
+          icon={<SlidersIcon color={INK} />}
+          labelColor={INK}
         />
         <SelectFieldRow
           grouped
@@ -586,8 +610,8 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
             ? t('settings.rangeUnlimitedLabel')
             : `${t('settings.range')} ${formatRadius(radius)}`}
           onPress={() => setRadiusPopupVisible(true)}
-          icon={<RadiusIcon color={GREEN} />}
-          labelColor={GREEN}
+          icon={<RadiusIcon color={INK} />}
+          labelColor={INK}
         />
         <SelectFieldRow
           grouped
@@ -597,7 +621,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
             ? setLocationLockedInfoVisible(true)
             : setLocationPopupVisible(true)}
           icon={locationFieldIcon}
-          labelColor={GREEN}
+          labelColor={INK}
         />
       </View>
       <RadiusPopup
@@ -762,7 +786,7 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
         <Button
           label={t('settings.deleteAccount')}
           variant="secondary"
-          iconStart={<TrashIcon color={BLACK_STRONG} />}
+          iconStart={<TrashIcon color={INK_SUBTLE} />}
           onPress={() => { tapWarning(); dismissThen(onDeletePress) }}
         />
       </View>
@@ -904,7 +928,7 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
               keyboardType="number-pad"
               maxLength={INVITE_CODE_LEN}
               placeholder={t('settings.groupsCodePlaceholder')}
-              placeholderTextColor={BLACK_MID}
+              placeholderTextColor={INK_DIM}
               autoComplete="off"
               textContentType="none"
               editable={!submitting}
@@ -944,24 +968,24 @@ const groupsPopupStyles = StyleSheet.create({
   header: { paddingHorizontal: MD, paddingBottom: MD },
   // The standard popup title: same size, weight and centring as every other
   // sheet in the app, so this one stops looking like a section heading.
-  title: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: BLACK, textAlign: 'center', letterSpacing: -0.3 },
+  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: INK, textAlign: 'center', letterSpacing: -0.3 },
   mineSection: { paddingHorizontal: MD, paddingBottom: LG },
   joinSection: { paddingHorizontal: MD, paddingTop: LG },
   // Join and leave steps: one titled block with its own actions row.
   step: { paddingHorizontal: MD, paddingTop: SM },
   actions: { flexDirection: 'row', gap: SM, marginTop: LG },
   action: { flex: 1 },
-  hint: { fontSize: TEXT.sm, color: BLACK_MID, marginTop: XS, lineHeight: lh(TEXT.sm) },
-  empty: { fontSize: TEXT.sm, color: BLACK_MID, paddingVertical: SM, textAlign: 'center' },
+  hint: { fontSize: TEXT.md, color: INK_DIM, marginTop: XS, lineHeight: lh(TEXT.md) },
+  empty: { fontSize: TEXT.md, color: INK_DIM, paddingVertical: SM, textAlign: 'center' },
   // Wrap: as many chips per line as fit, centred. alignItems keeps a chip
   // sized to its own content instead of stretching to the tallest on its line.
   list: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: SM },
-  rowTag: { fontSize: TEXT.xs, color: BLACK_MID },
-  sectionDivider: { height: 1, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
+  rowTag: { fontSize: TEXT.sm, color: INK_DIM },
+  sectionDivider: { height: 1, backgroundColor: LINE, marginHorizontal: MD },
   // Reads as a field: a border and a white fill, not just a tinted block. The
   // previous WHITE_SOFT-on-white panel gave no edge to aim at. Skin comes from
   // FIELD_SKIN like every other typing surface — it used to hand-roll its own
-  // 1.5px BLACK_MID rule, a heavier edge than the login field it sits beside.
+  // 1.5px INK_DIM rule, a heavier edge than the login field it sits beside.
   inputWrap: {
     ...FIELD_SKIN,
     marginTop: LG,
@@ -970,13 +994,13 @@ const groupsPopupStyles = StyleSheet.create({
   },
   input: {
     fontSize: TEXT.lg,
-    fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    fontWeight: WEIGHT.semibold,
+    color: INK,
     textAlign: 'center',
     letterSpacing: 6,
     padding: 0,
   },
-  error: { marginTop: XS, fontSize: TEXT.sm, color: INK, textAlign: 'center' },
+  error: { marginTop: XS, fontSize: TEXT.md, color: INK, textAlign: 'center' },
 })
 
 // ── App Tab ────────────────────────────────────────────────────────────────
@@ -1064,7 +1088,7 @@ const agePopupStyles = StyleSheet.create({
     paddingTop: 0,
   },
   title: {
-    fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: BLACK,
+    fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: INK,
     textAlign: 'center', marginBottom: MD,
   },
   row: {
@@ -1074,19 +1098,19 @@ const agePopupStyles = StyleSheet.create({
   },
   field: {
     flex: 1,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: INK_WASH,
     borderRadius: RADIUS,
     paddingVertical: SM,
     paddingHorizontal: SM,
     alignItems: 'center',
   },
   fieldLabel: {
-    fontSize: TEXT.sm,
-    color: BLACK,
+    fontSize: TEXT.md,
+    color: INK,
   },
   input: {
-    fontSize: TEXT.xxl,
-    fontWeight: WEIGHT.extrabold,
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.semibold,
     // Always black. selectTextOnFocus highlights the digits on focus; the
     // selection tint is AppText's app-standard translucent SELECTION, so the
     // black number stays readable on it (the old bespoke solid-black
@@ -1164,7 +1188,7 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
   const tapProps = useTapResponder(onPress, setPressed)
   return (
     <View {...tapProps}>
-      <View style={[selectListStyles.row, pressed && { backgroundColor: BLACK_SOFT }]}>
+      <View style={[selectListStyles.row, pressed && { backgroundColor: PAGE }]}>
         {/* labelWrap is flexDirection:'row' so the Text child auto-flips to
             the logical start side (right in RTL) — more reliable on iOS than
             textAlign alone. */}
@@ -1173,7 +1197,7 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
           <Text style={[selectListStyles.label, selected && selectListStyles.labelSelected]}>{label}</Text>
         </View>
         <View style={selectListStyles.checkSlot}>
-          {selected ? <CheckIcon color={GREEN} /> : null}
+          {selected ? <CheckIcon color={INK} /> : null}
         </View>
       </View>
       {!isLast ? <View style={selectListStyles.divider} /> : null}
@@ -1189,10 +1213,10 @@ const selectListStyles = StyleSheet.create({
   },
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowIcon: { marginEnd: SM },
-  label: { fontSize: TEXT.md, color: BLACK },
-  labelSelected: { color: GREEN, fontWeight: WEIGHT.extrabold },
+  label: { fontSize: TEXT.md, color: INK },
+  labelSelected: { color: INK, fontWeight: WEIGHT.semibold },
   checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT, marginHorizontal: MD },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: LINE, marginHorizontal: MD },
 })
 
 // ── Gender Popup ───────────────────────────────────────────────────────────
@@ -1397,7 +1421,7 @@ function LocationPopup({
       } finally {
         if (!controller.signal.aborted) setSearching(false)
       }
-    }, 300)
+    }, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [query, step])
 
@@ -1473,21 +1497,21 @@ function LocationPopup({
         <>
           <SelectListRow
             label={t('settings.locationDevice')}
-            icon={<PinGlyph color={currentType === 'device' ? GREEN : BLACK_STRONG} size={ICON.md} />}
+            icon={<PinGlyph color={currentType === 'device' ? INK : INK_SUBTLE} size={ICON.md} />}
             selected={currentType === 'device'}
             isLast={false}
             onPress={handleMyLocation}
           />
           <SelectListRow
             label={t('settings.locationHome')}
-            icon={<HomeGlyph color={currentType === 'home' ? GREEN : BLACK_STRONG} size={ICON.md} />}
+            icon={<HomeGlyph color={currentType === 'home' ? INK : INK_SUBTLE} size={ICON.md} />}
             selected={currentType === 'home'}
             isLast={false}
             onPress={() => { setPendingType('home'); setStep('address') }}
           />
           <SelectListRow
             label={t('settings.locationWork')}
-            icon={<WorkGlyph color={currentType === 'work' ? GREEN : BLACK_STRONG} size={ICON.md} />}
+            icon={<WorkGlyph color={currentType === 'work' ? INK : INK_SUBTLE} size={ICON.md} />}
             selected={currentType === 'work'}
             isLast={true}
             onPress={() => { setPendingType('work'); setStep('address') }}
@@ -1509,7 +1533,7 @@ function LocationPopup({
               value={query}
               onChangeText={setQuery}
               placeholder={t('settings.locationAddressPrompt')}
-              placeholderTextColor={BLACK_MID}
+              placeholderTextColor={INK_DIM}
               autoFocus
               returnKeyType="search"
               autoCorrect={false}
@@ -1550,11 +1574,11 @@ const locationPopupStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: SM,
     paddingHorizontal: MD, paddingTop: MD,
   },
-  statusText: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  statusText: { fontSize: TEXT.md, color: INK_SUBTLE },
   errorText: {
     paddingHorizontal: MD, paddingTop: MD,
-    fontSize: TEXT.sm, color: WHITE_MID,
-    lineHeight: lh(TEXT.sm),
+    fontSize: TEXT.md, color: WHITE_MID,
+    lineHeight: lh(TEXT.md),
   },
   // Address-step content fills the (now tall) cardWrap.
   addressCard: {
@@ -1567,8 +1591,8 @@ const locationPopupStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM,
   },
   searchInput: {
-    flex: 1, fontSize: TEXT.md, color: BLACK,
-    backgroundColor: BLACK_SOFT, borderRadius: RADIUS,
+    flex: 1, fontSize: TEXT.md, color: INK,
+    backgroundColor: PAGE, borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: SM,
     textAlign: isRTL ? 'right' : 'left',
   },
@@ -1694,7 +1718,7 @@ function FamilyValuePopup({
       onDismiss={onDismiss}
       contentStyle={[familyStyles.valuePopupCard, { paddingBottom: bottomGap(insets.bottom, SM) }]}
     >
-      <Text style={familyStyles.valuePopupTitle}>{title}</Text>
+      <SheetTitle style={familyStyles.valuePopupTitle}>{title}</SheetTitle>
       <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
         {options.map(opt => {
           const isSelected = selected === opt.value
@@ -2028,7 +2052,8 @@ const familyStyles = StyleSheet.create({
   shadowLayer: { flex: 1, backgroundColor: SURFACE_SUNK },
   gestureWrap: { flexShrink: 1 },
   sheet: {
-    backgroundColor: BG,
+    // No ground of its own: every popup is WHITE and BottomSheet's card paints
+    // it (user directive 2026-07-28). Only metrics here.
     paddingTop: RADIUS,
     paddingHorizontal: SM,
     flexShrink: 1,
@@ -2036,7 +2061,7 @@ const familyStyles = StyleSheet.create({
   dragHandle: {
     alignSelf: 'center',
     width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: INK_DIM,
     marginBottom: MD,
   },
   scrollContent: { paddingTop: SM, paddingBottom: SM },
@@ -2047,38 +2072,38 @@ const familyStyles = StyleSheet.create({
     paddingVertical: SM,
     paddingHorizontal: MD,
   },
-  toggleLabel: { fontSize: TEXT.md, color: BLACK },
+  toggleLabel: { fontSize: TEXT.md, color: INK },
   section: { marginBottom: MD },
   subSection: {},
-  sectionTitle: { fontSize: TEXT.md, color: BLACK, marginBottom: SM },
-  subSectionTitle: { fontSize: TEXT.sm, color: BLACK },
+  sectionTitle: { fontSize: TEXT.md, color: INK, marginBottom: SM },
+  subSectionTitle: { fontSize: TEXT.md, color: INK },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: XS },
-  sectionHint: { fontSize: TEXT.sm, color: BLACK_STRONG, marginTop: XS, marginBottom: MD },
-  optional: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  sectionHint: { fontSize: TEXT.md, color: INK_SUBTLE, marginTop: XS, marginBottom: MD },
+  optional: { fontSize: TEXT.md, color: INK_SUBTLE },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM },
-  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
-  pillSelected: { backgroundColor: GREEN },
-  pillLabel: { fontSize: TEXT.sm, color: BLACK },
+  pill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: PAGE },
+  pillSelected: { backgroundColor: INK },
+  pillLabel: { fontSize: TEXT.md, color: INK },
   pillLabelSelected: { color: WHITE },
   sectionPill: {
     paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: INK_WASH,
   },
-  sectionPillLabel: { fontSize: TEXT.sm, color: INK },
+  sectionPillLabel: { fontSize: TEXT.md, color: INK },
   card: {
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
     borderRadius: RADIUS,
     overflow: 'hidden',
   },
-  cardRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT },
+  cardRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
   cardRowDividerLast: { borderBottomWidth: 0 },
   dropdownRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: MD, paddingVertical: MD,
   },
-  dropdownLabel: { fontSize: TEXT.sm, color: BLACK },
-  dropdownValue: { fontSize: TEXT.sm, color: INK },
-  dropdownPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  dropdownLabel: { fontSize: TEXT.md, color: INK },
+  dropdownValue: { fontSize: TEXT.md, color: INK },
+  dropdownPlaceholder: { fontSize: TEXT.md, color: INK_SUBTLE },
 
   // "Days with kids" schedule. Title + weeks render inline with the rest of
   // the form (no enclosing card). Title sits flush, weeks gap below.
@@ -2089,85 +2114,84 @@ const familyStyles = StyleSheet.create({
   kidChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, paddingHorizontal: MD, marginTop: XS },
   kidChip: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: 999, backgroundColor: BLACK_SOFT,
+    borderRadius: 999, backgroundColor: PAGE,
     paddingStart: MD, paddingEnd: SM,
   },
   kidChipMain: { paddingVertical: SM },
-  kidChipLabel: { fontSize: TEXT.sm, color: INK },
-  kidChipPlaceholder: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  kidChipLabel: { fontSize: TEXT.md, color: INK },
+  kidChipPlaceholder: { fontSize: TEXT.md, color: INK_SUBTLE },
   kidChipRemoveBtn: { paddingHorizontal: SM, paddingVertical: XS },
-  kidChipRemoveLabel: { fontSize: TEXT.lg, color: BLACK_STRONG, lineHeight: 18 },
+  // A single × glyph: its line box should equal the glyph, so lineHeight tracks
+  // the font size rather than the 1.4× body ratio.
+  kidChipRemoveLabel: { fontSize: TEXT.lg, color: INK_SUBTLE, lineHeight: TEXT.lg },
   // "+ Add kid" is the only ACTION among the kid chips (the rest are values
   // you edit), so it is a solid filled pill rather than a dashed outline: the
   // dashed version read as a placeholder slot, not as something you press.
   kidChipAdd: {
     paddingHorizontal: MD, paddingVertical: SM,
     borderRadius: 999,
-    backgroundColor: GREEN,
+    backgroundColor: INK,
   },
-  kidChipAddLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE },
+  kidChipAddLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
 
   // + Add kid / + Add week button.
   addKidBtn: { ...OUTLINE_SKIN, paddingVertical: SM, alignItems: 'center', borderStyle: 'dashed' },
-  addKidLabel: { fontSize: TEXT.sm, color: INK },
+  addKidLabel: { fontSize: TEXT.md, color: INK },
 
   weekHeader: { marginBottom: MD, gap: XS },
   weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
-  weekLabel: { fontSize: TEXT.sm, color: BLACK },
-  weekLabelEmphasis: { fontWeight: WEIGHT.extrabold },
-  weekHint: { fontSize: TEXT.sm, color: BLACK_STRONG },
-  weekRemove: { fontSize: TEXT.sm, color: BLACK_STRONG },
+  weekLabel: { fontSize: TEXT.md, color: INK },
+  weekLabelEmphasis: { fontWeight: WEIGHT.semibold },
+  weekHint: { fontSize: TEXT.md, color: INK_SUBTLE },
+  weekRemove: { fontSize: TEXT.md, color: INK_SUBTLE },
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
   dayCell: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   dayBubble: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BORDER_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: LINE,
   },
-  dayBubbleSelected: { backgroundColor: GREEN, borderColor: GREEN },
+  dayBubbleSelected: { backgroundColor: INK, borderColor: INK },
   // Weekend cells (locale-defined: Fri+Sat for he/ar, Sat+Sun otherwise)
   // get a tinted bubble + primary-colored letter when not selected, so the
   // user can orient themselves visually toward their weekend without reading.
-  dayBubbleWeekend: { backgroundColor: GREEN_SOFT, borderColor: GREEN_SOFT },
-  dayLetterWeekend: { color: GREEN },
-  dayLetter: { fontSize: TEXT.sm, color: BLACK },
+  dayBubbleWeekend: { backgroundColor: INK_WASH, borderColor: INK_WASH },
+  dayLetterWeekend: { color: INK },
+  dayLetter: { fontSize: TEXT.md, color: INK },
   dayLetterSelected: { color: WHITE },
-  dayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
+  dayDate: { fontSize: TEXT.sm, color: INK_SUBTLE },
   addWeekBtn: { ...OUTLINE_SKIN, marginTop: MD, paddingVertical: MD, alignItems: 'center', borderStyle: 'dashed' },
-  addWeekLabel: { fontSize: TEXT.sm, color: INK },
+  addWeekLabel: { fontSize: TEXT.md, color: INK },
   // Static bottom strip housing the "Interested in kids" toggle. Sits below
   // the sheet's ScrollView so the cards expanding/collapsing inside don't
   // push it around. Same tone + horizontal padding as the sheet, so the popup
   // reads as one continuous surface.
-  interestedBar: { backgroundColor: BG },
+  interestedBar: { backgroundColor: SURFACE },
 
   // Inline picker (count / age) sheet
   valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
   valuePopupCard: {
-    backgroundColor: BG,
     paddingTop: RADIUS, paddingHorizontal: SM,
   },
-  valuePopupTitle: {
-    fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: BLACK,
-    textAlign: 'center', marginBottom: SM,
-  },
+  // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
+  valuePopupTitle: { marginBottom: SM },
   valueRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: MD, paddingHorizontal: SM,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BLACK_SOFT,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE,
   },
-  valueRowLabel: { fontSize: TEXT.md, color: BLACK },
-  valueRowLabelSelected: { color: INK, fontWeight: WEIGHT.extrabold },
-  valueRowCheck: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.extrabold },
+  valueRowLabel: { fontSize: TEXT.md, color: INK },
+  valueRowLabelSelected: { color: INK, fontWeight: WEIGHT.semibold },
+  valueRowCheck: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.semibold },
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
   triOptionRow: { flexWrap: 'wrap', rowGap: SM },
   triOptionLabel: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
-  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: BLACK_SOFT },
-  triOptionPillSelected: { backgroundColor: GREEN },
-  triOptionPillLabel: { fontSize: TEXT.sm, color: BLACK },
+  triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: PAGE },
+  triOptionPillSelected: { backgroundColor: INK },
+  triOptionPillLabel: { fontSize: TEXT.md, color: INK },
   triOptionPillLabelSelected: { color: WHITE },
 })
 
@@ -2206,7 +2230,7 @@ function PhotoOptionsPopup({
           style={[photoOptionsStyles.tile, !canMoveUp && photoOptionsStyles.tileDisabled]}
           onPress={() => { if (canMoveUp) { tap(); onMoveUp() } }}
         >
-          <ChevronUpIcon color={canMoveUp ? BLACK : BLACK_STRONG} />
+          <ChevronUpIcon color={canMoveUp ? INK : INK_SUBTLE} />
           <Text style={[photoOptionsStyles.tileLabel, !canMoveUp && photoOptionsStyles.tileLabelDisabled]}>
             {t('settings.photoEditMoveUp')}
           </Text>
@@ -2215,7 +2239,7 @@ function PhotoOptionsPopup({
           style={[photoOptionsStyles.tile, !canMoveDown && photoOptionsStyles.tileDisabled]}
           onPress={() => { if (canMoveDown) { tap(); onMoveDown() } }}
         >
-          <ChevronDownIcon color={canMoveDown ? BLACK : BLACK_STRONG} />
+          <ChevronDownIcon color={canMoveDown ? INK : INK_SUBTLE} />
           <Text style={[photoOptionsStyles.tileLabel, !canMoveDown && photoOptionsStyles.tileLabelDisabled]}>
             {t('settings.photoEditMoveDown')}
           </Text>
@@ -2223,7 +2247,7 @@ function PhotoOptionsPopup({
       </View>
 
       <SheetActionRow
-        icon={replacing ? <ActivityIndicator color={BLACK} /> : <PhotoReplaceIcon color={BLACK} />}
+        icon={replacing ? <ActivityIndicator color={INK} /> : <PhotoReplaceIcon color={INK} />}
         label={t('settings.photoEditReplace')}
         disabled={replacing}
         onPress={() => { tap(); onReplace() }}
@@ -2235,7 +2259,7 @@ function PhotoOptionsPopup({
           reversible by re-adding one, and the confirm still gates it; the
           warning haptic below carries the caution instead of the colour. */}
       <SheetActionRow
-        icon={<PhotoTrashIcon color={canDelete ? BLACK : BLACK_STRONG} />}
+        icon={<PhotoTrashIcon color={canDelete ? INK : INK_SUBTLE} />}
         label={canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
         disabled={!canDelete}
         onPress={() => { tapWarning(); onDelete() }}
@@ -2255,7 +2279,7 @@ const photoOptionsStyles = StyleSheet.create({
   },
   tile: {
     flex: 1,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
     borderRadius: RADIUS,
     paddingVertical: MD,
     alignItems: 'center',
@@ -2266,10 +2290,10 @@ const photoOptionsStyles = StyleSheet.create({
     opacity: 0.5,
   },
   tileLabel: {
-    fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK,
   },
   tileLabelDisabled: {
-    color: BLACK_STRONG,
+    color: INK_SUBTLE,
   },
 })
 
@@ -2800,22 +2824,22 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
             </View>
           }
           onPress={onOpenBuyExtra}
-          icon={<CoinIcon color={GREEN} size={ICON.md} />}
-          labelColor={GREEN}
+          icon={<CoinIcon color={INK} size={ICON.md} />}
+          labelColor={INK}
         />
         <SelectFieldRow
           grouped
           label={t('settings.account')}
           onPress={() => setAccountPopupVisible(true)}
-          icon={<UserIcon color={GREEN} />}
-          labelColor={GREEN}
+          icon={<UserIcon color={INK} />}
+          labelColor={INK}
         />
         <SelectFieldRow
           grouped
           label={t('settings.support')}
           onPress={() => { Linking.openURL(supportMailUrl(t('support.mailSubject'))).catch(() => {}) }}
-          icon={<SupportIcon color={GREEN} />}
-          labelColor={GREEN}
+          icon={<SupportIcon color={INK} />}
+          labelColor={INK}
         />
       </View>
       <AccountPopup
@@ -2888,7 +2912,7 @@ export default function SettingsPage({
   const { bottom: bottomInset } = useSafeAreaInsets()
 
   // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
-  // not the avatar but an orange CTA into the build-profile flow. A browse-only
+  // not the avatar but a purple CTA into the build-profile flow. A browse-only
   // user reaches settings freely (the menu is never gated), so this is their
   // way to finish. Same completion marker the invite popup and the server gate
   // use — one source of truth.
@@ -2919,7 +2943,7 @@ export default function SettingsPage({
     <View style={styles.rootOuter}>
       {/* NO 'bottom' edge: reserving the safe area HERE shortens the scroll's
           viewport, so the menu was permanently clipped a home-indicator's
-          height above the screen edge and rode over a dead beige band that
+          height above the screen edge and rode over a dead empty band that
           never scrolled away (iPhone only — Android reports 0 here, which is
           why it went unseen). The inset belongs to the scroll CONTENT below,
           where the list runs to the very bottom edge and only its last row is
@@ -2936,7 +2960,7 @@ export default function SettingsPage({
               <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
             ) : (
               <View style={styles.profileCardPlaceholder}>
-                <TabIcon tab="profile" color={BLACK_STRONG} />
+                <TabIcon tab="profile" color={INK_SUBTLE} />
               </View>
             )}
           </View>
@@ -2973,7 +2997,7 @@ export default function SettingsPage({
             </View>
           )}
 
-          {/* Opaque body: its solid BG fill is what covers the fixed photo as
+          {/* Opaque body: its solid WHITE fill is what covers the fixed photo as
               the list scrolls up over it. */}
           <View style={styles.scrollBody}>
             <View style={styles.optionsWrap}>
@@ -3002,7 +3026,10 @@ export default function SettingsPage({
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootOuter: { flex: 1, backgroundColor: BG },
+  // The menu page is WHITE (user directive 2026-07-28), the same white as the
+  // OverlaySheet it rises in — the page tint is for the app's own pages (home,
+  // chat), not for the drawer.
+  rootOuter: { flex: 1, backgroundColor: SURFACE },
   root: { flex: 1 },
 
   header: {
@@ -3029,9 +3056,9 @@ const styles = StyleSheet.create({
   section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: MD },
   sectionLabelRow: { flexDirection: 'row', marginTop: LG, marginBottom: SM, paddingHorizontal: SM },
-  sectionLabel: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
-  sectionTitle: { fontSize: TEXT.xl, fontWeight: WEIGHT.extrabold, color: WHITE, marginBottom: SM },
-  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: WHITE },
+  sectionLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
+  sectionTitle: { fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: WHITE, marginBottom: SM },
+  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, justifyContent: 'flex-end', width: 44 * 3 + SM * 2 },
@@ -3039,20 +3066,20 @@ const styles = StyleSheet.create({
 
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: SM },
   slider: { width: '100%', height: 40 },
-  sliderEndLabel: { fontSize: TEXT.sm, color: WHITE_MID, minWidth: 22, textAlign: 'center' },
+  sliderEndLabel: { fontSize: TEXT.md, color: WHITE_MID, minWidth: 22, textAlign: 'center' },
 
   genderRow: { flexDirection: 'row', gap: SM, marginTop: SM },
 
   previewWrap: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: SURFACE,
   },
 
   textInputWrap: { marginTop: SM, borderRadius: RADIUS, paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM, backgroundColor: WHITE_SOFT },
   textInputWrapInner: { paddingHorizontal: MD, paddingTop: MD, paddingBottom: MD + SM },
   textInputHeader: { flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM },
   textInput: { fontSize: TEXT.md, color: WHITE, padding: 0, textAlign: 'center', minHeight: 56 },
-  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.sm, color: WHITE_MID },
+  charCount: { position: 'absolute', end: 12, bottom: 8, fontSize: TEXT.md, color: WHITE_MID },
 
   // Account tab
   infoCard: {
@@ -3092,16 +3119,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: WHITE_SOFT,
   },
-  // Opaque wrapper around the scrolling menu content: its solid BG is what
+  // Opaque wrapper around the scrolling menu content: its solid WHITE is what
   // hides the fixed photo behind it as the list rises over the photo.
-  scrollBody: { backgroundColor: BG },
+  scrollBody: { backgroundColor: SURFACE },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Not-yet-built profile: no hero card, just the plain (beige) page. A regular
+  // Not-yet-built profile: no hero card, just the plain white page. A regular
   // button sits below the sheet's close (X) chrome; the inline paddingTop
   // clears that chrome (photoBleed) so the button never hides under it.
   buildProfileWrap: { paddingHorizontal: LG, paddingBottom: MD },
-  // A plain white card. The GROUP's meaning is carried by its ink (orange
+  // A plain white card. The GROUP's meaning is carried by its ink (the purple
   // for the account/status rows), never by tinting the card itself.
   accentCard: { backgroundColor: 'transparent' },
   accountLinkRowInner: {
@@ -3136,7 +3163,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent', borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
-    shadowColor: SCRIM_BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
+    shadowColor: SHADOW_BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.
@@ -3156,11 +3183,6 @@ const styles = StyleSheet.create({
   // Label + optional subtitle, stacked. Owns the whole width beside the icon
   // so both texts share one start edge.
   selectRowLabelStack: { flex: 1, minWidth: 0 },
-  // With a trailing node the stack stops claiming the leftover width, so the
-  // chip sits directly beside the label instead of being pushed to the row's
-  // far END edge. It still shrinks (and the label wraps) when the pair is
-  // wider than the row.
-  selectRowLabelStackTight: { flex: 0, flexShrink: 1 },
   // flexShrink:1 lets the text box shrink below its content width so it
   // wraps (multi-line, flexible) instead of overflowing/clipping.
   // Both texts own the stack's full width, so both depend on the app-wide
@@ -3168,20 +3190,27 @@ const styles = StyleSheet.create({
   // edge, beside the icon that names them. The subtitle used to carry that pair
   // inline while the label carried nothing, which is exactly why the label
   // drifted to the row's far END on iOS.
-  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: BLACK, fontWeight: WEIGHT.semibold },
+  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK, fontWeight: WEIGHT.semibold },
   // flexShrink:1 for the same reason the label carries it: a subtitle that
   // states several facts on one line (the communities counts) must be allowed
   // to shrink below its content width and wrap, not run off the row's edge.
-  selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.sm, color: INK_2, marginTop: XS },
+  selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.md, color: INK_BODY, marginTop: XS },
   // The credits row's pool table: one line per pool, caption on the START edge
   // and amount on the END edge (justifyContent spreads them, so the amounts
-  // form a column without a hand-set column width). alignItems:'flex-start'
-  // keeps the amount on the caption's FIRST line when a caption wraps.
+  // form a column without a hand-set column width). alignItems:'flex-end'
+  // keeps the amount on the caption's LAST line when a caption wraps (user
+  // directive 2026-07-28) — the fraction sits level with the bottom of the
+  // caption block, so the pool table's baseline stays a straight line.
   creditPools: { marginTop: XS, gap: XS },
-  creditPoolLine: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: MD },
-  creditPoolText: { flexShrink: 1, fontSize: TEXT.sm, lineHeight: lh(TEXT.sm), color: INK_2 },
-  creditPoolAmount: { flexShrink: 0, fontSize: TEXT.sm, lineHeight: lh(TEXT.sm), color: GREEN, fontWeight: WEIGHT.semibold },
+  creditPoolLine: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: MD },
+  creditPoolText: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK_BODY },
+  creditPoolAmount: { flexShrink: 0, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK, fontWeight: WEIGHT.semibold },
   selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
+  // One line of the label column, so an END-edge chip can ride it: the words
+  // take the whole width and the chip sits at their end, facing them. Same
+  // geometry as a group strip's line (CommunitiesPage's rowLine).
+  selectRowTextLine: { flexDirection: 'row', alignItems: 'center', gap: SM },
+  selectRowLineFill: { flex: 1, minWidth: 0 },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,
@@ -3209,7 +3238,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start', width: ICON.md, height: iconScale(lh(TEXT.md)), marginTop: inkOffset(TEXT.md),
     alignItems: 'center', justifyContent: 'center',
   },
-  selectRowIconWrapCentered: { alignSelf: 'center', marginTop: 0 },
 
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,
@@ -3223,12 +3251,12 @@ const styles = StyleSheet.create({
   subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
   subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
   optionDivider: {
-    height: StyleSheet.hairlineWidth, backgroundColor: BLACK_SOFT,
+    height: StyleSheet.hairlineWidth, backgroundColor: LINE,
     marginStart: MD,
   },
   subPageDesc: {
     marginHorizontal: SM, marginTop: MD,
-    fontSize: TEXT.sm, color: WHITE_STRONG,
-    textAlign: 'center', lineHeight: lh(TEXT.sm),
+    fontSize: TEXT.md, color: WHITE_STRONG,
+    textAlign: 'center', lineHeight: lh(TEXT.md),
   },
 })

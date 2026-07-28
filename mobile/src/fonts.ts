@@ -37,6 +37,20 @@ export const TEXT_START: TextStyle = {
   writingDirection: isRTL ? 'rtl' : 'ltr',
 }
 
+// The same rule for a FIELD, and it has to be stated physically. A TextInput's
+// PLACEHOLDER is drawn from its own attributed string, which iOS never gives
+// the base writing direction above — so in an RTL app every empty field showed
+// its placeholder (and then the text typed into it) pinned to the LEFT edge,
+// on the far side of the box from where the user reads. `textAlign` is the one
+// thing that reaches both the placeholder and the value.
+//
+// Applied once, in AppText's TextInput wrapper, and ONLY when the call site
+// stated no alignment of its own: a centred code field, a centred bio and an
+// LTR-pinned value all keep saying what they want and still win.
+export const INPUT_START: TextStyle = {
+  textAlign: isRTL ? 'right' : 'left',
+}
+
 // How much each class of text is allowed to grow when the user bumps the OS
 // font-size slider. Pass as `maxFontSizeMultiplier` on <Text>/<TextInput>.
 // - ui:      fixed-size chrome (buttons, badges, timestamps) — scaling would
@@ -90,12 +104,17 @@ export const iconScale = (size: number, cap: number = FONT_SCALE.body): number =
 export const inkOffset = (fontSize: number, cap: number = FONT_SCALE.body): number =>
   Math.round(iconScale(fontSize, cap) * 0.16)
 
+// fontWeight → the real weighted face to render it with. The app itself only
+// ever asks for two of these: 400 (the default) and 600 (WEIGHT.semibold, the
+// single emphasis tier — see tokens.ts). 500/700 stay mapped as the landing
+// spot for a stray `fontWeight: 'bold'` or a third-party style we don't own;
+// 800 is gone with the extrabold token, so nothing can resolve to a face that
+// is no longer loaded (see _layout's useFonts).
 export const WEIGHT_TO_FAMILY: Record<string, string> = {
   '400': 'NotoSansHebrew_400Regular',
   '500': 'NotoSansHebrew_500Medium',
   '600': 'NotoSansHebrew_600SemiBold',
   '700': 'NotoSansHebrew_700Bold',
-  '800': 'NotoSansHebrew_800ExtraBold',
   normal: 'NotoSansHebrew_400Regular',
   bold: 'NotoSansHebrew_700Bold',
 }

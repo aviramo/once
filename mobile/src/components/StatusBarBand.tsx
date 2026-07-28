@@ -20,7 +20,7 @@ import { STATUS_BAND } from '../colors'
 //
 // It is a vertical FADE, not a flat fill: deep purple (STATUS_BAND) at 50%
 // under the system glyphs at the top, dissolving to nothing at the bottom edge,
-// so the band meets whatever the screen is (a photo, a beige page) without
+// so the band meets whatever the screen is (a photo, the page) without
 // drawing a hard line across it.
 export function StatusBarBand({ topInset }: { topInset?: number } = {}) {
   const insets = useSafeAreaInsets()

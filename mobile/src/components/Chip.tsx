@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Text } from './AppText'
 import { Path, Circle, Rect } from 'react-native-svg'
@@ -7,17 +7,17 @@ import { Glyph } from './icons'
 import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
-import { PHOTO_CHROME, GREEN, GREEN_WASH, ONLINE_GREEN, PRIMARY, PRIMARY_BG, WHITE, LIFT_SHADOW } from '../colors'
+import { PHOTO_CHROME, PAGE, INK, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
 // tint of the tone color as background + same-hue icon/text — chips read as
 // lightweight fabric swatches instead of bordered stickers. When `onPhoto`
 // is set, the chip becomes a solid tile that MATCHES the round overlay buttons
-// — the same PHOTO_CHROME beige fill, with the tone's own ink (user directive
+// — the same PHOTO_CHROME white fill, with the tone's own ink (user directive
 // 2026-07-25, reverses the earlier transparent-white-ink-on-photo treatment):
-// chips and buttons now read as one fabric of beige tiles over the photo. The
-// `solid` tone is the exception — it keeps its full GREEN fill + white ink so
+// chips and buttons now read as one fabric of white tiles over the photo. The
+// `solid` tone is the exception — it keeps its full INK fill + white ink so
 // the chat's "End" still reads as a strong control, not a label. State-presence
 // chips (online, proximate, kids-affinity) add a `renderTrailing` dot via
 // `PresenceDot`; it is handed the chip's own ink colour.
@@ -38,23 +38,23 @@ const isRTL = localeIsRTL
 const RTL_SCRIPT = /[֐-׿؀-ۿ]/
 
 const TONES = {
-  // Green ink on a pale GREEN tile. The fill used to be the muted alpha ramp,
-  // which composites over the warm page into something the eye reads as grey —
-  // so the chip sat outside the palette. GREEN_WASH is the solid half-green
-  // that keeps it inside it.
-  neutral:  { fg: GREEN,  bg: GREEN_WASH },
-  // Solid brand green with light ink: a chip that is a real "do this" control,
-  // not a fact swatch. The full-strength fill (not the GREEN_WASH tint) is what
+  // INK on the PAGE tint — the palest purple in the palette (user directive
+  // 2026-07-28). Off-photo, a chip is a page-coloured tile on a white surface:
+  // the darker INK_PALE it used to wear read as a lavender block against the
+  // white menu, and the muted alpha ramp before that composited into something
+  // the eye read as grey. The page purple is the one fill that belongs to both.
+  neutral:  { fg: INK,  bg: PAGE },
+  // Solid purple with light ink: a chip that is a real "do this" control,
+  // not a fact swatch. The full-strength fill (not the PAGE tint) is what
   // makes it read as a button rather than a label — used for the chat's "End".
-  solid:    { fg: WHITE,  bg: GREEN },
-  // Orange on an orange wash — the positive hue, never the action green.
-  positive: { fg: PRIMARY, bg: PRIMARY_BG },
+  solid:    { fg: WHITE,  bg: INK },
+  // INK on an INK wash: the positive tone is the one purple, laid soft.
+  positive: { fg: INK, bg: INK_WASH },
   // "Do this" rather than "here is a fact". Same white tile as every other
   // on-photo chip — the tile is the fabric of the card and an add-chip is not
-  // a foreign object on it — but the ink is the brand orange instead of the
-  // reading green. Colour alone carries the difference, which is why this tone
-  // opts out of the on-photo ink override below.
-  action:   { fg: PRIMARY, bg: PHOTO_CHROME },
+  // a foreign object on it. It opts out of the on-photo ink override below so
+  // its ink stays the full INK purple whatever the tone rules do around it.
+  action:   { fg: INK, bg: PHOTO_CHROME },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -88,11 +88,87 @@ function segmentLines(segments: ChipSegment[]): ChipRun[][] {
   return lines.filter(l => l.length)
 }
 
+// ── A wrapped tile hugs the lines it actually paints ───────────────────────
+// A flex container that WRAPS keeps the width it was shrunk to, never the width
+// its lines ended up using (Yoga does this, and CSS shrink-to-fit does the same)
+// — so a chip whose sentence wraps paints a tile as wide as the whole column,
+// with dead space after every short line (user directive 2026-07-28).
+//
+// A plain single-<Text> chip never had this: RN's text measure reports the
+// widest LINE, so those tiles already hug. Only the multi-item rows here (text
+// runs + mini-chip clusters, and the "+N" name flow) are laid out by the flex
+// engine, and only they need this.
+//
+// Same shape as the meta-line reflow in AppText: lay the label out once, read
+// the item boxes back, and cap the container at the width its widest line
+// actually used. Each item measures to its own ink, so the furthest END edge
+// across a line IS that line's width. It cannot loop: the second pass caps the
+// container at exactly that width, so every line breaks where it already broke
+// and measures the same. `maxWidth`, not `width`: if the space ever gets
+// NARROWER than the hug (a larger font scale), the lines must stay free to
+// re-wrap instead of overflowing the tile.
+const HUG_SLACK = 1
+
+function useHugWidth(key: string, lineItems: number[]) {
+  const [hug, setHug] = useState<number | null>(null)
+  // Read inside the layout callbacks, so they never close over a stale label.
+  const items = useRef(lineItems)
+  items.current = lineItems
+  const boxes = useRef(new Map<string, { x: number; end: number }>())
+  const rows = useRef(new Map<number, number>())
+  // A new label is a new measurement: drop what the previous one measured
+  // rather than capping the new text at the old text's width.
+  const measured = useRef(key)
+  if (measured.current !== key) {
+    measured.current = key
+    boxes.current.clear()
+    rows.current.clear()
+    if (hug !== null) setHug(null)
+  }
+
+  const remeasure = useCallback(() => {
+    let widest = 0
+    for (let li = 0; li < items.current.length; li++) {
+      const rowWidth = rows.current.get(li)
+      // Nothing to cap until every box of every line has reported: a partial
+      // pass would cap the tile at a fraction of its text and re-wrap it.
+      if (rowWidth == null) return
+      let minX = Infinity
+      let maxEnd = 0
+      for (let i = 0; i < items.current[li]; i++) {
+        const box = boxes.current.get(`${li}:${i}`)
+        if (!box) return
+        minX = Math.min(minX, box.x)
+        maxEnd = Math.max(maxEnd, box.end)
+      }
+      // Lines are start-aligned: they fill from the left in LTR, from the row's
+      // right edge in RTL (layout x is always physical, whatever the direction).
+      widest = Math.max(widest, isRTL ? rowWidth - minX : maxEnd)
+    }
+    if (widest <= 0) return
+    const next = Math.ceil(widest)
+    setHug(cur => (cur !== null && Math.abs(cur - next) <= HUG_SLACK ? cur : next))
+  }, [])
+
+  const onItemLayout = useCallback((li: number, i: number) => (e: LayoutChangeEvent) => {
+    const { x, width } = e.nativeEvent.layout
+    boxes.current.set(`${li}:${i}`, { x, end: x + width })
+    remeasure()
+  }, [remeasure])
+
+  const onLineLayout = useCallback((li: number) => (e: LayoutChangeEvent) => {
+    rows.current.set(li, e.nativeEvent.layout.width)
+    remeasure()
+  }, [remeasure])
+
+  return { style: hug != null ? { maxWidth: hug } : undefined, onItemLayout, onLineLayout }
+}
+
 // The pale-purple mini-chip. Single source for both the "+N" groups hint and
 // the family chip's age/weekend pills so they read as one fabric.
-function Badge({ text, ltr = false }: { text: string; ltr?: boolean }) {
+function Badge({ text, ltr = false, onLayout }: { text: string; ltr?: boolean; onLayout?: (e: LayoutChangeEvent) => void }) {
   return (
-    <View style={styles.badge}>
+    <View style={styles.badge} onLayout={onLayout}>
       <Text style={[styles.badgeText, ltr && styles.badgeTextLtr]} maxFontSizeMultiplier={FONT_SCALE.heading}>
         {text}
       </Text>
@@ -161,7 +237,7 @@ export function phraseWrap(label: string): string {
 // with a chip — the leading glyph of the settings groups row — centres against
 // the real height instead of a hand-tuned margin that drifts when the tokens
 // move.
-export const CHIP_HEIGHT = lh(TEXT.sm) + 2 * SM
+export const CHIP_HEIGHT = lh(TEXT.md) + 2 * SM
 
 export function Chip({
   renderIcon,
@@ -171,6 +247,7 @@ export function Chip({
   onPhoto = false,
   outlined = false,
   bold = false,
+  small = false,
   plusCount,
   renderTrailing,
   onPress,
@@ -188,7 +265,7 @@ export function Chip({
    * groups than the one named. The "+N" is composed here (single source) and
    * mirrored under RTL so the plus stays on the reading-start side. */
   plusCount?: number
-  /** No fill, just a light green rule. For a chip that ADDS something rather
+  /** No fill, just a light purple rule. For a chip that ADDS something rather
    * than reporting a fact — it reads as an empty slot waiting to be filled,
    * which a solid chip cannot. */
   outlined?: boolean
@@ -196,6 +273,11 @@ export function Chip({
    * chip so it reads as the card's heading without growing the tile past the
    * fact chips beside it. */
   bold?: boolean
+  /** The compact tile: a tighter box around smaller text, for a chip that
+   * annotates a LIST ROW rather than standing on a card — the role/queue chip on
+   * a group strip, and the same chip on the menu row that opens those strips.
+   * One size step, a prop, never a second chip component. */
+  small?: boolean
   renderTrailing?: (color: string) => React.ReactNode
   /** When provided, the chip itself becomes the Pressable. Avoids an extra
    * wrapper View that would break the flexShrink chain — wrapping a
@@ -205,8 +287,8 @@ export function Chip({
 }) {
   const { fg, bg } = TONES[tone]
   // On a photo a chip is a solid tile that matches the round overlay buttons:
-  // the same PHOTO_CHROME beige fill, with the tone's own fg as ink. `solid`
-  // keeps its full GREEN fill + white ink so the chat's "End" still reads as a
+  // the same PHOTO_CHROME white fill, with the tone's own fg as ink. `solid`
+  // keeps its full INK fill + white ink so the chat's "End" still reads as a
   // strong control, not a label.
   const bgColor = onPhoto && tone !== 'solid' ? PHOTO_CHROME : bg
   // A filled tile over a photo casts the same soft lift as the round overlay
@@ -214,42 +296,55 @@ export function Chip({
   // chips (an empty add slot) stay flat.
   const tileShadow = onPhoto && !outlined
   const Container: any = onPress ? Pressable : View
-  // "+N": the mini-chip that chains right after the label's last word. It is
-  // nested INSIDE the label <Text> as an inline element — never a sibling flex
-  // item and never a split-per-word run. That keeps the whole label ONE bidi
-  // run (a Hebrew name renders correctly even in an LTR UI, instead of its words
-  // reordering by the flex engine) while the pill still flows after the final
-  // glyph and wraps with it. RTL mirrors the plus to the reading-start side
-  // ("1+"); `ltr` keeps the weak "+" glued to the digit.
+  // "+N": the mini-chip that chains right after the label's last word. The label
+  // is split into word-runs so the pill can flow after the final one and wrap
+  // with it, which an inline element inside the <Text> could not do. RTL mirrors
+  // the plus to the reading-start side ("1+"); `ltr` keeps the weak "+" glued to
+  // the digit.
   // Direction follows the LABEL's OWN script, not the UI locale: the flex engine
   // can't bidi-reorder words, so a locale-only direction reversed a Hebrew name
   // in an English UI. The "+" sits on that script's reading-start side.
   const nameDir: 'rtl' | 'ltr' | null = plusCount && text ? (RTL_SCRIPT.test(text) ? 'rtl' : 'ltr') : null
   const plusPill = nameDir ? (nameDir === 'rtl' ? `${plusCount}+` : `+${plusCount}`) : null
+  // The two flex-laid-out label shapes: `br`-delimited lines of runs + pill
+  // clusters, and the name's word-runs + trailing "+N". Both are built here so
+  // the hug hook knows how many boxes each line owes it, and both are capped by
+  // it so the tile ends where the text does (see useHugWidth).
+  const lines = segments ? segmentLines(segments) : null
+  const words = !segments && plusPill ? (text ?? '').split(/\s+/).filter(Boolean) : null
+  const hug = useHugWidth(
+    lines
+      ? lines.map(l => l.map(s => ('badges' in s ? s.badges.join(',') : s.text)).join('')).join('\n')
+      : words
+        ? `${text}${plusPill}`
+        : '',
+    lines ? lines.map(l => l.length) : words ? [words.length + 1] : [],
+  )
   return (
     <Container
       onPress={onPress}
-      style={[styles.chip, outlined ? styles.chipOutlined : { backgroundColor: bgColor }, tileShadow && styles.chipShadow]}
+      style={[styles.chip, small && styles.chipSmall, outlined ? styles.chipOutlined : { backgroundColor: bgColor }, tileShadow && styles.chipShadow]}
     >
       {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(fg)}</View> : null}
-      {segments ? (
+      {lines ? (
         // A column of wrapping rows: one row per `br`-delimited line, each row a
         // run of text + mini-chip clusters. Each text run is its own flex item
         // so it wraps at word boundaries; a badge cluster flows inline. Same
         // direction as the chip so items read start-to-end.
-        <View style={styles.segmentColumn}>
-          {segmentLines(segments).map((line, li) => (
-            <View key={li} style={styles.segments}>
+        <View style={[styles.segmentColumn, hug.style]}>
+          {lines.map((line, li) => (
+            <View key={li} style={styles.segments} onLayout={hug.onLineLayout(li)}>
               {line.map((seg, i) =>
                 'badges' in seg ? (
-                  <View key={i} style={styles.badgeCluster}>
+                  <View key={i} style={styles.badgeCluster} onLayout={hug.onItemLayout(li, i)}>
                     {seg.badges.map((b, j) => <Badge key={j} text={b} ltr={seg.ltr} />)}
                   </View>
                 ) : (
                   <Text
                     key={i}
-                    style={[styles.chipText, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
+                    style={[styles.chipText, small && styles.chipTextSmall, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
                     maxFontSizeMultiplier={FONT_SCALE.heading}
+                    onLayout={hug.onItemLayout(li, i)}
                   >
                     {seg.text}
                   </Text>
@@ -258,25 +353,26 @@ export function Chip({
             </View>
           ))}
         </View>
-      ) : plusPill ? (
+      ) : words ? (
         // Name + "+N": word-runs in a wrap row directed by the name's script, so
         // the pill lands right after the final word in any UI locale.
-        <View style={[styles.nameFlow, { direction: nameDir! }]}>
-          {(text ?? '').split(/\s+/).filter(Boolean).map((w, i) => (
+        <View style={[styles.nameFlow, { direction: nameDir! }, hug.style]} onLayout={hug.onLineLayout(0)}>
+          {words.map((w, i) => (
             <Text
               key={i}
-              style={[styles.chipText, bold && styles.chipTextBold, { color: fg }]}
+              style={[styles.chipText, small && styles.chipTextSmall, bold && styles.chipTextBold, { color: fg }]}
               maxFontSizeMultiplier={FONT_SCALE.heading}
+              onLayout={hug.onItemLayout(0, i)}
             >
               {w}
             </Text>
           ))}
-          <Badge text={plusPill} ltr />
+          <Badge text={plusPill!} ltr onLayout={hug.onItemLayout(0, words.length)} />
         </View>
       ) : (
         <>
           <Text
-            style={[styles.chipText, bold && styles.chipTextBold, { color: fg }]}
+            style={[styles.chipText, small && styles.chipTextSmall, bold && styles.chipTextBold, { color: fg }]}
             maxFontSizeMultiplier={FONT_SCALE.heading}
           >
             {phraseWrap(text ?? '')}
@@ -348,7 +444,7 @@ export function KidsIcon({ color }: { color: string }) {
 }
 
 // Small presence dot used as a chip trailing affordance. 7px filled circle,
-// hue carries the meaning: green (default) = "right now" / "right here" on
+// colour carries the meaning: purple (default) = "right now" / "right here" on
 // time + distance chips; white = kids-affinity chip (readable on the dark
 // photo scrim, where a black/brand dot would disappear). When
 // `pulsing` is set, opacity loops 1 ↔ PULSE.opacity continuously to signal a
@@ -356,7 +452,7 @@ export function KidsIcon({ color }: { color: string }) {
 
 const PRESENCE_DOT_SIZE = 7
 
-export function PresenceDot({ color = ONLINE_GREEN, pulsing = false }: { color?: string; pulsing?: boolean }) {
+export function PresenceDot({ color = PRESENCE, pulsing = false }: { color?: string; pulsing?: boolean }) {
   const opacity = useSharedValue(1)
   useEffect(() => {
     if (pulsing) {
@@ -390,6 +486,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     flexShrink: 1,
   },
+  // The compact tile: one step in on both axes, so the chip annotates a list row
+  // instead of standing beside it as an object of its own weight.
+  chipSmall: { paddingHorizontal: SM, paddingVertical: XS, gap: XS },
   // Same soft lift the round overlay buttons cast — applied to on-photo tiles so
   // chips and buttons read as one fabric off the image (shared LIFT_SHADOW).
   chipShadow: LIFT_SHADOW,
@@ -412,14 +511,14 @@ const styles = StyleSheet.create({
   // height, so top-align and centre coincide. The cap matches the label's own
   // maxFontSizeMultiplier so box and text scale together.
   glyphWrap: {
-    height: iconScale(lh(TEXT.sm), FONT_SCALE.heading),
-    marginTop: inkOffset(TEXT.sm, FONT_SCALE.heading),
+    height: iconScale(lh(TEXT.md), FONT_SCALE.heading),
+    marginTop: inkOffset(TEXT.md, FONT_SCALE.heading),
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipText: {
-    fontSize: TEXT.sm,
-    lineHeight: lh(TEXT.sm),
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
     fontWeight: WEIGHT.semibold,
     flexShrink: 1,
     // Start-aligned (physically right in RTL) comes from the app-wide reading
@@ -430,24 +529,30 @@ const styles = StyleSheet.create({
   // Heaviest weight at the ordinary chip size: the name/age heading chip reads
   // as the card's heading without growing the tile past the fact chips beside it.
   chipTextBold: {
-    fontWeight: WEIGHT.extrabold,
+    fontWeight: WEIGHT.semibold,
   },
-  // A small light-purple pill riding inside the chip after the label — the
-  // "+N more shared groups" hint. GREEN_WASH is the app's pale-purple soft-tile
-  // surface, so it reads as light purple against the beige chip tile. Its line
-  // height matches the label's first line (lh(TEXT.sm)) so, under the row's
+  // The small tile's label — the list-row size, one step under the chip's own.
+  chipTextSmall: {
+    fontSize: TEXT.sm,
+    lineHeight: lh(TEXT.sm),
+  },
+  // A small pale-purple pill riding inside the chip after the label — the
+  // "+N more shared groups" hint. The PAGE tint, the same fill the chip itself
+  // wears off-photo (user directive 2026-07-28: every chip is the page purple),
+  // so it reads as a whisper of purple against the white chip tile. Its line
+  // height matches the label's first line (lh(TEXT.md)) so, under the row's
   // flex-start alignment, the pill sits level with line one of a wrapped label.
   badge: {
-    backgroundColor: GREEN_WASH,
+    backgroundColor: PAGE,
     borderRadius: RADIUS,
     paddingHorizontal: XS,
     alignSelf: 'flex-start',
   },
   badgeText: {
-    fontSize: TEXT.xs,
-    lineHeight: lh(TEXT.sm),
+    fontSize: TEXT.sm,
+    lineHeight: lh(TEXT.md),
     fontWeight: WEIGHT.semibold,
-    color: GREEN,
+    color: INK,
     textAlign: 'center',
   },
   // Forced LTR for numeric/punctuation pills (the "+N" hint, a kid's age, "?"):

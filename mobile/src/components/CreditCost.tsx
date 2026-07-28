@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: TEXT.md,
-    fontWeight: WEIGHT.extrabold,
+    fontWeight: WEIGHT.semibold,
     includeFontPadding: false,
     textAlignVertical: 'center',
     fontVariant: ['tabular-nums'],

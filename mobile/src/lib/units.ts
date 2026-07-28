@@ -15,7 +15,7 @@ export const units: Units =
 export const M_PER_MI = 1609.344
 
 // "Right here" threshold (meters). Under this gap the distance reads as
-// proximate and adds the green presence dot to the distance chip. Same
+// proximate and adds the presence dot to the distance chip. Same
 // threshold for metric and imperial — 250m comfortably covers <0.1mi
 // (~160m), so the imperial branch never needs a second check.
 export const M_HERE_THRESHOLD = 250

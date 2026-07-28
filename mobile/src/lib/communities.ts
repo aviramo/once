@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { invoke } from './api'
 import { supabase } from './supabase'
 import { STORAGE } from '../keys'
+import { LIST_PAGE_SIZE } from '../tokens'
 import { t } from '../i18n'
 import type { Group } from './groups'
 import type { Profile } from '../stores/userStore'
@@ -29,24 +30,11 @@ export type GroupMember = { user_id: string; name: string | null; image: MemberI
 // settings menu row ("4 groups · 5 friends · 3 requests"). One separator, one
 // composer — empty/undefined segments drop out so a caller never has to build
 // the string conditionally.
-// Two rules govern where a meta line is allowed to wrap (user directive
-// 2026-07-27), and both are enforced with non-breaking spaces so any Text can
-// render the string as-is:
-//   1. A segment never breaks in half: "3 requests" keeps its number, instead
-//      of stranding the "3" at the end of a line with the word on the next. So
-//      the spaces INSIDE a segment are non-breaking.
-//   2. The interpunct travels DOWN with the fact it introduces, never dangling
-//      at the end of a line with nothing after it. So the dot is glued to the
-//      segment that follows it, and the one plain space in the whole string,
-//      the one BEFORE the dot, is the only place a wrap can land.
-// A one-line meta reads exactly as it always did: an NBSP paints as a space.
-const NBSP = '\u00A0'
-// The separator's visible mark, on its own: MetaText counts these to work out
-// which facts ended up on which line. Derived, so there is one interpunct.
-export const META_DOT = '\u00B7'
-export const META_SEP = ' ' + META_DOT + NBSP
-export const metaLine = (...parts: (string | false | null | undefined)[]): string =>
-  parts.filter(Boolean).map(p => (p as string).replace(/ /g, NBSP)).join(META_SEP)
+// The separator itself, the composer, and the rule that a dot never lands at
+// the edge of a wrapped line all live in `lib/meta.ts` (2026-07-28): a leaf
+// module, because the app's base `Text` is what enforces the rule now, for
+// every string in the app rather than for the rows that opted in.
+export { metaLine } from './meta'
 
 // The count wordings every meta line is built from — one definition each, so a
 // number reads the same in the menu row, the hub row and the popup. Each takes
@@ -73,13 +61,19 @@ export const requestLabel = (n: number) => (n === 1 ? t('communities.oneRequest'
 export type GroupKind = 'open' | 'approved' | 'private'
 export const GROUP_KINDS: GroupKind[] = ['open', 'approved', 'private']
 /** What a brand-new group is unless the creator says otherwise. */
-export const DEFAULT_GROUP_KIND: GroupKind = 'open'
+export const DEFAULT_GROUP_KIND: GroupKind = 'approved'
 export const groupKind = (g: { is_public?: boolean | null; requires_approval?: boolean | null }): GroupKind =>
   !g.is_public ? 'private' : g.requires_approval ? 'approved' : 'open'
 export const groupKindFlags = (kind: GroupKind): { is_public: boolean; requires_approval: boolean } => ({
   is_public: kind !== 'private',
   requires_approval: kind !== 'open',
 })
+// `link` is the group's optional "more details" URL: owners/managers set it
+// under the description, every member sees it as a tappable line in the group
+// popup. The server is the only place it is normalized and validated (a bare
+// host gets https://, anything that isn't http/https is refused), so a client
+// may hand what it receives straight to Linking.openURL. Optional/null: most
+// groups have none, and a row cached by an older build predates the field.
 // `requires_approval` gates joins (a link/search join becomes a pending request
 // an owner/manager must approve); `description` is the editable group blurb;
 // `pending` is the count of pending join requests (shown as a badge to staff).
@@ -89,7 +83,7 @@ export const groupKindFlags = (kind: GroupKind): { is_public: boolean; requires_
 // counting as a shared group between us). It is what lets someone run a
 // community without playing inside it. Optional: a row cached by an older build
 // predates it.
-export type OwnedGroup = { id: string; name: string; invite_code: string; is_public: boolean; members: number; is_owner?: boolean; requires_approval?: boolean; description?: string | null; pending?: number; hidden?: boolean }
+export type OwnedGroup = { id: string; name: string; invite_code: string; is_public: boolean; members: number; is_owner?: boolean; requires_approval?: boolean; description?: string | null; link?: string | null; pending?: number; hidden?: boolean }
 export type CreatedGroup = OwnedGroup & { owner: boolean }
 // One pending join request on a group the caller owns/manages. `profile` is the
 // requester's full profile card payload (server 2026-07-27): letting someone
@@ -100,14 +94,14 @@ export type JoinRequestItem = { id: string; user_id: string; name: string | null
 // invite_code is included for public groups (a public group is joinable by
 // anyone, so its code is not a secret) — lets "Join" from search reuse redeem.
 // `requires_approval` flips Join → Request; `requested` is my own pending state.
-export type PublicGroup = { id: string; name: string; members: number; joined: boolean; invite_code?: string; owner_id?: string | null; owner_name?: string | null; owner_image?: MemberImage; description?: string | null; requires_approval?: boolean; requested?: boolean }
+export type PublicGroup = { id: string; name: string; members: number; joined: boolean; invite_code?: string; owner_id?: string | null; owner_name?: string | null; owner_image?: MemberImage; description?: string | null; link?: string | null; requires_approval?: boolean; requested?: boolean; relevant?: number }
 export type Person = { user_id: string; name: string | null; image: MemberImage; requested: boolean; friend: boolean }
 // One row of the group chip's detail popup: a group the viewer and the profile
 // subject both belong to. `owner` is null for admin-owned groups.
 export type SharedGroupOwner = { user_id: string; name: string | null; image: MemberImage }
 // is_public / invite_code (public only) / description let a tapped row open the
-// same member sheet (JoinedGroupSheet) as the Communities hub.
-export type SharedGroup = { id: string; name: string; members: number; owner: SharedGroupOwner | null; is_public?: boolean; invite_code?: string | null; description?: string | null }
+// same group popup (GroupSheet) as the Communities hub.
+export type SharedGroup = { id: string; name: string; members: number; owner: SharedGroupOwner | null; is_public?: boolean; invite_code?: string | null; description?: string | null; link?: string | null }
 export type FriendItem = { user_id: string; name: string | null; image: MemberImage; profile?: Profile | null }
 export type FriendRequestItem = { id: string; user_id: string; name: string | null; image: MemberImage }
 export type MyFriends = { friends: FriendItem[]; requests: FriendRequestItem[] }
@@ -117,10 +111,46 @@ export type MyFriends = { friends: FriendItem[]; requests: FriendRequestItem[] }
 // from the store — no query. Heavier lists (rosters, people search, the full
 // friends list) stay on-demand.
 // A group the caller belongs to (not owned/managed). Carries enough to paint
-// the hub row and drive the popup: type + member count, and the invite_code for
+// the hub row and drive the popup: type + member count, the invite_code for
 // PUBLIC groups only (a public code is not a secret, so a member can share the
-// link); private groups get no code.
-export type JoinedGroup = { id: string; name: string; is_public?: boolean; members?: number; invite_code?: string | null; description?: string | null }
+// link; private groups get no code), and WHO RUNS IT — the same
+// SharedGroupOwner object shared_groups embeds, so GroupSheet reads one
+// field whichever surface opened it. null for an admin-owned group; undefined
+// on a summary written before the server carried it (server 2026-07-28).
+export type JoinedGroup = { id: string; name: string; is_public?: boolean; members?: number; invite_code?: string | null; description?: string | null; link?: string | null; owner?: SharedGroupOwner | null }
+
+// ── The one group the popup is about ───────────────────────────────────────
+// THE shape GroupSheet reads, whichever list opened it (user directive
+// 2026-07-28: one group popup everywhere). JoinedGroup / PendingGroup /
+// SharedGroup already ARE this shape, so a hub row and a shared-groups row hand
+// their item straight over; a search result carries its owner flattened onto
+// three columns, which `groupBrief` folds back into the one `owner` field.
+export type GroupBrief = {
+  id: string
+  name: string
+  members?: number
+  owner?: SharedGroupOwner | null
+  description?: string | null
+  link?: string | null
+  is_public?: boolean
+  invite_code?: string | null
+  /** Decides the wording of the join action for a group I am not in yet. */
+  requires_approval?: boolean
+}
+
+export const groupBrief = (g: PublicGroup): GroupBrief => ({
+  id: g.id,
+  name: g.name,
+  members: g.members,
+  owner: g.owner_id ? { user_id: g.owner_id, name: g.owner_name ?? null, image: g.owner_image ?? null } : null,
+  description: g.description,
+  link: g.link,
+  // Everything search can return is searchable by definition, so its invite
+  // link is not a secret and a member of it may hand it on.
+  is_public: true,
+  invite_code: g.invite_code,
+  requires_approval: g.requires_approval,
+})
 
 // A group the caller has an outstanding join request on (requires_approval
 // group they hit Join/Request on). Same shape as JoinedGroup so the hub row
@@ -169,9 +199,11 @@ export function pendingApprovals(c: CommunitiesSummary | null): number {
 
 // ── Communities (reuse the existing groups/user_groups machinery server-side) ──
 
+// Only the name is required; description and link are both optional, and the
+// link is normalized/validated by the same server rule the settings editor uses.
 export const createGroup = (
   name: string, is_public: boolean,
-  opts?: { description?: string | null; requires_approval?: boolean },
+  opts?: { description?: string | null; link?: string | null; requires_approval?: boolean },
 ): Promise<CreatedGroup> =>
   invoke<{ group: CreatedGroup }>('app/create_group', { name, is_public, ...opts }).then(r => r.group)
 
@@ -189,11 +221,11 @@ export const setManager = (group_id: string, user_id: string, make: boolean): Pr
   invoke<{ members: GroupMember[] }>('app/set_manager', { group_id, user_id, make }).then(r => r.members ?? [])
 
 // name / is_public / requires_approval each omitted = unchanged. `description`
-// is applied only when the key is present (pass null to clear) — the server
-// keys off the key's presence, so undefined leaves it untouched.
+// and `link` are applied only when the key is present (pass null to clear) —
+// the server keys off the key's presence, so undefined leaves them untouched.
 export const updateGroup = (
   group_id: string,
-  opts: { name?: string; is_public?: boolean; description?: string | null; requires_approval?: boolean },
+  opts: { name?: string; is_public?: boolean; description?: string | null; link?: string | null; requires_approval?: boolean },
 ): Promise<CreatedGroup> =>
   invoke<{ group: CreatedGroup }>('app/update_group', { group_id, ...opts }).then(r => r.group)
 
@@ -213,11 +245,25 @@ export const respondJoin = (request_id: string, accept: boolean): Promise<{ memb
   invoke<{ members?: GroupMember[]; requests?: JoinRequestItem[] }>('app/respond_join', { request_id, accept })
     .then(r => ({ members: r.members ?? [], requests: r.requests ?? [] }))
 
+// Empty the queue: every pending request on the group is approved in ONE
+// server transaction (and one push each), instead of a round trip per person.
+// Same payload as respondJoin, so both caches are written from one answer.
+export const approveAllJoins = (group_id: string): Promise<{ members: GroupMember[]; requests: JoinRequestItem[] }> =>
+  invoke<{ members?: GroupMember[]; requests?: JoinRequestItem[] }>('app/approve_all_joins', { group_id })
+    .then(r => ({ members: r.members ?? [], requests: r.requests ?? [] }))
+
 export const deleteGroup = (group_id: string): Promise<unknown> =>
   invoke('app/delete_group', { group_id })
 
-export const searchGroups = (q: string): Promise<PublicGroup[]> =>
-  invoke<{ results: PublicGroup[] }>('app/search_groups', { q }).then(r => r.results ?? [])
+// One page of the findable catalogue. An EMPTY `q` is not a no-op: it means
+// browse, so the window opens on the whole catalogue instead of a blank. Either
+// way the server orders by how many members are candidates for the caller
+// (`relevant` on each row), matches names approximately rather than by
+// containment, and reports whether another page exists.
+export type GroupPage = { results: PublicGroup[]; has_more: boolean }
+export const searchGroups = (q: string, offset = 0, limit = LIST_PAGE_SIZE): Promise<GroupPage> =>
+  invoke<{ results?: PublicGroup[]; has_more?: boolean }>('app/search_groups', { q, offset, limit })
+    .then(r => ({ results: r.results ?? [], has_more: r.has_more === true }))
 
 // Join by 6-digit code (existing endpoint; returns the fresh legacy group list).
 // `join_status` distinguishes an instant join from a pending request on an

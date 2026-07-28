@@ -12,33 +12,35 @@
 import { useState } from 'react'
 import { View, StyleSheet, Pressable } from 'react-native'
 import { Text } from './AppText'
-import { BottomSheet } from './BottomSheet'
+import { BottomSheet, SheetTitle } from './BottomSheet'
 import { Avatar, SkeletonRows, AVATAR } from './CommunityBits'
 import { GroupsIcon } from './icons'
-import { JoinedGroupSheet } from './CommunitiesPage'
+import { GroupSheet } from './CommunitiesPage'
 import { tap } from '../lib/haptics'
 import { memberLabel, type SharedGroup } from '../lib/communities'
 import { t } from '../i18n'
 import { XS, SM, MD, RADIUS, TEXT, WEIGHT } from '../tokens'
-import { INK, GREEN, GREEN_HALF, GREEN_SOFT, SURFACE, BORDER_SOFT } from '../colors'
+import { INK, INK_MUTED, INK_WASH, SURFACE, LINE } from '../colors'
 
 export function SharedGroupsPopup({
   visible, groups, onDismiss,
 }: { visible: boolean; groups: SharedGroup[] | null; onDismiss: () => void }) {
-  // Tapping a row opens the same member sheet (share link / leave) as the
-  // Communities hub, for that group. The list hides while it's open (same
-  // pattern JoinedGroupSheet uses for its own confirm), and reappears on close.
+  // Tapping a row opens the app's one group popup (share link / leave), the
+  // same surface the Communities hub and the group search open — a group listed
+  // here is one we are both IN, so it opens in the `joined` state. The list
+  // hides while it's open (same pattern GroupSheet uses for its own confirm),
+  // and reappears on close.
   const [selected, setSelected] = useState<SharedGroup | null>(null)
   return (
     <>
       <BottomSheet visible={visible && !selected} onDismiss={onDismiss}>
         <View style={styles.wrap}>
-          <Text style={styles.title}>{t('communities.sharedGroupsTitle')}</Text>
+          <SheetTitle style={styles.title}>{t('communities.sharedGroupsTitle')}</SheetTitle>
           {groups == null ? (
-            // Same three-line rows the list is about to render, so the sheet
+            // The same group strips the list is about to render, so the sheet
             // opens at roughly its final height instead of growing under the
-            // user's thumb.
-            <View style={styles.card}><SkeletonRows rows={2} lines={3} /></View>
+            // user's thumb. Two bars, like every other group placeholder.
+            <View style={styles.card}><SkeletonRows rows={2} lines={2} /></View>
           ) : (
             <View style={styles.card}>
               {groups.map((g, i) => (
@@ -50,7 +52,7 @@ export function SharedGroupsPopup({
                   {g.owner ? (
                     <Avatar userId={g.owner.user_id} name={g.owner.name} image={g.owner.image} />
                   ) : (
-                    <View style={styles.iconWrap}><GroupsIcon color={GREEN} /></View>
+                    <View style={styles.iconWrap}><GroupsIcon color={INK} /></View>
                   )}
                   {/* Three stacked lines: name, manager, member count. */}
                   <View style={styles.text}>
@@ -68,20 +70,21 @@ export function SharedGroupsPopup({
           )}
         </View>
       </BottomSheet>
-      <JoinedGroupSheet group={selected} onClose={() => setSelected(null)} />
+      <GroupSheet group={selected} status="joined" onClose={() => setSelected(null)} />
     </>
   )
 }
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: MD, paddingBottom: MD, gap: MD },
-  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: INK, textAlign: 'center', paddingBottom: XS },
+  // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
+  title: { paddingBottom: XS },
   card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: MD, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: BORDER_SOFT },
+  row: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: MD, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
   rowFirst: { borderTopWidth: 0 },
-  rowPressed: { backgroundColor: GREEN_SOFT },
+  rowPressed: { backgroundColor: INK_WASH },
   iconWrap: { width: AVATAR, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1, minWidth: 0, gap: XS },
-  name: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: INK },
-  meta: { fontSize: TEXT.sm, color: GREEN_HALF },
+  name: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK },
+  meta: { fontSize: TEXT.md, color: INK_MUTED },
 })

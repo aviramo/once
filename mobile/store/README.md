@@ -33,7 +33,7 @@ App Store Connect accepts 1242×2688, 2688×1242, 1284×2778 or 2778×1284 for t
 sizes; the portrait 1284×2778 set here is the one to upload.
 
 Each screenshot is a Hebrew headline over a phone whose screen restates a real app
-screen: the purple-on-beige palette (`mobile/src/colors.ts`), the dp tokens
+screen: the purple-on-white palette (`mobile/src/colors.ts`), the dp tokens
 (`mobile/src/tokens.ts`), the app's own Noto Sans Hebrew faces, and real strings from
 `mobile/src/i18n/he.ts`. The chrome placement follows the card contract in `CLAUDE.md`
 (hamburger top-START, name/age chip top-END, fact chips bottom-START, small report
@@ -159,7 +159,7 @@ Both generators are checked in:
   live at the top of that file. When the app's palette, tokens or card layout
   change, re-read `mobile/src/colors.ts` / `tokens.ts` / `MatchCard.tsx` and re-run it.
 - `node mobile/scripts/build-feature-graphic.mjs` → writes both
-  `play-feature-graphic.svg` and `.png` here: the feature graphic, purple on beige,
+  `play-feature-graphic.svg` and `.png` here: the feature graphic, purple on white,
   matching the app icon and these screenshots. The landing page draws the same
   picture from its own elements in `web/public/art.js`; the two are separate files,
   so a change to one is not a change to the other.

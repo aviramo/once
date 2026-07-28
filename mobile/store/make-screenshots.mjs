@@ -5,7 +5,7 @@
 //   apple/  1284x2778  — App Store Connect 6.5"/6.7" portrait
 //
 // Each frame is a Hebrew headline over a drawn phone whose screen is a faithful
-// restatement of a real app screen: the current purple-on-beige palette
+// restatement of a real app screen: the current purple-on-white palette
 // (mobile/src/colors.ts), the real dp tokens (mobile/src/tokens.ts) scaled to the
 // mockup, the app's own Noto Sans Hebrew faces, and real i18n strings from
 // mobile/src/i18n/he.ts. Nothing here invents a colour, a size or a phrase — when
@@ -38,16 +38,19 @@ const CHROME = [
 ].find(p => existsSync(p))
 if (!CHROME) throw new Error('No Chrome/Edge binary found for headless rendering')
 
-// ── Palette (mobile/src/colors.ts) ─────────────────────────────────────────
+// ── Palette (mobile/src/colors.ts, verbatim) ───────────────────────────────
+// Purple + white, nothing else (user directive 2026-07-28 — no beige, no grey).
+// The names are the app's own role names, so a token change over there is a
+// one-line change here.
 const C = {
-  BG: '#F3EEE6',          // beige-1: the page, sheets, popups
-  SURFACE: '#FAF6EE',     // beige-3: cards, chips, round buttons
-  BORDER: '#E5DFD4',      // beige-2: the one hairline
-  INK: '#5C4A94',         // the ONE regular purple: text, headings, actions
-  HALF: '#8A7DB2',        // muted purple: hints, the de-emphasised report glyph
-  WASH: '#D1C2D9',        // pale purple: mini-chips, soft tiles
-  SOFT: 'rgba(92,74,148,0.12)',
-  MID: 'rgba(92,74,148,0.32)',
+  PAGE: '#F1EEF8',        // the page itself: INK at ~9% over white
+  SURFACE: '#FFFFFF',     // cards, chips, popups, round buttons — what lifts off PAGE
+  LINE: '#E2DEEC',        // the one hairline (= SURFACE_SUNK)
+  INK: '#5C4A94',         // the ONE regular purple: text, headings, actions, glyphs
+  INK_MUTED: '#8A7DB2',   // muted but still purple: hints, sub-captions
+  INK_PALE: '#DACFEC',    // pale ground: mini-chips
+  INK_WASH: 'rgba(92,74,148,0.12)',
+  INK_DIM: 'rgba(92,74,148,0.32)',
   WHITE: '#FFFFFF',
 }
 
@@ -162,7 +165,7 @@ const matchCard = ({ src, name, chips, flush }) => `
     ${flush ? '' : roundBtn('ham', C.SURFACE, hamburger(C.INK), 38)}
     <div class="topend">${chip({ text: name, bold: true })}</div>
     <div class="chips">${chips.map(chip).join('')}</div>
-    ${roundBtn('report', C.BG, shield(C.HALF), 38)}
+    ${roundBtn('report', C.PAGE, shield(C.INK), 38)}
     ${roundBtn('heart', C.SURFACE, heart(C.INK))}
     ${homeBar}
   </div>`
@@ -258,16 +261,16 @@ ${fontFace(600, '600SemiBold')}
 ${fontFace(800, '800ExtraBold')}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:${W}px;height:${H}px;overflow:hidden}
-body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
-.frame{position:relative;width:${W}px;height:${H}px;background:${C.BG};overflow:hidden}
+body{background:${C.PAGE};font-family:Noto,sans-serif;direction:rtl}
+.frame{position:relative;width:${W}px;height:${H}px;background:${C.PAGE};overflow:hidden}
 .cap{padding:${px(74)} ${px(76)} 0}
 .cap h1{font-size:${px(74)};font-weight:800;color:${C.INK};line-height:1.14;letter-spacing:${px(-0.5)}}
-.cap p{margin-top:${px(22)};font-size:${px(33)};font-weight:400;color:${C.HALF};line-height:1.45;max-width:${px(900)}}
+.cap p{margin-top:${px(22)};font-size:${px(33)};font-weight:400;color:${C.INK_MUTED};line-height:1.45;max-width:${px(900)}}
 
 .phone{position:absolute;top:${PHONE_TOP}px;left:${(W - PHONE_W) / 2}px;width:${PHONE_W}px;height:${PHONE_H}px;
   background:${C.INK};border-radius:${BEZEL + RADIUS}px;padding:${BEZEL}px;box-shadow:0 ${px(24)} ${px(60)} rgba(92,74,148,.28)}
-.screen{position:relative;width:${SCREEN_W}px;height:${SCREEN_H}px;border-radius:${RADIUS}px;overflow:hidden;background:${C.BG}}
-.stack{display:flex;flex-direction:column;height:100%;background:${C.BG}}
+.screen{position:relative;width:${SCREEN_W}px;height:${SCREEN_H}px;border-radius:${RADIUS}px;overflow:hidden;background:${C.PAGE}}
+.stack{display:flex;flex-direction:column;height:100%;background:${C.PAGE}}
 
 /* status bar */
 .sbar{position:absolute;top:0;left:0;right:0;height:${dp(44)};display:flex;align-items:center;justify-content:space-between;
@@ -290,7 +293,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 .chips{position:absolute;bottom:${dp(16 + 38 + 24)};inset-inline-start:${dp(16)};display:flex;flex-direction:column;
   align-items:flex-start;gap:${dp(8)};max-width:${dp(252)};z-index:3}
 .homebar{position:absolute;bottom:${dp(8)};left:50%;transform:translateX(-50%);width:${dp(108)};height:${dp(4)};
-  border-radius:${dp(2)};background:rgba(92,74,148,.35);z-index:6}
+  border-radius:${dp(2)};background:${C.INK_DIM};z-index:6}
 
 /* chip (mobile/src/components/Chip.tsx: radius 12, pad 8/16, gap 8, 14sp semibold) */
 .chip{display:flex;align-items:flex-start;gap:${dp(8)};background:${C.SURFACE};border-radius:${dp(12)};
@@ -299,7 +302,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 .chip .ct{font-size:${dp(14)};line-height:${dp(20)};font-weight:600;color:${C.INK}}
 .chip.bold .ct{font-weight:800}
 .chip .dot{width:${dp(7)};height:${dp(7)};border-radius:999px;background:${C.INK};margin-top:${dp(7)};flex:none}
-.badge{display:inline-block;background:${C.WASH};border-radius:${dp(12)};padding:0 ${dp(4)};margin-inline-start:${dp(4)};
+.badge{display:inline-block;background:${C.INK_PALE};border-radius:${dp(12)};padding:0 ${dp(4)};margin-inline-start:${dp(4)};
   font-size:${dp(12)};line-height:${dp(20)};font-weight:600;color:${C.INK};vertical-align:top}
 .badge.ltr{direction:ltr}
 .cluster{display:inline}
@@ -308,7 +311,7 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 .brk{display:block;height:0}
 
 /* status card (home.tsx InviteTimerCard) */
-.status{background:${C.BG};padding:${dp(24)} ${dp(16)};text-align:center}
+.status{background:${C.PAGE};padding:${dp(24)} ${dp(16)};text-align:center}
 .s-head{font-size:${dp(18)};line-height:${dp(25)};font-weight:800;color:${C.INK};margin-bottom:${dp(8)}}
 .s-body{font-size:${dp(18)};line-height:${dp(25)};color:${C.INK};opacity:.9}
 .s-timer{margin-top:${dp(16)};font-size:${dp(32)};line-height:${dp(45)};font-weight:800;color:${C.INK};font-variant-numeric:tabular-nums}
@@ -317,17 +320,17 @@ body{background:${C.BG};font-family:Noto,sans-serif;direction:rtl}
 
 /* shared-groups popup (SharedGroupsPopup over a BottomSheet — no backdrop dim:
    the sheet is transparent over the screen and floats on SHEET_SHADOW alone) */
-.sheet{position:absolute;left:0;right:0;bottom:0;background:${C.BG};border-radius:${dp(20)} ${dp(20)} 0 0;
+.sheet{position:absolute;left:0;right:0;bottom:0;background:${C.SURFACE};border-radius:${dp(20)} ${dp(20)} 0 0;
   padding:0 ${dp(16)} ${dp(28)};z-index:9;box-shadow:0 ${dp(-4)} ${dp(24)} rgba(0,0,0,.12)}
-.handle{width:${dp(48)};height:${dp(4)};border-radius:${dp(2)};background:${C.MID};margin:${dp(16)} auto}
+.handle{width:${dp(48)};height:${dp(4)};border-radius:${dp(2)};background:${C.INK_DIM};margin:${dp(16)} auto}
 .sheet-title{font-size:${dp(18)};font-weight:800;color:${C.INK};text-align:center;padding-bottom:${dp(12)}}
 .sheet-card{background:${C.SURFACE};border-radius:${dp(12)};overflow:hidden}
-.srow{display:flex;align-items:center;gap:${dp(16)};padding:${dp(16)};border-top:1px solid ${C.BORDER}}
+.srow{display:flex;align-items:center;gap:${dp(16)};padding:${dp(16)};border-top:1px solid ${C.LINE}}
 .srow:first-child{border-top:0}
 .av{width:${dp(44)};height:${dp(44)};border-radius:999px;object-fit:cover;flex:none}
 .stext{display:flex;flex-direction:column;gap:${dp(4)}}
 .sname{font-size:${dp(16)};font-weight:800;color:${C.INK}}
-.smeta{font-size:${dp(14)};color:${C.HALF}}
+.smeta{font-size:${dp(14)};color:${C.INK_MUTED}}
 .sheet .homebar{bottom:${dp(8)}}
 `
 

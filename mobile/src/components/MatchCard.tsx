@@ -18,8 +18,8 @@ import { HeartIcon, ShieldIcon, GroupsIcon } from './icons'
 import { RoundButton } from './RoundButton'
 import { Button } from './Button'
 import { EditableText } from './EditableText'
-import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, STROKE, OVERLAY, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, lh, bottomGap } from '../tokens'
-import { BG, INK, SURFACE, BLACK, WHITE, GREEN, GREEN_HALF, PRIMARY, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BIO_INK } from '../colors'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, OVERLAY, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, lh, bottomGap } from '../tokens'
+import { PAGE, PHOTO_CHROME, INK, SURFACE, WHITE, INK_DIM, INK_SUBTLE } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 
@@ -46,7 +46,7 @@ export type CardAction = {
   icon: React.ReactNode
   onPress?: () => void
   bg?: string
-  /** When true, a minimal unread dot is overlaid on the button's top-END arc
+  /** When true, the shared notification dot rides the button's top-END arc
    *  (the open-chat button uses it to signal new messages). */
   badge?: boolean
 }
@@ -61,26 +61,13 @@ export type CardAddChip = {
   onPress: () => void
 }
 
-// Minimal unread marker. Sized/placed to sit ON the round button's upper-END
-// arc (~11px in from each corner of the 76dp button), so it reads as attached
-// to the button rather than floating in the empty square corner. A solid GREEN
-// disc inside a WHITE ring: the ring is what separates it from the white
-// button below and from any photo behind it, and the brand orange keeps the
-// marker in the app's "good news" hue (a waiting message is news, not a
-// warning) and matches the chat glyph on the button it rides.
-const UNREAD_DOT_SIZE = 14
-const UNREAD_DOT_INSET = 4
-
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
   return (
     <View style={styles.actionStack}>
       {actions.map(a => (
-        <View key={a.key} style={styles.actionItem}>
-          <RoundButton bg={a.bg} onPress={a.onPress}>
-            {a.icon}
-          </RoundButton>
-          {a.badge ? <View pointerEvents="none" style={styles.unreadDot} /> : null}
-        </View>
+        <RoundButton key={a.key} bg={a.bg} badge={a.badge} onPress={a.onPress}>
+          {a.icon}
+        </RoundButton>
       ))}
     </View>
   )
@@ -115,9 +102,9 @@ function BioField({
   edit: BioEdit
   /** Ask the parent card to scroll this field above the keyboard. */
   onFocusRequested: () => void
-  /** When rendered inside the on-photo beige chip (own-profile preview), the
+  /** When rendered inside the on-photo bio chip (own-profile preview), the
    * field styles itself byte-for-byte like the static remote bio: purple
-   * BIO_INK, START-aligned, larger. Otherwise it matches the white fallback
+   * INK, START-aligned, larger. Otherwise it matches the white fallback
    * bubble (own-profile editor with a single photo). */
   onPhoto?: boolean
 }) {
@@ -142,8 +129,7 @@ function BioField({
       onFocusRequested={onFocusRequested}
       inputStyle={[onPhoto ? styles.photoBioText : styles.aboutText, styles.bioInput]}
       footerStyle={styles.bioFooter}
-      counterStyle={styles.bioCounter}
-      counterWarnStyle={styles.bioCounterWarn}
+      hintStyle={styles.bioHint}
     />
   )
 }
@@ -239,7 +225,7 @@ function LoadingImage({
         onError={handleError}
       />
       {loading && isLightHash && (
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: BLACK_MID }]} />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: INK_DIM }]} />
       )}
       {loading && (
         <View style={spinnerOverlay}>
@@ -459,9 +445,9 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
         key: `photo-${img.normal}`,
       }))
     // The bio is laid over the bottom of the SECOND photo (see render) as the
-    // beige chip, so photos 1 and 2 sit flush with no band between them (user
-    // directive 2026-07-25). This holds for the own-profile preview too: the
-    // inline editor renders INSIDE that same beige chip (user directive
+    // white chip, so photos 1 and 2 sit flush with no band between them
+    // (user directive 2026-07-25). This holds for the own-profile preview too:
+    // the inline editor renders INSIDE that same chip (user directive
     // 2026-07-25), so a self card looks exactly like a match card. A standalone
     // bubble survives only when there is no second photo to sit on (own-profile
     // editor with a single photo, or a remote bio with one photo).
@@ -492,7 +478,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     const keys = sections.filter(s => s.type === 'photo').map(s => s.key)
     return keys[1] ?? null
   }, [sections])
-  // The bio rides the bottom of the 2nd photo as the beige chip whenever a 2nd
+  // The bio rides the bottom of the 2nd photo as the white chip whenever a 2nd
   // photo exists — static text on a remote card, the inline editor on the
   // own-profile preview (bioEditable), which renders even with an empty bio so
   // one can be added in place. Mirrored into a ref for the keyboard-scroll math.
@@ -563,19 +549,20 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // it and leaves its anchored position.
   const overlayBottomOffset = bottomGap(safeBottomInset, MD)
   // Report affordance: DELIBERATELY NOT the hero-heart twin (user directive
-  // 2026-07-26 — the full-size GREEN tile mirrored the heart on the opposite
+  // 2026-07-26 — the full-size INK tile mirrored the heart on the opposite
   // corner and read as its equal). It is a secondary, "seen the whole profile,
   // flag it" flag, so it wears the SMALL chrome circle (ROUND_BUTTON_SIZE_SM,
-  // the hamburger's size / ICON.round glyph) over a DARKER beige tile (BG, the
-  // page beige, vs the heart's lighter SURFACE) with a MUTED purple glyph
-  // (GREEN_HALF, not the heart's full INK) — three axes of de-emphasis so it
-  // recedes beside the heart. Bottom-anchored on the LAST photo, so its bottom
+  // the hamburger's size / ICON.round glyph) over a TINTED tile (PAGE, the page
+  // purple, vs the heart's plain white SURFACE). The GLYPH is the regular INK
+  // purple, same as the heart (user directive 2026-07-28 — the old muted
+  // INK_MUTED shield read as disabled); size and tile carry the de-emphasis on
+  // their own. Bottom-anchored on the LAST photo, so its bottom
   // edge still sits level with the heart's. Omitted for the own-profile
   // preview (no onReport).
   const renderReportOverlay = () => onReport ? (
     <View pointerEvents="box-none" style={[styles.reportOverlay, { paddingBottom: overlayBottomOffset }]}>
-      <RoundButton onPress={onReport} size={ROUND_BUTTON_SIZE_SM} bg={BG}>
-        <ShieldIcon color={GREEN_HALF} fill={GREEN_HALF} size={ICON.round} />
+      <RoundButton onPress={onReport} size={ROUND_BUTTON_SIZE_SM} bg={PAGE}>
+        <ShieldIcon color={INK} fill={INK} size={ICON.round} />
       </RoundButton>
     </View>
   ) : null
@@ -653,7 +640,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     setTimeout(() => {
       let target: number
       if (bioOnSecondPhotoRef.current) {
-        // Bio on the 2nd photo: scroll so that photo's BOTTOM (where the beige
+        // Bio on the 2nd photo: scroll so that photo's BOTTOM (where the bio
         // chip sits) lands just above the keyboard. The extra kb-height bottom
         // padding (kbPad) makes room to reach it. photoHeight ~= viewport.
         const photoBottom = bioPhotoYRef.current + photoHeight
@@ -910,12 +897,12 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 if (h > 0 && h !== topBlockHeight) setTopBlockHeight(h)
               }}
             >
-              {/* The reserved band is painted PRIMARY, not left transparent:
+              {/* The reserved band is painted INK, not left transparent:
                   every topBlock the app renders is a status card on the light
-                  BG, so a transparent gap would expose the backdrop as a stripe
+                  PAGE, so a transparent gap would expose the backdrop as a stripe
                   above it. If a topBlock ever ships a different background this
                   needs to become a prop alongside `footerBg`. */}
-              <View style={chromeBottom > 0 ? { paddingTop: chromeBottom, backgroundColor: BG } : undefined}>
+              <View style={chromeBottom > 0 ? { paddingTop: chromeBottom, backgroundColor: PAGE } : undefined}>
                 {effectiveTopBlock}
               </View>
             </Animated.View>
@@ -1065,7 +1052,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 // out so the image is unobscured, and taps it back.
                 <Pressable style={StyleSheet.absoluteFill} onPress={toggleChips} />
               ) : null}
-              {/* Bio as a big BEIGE chip floated at the bottom of the second
+              {/* Bio as a big WHITE chip floated at the bottom of the second
                   photo, inset on every side. Its END inset clears the floating
                   heart (so it is never where the heart is); its bottom inset
                   lifts it above the report button when this photo carries it. On
@@ -1152,7 +1139,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           shell's hamburger (top-START) and OUT of the scroll so it stays put
           while the profile scrolls under it (user directive 2026-07-25). On the
           own-profile preview the add-chips follow it in the same column. Its
-          beige tile matches the round overlay buttons — same PHOTO_CHROME. */}
+          white tile matches the round overlay buttons — same PHOTO_CHROME. */}
       {identityChipText || headingAction || (addChips && addChips.length > 0) ? (
         <View
           pointerEvents="box-none"
@@ -1237,7 +1224,7 @@ const styles = StyleSheet.create({
     end: 0,
   },
   photo: {
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
     overflow: 'hidden',
   },
   infoOverlay: {
@@ -1324,20 +1311,6 @@ const styles = StyleSheet.create({
     end: MD,
     alignItems: 'center',
   },
-  actionItem: {
-    position: 'relative',
-  },
-  unreadDot: {
-    position: 'absolute',
-    top: UNREAD_DOT_INSET,
-    end: UNREAD_DOT_INSET,
-    width: UNREAD_DOT_SIZE,
-    height: UNREAD_DOT_SIZE,
-    borderRadius: UNREAD_DOT_SIZE / 2,
-    backgroundColor: PRIMARY,
-    borderWidth: STROKE.base,
-    borderColor: WHITE,
-  },
   // Gap between the frosted-glass chips (name + fact lines). SM keeps each
   // frosted label a distinct, readable pill without the block feeling loose.
   chipsStack: {
@@ -1355,14 +1328,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: MD,
   },
-  // Bio as a big BEIGE chip floated at the bottom of the second photo, inset on
+  // Bio as a big WHITE chip floated at the bottom of the second photo, inset on
   // every side (`start` here; `end` + `bottom` set inline so the END inset can
   // clear the floating heart and the bottom inset can clear the report). Fully
-  // rounded like an oversized chip, padded on all sides.
+  // rounded like an oversized chip, padded on all sides. It is the SAME white
+  // tile as every other on-photo chip and round button (PHOTO_CHROME), just
+  // oversized — user directive 2026-07-28.
   photoBioCard: {
     position: 'absolute',
     start: MD,
-    backgroundColor: BG,
+    backgroundColor: PHOTO_CHROME,
     borderRadius: RADIUS,
     padding: MD,
   },
@@ -1374,7 +1349,7 @@ const styles = StyleSheet.create({
   photoBioText: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
-    color: BIO_INK,
+    color: INK,
   },
   // Fallback bio bubble — only the own-profile editor and a bio with no second
   // photo reach it (the remote bio is on-photo, above). Plain white card.
@@ -1389,7 +1364,7 @@ const styles = StyleSheet.create({
   aboutText: {
     fontSize: TEXT.md,
     lineHeight: lh(TEXT.md),
-    color: BLACK,
+    color: INK,
     textAlign: 'center',
   },
   // Layered over aboutText so the editor is visually identical to the static
@@ -1400,9 +1375,9 @@ const styles = StyleSheet.create({
     padding: 0,
     includeFontPadding: false,
   },
-  // Footer bar under the editor: char count on the start edge, Update button
-  // on the end edge (flips under RTL). Full bubble width so it reads as the
-  // editor's own toolbar rather than floating centered text.
+  // Footer bar under the editor: the minimum-length hint on the start edge,
+  // Update button on the end edge (flips under RTL). Full bubble width so it
+  // reads as the editor's own toolbar rather than floating centered text.
   bioFooter: {
     alignSelf: 'stretch',
     flexDirection: 'row',
@@ -1411,14 +1386,13 @@ const styles = StyleSheet.create({
     gap: MD,
     marginTop: MD,
   },
-  bioCounter: {
-    fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+  bioHint: {
+    fontSize: TEXT.md,
+    color: INK_SUBTLE,
   },
-  bioCounterWarn: { color: INK },
   extraPhoto: {
     width: '100%',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
     overflow: 'hidden',
   },
   footerBlock: {
@@ -1432,7 +1406,7 @@ const styles = StyleSheet.create({
     paddingVertical: MD,
     paddingHorizontal: MD,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
   },
   kidsLabel: {
     flexDirection: 'row',
@@ -1440,12 +1414,12 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   kidsLabelText: {
-    fontSize: TEXT.sm,
+    fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
-    color: BLACK,
+    color: INK,
   },
   kidsValue: {
-    fontSize: TEXT.sm,
+    fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
   },
 })

@@ -19,15 +19,21 @@ export const API_TIMEOUT_MS = 15_000
 
 export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
 
-  const session = await supabase.auth.getSession()
+  // The session and the position are independent, so they are awaited TOGETHER
+  // rather than one after the other: both sit on the critical path of every
+  // single request, and serialising them charged each call the sum of two
+  // waits for no reason. getLastKnownLocation is normally instant (the OS hands
+  // back a cached fix), but on a device with no fix yet it is not, and that
+  // wait used to be spent before the token lookup had even started.
+  const [session, loc] = await Promise.all([
+    supabase.auth.getSession(),
+    // Attach the device's last known location to every request so the server
+    // always has a reasonably fresh position. Only after startup has completed
+    // — before app/start fires the caller passes location explicitly, so there
+    // is nothing to fill in here.
+    startupComplete ? getLastKnownLocation() : Promise.resolve(null),
+  ])
   const token = session.data.session?.access_token
-
-  // Attach the device's last known location to every request so the server
-  // always has a reasonably fresh position. getLastKnownLocation is instant
-  // (cached by the OS) so it won't slow down any call.
-  // Only auto-attach after startup has completed — before app/start fires the
-  // caller passes location explicitly, so there's nothing to fill in here.
-  const loc = startupComplete ? await getLastKnownLocation() : null
   const payload = {
     ...(body ?? {}),
     ...(loc && !(body as any)?.location ? { location: { latitude: loc.lat, longitude: loc.lng } } : {}),

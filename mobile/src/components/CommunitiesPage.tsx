@@ -12,8 +12,8 @@
 // Communities reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, Share, I18nManager, Keyboard, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
-import { Path, Circle, Line } from 'react-native-svg'
+import { View, StyleSheet, Pressable, Share, Keyboard, Linking, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
+import { Path, Circle, Line, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text, TextInput } from './AppText'
 import { SheetHeader, type OverlaySheetBody } from './OverlaySheet'
@@ -22,51 +22,47 @@ import { useSharedValue, useAnimatedReaction, runOnJS, type SharedValue } from '
 import type { GestureType } from 'react-native-gesture-handler'
 import { RisingCard } from './RisingCard'
 import { Button } from './Button'
+import { RoundButton } from './RoundButton'
 import { ConfirmDialog } from './ConfirmDialog'
-import { BottomSheet } from './BottomSheet'
-import { Glyph, GroupsIcon, TrashIcon, UserIcon, UserMinusIcon, SignOutIcon, CheckIcon, CloseIcon, EyeOffIcon, EyeOpenIcon } from './icons'
+import { BottomSheet, SheetScroll, SheetTitle } from './BottomSheet'
+import { Glyph, GroupsIcon, TrashIcon, RankIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon, EyeOffIcon, EyeOpenIcon } from './icons'
 import { tap, tapWarning } from '../lib/haptics'
 import { t } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
 
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
-import { Avatar, SkeletonRows, MetaText, AVATAR } from './CommunityBits'
+import { Avatar, SkeletonRows, SyncBar, AVATAR } from './CommunityBits'
+import { Chip } from './Chip'
 import { MatchCard } from './MatchCard'
 import { rosters, joinRequests, friendsRoster, dropGroupCaches } from '../lib/rosterCache'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { shareFriendInvite } from '../lib/referral'
 import { groupInviteUrl } from '../lib/links'
 import { EditableText } from './EditableText'
+import { GROUP_NAME_MAX, GROUP_DESCRIPTION_MAX, GROUP_LINK_MAX } from '../lib/groups'
 import {
   ownedGroups, myGroups, myFriends, groupMembers, removeMember, deleteGroup,
   updateGroup, createGroup, searchGroups, redeemInvite, leaveGroup, setManager,
   friendRespond, unfriend, communitiesSummary, cancelJoinRequest,
-  groupRequests, respondJoin, setGroupHidden,
+  groupRequests, respondJoin, approveAllJoins, setGroupHidden,
   groupKind, groupKindFlags, GROUP_KINDS, DEFAULT_GROUP_KIND, type GroupKind,
-  metaLine, memberLabel, friendLabel, requestLabel,
+  metaLine, memberLabel, friendLabel, requestLabel, groupBrief, type GroupBrief,
   type OwnedGroup, type GroupMember, type MyFriends, type PublicGroup, type MemberImage,
   type FriendItem, type CommunitiesSummary, type JoinedGroup, type PendingGroup,
   type JoinRequestItem, type CommunitiesTarget,
 } from '../lib/communities'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, bottomGap } from '../tokens'
-import { BG, SURFACE, INK, GREEN, GREEN_HALF, PRIMARY, BORDER_SOFT, GREEN_SOFT, WHITE, BLACK_MID } from '../colors'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS } from '../tokens'
+import { PAGE, SURFACE, INK, INK_MUTED, INK_SUBTLE, LINE, INK_WASH, WHITE, INK_DIM } from '../colors'
 import { FIELD_SKIN } from '../field'
+import { fuzzyRank } from '../lib/fuzzy'
 
-const ChevGlyph = ({ color = GREEN_HALF }: { color?: string } = {}) => (
-  // Disclosure chevron points in the reading-forward direction: right in LTR,
-  // mirrored to left under RTL (same treatment as BackIcon in icons.tsx).
-  // `color` is for the one row that sits on the full purple (the waiting queue).
-  <Glyph width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-    <Path d={I18nManager.isRTL ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} />
-  </Glyph>
-)
-const SearchGlyph = ({ color = GREEN }: { color?: string }) => (
-  <Glyph width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.9} strokeLinecap="round">
+const SearchGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: number }) => (
+  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.9} strokeLinecap="round">
     <Circle cx="11" cy="11" r="7" /><Line x1="16.5" y1="16.5" x2="21" y2="21" />
   </Glyph>
 )
-const PlusGlyph = ({ color = GREEN }: { color?: string }) => (
-  <Glyph width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round">
+const PlusGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: number }) => (
+  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round">
     <Line x1="12" y1="5" x2="12" y2="19" /><Line x1="5" y1="12" x2="19" y2="12" />
   </Glyph>
 )
@@ -76,13 +72,42 @@ const ShareGlyph = ({ color = WHITE }: { color?: string }) => (
     <Path d="M12 3v12" /><Path d="M8 7l4-4 4 4" /><Path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
   </Glyph>
 )
-// Settings gear (leads the manage-page summary row).
-const GearGlyph = ({ color = GREEN }: { color?: string }) => (
-  <Glyph width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+// Settings gear (rides the manage page's header, opposite the close X).
+const GearGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: number }) => (
+  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
     <Circle cx="12" cy="12" r="3.2" />
     <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
   </Glyph>
 )
+// The group card, as a mark: the plaque the popup is, with the owner's face and
+// the lines under it. Deliberately NOT an eye — the eye already says "am I
+// playing in this group" one page back (OwnedGroupView), and one surface cannot
+// spend the same glyph on two meanings.
+const PreviewGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: number }) => (
+  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Rect x="3.5" y="3.5" width="17" height="17" rx="4" />
+    <Circle cx="12" cy="10" r="2.3" />
+    <Line x1="8" y1="16" x2="16" y2="16" />
+  </Glyph>
+)
+
+// A control on the title bar's trailing corner, opposite the close X. ONE
+// definition for all three (the hub's find + create, the manage page's gear):
+// backgroundless, sized to the same small chrome circle the X wears, so the
+// corner reads as chrome beside the title rather than a strip of buttons.
+function HeaderButton({ label, onPress, children }: { label: string; onPress: () => void; children: React.ReactNode }) {
+  return (
+    <RoundButton
+      size={ROUND_BUTTON_SIZE_SM}
+      bg="transparent"
+      shadow={false}
+      onPress={() => { tap(); onPress() }}
+      accessibilityLabel={label}
+    >
+      {children}
+    </RoundButton>
+  )
+}
 
 /** How the host renders MY OWN profile inside the communities stack. The
  *  editable preview lives in the settings route, so it is handed in instead of
@@ -421,9 +446,33 @@ function PageLayer({
   // X floating on the photo (user directive 2026-07-27).
   const floatingChrome = view.k === 'request' || view.k === 'person' || view.k === 'self'
 
+  // The find page's query lives HERE, because its field lives in the header
+  // (user directive 2026-07-28): the search box IS that page's heading, so it
+  // takes the title's place on the bar and the body under it is nothing but the
+  // list of answers. Held on the page rather than in the body so the two cannot
+  // disagree about what is being searched for.
+  const [findQuery, setFindQuery] = useState('')
+  const searchField = view.k === 'find' ? (
+    <View style={[s.field, s.fieldSlim]}>
+      <SearchGlyph color={INK_MUTED} />
+      <TextInput
+        style={s.fieldInput}
+        value={findQuery}
+        onChangeText={setFindQuery}
+        placeholder={t('communities.findSearch')}
+        placeholderTextColor={INK_DIM}
+        // The page's name, for a screen reader: the bar has no title to read out
+        // because this field is standing in its place.
+        accessibilityLabel={t('communities.findTitle')}
+        autoFocus
+      />
+    </View>
+  ) : undefined
+
   const header = (
     <SheetHeader
-      title={floatingChrome ? undefined : titleFor(view)}
+      title={floatingChrome || searchField ? undefined : titleFor(view)}
+      center={searchField}
       // A group's name is shown WHOLE (user directive 2026-07-27): as many
       // lines as its 60 characters need, never an ellipsis. The header grows
       // downward and its first line stays put, so a long name costs nothing but
@@ -432,10 +481,39 @@ function PageLayer({
       titleLines={view.k === 'owned' ? 0 : 1}
       topInset={insets.top}
       floating={floatingChrome}
-      // Match the page background (BG), not the default light-beige SURFACE,
+      // Match the page background (PAGE), not the default white SURFACE,
       // so the header blends into the Communities page instead of sitting on
       // a lighter band.
-      barBg={BG}
+      barBg={PAGE}
+      // The trailing corner carries what the page can DO, opposite the X.
+      // The hub: find a group and create one (user directive 2026-07-28) — the
+      // two buttons that used to sit under its list, now that the list is one
+      // uninterrupted run of rows with nothing between them. The manage page:
+      // that group's gear, beside its own name, since the settings of THIS
+      // group belong with its title. All backgroundless, so the corner reads as
+      // chrome next to the title rather than a strip of buttons.
+      trailing={view.k === 'hub' ? (
+        <View style={s.headerActions}>
+          <HeaderButton label={t('communities.find')} onPress={() => push({ k: 'find' })}>
+            <SearchGlyph size={ICON.round} />
+          </HeaderButton>
+          <HeaderButton label={t('communities.create')} onPress={() => push({ k: 'create' })}>
+            <PlusGlyph size={ICON.round} />
+          </HeaderButton>
+        </View>
+      ) : view.k === 'owned' ? (
+        <HeaderButton label={t('communities.settings')} onPress={() => push({ k: 'settings', group: view.group })}>
+          <GearGlyph size={ICON.round} />
+        </HeaderButton>
+      ) : view.k === 'settings' ? (
+        // The settings page's one non-editing control: read the group back as
+        // everyone else meets it. See GroupPreviewControl.
+        <GroupPreviewControl group={view.group} />
+      ) : undefined}
+      // The queue page deliberately carries NOTHING here (user directive
+      // 2026-07-28): its bulk answer moved down onto the group-name heading,
+      // beside the list it empties, so this bar holds only the page's title on
+      // the row's true centre. See JoinRequestsView.
       // Every Communities page leaves by sliding DOWN, the hub included, so
       // every page wears the X (user directive 2026-07-27). The arrow belongs
       // to a surface that leaves sideways, i.e. only the menu drawer.
@@ -471,18 +549,28 @@ function PageLayer({
       headerBottomShared: headerBottom,
       pullEngaged: pull.pullEngaged,
     }) ?? null
-  ) : view.k === 'owned' || view.k === 'requests' ? (
-    // The two roster pages do NOT ride a page scroll: their heads stay put and
-    // only the list under them scrolls, inside a box that ends `rosterGap`
-    // above the page's end (user directive 2026-07-27). So each gets the page
-    // box itself — the same gutters the scroll's content container paints —
-    // and owns the one scroll region in it.
+  ) : view.k === 'hub' || view.k === 'owned' || view.k === 'requests' || view.k === 'find' ? (
+    // The list pages do NOT ride a page scroll: whatever head they have stays
+    // put and only the rows under it scroll, inside a box that ends `rosterGap`
+    // above the page's end (user directive 2026-07-27; the hub joined them
+    // 2026-07-28 — its list is a list like any other, and search followed the
+    // same day once its field moved onto the header). So each gets the page box
+    // itself — the same gutters the scroll's content container paints — and owns
+    // the one scroll region in it.
     <View style={[s.scroll, s.content]}>
-      {view.k === 'owned' ? (
+      {view.k === 'find' ? (
+        <FindView query={findQuery} bottomInset={rosterGap} onDone={closePage} />
+      ) : view.k === 'hub' ? (
+        <HubView
+          push={push}
+          bottomInset={rosterGap}
+          initialJoined={joinedTarget}
+          onInitialJoinedConsumed={onInitialJoinedConsumed}
+        />
+      ) : view.k === 'owned' ? (
         <OwnedGroupView
           group={view.group}
           onChanged={applyGroup}
-          onOpenSettings={() => push({ k: 'settings', group: view.group })}
           onOpenRequests={() => push({ k: 'requests', group: view.group })}
           // Myself in the roster opens MY profile, never a member page about me.
           onOpenMember={m => push(m.user_id === profile?.user_id
@@ -497,6 +585,10 @@ function PageLayer({
           onOpen={r => push({ k: 'request', group: view.group, request: r })}
           bottomInset={rosterGap}
           onRosterTop={y => { rosterTop.current = y; syncDragBand() }}
+          isTop={isTop}
+          // Same ride-off the close X uses, so the emptied queue leaves exactly
+          // as the profile above it just did.
+          onEmptied={closePage}
         />
       )}
     </View>
@@ -510,20 +602,12 @@ function PageLayer({
       scrollEventThrottle={16}
       onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => { scrollY.current = e.nativeEvent.contentOffset.y }}
     >
-      {view.k === 'hub' && (
-        <HubView
-          push={push}
-          initialJoined={joinedTarget}
-          onInitialJoinedConsumed={onInitialJoinedConsumed}
-        />
-      )}
       {view.k === 'friends' && (
         <FriendsView
           profile={profile}
           onOpenFriend={f => push({ k: 'person', person: { kind: 'friend', friend: f } })}
         />
       )}
-      {view.k === 'find' && <FindView />}
       {view.k === 'create' && <CreateView onCreated={g => setStack([{ k: 'hub' }, { k: 'owned', group: g }])} />}
       {view.k === 'settings' && <GroupSettingsView group={view.group} onChanged={applyGroup} onDeleted={() => removeGroupViews(view.group.id)} />}
     </PullScrollView>
@@ -553,8 +637,19 @@ function PageLayer({
 }
 
 // ── Hub ────────────────────────────────────────────────────────────────────
-function HubView({ push, initialJoined, onInitialJoinedConsumed }: {
+/** One row of the hub's single list: something the caller belongs to, whatever
+ *  the relationship is. The kind decides the row's meta and what tapping it
+ *  does — the rows themselves are all the same shape. */
+type HubItem =
+  | { k: 'managed'; group: OwnedGroup }
+  | { k: 'pending'; group: PendingGroup }
+  | { k: 'declined'; group: PendingGroup }
+  | { k: 'joined'; group: JoinedGroup }
+
+function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: {
   push: (v: CView) => void
+  /** Air under the contained list — see ContainedRoster / PageLayer. */
+  bottomInset: number
   /** A deep-linked group the caller is a member of — its member sheet opens as
    *  soon as the hub is on screen (a group_approved push). */
   initialJoined?: JoinedGroup | null
@@ -594,209 +689,443 @@ function HubView({ push, initialJoined, onInitialJoinedConsumed }: {
     joinRequests.prime(ids)
   }, [managedIds])
 
-  const [joinedSheet, setJoinedSheet] = useState<JoinedGroup | null>(initialJoined ?? null)
+  // EVERY group row on this page opens the one group popup (user directive
+  // 2026-07-28) — a membership, a request still waiting, and one that was turned
+  // down are the same popup in three states, never three surfaces. So one piece
+  // of state: which group, and what I am to it.
+  const [sheet, setSheet] = useState<{ group: JoinedGroup; status: GroupStatus } | null>(
+    initialJoined ? { group: initialJoined, status: 'joined' } : null,
+  )
   // Open the deep-linked member group's sheet, and let the page forget the
   // target straight away so popping back to the hub later doesn't reopen it.
   useEffect(() => {
     if (!initialJoined) return
-    setJoinedSheet(initialJoined)
+    setSheet({ group: initialJoined, status: 'joined' })
     onInitialJoinedConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialJoined])
-  const [pendingConfirm, setPendingConfirm] = useState<PendingGroup | null>(null)
-  const [declinedConfirm, setDeclinedConfirm] = useState<PendingGroup | null>(null)
-  const [pendingBusy, setPendingBusy] = useState(false)
-  const doCancelJoin = async () => {
-    if (!pendingConfirm) return
-    setPendingBusy(true); tapWarning()
-    try { await cancelJoinRequest(pendingConfirm.id); setPendingConfirm(null) } finally { setPendingBusy(false) }
-  }
-  // Same endpoint: on a declined row the server only marks the notice seen, so
-  // clearing it is not a way around the wait before asking again.
-  const doClearDeclined = async () => {
-    if (!declinedConfirm) return
-    setPendingBusy(true); tap()
-    try { await cancelJoinRequest(declinedConfirm.id); setDeclinedConfirm(null) } finally { setPendingBusy(false) }
-  }
-  // "kind · N members" like the managed rows. Undefined for the degraded
-  // fallback payload (old summary shape carried no type/count).
+  // How big it is, like the managed rows. A group's KIND is off the strip (user
+  // directive 2026-07-28): it is a rule about getting IN, and I am already in
+  // (or waiting), so the row says nothing about it. Undefined for the degraded
+  // fallback payload (old summary shape carried no count).
   const joinedMeta = (g: JoinedGroup) =>
     g.is_public === undefined
       ? undefined
-      : metaLine(kindShort(groupKind(g)), memberLabel(g.members ?? 0))
-  // My friends is not a group and has no kind: it is always the same thing, so
-  // its meta is just the counts.
-  const friendsMeta = data
-    ? metaLine(friendLabel(data.friends), data.requests > 0 && requestLabel(data.requests))
-    : t('communities.myFriendsSub')
+      : metaLine(memberLabel(g.members ?? 0))
+  // My friends is not a group: its meta is the count. Friend requests waiting on
+  // an answer are NOT part of that line — they ride the same strong chip a
+  // group's queue does (user directive 2026-07-28), so every row on the page
+  // says "someone is waiting on you" the one way.
+  const friendsMeta = data ? metaLine(friendLabel(data.friends)) : t('communities.myFriendsSub')
+  const friendsWaiting = (data?.requests ?? 0) > 0
+
+  // Everything the caller belongs to, in ONE list (user directive 2026-07-28).
+  // There are no section headings left, because a single uninterrupted run of
+  // rows needs none: my friends leads, the groups I RUN come next — each marked
+  // by the role chip that says so, which is what the heading used to say — and
+  // the ones I am only a member of follow. Creating and finding a group are the
+  // two controls in the page's own header, so nothing sits between the rows or
+  // under them.
+  //
+  // One flat array, because the list is ONE scroll region inside a contained box
+  // (user directive 2026-07-28): the box sits in the page and the rows scroll in
+  // it, exactly as the group roster and the waiting queue do. null while the
+  // summary is still unknown, which is what puts the skeleton up.
+  //
+  // Order inside the run: anything WAITING on the user comes first (user
+  // directive 2026-07-28). A group whose queue has people in it leads the
+  // groups, right under my friends, because the row is a job to do and not just
+  // a place I belong; the rest keep the order the summary gave them.
+  const waitingFirst = (a: OwnedGroup, b: OwnedGroup) =>
+    Number((b.pending ?? 0) > 0) - Number((a.pending ?? 0) > 0)
+  const items: HubItem[] | null = loading ? null : [
+    ...[...data!.managed].sort(waitingFirst).map((group): HubItem => ({ k: 'managed', group })),
+    // A pending join request carries a "waiting for approval" meta; tapping
+    // opens the group's own popup, the same one a membership opens, with the
+    // control that takes the request back on it. A DECLINED one used to vanish,
+    // which read as "still waiting" forever; it says so now, and tapping clears
+    // the notice (the answer itself stands).
+    ...data!.pending.map((group): HubItem => ({ k: 'pending', group })),
+    ...data!.declined.map((group): HubItem => ({ k: 'declined', group })),
+    ...data!.joined.map((group): HubItem => ({ k: 'joined', group })),
+  ]
+
+  // My friends is the card's FIRST row, always, so a group row is never first:
+  // it keeps its top hairline, and only the last one rounds off.
+  const hubRow = (it: HubItem, index: number, last: boolean) => {
+    const style = rosterRowStyle(index + 1, last)
+    switch (it.k) {
+      case 'managed': {
+        const g = it.group
+        const waiting = g.pending != null && g.pending > 0
+        // A group you deliberately stepped out of says so on its row, so the
+        // state is readable without opening it. What is WAITING is off this line
+        // when there is any: it rides the chip instead, and a row never says the
+        // same thing twice.
+        const meta = metaLine(
+          memberLabel(g.members),
+          g.hidden && t('communities.hiddenShort'),
+        )
+        return (
+          <Strip
+            title={g.name}
+            meta={meta}
+            // Normally the one thing that separates these rows from the ones
+            // under them, now that no heading does: the role you hold there. A
+            // waiting queue OUTRANKS it (user directive 2026-07-28) — the chip
+            // says how many are waiting, in full-strength purple, because the
+            // row is a job to do and the role is only a standing fact.
+            tag={waiting ? requestLabel(g.pending!) : (g.is_owner ? t('communities.owner') : t('communities.manager'))}
+            tagStrong={waiting}
+            style={style}
+            onPress={() => push({ k: 'owned', group: g })}
+          />
+        )
+      }
+      case 'pending':
+        // Reads as a GROUP row like every other one — its size on the meta line
+        // (user directive 2026-07-28) — with the waiting state carried by the
+        // chip in the corner the role chip owns, not by replacing what the row
+        // says about the group.
+        // An old payload with no count falls back to the sentence.
+        return <Strip title={it.group.name} meta={joinedMeta(it.group) ?? t('communities.pending')} tag={t('communities.pendingTag')} style={style} onPress={() => setSheet({ group: it.group, status: 'pending' })} />
+      case 'declined':
+        // Same shape as the pending row above it: the group's own facts on the
+        // meta line, the answer it got in the chip.
+        return <Strip title={it.group.name} meta={joinedMeta(it.group) ?? t('communities.declined')} tag={t('communities.declinedTag')} style={style} onPress={() => setSheet({ group: it.group, status: 'declined' })} />
+      case 'joined':
+        return <Strip title={it.group.name} meta={joinedMeta(it.group)} style={style} onPress={() => setSheet({ group: it.group, status: 'joined' })} />
+    }
+  }
 
   return (
-    <View style={{ gap: MD }}>
-      <View style={s.card}>
-        <NavRow
-          title={t('communities.myFriends')}
-          meta={friendsMeta}
-          first
-          onPress={() => push({ k: 'friends' })}
-        />
-      </View>
-
-      <Text style={s.section}>{t('communities.manageSection')}</Text>
-      <View style={s.card}>
-        {loading ? <SkeletonRows rows={2} lines={2} /> : data!.managed.length === 0 ? (
-          <Empty text={t('communities.emptyManage')} />
-        ) : data!.managed.map((g, i) => {
-          // A group you deliberately stepped out of says so on its row, so the
-          // state is readable without opening it.
-          const meta = metaLine(
-            kindShort(groupKind(g)),
-            memberLabel(g.members),
-            g.pending != null && g.pending > 0 && requestLabel(g.pending),
-            g.hidden && t('communities.hiddenShort'),
-          )
-          return (
-            <NavRow
-              key={g.id}
-              first={i === 0}
-              title={g.name}
-              meta={meta}
-              onPress={() => push({ k: 'owned', group: g })}
-            />
-          )
-        })}
-      </View>
-      <Button label={t('communities.create')} variant="primary" size="lg" iconStart={<PlusGlyph color={WHITE} />} onPress={() => push({ k: 'create' })} />
-
-      <Text style={s.section}>{t('communities.inSection')}</Text>
-      <View style={s.card}>
-        {loading ? <SkeletonRows rows={3} lines={2} /> : (data!.joined.length === 0 && data!.pending.length === 0) ? (
-          <Empty text={t('communities.emptyIn')} />
-        ) : (
+    <>
+      <ContainedRoster
+        data={items}
+        bottomInset={bottomInset}
+        keyOf={it => `${it.k}:${it.group.id}`}
+        header={(
+          <Strip
+            title={t('communities.myFriends')}
+            meta={friendsMeta}
+            tag={friendsWaiting ? requestLabel(data!.requests) : null}
+            tagStrong
+            first
+            style={rosterRowStyle(0, false)}
+            onPress={() => push({ k: 'friends' })}
+          />
+        )}
+        // Whatever follows the friends row closes the card off, so both states
+        // wear its white and its rounded bottom rather than a block of their own.
+        empty={(
           <>
-            {/* Pending join requests render first with a distinct "waiting for
-                approval" meta. Tapping opens the shared cancel confirm — the
-                same popup the FindView pending button opens. */}
-            {data!.pending.map((g, i) => (
-              <NavRow key={`p-${g.id}`} first={i === 0} title={g.name} meta={t('communities.pending')} onPress={() => setPendingConfirm(g)} />
-            ))}
-            {/* A request that was turned down. It used to vanish, which read as
-                "still waiting" forever; it now says so, and tapping clears the
-                notice (the answer itself stands). */}
-            {data!.declined.map(g => (
-              <NavRow key={`d-${g.id}`} title={g.name} meta={t('communities.declined')} onPress={() => setDeclinedConfirm(g)} />
-            ))}
-            {data!.joined.map((g, i) => (
-              <NavRow key={g.id} first={data!.pending.length === 0 && data!.declined.length === 0 && i === 0} title={g.name} meta={joinedMeta(g)} onPress={() => setJoinedSheet(g)} />
-            ))}
+            <View style={[s.rosterRow, s.rosterRowLast]}>
+              {items == null
+                ? <SkeletonRows rows={3} lines={2} first={false} />
+                : <Empty text={t('communities.emptyGroups')} />}
+            </View>
+            {/* ONLY while there is nothing to list (user directive 2026-07-28):
+                the two header controls, spelled out as buttons under the
+                sentence that says the page is empty. A page with rows on it
+                keeps them as chrome in the corner — a full list must not carry
+                a block of CTAs under it. Same two destinations, so a tap here
+                and a tap up there land on the same page. */}
+            {items != null ? (
+              <View style={s.emptyActions}>
+                <Button
+                  label={t('communities.findTitle')}
+                  variant="primary"
+                  size="lg"
+                  iconStart={<SearchGlyph color={WHITE} />}
+                  onPress={() => push({ k: 'find' })}
+                />
+                <Button
+                  label={t('communities.create')}
+                  variant="secondary"
+                  size="lg"
+                  iconStart={<PlusGlyph color={INK_SUBTLE} />}
+                  onPress={() => push({ k: 'create' })}
+                />
+              </View>
+            ) : null}
           </>
         )}
-      </View>
-      <Button label={t('communities.find')} variant="secondary" size="lg" iconStart={<SearchGlyph color={GREEN} />} onPress={() => push({ k: 'find' })} />
+        row={hubRow}
+      />
 
-      <JoinedGroupSheet group={joinedSheet} onClose={() => setJoinedSheet(null)} />
-      <ConfirmDialog
-        visible={!!pendingConfirm}
-        title={pendingConfirm ? t('communities.cancelJoinTitle').replace('{name}', pendingConfirm.name) : ''}
-        description={t('communities.cancelJoinDesc')}
-        confirmLabel={t('communities.cancelJoinConfirm')}
-        busy={pendingBusy}
-        onCancel={() => setPendingConfirm(null)}
-        onConfirm={doCancelJoin}
-        draggable
-      />
-      <ConfirmDialog
-        visible={!!declinedConfirm}
-        title={declinedConfirm ? t('communities.declinedTitle').replace('{name}', declinedConfirm.name) : ''}
-        description={t('communities.declinedDesc')}
-        confirmLabel={t('communities.declinedConfirm')}
-        busy={pendingBusy}
-        onCancel={() => setDeclinedConfirm(null)}
-        onConfirm={doClearDeclined}
-        draggable
-      />
-    </View>
+      {/* One popup for all three kinds of row: it is told which the group is and
+          offers leave / cancel the request / clear the notice accordingly. */}
+      <GroupSheet group={sheet?.group ?? null} status={sheet?.status} onClose={() => setSheet(null)} />
+    </>
   )
 }
 
-// Tapping a group you're a member of opens this popup: leave, and — for a
-// public group — share its invite link (a public code is not a secret). The
-// old drill-in screen is gone. Leaving refreshes via the store (the server
-// trigger repaints relations.communities), so the hub row drops on its own.
-export function JoinedGroupSheet({ group, onClose }: { group: JoinedGroup | null; onClose: () => void }) {
+// A group's optional "more details" link, as one tappable line under whatever
+// the group says about itself. Defined once and used by both places a group is
+// described to someone: the member popup and the search preview. It shows the
+// words, never the raw URL, and renders nothing for a group with no link. The
+// server is what guarantees the value is an http(s) URL, so opening it here
+// needs no parsing of its own.
+const GroupLink = ({ url }: { url?: string | null }) =>
+  url ? (
+    <Text
+      style={s.sheetLink}
+      accessibilityRole="link"
+      onPress={() => { tap(); Linking.openURL(url).catch(() => {}) }}
+    >
+      {t('communities.moreDetails')}
+    </Text>
+  ) : null
+
+// ── The group popup ────────────────────────────────────────────────────────
+// THE popup a group opens into, from EVERY surface that lists one (user
+// directive 2026-07-28): the hub's rows, a search result, and a match card's
+// shared-groups list all open THIS. A group therefore reads identically
+// wherever it was tapped — the owner's photo, "managed by <them>" under it, the
+// name, how big it is, what it says about itself, its link — and the only thing
+// that changes with where I stand is the ACTION at the bottom, which is always
+// the one thing that standing lets me do:
+//   joined    → share the invite link (public groups only, whose code is not a
+//               secret) + LEAVE the group
+//   pending   → take the join request back
+//   declined  → clear the notice (the answer itself stands; the endpoint only
+//               marks it seen, so this is not a way around the wait)
+//   none      → join, or ask to be let in
+// Nothing is ever a dead, disabled chip saying what I already am: the search
+// popup used to end at a greyed-out "Member", which named my standing instead
+// of offering what it allows. Every terminal action lands on the same summary
+// refresh (the server trigger repaints relations.communities), so the row that
+// opened the popup goes on its own.
+export type GroupStatus = 'joined' | 'pending' | 'declined' | 'none'
+
+export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin, onDone }: {
+  group: GroupBrief | null
+  status?: GroupStatus
+  onClose: () => void
+  /** The popup has finished sliding away — for a caller that leaves with it. */
+  onClosed?: () => void
+  /** `none` only: joining is the CALLER's (search keeps its own optimistic map
+   *  of what this session has asked for). Without it a non-member sees no
+   *  action, which is right for a list that cannot offer one. */
+  onJoin?: () => void
+  /** A terminal action landed, so the caller's own copy of my standing is
+   *  stale. The hub repaints off the store and ignores it. */
+  onDone?: () => void
+}) {
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
+  const pending = status === 'pending'
 
   const share = () => {
     if (!group?.invite_code) return
     tap()
     Share.share({ message: t('communities.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) })
   }
-  const leave = async () => {
+  // The one terminal action this popup carries, whichever group it is about and
+  // whatever I am to it: leaving, taking the request back, or clearing the
+  // answer that turned it down.
+  const quit = async () => {
     if (!group) return
     setBusy(true); tapWarning()
-    // The cached roster goes with the membership — it is other people's names
-    // and photos, kept only for a group the user is actually in.
-    try { await leaveGroup(group.id); dropGroupCaches(group.id); onClose() } finally { setBusy(false); setConfirm(false) }
+    try {
+      // The cached roster goes with the membership — it is other people's names
+      // and photos, kept only for a group the user is actually in. A request,
+      // answered or not, never had one, and both go back through the same
+      // endpoint.
+      if (status === 'joined') { await leaveGroup(group.id); dropGroupCaches(group.id) }
+      else await cancelJoinRequest(group.id)
+      onDone?.()
+      onClose()
+    } finally { setBusy(false); setConfirm(false) }
   }
 
   return (
     <>
-      <BottomSheet visible={!!group && !confirm} onDismiss={onClose}>
+      <BottomSheet visible={!!group && !confirm} onDismiss={onClose} onClosed={onClosed}>
         <View style={s.sheetWrap}>
+          {/* Who runs the group leads the popup: their photo, "managed by
+              <them>" directly UNDER that photo (user directive 2026-07-28 — the
+              line belongs to the face above it, not stranded under the group's
+              name), and the group's own name on the line below. An admin-owned
+              group has no owner and simply shows neither. */}
+          {group?.owner ? (
+            <View style={s.sheetAvatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
+          ) : null}
+          {group?.owner?.name ? <Text style={s.sheetDesc}>{t('communities.managedBy').replace('{name}', group.owner.name)}</Text> : null}
           {/* Whole name, wrapping as far as it needs (user directive
               2026-07-27) — a popup about one group never abbreviates which. */}
-          <Text style={s.sheetTitle}>{group?.name}</Text>
-          {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
-          <Text style={s.sheetNote}>{t('communities.memberNote')}</Text>
-          {group?.is_public && group?.invite_code ? (
-            <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
+          <SheetTitle style={s.sheetTitle}>{group?.name}</SheetTitle>
+          {/* How big it is: the same fact the row it was opened from states, and
+              the one thing a searcher weighs a group by. Absent only on an old
+              summary payload that carried no count. */}
+          {group?.members != null ? <Text style={s.sheetDesc}>{memberLabel(group.members)}</Text> : null}
+          {/* The one part of this popup with no length to count on: what a
+              group wrote about itself can run for paragraphs. It takes whatever
+              height is left under the sheet's cap and scrolls inside it, so the
+              face, the name, the size and the action are ALWAYS on screen
+              (user directive 2026-07-28) — before this, a long description
+              pushed the popup's own head off the top of the display. */}
+          {group?.description ? (
+            <SheetScroll><Text style={s.sheetDesc}>{group.description}</Text></SheetScroll>
           ) : null}
-          <Button label={t('communities.leave')} variant="secondary" size="lg" iconStart={<SignOutIcon color={INK} />} onPress={() => setConfirm(true)} />
+          <GroupLink url={group?.link} />
+          {/* What this group is to me right now, in a sentence. A group I have
+              not asked to join yet says nothing: the button below says it. */}
+          {status !== 'none' ? (
+            <Text style={s.sheetNote}>
+              {t(status === 'joined' ? 'communities.memberNote'
+                : pending ? 'communities.pendingNote'
+                : 'communities.declinedDesc')}
+            </Text>
+          ) : null}
+          {status === 'joined' ? (
+            <>
+              {/* Only a MEMBER hands the group's link on: an invite from someone
+                  who has not been let in yet is not theirs to give. */}
+              {group?.is_public && group?.invite_code ? (
+                <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
+              ) : null}
+              <Button
+                label={t('communities.leave')}
+                variant="secondary"
+                size="lg"
+                iconStart={<SignOutIcon color={INK} />}
+                onPress={() => setConfirm(true)}
+              />
+            </>
+          ) : pending ? (
+            <Button
+              label={t('communities.cancelJoin')}
+              variant="secondary"
+              size="lg"
+              // Cancelling a request is an X, plainly (user directive
+              // 2026-07-28), at the size every other button glyph wears.
+              iconStart={<CloseIcon color={INK} />}
+              onPress={() => setConfirm(true)}
+            />
+          ) : status === 'declined' ? (
+            // No confirm on this one: it dismisses a notice, it does not undo
+            // anything, and the sentence above it has just said so.
+            <Button
+              label={t('communities.declinedConfirm')}
+              variant="secondary"
+              size="lg"
+              loading={busy}
+              iconStart={<CloseIcon color={INK} />}
+              onPress={quit}
+            />
+          ) : onJoin ? (
+            <Button
+              label={t(group?.requires_approval ? 'communities.requestJoin' : 'communities.join')}
+              variant="primary"
+              size="lg"
+              onPress={onJoin}
+            />
+          ) : null}
         </View>
       </BottomSheet>
       <ConfirmDialog
         visible={confirm}
-        title={group ? t('settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
-        description={t('settings.groupsLeaveDesc')}
-        confirmLabel={t('settings.groupsLeaveConfirm')}
-        confirmIconStart={<SignOutIcon color={WHITE} />}
+        title={group ? t(pending ? 'communities.cancelJoinTitle' : 'settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
+        description={t(pending ? 'communities.cancelJoinDesc' : 'settings.groupsLeaveDesc')}
+        confirmLabel={t(pending ? 'communities.cancelJoinConfirm' : 'settings.groupsLeaveConfirm')}
+        confirmIconStart={pending ? <CloseIcon color={WHITE} /> : <SignOutIcon color={WHITE} />}
         busy={busy}
         onCancel={() => setConfirm(false)}
-        onConfirm={leave}
+        onConfirm={quit}
         draggable
       />
     </>
   )
 }
 
-// A single tappable card row: leading icon/avatar, title + optional meta, chevron.
-function NavRow({ icon, title, meta, first, style, onPress }: { icon?: React.ReactNode; title: string; meta?: string; first?: boolean; style?: StyleProp<ViewStyle>; onPress: () => void }) {
+// ── The strip ──────────────────────────────────────────────────────────────
+// THE row of this whole surface (user directive 2026-07-28): a leading
+// icon/avatar, a title, any number of meta lines under it, an optional chip, and
+// a trailing lane for the rare row that answers in place. Every list here is
+// built from this one component — the hub's groups, a search result, a group's
+// members, the waiting queue, my friends — so a strip is a strip wherever it
+// appears, and a variant is a PROP, never a second row.
+//
+// Three rules the strips are shaped by, all absolute:
+//  • The TITLE OWNS THE FULL WIDTH of the strip and is never clipped. A group's
+//    name wraps to as many lines as it needs; nothing sits beside it stealing
+//    room, which is what used to cut "Tel Aviv Weekend Runners" to an ellipsis.
+//  • THE CHIP RIDES THE LAST TEXT LINE, at its end, facing it. On a group row
+//    that is the meta line ("26 members"), so the chip sits opposite the details
+//    rather than beside the name. On a one-line strip (a member, the queue
+//    entry) the last line IS the title, so the chip keeps its old place.
+//  • NO CHEVRON, ever (user directive 2026-07-28). A card of rows on a page that
+//    goes somewhere when you tap it does not need an arrow on every one of them,
+//    and the lane it ate belonged to the name.
+function Strip({ icon, title, meta, tag, tagStrong, trailing, first, style, onPress }: {
+  icon?: React.ReactNode
+  title: string
+  /** One line, or several — falsy entries drop, so a caller can inline a
+   *  condition. Never clipped either: what is said about a group wraps with it. */
+  meta?: string | Array<string | false | null | undefined>
+  /** Nothing to say (null/undefined/empty) renders no chip at all. */
+  tag?: string | number | null
+  /** The chip is a full-strength purple tile with white ink instead of the pale
+   *  one: something is WAITING on the user there (join requests), and the pale
+   *  chip that states a standing role must not read as the same weight. */
+  tagStrong?: boolean
+  /** The one row that answers in place instead of opening something: the
+   *  friend-request row's accept/decline pills. */
+  trailing?: React.ReactNode
+  first?: boolean
+  style?: StyleProp<ViewStyle>
+  onPress?: () => void
+}) {
   const [pressed, setPressed] = useState(false)
+  const metaLines = (Array.isArray(meta) ? meta : [meta]).filter(Boolean) as string[]
+  // The one chip component, in its small size (`Chip small`): a strip's chip and
+  // the menu row's chip are the same tile, so a count that moves between the two
+  // surfaces does not change shape on the way.
+  const chip = tag != null && tag !== ''
+    ? <Chip small text={String(tag)} tone={tagStrong ? 'solid' : 'positive'} />
+    : null
+  const body = (
+    <>
+      {icon ? <View style={s.rowIcon}>{icon}</View> : null}
+      <View style={s.rowText}>
+        <View style={s.rowLine}>
+          <Text style={[s.rowTitle, s.rowLineText]}>{title}</Text>
+          {metaLines.length === 0 ? chip : null}
+        </View>
+        {metaLines.map((line, i) => (
+          <View key={i} style={s.rowLine}>
+            <Text style={[s.rowMeta, s.rowLineText]}>{line}</Text>
+            {i === metaLines.length - 1 ? chip : null}
+          </View>
+        ))}
+      </View>
+      {trailing}
+    </>
+  )
+  // A strip that says something UNDER the name breathes (MD); one that is a name
+  // and nothing else is the tighter people row (SM) every roster is made of. One
+  // rule, so two rows of the same content can never end up different heights.
+  const rowStyle = [s.row, metaLines.length === 0 && s.rowTight, first && s.rowFirst, style]
+  if (!onPress) return <View style={rowStyle}>{body}</View>
   return (
     <Pressable
       onPress={() => { tap(); onPress() }}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
-      style={[s.row, first && s.rowFirst, style, pressed && { backgroundColor: GREEN_SOFT }]}
+      style={[rowStyle, pressed && { backgroundColor: INK_WASH }]}
     >
-      {icon ? <View style={s.rowIcon}>{icon}</View> : null}
-      <View style={s.rowText}>
-        <Text style={s.rowTitle} numberOfLines={2}>{title}</Text>
-        {/* The meta line wraps to a SECOND line rather than ellipsizing (user
-            directive 2026-07-27): "open · 18 members · not accepting requests"
-            says nothing once it is cut mid-word. Two lines is the ceiling, a
-            row is still a row. MetaText is what drops the separator at the
-            break; a plain label with no separator in it renders unchanged. */}
-        {meta ? <MetaText text={meta} style={s.rowMeta} numberOfLines={2} /> : null}
-      </View>
-      <ChevGlyph />
+      {body}
     </Pressable>
   )
 }
 
 // ── Group kind ─────────────────────────────────────────────────────────────
-// The three names live here once, so a kind reads identically in the chooser,
-// in a row's meta line and in search. See groupKind() in lib/communities.
+// The three names live here once, so a kind reads identically everywhere it is
+// asked about. It is asked about in ONE place now — the chooser, where the
+// group is being set up: a kind is a rule about getting IN, so it is off the
+// strips entirely (user directive 2026-07-28), and what a tap will do is said
+// by the join popup's own button. See groupKind() in lib/communities.
 const kindTitle = (k: GroupKind) =>
   k === 'open' ? t('communities.kindOpen')
   : k === 'approved' ? t('communities.kindApproved')
@@ -805,12 +1134,6 @@ const kindSub = (k: GroupKind) =>
   k === 'open' ? t('communities.kindOpenSub')
   : k === 'approved' ? t('communities.kindApprovedSub')
   : t('communities.kindPrivateSub')
-/** One word for a meta line, where the full name would repeat "group". */
-const kindShort = (k: GroupKind) =>
-  k === 'open' ? t('communities.kindOpenShort')
-  : k === 'approved' ? t('communities.kindApprovedShort')
-  : t('communities.kindPrivateShort')
-
 // Pick one of the three. Vertical, because each stop carries the sentence that
 // explains it — the old two side-by-side toggles (searchable? approval?) asked
 // the user to combine two answers into a policy (user directive 2026-07-27).
@@ -838,7 +1161,7 @@ function KindChooser({ value, onChange }: { value: GroupKind; onChange: (k: Grou
 // only once the list has reached its top (see PullPane's `scrollSpent`).
 // A FlatList has no wrapper to paint the card on, so the rows carry it: see
 // `rosterRowStyle`.
-function ContainedRoster<T>({ data, keyOf, row, empty, header, bottomInset, onTopMeasured }: {
+function ContainedRoster<T>({ data, keyOf, row, empty, header, footer, bottomInset, onTopMeasured, onEndReached, syncing }: {
   /** null = still loading; `empty` covers both that and a genuinely empty list. */
   data: T[] | null
   keyOf: (item: T) => string
@@ -848,11 +1171,21 @@ function ContainedRoster<T>({ data, keyOf, row, empty, header, bottomInset, onTo
       queue's entry). Style it with `rosterRowStyle(0, false)` so it wears the
       card's rounded top and the rows below it stay flat. */
   header?: React.ReactElement | null
+  /** A row at the BOTTOM of the card: the next page arriving (search). Style it
+      like the rows so it reads as part of the same run. */
+  footer?: React.ReactElement | null
   bottomInset: number
   /** The box's top edge in WINDOW coordinates. Everything above it on these
    *  pages is fixed, so the page hands it to its dismiss pan as the bottom of
    *  the drag band (see PageLayer): the head is a handle, the list is a list. */
   onTopMeasured?: (y: number) => void
+  /** Fetch the next page: the end of the rows is coming into view. A server-paged
+   *  list (search) sets it; a list that arrives whole leaves it off. */
+  onEndReached?: () => void
+  /** True while the server's answer is still out on a list that is ALREADY
+   *  painted from the last visit — the box wears the drifting hairline on its
+   *  top edge (see SyncBar / useSyncFlag). */
+  syncing?: boolean
 }) {
   const count = data?.length ?? 0
   const boxRef = useRef<View>(null)
@@ -870,13 +1203,43 @@ function ContainedRoster<T>({ data, keyOf, row, empty, header, bottomInset, onTo
         keyExtractor={keyOf}
         renderScrollComponent={props => <PullScrollView {...props} />}
         showsVerticalScrollIndicator={false}
+        // A row must answer the FIRST tap while a keyboard is up (search opens
+        // with its field focused), not spend it on dismissing the keyboard.
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={header ?? null}
         ListEmptyComponent={empty ?? null}
-        renderItem={({ item, index }) => row(item, index, index === count - 1)}
+        ListFooterComponent={footer ?? null}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={LIST_PAGE_AHEAD_VIEWPORTS}
+        // A footer means the run of rows does NOT end at the last item, so the
+        // card's rounded bottom belongs to the footer, not to that row.
+        renderItem={({ item, index }) => row(item, index, index === count - 1 && !footer)}
       />
+      {/* LAST, so it paints over the first row's top edge rather than under it.
+          The box clips (rounded corners), so the hairline ends where the card
+          does. */}
+      {syncing === undefined ? null : <SyncBar visible={syncing} />}
     </View>
   )
 }
+
+// ── The "still thinking" flag ──────────────────────────────────────────────
+// What a cache-first list wears its hairline off (SyncBar). Every list here
+// paints from the last visit and lets the round trip correct it, so between the
+// two there is a stretch where the screen is full and NOT final; this is the
+// only thing that says so. Two rules live in the hook so no page can get them
+// wrong: nothing painted yet = stay away (the skeleton already owns that wait),
+// and a page with two loads in flight (the roster and its waiting queue) is
+// done only when both are.
+function useSyncFlag(painted: boolean) {
+  const [inFlight, setInFlight] = useState(0)
+  const track = useCallback(function track<T>(p: Promise<T>): Promise<T> {
+    setInFlight(n => n + 1)
+    return p.finally(() => setInFlight(n => n - 1))
+  }, [])
+  return { syncing: inFlight > 0 && painted, track }
+}
+
 /** The card look, carried by the rows themselves: only the ends are rounded. */
 const rosterRowStyle = (index: number, last: boolean) => [
   s.rosterRow,
@@ -895,11 +1258,12 @@ function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenF
   // Cache-first: this page stays mounted under a friend's profile, and removing
   // them there arrives as a cache write. See OwnedGroupView.
   const data = cached ?? fetched
+  const { syncing, track } = useSyncFlag(data != null)
   const load = useCallback(() => {
-    myFriends()
+    track(myFriends())
       .then(fresh => { setFetched(fresh); friendsRoster.set(fresh) })
       .catch(() => { if (!friendsRoster.get()) setFetched({ friends: [], requests: [] }) })
-  }, [])
+  }, [track])
   useEffect(load, [load])
 
   // How many friends there are is already known before the roster arrives (the
@@ -927,16 +1291,24 @@ function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenF
           <Text style={s.section}>{t('communities.requestsSection')}</Text>
           <View style={s.card}>
             {data.requests.map((r, i) => (
-              <View key={r.id} style={[s.memberRow, i === 0 && s.rowFirst]}>
-                <Avatar userId={r.user_id} name={r.name} image={r.image} />
-                <Text style={s.memberName} numberOfLines={1}>{r.name}</Text>
-                <Pressable style={[s.pillBtn, { backgroundColor: PRIMARY}]} onPress={() => respond(r.id, true)} disabled={!!busy}>
-                  <Text style={s.pillBtnInk}>{t('communities.accept')}</Text>
-                </Pressable>
-                <Pressable style={[s.pillBtn, { backgroundColor: GREEN_SOFT }]} onPress={() => respond(r.id, false)} disabled={!!busy}>
-                  <Text style={[s.pillBtnInk, { color: GREEN }]}>{t('communities.decline')}</Text>
-                </Pressable>
-              </View>
+              // The one strip that answers in place instead of opening
+              // something: its two pills ride the trailing lane.
+              <Strip
+                key={r.id}
+                first={i === 0}
+                icon={<Avatar userId={r.user_id} name={r.name} image={r.image} />}
+                title={r.name ?? ''}
+                trailing={(
+                  <>
+                    <Pressable style={[s.pillBtn, { backgroundColor: INK}]} onPress={() => respond(r.id, true)} disabled={!!busy}>
+                      <Text style={s.pillBtnInk}>{t('communities.accept')}</Text>
+                    </Pressable>
+                    <Pressable style={[s.pillBtn, { backgroundColor: INK_WASH }]} onPress={() => respond(r.id, false)} disabled={!!busy}>
+                      <Text style={[s.pillBtnInk, { color: INK }]}>{t('communities.decline')}</Text>
+                    </Pressable>
+                  </>
+                )}
+              />
             ))}
           </View>
         </>
@@ -953,7 +1325,7 @@ function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenF
         ) : friends!.map((f, i) => (
           // No button on the row (user directive 2026-07-27): tapping opens the
           // friend's profile, and removing them is decided there.
-          <NavRow
+          <Strip
             key={f.user_id}
             first={i === 0}
             icon={<Avatar userId={f.user_id} name={f.name} image={f.image} />}
@@ -961,6 +1333,9 @@ function FriendsView({ profile, onOpenFriend }: { profile: StoreProfile; onOpenF
             onPress={() => onOpenFriend(f)}
           />
         ))}
+        {/* Last child, over the card's top edge: the list is the last visit's
+            and the answer is still out. See SyncBar. */}
+        <SyncBar visible={syncing} />
       </View>
       {data && data.friends.length > 0 ? <Text style={s.note}>{t('communities.mutualNote')}</Text> : null}
     </View>
@@ -972,8 +1347,10 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
   const kb = useKeyboardHeight()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  // A new group is OPEN unless the creator says otherwise (user directive
-  // 2026-07-27): the point of creating one is that people can find it.
+  const [link, setLink] = useState('')
+  // A new group is APPROVED unless the creator says otherwise (user directive
+  // 2026-07-28): it is found in search like an open one, but the owner decides
+  // who actually gets in.
   const [kind, setKind] = useState<GroupKind>(DEFAULT_GROUP_KIND)
   const [busy, setBusy] = useState(false)
 
@@ -984,6 +1361,7 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
       const flags = groupKindFlags(kind)
       const g = await createGroup(name.trim(), flags.is_public, {
         description: description.trim() || null,
+        link: link.trim() || null,
         requires_approval: flags.requires_approval,
       })
       onCreated(g)
@@ -994,11 +1372,27 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
     <View style={{ gap: MD, marginBottom: kb }}>
       <Text style={s.section}>{t('communities.name')}</Text>
       <View style={s.field}>
-        <TextInput style={s.fieldInput} value={name} onChangeText={setName} placeholder={t('communities.namePlaceholder')} placeholderTextColor={BLACK_MID} autoFocus maxLength={60} />
+        <TextInput style={s.fieldInput} value={name} onChangeText={setName} placeholder={t('communities.namePlaceholder')} placeholderTextColor={INK_DIM} autoFocus maxLength={GROUP_NAME_MAX} />
       </View>
       <Text style={s.section}>{t('communities.description')}</Text>
       <View style={s.field}>
-        <TextInput style={[s.fieldInput, s.descInput]} value={description} onChangeText={setDescription} placeholder={t('communities.descriptionPlaceholder')} placeholderTextColor={BLACK_MID} multiline maxLength={300} textAlignVertical="top" />
+        <TextInput style={[s.fieldInput, s.descInput]} value={description} onChangeText={setDescription} placeholder={t('communities.descriptionPlaceholder')} placeholderTextColor={INK_DIM} multiline maxLength={GROUP_DESCRIPTION_MAX} textAlignVertical="top" />
+      </View>
+      {/* Optional, like the description: the name is the only thing creation
+          insists on. Empty simply means a group with no link. */}
+      <Text style={s.section}>{t('communities.link')}</Text>
+      <View style={s.field}>
+        <TextInput
+          style={[s.fieldInput, s.linkInput]}
+          value={link}
+          onChangeText={setLink}
+          placeholder={t('communities.linkPlaceholder')}
+          placeholderTextColor={INK_DIM}
+          maxLength={GROUP_LINK_MAX}
+          keyboardType="url"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
       </View>
       <Text style={s.section}>{t('communities.kindLabel')}</Text>
       <KindChooser value={kind} onChange={setKind} />
@@ -1012,10 +1406,9 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
 // settings sub-screen, the pending join requests, and the member roster. All
 // the editable config (name / description / public / approval / delete) lives
 // in GroupSettingsView below.
-function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOpenMember, bottomInset, onRosterTop }: {
+function OwnedGroupView({ group, onChanged, onOpenRequests, onOpenMember, bottomInset, onRosterTop }: {
   group: OwnedGroup
   onChanged: (g: OwnedGroup) => void
-  onOpenSettings: () => void
   /** Drill into the waiting queue — its own sub-screen, so this page carries
    *  exactly one long list. */
   onOpenRequests: () => void
@@ -1050,13 +1443,20 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
     rosters.set(group.id, list)
   }, [group.id])
 
+  // Both round trips on this page go through the one flag, so the hairline is up
+  // while either is out and gone only when the page is whole.
+  const { syncing, track } = useSyncFlag(members != null)
+
+  // `track` wraps the REQUEST, not the chain that applies it: the flag has to
+  // drop before the rows land, or the frame between the two paints the hairline
+  // over a page that just became whole.
   const load = useCallback(() => {
-    groupMembers(group.id)
+    track(groupMembers(group.id))
       .then(applyMembers)
       // A failed refresh must not blank a roster we already have — only an
       // account with nothing cached falls through to the empty list.
       .catch(() => { if (!rosters.get(group.id)) setFetched([]) })
-  }, [group.id, applyMembers])
+  }, [group.id, applyMembers, track])
   useEffect(load, [load])
   // Pending join requests (only meaningful while approval is on, but harmless
   // to fetch either way — the server returns [] when there are none). Cached on
@@ -1071,10 +1471,10 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
   }, [group.id])
 
   const loadRequests = useCallback(() => {
-    groupRequests(group.id)
+    track(groupRequests(group.id))
       .then(applyRequests)
       .catch(() => { if (!joinRequests.get(group.id)) setFetchedRequests([]) })
-  }, [group.id, applyRequests])
+  }, [group.id, applyRequests, track])
   useEffect(loadRequests, [loadRequests])
 
   // How many people are waiting is already on the group row (the denormalized
@@ -1102,86 +1502,89 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
 
   return (
     <View style={s.ownedFill}>
-      {/* Fixed head: share, settings and the member heading STAY PUT — only the
-          roster below them scrolls (the waiting queue rides at its top). */}
+      {/* Fixed head: share and the member heading STAY PUT — only the roster
+          below them scrolls (the waiting queue rides at its top). The gear that
+          used to sit here now rides the page HEADER, beside the group's name. */}
       <View style={s.ownedHead}>
         <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
-
-        {/* Two WORDLESS buttons side by side (user directive 2026-07-27), where
-            a two-row card used to be: the gear opens the group's config, the eye
-            opens the play-here popup. Regular button height, split evenly, so
-            they read as one strip under the share button. The waiting queue used
-            to sit beside them as a second card; it now lives at the head of the
-            roster instead — the people waiting to get in belong with the people
-            already in, not in the settings stack. */}
-        <View style={s.actionRow}>
-          <View style={s.actionSlot}>
-            <Button label="" variant="secondary" size="lg" iconStart={<GearGlyph />} onPress={onOpenSettings} />
-          </View>
-          {/* Manage without playing. With no label left to say it, the EYE alone
-              carries the state: open = playing here, crossed out = hidden. The
-              button keeps the same recessive skin either way (user directive
-              2026-07-27: no purple fill to mark it on) — the glyph is the whole
-              signal. The sentence that explains it lives in the popup it opens.
-              It rides here rather than in Group settings because that page is
-              the GROUP's config; this is the caller's own membership. */}
-          <View style={s.actionSlot}>
-            <Button
-              label=""
-              variant="secondary"
-              size="lg"
-              iconStart={hidden ? <EyeOffIcon color={GREEN} size={ICON.md} /> : <EyeOpenIcon color={GREEN} size={ICON.md} />}
-              onPress={() => setHiddenSheet(true)}
-            />
-          </View>
-        </View>
         {/* No description here (user directive 2026-07-27): it only ate the
             roster's height, and it is one tap away in Group settings, where it
             is also edited. */}
 
         {/* The count rides in on the group row itself, so the heading is painted
-            from the first frame and only the roster below it waits. */}
-        <Text style={s.section}>{memberLabel(members?.length ?? group.members)}</Text>
+            from the first frame and only the roster below it waits. Opposite it,
+            on the same line, the play-here EYE (user directive 2026-07-28):
+            backgroundless, so the heading row carries it as chrome rather than
+            as a button strip of its own. Manage without playing — with no label
+            left to say it, the glyph alone carries the state: open = playing
+            here, crossed out = hidden, and the sentence that explains it lives
+            in the popup it opens. It rides beside the roster rather than in
+            Group settings because that page is the GROUP's config; this is the
+            caller's own membership, i.e. whether these very people meet you. */}
+        <View style={s.sectionRow}>
+          <Text style={[s.section, s.sectionFlat]}>{memberLabel(members?.length ?? group.members)}</Text>
+          <RoundButton
+            // Sized to the GLYPH, not to a chrome circle: with no background to
+            // draw, a ROUND_BUTTON_SIZE_SM box only stretched the heading row and
+            // pushed the roster down. The tap target is RoundButton's hitSlop.
+            size={ICON.xxl}
+            bg="transparent"
+            shadow={false}
+            style={s.headingGlyph}
+            onPress={() => { tap(); setHiddenSheet(true) }}
+            accessibilityLabel={t('communities.hiddenTitle')}
+          >
+            {/* ICON.xl, an optical half-step over the chrome default: the eye's
+                ink is a wide flat lens that fills barely half its box height, so
+                at the plain size it reads visibly smaller than every other
+                glyph. */}
+            {hidden ? <EyeOffIcon color={INK} size={ICON.xl} /> : <EyeOpenIcon color={INK} size={ICON.xl} />}
+          </RoundButton>
+        </View>
       </View>
 
       <ContainedRoster
         data={members}
         bottomInset={bottomInset}
         onTopMeasured={onRosterTop}
+        syncing={syncing}
         keyOf={m => m.user_id}
         empty={<View style={s.card}><SkeletonRows rows={group.members} /></View>}
         // The waiting queue is the roster's FIRST row (user directive
-        // 2026-07-27): built from the member row's own parts — the same
-        // avatar-width leading lane, the same name type, the same padding — so
-        // it lines up with the people below it, and wears the regular purple
-        // (GREEN) plus the chevron that say it is an entry wanting an answer
-        // rather than a person.
+        // 2026-07-27): the same Strip the people under it are, so it lines up
+        // with them by construction. What says it is an entry wanting an answer
+        // rather than a person is the purple DISC in the avatar's lane, not a
+        // fill of its own. How many are waiting rides in the SAME chip the roles
+        // wear (user directive 2026-07-28), so the label stays a plain name.
         header={requestCount > 0 ? (
-          <Pressable
-            // requestsRow last: rosterRowStyle paints the card's beige, and this
-            // row is the pale purple one.
-            style={[s.memberRow, s.rowFirst, ...rosterRowStyle(0, false), s.requestsRow]}
-            onPress={() => { tap(); onOpenRequests() }}
-          >
-            <View style={s.requestsGlyph}><UserIcon color={GREEN} /></View>
-            <Text style={[s.memberName, s.requestsInk]} numberOfLines={1}>{t('communities.requestsSectionJoin').replace('{count}', String(requestCount))}</Text>
-            <ChevGlyph color={WHITE} />
-          </Pressable>
+          <Strip
+            // No fill override: it is the card's own WHITE first row (user
+            // directive 2026-07-28). A tint here read as the PAGE behind it and
+            // detached the row from the card.
+            first
+            style={rosterRowStyle(0, false)}
+            // A CHECK, not a person (user directive 2026-07-28): the disc is
+            // the answer this row is waiting for, and a person glyph only
+            // repeated the avatars under it.
+            icon={<View style={s.requestsGlyph}><CheckIcon color={WHITE} /></View>}
+            title={t('communities.requestsSectionJoin')}
+            tag={requestCount}
+            onPress={onOpenRequests}
+          />
         ) : null}
         row={(m, index, last) => {
-          const tag = roleTag(m)
           // The header row, when there is one, owns the card's rounded top and
           // the first hairline-free edge, so the people below it stay flat.
           const first = index === 0 && requestCount === 0
           return (
-            <Pressable
-              style={[s.memberRow, first && s.rowFirst, ...rosterRowStyle(first ? 0 : index + 1, last)]}
-              onPress={() => { tap(); onOpenMember(m) }}
-            >
-              <Avatar userId={m.user_id} name={m.name} image={m.image} />
-              <Text style={s.memberName} numberOfLines={1}>{m.name}</Text>
-              {tag ? <View style={s.tag}><Text style={s.tagInk}>{tag}</Text></View> : null}
-            </Pressable>
+            <Strip
+              first={first}
+              style={rosterRowStyle(first ? 0 : index + 1, last)}
+              icon={<Avatar userId={m.user_id} name={m.name} image={m.image} />}
+              title={m.name ?? ''}
+              tag={roleTag(m)}
+              onPress={() => onOpenMember(m)}
+            />
           )
         }}
       />
@@ -1190,7 +1593,7 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
           gets for a group they're in. One action, worded as what it will do. */}
       <BottomSheet visible={hiddenSheet} onDismiss={() => setHiddenSheet(false)}>
         <View style={s.sheetWrap}>
-          <Text style={s.sheetTitle}>{t('communities.hiddenTitle')}</Text>
+          <SheetTitle style={s.sheetTitle}>{t('communities.hiddenTitle')}</SheetTitle>
           <Text style={s.sheetDesc}>{t('communities.hiddenSub')}</Text>
           {/* The popup's one action is the regular purple button in BOTH
               directions (user directive 2026-07-27): coming back to play is as
@@ -1200,7 +1603,7 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
             label={hidden ? t('communities.hiddenOff') : t('communities.hiddenOn')}
             variant="primary"
             size="lg"
-            iconStart={hidden ? <EyeOpenIcon color={WHITE} size={ICON.md} /> : <EyeOffIcon color={WHITE} size={ICON.md} />}
+            iconStart={hidden ? <EyeOpenIcon color={WHITE} /> : <EyeOffIcon color={WHITE} />}
             loading={hiddenBusy}
             onPress={toggleHidden}
           />
@@ -1215,18 +1618,48 @@ function OwnedGroupView({ group, onChanged, onOpenSettings, onOpenRequests, onOp
 // so a queue of forty is as usable as a queue of three. Reads and writes the
 // SAME joinRequests / rosters caches the manage page uses, so it opens painted
 // and the page behind it is already correct when it pops back.
-function JoinRequestsView({ group, onOpen, bottomInset, onRosterTop }: { group: OwnedGroup; onOpen: (r: JoinRequestItem) => void; bottomInset: number; onRosterTop?: (y: number) => void }) {
+function JoinRequestsView({ group, onOpen, bottomInset, onRosterTop, isTop, onEmptied }: {
+  group: OwnedGroup
+  onOpen: (r: JoinRequestItem) => void
+  bottomInset: number
+  onRosterTop?: (y: number) => void
+  /** False while a requester's profile is stacked over this page. */
+  isTop: boolean
+  /** The last request was answered: nothing is left to queue up. */
+  onEmptied: () => void
+}) {
   const cached = joinRequests.useValue(group.id)
   const [fetched, setFetched] = useState<JoinRequestItem[] | null>(null)
   // Cache-first: this page stays mounted under the requester's profile, and the
   // answer given there arrives as a cache write. See OwnedGroupView.
   const requests = cached ?? fetched
 
+  // A queue that has just been emptied is not a page (user directive
+  // 2026-07-28): answering the last request takes this page off too, so the
+  // manager lands back on the group instead of on an empty list.
+  //
+  // Two things make it honest. It fires only on the TRANSITION to empty — a
+  // queue that was already empty when it opened (a stale notification tap) is
+  // left alone, since nothing just happened — and only while this page is on
+  // TOP: the answer is given on the profile stacked above it, and a page that
+  // is not top cannot ride off (its pull is disabled). So the flag survives the
+  // answer and is spent the moment the profile pops back onto an empty queue,
+  // which is what makes the two pages leave one after the other.
+  const hadAny = useRef(false)
+  useEffect(() => {
+    if (!requests) return
+    if (requests.length > 0) { hadAny.current = true; return }
+    if (!isTop || !hadAny.current) return
+    hadAny.current = false
+    onEmptied()
+  }, [requests, isTop, onEmptied])
+
+  const { syncing, track } = useSyncFlag(requests != null)
   const load = useCallback(() => {
-    groupRequests(group.id)
+    track(groupRequests(group.id))
       .then(list => { setFetched(list); joinRequests.set(group.id, list) })
       .catch(() => { if (!joinRequests.get(group.id)) setFetched([]) })
-  }, [group.id])
+  }, [group.id, track])
   useEffect(load, [load])
 
   // Known before the list lands (the denormalized count on the group row), so
@@ -1238,8 +1671,19 @@ function JoinRequestsView({ group, onOpen, bottomInset, onRosterTop }: { group: 
       <View style={s.ownedHead}>
         {/* The title bar already says "Join requests", so the heading under it
             says WHOSE queue this is: the group's name (user directive
-            2026-07-27), not the same words a second time. */}
-        <Text style={s.section} numberOfLines={1}>{group.name}</Text>
+            2026-07-27), not the same words a second time. Opposite it, on that
+            same line, the queue's ONE bulk answer (user directive 2026-07-28):
+            it came off the title bar so the bar carries nothing but the page's
+            own name, centred on the screen, and the control now sits with the
+            list it empties — the same heading-row treatment the play-here eye
+            wears one page back. The row's top margin is the heading's own
+            (sectionFlat drops it off the text), so the glyph centres against
+            the words rather than against the gap above them. */}
+        <View style={[s.sectionRow, s.sectionRowTop]}>
+          <Text style={[s.section, s.sectionFlat, s.sectionFill]} numberOfLines={1}>{group.name}</Text>
+          {/* Hides itself when the queue is empty. See ApproveAllControl. */}
+          <ApproveAllControl group={group} onDone={onEmptied} />
+        </View>
       </View>
       {/* The same contained roster the member list is, so the queue scrolls the
           same way and ends at the same height. Rows carry NO buttons: a name
@@ -1250,12 +1694,13 @@ function JoinRequestsView({ group, onOpen, bottomInset, onRosterTop }: { group: 
         data={requests}
         bottomInset={bottomInset}
         onTopMeasured={onRosterTop}
+        syncing={syncing}
         keyOf={r => r.id}
         empty={requests == null
           ? <View style={s.card}><SkeletonRows rows={count} /></View>
           : <View style={s.card}><Empty text={t('communities.noRequests')} /></View>}
         row={(r, index, last) => (
-          <NavRow
+          <Strip
             first={index === 0}
             style={rosterRowStyle(index, last)}
             icon={<Avatar userId={r.user_id} name={r.name} image={r.image} />}
@@ -1265,6 +1710,109 @@ function JoinRequestsView({ group, onOpen, bottomInset, onRosterTop }: { group: 
         )}
       />
     </View>
+  )
+}
+
+// The settings page's own header control, on the trailing corner opposite the
+// close X: read the group back as everyone ELSE meets it. A manager edits it
+// through fields and a chooser, which say nothing about what those add up to —
+// and what they add up to is the group POPUP, the one surface a searcher, an
+// invitee and a member all meet the group in. So the preview IS that popup
+// (GroupSheet), with nothing added to it and no action under it: `none` with no
+// `onJoin` renders the card and only the card, which is what a preview has to
+// be. Who runs it comes off the cached roster — the member flagged owner — so
+// the face at the top is the real one whether I own the group or only manage it
+// (an unread roster simply shows none, exactly as an admin-owned group does).
+function GroupPreviewControl({ group }: { group: OwnedGroup }) {
+  const [open, setOpen] = useState(false)
+  const members = rosters.useValue(group.id)
+  const owner = members?.find(m => m.owner)
+  // Every field the popup reads is already on the group row, which the settings
+  // page keeps in step with each save (applyGroup), so the preview repaints with
+  // the edit that was just made.
+  const brief: GroupBrief = {
+    ...group,
+    owner: owner ? { user_id: owner.user_id, name: owner.name, image: owner.image } : null,
+  }
+
+  return (
+    <>
+      <HeaderButton label={t('communities.preview')} onPress={() => setOpen(true)}>
+        <PreviewGlyph size={ICON.round} />
+      </HeaderButton>
+      <GroupSheet group={open ? brief : null} status="none" onClose={() => setOpen(false)} />
+    </>
+  )
+}
+
+// The queue page's own control, opposite the group-name heading over the list:
+// a check that empties the whole queue at once (user directive 2026-07-28). A
+// queue of forty is otherwise forty profiles to open, and a manager who trusts
+// the list wants one answer, not forty. It asks first, in the app's ONE
+// decision popup, with a single button — approving everyone is not a thing to
+// do by accident. It rides the HEADING and not the title bar (user directive
+// 2026-07-28) so the bar is left to hold the page's name alone, centred.
+function ApproveAllControl({ group, onDone }: { group: OwnedGroup; onDone: () => void }) {
+  // Same cache the queue page reads, so the control appears and disappears
+  // with the list under it rather than with a stale count.
+  const requests = joinRequests.useValue(group.id)
+  const [ask, setAsk] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const count = requests?.length ?? group.pending ?? 0
+
+  // Nothing to approve: no dead chrome beside the heading.
+  if (count < 1) return null
+
+  const approveAll = async () => {
+    setBusy(true)
+    try {
+      // ONE round trip for the whole queue (server drains it in one
+      // transaction), so both caches are correct from a single answer.
+      const fresh = await approveAllJoins(group.id)
+      joinRequests.set(group.id, fresh.requests)
+      rosters.set(group.id, fresh.members)
+    } catch {
+      // Already emptied on another device: the queue refetches on the way
+      // back, so there is nothing to say here.
+    } finally {
+      setBusy(false)
+      // The popup goes first, then the page rides off under it — the queue it
+      // was about no longer exists.
+      setAsk(false)
+      onDone()
+    }
+  }
+
+  return (
+    <>
+      {/* Two ticks, not one: the double check is already read as "all of them"
+          (user directive 2026-07-28), and a single one beside a list reads as
+          approving whoever sits at the top of it. Sized to the GLYPH with no
+          chrome circle, exactly as the play-here eye is one page back: a
+          heading row carries chrome, not a button. */}
+      <RoundButton
+        size={ICON.xxl}
+        bg="transparent"
+        shadow={false}
+        style={s.headingGlyph}
+        onPress={() => { tap(); setAsk(true) }}
+        accessibilityLabel={t('communities.approveAll')}
+      >
+        <DoubleCheckIcon size={ICON.xxl} />
+      </RoundButton>
+      <ConfirmDialog
+        visible={ask}
+        title={t('communities.approveAllTitle')}
+        description={t('communities.approveAllDesc').replace('{name}', group.name)}
+        // ONE button (no cancelLabel): the popup is dismissed by swiping it
+        // down or tapping the backdrop, and the only thing to press approves.
+        confirmLabel={t('communities.approveAll')}
+        busy={busy}
+        onCancel={() => { if (!busy) setAsk(false) }}
+        onConfirm={approveAll}
+        draggable
+      />
+    </>
   )
 }
 
@@ -1298,10 +1846,7 @@ function ProfilePage({ profile, userId, name, image, insets, caption, children }
       ) : (
         <View style={[s.content, s.profileBare]}>
           <View style={s.card}>
-            <View style={[s.memberRow, s.rowFirst]}>
-              <Avatar userId={userId} name={name} image={image} />
-              <Text style={s.memberName} numberOfLines={1}>{name}</Text>
-            </View>
+            <Strip first icon={<Avatar userId={userId} name={name} image={image} />} title={name ?? ''} />
           </View>
         </View>
       )}
@@ -1348,13 +1893,13 @@ function JoinRequestProfileView({ group, request, onDone, insets }: {
     >
       <Button
         label={t('communities.approve')} variant="primary" size="lg"
-        iconStart={<CheckIcon color={WHITE} size={ICON.md} />}
+        iconStart={<CheckIcon color={WHITE} />}
         loading={busy === 'accept'} disabled={!!busy}
         onPress={() => respond(true)}
       />
       <Button
         label={t('communities.declineJoin')} variant="secondary" size="lg"
-        iconStart={<CloseIcon color={INK} size={ICON.md} />}
+        iconStart={<CloseIcon color={INK} />}
         loading={busy === 'decline'} disabled={!!busy}
         onPress={() => respond(false)}
       />
@@ -1390,7 +1935,7 @@ function PersonProfileView({ person, onDone, insets }: {
         <ProfilePage profile={f.profile} userId={f.user_id} name={f.name} image={f.image} insets={insets}>
           <Button
             label={t('communities.unfriendConfirm')} variant="secondary" size="lg"
-            iconStart={<UserMinusIcon color={INK} size={ICON.md} />}
+            iconStart={<UserMinusIcon color={INK} />}
             loading={busy === 'remove'}
             onPress={() => { tap(); setConfirmRemove(true) }}
           />
@@ -1430,7 +1975,7 @@ function PersonProfileView({ person, onDone, insets }: {
           <Button
             label={m.manager ? t('communities.removeManager') : t('communities.makeManager')}
             variant="primary" size="lg"
-            iconStart={<UserIcon color={WHITE} size={ICON.md} />}
+            iconStart={<RankIcon color={WHITE} down={!!m.manager} />}
             loading={busy === 'manager'} disabled={!!busy}
             onPress={doSetManager}
           />
@@ -1438,7 +1983,7 @@ function PersonProfileView({ person, onDone, insets }: {
         {canAct ? (
           <Button
             label={t('communities.removeFromGroup')} variant="secondary" size="lg"
-            iconStart={<UserMinusIcon color={INK} size={ICON.md} />}
+            iconStart={<UserMinusIcon color={INK} />}
             loading={busy === 'remove'} disabled={!!busy}
             onPress={() => { tap(); setConfirmRemove(true) }}
           />
@@ -1468,6 +2013,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
   const [kind, setKind] = useState<GroupKind>(groupKind(group))
   const [savingName, setSavingName] = useState(false)
   const [savingDesc, setSavingDesc] = useState(false)
+  const [savingLink, setSavingLink] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -1496,6 +2042,16 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
     setSavingDesc(true)
     try { const g = await updateGroup(group.id, { description: next }); onChanged(g) } finally { setSavingDesc(false) }
   }
+  // The stored link is whatever the server made of what was pasted: a bare
+  // "example.com/x" comes back with its https://, so the field repaints with
+  // the real URL. One the server refuses (any other scheme, or not a host at
+  // all) changes nothing, and the field snaps back to the stored value.
+  const saveLink = async (next: string | null) => {
+    setSavingLink(true)
+    try { const g = await updateGroup(group.id, { link: next }); onChanged(g) }
+    catch {}
+    finally { setSavingLink(false) }
+  }
   const doDelete = async () => {
     setDeleting(true); tapWarning()
     try { await deleteGroup(group.id); dropGroupCaches(group.id); onDeleted() } finally { setDeleting(false); setConfirmDelete(false) }
@@ -1510,14 +2066,13 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           saving={savingName}
           onCommit={saveName}
           min={1}
-          max={60}
+          max={GROUP_NAME_MAX}
           singleLine
           placeholder={t('communities.namePlaceholder')}
           updateLabel={t('communities.descUpdate')}
           inputStyle={s.nameInput}
           footerStyle={s.descFooter}
-          counterStyle={s.descCounter}
-          counterWarnStyle={s.descCounterWarn}
+          hintStyle={s.descHint}
         />
       </View>
 
@@ -1528,14 +2083,36 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           saving={savingDesc}
           onCommit={saveDescription}
           min={0}
-          max={300}
+          max={GROUP_DESCRIPTION_MAX}
           allowEmpty
           placeholder={t('communities.descriptionPlaceholder')}
           updateLabel={t('communities.descUpdate')}
           inputStyle={s.descEditorInput}
           footerStyle={s.descFooter}
-          counterStyle={s.descCounter}
-          counterWarnStyle={s.descCounterWarn}
+          hintStyle={s.descHint}
+        />
+      </View>
+
+      {/* Where the group lives outside the app (a site, a form, a WhatsApp
+          invite). Sits under the description because it is the rest of that
+          sentence, and above the kind, which is policy rather than blurb. */}
+      <Text style={s.section}>{t('communities.link')}</Text>
+      <View style={s.descCard}>
+        <EditableText
+          value={group.link ?? ''}
+          saving={savingLink}
+          onCommit={saveLink}
+          min={0}
+          max={GROUP_LINK_MAX}
+          allowEmpty
+          singleLine
+          keyboardType="url"
+          autoCapitalize="none"
+          placeholder={t('communities.linkPlaceholder')}
+          updateLabel={t('communities.descUpdate')}
+          inputStyle={s.linkInput}
+          footerStyle={s.descFooter}
+          hintStyle={s.descHint}
         />
       </View>
 
@@ -1562,46 +2139,124 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
 }
 
 // ── Find or join ───────────────────────────────────────────────────────────
-function FindView() {
+// The window opens on the catalogue rather than on a blank: an empty query is a
+// legal search meaning "browse", ordered by how many of each group's members
+// are candidates for ME (the server runs its own others() pool, so the order can
+// never drift from the game's definition of a match). Rows arrive a page at a
+// time and the list asks for the next one as its end comes into view.
+//
+// The page is the search field and its answers, nothing else: the field is the
+// page HEADER (user directive 2026-07-28 — it took the title's place, since a
+// title saying "Join a group" over a box saying "Search a group" said the same
+// thing twice), and the rows sit in a contained box below it, exactly like the
+// roster and the waiting queue. So the query is owned by the page (PageLayer)
+// and handed in here.
+//
+// Typing does two things at once. The list re-filters what it ALREADY holds in
+// the same frame the key goes down (fuzzyRank, the client twin of the server's
+// matcher), and a debounced request goes out for the authoritative answer over
+// the whole catalogue, which replaces it. So there is never a blank beat while
+// a request is in flight, and the eventual list is not limited to what happened
+// to be downloaded.
+function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInset: number; onDone: () => void }) {
   const kb = useKeyboardHeight()
-  const [q, setQ] = useState('')
-  const [results, setResults] = useState<PublicGroup[] | null>(null)
+  // `rows` are the server's answer for `rowsQ` — while the two queries differ
+  // the user has typed ahead of the request, and `shown` below stands in.
+  const [rows, setRows] = useState<PublicGroup[] | null>(null)
+  const [rowsQ, setRowsQ] = useState('')
+  const [hasMore, setHasMore] = useState(false)
+  const [paging, setPaging] = useState(false)
+  const pagingRef = useRef(false)
+  // Every group seen this session, in the order first seen (so the server's
+  // ranking survives as the tiebreak). This is what the instant filter reads,
+  // which keeps backspacing from narrowing the list: deleting a character
+  // widens the pool again instead of filtering the previous, tighter answer.
+  const pool = useRef<Map<string, PublicGroup>>(new Map())
   const [joined, setJoined] = useState<Record<string, boolean>>({})
   const [requested, setRequested] = useState<Record<string, boolean>>({})
   // Groups this account was already turned down by: the join control says so
   // rather than pretending the tap queued anything.
   const [declined, setDeclined] = useState<Record<string, boolean>>({})
   const [preview, setPreview] = useState<PublicGroup | null>(null)  // group-details popup
-  const [cancelTarget, setCancelTarget] = useState<PublicGroup | null>(null)
-  const [cancelBusy, setCancelBusy] = useState(false)
   const seq = useRef(0)
+  // Asking to join is the end of the search (user directive 2026-07-28): the
+  // popup goes, and the page goes with it. Set when the tap queued a REQUEST,
+  // read once the popup has actually unmounted — the page must not start
+  // sliding off under a Modal that is still on screen, since a Modal is its own
+  // window and would not ride down with it.
+  const doneAfterPreview = useRef(false)
+  const onPreviewClosed = useCallback(() => {
+    if (!doneAfterPreview.current) return
+    doneAfterPreview.current = false
+    onDone()
+  }, [onDone])
 
-  const doCancelJoin = async () => {
-    if (!cancelTarget) return
-    setCancelBusy(true); tapWarning()
-    try {
-      await cancelJoinRequest(cancelTarget.id)
-      setRequested(m => ({ ...m, [cancelTarget.id]: false }))
-      setCancelTarget(null)
-    } finally { setCancelBusy(false) }
-  }
+  const remember = useCallback((list: PublicGroup[]) => {
+    for (const g of list) if (!pool.current.has(g.id)) pool.current.set(g.id, g)
+  }, [])
 
+  // First page for the active query. Browsing (empty field) fires at once —
+  // there is no keystroke to wait out — while a typed query waits out the
+  // debounce, which the instant filter below covers.
   useEffect(() => {
     const query = q.trim()
-    if (query.length < 2) { setResults(null); return }
     const mine = ++seq.current
-    const h = setTimeout(() => {
-      searchGroups(query).then(r => { if (mine === seq.current) setResults(r) }).catch(() => { if (mine === seq.current) setResults([]) })
-    }, 300)
+    const run = () => searchGroups(query)
+      .then(r => {
+        if (mine !== seq.current) return
+        remember(r.results); setRows(r.results); setRowsQ(query); setHasMore(r.has_more)
+      })
+      .catch(() => {
+        if (mine !== seq.current) return
+        setRows([]); setRowsQ(query); setHasMore(false)
+      })
+    if (!query) { run(); return }
+    const h = setTimeout(run, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(h)
-  }, [q])
+  }, [q, remember])
+
+  // The next page of whatever `rows` currently holds. Keyed to `seq` so a page
+  // that lands after the query moved on is dropped rather than appended to a
+  // list it does not belong to.
+  const loadMore = useCallback(() => {
+    // The in-flight flag is a ref, not the state: the list keeps announcing the
+    // end for as long as it is in view, and a state write would not be visible
+    // to the next few of those calls.
+    if (pagingRef.current || !hasMore || !rows) return
+    pagingRef.current = true
+    setPaging(true)
+    const mine = seq.current
+    searchGroups(rowsQ, rows.length)
+      .then(r => {
+        if (mine !== seq.current) return
+        remember(r.results); setRows(cur => [...(cur ?? []), ...r.results]); setHasMore(r.has_more)
+      })
+      .catch(() => { if (mine === seq.current) setHasMore(false) })
+      .finally(() => { pagingRef.current = false; setPaging(false) })
+  }, [hasMore, rows, rowsQ, remember])
+
+  // What the list paints. Once the server has answered for this exact query its
+  // answer is authoritative and complete; until then, the pool filtered locally.
+  const shown = useMemo(() => {
+    const query = q.trim()
+    if (query === rowsQ) return rows
+    return fuzzyRank([...pool.current.values()], query, g => g.name)
+  }, [q, rows, rowsQ])
 
   const joinPublic = (g: PublicGroup) => {
     tap()
     // Optimistically show the terminal state the server will land on: an
     // approval-gated group becomes a pending REQUEST, an open one joins.
-    if (g.requires_approval) setRequested(m => ({ ...m, [g.id]: true }))
-    else setJoined(m => ({ ...m, [g.id]: true }))
+    if (g.requires_approval) {
+      setRequested(m => ({ ...m, [g.id]: true }))
+      // Leave on the tap, not on the answer: the wait is the whole outcome, and
+      // it is the hub that carries it (the pending row lands there off the same
+      // refresh). The rare reconcile below can no longer repaint a row that is
+      // gone, and it does not have to — a request that turns out to have been
+      // DECLINED shows up on the hub as a declined row, from the same summary.
+      doneAfterPreview.current = true
+      setPreview(null)
+    } else setJoined(m => ({ ...m, [g.id]: true }))
     // A public group is joinable by anyone who found it in search; joining
     // reuses the redeem path under the hood (no manual code needed).
     if (!g.invite_code) return
@@ -1621,82 +2276,103 @@ function FindView() {
       })
       .catch(() => { setJoined(m => ({ ...m, [g.id]: false })); setRequested(m => ({ ...m, [g.id]: false })) })
   }
-  // The join action, as the popup's primary button. Reflects the live
-  // optimistic state (joined / requested) off the same maps the row does.
-  // In the pending state it doubles as a cancel affordance: tapping opens
-  // the same confirm the Hub's pending row opens.
-  const joinControl = (g: PublicGroup) => {
-    const isJoined = g.joined || joined[g.id]
-    const isRequested = !isJoined && (g.requested || requested[g.id])
-    if (isJoined) return <Button label={t('communities.joined')} variant="secondary" size="lg" disabled onPress={() => {}} />
-    if (isRequested) return <Button label={t('communities.pending')} variant="secondary" size="lg" onPress={() => { tap(); setCancelTarget(g) }} />
-    if (declined[g.id]) return <Button label={t('communities.declined')} variant="secondary" size="lg" disabled onPress={() => {}} />
-    return <Button label={g.requires_approval ? t('communities.requestJoin') : t('communities.join')} variant="primary" size="lg" onPress={() => joinPublic(g)} />
+  // How big it is, and nothing else: a group's KIND is off the strip (user
+  // directive 2026-07-28) — what a tap will do is said by the popup's own
+  // button, which is where the decision is made. How many members are
+  // candidates for me still ORDERS the list, but is not information a searcher
+  // needs on the row, so it is never said out loud either.
+  const groupMeta = (g: PublicGroup) => metaLine(memberLabel(g.members))
+
+  // Where I stand with this group RIGHT NOW: the server's answer, overridden by
+  // whatever this session has since done about it (the optimistic maps — an
+  // explicit local `false` wins, so a cancelled request stops reading as a
+  // wait). ONE definition, read by both things that say it: the chip on the
+  // row and the popup, which is the same popup the hub opens and takes this
+  // exact status as its state.
+  const myStatus = (g: PublicGroup): GroupStatus =>
+    (joined[g.id] ?? g.joined) ? 'joined'
+    : (requested[g.id] ?? g.requested) ? 'pending'
+    : declined[g.id] ? 'declined'
+    : 'none'
+  // The same fact as a chip. Short words: it sits in a corner, not on a line.
+  const statusTag = (g: PublicGroup) => {
+    const st = myStatus(g)
+    return st === 'joined' ? t('communities.joined')
+      : st === 'pending' ? t('communities.pendingTag')
+      : st === 'declined' ? t('communities.declinedTag')
+      : undefined
   }
 
   return (
-    <View style={{ gap: MD, marginBottom: kb }}>
-      <View style={s.field}>
-        <SearchGlyph color={GREEN_HALF} />
-        <TextInput style={s.fieldInput} value={q} onChangeText={setQ} placeholder={t('communities.findSearch')} placeholderTextColor={BLACK_MID} autoFocus />
-      </View>
-      {q.trim().length >= 2 && (results == null ? (
-        // Search results are three-line rows, so the placeholder is too.
-        <View style={s.card}><SkeletonRows rows={3} lines={3} /></View>
-      ) : results.length === 0 ? <Empty text={t('communities.noResults')} /> : (
-        <View style={s.card}>
-          {/* An informational row: owner avatar, full group name, who manages it,
-              member count. Tapping opens the details popup (description + join);
-              the row itself carries no action, so the name is never squeezed. */}
-          {results.map((g, i) => (
-            <Pressable
-              key={g.id}
-              onPress={() => { tap(); setPreview(g) }}
-              style={({ pressed }) => [s.memberRow, i === 0 && s.rowFirst, pressed && { backgroundColor: GREEN_SOFT }]}
-            >
-              {g.owner_id ? (
-                <Avatar userId={g.owner_id} name={g.owner_name ?? null} image={g.owner_image ?? null} />
-              ) : (
-                <View style={s.rowIcon}><GroupsIcon color={GREEN} /></View>
-              )}
-              <View style={s.rowText}>
-                <Text style={s.rowTitle}>{g.name}</Text>
-                {g.owner_name ? <Text style={s.rowMeta} numberOfLines={1}>{t('communities.managedBy').replace('{name}', g.owner_name)}</Text> : null}
-                {/* Search only returns findable groups, so the kind here is
-                    open or approved — which is exactly what a searcher wants to
-                    know before tapping: instant, or a wait. */}
-                <Text style={s.rowMeta} numberOfLines={1}>{metaLine(kindShort(groupKind({ is_public: true, requires_approval: g.requires_approval })), memberLabel(g.members))}</Text>
-              </View>
-              <ChevGlyph />
-            </Pressable>
-          ))}
-        </View>
-      ))}
-      <Text style={s.note}>{t('communities.findNote')}</Text>
+    // The box is fixed and only the rows in it scroll; the note keeps its line
+    // under it and the whole thing ends `bottomInset` above the page's end, the
+    // same air every other contained list leaves. The box's own inset is 0
+    // because it is NOT the last thing here — the fill below it is what holds
+    // the gap. The keyboard is a second floor under the same box: the field it
+    // belongs to is up on the header, so nothing has to be scrolled clear of
+    // it, the list simply stops above it.
+    <View style={[s.findFill, { paddingBottom: bottomInset, marginBottom: kb }]}>
+      <ContainedRoster
+        data={shown}
+        bottomInset={0}
+        keyOf={g => g.id}
+        onEndReached={loadMore}
+        empty={(
+          <View style={[s.rosterRow, s.rosterRowFirst, s.rosterRowLast]}>
+            {/* Two bars and NO avatar disc (user directive 2026-07-28): a search
+                strip is all text now, so its placeholder stands for the name and
+                the lines about it, starting where the words will. */}
+            {shown == null
+              ? <SkeletonRows rows={3} lines={2} avatar={false} />
+              : <Empty text={t('communities.noResults')} />}
+          </View>
+        )}
+        // The next page, arriving. Sits inside the card so the rows and the
+        // placeholder are one continuous surface.
+        footer={paging ? <View style={[s.rosterRow, s.rosterRowLast]}><SkeletonRows rows={1} lines={2} first={false} avatar={false} /></View> : null}
+        row={(g, i, last) => (
+          // The SAME strip the hub is made of (user directive 2026-07-28), with
+          // the facts a searcher wants kept exactly as they were: the whole
+          // group name, who manages it, how big it is. NO owner photo — a face
+          // in the leading lane read as the group's own picture — so the row is
+          // all text, and the chip on its meta line says where I stand with this
+          // group (member / waiting / turned down), which is the one thing the
+          // search list could not say before. Tapping opens the details popup.
+          <Strip
+            first={i === 0}
+            style={rosterRowStyle(i, last)}
+            title={g.name}
+            meta={[
+              g.owner_name && t('communities.managedBy').replace('{name}', g.owner_name),
+              groupMeta(g),
+            ]}
+            tag={statusTag(g)}
+            onPress={() => setPreview(g)}
+          />
+        )}
+      />
 
-      {/* Group details popup: owner avatar, name, manager, members, the full
-          description, and the join action. */}
-      <BottomSheet visible={!!preview} onDismiss={() => setPreview(null)}>
-        <View style={s.sheetWrap}>
-          {preview?.owner_id ? (
-            <View style={s.sheetAvatar}><Avatar userId={preview.owner_id} name={preview.owner_name ?? null} image={preview.owner_image ?? null} /></View>
-          ) : null}
-          <Text style={s.sheetTitle}>{preview?.name}</Text>
-          {preview?.owner_name ? <Text style={s.sheetDesc}>{t('communities.managedBy').replace('{name}', preview.owner_name)}</Text> : null}
-          <Text style={s.sheetDesc}>{preview ? metaLine(kindShort(groupKind({ is_public: true, requires_approval: preview.requires_approval })), memberLabel(preview.members)) : ''}</Text>
-          {preview?.description ? <Text style={s.sheetDesc}>{preview.description}</Text> : null}
-          {preview ? joinControl(preview) : null}
-        </View>
-      </BottomSheet>
-      <ConfirmDialog
-        visible={!!cancelTarget}
-        title={cancelTarget ? t('communities.cancelJoinTitle').replace('{name}', cancelTarget.name) : ''}
-        description={t('communities.cancelJoinDesc')}
-        confirmLabel={t('communities.cancelJoinConfirm')}
-        busy={cancelBusy}
-        onCancel={() => setCancelTarget(null)}
-        onConfirm={doCancelJoin}
-        draggable
+      {/* The app's ONE group popup (user directive 2026-07-28) — the same
+          surface the hub and a match card's shared-groups list open, told where
+          I stand with this result. So a group I am already IN offers to LEAVE
+          here exactly as it does on the hub, instead of the dead "Member" chip
+          that used to close this popup off, and one I am waiting on offers to
+          take the request back. */}
+      <GroupSheet
+        group={preview ? groupBrief(preview) : null}
+        status={preview ? myStatus(preview) : 'none'}
+        onClose={() => setPreview(null)}
+        onClosed={onPreviewClosed}
+        onJoin={() => { if (preview) joinPublic(preview) }}
+        // The popup left / cancelled / cleared: this page keeps its own copy of
+        // where I stand (the row's chip reads it), so it has to be told.
+        onDone={() => {
+          const id = preview?.id
+          if (!id) return
+          setJoined(m => ({ ...m, [id]: false }))
+          setRequested(m => ({ ...m, [id]: false }))
+          setDeclined(m => ({ ...m, [id]: false }))
+        }}
       />
     </View>
   )
@@ -1705,18 +2381,23 @@ function FindView() {
 // ── shared bits ────────────────────────────────────────────────────────────
 const Empty = ({ text }: { text: string }) => <Text style={s.empty}>{text}</Text>
 
+// A bare glyph in a section heading — the play-here eye — has to sit on the
+// same vertical line as the page HEADER's controls above it (the gear), or the
+// two read as two different edges. It cannot simply share their end gutter: its
+// box is the glyph itself, not the chrome circle they wear, so aligning the
+// boxes' end EDGES would leave their centres half that difference apart. Nudge
+// it in by exactly that half, plus whatever the header's gutter differs from
+// the page's, so the two stay locked together if either token moves.
+const HEADING_GLYPH_INSET = OVERLAY.chromeInset - MD + (ROUND_BUTTON_SIZE_SM - ICON.xxl) / 2
+
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG },
+  root: { flex: 1, backgroundColor: PAGE },
   scroll: { flex: 1 },
   content: { paddingHorizontal: MD, paddingTop: SM, gap: SM },
   // A group page fills the sheet: a fixed head plus the roster's scroll region,
   // MD apart, the same gap the page's blocks had while it all scrolled.
   ownedFill: { flex: 1, gap: MD },
   ownedHead: { gap: MD },
-  // The wordless pair under the share button: equal halves, the same MD gutter
-  // the head's blocks keep between them.
-  actionRow: { flexDirection: 'row', gap: MD },
-  actionSlot: { flex: 1 },
   // The roster is a FlatList, so `card` can't wrap it — the rows carry the card
   // themselves and only the ends are rounded. The list BOX carries the same
   // radius so a row clipped at the bottom edge is clipped round, not square.
@@ -1729,62 +2410,107 @@ const s = StyleSheet.create({
   profileBar: { paddingHorizontal: MD, paddingTop: MD, gap: SM },
   profileBarCaption: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK, textAlign: 'center' },
   // A stacked page: opaque, so the page it covers never shows through.
-  layerCard: { flex: 1, backgroundColor: BG },
+  layerCard: { flex: 1, backgroundColor: PAGE },
   rosterRow: { backgroundColor: SURFACE },
   rosterRowFirst: { borderTopLeftRadius: RADIUS, borderTopRightRadius: RADIUS },
   rosterRowLast: { borderBottomLeftRadius: RADIUS, borderBottomRightRadius: RADIUS },
   card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden' },
-  // The waiting-queue entry, the roster's first row: a member row filled with
-  // the regular purple (user directive 2026-07-27) so it stands off the beige
-  // rows under it. Its leading lane is an avatar-sized disc, so the names below
-  // it start on exactly the same line — beige on the purple, the inverse of the
-  // photo-less member's purple disc on beige.
-  requestsRow: { backgroundColor: GREEN },
-  requestsInk: { color: WHITE },
-  requestsGlyph: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: SURFACE, alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: MD, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: BORDER_SOFT },
+  // The waiting-queue entry, the roster's FIRST row. It used to be a solid
+  // purple slab, which repeated the "Share invite link" CTA right above it and
+  // read as a second primary action (user directive 2026-07-28). It carries no
+  // fill at all now: it is the card's white row, and the purple disc in the
+  // avatar lane (the same one a photo-less member wears) is what marks it as an
+  // entry rather than a person.
+  requestsGlyph: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' },
+  // THE strip. One geometry for every row on this surface (see Strip): the
+  // leading lane is the avatar's width whatever sits in it, and the text column
+  // takes everything else — there is no trailing lane to speak of, since no
+  // strip wears a chevron.
+  row: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: MD, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
+  // A strip that is a name and nothing under it — the people rows every roster
+  // is made of. Same strip, tighter, because there is one line to hold.
+  rowTight: { paddingVertical: SM },
   rowFirst: { borderTopWidth: 0 },
   rowIcon: { width: AVATAR, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, minWidth: 0, gap: XS },
-  rowTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: INK },
-  rowMeta: { fontSize: TEXT.sm, color: GREEN_HALF },
-  section: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: GREEN_HALF, marginTop: MD, marginStart: XS },
-  memberRow: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: SM, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: BORDER_SOFT },
-  memberName: { flex: 1, minWidth: 0, fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK },
-  tag: { paddingHorizontal: SM, paddingVertical: XS, borderRadius: RADIUS, backgroundColor: GREEN_SOFT },
-  tagInk: { fontSize: TEXT.xs, fontWeight: WEIGHT.extrabold, color: GREEN },
-  sheetWrap: { paddingHorizontal: MD, paddingBottom: MD, gap: SM },
+  // One line of the text column: its words take the WHOLE width, and the chip,
+  // when this is the last line, sits at its end facing them.
+  rowLine: { flexDirection: 'row', alignItems: 'center', gap: SM },
+  rowLineText: { flex: 1, minWidth: 0 },
+  // A group's name in a row is a navigation label, exactly like the menu row
+  // that opens this hub (settings.tsx selectRowLabel) and like the member names
+  // below: same size, same weight, same ink, so the whole navigable surface
+  // reads as one voice (user directive 2026-07-28).
+  rowTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK },
+  rowMeta: { fontSize: TEXT.md, color: INK_MUTED },
+  section: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK_MUTED, marginTop: MD, marginStart: XS },
+  // A section heading with a control opposite it. The heading's own top margin
+  // is DROPPED (sectionFlat), not moved onto the row: the head already spaces
+  // its blocks by its `gap`, and keeping both stacked two MDs above the roster.
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionFlat: { marginTop: 0 },
+  // The heading's own top margin, moved onto the ROW: for a head whose only
+  // block is that row (the queue page), where no `gap` above it does the job.
+  sectionRowTop: { marginTop: MD },
+  // A heading that is a NAME, not a fixed label: it takes the row and shrinks
+  // to an ellipsis instead of shoving the control off the end.
+  sectionFill: { flex: 1, minWidth: 0 },
+  // Shared by every bare glyph in a section heading — see HEADING_GLYPH_INSET.
+  headingGlyph: { marginEnd: HEADING_GLYPH_INSET },
+  // The header's trailing controls, side by side on the bar's end corner.
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SM },
+  // `flexShrink` is what lets the popup obey the sheet's height cap: the body
+  // gives, and inside it only the description's SheetScroll declares a shrink of
+  // its own, so that is where the whole overflow lands.
+  sheetWrap: { paddingHorizontal: MD, paddingBottom: MD, gap: SM, flexShrink: 1 },
   sheetAvatar: { alignItems: 'center', paddingBottom: XS },
-  sheetTitle: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold, color: INK, textAlign: 'center', paddingBottom: XS },
-  sheetDesc: { fontSize: TEXT.sm, color: INK, textAlign: 'center', lineHeight: lhSm() },
+  // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
+  sheetTitle: { paddingBottom: XS },
+  sheetDesc: { fontSize: TEXT.md, color: INK, textAlign: 'center', lineHeight: lhSm() },
+  // The "more details" line: underlined because it is the one word in a popup
+  // that leaves the app (same treatment the sign-in screen gives
+  // terms/privacy), and set at the TITLE's size (user directive 2026-07-28) —
+  // it is the popup's one tap into the group's own page, so it may not read as
+  // small print under the description it follows.
+  sheetLink: { fontSize: TEXT.lg, color: INK, textAlign: 'center', lineHeight: lh(TEXT.lg), textDecorationLine: 'underline' },
   // Group-description editor card (hosts the shared EditableText). The input is
-  // a plain readable block; the footer mirrors the bio editor's counter+Update.
+  // a plain readable block; the footer mirrors the bio editor's hint+Update.
   descCard: { backgroundColor: SURFACE, borderRadius: RADIUS, padding: MD, gap: SM },
   descEditorInput: { fontSize: TEXT.md, color: INK, padding: 0, minHeight: 54, lineHeight: lhSm(), includeFontPadding: false },
-  nameInput: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.extrabold, padding: 0, includeFontPadding: false },
+  nameInput: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.semibold, padding: 0, includeFontPadding: false },
+  // The link field: one line, and start-aligned like every other field (the
+  // base TextInput does that) — a latin URL still renders LTR inside it.
+  linkInput: { fontSize: TEXT.md, color: INK, padding: 0, includeFontPadding: false },
   descFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: MD },
-  descCounter: { fontSize: TEXT.sm, color: GREEN_HALF },
-  descCounterWarn: { color: INK },
+  descHint: { fontSize: TEXT.md, color: INK_MUTED },
   descInput: { minHeight: 54, paddingTop: 0 },
   pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS },
-  pillBtnInk: { fontSize: TEXT.sm, fontWeight: WEIGHT.extrabold, color: WHITE },
-  note: { fontSize: TEXT.sm, color: GREEN_HALF, lineHeight: lhSm(), marginStart: XS, marginTop: XS },
-  sheetNote: { fontSize: TEXT.sm, color: GREEN_HALF, lineHeight: lhSm(), textAlign: 'center', marginTop: XS },
-  empty: { fontSize: TEXT.sm, color: GREEN_HALF, textAlign: 'center', paddingVertical: LG },
+  pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
+  note: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lhSm(), marginStart: XS, marginTop: XS },
+  sheetNote: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lhSm(), textAlign: 'center', marginTop: XS },
+  empty: { fontSize: TEXT.md, color: INK_MUTED, textAlign: 'center', paddingVertical: LG },
+  // The empty hub's two ways forward, under the card rather than in it: the card
+  // is the list, and these are what to do when there is no list yet.
+  emptyActions: { gap: SM, paddingTop: MD },
+  // The search page: the contained box takes the height, the note sits under it.
+  findFill: { flex: 1, gap: SM },
   field: { ...FIELD_SKIN, flexDirection: 'row', alignItems: 'center', gap: SM, paddingHorizontal: MD, paddingVertical: MD },
+  // The same field, on the header bar: padded to the height of the chrome circle
+  // beside it (the close X) instead of a form row's, so the bar stays a bar.
+  fieldSlim: { paddingVertical: SM },
   fieldInput: { flex: 1, fontSize: TEXT.md, color: INK, padding: 0 },
-  codeInput: { textAlign: 'center', letterSpacing: LG, fontWeight: WEIGHT.extrabold },
-  toggle: { flexDirection: 'row', backgroundColor: GREEN_SOFT, borderRadius: RADIUS, padding: XS, gap: XS },
+  codeInput: { textAlign: 'center', letterSpacing: LG, fontWeight: WEIGHT.semibold },
+  toggle: { flexDirection: 'row', backgroundColor: INK_WASH, borderRadius: RADIUS, padding: XS, gap: XS },
   // The kind chooser is the same fabric as `toggle`, stacked: three stops, each
   // with the sentence that explains it, so the list reads top to bottom.
-  kindList: { backgroundColor: GREEN_SOFT, borderRadius: RADIUS, padding: XS, gap: XS },
+  kindList: { backgroundColor: INK_WASH, borderRadius: RADIUS, padding: XS, gap: XS },
   kindItem: { paddingVertical: SM, paddingHorizontal: SM, borderRadius: RADIUS, gap: XS },
   toggleItem: { flex: 1, alignItems: 'center', paddingVertical: SM, borderRadius: RADIUS, gap: XS },
   toggleOn: { backgroundColor: SURFACE },
-  toggleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: GREEN_HALF },
-  toggleSub: { fontSize: TEXT.xs, fontWeight: WEIGHT.semibold, color: GREEN_HALF },
+  toggleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK_MUTED },
+  toggleSub: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: INK_MUTED },
 })
 
 // Body line-height for the muted note (kept a small helper so the ratio lives
 // in one place rather than as an inline literal at the style site).
-function lhSm() { return Math.round(TEXT.sm * 1.5) }
+function lhSm() { return Math.round(TEXT.md * 1.5) }

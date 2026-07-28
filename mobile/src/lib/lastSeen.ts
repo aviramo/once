@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 
 // "Just now" threshold — under this gap the user reads as currently online.
-// Also drives the green presence dot on the time chip (WatcherCard +
+// Also drives the presence dot on the time chip (WatcherCard +
 // MatchCard).
 export const SECONDS_JUST_NOW = 60
 

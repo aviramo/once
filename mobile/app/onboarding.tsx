@@ -16,7 +16,7 @@ import { RoundButton } from '../src/components/RoundButton'
 import { CloseIcon, UserPlusIcon, CheckIcon } from '../src/components/icons'
 import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { BG, INK, INK_3, BLACK, GREEN, GREEN_SOFT, GREEN_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
+import { PAGE, PHOTO_CHROME, INK, INK_HINT, INK_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
 import { FIELD_SKIN } from '../src/field'
 import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, ROUND_BUTTON_SIZE_SM, OVERLAY, ICON } from '../src/tokens'
 
@@ -43,8 +43,8 @@ function birthdateInWords(yyyy: string, mm: string, dd: string): string {
 // overrides weight only).
 function birthConfirmBody(template: string, date: string, age: string) {
   return template.split(/(\{date\}|\{age\})/).map((part, i) => {
-    if (part === '{date}') return <Text key={i} style={{ fontWeight: WEIGHT.extrabold, color: BLACK }}>{date}</Text>
-    if (part === '{age}') return <Text key={i} style={{ fontWeight: WEIGHT.extrabold, color: BLACK }}>{age}</Text>
+    if (part === '{date}') return <Text key={i} style={{ fontWeight: WEIGHT.semibold, color: INK }}>{date}</Text>
+    if (part === '{age}') return <Text key={i} style={{ fontWeight: WEIGHT.semibold, color: INK }}>{age}</Text>
     return part
   })
 }
@@ -119,7 +119,7 @@ function GenderCard({
         onResponderRelease={handlePress}
       >
         <View style={styles.cardInner}>
-          {icon(BLACK)}
+          {icon(INK)}
           <Text style={styles.cardLabel}>{label}</Text>
         </View>
         <Animated.View
@@ -395,7 +395,7 @@ export default function OnboardingPage() {
       // Account created (row + derived matching fields). That is the only hard
       // gate before /home: the user lands on home and browses immediately. The
       // photo + bio steps are no longer forced here — they are reached later,
-      // on demand, via the menu's orange build-profile CTA (which re-enters
+      // on demand, via the menu's purple build-profile CTA (which re-enters
       // this screen at step 4 through `initialStep`).
       router.replace('/home')
     } catch (e: any) {
@@ -468,7 +468,7 @@ export default function OnboardingPage() {
       // Profile is now built (bio saved last, photos already flushed). The
       // routing guard no longer reacts to this, so navigate home explicitly.
       // Works for both entry paths: the linear first-time flow AND a later
-      // visit opened from the menu's orange build-profile CTA.
+      // visit opened from the menu's purple build-profile CTA.
       router.replace('/home')
     } catch {
       bioSubmittingRef.current = false
@@ -578,7 +578,7 @@ export default function OnboardingPage() {
                       size for placeholder + value, but the typed digits should
                       stay large while the hint reads smaller. Render the hint
                       as a separate, smaller Text shown only while empty; the
-                      input keeps TEXT.xl so the box height is identical whether
+                      input keeps TEXT.lg so the box height is identical whether
                       empty or filled. */}
                   {unitValue[unit] === '' && (
                     <View style={styles.datePlaceholder} pointerEvents="none">
@@ -658,7 +658,7 @@ export default function OnboardingPage() {
               // than its own element. Composed from the two existing strings,
               // both of which the MatchCard bio editor still uses separately.
               placeholder={`${t('bio.placeholder')}\n${t('bio.min')}`}
-              placeholderTextColor={INK_3}
+              placeholderTextColor={INK_HINT}
               cursorColor={INK}
               selectionColor={SELECTION}
               editable={!bioSubmitting}
@@ -686,7 +686,7 @@ export default function OnboardingPage() {
   return (
     <View style={styles.rootWrap}>
     <SafeAreaView style={styles.root}>
-      {/* The shared green band with white glyphs, as on every other screen. */}
+      {/* The shared purple band with white glyphs, as on every other screen. */}
       <AppStatusBar />
       <Animated.View style={{ flex: 1, paddingBottom: keyboardOffset }}>
         <View
@@ -716,7 +716,7 @@ export default function OnboardingPage() {
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: BG, transform: [{ translateY: overlayY }] },
+                { backgroundColor: PAGE, transform: [{ translateY: overlayY }] },
               ]}
               pointerEvents={step === 5 ? 'auto' : 'none'}
             >
@@ -753,12 +753,12 @@ export default function OnboardingPage() {
       <View style={[styles.closeWrap, { top: insets.top + OVERLAY.chromeGap }]} pointerEvents="box-none">
         <RoundButton
           size={ROUND_BUTTON_SIZE_SM}
-          bg={GREEN_WASH}
+          bg={PHOTO_CHROME}
           shadow={false}
           onPress={() => { tap(); router.replace('/home') }}
           accessibilityLabel={t('ob.close')}
         >
-          <CloseIcon color={GREEN} size={ICON.round} />
+          <CloseIcon color={INK} size={ICON.round} />
         </RoundButton>
       </View>
     )}
@@ -769,8 +769,8 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootWrap: { flex: 1, backgroundColor: BG },
-  root: { flex: 1, backgroundColor: BG },
+  rootWrap: { flex: 1, backgroundColor: PAGE },
+  root: { flex: 1, backgroundColor: PAGE },
   // Close X for the build-profile steps: same gutter as every sheet's close
   // (OVERLAY.chromeInset from the START edge); `top` is set inline off the
   // safe-area inset so it lines up with the sheet chrome.
@@ -789,8 +789,8 @@ const styles = StyleSheet.create({
   pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: LG, paddingBottom: LG },
 
   title: {
-    fontSize: TEXT.xxl,
-    fontWeight: WEIGHT.extrabold,
+    fontSize: TEXT.xl,
+    fontWeight: WEIGHT.semibold,
     color: INK,
     textAlign: 'center',
     letterSpacing: -0.5,
@@ -804,7 +804,7 @@ const styles = StyleSheet.create({
   card: {
     aspectRatio: 1,
     borderRadius: RADIUS,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: INK_WASH,
     overflow: 'hidden',
   },
   cardInner: {
@@ -814,22 +814,22 @@ const styles = StyleSheet.create({
     gap: MD,
   },
   // Selected = the regular brand-purple card carrying WHITE content, against the
-  // light green of the unselected ones. Same inversion the primary Button and the
+  // light purple of the unselected ones. Same inversion the primary Button and the
   // home centre button use. The unselected card is the faint brand wash above, so
   // the two states differ by fill AND by ink, not by a subtle change of shade.
   cardActive: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: GREEN,
+    backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
     gap: MD,
   },
   cardLabel: {
     fontSize: TEXT.md,
-    fontWeight: WEIGHT.extrabold,
-    color: BLACK,
+    fontWeight: WEIGHT.semibold,
+    color: INK,
   },
-  // White ink, because the selected card's fill is green.
+  // White ink, because the selected card's fill is the solid purple.
   cardLabelActive: { color: WHITE },
 
   ctaWrap: { marginTop: LG },
@@ -872,8 +872,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dateInput: {
-    fontSize: TEXT.xl,
-    fontWeight: WEIGHT.extrabold,
+    fontSize: TEXT.lg,
+    fontWeight: WEIGHT.semibold,
     color: INK,
     textAlign: 'center',
     padding: 0,
@@ -886,12 +886,12 @@ const styles = StyleSheet.create({
   datePlaceholderText: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
-    color: INK_3,
+    color: INK_HINT,
     textAlign: 'center',
   },
   errorText: {
     marginTop: MD,
-    fontSize: TEXT.sm,
+    fontSize: TEXT.md,
     color: NEGATIVE,
     textAlign: 'center',
   },

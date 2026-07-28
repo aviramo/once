@@ -18,7 +18,7 @@ import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
 import { SM, RADIUS, STROKE, ICON } from '../tokens'
-import { INK, INK_3, PHOTO_CHROME, SURFACE, BLACK_SOFT, WHITE_MID } from '../colors'
+import { INK, INK_HINT, INK_DIM, PHOTO_CHROME, SURFACE, WHITE_MID, SHADOW_BLACK } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -350,8 +350,8 @@ function PhotoGrid({
           ) : (
             <View style={photoStyles.placeholderBg}>
               <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="8" r="4" fill={BLACK_SOFT} />
-                <Path d="M4 21c0-4 3.5-7 8-7s8 3 8 7" fill={BLACK_SOFT} />
+                <Circle cx="12" cy="8" r="4" fill={INK_DIM} />
+                <Path d="M4 21c0-4 3.5-7 8-7s8 3 8 7" fill={INK_DIM} />
               </Svg>
             </View>
           )}
@@ -741,7 +741,7 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
                 {pickingAddIdx === i ? (
                   <ActivityIndicator size="small" color={INK} />
                 ) : (
-                  <Svg pointerEvents="none" width={ICON.xxl} height={ICON.xxl} viewBox="0 0 24 24" fill="none" stroke={INK_3} strokeWidth={STROKE.thin} strokeLinecap="round">
+                  <Svg pointerEvents="none" width={ICON.xxl} height={ICON.xxl} viewBox="0 0 24 24" fill="none" stroke={INK_HINT} strokeWidth={STROKE.thin} strokeLinecap="round">
                     <Path d="M12 5v14M5 12h14" />
                   </Svg>
                 )}
@@ -798,7 +798,7 @@ const photoStyles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: PHOTO_CHROME,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
+    shadowColor: SHADOW_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
   },
   // Empty slot: a white surface behind the warm hairline — the same skin the
   // onboarding name/date/bio fields and the login email field wear, since an

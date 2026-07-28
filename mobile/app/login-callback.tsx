@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { View, ActivityIndicator } from 'react-native'
 import { useRouter, useRootNavigationState } from 'expo-router'
 import { useAuthStore } from '../src/stores/authStore'
-import { INK, BG } from '../src/colors'
+import { INK, PAGE } from '../src/colors'
 
 // Magic-link landing route. The Supabase email links to
 // `once://login-callback#access_token=...&refresh_token=...`. The deep
@@ -29,7 +29,7 @@ export default function LoginCallback() {
   }, [user, loading, navigatorReady])
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: BG }}>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: PAGE }}>
       <ActivityIndicator size="large" color={INK} />
     </View>
   )

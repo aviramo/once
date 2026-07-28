@@ -168,8 +168,6 @@ export default {
   'communities.title': 'Circles',
   'communities.myFriends': 'My friends',
   'communities.myFriendsSub': 'People you personally know',
-  'communities.manageSection': 'Groups you manage',
-  'communities.inSection': "Groups you're in",
   'communities.create': 'Create a group',
   'communities.find': 'Find or join a group',
   // Group kinds: ONE axis, three stops (2026-07-27). Replaces the old
@@ -181,9 +179,6 @@ export default {
   'communities.kindApprovedSub': 'Appears in search, and every join request needs a manager to approve.',
   'communities.kindPrivate': 'Private group',
   'communities.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs a manager to approve.',
-  'communities.kindOpenShort': 'Open',
-  'communities.kindApprovedShort': 'Approved',
-  'communities.kindPrivateShort': 'Private',
   'communities.membersCount': '{count} members',
   'communities.oneMember': '1 member',
   // Row meta segments, joined by metaLine(). One string per fact, so the menu
@@ -195,11 +190,11 @@ export default {
   'communities.oneRequest': '1 request',
   // Menu row with nothing in it yet: the row still says what it is for, in the
   // one line the counts would have used.
-  'communities.rowEmpty': 'Add groups and friends',
+  'communities.rowEmpty': 'Join groups and friends',
   'communities.managedBy': 'Managed by {name}',
   'communities.sharedGroupsTitle': 'Shared groups',
-  'communities.emptyManage': "You haven't created a group yet.",
-  'communities.emptyIn': "You haven't joined a group yet.",
+  // One list, one empty line: the hub no longer splits managed from joined.
+  'communities.emptyGroups': "You haven't created or joined a group yet.",
   'communities.loadError': 'Could not load, try again.',
 
   // My friends
@@ -239,10 +234,18 @@ export default {
   'communities.description': 'Description',
   'communities.descriptionPlaceholder': 'What the group is about',
   'communities.descUpdate': 'Update',
+  // The "more details" link: managers set it in the group settings, and anyone
+  // looking at the group gets one tappable line under the description.
+  'communities.link': 'Link to more details',
+  'communities.linkPlaceholder': 'Paste a link here',
+  'communities.moreDetails': 'More details',
 
   // A group you manage
   'communities.shareInvite': 'Share invite link',
   'communities.settings': 'Group settings',
+  // The settings header's one non-editing control: opens the group's own popup
+  // exactly as everyone else meets it.
+  'communities.preview': 'Preview',
   // Manage without playing. The caller's OWN membership flag inside one group
   // they run: while it is on, they and that group's members never meet in the
   // game. One row over the member list, and the sentence that explains it in
@@ -262,11 +265,14 @@ export default {
   'communities.makePrivate': 'Make private',
   'communities.approvalEnable': 'Require approval to join',
   'communities.approvalDisable': 'Stop requiring approval',
-  'communities.requestsSectionJoin': 'Join requests ({count})',
+  'communities.requestsSectionJoin': 'Join requests',
   'communities.requestsNav': 'Join requests',
   'communities.noRequests': 'No one is waiting right now',
   'communities.joinRequestFor': 'Joining {name}',
   'communities.approve': 'Approve',
+  'communities.approveAll': 'Approve everyone',
+  'communities.approveAllTitle': 'Approve every request?',
+  'communities.approveAllDesc': 'Everyone waiting in the queue joins {name}, and each of them is notified.',
   'communities.declineJoin': 'Decline',
   'communities.owner': 'Owner',
   'communities.manager': 'Manager',
@@ -286,6 +292,11 @@ export default {
   'communities.joined': 'Joined',
   'communities.requestJoin': 'Request to join',
   'communities.pending': 'Pending approval',
+  // A strip's chip, where the meta line already says the size: ONE word in the
+  // corner the role chip sits in, not the sentence the popup's button says.
+  // Where I stand with a group, on the hub and in search alike.
+  'communities.pendingTag': 'Pending',
+  'communities.declinedTag': 'Declined',
   'communities.declined': 'Request declined',
   'communities.declinedTitle': 'Your request to {name} was declined',
   'communities.declinedDesc': "A manager did not approve the request. You can clear this notice, and ask again in a month.",
@@ -293,7 +304,10 @@ export default {
   'communities.cancelJoinTitle': 'Cancel your request to join {name}?',
   'communities.cancelJoinDesc': 'The request will be removed from the managers\' queue. You can always send a new one.',
   'communities.cancelJoinConfirm': 'Yes, cancel the request',
-  'communities.findNote': 'Only public groups appear in search.',
+  // The pending group's own popup: what the state is, and the button that ends
+  // it (the same popup a group you are in opens, with cancel instead of leave).
+  'communities.pendingNote': 'Your request is waiting for a manager to approve it.',
+  'communities.cancelJoin': 'Cancel request',
   'communities.shareMessage': 'Join {name}\n{link}',
   // Support: row in the account card. Opens the device mail composer at the
   // support inbox, with this subject prefilled.
@@ -859,7 +873,7 @@ Next may surprise`,
   'chat.report': 'Report',
   'chat.reportTitle': 'Report user',
   'chat.reportDesc': 'Your report will be sent to our team for review. This user will be blocked and you will not be matched again. Any active connection between you will end.',
-  'chat.reportPlaceholder': 'What happened? You can add details (optional)',
+  'chat.reportPlaceholder': "What's wrong? (optional)",
   'chat.reportConfirm': 'Report and block',
   'chat.newMessages': 'New messages',
   'chat.attachMenu.image': 'Photo',
@@ -906,6 +920,9 @@ Next may surprise`,
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   // Accessibility labels for the floating shell chrome (no visible text).
   'home.a11y.menu': 'Open menu',
+  // Same button while its notification dot is up (someone is waiting on an
+  // answer inside: a join request, a friend request).
+  'home.a11y.menuPending': 'Open menu, someone is waiting for an answer',
   'home.a11y.closeMenu': 'Close menu',
   'home.a11y.closeInvite': 'Close invitation',
   'home.a11y.closeProfile': 'Close profile',

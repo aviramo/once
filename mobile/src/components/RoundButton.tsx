@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
-import { PHOTO_CHROME, LIFT_SHADOW } from '../colors'
-import { ROUND_BUTTON_SIZE } from '../tokens'
+import { PHOTO_CHROME, LIFT_SHADOW, INK, WHITE } from '../colors'
+import { ROUND_BUTTON_SIZE, NOTIFY_DOT_SIZE, NOTIFY_DOT_RING } from '../tokens'
 import { FONT_SCALE } from '../fonts'
 import { GlyphScale } from './icons'
 
@@ -34,6 +34,10 @@ export type RoundButtonProps = {
   disabled?: boolean
   hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number }
   accessibilityLabel?: string
+  /** Overlay the notification dot on the button's upper-END arc — "there is
+   *  something here for you" (unread messages on the card's chat action,
+   *  someone waiting on an answer on home's menu button). */
+  badge?: boolean
   children: ReactNode
   style?: StyleProp<ViewStyle>
 }
@@ -51,9 +55,17 @@ export function RoundButton({
   disabled,
   hitSlop = 12,
   accessibilityLabel,
+  badge = false,
   children,
   style,
 }: RoundButtonProps) {
+  // The dot is one fixed size on every button; only its placement is per-size.
+  // It sits ON the arc rather than in the empty corner of the square: its
+  // centre lands on the 45° point, so the inset off each edge is
+  // R - R/√2 - dot/2 — negative on a small button, where the disc straddles
+  // the arc with more of it outside. Nothing clips it (no ancestor of a round
+  // button hides overflow at that scale).
+  const dotInset = (size / 2) * (1 - Math.SQRT1_2) - NOTIFY_DOT_SIZE / 2
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
@@ -85,6 +97,12 @@ export function RoundButton({
       <GlyphScale cap={FONT_SCALE.ui}>
         <View pointerEvents="none" style={styles.inner}>{children}</View>
       </GlyphScale>
+      {badge ? (
+        <View
+          pointerEvents="none"
+          style={[styles.badge, { top: dotInset, end: dotInset }]}
+        />
+      ) : null}
     </Pressable>
   )
 }
@@ -99,6 +117,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shadow: LIFT_SHADOW,
+  // Solid INK disc in a WHITE ring — the ring is what keeps it off the white
+  // button under it and off any photo behind it. Only its offsets are
+  // per-button (they follow the diameter's arc); the disc itself is fixed.
+  badge: {
+    position: 'absolute',
+    width: NOTIFY_DOT_SIZE,
+    height: NOTIFY_DOT_SIZE,
+    borderRadius: NOTIFY_DOT_SIZE / 2,
+    backgroundColor: INK,
+    borderWidth: NOTIFY_DOT_RING,
+    borderColor: WHITE,
+  },
   disabled: {
     opacity: 0.4,
   },

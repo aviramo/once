@@ -98,6 +98,15 @@ export function dismissAllNotifications() {
  * Register a listener for when the user taps a notification.
  * The handler receives the notification `type` code (e.g. 'chat', 'invite-in').
  * Returns a cleanup function — call it on unmount.
+ *
+ * A handled tap is CONSUMED (clearLastNotificationResponse): expo caches the
+ * last response and hands it to whoever asks afterwards, so a mid-session tap
+ * stayed on file and the next reader — getInitialNotificationType(), which any
+ * home REMOUNT calls (returning from onboarding, a routing-guard re-route) —
+ * replayed it as a launch notification and raised the chat / Communities sheet
+ * with nothing touched. Clearing here covers every consumer at once; the
+ * cold-start path is unaffected, since the launch response is read during
+ * render, before this listener is ever subscribed.
  */
 export function addNotificationTapListener(
   handler: (type: string, groupId?: string, actorId?: string) => void,
@@ -108,6 +117,7 @@ export function addNotificationTapListener(
     const groupId = typeof data?.group_id === 'string' ? data.group_id : undefined
     const actorId = typeof data?.actor_id === 'string' ? data.actor_id : undefined
     if (type) handler(type, groupId, actorId)
+    clearInitialNotification()
   })
   return () => sub.remove()
 }

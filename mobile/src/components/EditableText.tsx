@@ -4,8 +4,10 @@
 // fallback bubble) and the group description (CommunitiesPage). The field is a
 // multiline TextInput styled by the caller to look byte-identical to the
 // read-only text it replaces; tapping drops the caret natively. While focused,
-// a footer bar carries a char counter and an explicit Update button — the ONLY
-// save path. Leaving the field without pressing Update (blur / keyboard
+// a footer bar carries an explicit Update button — the ONLY save path — plus the
+// below-minimum hint when there is one. There is NO character counter anywhere
+// (user directive 2026-07-28): the cap is enforced silently by maxLength, never
+// announced. Leaving the field without pressing Update (blur / keyboard
 // dismissed / focus lost) discards the edit and reverts to the last committed
 // value. Nothing is saved on blur.
 //
@@ -17,7 +19,7 @@ import { View, Keyboard, type StyleProp, type TextStyle, type ViewStyle } from '
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { normalizeBio } from '../lib/bio'
-import { BLACK_MID } from '../colors'
+import { INK_DIM } from '../colors'
 
 export type EditableTextProps = {
   /** Last committed value (server truth, '' when unset). */
@@ -32,31 +34,33 @@ export type EditableTextProps = {
   max: number
   placeholder: string
   updateLabel: string
-  /** Shown in the counter slot while below min (ignored when min is 0). */
+  /** Shown in the footer's hint slot while below min (ignored when min is 0). */
   minLabel?: string
   /** Physical alignment. Omit to follow the writing direction (RTL-aware) — the
    *  bio passes explicit left/center; the group description omits it. */
   textAlign?: 'left' | 'center'
-  /** Remaining-chars threshold under which the counter takes the warn style. */
-  warnAt?: number
   /** When true, an empty field is a valid save that commits null (clear). */
   allowEmpty?: boolean
   /** Single-line field (no newlines) — e.g. a group name. */
   singleLine?: boolean
+  /** Keyboard shape for a field that isn't prose (the group link asks for the
+   *  URL keyboard and no auto-capitalization). Both default to plain text. */
+  keyboardType?: 'default' | 'url'
+  autoCapitalize?: 'none' | 'sentences'
   /** Ask the parent to scroll this field above the keyboard (bio uses it). */
   onFocusRequested?: () => void
   placeholderTextColor?: string
   inputStyle?: StyleProp<TextStyle>
   footerStyle?: StyleProp<ViewStyle>
-  counterStyle?: StyleProp<TextStyle>
-  counterWarnStyle?: StyleProp<TextStyle>
+  hintStyle?: StyleProp<TextStyle>
 }
 
 export function EditableText({
   value, saving, onCommit, min, max, placeholder, updateLabel, minLabel,
-  textAlign, warnAt = 20, allowEmpty = false, singleLine = false, onFocusRequested,
-  placeholderTextColor = BLACK_MID,
-  inputStyle, footerStyle, counterStyle, counterWarnStyle,
+  textAlign, allowEmpty = false, singleLine = false,
+  keyboardType = 'default', autoCapitalize = 'sentences', onFocusRequested,
+  placeholderTextColor = INK_DIM,
+  inputStyle, footerStyle, hintStyle,
 }: EditableTextProps) {
   const [draft, setDraft] = useState(value)
   const [focused, setFocused] = useState(false)
@@ -73,11 +77,15 @@ export function EditableText({
     }
   }, [value, focused])
 
+  const normalizedDraft = normalizeBio(draft)
   const trimmedLen = draft.trim().length
   const belowMin = trimmedLen < min
-  const remaining = max - draft.length
-  const dirty = normalizeBio(draft) !== normalizeBio(committedRef.current)
-  const canSave = !belowMin && dirty && !saving
+  // Cap the SAVE too, not only typing: an existing server value that is over
+  // max (out-of-band write, older policy) must not be re-committed as-is.
+  // normalizeBio only shrinks, so it is the true post-save length.
+  const overMax = normalizedDraft.length > max
+  const dirty = normalizedDraft !== normalizeBio(committedRef.current)
+  const canSave = !belowMin && !overMax && dirty && !saving
 
   // The save routine, fired only by the Update button (never on blur).
   const commit = useCallback(() => {
@@ -87,10 +95,11 @@ export function EditableText({
     // Below the minimum → discard, restore previous (min 0 with allowEmpty lets
     // a fully-cleared field through as a null commit).
     if (next.trim().length < min) { setDraft(committedRef.current); return }
+    if (next.length > max) { setDraft(committedRef.current); return }
     committedRef.current = next
     setDraft(next)
     onCommit(allowEmpty && next.trim() === '' ? null : next)
-  }, [draft, onCommit, min, allowEmpty])
+  }, [draft, onCommit, min, max, allowEmpty])
 
   // Leaving without pressing Update discards the edit.
   const handleBlur = useCallback(() => {
@@ -103,8 +112,6 @@ export function EditableText({
   // (a no-op) rather than throwing the fresh save away.
   const handleUpdate = useCallback(() => { commit(); Keyboard.dismiss() }, [commit])
 
-  const warn = !belowMin && remaining < warnAt
-
   return (
     <>
       <TextInput
@@ -116,6 +123,9 @@ export function EditableText({
         scrollEnabled={false}
         textAlign={textAlign}
         textAlignVertical="top"
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCapitalize !== 'none'}
         placeholder={placeholder}
         placeholderTextColor={placeholderTextColor}
         editable={!saving}
@@ -124,9 +134,9 @@ export function EditableText({
       />
       {focused ? (
         <View style={footerStyle}>
-          <Text style={[counterStyle, warn && counterWarnStyle]}>
-            {belowMin ? (minLabel ?? '') : remaining}
-          </Text>
+          {/* Hint slot: the below-minimum requirement only. Never a count of
+              what is left — the cap is silent. */}
+          <Text style={hintStyle}>{belowMin ? (minLabel ?? '') : ''}</Text>
           <Button label={updateLabel} onPress={handleUpdate} size="md" disabled={!canSave} />
         </View>
       ) : null}

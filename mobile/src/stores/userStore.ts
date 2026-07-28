@@ -221,7 +221,7 @@ const pending = new Map<keyof UserProfile, unknown>()
 // ── Boot-paint cache for the user's own row ────────────────────────────────
 // The profile decides EVERYTHING the first frame shows — /home vs /onboarding,
 // and whether the chat sheet is in the tree at all. Holding it in memory only
-// meant a relaunch sat on the beige hand-off cover for a full `users` round
+// meant a relaunch sat on the hand-off cover for a full `users` round
 // trip before anything, including the chat's own on-disk transcript, could even
 // start loading. So the last snapshot is mirrored to disk and repainted on
 // boot; the fetch that follows overwrites it (stale-while-revalidate).
@@ -266,7 +266,7 @@ function deriveCompat(relations: Pages | null | undefined) {
   if (page1?.state === 'free') state = null
   else if (page1?.state === 'locked') {
     // locked without message = post-clear1 (or brand-new user); UI treats as
-    // null/HIDDEN so the green search button shows. With a message, distinguish
+    // null/HIDDEN so the search button shows. With a message, distinguish
     // user-initiated failures (fail) from things that happened to them (missed).
     if (!page1.message) state = null
     else state = FAIL_MESSAGES.has(page1.message) ? 'fail' : 'missed'
@@ -364,7 +364,7 @@ export function selectNeedsAccount(profile: UserProfile | null | undefined): boo
 
 /** A profile is BUILT once it carries a non-empty bio — the last step of the
  *  onboarding build flow, saved together with the (2-6) photos. This is the
- *  single marker for "full member": while false the menu shows the orange
+ *  single marker for "full member": while false the menu shows the purple
  *  build-profile CTA in place of the avatar and the invite prompt opens the
  *  build-profile popup instead of sending. Matches the server's profileComplete
  *  gate (app/index.ts) one-for-one. */

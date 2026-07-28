@@ -1,10 +1,11 @@
 import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from 'react'
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
+import { GlyphScale } from './icons'
 import { FONT_SCALE } from '../fonts'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, SPINNER } from '../tokens'
-import { GREEN, GREEN_SOFT, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, BLACK, PRIMARY, PRESSED, BLACK_SOFT, BLACK_MID, BLACK_STRONG, BORDER_SOFT, PREMIUM } from '../colors'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON } from '../tokens'
+import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
 // through this component so the appearance and disabled state stay identical
@@ -20,6 +21,14 @@ import { GREEN, GREEN_SOFT, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID,
 // ScrollViews (settings reset, week-start toggle) — the bare responder flow below
 // fires onPress on every clean release. Termination is NOT refused, so a
 // ScrollView ancestor can still steal the gesture on an actual scroll.
+
+// THE glyph size inside an action button, for the whole app: the icon at the
+// start of the label, and the spinner that replaces it while the action is in
+// flight. Sized to the label it stands beside (TEXT.md, see BUTTON_LABEL) so
+// the two read as one object — a 24dp glyph next to a 16dp word read as the
+// button's subject with the label captioning it. Exported for the one button
+// that cannot compose <Button> (LoginForm's provider tiles).
+export const BUTTON_GLYPH = ICON.md
 
 type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
 type Size = 'lg' | 'md'
@@ -97,14 +106,24 @@ export function Button({
   const textColor = useVariantDisabled && skin.disabledText ? skin.disabledText.color : skin.text.color
   // While loading, swap the start-position icon (or insert one if none was
   // provided) with a spinner in the label color. End-position icons stay.
+  //
+  // The BUTTON owns its glyph size, not the call site: the icons' own defaults
+  // range from 18 to 24, so which button got which size came down to whichever
+  // icon it happened to use, and the call sites that noticed patched it back
+  // one by one with `size={ICON.md}` (six of them) while the rest ran a glyph
+  // half again the size of the label beside it. Injected here, so every button
+  // in the app carries the same object and no call site can forget.
   const startIcon = loading
-    ? <Spinner color={textColor} />
-    : useVariantDisabled && isValidElement(iconStart)
-      ? cloneElement(iconStart as ReactElement<{ color?: string }>, { color: textColor })
+    ? <Spinner color={textColor} size={BUTTON_GLYPH} />
+    : isValidElement(iconStart)
+      ? cloneElement(iconStart as ReactElement<{ color?: string; size?: number }>, {
+          size: BUTTON_GLYPH,
+          ...(useVariantDisabled ? { color: textColor } : null),
+        })
       : iconStart
 
   // Held-down feedback: the fill darkens to the variant's pressedBtn (the purple
-  // buttons → deep PRESSED). Only a live press on a non-blocked button shows it;
+  // buttons → deep INK_PRESSED). Only a live press on a non-blocked button shows it;
   // a tone override supplies its own pressed fill so it wins over the variant.
   const [pressed, setPressed] = useState(false)
   const pressedBtn = pressed && !blocked ? (toneSkin?.pressedBtn ?? skin.pressedBtn ?? null) : null
@@ -137,12 +156,15 @@ export function Button({
             with the label squashed up to make room". */}
         <View pointerEvents="none" style={[styles.labelArea, base.labelArea]}>
           <View style={styles.labelRow}>
-            {startIcon ? <View style={styles.startSlot}>{startIcon}</View> : null}
+            {/* The label is pinned at FONT_SCALE.ui and the button's height is a
+                fixed dp, so the glyph beside it may not keep growing either —
+                the same ceiling RoundButton pins, for the same reason. */}
+            {startIcon ? <GlyphScale cap={FONT_SCALE.ui}><View style={styles.startSlot}>{startIcon}</View></GlyphScale> : null}
             {/* Icon-only button: an empty label drops the Text entirely rather
                 than rendering a zero-width one, so the labelRow gap doesn't
                 push the glyph off the button's centre. */}
             {label ? <Text
-              style={[styles.text, base.text, skin.text, useVariantDisabled && skin.disabledText]}
+              style={[BUTTON_LABEL, styles.text, skin.text, useVariantDisabled && skin.disabledText]}
               numberOfLines={multiline ? 2 : 1}
               adjustsFontSizeToFit={!multiline}
               minimumFontScale={0.85}
@@ -184,22 +206,18 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   // Fixed-width start slot: whatever sits here (a provided iconStart or the
-  // loading Spinner) is centered inside exactly SPINNER.size. This is what
-  // keeps the label from shifting when a tap swaps the icon for the spinner —
-  // an icon smaller than the spinner still reserves the spinner's width, so
-  // icon → spinner → icon never nudges the text. Icons wider than the spinner
-  // (e.g. the credit-cost badge on the invite button) grow past the minWidth
-  // and are the one place a swap can still move the label.
+  // loading Spinner) is centered inside exactly BUTTON_GLYPH — the size both of
+  // them are given above. This is what keeps the label from shifting when a tap
+  // swaps the icon for the spinner. Content wider than a glyph (e.g. the
+  // credit-cost badge on the invite button) grows past the minWidth and is the
+  // one place a swap can still move the label.
   startSlot: {
-    minWidth: SPINNER.size,
+    minWidth: BUTTON_GLYPH,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: {
-    letterSpacing: -0.2,
-    textAlign: 'center',
     textAlignVertical: 'center',
-    includeFontPadding: false,
     flexShrink: 1,
   },
   // Clips the footer strip to the button's rounded corners. No extra padding
@@ -213,27 +231,47 @@ const styles = StyleSheet.create({
   },
 })
 
-const SIZE: Record<Size, { btn: object; labelArea: object; text: object }> = {
+// THE type of an action button's label, for the whole app. Exported because one
+// button CANNOT compose <Button>: the SSO provider tiles (LoginForm) must read
+// as a white field-skin tile with the platform brand mark pinned to the start
+// edge, so they are their own Pressable — and before this they re-typed a label
+// style that had already drifted (-0.3 tracking against this -0.2). A button
+// that has to be built by hand still takes its type from here.
+//
+// `size` does not change the type: an lg and an md button differ in height and
+// padding, not in how their label sets.
+//
+// TEXT.md, the body rank (user directive 2026-07-28). A button label is not a
+// heading — it names an action in the same voice the rest of the surface speaks,
+// and at TEXT.lg it was setting one rank ABOVE the popup text that explains it.
+// The semibold weight and the fill are what mark it as the thing to press.
+export const BUTTON_LABEL: TextStyle = {
+  fontSize: TEXT.md,
+  fontWeight: WEIGHT.semibold,
+  letterSpacing: -0.2,
+  textAlign: 'center',
+  includeFontPadding: false,
+}
+
+const SIZE: Record<Size, { btn: object; labelArea: object }> = {
   lg: {
     btn: { borderRadius: RADIUS },
     labelArea: { minHeight: BUTTON_MIN_HEIGHT, paddingVertical: SM },
-    text: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold },
   },
   md: {
     btn: { borderRadius: RADIUS },
     labelArea: { paddingVertical: SM },
-    text: { fontSize: TEXT.lg, fontWeight: WEIGHT.extrabold },
   },
 }
 
-// The `positive` tone once wore the action ORANGE for the invite pair; since the
+// The `positive` tone once wore the action BRAND_MARK for the invite pair; since the
 // app unified onto ONE purple (user directive 2026-07-25) it resolves to the same
-// PRIMARY as every other button, kept only so existing call sites stay valid.
-// Held down it darkens to PRESSED like every purple button.
+// INK as every other button, kept only so existing call sites stay valid.
+// Held down it darkens to INK_PRESSED like every purple button.
 const TONE: Record<Tone, { btn: object; pressedBtn: object }> = {
   positive: {
-    btn: { backgroundColor: PRIMARY },
-    pressedBtn: { backgroundColor: PRESSED },
+    btn: { backgroundColor: INK },
+    pressedBtn: { backgroundColor: INK_PRESSED },
   },
 }
 
@@ -246,55 +284,55 @@ const VARIANT: Record<Variant, {
   disabledBtn?: object
   disabledText?: { color: string }
   // Fill while the button is HELD DOWN. The purple fills darken to the deep
-  // PRESSED step (user directive 2026-07-25: pressing a button = dark purple);
-  // the recessive/beige ones step one shade darker so the press still reads.
+  // INK_PRESSED step (user directive 2026-07-25: pressing a button = dark purple);
+  // the recessive ones step one shade darker so the press still reads.
   pressedBtn?: object
 }> = {
-  // Disabled is a LIGHT GREEN fill carrying a FULL-STRENGTH green label, not
+  // Disabled is a LIGHT INK fill carrying a FULL-STRENGTH purple label, not
   // the global opacity fade. Two separate problems that fade caused: the solid
-  // green washed out to near-invisible on the beige page, and a muted label on
+  // purple washed out to near-invisible on the page, and a muted label on
   // top of that was unreadable. The pale fill alone says "not yet"; the label
   // stays legible so the user can still read what the action is.
   primary: {
-    btn: { backgroundColor: GREEN },
+    btn: { backgroundColor: INK },
     text: { color: WHITE },
-    disabledBtn: { backgroundColor: GREEN_SOFT },
-    disabledText: { color: GREEN },
-    pressedBtn: { backgroundColor: PRESSED },
+    disabledBtn: { backgroundColor: INK_WASH },
+    disabledText: { color: INK },
+    pressedBtn: { backgroundColor: INK_PRESSED },
   },
   secondary: {
-    btn: { backgroundColor: BLACK_SOFT },
-    text: { color: BLACK_STRONG, fontWeight: WEIGHT.semibold },
-    pressedBtn: { backgroundColor: BLACK_MID },
+    btn: { backgroundColor: PAGE },
+    text: { color: INK_SUBTLE, fontWeight: WEIGHT.semibold },
+    pressedBtn: { backgroundColor: INK_DIM },
   },
   soft: {
-    btn: { backgroundColor: BLACK_STRONG },
+    btn: { backgroundColor: INK_SUBTLE },
     text: { color: WHITE },
-    pressedBtn: { backgroundColor: PRESSED },
+    pressedBtn: { backgroundColor: INK_PRESSED },
   },
   dark: {
-    btn: { backgroundColor: BLACK },
+    btn: { backgroundColor: INK },
     text: { color: WHITE },
-    pressedBtn: { backgroundColor: PRESSED },
+    pressedBtn: { backgroundColor: INK_PRESSED },
   },
-  // The one action purple, so the label is white. Held down → deep PRESSED.
+  // The one action purple, so the label is white. Held down → deep INK_PRESSED.
   premium: {
     btn: { backgroundColor: PREMIUM },
     text: { color: WHITE },
-    pressedBtn: { backgroundColor: PRESSED },
+    pressedBtn: { backgroundColor: INK_PRESSED },
   },
-  // Light-beige button sized for placement on top of a PRIMARY surface.
-  // The beige fill (the same lift as every other surface) keeps the CTA legible
-  // against the purple. Held down it steps to the beige-2 rule tone.
+  // White button sized for placement on top of a filled INK surface.
+  // The white fill (the same lift as every other surface) keeps the CTA legible
+  // against the purple. Held down it steps to the LINE tone.
   onPrimary: {
     btn: { backgroundColor: SURFACE },
-    text: { color: PRIMARY },
+    text: { color: INK },
     disabledBtn: { backgroundColor: WHITE_SOFT },
     disabledText: { color: WHITE_STRONG },
-    pressedBtn: { backgroundColor: BORDER_SOFT },
+    pressedBtn: { backgroundColor: LINE },
   },
   // Recessive companion to `onPrimary`: the secondary action when the
-  // surface is PRIMARY-colored. Mirrors `secondary` (soft fill + muted
+  // surface is INK-colored. Mirrors `secondary` (soft fill + muted
   // weight) but on the white-alpha scale so it sits on a tinted bg.
   onPrimaryGhost: {
     btn: { backgroundColor: WHITE_SOFT },

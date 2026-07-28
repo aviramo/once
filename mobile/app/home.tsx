@@ -17,16 +17,17 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { GREEN_DEEP, BG, GREEN, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_SOFT } from '../src/colors'
+import { INK, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
 import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh, bottomGap } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedGroupsPopup } from '../src/components/SharedGroupsPopup'
-import { sharedGroups, flushPendingInvite, watchInvites, type SharedGroup, type CommunitiesTarget } from '../src/lib/communities'
+import { sharedGroups, flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type SharedGroup, type CommunitiesTarget } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
+import { HomeArt, HOME_ART_SIZE } from '../src/components/HomeArt'
 import { CreditCost } from '../src/components/CreditCost'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { clearChatCache } from '../src/lib/chatCache'
@@ -50,7 +51,12 @@ import { AppStatusBar } from '../src/components/AppStatusBar'
 
 // ── Avatar rings: static halo + radar pulse ───────────────────────────────
 
-const AVATAR_SIZE = 130
+// The one action surface on home. Everything around it — the halo, the dotted
+// ring, the glyph inside — derives from this number, so the whole centre grows
+// with a single edit. Nudged up from 130 (user directive 2026-07-28) to give
+// the page's only call to action a bit more presence; the lift below does the
+// rest, and nothing here moves at rest.
+const AVATAR_SIZE = 142
 // Glyph inside that circle (play / pause / hamburger / spinner). Derived from
 // the same ratio every round button uses, so the center action surface keeps
 // the same padding ring as the chrome buttons instead of a hand-picked size.
@@ -105,13 +111,13 @@ function RadarRing({ active, ringIndex }: { active: boolean; ringIndex: number }
         height: AVATAR_SIZE,
         borderRadius: AVATAR_SIZE / 2,
         borderWidth: STROKE.base,
-        borderColor: PRIMARY,
+        borderColor: INK,
       }, style]}
     />
   )
 }
 // (RadarRing borderColor set to WHITE below so the pulse reads on the
-// deep-wine PRIMARY page — PRIMARY-on-PRIMARY was invisible.)
+// deep-wine INK page — INK-on-INK was invisible.)
 
 function RadarRings({ active }: { active: boolean }) {
   return (
@@ -126,6 +132,11 @@ function RadarRings({ active }: { active: boolean }) {
 const HALO_SIZE = Math.round(AVATAR_SIZE * 1.55)
 const DOTTED_RING_SIZE = Math.round(AVATAR_SIZE * 1.55)
 
+// The one gap between the three stacked pieces of the centre column —
+// headline / the round action / the art under it. The pull-tutorial geometry
+// below has to add it up, so it cannot be an inline literal in the stylesheet.
+const CENTER_GROUP_GAP = MD * 4
+
 function AvatarHaloRings() {
   return (
     <>
@@ -137,7 +148,7 @@ function AvatarHaloRings() {
         // A faint wash of the ACTION hue, so the halo reads as the button's
         // own glow rather than as a grey disc parked behind it. Must stay a
         // low-alpha tint: an opaque ring competes with the button it frames.
-        backgroundColor: PRIMARY_BG,
+        backgroundColor: INK_WASH,
       }} />
       <Svg
         pointerEvents="none"
@@ -149,7 +160,7 @@ function AvatarHaloRings() {
           cx={DOTTED_RING_SIZE / 2}
           cy={DOTTED_RING_SIZE / 2}
           r={DOTTED_RING_SIZE / 2 - 2}
-          stroke={PRIMARY}
+          stroke={INK}
           strokeWidth={1.5}
           strokeDasharray="2 5"
           fill="none"
@@ -183,7 +194,7 @@ const SKIP_HINT_LINE_H = 30
 const SKIP_HINT_MAX_LINES = 3
 const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H * (SKIP_HINT_MAX_LINES - 1)
 
-// Estimated rest-state pixel width per character at extrabold + the 2px
+// Estimated rest-state pixel width per character at semibold + the 2px
 // letterSpacing the label draws with. Slightly over-estimates, so wrapping
 // decisions err toward breaking early rather than clipping.
 const skipHintCharW = (font: number) => font * 0.58 + 2
@@ -320,8 +331,8 @@ function SkipHintLabel({ text }: { text: string }) {
     <Svg width={w} height={h}>
       <Defs>
         <SvgLinearGradient id="skipHintFade" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={GREEN} stopOpacity={1} />
-          <Stop offset="1" stopColor={GREEN} stopOpacity={1} />
+          <Stop offset="0" stopColor={INK} stopOpacity={1} />
+          <Stop offset="1" stopColor={INK} stopOpacity={1} />
         </SvgLinearGradient>
       </Defs>
       {lines.map((line, i) => {
@@ -335,7 +346,7 @@ function SkipHintLabel({ text }: { text: string }) {
             y={y}
             fill="url(#skipHintFade)"
             fontSize={font}
-            fontWeight={WEIGHT.extrabold}
+            fontWeight={WEIGHT.semibold}
             textAnchor="middle"
             letterSpacing={2}
             textLength={fit ? w : undefined}
@@ -455,7 +466,7 @@ function useLapsed(expiresAt: string | null | undefined): boolean {
 // ── StatusCard scaffold ──────────────────────────────────────────────────
 // Visual scaffolding shared by InviteTimerCard (page1 invite timer), EventMessageCard
 // (terminal locked-message states) and ViewersStatusCard (Viewers empty-state).
-// All three render the same warm card surface with optional title,
+// All three render the same card surface with optional title,
 // description, and a stack of full-width Buttons below. The live timer for
 // invite/cooldown rides inside the primary Button itself (footer slot), so
 // no separate clock/bar row lives in this scaffold.
@@ -470,38 +481,45 @@ const STATUS_LAYOUT = LinearTransition
 // notch above the body copy. Sized at the "large numeric readout" step so the
 // countdown carries real presence on the card instead of reading as another
 // line of text (user request 2026-07-19).
-const STATUS_TIMER_FONT = TEXT.xxl
+const STATUS_TIMER_FONT = TEXT.xl
 
 const statusCardStyles = StyleSheet.create({
   // The message card is INVERTED relative to the page it announces on: a light
-  // surface carrying GREEN ink, with a green action button. It used to be a
-  // solid orange slab with white text, which made the whole screen orange and
+  // surface carrying INK ink, with a purple action button. It used to be a
+  // solid purple slab with white text, which made the whole screen purple and
   // left no room for the action to stand out.
   container: {
-    backgroundColor: BG,
+    // The scaffold's own ground, the PAGE tint. Every CARD use (page1 status
+    // block, page2 invite topBlock) sits directly under a photo inside a
+    // MatchCard, so a transparent gap here would show the backdrop as a stripe.
+    backgroundColor: PAGE,
     paddingVertical: LG,
     paddingHorizontal: MD,
   },
+  // Ground OFF, for the one use that lives in a POPUP: a popup is WHITE (user
+  // directive 2026-07-28) and paints its own ground, so the scaffold must not
+  // lay the page tint over it. See ReplyingInviteCard's `inPopup`.
+  containerInPopup: { backgroundColor: 'transparent' },
   description: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
     // No fontWeight: rendered through AppText, so this resolves to the real
     // NotoSansHebrew_400Regular face. Kept slightly dimmed so the full-white
-    // ExtraBold heading lead-in clearly carries the emphasis.
-    color: GREEN,
+    // SemiBold heading lead-in clearly carries the emphasis.
+    color: INK,
     textAlign: 'center',
     includeFontPadding: false,
   },
   // The heading sits on its own line above the body (user directive
-  // 2026-07-26). Through AppText this picks the real NotoSansHebrew_800ExtraBold
-  // face (not a weak synthetic bold); deeper green vs the body's dimmed green
+  // 2026-07-26). Through AppText this picks the real NotoSansHebrew_600SemiBold
+  // face (not a weak synthetic bold); full-strength ink vs the body's dimmed ink
   // adds a second contrast step so the two ranks read clearly apart. A small
   // gap below separates it from the body paragraph.
   heading: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
-    fontWeight: WEIGHT.extrabold,
-    color: GREEN_DEEP,
+    fontWeight: WEIGHT.semibold,
+    color: INK,
     textAlign: 'center',
     includeFontPadding: false,
     marginBottom: SM,
@@ -512,8 +530,8 @@ const statusCardStyles = StyleSheet.create({
     marginTop: MD,
     fontSize: STATUS_TIMER_FONT,
     lineHeight: lh(STATUS_TIMER_FONT),
-    fontWeight: WEIGHT.extrabold,
-    color: GREEN_DEEP,
+    fontWeight: WEIGHT.semibold,
+    color: INK,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
     includeFontPadding: false,
@@ -522,7 +540,7 @@ const statusCardStyles = StyleSheet.create({
 
 // Shared heading+body text for every StatusCard variant (InviteTimerCard /
 // EventMessageCard / ReplyingInviteCard). The bold heading gets its own line
-// (real weighted Noto ExtraBold face, not synthetic), a small gap, then the
+// (real weighted Noto SemiBold face, not synthetic), a small gap, then the
 // body paragraph below it (user directive 2026-07-26 — heading was previously
 // an inline period-terminated lead-in on the same line as the body). Any
 // trailing sentence punctuation is stripped so the standalone heading never
@@ -637,6 +655,7 @@ function ReplyingInviteCard({
   footerInset,
   expiresAt,
   onLapsed,
+  inPopup,
 }: {
   title: string
   description: string
@@ -672,6 +691,11 @@ function ReplyingInviteCard({
   /** Fired once when `expiresAt` runs out. No-op on the page1 invite prompt,
    * which carries no clock. */
   onLapsed?: () => void
+  /** Set by the page1 invite POPUP use. Drops the scaffold's PAGE ground so the
+   * popup's own white shows through (user directive 2026-07-28: every popup is
+   * white). The page2 topBlock use leaves it off and keeps the tint, because
+   * there the card sits straight on a photo. */
+  inPopup?: boolean
 }) {
   const unaffordable = affordable === false
   const hasFallback = unaffordable && onUnaffordable != null
@@ -681,7 +705,11 @@ function ReplyingInviteCard({
   const acceptDisabled = busy || (unaffordable && !hasFallback)
   const handleAccept = hasFallback ? onUnaffordable! : onAccept
   return (
-    <View style={[statusCardStyles.container, footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null]}>
+    <View style={[
+      statusCardStyles.container,
+      inPopup && statusCardStyles.containerInPopup,
+      footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null,
+    ]}>
       <StatusCardText title={title} description={description} />
       <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
@@ -754,14 +782,14 @@ const statusButtonStyles = StyleSheet.create({
     gap: SM,
   },
   footerExtended: {
-    fontSize: TEXT.xs,
+    fontSize: TEXT.sm,
     fontWeight: WEIGHT.semibold,
     color: WHITE,
     opacity: 0.85,
     includeFontPadding: false,
   },
   footerTime: {
-    fontSize: TEXT.xs,
+    fontSize: TEXT.sm,
     fontWeight: WEIGHT.semibold,
     color: WHITE,
     textAlign: 'right',
@@ -899,12 +927,17 @@ export default function HomePage() {
   useEffect(() => {
     if (initialNotif !== null) clearInitialNotification()
   }, [])
-  // First-render only: a cold start while already in chat opens the chat
-  // overlay directly (user decision 2026-07-19), and a group/friend deep-link
-  // opens Communities on its target. state→chat transitions during the session
-  // are owned by the chat-transition effect below.
+  // First-render only: routing for the notification that LAUNCHED the app — a
+  // chat/match push opens the chat, a group/friend deep-link opens Communities
+  // on its target. An active chat on its own does NOT open the sheet any more
+  // (user directive 2026-07-28, reverses the 2026-07-19 decision): this effect
+  // runs on every home MOUNT, not only a cold start, so returning from
+  // onboarding or any guard re-route raised a chat the user had deliberately
+  // swiped closed. Opening the app now always lands on home; the card's chat
+  // button is the way in. state→chat transitions during the session are owned
+  // by the chat-transition effect below.
   useEffect(() => {
-    if (initialNotif?.overlay === 'chat' || useUserStore.getState().profile?.state === 'chat') {
+    if (initialNotif?.overlay === 'chat') {
       setOverlays(['chat'])
     } else if (initialNotif?.overlay === 'communities') {
       if (initialNotif.target) setCommunitiesTarget(initialNotif.target)
@@ -920,6 +953,12 @@ export default function HomePage() {
   // this works while the chat is CLOSED — exactly when the dot is needed. See
   // useChatHasUnread.
   const chatHasUnread = useChatHasUnread(chatOpen)
+  // Same marker on the menu button: someone is waiting on an answer of mine
+  // (a join request on a group I manage, or an incoming friend request), and
+  // the menu is the only way to that queue. Read off the denormalized
+  // relations.communities summary the settings row already counts from — one
+  // source, so the dot and the row it leads to can never disagree.
+  const menuHasPending = pendingApprovals(communitiesSummary(profile)) > 0
   // Whether the chat partner is currently online — reported by ChatPage via
   // its presence channel. Drives the presence dot in the chat sheet's header.
   const [partnerOnline, setPartnerOnline] = useState(false)
@@ -2407,6 +2446,16 @@ export default function HomePage() {
   // 'waiting' over Realtime, which drops `visible` and slides the popup away on
   // its own — no keep-alive timer needed the way the inline footer once was.
   const invitePopupVisible = invitePopupOpen && state === 'watching' && isMatchCardOpen
+  // ...but the flag itself is STICKY: every exit that isn't a dismiss (sending
+  // the invite, the card lapsing, a skip) only drops the gate around it, so
+  // `invitePopupOpen` stayed true and the popup re-raised ITSELF the next time
+  // a candidate landed in `watching` — the user pressed play, a profile came
+  // up, and the invite sheet appeared with no heart tap (bug, 2026-07-28).
+  // Clear it the moment it stops being showable, so the heart is the only way
+  // in.
+  useEffect(() => {
+    if (invitePopupOpen && !invitePopupVisible) setInvitePopupOpen(false)
+  }, [invitePopupOpen, invitePopupVisible])
 
   // ── Invitation lapse ─────────────────────────────────────────────────────
   // The clock reaching 00:00 is the only local signal that an invitation died —
@@ -2469,7 +2518,7 @@ export default function HomePage() {
     state === 'chat'
       ? [{
           key: 'open-chat',
-          icon: <ChatIcon color={PRIMARY} size={ICON.huge} />,
+          icon: <ChatIcon color={INK} size={ICON.huge} />,
           onPress: () => openOverlay('chat'),
           badge: chatHasUnread,
         }]
@@ -2477,7 +2526,7 @@ export default function HomePage() {
         ? [
             {
               key: 'like',
-              icon: <HeartIcon color={PRIMARY} stroke={PRIMARY} size={ICON.huge} />,
+              icon: <HeartIcon color={INK} stroke={INK} size={ICON.huge} />,
               // The heart no longer scrolls to an inline invite footer; it
               // raises the invite popup (footer moved off the card).
               onPress: openInvitePopup,
@@ -2863,7 +2912,7 @@ export default function HomePage() {
   // at the top of the screen. The card's topBlock starts below it.
 
   // Never paint the shell without a profile. Every branch below reads through
-  // `profile?.…`, so a null profile renders a bare PRIMARY screen: no card, no
+  // `profile?.…`, so a null profile renders a bare INK screen: no card, no
   // play button, no chrome, and no way out. That is the reported
   // blank-screen-on-launch — a device holding a dead session read the profile
   // as null and parked here. Routing (index.tsx / the _layout guard) owns the
@@ -2909,12 +2958,14 @@ export default function HomePage() {
                     onLayout={e => {
                       // Pause-icon (centre circle) centre in the pane's own Y
                       // space — exactly the pullY that lands a descending
-                      // card's top edge on it. permCenterGroup (HeadlineArea +
-                      // MD*4 gap + permAvatarWrap) is flex-centred in the
-                      // pane, so the avatar sits below the pane centre by half
-                      // the headline + gap stacked above it.
+                      // card's top edge on it. permCenterGroup is flex-centred
+                      // in the pane, so the circle sits off the pane centre by
+                      // half the difference between what is stacked above it
+                      // and what is stacked below.
                       const paneH = e.nativeEvent.layout.height
-                      tutorialPeekV.value = paneH / 2 + (SKIP_HINT_AREA_H + MD * 4) / 2
+                      const above = SKIP_HINT_AREA_H + CENTER_GROUP_GAP
+                      const below = CENTER_GROUP_GAP + HOME_ART_SIZE.height
+                      tutorialPeekV.value = paneH / 2 + (above - below) / 2
                       if (paneH > 0 && paneH !== paneHeight) setPaneHeight(paneH)
                     }}
                   >
@@ -3028,6 +3079,12 @@ export default function HomePage() {
                             )}
                             </GlyphScale>
                           </Pressable>
+                        </View>
+                        {/* Page texture under the action, never a control:
+                            pointerEvents off so a drag here still belongs to
+                            the shell's open-the-menu pan. */}
+                        <View pointerEvents="none">
+                          <HomeArt />
                         </View>
                       </View>
                       <View style={styles.permFlexSpacer} />
@@ -3160,6 +3217,8 @@ export default function HomePage() {
                     busy={busy}
                     acceptLoading={busy && pendingKey === 'invite-confirm'}
                     footerInset={bottomInset}
+                    // This one lives in a BottomSheet, and a popup is white.
+                    inPopup
                   />
                 </BottomSheet>
 
@@ -3227,7 +3286,7 @@ export default function HomePage() {
                   <Button
                     label={t('chat.block')}
                     variant="secondary"
-                    iconStart={<BlockIcon color={BLACK_STRONG} />}
+                    iconStart={<BlockIcon color={INK_SUBTLE} />}
                     onPress={() => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) }}
                   />
                 </BottomSheet>
@@ -3260,8 +3319,11 @@ export default function HomePage() {
                     and tears it down + permanent-blocks the pair. */}
                 <ConfirmDialog
                   visible={!!reportTargetId}
-                  // Filled, matching the flag on the card that opens this dialog:
-                  // an outline shield read lighter than the solid one just tapped.
+                  // Solid white shield at the sibling buttons' glyph size
+                  // (ICON.md, like the block/sign-out/close confirm icons):
+                  // an outline shield read lighter than the solid one just
+                  // tapped on the card, and the xxl default overpowered the
+                  // label beside it.
                   title={t('chat.reportTitle')}
                   noteInput={{
                     value: reportNote,
@@ -3269,7 +3331,7 @@ export default function HomePage() {
                     placeholder: t('chat.reportPlaceholder'),
                   }}
                   confirmLabel={t('chat.reportConfirm')}
-                  confirmIconStart={<ShieldIcon color={WHITE} />}
+                  confirmIconStart={<ShieldIcon color={WHITE} fill={WHITE} />}
                   onCancel={() => { if (!busy) { setReportTargetId(null); setReportNote('') } }}
                   onConfirm={() => {
                     const pid = reportTargetId
@@ -3308,9 +3370,10 @@ export default function HomePage() {
                   size={ROUND_BUTTON_SIZE_SM}
                   style={[styles.hamburger, { top: topInset + OVERLAY.chromeGap }]}
                   onPress={openMenuByTap}
-                  accessibilityLabel={t('home.a11y.menu')}
+                  badge={menuHasPending}
+                  accessibilityLabel={menuHasPending ? t('home.a11y.menuPending') : t('home.a11y.menu')}
                 >
-                  <HamburgerIcon color={GREEN} size={ICON.round} />
+                  <HamburgerIcon color={INK} size={ICON.round} />
                 </RoundButton>
               </View>
             </View>
@@ -3391,7 +3454,7 @@ export default function HomePage() {
           isTop={!menuOpen && !profileSheetOpen && !communitiesSheetOpen}
           keepMounted
           zIndex={OVERLAY.z.chat}
-          // No title bar: just a floating close X (beige round button, purple
+          // No title bar: just a floating close X (white round button, purple
           // glyph — same chrome as the home hamburger) over the message list.
           // The partner's name already rides every bubble; the "End Chat" chip
           // lives on the home card behind this sheet (2026-07-26).
@@ -3549,7 +3612,7 @@ const styles = StyleSheet.create({
   // Outer, always-opaque backdrop behind the shell.
   backdrop: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: PAGE,
   },
   bootFill: {
     alignItems: 'center',
@@ -3558,7 +3621,7 @@ const styles = StyleSheet.create({
   shell: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: BG,
+    backgroundColor: PAGE,
   },
   // Floating menu button on page1, at top-START (opposite the card's group
   // chip at top-END). `start` rather than `left` so it mirrors under RTL.
@@ -3576,7 +3639,7 @@ const styles = StyleSheet.create({
   },
   root: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: PAGE,
   },
 
   // Hidden MatchCard used to drive expo-image's onLoad before promoting the
@@ -3593,7 +3656,7 @@ const styles = StyleSheet.create({
   },
   matchPhoto: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: PAGE,
     overflow: 'hidden',
   },
   // ── Permission screen (no card) ────────────────────────────────────────
@@ -3603,20 +3666,21 @@ const styles = StyleSheet.create({
   // Flex spacers above and below permCenterGroup position the visible group
   // across every screen height. Named (not inline) so both copies of the
   // layout (page1 watching + page2 pull-to-decline) share the same single
-  // source. The top spacer is deliberately lighter than the bottom one, so
-  // the group sits above centre — dead-centring left too much empty space
-  // between the top chrome and the headline.
+  // source. EQUAL, so the group is dead-centred vertically (user directive
+  // 2026-07-28): the top spacer used to be the lighter of the two to close
+  // the empty space the group left underneath it, and the art now fills that
+  // space itself.
   permFlexSpacerTop: {
-    flex: 0.6,
+    flex: 1,
   },
   permFlexSpacer: {
     flex: 1,
   },
-  // The visible group: gradient SVG headline stacked above the avatar
-  // with a constant gap.
+  // The visible group, three pieces on one constant gap: gradient SVG
+  // headline, the round centre action, the page art beneath it.
   permCenterGroup: {
     alignItems: 'center',
-    gap: MD * 4,
+    gap: CENTER_GROUP_GAP,
   },
   permAvatarWrap: {
     width: DOTTED_RING_SIZE,
@@ -3630,7 +3694,7 @@ const styles = StyleSheet.create({
     borderRadius: AVATAR_SIZE / 2,
     borderWidth: STROKE.base,
     borderColor: WHITE,
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
     // overflow:hidden forces Android (New Arch/Fabric) to clip to the true
     // rounded outline. Without it, borderRadius (=size/2) + borderWidth +
     // elevation makes the border-path tessellation chamfer the corners and
@@ -3638,19 +3702,24 @@ const styles = StyleSheet.create({
     // to the circle. Native elevation shadow is unaffected (drawn from the
     // view outline by the parent, not a clipped child).
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
+    // Deeper than the chrome buttons' soft LIFT_SHADOW on purpose: this is the
+    // one thing on the page that must read as pressable, and it earns that by
+    // sitting HIGHER above the page than anything else, not by being bigger or
+    // by moving (user directive 2026-07-28 — size and motion were both tried
+    // and rejected; the lift is the whole of it).
+    shadowColor: SHADOW_BLACK,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 16,
   },
-  // The centre action surface is a SOLID GREEN disc carrying a WHITE glyph —
+  // The centre action surface is a SOLID INK disc carrying a WHITE glyph —
   // the same arrangement as the primary Button, so the one big tap target on
   // home reads as the app's main action. Every variation of it (play, pause,
   // hamburger, spinner, and the gate notices) shares this fill, so the glyphs
   // inside are all WHITE.
   permPlayButton: {
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3663,7 +3732,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   permSlidersButton: {
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
   },

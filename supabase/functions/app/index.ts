@@ -11,6 +11,10 @@ import {
 } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
+// One page of group search / browse. The client sends its own window; this is
+// only the fallback for a caller that sends none (the published build predates
+// paging). The RPC clamps whatever arrives.
+const SEARCH_PAGE = 20;
 const updatable = ["weekStart", "os", "lang", "push_token", "location_custom", "location_type", "location_label"];
 // User-initiated actions that start/extend an interaction and therefore
 // require presence (the user must be reachable). A gated user — geo /
@@ -188,6 +192,11 @@ async function firePush(
   payload.actor_id = actor_id;
   const entry = log.log(`push:${code}`, { target: target_user_id, payload });
   const res = await Tools.notify(entry, token, payload);
+  // The request's log row is serialized the moment the response goes out, so a
+  // `push:` entry resolved inside waitUntil never reaches the DB. The runtime
+  // log is the only place a push outcome is observable — record every one, not
+  // just the failures Tools.notify already shouts about.
+  console.log("push_sent", JSON.stringify({ code, target: target_user_id, ok: res.ok, error: res.error }));
   // Expo says this token is dead (app uninstalled / push receipt revoked).
   // Clear it and recompute availability so the user drops out of every pool
   // immediately — they can no longer be reached, the app requires presence.
@@ -625,9 +634,12 @@ Deno.serve(async (req) => {
         const is_public = body.is_public === true;
         const p_description = typeof body.description === "string" ? body.description : null;
         const p_requires_approval = body.requires_approval === true;
+        // Optional, like the description — only the name is required to create
+        // a group. Absent/empty is simply a group with no link.
+        const p_link = typeof body.link === "string" ? body.link : null;
         const result = await Tools.rpc(log, "app_create_group", {
           me_id: user.user_id, p_name: name, p_is_public: is_public,
-          p_description, p_requires_approval,
+          p_description, p_requires_approval, p_link,
         });
         await user.persist(log);
         if (result?.error) return log.error("create_group", result.error, 400);
@@ -703,9 +715,16 @@ Deno.serve(async (req) => {
         const p_desc_provided = "description" in body;
         const p_description = typeof body.description === "string" ? body.description : null;
         const p_requires_approval = typeof body.requires_approval === "boolean" ? body.requires_approval : null;
+        // Same key-presence contract as the description: `link` present means
+        // "set it" (a string, or null to clear). The RPC is what normalizes a
+        // bare host to https:// and refuses any other scheme — the value ends
+        // up in Linking.openURL on someone else's phone.
+        const p_link_provided = "link" in body;
+        const p_link = typeof body.link === "string" ? body.link : null;
         const result = await Tools.rpc(log, "app_update_group", {
           me_id: user.user_id, p_group_id: group_id, p_name, p_is_public,
           p_description, p_desc_provided, p_requires_approval,
+          p_link, p_link_provided,
         });
         await user.persist(log);
         if (result?.error) return log.error("update_group", result.error, 400);
@@ -728,10 +747,17 @@ Deno.serve(async (req) => {
       }
 
       case "search_groups": {
+        // An empty q is legal and means "browse the catalogue" — the RPC pages
+        // and orders either way. The page window is clamped inside the RPC, so
+        // a hostile limit costs nothing here.
         const q = typeof body.q === "string" ? body.q : "";
-        const result = await Tools.rpc(log, "app_search_groups", { me_id: user.user_id, p_q: q });
+        const limit = typeof body.limit === "number" ? body.limit : SEARCH_PAGE;
+        const offset = typeof body.offset === "number" ? body.offset : 0;
+        const result = await Tools.rpc(log, "app_search_groups", { me_id: user.user_id, p_q: q, p_limit: limit, p_offset: offset });
         await user.persist(log);
-        rpcExtra = { results: result };
+        // { results, has_more } — passed through whole. A published client that
+        // predates paging reads `results` and ignores the rest.
+        rpcExtra = result;
         break;
       }
 
@@ -758,6 +784,22 @@ Deno.serve(async (req) => {
         const { notify: _n, ...extra } = result ?? {};
         notifyList = (result?.notify as Notify[]) ?? [];
         rpcExtra = extra;
+        break;
+      }
+
+      case "approve_all_joins": {
+        // Owner/manager empties the whole queue: every pending request for the
+        // group is approved in ONE transaction (the same drain the open-flip
+        // uses), each requester pushed. Returns the fresh queue + roster in
+        // respond_join's shape, so the client writes both caches from it.
+        const group_id = typeof body.group_id === "string" ? body.group_id : null;
+        if (!group_id) return log.error("approve_all_joins", "no_group_id", 400);
+        const result = await Tools.rpc(log, "app_approve_all_joins", { me_id: user.user_id, p_group_id: group_id });
+        await user.persist(log);
+        if (result?.error) return log.error("approve_all_joins", result.error, 400);
+        const { notify: _an, ...allExtra } = result ?? {};
+        notifyList = (result?.notify as Notify[]) ?? [];
+        rpcExtra = allExtra;
         break;
       }
 

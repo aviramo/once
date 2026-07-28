@@ -169,8 +169,6 @@ export default {
   'communities.title': 'מעגלים',
   'communities.myFriends': 'החברים שלי',
   'communities.myFriendsSub': 'אנשים שאתה מכיר אישית',
-  'communities.manageSection': 'קבוצות שאני מנהל',
-  'communities.inSection': 'קבוצות שאני חבר בהן',
   'communities.create': 'יצירת קבוצה',
   'communities.find': 'חיפוש והצטרפות לקבוצה',
   // Group kinds: ONE axis, three stops (2026-07-27). Replaces the old
@@ -182,9 +180,6 @@ export default {
   'communities.kindApprovedSub': 'מופיעה בחיפוש וכל בקשת הצטרפות דורשת אישור מנהל.',
   'communities.kindPrivate': 'קבוצה פרטית',
   'communities.kindPrivateSub': 'לא מופיעה בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור מנהל.',
-  'communities.kindOpenShort': 'פתוחה',
-  'communities.kindApprovedShort': 'מאושרת',
-  'communities.kindPrivateShort': 'פרטית',
   'communities.membersCount': '{count} חברים',
   'communities.oneMember': 'חבר אחד',
   // Row meta segments, joined by metaLine(). One string per fact, so the menu
@@ -196,11 +191,11 @@ export default {
   'communities.oneRequest': 'בקשה אחת',
   // Menu row with nothing in it yet: the row still says what it is for, in the
   // one line the counts would have used.
-  'communities.rowEmpty': 'הוספת קבוצות וחברים',
+  'communities.rowEmpty': 'הצטרפות לקבוצות וחברים',
   'communities.managedBy': 'מנוהלת על ידי {name}',
   'communities.sharedGroupsTitle': 'קבוצות משותפות',
-  'communities.emptyManage': 'עוד לא יצרת קבוצה.',
-  'communities.emptyIn': 'עוד לא הצטרפת לקבוצה.',
+  // One list, one empty line: the hub no longer splits managed from joined.
+  'communities.emptyGroups': 'עוד לא יצרת קבוצה ולא הצטרפת לאף אחת.',
   'communities.loadError': 'טעינה נכשלה, נסה שוב.',
 
   // My friends
@@ -240,10 +235,18 @@ export default {
   'communities.description': 'תיאור',
   'communities.descriptionPlaceholder': 'על מה הקבוצה',
   'communities.descUpdate': 'עדכון',
+  // קישור לפרטים נוספים: המנהלים מזינים אותו בהגדרות הקבוצה, וכל מי שרואה את
+  // הקבוצה מקבל שורה אחת לחיצה מתחת לתיאור.
+  'communities.link': 'קישור לפרטים נוספים',
+  'communities.linkPlaceholder': 'הדבק או הדביקי לכאן קישור',
+  'communities.moreDetails': 'לפרטים נוספים',
 
   // A group you manage
   'communities.shareInvite': 'שיתוף קישור הזמנה',
   'communities.settings': 'הגדרות הקבוצה',
+  // תצוגה מקדימה: הכפתור בכותרת של הגדרות הקבוצה, שפותח את הפופאפ של הקבוצה
+  // בדיוק כפי שכל אחד אחר רואה אותו.
+  'communities.preview': 'תצוגה מקדימה',
   // ניהול בלי לשחק. דגל על החברות שלי בקבוצה אחת שאני מנהל: כשהוא דלוק, אני
   // והחברים בקבוצה לא נפגשים במשחק. שורה אחת מעל רשימת החברים, וההסבר בפופאפ
   // שהיא פותחת.
@@ -262,11 +265,14 @@ export default {
   'communities.makePrivate': 'הפיכה לפרטית',
   'communities.approvalEnable': 'דרישת אישור להצטרפות',
   'communities.approvalDisable': 'ביטול דרישת האישור',
-  'communities.requestsSectionJoin': 'בקשות הצטרפות ({count})',
+  'communities.requestsSectionJoin': 'בקשות הצטרפות',
   'communities.requestsNav': 'בקשות הצטרפות',
   'communities.noRequests': 'אין בקשות שממתינות',
   'communities.joinRequestFor': 'הצטרפות לקבוצה {name}',
   'communities.approve': 'אישור',
+  'communities.approveAll': 'אישור כולם',
+  'communities.approveAllTitle': 'לאשר את כל הבקשות?',
+  'communities.approveAllDesc': 'כל מי שממתין בתור יצורף לקבוצה {name}, ויקבל על כך התראה.',
   'communities.declineJoin': 'דחייה',
   'communities.owner': 'בעלים',
   'communities.manager': 'מנהל',
@@ -286,6 +292,11 @@ export default {
   'communities.joined': 'חבר',
   'communities.requestJoin': 'בקשת הצטרפות',
   'communities.pending': 'ממתין לאישור',
+  // A strip's chip, where the meta line already says the size: ONE word in the
+  // corner the role chip sits in, not the sentence the popup's button says.
+  // Where I stand with a group, on the hub and in search alike.
+  'communities.pendingTag': 'בהמתנה',
+  'communities.declinedTag': 'נדחתה',
   'communities.declined': 'הבקשה נדחתה',
   'communities.declinedTitle': 'הבקשה ל{name} נדחתה',
   'communities.declinedDesc': 'מנהל הקבוצה לא אישר את הבקשה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש.',
@@ -293,7 +304,10 @@ export default {
   'communities.cancelJoinTitle': 'ביטול בקשת ההצטרפות ל{name}?',
   'communities.cancelJoinDesc': 'הבקשה תוסר מהתור של מנהלי הקבוצה. תמיד אפשר לשלוח בקשה חדשה.',
   'communities.cancelJoinConfirm': 'כן, לבטל את הבקשה',
-  'communities.findNote': 'בחיפוש מופיעות רק קבוצות ציבוריות.',
+  // The pending group's own popup: what the state is, and the button that ends
+  // it (the same popup a group you are in opens, with cancel instead of leave).
+  'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור של מנהלי הקבוצה.',
+  'communities.cancelJoin': 'ביטול הבקשה',
   'communities.shareMessage': 'הצטרפו לקבוצה {name}\n{link}',
 
   // Support: row in the account card. Opens the device mail composer at the
@@ -985,7 +999,7 @@ export default {
   'chat.report': 'דיווח',
   'chat.reportTitle': 'דיווח על המשתמש',
   'chat.reportDesc': 'הדיווח יישלח לצוות שלנו לבדיקה. המשתמש ייחסם ולא תותאמו שוב. כל קשר פעיל ביניכם יסתיים.',
-  'chat.reportPlaceholder': 'מה קרה? אפשר להוסיף פרטים (לא חובה)',
+  'chat.reportPlaceholder': 'מה לא בסדר? (אופציונאלי)',
   'chat.reportConfirm': 'דיווח וחסימה',
   'chat.newMessages': 'הודעות חדשות',
   'chat.attachMenu.image': 'תמונה',
@@ -1035,6 +1049,9 @@ export default {
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   // Accessibility labels for the floating shell chrome (no visible text).
   'home.a11y.menu': 'פתיחת התפריט',
+  // Same button while its notification dot is up (someone is waiting on an
+  // answer inside: a join request, a friend request).
+  'home.a11y.menuPending': 'פתיחת התפריט, מישהו ממתין לתשובה',
   'home.a11y.closeMenu': 'סגירת התפריט',
   'home.a11y.closeInvite': 'סגירת ההזמנה',
   'home.a11y.closeProfile': 'סגירת הפרופיל',

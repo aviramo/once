@@ -22,24 +22,38 @@ export const XL = 40   // hero spacing, largest tier
 export const RADIUS = 12
 
 // Button / input minimum height. Also reused as the brand-logotype font size
-// (see TEXT.xxxl below) — the "Once" logo on the login screen reads at this
+// (see TEXT.xxl below) — the "Once" logo on the login screen reads at this
 // exact size.
 export const BUTTON_MIN_HEIGHT = 56
 export const INPUT_MIN_HEIGHT = 56
 
 // ── Font size scale ────────────────────────────────────────────────────────
-// T-shirt-sized scale. Each tier captures all uses of that visual rank, from
-// the smallest captions up to the brand logotype. Add a tier only when a real
-// call site needs it.
+// FIVE tiers, in 4px steps up to the body rank and then doubling (user
+// directive 2026-07-28). The old seven tiers drew distinctions the eye could
+// not read: 14 beside 16 and 18 beside 24 were two pairs of near-twins, so
+// "which one does this row use" had no answer a person could give, and the same
+// visual rank picked a different tier in two different screens. Each tier here
+// is far enough from its neighbour that choosing between them is obvious.
+//
+// Ranks, not pixel values, are what a call site should be thinking about:
+//   sm — everything BELOW the body: hints, timestamps, day separators, meta
+//        lines, counters, micro labels.
+//   md — THE body. Paragraphs, row labels, chips, form inputs, button labels,
+//        member and group names. The default; when unsure, this is the answer.
+//   lg — every heading, whatever surface it heads: popup and sheet titles,
+//        screen and section titles, hero card names, status headers.
+//   xl — a large number meant to be read as a quantity (age inputs, readouts).
+//   xxl — the "Once" brand logotype on the login screen, and nothing else.
+//
+// Add a tier only when a real call site needs a rank that genuinely is not one
+// of these five. Two tiers four pixels apart is what this scale replaced.
 
 export const TEXT = {
-  xs: 12,    // hints, micro labels, timestamps, day-separators, retry
-  sm: 14,    // secondary text, chips, pill labels, sub-section titles, counters
-  md: 16,    // primary body, row labels, form inputs, dialog button labels
-  lg: 18,    // count badges, kid-chip × glyph, brand slogan, sub-page list rows, popup titles, status header
-  xl: 24,    // dialog titles, screen page titles, section titles, hero card names
-  xxl: 32,   // large numeric values (age inputs, big readouts)
-  xxxl: BUTTON_MIN_HEIGHT,  // "Once" brand logotype (login screen)
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 32,
+  xxl: BUTTON_MIN_HEIGHT,  // 56
 } as const
 
 // Line-height helper. 1.4× the font size is the comfortable body-text ratio
@@ -67,12 +81,19 @@ export const lh = (size: number): number => Math.round(size * 1.4)
 export const bottomGap = (safeInset: number, gap: number): number => Math.max(safeInset, gap)
 
 // ── Font weights ───────────────────────────────────────────────────────────
-// Two-tier weight scale. `fontWeight: '600'` should reference WEIGHT.semibold
-// instead of repeating the magic string.
+// ONE weight above the regular face (user directive 2026-07-28): every piece of
+// emphasis in the app — popup titles, button labels, section headings, row
+// labels, selected states — is semibold. The old `extrabold: '800'` tier is
+// gone; it drew a hierarchy the app does not actually have, and two weights of
+// emphasis sitting next to each other (a group's name at 800 above a member's
+// at 600) read as two different kinds of thing when they are the same thing.
+//
+// Hierarchy is carried by SIZE (TEXT.*) and COLOR (INK vs INK_BODY/INK_HINT), not by
+// a second bold. `fontWeight: '600'` should reference WEIGHT.semibold instead of
+// repeating the magic string; there is deliberately nothing heavier to reach for.
 
 export const WEIGHT = {
   semibold: '600',
-  extrabold: '800',
 } as const
 
 // ── Radii ──────────────────────────────────────────────────────────────────
@@ -182,6 +203,24 @@ export const STROKE = {
   heavy: 3.5,
 } as const
 
+// ── Notification dot ───────────────────────────────────────────────────────
+// THE "there is something here for you" marker, riding a round button's
+// upper-END arc: unread messages on the card's chat action, and someone
+// waiting on an answer on home's menu button. A solid INK disc (news, not a
+// warning, so it wears the app's one colour and not an alarm one) in a WHITE
+// ring that separates it from the white button under it and from any photo
+// behind it.
+// ONE FIXED SIZE on every button (user directive 2026-07-28) — the dot says
+// the same thing wherever it appears, so it is the same object, not a mark
+// scaled to whatever circle it happens to ride. On the 38dp chrome circle it
+// therefore reads BIGGER relative to the button than on the 76dp hero one,
+// which is the point: a 7dp version of it would be a smudge.
+// Its inset is geometry, not a token: it lands the disc's centre on the 45°
+// point of whatever circle it rides (see RoundButton), so on a small button
+// the disc straddles the arc further out.
+export const NOTIFY_DOT_SIZE = 14
+export const NOTIFY_DOT_RING = STROKE.base
+
 // ── Gesture thresholds ─────────────────────────────────────────────────────
 
 export const SWIPE_DISMISS_PX = 80         // translateY to commit a dismiss
@@ -216,6 +255,20 @@ export const PULL_TUTORIAL_HOLD_MS = 2_000
 // (chat's message-actions sheet). A gesture threshold, not a MOTION duration:
 // it gates when a handler activates, it does not time an animation.
 export const LONG_PRESS_MS = 400
+
+// ── Paged lists ────────────────────────────────────────────────────────────
+// Rows a server-paged list asks for at a time (group browse / search).
+export const LIST_PAGE_SIZE = 20
+// How much scroll is allowed to remain below the viewport before the next page
+// is fetched, measured in viewports (what a virtualized list's own threshold
+// speaks): one screen's worth, so the rows are already in place by the time the
+// finger gets there and the list never visibly stalls.
+export const LIST_PAGE_AHEAD_VIEWPORTS = 1
+// How long a search field waits after the last keystroke before it asks the
+// server. Not a motion duration: it gates a request. A list that can filter
+// what it already holds does so immediately, so this delay costs nothing that
+// the user can see.
+export const SEARCH_DEBOUNCE_MS = 300
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,
@@ -257,17 +310,33 @@ export const SEARCH_WATCHDOG_SLACK_MS = 6_000
 
 export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
 
+// The air a popup leaves above itself once it has grown as tall as it is
+// allowed to. A sheet rises from the bottom, so an over-long body used to push
+// its own HEAD off the top of the screen — the group popup with a long
+// description lost the owner's photo, the name and the member count before the
+// text ran out. The cap (screen minus the safe-area top minus this) is what the
+// body then has to fit inside, and the strip left over says the surface is a
+// sheet laid on the app rather than a page of its own.
+export const SHEET_TOP_GAP = LG
+
+// A bounded, scrollable block inside a popup fades out over its bottom edge to
+// say there is more below it (user directive 2026-07-28 — the one gradient in
+// the app, and it is a hint, not decoration: it paints the popup's own white
+// over the last strip of text and lifts the moment the end is reached). This is
+// how tall that fade is.
+export const SCROLL_FADE = 36
+
 // ── Loading skeleton ───────────────────────────────────────────────────────
 // Geometry of the placeholder rows that stand in for a list while it loads
 // (SkeletonRows in CommunityBits.tsx). A skeleton row keeps the real row's
-// shape with the avatar and text swapped for beige bars, so the card holds the
+// shape with the avatar and text swapped for pale purple bars, so the card holds the
 // size it is about to have instead of collapsing around a spinner. It breathes
 // on the app's one PULSE — no second rhythm, no shimmer sweep.
 
 export const SKELETON = {
   // How many rows to paint. A caller that already knows the real count (it
   // rides in on the row that opened the screen) passes it and gets that many,
-  // capped here so a 200-member group doesn't paint a screenful of beige.
+  // capped here so a 200-member group doesn't paint a screenful of bars.
   maxRows: 6,
   // Bar heights: the title line and the muted meta line beneath it.
   barHeight: 12,
@@ -279,6 +348,23 @@ export const SKELETON = {
   // A meta bar is this much of its row's title bar, so the two lines stay in
   // proportion whichever width the cycle handed the row.
   metaOfTitle: 0.6,
+} as const
+
+// ── Sync hairline ──────────────────────────────────────────────────────────
+// Geometry of the quietest loading mark in the app (SyncBar in OverlaySheet.tsx):
+// a segment that drifts along a page's chrome edge while a round trip runs
+// BEHIND content that is already painted. The skeleton above says "there is
+// nothing here yet"; this says "what you are reading is not the final word".
+// Deliberately thin and short — it may never read as a progress bar, only as a
+// sign that something is still thinking. Its rhythm is not here: the drift runs
+// on PULSE.phaseMs, the app's one attention period, so a page whose list is
+// still breathing on the skeleton and one that is re-syncing move on the same
+// clock instead of on two.
+
+export const SYNC = {
+  height: 2,
+  /** How much of the edge the drifting segment covers. */
+  segment: 0.3,
 } as const
 
 // ── Misc UI dimensions ─────────────────────────────────────────────────────
@@ -314,6 +400,21 @@ export const OVERLAY = {
     menu: 30,
     subPage: 40,
   },
+} as const
+
+
+// ── Home art ───────────────────────────────────────────────────────────────
+// The illustration that sits under home's centre button (HomeArt.tsx). It is
+// TEXTURE, not content: it gives the empty page a playful ground and must
+// never pull the eye off the headline or the one big action above it.
+
+export const HOME_ART = {
+  // Share of the screen width the drawing spans. Wide enough to read, short
+  // enough that the whole centre column still fits a small screen — the frame
+  // is not far off square (see HomeArt's FRAME), so width buys real height.
+  widthRatio: 0.76,
+  // Faint. Present when you look for it, quiet when you don't.
+  opacity: 0.3,
 } as const
 
 

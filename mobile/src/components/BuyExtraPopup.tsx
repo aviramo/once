@@ -1,7 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
 import { Text } from './AppText'
-import { BottomSheet } from './BottomSheet'
+import { BottomSheet, SheetTitle } from './BottomSheet'
 import { CoinIcon, UserPlusIcon } from './icons'
 import { invoke } from '../lib/api'
 import { tap } from '../lib/haptics'
@@ -9,10 +9,7 @@ import { BUY_EXTRA_OPTIONS, type BuyExtraCount, creditsText } from '../lib/credi
 import { referralCode, referralJoined, shareReferral } from '../lib/referral'
 import { useUserStore } from '../stores/userStore'
 import { t, genderize } from '../i18n'
-import {
-  INK, BLACK, BLACK_MID, BLACK_SOFT, BLACK_STRONG, PRIMARY,
-  GREEN, GREEN_STRONG, WHITE, WHITE_STRONG,
-} from '../colors'
+import { INK, INK_DIM, PAGE, LINE, SURFACE_SUNK, INK_SUBTLE, INK_PRESSED, WHITE, WHITE_STRONG } from '../colors'
 import { iconScale } from '../fonts'
 import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON, lh } from '../tokens'
 
@@ -38,7 +35,7 @@ import { LG, MD, RADIUS, SM, TEXT, WEIGHT, XS, ICON, lh } from '../tokens'
 // credit packs — they differ only in what leads and what trails, which is
 // exactly what props are for.
 function CreditRow({
-  icon, label, sublabel, trailing, disabled, filled, onPress,
+  icon, label, sublabel, trailing, disabled, filled, grouped, divider, onPress,
 }: {
   icon: ReactNode
   label: string
@@ -48,10 +45,16 @@ function CreditRow({
   sublabel?: string
   trailing: ReactNode
   disabled?: boolean
-  /** The row is the sheet's live action, so it wears the GREEN action fill and
+  /** The row is the sheet's live action, so it wears the INK action fill and
    *  everything inside it flips to white ink. A prop, not a forked row — the
    *  geometry is identical and only the skin changes. */
   filled?: boolean
+  /** The row is part of the JOINED pack block (user directive 2026-07-28: the
+   *  packs read as one list, not three floating tiles), so it drops its own
+   *  corners — the block clips them — and `divider` draws the hairline that
+   *  separates it from the row above. */
+  grouped?: boolean
+  divider?: boolean
   onPress?: () => void
 }) {
   return (
@@ -60,6 +63,8 @@ function CreditRow({
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        grouped && styles.rowGrouped,
+        divider && styles.rowDivider,
         filled && styles.rowFilled,
         disabled && styles.rowDisabled,
         pressed && !disabled && (filled ? styles.rowFilledPressed : styles.rowPressed),
@@ -123,7 +128,7 @@ export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
       disableBackdropDismiss={busy != null}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>{t(outOfCredits ? 'credits.buy.emptyTitle' : 'credits.buy.title')}</Text>
+        <SheetTitle>{t(outOfCredits ? 'credits.buy.emptyTitle' : 'credits.buy.title')}</SheetTitle>
         <Text style={styles.desc}>{t('credits.buy.desc')}</Text>
         <View style={styles.list}>
           <CreditRow
@@ -144,28 +149,33 @@ export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
             trailing={<Text style={[styles.rowBadge, styles.rowBadgeFilled]}>{t('credits.buy.priceFree')}</Text>}
           />
 
-          {BUY_EXTRA_OPTIONS.map(opt => {
-            const isBusy = busy === opt.count
-            // Two reasons a row is unavailable: the option isn't enabled (all
-            // of them, currently), or a sibling row is busy.
-            const disabled = !opt.enabled || (busy != null && !isBusy)
-            return (
-              <CreditRow
-                key={opt.count}
-                icon={<CoinIcon color={disabled ? BLACK_STRONG : PRIMARY} size={ICON.md} />}
-                label={creditsText(opt.count)}
-                disabled={disabled}
-                onPress={() => onPick(opt.count)}
-                trailing={!opt.enabled ? (
-                  <Text style={styles.rowBadge}>{t('credits.buy.comingSoon')}</Text>
-                ) : isBusy ? (
-                  <ActivityIndicator color={INK} />
-                ) : (
-                  <Text style={styles.rowPrice}>{t('credits.buy.priceFree')}</Text>
-                )}
-              />
-            )
-          })}
+          {/* The packs, JOINED into one block (see styles.packs). */}
+          <View style={styles.packs}>
+            {BUY_EXTRA_OPTIONS.map((opt, i) => {
+              const isBusy = busy === opt.count
+              // Two reasons a row is unavailable: the option isn't enabled (all
+              // of them, currently), or a sibling row is busy.
+              const disabled = !opt.enabled || (busy != null && !isBusy)
+              return (
+                <CreditRow
+                  key={opt.count}
+                  grouped
+                  divider={i > 0}
+                  icon={<CoinIcon color={disabled ? INK_SUBTLE : INK} size={ICON.md} />}
+                  label={creditsText(opt.count)}
+                  disabled={disabled}
+                  onPress={() => onPick(opt.count)}
+                  trailing={!opt.enabled ? (
+                    <Text style={styles.rowBadge}>{t('credits.buy.comingSoon')}</Text>
+                  ) : isBusy ? (
+                    <ActivityIndicator color={INK} />
+                  ) : (
+                    <Text style={styles.rowPrice}>{t('credits.buy.priceFree')}</Text>
+                  )}
+                />
+              )
+            })}
+          </View>
         </View>
       </View>
     </BottomSheet>
@@ -181,23 +191,22 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     alignItems: 'center',
   },
-  title: {
-    fontSize: TEXT.xl,
-    fontWeight: WEIGHT.extrabold,
-    color: BLACK,
-    textAlign: 'center',
-  },
   desc: {
-    // Regular purple, full strength: the muted BLACK_MID read as an
-    // unreadable grey wash on the beige sheet (user directive 2026-07-26 —
+    // Regular purple, full strength: the muted INK_DIM read as an
+    // unreadable grey wash on the pale sheet (user directive 2026-07-26 —
     // popup body text is the regular INK purple, never a faded step).
     fontSize: TEXT.md,
-    color: BLACK,
+    color: INK,
     marginTop: XS,
     marginBottom: LG,
     textAlign: 'center',
   },
   list: { alignSelf: 'stretch', gap: SM },
+  // The credit packs, JOINED into one block (user directive 2026-07-28): one
+  // rounded card that CLIPS its rows, so they read as a single list separated by
+  // hairlines instead of three tiles floating apart. The live referral row above
+  // stays its own tile — it is a different kind of thing.
+  packs: { borderRadius: RADIUS, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -205,14 +214,20 @@ const styles = StyleSheet.create({
     paddingVertical: MD,
     paddingHorizontal: LG,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_SOFT,
+    // The chip's fill (user directive 2026-07-28): every soft tile in the app is
+    // the PAGE purple now.
+    backgroundColor: PAGE,
   },
-  rowPressed: { backgroundColor: BLACK_MID },
-  // The live action row: a solid GREEN button, the app's "you press this" hue,
+  // Inside the joined block the corners belong to the block, and each row after
+  // the first carries the one hairline the app draws.
+  rowGrouped: { borderRadius: 0 },
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
+  rowPressed: { backgroundColor: SURFACE_SUNK },
+  // The live action row: a solid INK button, the app's "you press this" hue,
   // so the one thing that actually works here stops reading like the dead packs
   // above it. Everything inside flips to white ink (see the *Filled styles).
-  rowFilled: { backgroundColor: GREEN },
-  rowFilledPressed: { backgroundColor: GREEN_STRONG },
+  rowFilled: { backgroundColor: INK },
+  rowFilledPressed: { backgroundColor: INK_PRESSED },
   rowDisabled: { opacity: 0.45 },
   // flex (not flexShrink) so the text column claims the leftover width and
   // wraps, instead of pushing the trailing badge off the row.
@@ -226,37 +241,43 @@ const styles = StyleSheet.create({
   // height and top-align == centre.
   //
   // Deliberately NO inkOffset nudge (unlike Chip's glyphWrap): the label here
-  // sets at lh(TEXT.lg) with plenty of leading, so the line box and the ink
+  // sets at lh(TEXT.md) with plenty of leading, so the line box and the ink
   // already share a centre, and the extra 3dp read as visibly low.
   rowIconWrap: {
-    height: iconScale(lh(TEXT.lg)),
+    height: iconScale(lh(TEXT.md)),
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowText: { flex: 1 },
+  // The SAME type as a menu button (settings.tsx selectRowLabel): TEXT.md at
+  // lh(), semibold, INK (user directive 2026-07-28). These rows are the same
+  // kind of object — a labelled thing you press — so they must not set at a
+  // heading rank just because they live in a popup. It also stopped "10
+  // credits" from wrapping onto a second line inside its own row.
+  //
   // lineHeight is what rowIconWrap/rowTail measure against — without it the
   // label sets at the font's own metrics and the boxes no longer match it.
-  rowCount: { fontSize: TEXT.lg, lineHeight: lh(TEXT.lg), fontWeight: WEIGHT.extrabold, color: BLACK },
-  rowCountDisabled: { color: BLACK_MID },
+  rowCount: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.semibold, color: INK },
+  rowCountDisabled: { color: INK_DIM },
   rowCountFilled: { color: WHITE },
   // Second line of a row, indented to the label. Same recipe as the settings
-  // `hint` style (app/settings.tsx) — TEXT.sm at lh() 1.4×. The lineHeight is
+  // `hint` style (app/settings.tsx) — TEXT.md at lh() 1.4×. The lineHeight is
   // load-bearing: without it a wrapped two-line hint sets at the font's own
   // metrics and reads visibly cramped against the app's other body text.
-  rowSub: { fontSize: TEXT.sm, color: BLACK_STRONG, lineHeight: lh(TEXT.sm), marginTop: XS },
+  rowSub: { fontSize: TEXT.md, color: INK_SUBTLE, lineHeight: lh(TEXT.md), marginTop: XS },
   rowSubFilled: { color: WHITE_STRONG },
   // The trailing badge rides the label's line too, for the same reason the
   // glyph does — leading and trailing chrome frame the heading, not the
   // two-line block.
   rowTail: {
     flexDirection: 'row',
-    height: iconScale(lh(TEXT.lg)),
+    height: iconScale(lh(TEXT.md)),
     alignItems: 'center',
     marginStart: SM,
   },
-  rowPrice: { fontSize: TEXT.md, fontWeight: WEIGHT.extrabold, color: INK },
+  rowPrice: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK },
   // Shared trailing badge: "coming soon" on the dead packs, "free" on the
   // invite row. One style so the two read as the same kind of tag.
-  rowBadge: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK_MID },
+  rowBadge: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK_DIM },
   rowBadgeFilled: { color: WHITE_STRONG },
 })

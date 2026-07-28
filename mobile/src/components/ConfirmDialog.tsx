@@ -2,10 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
-import { BottomSheet } from './BottomSheet'
+import { BottomSheet, SheetTitle } from './BottomSheet'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
-import { SM, MD, LG, RADII, TEXT as FSIZE, WEIGHT, STROKE, lh } from '../tokens'
-import { SURFACE, BLACK, WHITE, BLACK_STRONG, PRIMARY, BLACK_MID } from '../colors'
+import { SM, MD, LG, RADII, TEXT, WEIGHT, STROKE, lh } from '../tokens'
+import { SURFACE, INK, WHITE, INK_SUBTLE, INK_DIM } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { CloseIcon, CheckIcon } from './icons'
 
@@ -53,7 +53,7 @@ export function ConfirmDialog({
    * check. */
   confirmIconStart?: ReactNode
   /** Marks this popup's confirm as an INVITE action, which is the one case
-   * that wears the orange instead of the default green. */
+   * that wears the positive tone instead of the default one. */
   confirmTone?: 'positive'
   onCancel?: () => void
   onConfirm?: () => void
@@ -99,12 +99,12 @@ export function ConfirmDialog({
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
       cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight + MD } : undefined}
-      // When draggable, the PRIMARY drag-handle bar (with its own top/bottom
+      // When draggable, the INK drag-handle bar (with its own top/bottom
       // margins) already supplies the top breathing room — drop the card's
       // own paddingTop so the gap above the icon isn't doubled up.
       contentStyle={[styles.card, draggable && styles.cardDraggable]}
     >
-      <Text style={styles.title}>{title}</Text>
+      <SheetTitle>{title}</SheetTitle>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
 
       {skipToggle && (
@@ -127,7 +127,7 @@ export function ConfirmDialog({
           value={noteInput.value}
           onChangeText={noteInput.onChangeText}
           placeholder={noteInput.placeholder}
-          placeholderTextColor={BLACK_MID}
+          placeholderTextColor={INK_DIM}
           maxLength={noteInput.maxLength ?? 500}
           multiline
           textAlignVertical="top"
@@ -141,7 +141,7 @@ export function ConfirmDialog({
             <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
               <Button
                 label={cancelLabel}
-                iconStart={<CloseIcon color={BLACK_STRONG} />}
+                iconStart={<CloseIcon color={INK_SUBTLE} />}
                 onPress={() => { setPressed('cancel'); onCancel?.() }}
                 variant="secondary"
                 size="lg"
@@ -188,21 +188,14 @@ const styles = StyleSheet.create({
   cardDraggable: {
     paddingTop: 0,
   },
-  title: {
-    fontSize: FSIZE.xl,
-    fontWeight: WEIGHT.extrabold,
-    color: BLACK,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
   desc: {
     // Regular purple, full strength: popup body text is the regular INK
     // purple, never a faded step (user directive 2026-07-26). The muted
-    // BLACK_STRONG read as a washed-out grey on the beige sheet.
+    // INK_SUBTLE read as a washed-out grey on the pale sheet.
     marginTop: SM,
-    fontSize: FSIZE.md,
-    lineHeight: lh(FSIZE.md),
-    color: BLACK,
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
+    color: INK,
     textAlign: 'center',
   },
   skipRow: {
@@ -211,35 +204,37 @@ const styles = StyleSheet.create({
     gap: SM,
     marginTop: MD,
   },
-  // The ONE outline in the app allowed to be darker than BORDER_SOFT, and it
+  // The ONE outline in the app allowed to be darker than LINE, and it
   // is not emphasis: an unchecked box IS its rule — there is no fill, no label
   // inside it, nothing else to see — so at 20px the standard hairline leaves
   // the control invisible. Every other outlined thing has a shape or a label
-  // carrying it and stays on BORDER_SOFT.
+  // carrying it and stays on LINE.
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: RADII.sm,
     borderWidth: STROKE.thin,
-    borderColor: BLACK_MID,
+    borderColor: INK_DIM,
     backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: PRIMARY,
-    borderColor: PRIMARY,
+    backgroundColor: INK,
+    borderColor: INK,
   },
   checkboxTick: {
-    fontSize: FSIZE.sm,
-    lineHeight: 14,
+    // One glyph inside a fixed 20px box: the line box equals the glyph, so
+    // lineHeight tracks the font size instead of the 1.4x body ratio.
+    fontSize: TEXT.md,
+    lineHeight: TEXT.md,
     color: WHITE,
-    fontWeight: WEIGHT.extrabold,
+    fontWeight: WEIGHT.semibold,
     includeFontPadding: false,
   },
   skipLabel: {
-    fontSize: FSIZE.sm,
-    color: BLACK,
+    fontSize: TEXT.md,
+    color: INK,
   },
   noteInput: {
     ...FIELD_SKIN,
@@ -247,9 +242,9 @@ const styles = StyleSheet.create({
     minHeight: 96,
     paddingHorizontal: MD,
     paddingVertical: SM,
-    fontSize: FSIZE.md,
-    lineHeight: lh(FSIZE.md),
-    color: BLACK,
+    fontSize: TEXT.md,
+    lineHeight: lh(TEXT.md),
+    color: INK,
   },
   row: {
     flexDirection: 'row',

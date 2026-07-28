@@ -19,7 +19,7 @@ import { useUserStore } from '../src/stores/userStore'
 import { FONT_SCALE } from '../src/fonts'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM } from '../src/tokens'
 import { FIELD_SKIN } from '../src/field'
-import { INK, SURFACE, SURFACE_SUNK, BG, GREEN, GREEN_HALF, GREEN_WASH, GREEN_SOFT, BORDER_SOFT, BLACK, WHITE, PRIMARY, PRIMARY_BG, BLACK_STRONG, BLACK_MID, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW } from '../src/colors'
+import { INK, SURFACE, SURFACE_SUNK, PAGE, INK_MUTED, INK_PALE, INK_WASH, LINE, WHITE, INK_SUBTLE, INK_DIM, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW, SHADOW_BLACK } from '../src/colors'
 import { SendIcon, MicIcon, ReplyIcon, CopyIcon } from '../src/components/icons'
 import { BottomSheet, SheetActionRow } from '../src/components/BottomSheet'
 import { copyToClipboard } from '../src/lib/clipboard'
@@ -172,7 +172,7 @@ function formatTime(dateStr: string): string {
 // ── Icons (chat-specific only; shared icons live in src/components/icons.tsx) ─
 
 function CheckMark({ status, isMine }: { status: 'pending' | 'sent' | 'read'; isMine: boolean }) {
-  const c = isMine ? WHITE_STRONG : GREEN_HALF
+  const c = isMine ? WHITE_STRONG : INK_MUTED
   if (status === 'pending') {
     return (
       <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -202,7 +202,7 @@ type ChatPageProps = {
   isActive?: boolean
   onUnreadChange?: (count: number) => void
   // Reports the partner's live online status (from the presence channel) so
-  // the home shell can show a green dot beside the chat tab icon.
+  // the home shell can show a presence dot beside the chat tab icon.
   onOnlineChange?: (online: boolean) => void
   autoFocusInput?: boolean
   // Wiring handed down by the enclosing OverlaySheet so the message list can
@@ -359,7 +359,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
   }))
   const inputWrapBorderStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(attachAnim.value, [0, 1], [BORDER_SOFT, PRIMARY]),
+    borderColor: interpolateColor(attachAnim.value, [0, 1], [LINE, INK]),
   }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
@@ -638,7 +638,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [unread, setUnread] = useState(0)
   useEffect(() => { if (isActive) setUnread(0) }, [isActive])
   useEffect(() => { onUnreadChange?.(unread) }, [unread, onUnreadChange])
-  // Lift the partner's online status to the home shell (green dot on the
+  // Lift the partner's online status to the home shell (presence dot on the
   // chat tab). On unmount the home shell's `chatAvailable` gate covers the
   // stale value, so no explicit reset is needed here.
   useEffect(() => { onOnlineChange?.(otherIsOnline) }, [otherIsOnline, onOnlineChange])
@@ -1813,7 +1813,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             style={styles.retryRow}
             hitSlop={6}
           >
-            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 9v4M12 17h.01" />
               <Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </Svg>
@@ -1867,7 +1867,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           onScrollToIndexFailed={() => {}}
           ListFooterComponent={loadingMore ? (
             <View style={{ paddingVertical: MD, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={GREEN_HALF} />
+              <ActivityIndicator size="small" color={INK_MUTED} />
             </View>
           ) : null}
           ListEmptyComponent={<Text style={styles.emptyLabel}>{t('chat.empty')}</Text>}
@@ -1912,7 +1912,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 accessibilityLabel={t('chat.reply.a11y')}
                 style={({ pressed }) => [styles.replyComposerClose, pressed && styles.attachBarItemPressed]}
               >
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={GREEN_HALF} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_MUTED} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M18 6L6 18M6 6l12 12" />
                 </Svg>
               </Pressable>
@@ -1967,7 +1967,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   }}
                   scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
-                  placeholderTextColor={GREEN_HALF}
+                  placeholderTextColor={INK_MUTED}
                   multiline
                   blurOnSubmit={false}
                   autoFocus={false}
@@ -1978,7 +1978,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
                 style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
               >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={GREEN_HALF} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={INK_MUTED} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </Svg>
               </Pressable>
@@ -2067,7 +2067,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             {recordPhase === 'recording' && (
               <View style={[styles.inputRow, styles.recordOverlay]}>
                 <Pressable onPress={handleCancelRecording} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={BLACK_STRONG} strokeWidth={2.5} strokeLinecap="round">
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_SUBTLE} strokeWidth={2.5} strokeLinecap="round">
                     <Path d="M18 6L6 18M6 6l12 12" />
                   </Svg>
                 </Pressable>
@@ -2079,7 +2079,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   <View style={styles.recWaveWrap} onLayout={e => setRecWaveWidth(e.nativeEvent.layout.width)}>
                     {recWaveWidth > 0 && (
                       <Svg width={recWaveWidth} height={24}>
-                        <Path d={buildRecWavePath(liveBars, recWaveWidth, 24)} fill={PRIMARY} />
+                        <Path d={buildRecWavePath(liveBars, recWaveWidth, 24)} fill={INK} />
                       </Svg>
                     )}
                   </View>
@@ -2095,12 +2095,12 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
             {recordPhase === 'preview' && (
               <View style={[styles.inputRow, styles.recordOverlay]}>
                 <Pressable onPress={handleCancelRecording} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={BLACK_STRONG} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_SUBTLE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <Path d="M3 6h18M19 6l-1 14H6L5 6M8 6V4h8v2" />
                   </Svg>
                 </Pressable>
                 <Pressable onPress={handlePreviewPlayPause} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={BLACK}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={INK}>
                     {previewPlaying
                       ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" />
                       : <Path d="M8 5v14l11-7z" />}
@@ -2110,9 +2110,9 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   <Waveform
                     bars={previewBars}
                     height={28}
-                    inactiveColor={GREEN_HALF}
-                    activeColor={PRIMARY}
-                    thumbColor={PRIMARY}
+                    inactiveColor={INK_MUTED}
+                    activeColor={INK}
+                    thumbColor={INK}
                     progressAnim={previewProgressAnim}
                     seekable={(previewStatus.duration ?? 0) > 0}
                     onScrub={r => {
@@ -2220,7 +2220,7 @@ function ReplyQuote({ snapshot, tone, onPress }: {
     : nameFromTitle(profile?.relations?.match?.title)
   const c = tone === 'mine'
     ? { bg: WHITE_SOFT, bar: WHITE_STRONG, text: WHITE_STRONG }
-    : { bg: GREEN_SOFT, bar: PRIMARY, text: GREEN }
+    : { bg: INK_WASH, bar: INK, text: INK }
   // A text quote always shows its written text (never the media label); media
   // kinds show an icon + short label.
   const isText = snapshot.kind === 'text'
@@ -2303,7 +2303,7 @@ function SwipeToReply({ enabled, onReply, onLongPress, children }: {
   return (
     <View>
       <ReAnimated.View style={[styles.swipeReplyIcon, iconStyle]} pointerEvents="none">
-        <ReplyIcon color={GREEN_HALF} />
+        <ReplyIcon color={INK_MUTED} />
       </ReAnimated.View>
       <GestureDetector gesture={gesture}>
         <ReAnimated.View style={rowStyle}>{children}</ReAnimated.View>
@@ -2396,7 +2396,7 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
         </Pressable>
       ) : (
         <View style={styles.chatImagePlaceholder}>
-          <ActivityIndicator color={isMine ? WHITE : BLACK} />
+          <ActivityIndicator color={isMine ? WHITE : INK} />
         </View>
       )}
       <View style={[styles.imageTimeRow, { flexDirection: 'row', alignItems: 'center', gap: XS }]}>
@@ -2435,10 +2435,10 @@ function LocationBubble({ animate, isMine, isLast, location, time, status, reply
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
 
-  const textColor = isMine ? WHITE : BLACK
-  const subColor = isMine ? WHITE_STRONG : GREEN
-  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
-  const iconBg = isMine ? WHITE_SOFT : GREEN_SOFT
+  const textColor = isMine ? WHITE : INK
+  const subColor = isMine ? WHITE_STRONG : INK
+  const timeColor = isMine ? WHITE_STRONG : INK_MUTED
+  const iconBg = isMine ? WHITE_SOFT : INK_WASH
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -2526,7 +2526,7 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
+  const timeColor = isMine ? WHITE_STRONG : INK_MUTED
 
   return (
     <AnimatedBubble animate={animate} isMine={isMine} style={bubbleStyle}>
@@ -2815,7 +2815,7 @@ function Waveform({
                   height: THUMB,
                   borderRadius: THUMB / 2,
                   backgroundColor: thumbColor,
-                  shadowColor: '#000',
+                  shadowColor: SHADOW_BLACK,
                   shadowOffset: { width: 0, height: 1 },
                   shadowOpacity: 0.18,
                   shadowRadius: 1.5,
@@ -3000,16 +3000,16 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
     isMine ? styles.bubbleMine : styles.bubbleTheirs,
     isLast && (isMine ? styles.bubbleMineLast : styles.bubbleTheirsLast),
   ]
-  const iconColor = isMine ? WHITE : BLACK
+  const iconColor = isMine ? WHITE : INK
   // Progress is shown as strong-vs-faint WITHIN the bubble's own ink family, so
-  // both directions read the same way: mine is bright-vs-dim white on the orange
-  // bubble, theirs is strong-vs-half green on the green bubble. Orange (PRIMARY)
-  // is the SENDER's action colour; painting a received message's played bars
-  // orange made them look like they belonged to me, which is what broke the
-  // coherence, the played half of a voice note must stay in its bubble's hue.
-  const barActive = isMine ? WHITE_STRONG : GREEN
-  const barInactive = isMine ? WHITE_MID : GREEN_HALF
-  const timeColor = isMine ? WHITE_STRONG : GREEN_HALF
+  // both directions read the same way: mine is bright-vs-dim white on the solid
+  // purple bubble, theirs is INK-vs-INK_MUTED on the pale purple bubble. The
+  // solid purple is the SENDER's fill; painting a received message's played
+  // bars with it made them look like they belonged to me, which is what broke
+  // the coherence, the played half of a voice note must stay in its bubble.
+  const barActive = isMine ? WHITE_STRONG : INK
+  const barInactive = isMine ? WHITE_MID : INK_MUTED
+  const timeColor = isMine ? WHITE_STRONG : INK_MUTED
   const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
   const routeBtn = playing ? (
@@ -3023,7 +3023,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           <Path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.05-.24c1.16.39 2.41.6 3.7.6a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A18 18 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.29.21 2.54.6 3.7a1 1 0 0 1-.24 1.05l-2.2 2.04z" />
         </Svg>
       ) : (
-        <Svg width={16} height={16} viewBox="0 0 24 24" fill={BLACK}>
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill={INK}>
           <Path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05a4.5 4.5 0 0 0 2.5-4.02zM14 3.23v2.06a8 8 0 0 1 0 14.66v2.06a10 10 0 0 0 0-18.78z" />
         </Svg>
       )}
@@ -3039,7 +3039,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           <Pressable
             onPress={handlePlayPause}
             disabled={!ready}
-            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : GREEN_SOFT }]}
+            style={[styles.audioPlayBtn, { backgroundColor: isMine ? WHITE_SOFT : INK_WASH }]}
             hitSlop={8}
           >
             {ready ? (
@@ -3234,10 +3234,10 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
     <Modal visible transparent animationType="fade" onRequestClose={slideClose} statusBarTranslucent>
       {/* A Modal is its own native window, so the root layout's status bar
           chrome does NOT reach it. Re-assert both here: light glyphs
-          (AppStatusBar) and the same green gradient band the rest of the app
+          (AppStatusBar) and the same purple gradient band the rest of the app
           draws behind the OS bar (StatusBarBand — passed the inset explicitly
           since a Modal's SafeAreaProvider context may read it as 0). Without
-          the band the cream backdrop shows through the always-transparent
+          the band the pale backdrop shows through the always-transparent
           edge-to-edge status strip. */}
       <AppStatusBar />
       {/* RNGH gestures don't reach into a Modal (its own window) without a
@@ -3297,7 +3297,7 @@ const lbStyles = StyleSheet.create({
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG },
+  root: { flex: 1, backgroundColor: PAGE },
 
   body: { flex: 1 },
   messagesArea: { flex: 1 },
@@ -3305,7 +3305,7 @@ const styles = StyleSheet.create({
   messagesContent: { padding: SM, flexGrow: 1 },
   emptyLabel: {
     marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
-    color: GREEN_HALF, fontSize: TEXT.md, letterSpacing: 0.4,
+    color: INK_MUTED, fontSize: TEXT.md, letterSpacing: 0.4,
   },
 
   msgWrap: { marginTop: XS },
@@ -3319,7 +3319,7 @@ const styles = StyleSheet.create({
     marginTop: XS,
     paddingVertical: XS,
   },
-  retryLabel: { fontSize: TEXT.xs, color: INK },
+  retryLabel: { fontSize: TEXT.sm, color: INK },
 
   // ── Reply-to-message ──
   // Accent band flashed behind a message row when a quote-tap lands on it. A
@@ -3329,7 +3329,7 @@ const styles = StyleSheet.create({
   highlightFlash: {
     position: 'absolute',
     top: 0, bottom: 0, start: -XS, end: -XS,
-    backgroundColor: PRIMARY_BG,
+    backgroundColor: INK_WASH,
     borderRadius: RADIUS,
   },
   // The reply arrow revealed behind a bubble as it's swiped, parked at the
@@ -3353,9 +3353,9 @@ const styles = StyleSheet.create({
   },
   replyQuoteBar: { width: 3, borderRadius: RADII.pill },
   replyQuoteBody: { flex: 1, justifyContent: 'center' },
-  replyQuoteName: { fontSize: TEXT.xs, lineHeight: lh(TEXT.sm), fontWeight: WEIGHT.semibold },
+  replyQuoteName: { fontSize: TEXT.sm, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.semibold },
   replyQuoteMediaRow: { flexDirection: 'row', alignItems: 'center', gap: XS },
-  replyQuoteText: { fontSize: TEXT.sm, lineHeight: lh(TEXT.sm) },
+  replyQuoteText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md) },
 
   // The composer bar above the input while answering a message.
   replyComposer: {
@@ -3373,8 +3373,8 @@ const styles = StyleSheet.create({
   },
 
   daySep: { flexDirection: 'row', alignItems: 'center', gap: SM, paddingVertical: SM },
-  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: BORDER_SOFT },
-  daySepLabel: { fontSize: TEXT.xs, color: GREEN },
+  daySepLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: LINE },
+  daySepLabel: { fontSize: TEXT.sm, color: INK },
 
   bubble: {
     maxWidth: '80%',
@@ -3382,17 +3382,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD,
     borderRadius: RADIUS,
   },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: PRIMARY },
+  bubbleMine: { alignSelf: 'flex-end', backgroundColor: INK },
   bubbleMineLast: { borderBottomEndRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: GREEN_WASH },
+  // Incoming bubbles are WHITE (user directive 2026-07-28): they sit on the
+  // chat PAGE tint, so the pale purple they used to wear barely lifted off it.
+  // White vs the solid INK of mine is the same pairing as everywhere else.
+  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: SURFACE },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
   bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), flexShrink: 1 },
   bubbleTextMine: { color: WHITE },
-  bubbleTextTheirs: { color: BLACK },
+  bubbleTextTheirs: { color: INK },
 
-  inlineTime: { fontSize: TEXT.xs, lineHeight: lh(TEXT.xs), letterSpacing: 0.3 },
+  inlineTime: { fontSize: TEXT.sm, lineHeight: lh(TEXT.sm), letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
-  inlineTimeTheirs: { color: GREEN_HALF },
+  inlineTimeTheirs: { color: INK_MUTED },
   bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
   textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginEnd: -SM },
 
@@ -3418,7 +3421,7 @@ const styles = StyleSheet.create({
     height: ROUND_BUTTON_SIZE_SM,
     paddingHorizontal: MD,
     borderRadius: RADII.pill,
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
     ...LIFT_SHADOW,
   },
   typingDot: { width: 7, height: 7, borderRadius: RADII.pill, backgroundColor: WHITE },
@@ -3442,7 +3445,7 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     // The composer is a typing surface, so it wears the standard field skin.
-    // `borderColor` is then animated to PRIMARY while the attach bar is open
+    // `borderColor` is then animated to INK while the attach bar is open
     // (inputWrapBorderStyle) — the one allowed override, and it is state.
     ...FIELD_SKIN,
     flex: 1,
@@ -3466,7 +3469,7 @@ const styles = StyleSheet.create({
     paddingVertical: SM,
     fontSize: TEXT.md,
     lineHeight: lh(TEXT.md),
-    color: BLACK,
+    color: INK,
     textAlign: isRTL ? 'right' : 'left',
     textAlignVertical: 'center',
     includeFontPadding: false,
@@ -3476,7 +3479,7 @@ const styles = StyleSheet.create({
     // tall, and FIELD_SKIN's hairline adds STROKE.thin top + bottom. The send
     // button has no border, so it needs those two strokes added to line up.
     width: INPUT_MIN_HEIGHT + STROKE.thin * 2, height: INPUT_MIN_HEIGHT + STROKE.thin * 2, borderRadius: RADIUS,
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
     alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.3 },
@@ -3494,7 +3497,7 @@ const styles = StyleSheet.create({
   attachBar: {
     position: 'absolute',
     end: 0, top: 0, bottom: 0,
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
   },
   attachBarInner: {
     position: 'absolute',
@@ -3541,11 +3544,11 @@ const styles = StyleSheet.create({
     gap: SM,
     paddingHorizontal: MD,
     paddingVertical: SM,
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
   },
   attachConfirmText: {
     flex: 1,
-    fontSize: TEXT.sm,
+    fontSize: TEXT.md,
     color: WHITE,
     fontWeight: WEIGHT.semibold,
   },
@@ -3564,9 +3567,9 @@ const styles = StyleSheet.create({
   },
   attachConfirmSendPressed: { opacity: 0.7 },
   attachConfirmSendLabel: {
-    fontSize: TEXT.sm,
+    fontSize: TEXT.md,
     color: INK,
-    fontWeight: WEIGHT.extrabold,
+    fontWeight: WEIGHT.semibold,
   },
 
   // Image bubble
@@ -3587,12 +3590,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GREEN_WASH,
+    backgroundColor: INK_PALE,
   },
   chatImageSpinnerOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: RADIUS,
-    backgroundColor: BLACK_MID,
+    backgroundColor: INK_DIM,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3600,14 +3603,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: SM + SM,
     end: SM + SM,
-    backgroundColor: BLACK_MID,
+    backgroundColor: INK_DIM,
     borderRadius: RADII.sm,
     paddingHorizontal: SM,
     paddingVertical: XS,
   },
   imageTimeText: {
-    fontSize: TEXT.xs,
-    lineHeight: lh(TEXT.xs),
+    fontSize: TEXT.sm,
+    lineHeight: lh(TEXT.sm),
     letterSpacing: 0.3,
     color: WHITE_STRONG,
   },
@@ -3629,10 +3632,10 @@ const styles = StyleSheet.create({
     width: 32, height: 32,
     borderRadius: RADII.pill,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: GREEN_WASH,
+    backgroundColor: INK_PALE,
   },
   audioRouteBtnActive: {
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
   },
   audioRow: {
     flexDirection: 'row',
@@ -3663,7 +3666,7 @@ const styles = StyleSheet.create({
   recordOverlay: {
     position: 'absolute',
     top: 0, start: 0, end: 0, bottom: 0,
-    backgroundColor: BG,
+    backgroundColor: PAGE,
   },
   recSideBtn: {
     width: 40, height: 49,
@@ -3678,12 +3681,12 @@ const styles = StyleSheet.create({
   recDot: {
     width: 8, height: 8,
     borderRadius: 4,
-    backgroundColor: PRIMARY,
+    backgroundColor: INK,
   },
   recTime: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.semibold,
-    color: BLACK,
+    color: INK,
     fontVariant: ['tabular-nums'],
   },
   recWaveWrap: {
@@ -3696,8 +3699,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   previewDuration: {
-    fontSize: TEXT.sm,
-    color: BLACK_STRONG,
+    fontSize: TEXT.md,
+    color: INK_SUBTLE,
     fontVariant: ['tabular-nums'],
     minWidth: 34,
     textAlign: 'right',
@@ -3728,7 +3731,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   locationLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.semibold },
-  locationSubLabel: { fontSize: TEXT.sm, lineHeight: 16, marginTop: 1 },
+  // The line under the location name: the rank BELOW the body, so TEXT.sm. The
+  // old 1px marginTop was an optical nudge against a hand-set 16 lineHeight;
+  // with the standard 1.4x line box there is nothing left to nudge.
+  locationSubLabel: { fontSize: TEXT.sm, lineHeight: lh(TEXT.sm) },
   locationFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3741,36 +3747,36 @@ const styles = StyleSheet.create({
   // Schedule bubble. Shape mirrors the settings family-schedule grid (M T W T F S S
   // header with date underneath); kid-day cells are filled, weekend cells are
   // tinted, kid-free cells are outlined. Bubble adapts to mine vs theirs:
-  // theirs uses the same colors as the settings UI (PRIMARY accents on white);
-  // mine inverts (white accents on PRIMARY) to stay legible against the orange
-  // outgoing-bubble background.
+  // theirs uses the same colors as the settings UI (INK accents on white);
+  // mine inverts (white accents on INK) to stay legible against the solid
+  // purple outgoing-bubble background.
   scheduleBubble: {
     paddingVertical: SM,
     paddingHorizontal: MD,
     borderRadius: RADIUS,
     gap: SM,
   },
-  scheduleTitle: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: BLACK, marginBottom: XS },
+  scheduleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK, marginBottom: XS },
   scheduleTitleMine: { color: WHITE },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SM },
   scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: XS },
   scheduleDayBubble: {
     width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: BORDER_SOFT,
+    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: LINE,
   },
   scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
-  scheduleDayBubbleSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  scheduleDayBubbleSelectedMine: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  scheduleDayBubbleWeekend: { backgroundColor: PRIMARY_BG, borderColor: PRIMARY_BG },
+  scheduleDayBubbleSelected: { backgroundColor: INK, borderColor: INK },
+  scheduleDayBubbleSelectedMine: { backgroundColor: INK, borderColor: INK },
+  scheduleDayBubbleWeekend: { backgroundColor: INK_WASH, borderColor: INK_WASH },
   scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
-  scheduleDayLetter: { fontSize: TEXT.sm, color: BLACK },
+  scheduleDayLetter: { fontSize: TEXT.md, color: INK },
   scheduleDayLetterMine: { color: WHITE },
   scheduleDayLetterSelected: { color: WHITE },
   scheduleDayLetterSelectedMine: { color: WHITE },
-  scheduleDayLetterWeekend: { color: GREEN },
+  scheduleDayLetterWeekend: { color: INK },
   scheduleDayLetterWeekendMine: { color: WHITE },
-  scheduleDayDate: { fontSize: TEXT.xs, color: BLACK_STRONG },
+  scheduleDayDate: { fontSize: TEXT.sm, color: INK_SUBTLE },
   scheduleDayDateMine: { color: WHITE_STRONG },
   scheduleFooter: {
     flexDirection: 'row',

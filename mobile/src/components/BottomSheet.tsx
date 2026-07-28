@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Modal, Pressable, StyleSheet, View, Keyboard, Dimensions } from 'react-native'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Modal, Pressable, ScrollView, StyleSheet, View, Keyboard, Dimensions, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import { GestureHandlerRootView, Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, runOnJS,
   type SharedValue,
 } from 'react-native-reanimated'
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from './AppText'
-import { BG, BLACK, BLACK_SOFT, BLACK_MID } from '../colors'
-import { MD, SM, RADIUS, TEXT, WEIGHT, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, DRAG_HANDLE } from '../tokens'
+import { SURFACE, PAGE, INK, INK_DIM } from '../colors'
+import { MD, SM, RADIUS, TEXT, WEIGHT, lh, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SCROLL_FADE, DRAG_HANDLE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
 // exceed any sheet's height, so the sheet always begins fully hidden no matter
@@ -57,6 +59,37 @@ type BottomSheetProps = {
   scrollAtTop?: SharedValue<boolean>
 }
 
+// ── The scrollable block inside a sheet ────────────────────────────────────
+// The wiring a <SheetScroll> needs from the sheet around it: the native scroll
+// gesture the dismiss-pan must run simultaneously with, the at-top flag it
+// reads on touch-down, and WHERE the scrollable block sits inside the card.
+// Handed down by context rather than by props so a body can drop a scrollable
+// block in without the popup that composes it having to thread anything
+// through — the pair can never be half-connected.
+// (The `scrollableGesture`/`scrollAtTop` props above are the older, explicit
+// path for a body that owns its own ScrollView; both feed the same pan.)
+//
+// The bounds are what keep the iron rule honest: the inner scroll outranks the
+// dismiss-pan ONLY over the strip a finger could have scrolled instead. Without
+// them the at-top flag gated the whole card, so a popup whose description had
+// been scrolled once could not be swiped away from anywhere — not the drag
+// handle, not the title, not the buttons.
+type SheetScrollWiring = {
+  native: GestureType
+  atTop: SharedValue<boolean>
+  /** Top/bottom edge of the scrollable block, in the card's own coordinates
+   *  (which are the pan's, since the handler is attached to the card wrap and
+   *  the card sits at its origin). Parked as an empty range while no
+   *  <SheetScroll> is mounted. */
+  top: SharedValue<number>
+  bottom: SharedValue<number>
+  /** The card the block measures itself against. A layout-relative measure, not
+   *  a window one: the card rides the entrance slide on a transform, so its
+   *  on-screen position is a moving target while the popup is opening. */
+  cardRef: React.RefObject<View | null>
+}
+const SheetScrollContext = createContext<SheetScrollWiring | null>(null)
+
 export function BottomSheet({
   visible,
   onDismiss,
@@ -70,9 +103,29 @@ export function BottomSheet({
   scrollableGesture,
   scrollAtTop,
 }: BottomSheetProps) {
+  const insets = useSafeAreaInsets()
   const translateY = useSharedValue(SCREEN_H)
   const dragY = useSharedValue(0)
   const cardHeight = useSharedValue(SCREEN_H)
+  // A body that runs long (a group's description, a long list) may grow the
+  // sheet up to here and no further: the card's TOP never crosses the safe area
+  // (user directive 2026-07-28). Everything above the cap used to be pushed off
+  // the screen, head first. What gives inside the card is whatever declares
+  // `flexShrink` — in practice a <SheetScroll>; every other part keeps its size.
+  const maxHeight = Dimensions.get('window').height - insets.top - SHEET_TOP_GAP
+  // The wiring for a <SheetScroll> anywhere in the body. Created here, once, so
+  // the dismiss-pan can be told about it before it exists.
+  const bodyScroll = useMemo(() => Gesture.Native(), [])
+  const bodyAtTop = useSharedValue(true)
+  // An empty range until a <SheetScroll> measures itself: a sheet with no
+  // scrollable block must never have a strip that refuses the dismiss.
+  const bodyScrollTop = useSharedValue(Number.POSITIVE_INFINITY)
+  const bodyScrollBottom = useSharedValue(Number.NEGATIVE_INFINITY)
+  const cardRef = useRef<View | null>(null)
+  const scrollWiring = useMemo<SheetScrollWiring>(
+    () => ({ native: bodyScroll, atTop: bodyAtTop, top: bodyScrollTop, bottom: bodyScrollBottom, cardRef }),
+    [bodyScroll, bodyAtTop, bodyScrollTop, bodyScrollBottom],
+  )
   // Armed when an open is requested; the slide-in fires from the sheet's first
   // onLayout (the earliest moment the content is mounted AND the native Modal
   // view is attached), instead of a blind requestAnimationFrame that only
@@ -91,6 +144,12 @@ export function BottomSheet({
   useEffect(() => {
     if (visible) {
       dragY.value = 0
+      // A body's scroll is unmounted between opens, so nothing would reset the
+      // flag it left behind: without this, a sheet closed while scrolled would
+      // reopen refusing to swipe away.
+      bodyAtTop.value = true
+      bodyScrollTop.value = Number.POSITIVE_INFINITY
+      bodyScrollBottom.value = Number.NEGATIVE_INFINITY
       // Start fully off-screen and arm the entrance. The slide-in is kicked
       // from onLayout (view mounted + attached), not a guessed rAF, so it
       // begins at the earliest correct frame and from a known start.
@@ -127,14 +186,26 @@ export function BottomSheet({
     .enabled(swipeToDismiss)
     .activeOffsetY(PAN_ACTIVE_OFFSET_Y)
     .failOffsetY(PAN_FAIL_OFFSET_Y)
-  const pan = (scrollableGesture ? panBase.simultaneousWithExternalGesture(scrollableGesture) : panBase)
-    .onBegin(() => {
+  const pan = (scrollableGesture
+    ? panBase.simultaneousWithExternalGesture(scrollableGesture, bodyScroll)
+    : panBase.simultaneousWithExternalGesture(bodyScroll))
+    .onBegin(e => {
       'worklet'
       // Snapshot whether the scroll is at the top right when the user touches
       // down. The dismiss decision uses this snapshot for the whole pan, so a
       // drag that starts mid-scroll won't suddenly start dismissing once the
       // user happens to scroll back to the top during the same drag.
-      wasAtTop.value = scrollAtTop ? scrollAtTop.value : true
+      // BOTH scrolls must be at their top — the body's own (the older prop
+      // path) and any <SheetScroll> in it. A scroll with something left to give
+      // outranks the dismiss, always.
+      //
+      // But only WHERE it could have been scrolled: the <SheetScroll> gate
+      // applies to touches that land inside that block and nowhere else. The
+      // drag handle, the title, the buttons and every other part of the card
+      // still dismiss whatever the description has been scrolled to — gating
+      // the whole card on it is what made this popup impossible to close.
+      const onScrollBlock = e.y >= bodyScrollTop.value && e.y <= bodyScrollBottom.value
+      wasAtTop.value = (scrollAtTop ? scrollAtTop.value : true) && (!onScrollBlock || bodyAtTop.value)
     })
     .onUpdate(e => {
       'worklet'
@@ -178,9 +249,11 @@ export function BottomSheet({
             }
           }}
         >
-          <View style={[styles.card, contentStyle]}>
+          <View ref={cardRef} style={[styles.card, { maxHeight }, contentStyle]}>
             {dragHandle ? <View style={styles.dragHandle} /> : null}
-            {children}
+            <SheetScrollContext.Provider value={scrollWiring}>
+              {children}
+            </SheetScrollContext.Provider>
           </View>
         </Animated.View>
       </GestureDetector>
@@ -199,6 +272,152 @@ export function BottomSheet({
         {Inner}
       </GestureHandlerRootView>
     </Modal>
+  )
+}
+
+// THE title of a popup — every one of them, whatever kind (user directive
+// 2026-07-28). A confirm dialog, the buy-credits sheet, a group sheet, the
+// inline value picker and the full-screen OverlaySheet header all render their
+// heading through this one style, so no popup can ever look like a different
+// rank of surface than the popup beside it.
+//
+// TEXT.lg, not xl: the sheet header (OverlaySheet) was already 18 and so were
+// four of the six popups, so 18 is the size that makes the whole family agree.
+// The old 24 on ConfirmDialog/BuyExtraPopup also carried a -0.3 letterSpacing
+// to claw back the width it cost — at 18 there is nothing to claw back, so the
+// tracking goes with it.
+//
+// Spacing is deliberately NOT in here: a popup's gap under its title belongs to
+// that popup's layout (a desc follows in one, a list in another). Call sites
+// pass it via `style`.
+export const SHEET_TITLE: TextStyle = {
+  fontSize: TEXT.lg,
+  lineHeight: lh(TEXT.lg),
+  fontWeight: WEIGHT.semibold,
+  color: INK,
+  textAlign: 'center',
+}
+
+export function SheetTitle({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
+  return <Text style={[SHEET_TITLE, style]}>{children}</Text>
+}
+
+// ── SheetScroll ────────────────────────────────────────────────────────────
+// The popup's own white, arriving over the strip of text that runs past the
+// edge — so the words dissolve into the card instead of being cut by a hard
+// line. BOTH edges wear one (user directive 2026-07-28): text scrolled up past
+// the top of the block was being sliced mid-glyph exactly as it was at the
+// bottom, and one fade without the other reads as "the block starts here".
+// ONE component, told which edge it is: the two are the same gradient, flipped.
+const FADE_ID = { top: 'sheetScrollFadeTop', bottom: 'sheetScrollFadeBottom' } as const
+
+function ScrollFade({ edge, show }: { edge: 'top' | 'bottom'; show: boolean }) {
+  // Fades in and out rather than blinking on the frame the last line arrives —
+  // default timing, like every other fade in the app.
+  const fade = useSharedValue(0)
+  useEffect(() => { fade.value = withTiming(show ? 1 : 0) }, [show, fade])
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }))
+  // Opaque at the card's edge, clear where the text carries on.
+  const [near, far] = edge === 'top' ? ['1', '0'] : ['0', '1']
+  return (
+    <Animated.View
+      style={[styles.scrollFade, edge === 'top' ? styles.scrollFadeTop : styles.scrollFadeBottom, fadeStyle]}
+      pointerEvents="none"
+    >
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={FADE_ID[edge]} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={SURFACE} stopOpacity={near} />
+            <Stop offset="1" stopColor={SURFACE} stopOpacity={far} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${FADE_ID[edge]})`} />
+      </Svg>
+    </Animated.View>
+  )
+}
+
+// The ONE part of a popup that is allowed to run long: user-written text with
+// no length the layout can count on (a group's description). Everything else in
+// the sheet keeps its natural height, and this block takes whatever is left
+// under the cap — it is the only child that declares `flexShrink`, so the
+// overflow lands here by construction rather than by a measured maxHeight that
+// would have to be recomputed per popup.
+//
+// It scrolls, and it SAYS it scrolls: the popup's own white fades up over its
+// bottom edge while there is more below, and lifts the moment the end is
+// reached. That fade is the app's one gradient (user directive 2026-07-28) —
+// everything else stays flat — because a hard cut at the last line reads as the
+// text ENDING there, which is exactly the misreading the block has to prevent.
+//
+// The inner scroll always outranks the sheet's swipe-to-dismiss: it takes the
+// wiring from the BottomSheet around it (context), so a drag with scrolling
+// still to do scrolls, and only a drag that begins at the top can dismiss.
+export function SheetScroll({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const wiring = useContext(SheetScrollContext)
+  // Is there anything above or below the fold right now? Kept in refs and
+  // reduced to two booleans, so a scroll frame re-renders nothing unless one of
+  // the ANSWERS changed.
+  const boxH = useRef(0)
+  const contentH = useRef(0)
+  const offsetY = useRef(0)
+  const [more, setMore] = useState(false)
+  const [above, setAbove] = useState(false)
+  const sync = () => {
+    setMore(contentH.current - offsetY.current - boxH.current > 1)
+    setAbove(offsetY.current > 1)
+  }
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    offsetY.current = e.nativeEvent.contentOffset.y
+    if (wiring) wiring.atTop.value = offsetY.current <= 0
+    sync()
+  }
+
+  // Where this block sits inside the card, for the dismiss-pan: the finger owns
+  // the scroll HERE and the sheet everywhere else. Measured against the card
+  // rather than the window, since the card is mid-slide while the popup opens.
+  const boxRef = useRef<View | null>(null)
+  const syncBounds = () => {
+    const card = wiring?.cardRef.current
+    if (!card || !boxRef.current) return
+    boxRef.current.measureLayout(
+      card as never,
+      (_x, y, _w, h) => { wiring.top.value = y; wiring.bottom.value = y + h },
+      () => {},
+    )
+  }
+  // Gone with the block: a card that no longer has a scrollable strip must not
+  // keep one that refuses the swipe.
+  useEffect(() => () => {
+    if (!wiring) return
+    wiring.top.value = Number.POSITIVE_INFINITY
+    wiring.bottom.value = Number.NEGATIVE_INFINITY
+  }, [wiring])
+
+  const scroll = (
+    <ScrollView
+      style={styles.scrollBody}
+      showsVerticalScrollIndicator={false}
+      // The sheet is already a bounce-free surface; a rubber band here would
+      // fight the dismiss-pan for the same drag at the top.
+      bounces={false}
+      nestedScrollEnabled
+      scrollEventThrottle={16}
+      onScroll={onScroll}
+      onLayout={e => { boxH.current = e.nativeEvent.layout.height; sync() }}
+      onContentSizeChange={(_w, h) => { contentH.current = h; sync() }}
+    >
+      {children}
+    </ScrollView>
+  )
+
+  return (
+    <View ref={boxRef} style={[styles.scrollBox, style]} onLayout={syncBounds}>
+      {wiring ? <GestureDetector gesture={wiring.native}>{scroll}</GestureDetector> : scroll}
+      <ScrollFade edge="top" show={above} />
+      <ScrollFade edge="bottom" show={more} />
+    </View>
   )
 }
 
@@ -230,17 +449,30 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   cardWrap: {},
   card: {
-    // The page beige BG (beige-1) — the light-beige tone colors.ts documents for
-    // "the page, sheets, popups" (user directive 2026-07-26). The lighter beige-3
-    // SURFACE read as near-white on device; a popup must clearly be a warm beige
-    // surface, not a white sheet of paper laid on the page.
-    backgroundColor: BG,
+    // WHITE (user directive 2026-07-28): EVERY popup is a white sheet. It is
+    // the surface that LIFTS off the page — a dialog is a thing laid ON the
+    // app, not the page itself rising — so it takes SURFACE, never the PAGE
+    // tint. This is the single place the popup ground is set: ConfirmDialog,
+    // BuyExtraPopup, SharedGroupsPopup and every action sheet compose this card.
+    backgroundColor: SURFACE,
     boxShadow: SHEET_SHADOW,
   },
+  // The box a <SheetScroll> claims: whatever height is left under the cap, and
+  // never a pixel more than its own text needs. `flexShrink` is what hands the
+  // overflow to it; `flexGrow: 0` is what keeps a SHORT description from
+  // stretching to fill the card. It clips, so the fade sits over real text.
+  scrollBox: { flexGrow: 0, flexShrink: 1, overflow: 'hidden' },
+  // The scroll fills the box; the box is what was bounded.
+  scrollBody: { flexGrow: 0, flexShrink: 1 },
+  // One band, pinned to whichever edge it is fading — same height either way, so
+  // the block reads the same at its head as at its foot.
+  scrollFade: { position: 'absolute', start: 0, end: 0, height: SCROLL_FADE },
+  scrollFadeTop: { top: 0 },
+  scrollFadeBottom: { bottom: 0 },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: BLACK_SOFT,
+    backgroundColor: PAGE,
     borderRadius: RADIUS,
     paddingVertical: MD,
     paddingHorizontal: MD,
@@ -251,14 +483,14 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   actionRowLabel: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: BLACK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK,
   },
   dragHandle: {
     alignSelf: 'center',
     width: DRAG_HANDLE.width,
     height: DRAG_HANDLE.height,
     borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: BLACK_MID,
+    backgroundColor: INK_DIM,
     marginTop: MD,
     marginBottom: MD,
   },

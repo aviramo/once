@@ -1,144 +1,114 @@
-// ── Purples on beige — the single source of truth for colour ───────────────
+// ── Purple on white — the single source of truth for colour ────────────────
 //
-// A LIGHT scheme. The whole palette is a handful of purples, THREE beiges, WHITE,
-// and one semi-transparent BLACK for shadows. Nothing else. The constant NAMES
-// `GREEN`/`ORANGE` are kept as legacy labels for their ROLES (like `BLACK`
-// aliasing the ink) — the values are purple, the jobs are unchanged:
+// A LIGHT scheme with exactly TWO ingredients: PURPLE and WHITE. There is no
+// beige, no grey, no second accent hue, no red, no green (user directive
+// 2026-07-28 — the warm palette is gone, and so are the old hue-named tokens
+// `GREEN` / `ORANGE` / `BLACK`, which named a colour the value had not been for
+// months).
 //
-//   INK/GREEN/PRIMARY = the ONE regular purple. Everything: all text, headings,
-//                      titles, SELECTED surfaces, AND every in-app action — the
-//                      buttons, the heart, presence, positive signals. Ink on a
-//                      filled one is WHITE (user directive 2026-07-25: one purple
-//                      in-app, no separate action hue).
-//   PRESSED = the darkest step. The ONLY place the deep purple survives: a button
-//                      momentarily HELD DOWN. Never text, never a resting fill.
-//   ORANGE  = the BRAND MARK only. #6C3FB2 survives solely on the launcher / store
-//                      icon disc + web --brand; nothing INSIDE the app uses it.
+// Every name here says the ROLE and the STRENGTH, never a hue that could drift:
+//   PAGE / SURFACE / SURFACE_SUNK / LINE  — what a pixel of background is
+//   INK, INK_PRESSED, INK_MUTED, INK_PALE — solid purple, dark → light
+//   INK_BODY … INK_WASH                   — the SAME purple laid translucent
+//   WHITE, WHITE_STRONG … WHITE_SOFT      — white, solid and translucent
 //
-// The purples, dark → light:
-//   PRESSED           #33265B  pressed/hover ONLY (the one deep step)
-//   INK/GREEN/PRIMARY #5C4A94  EVERYTHING in-app: text, headings, selected, actions
-//   GREEN_HALF        #8A7DB2  muted: placeholders, hints, empty states
-//   ORANGE            #6C3FB2  the brand-mark disc (icon + web) ONLY
-//   PRIMARY_GROUND    #D1C2D9  pale surfaces: icon ground, washes, soft tiles
+// The solid purples, dark → light:
+//   INK_PRESSED  #33265B  the one deep step — HELD-DOWN states only
+//   INK          #5C4A94  EVERYTHING: text, headings, selected, every action,
+//                         AND the brand mark itself (the launcher / store icon
+//                         glyph, the web --brand). There is no separate brand
+//                         hue any more: the old #6C3FB2 `BRAND_MARK` was the
+//                         last colour in the app that was not this purple, and
+//                         it is gone (user directive 2026-07-28).
+//   INK_MUTED    #8A7DB2  muted but still purple: placeholders, hints, empties
+//   INK_PALE     #DACFEC  pale ground: incoming bubbles, soft tiles
 //
-// THERE ARE NO GREYS: every muted step is a translucent INK purple, so the
-// surface never drifts to neutral grey. Every `rgba()` below is one of these
-// at an opacity — transparency, not another colour.
+// THERE ARE NO GREYS: every muted step is a translucent INK purple, so a
+// surface can never drift to neutral grey. Every `rgba()` below is INK (or
+// white) at an opacity — transparency, not another colour.
 
-// ── Surfaces: three beiges + white ──────────────────────────────────────────
-// The scheme is warm end to end: even the surfaces that lift OFF the page are a
-// beige now, not white. Three warm steps, lightest → darkest:
-//   SURFACE  #FAF6EE  beige-3, the LIGHTEST: every surface that sits ABOVE the
-//                     page (cards, chips, list rows, fields, buttons, on-photo
-//                     chrome). A gentle warm lift off BG, where white used to be.
-//   BG       #F3EEE6  beige-1: the page itself, the sheets, the popups.
-//   BORDER   #E5DFD4  beige-2: the one hairline / rule, and inset wells.
-// WHITE is no longer a surface — it survives ONLY as ink/glyphs on a dark or
-// purple fill (see WHITE below).
-export const BG           = '#F3EEE6'  // beige-1: the page, sheets, popups
-export const SURFACE      = '#FAF6EE'  // beige-3 (LIGHTEST): cards, chips, rows, fields, buttons — the warm lift off the page
-export const SURFACE_LIFT = SURFACE    // a barely-lifted band = light beige over the page beige
-export const BORDER_SOFT  = '#E5DFD4'  // beige-2: the one hairline / rule colour
-export const SURFACE_SUNK = BORDER_SOFT // inset rows, input wells = the same beige-2
-
-// ── Ink (the REGULAR brand purple) ───────────────────────────────────────────
-// Text is the brand PURPLE, never a neutral black. `BLACK` is the legacy name
-// (~100 call sites) and aliases INK. It is NOT black: the only real black is
-// SCRIM_BLACK, for shadows. INK is the MEDIUM purple #5C4A94 — the same value as
-// GREEN. All text, titles, headings and selected states are this one regular
-// purple; the deep #33265B is PRESSED, reserved for held-down states only
-// (user directive 2026-07-25).
-export const INK   = '#5C4A94'
-export const BLACK = INK
-// Pure white — INK ONLY now (text / glyphs / spinner arcs on a dark or purple
-// fill). Never a surface: every white tile became the light beige SURFACE above.
+// ── The one white ──────────────────────────────────────────────────────────
+// White is half the palette: it is the lifted SURFACE (see below) AND the ink
+// on any filled purple (text, glyphs, spinner arcs).
 export const WHITE = '#FFFFFF'
-// The one deep step, HELD-DOWN states only (a pressed row/button). Never text,
-// never a resting fill — the sole survivor of the old darkest purple.
-export const PRESSED = '#33265B'
-export const INK_2 = 'rgba(92,74,148,0.72)'  // secondary / body
-export const INK_3 = 'rgba(92,74,148,0.48)'  // muted: hints, timestamps
 
-// ── Muted INK ramp (INK at three opacities) ─────────────────────────────────
-// BLACK_* is the legacy name — nothing here is black, it is INK purple laid
-// translucent. WHITE_* is its counterpart on a dark or filled surface.
-export const BLACK_SOFT   = 'rgba(92,74,148,0.10)'  // dividers, soft borders, tracks, inactive chip bg
-export const BLACK_MID    = 'rgba(92,74,148,0.32)'  // inactive bar/pill, spinner track, placeholder, checkbox border
-export const BLACK_STRONG = 'rgba(92,74,148,0.62)'  // muted icon, secondary label, disabled text
+// ── Surfaces: white + the palest purples ───────────────────────────────────
+// Cool end to end. Two steps of background plus the one rule colour:
+//   SURFACE       #FFFFFF  every surface that sits ABOVE the page (cards,
+//                          chips, list rows, fields, buttons, on-photo
+//                          chrome) AND every POPUP / rising sheet (user
+//                          directive 2026-07-28: popups are white). The clean
+//                          lift off PAGE.
+//   PAGE          #F1EEF8  the page itself, and only the page — INK laid at
+//                          ~9% over white, so the page is a purple whisper and
+//                          a white card or popup visibly floats on it.
+//   SURFACE_SUNK  #E2DEEC  INK at ~18%: inset rows and input wells, and the
+//                          one hairline / rule (LINE is the same value under
+//                          its own name, because a rule is not a surface).
+export const PAGE         = '#F1EEF8'
+export const SURFACE      = WHITE
+export const SURFACE_SUNK = '#E2DEEC'
+export const LINE         = SURFACE_SUNK
 
-export const WHITE_SOFT   = 'rgba(255,255,255,0.20)'  // subtle fills on a purple surface
-export const WHITE_MID    = 'rgba(255,255,255,0.42)'  // borders, spinner track on a purple fill
-export const WHITE_STRONG = 'rgba(255,255,255,0.86)'  // strong text / active state on a filled surface
-
-// ── GREEN (the REGULAR brand purple; legacy name) ────────────────────────────
-// Headings, selected states, popup row icons, chips. Same value as INK — the
-// text ink and the brand are ONE regular purple now. WHITE is the ink on a
-// filled brand surface. GREEN_DEEP folds into INK (a heading is the regular
-// purple, not a deeper one); GREEN_STRONG is the held-down PRESSED step (the
-// one place the deep purple survives).
-export const GREEN        = INK        // the regular purple = the text ink
-export const GREEN_STRONG = PRESSED    // pressed / hover = the deep step
-export const GREEN_DEEP   = INK        // this hue used AS page text = INK
-export const GREEN_SOFT   = 'rgba(92,74,148,0.12)'  // faint brand wash (chips, row fills)
-// Bio text on its beige band = the medium brand purple.
-export const BIO_INK = GREEN
-
-// ── GREEN_HALF (purple #3 — muted) ───────────────────────────────────────────
+// ── INK — the ONE purple ───────────────────────────────────────────────────
+// All text, titles, headings and selected states are this single regular
+// purple, and so is every in-app action: the buttons, the heart, presence, the
+// positive signals. Ink on a filled one is WHITE (user directive 2026-07-25:
+// one purple in-app, no separate action hue).
+export const INK = '#5C4A94'
+// The one deep step, HELD-DOWN states only (a pressed row / button). Never
+// text, never a resting fill.
+export const INK_PRESSED = '#33265B'
 // Where a muted element must still read PURPLE (a placeholder, a hint, an empty
-// state) a low-alpha ink would desaturate to grey — so this is a SOLID
-// half-strength purple. GREEN_WASH is its pale-surface partner, folded into the
-// pale ground (purple #5) so incoming bubbles and soft tiles share it.
-export const GREEN_HALF = '#8A7DB2'  // muted purple INK: placeholders, hints, empty states
+// state) a low-alpha ink would wash out — so this is a SOLID half-strength
+// purple, not a transparency.
+export const INK_MUTED = '#8A7DB2'
+// The pale step: a solid pale purple for surfaces where alpha can't go —
+// incoming chat bubbles, soft tiles, the pale wash behind a sheet's close X.
+export const INK_PALE = '#DACFEC'
 
-// ── ORANGE (the brand-mark purple; legacy name) ──────────────────────────────
-// #6C3FB2 is now ONLY the app's brand mark: the launcher / store icon disc, the
-// splash, the favicon / og-image, and the web landing page's --brand. NOTHING
-// inside the app uses it anymore — every in-app action / positive / heart /
-// presence was unified onto the ONE regular purple (see PRIMARY below), so the UI
-// reads as a single purple while the icon keeps its established brand tone.
-export const ORANGE       = '#6C3FB2'
-export const ORANGE_SOFT  = 'rgba(108,63,178,0.14)'  // brand-mark wash (web only)
+// ── INK at alpha (transparency, not new colours) ───────────────────────────
+// One ramp, strongest → faintest. Pick by the ROLE listed, never by hunting a
+// number: two things that should read the same weight take the same token.
+export const INK_BODY   = 'rgba(92,74,148,0.72)'  // secondary / body text
+export const INK_SUBTLE = 'rgba(92,74,148,0.62)'  // muted icon, secondary label, disabled text
+export const INK_HINT   = 'rgba(92,74,148,0.48)'  // hints, timestamps
+export const INK_DIM    = 'rgba(92,74,148,0.32)'  // inactive bar/pill, spinner track, placeholder, checkbox border
+export const INK_WASH   = 'rgba(92,74,148,0.12)'  // a FILL: selected row grounds, soft washes
 
-// ── Primary brand (the in-app action purple) ─────────────────────────────────
-// The in-app action fill = the ONE regular purple (GREEN/INK #5C4A94), the SAME
-// value as every heading and selected surface. Buttons, the heart, chat "mine"
-// bubbles, chips and every positive signal are this single purple now (user
-// directive 2026-07-25) — the saturated #6C3FB2 stays on the brand ICON only.
-// A held-down button darkens to PRESSED; ink on the fill is WHITE.
-export const PRIMARY      = GREEN
-export const PRIMARY_BG   = GREEN_SOFT
+// ── WHITE at alpha (on a filled purple surface) ────────────────────────────
+export const WHITE_STRONG = 'rgba(255,255,255,0.86)'  // strong text / active state on a purple fill
+export const WHITE_MID    = 'rgba(255,255,255,0.42)'  // borders, spinner track on a purple fill
+export const WHITE_SOFT   = 'rgba(255,255,255,0.20)'  // subtle fills on a purple surface
 
-// ── PRIMARY_GROUND (purple #5 — the pale step) ───────────────────────────────
-// ORANGE flattened over BG at 25% into a solid hex, for the surfaces where alpha
-// can't go: the launcher icon, adaptive-icon background, splash, web favicon /
-// og-image (app.json). `scripts/build-icons.mjs` recomputes this mix and refuses
-// to build if it has drifted, so it is derived, never hand-picked. Every other
-// pale-purple surface folds into it: incoming chat bubbles / soft tiles (GREEN_WASH).
-export const PRIMARY_GROUND = '#D1C2D9'  // ORANGE at 25% over BG
-export const GREEN_WASH     = PRIMARY_GROUND  // muted purple SURFACE: incoming bubbles, soft tiles
+// ── Role aliases ───────────────────────────────────────────────────────────
+// One value, named where a call site reads better for it. Never a new colour.
 
-// ── Status strip ─────────────────────────────────────────────────────────────
-// The fade behind the OS status glyphs (`StatusBarBand`), the regular INK
-// purple, applied at a 0.5 → 0 vertical fade in the component (stops live there).
-export const STATUS_BAND = INK
-
-// ── On-photo chrome ───────────────────────────────────────────────────────
 // Everything ON TOP OF A PHOTO — the chips, every round overlay button — is a
-// light-beige tile (the same beige-3 SURFACE as every other lifted surface);
-// the photo underneath is arbitrary so it must supply its own contrast.
+// white tile; the photo underneath is arbitrary so it must supply its own
+// contrast.
 export const PHOTO_CHROME = SURFACE
+// The fade behind the OS status glyphs (`StatusBarBand`): INK, applied at a
+// 0.5 → 0 vertical fade in the component (the stops live there).
+export const STATUS_BAND = INK
+// Presence dot: someone is here NOW.
+export const PRESENCE = INK
+// An error, or a removed-stars delta (-N). No red in the palette (2026-07-25).
+export const NEGATIVE = INK
+// Paid / premium affordances — the same purple as the heart.
+export const PREMIUM = INK
 
-// ── The one black: shadows only ──────────────────────────────────────────────
-// The ONLY black in the palette, and the only place black is allowed. Its job is
-// to SUBTRACT LIGHT: drop shadows (shadowColor = this, opacity set per elevation)
-// and the soft dark halo that keeps white on-photo glyphs legible over any photo.
-// Never a surface, a border, or text. PHOTO_INK_SHADOW is this same black baked
-// at the halo's opacity (a text/SVG shadow can't take a separate opacity prop),
-// and PHOTO_INK_SHADOW_FILTER is the ready-to-use CSS drop-shadow string.
-export const SCRIM_BLACK = '#000000'
-export const PHOTO_INK_SHADOW = 'rgba(0,0,0,0.9)'
-export const PHOTO_INK_SHADOW_FILTER = 'drop-shadow(0px 1px 4px rgba(0,0,0,0.9))'
+// ── Text selection ─────────────────────────────────────────────────────────
+// Must stay translucent: an opaque highlight under the ink renders an unreadable
+// solid block. The caret stays opaque via cursorColor.
+export const SELECTION = 'rgba(92,74,148,0.25)'
+
+// ── The one black: shadows only ────────────────────────────────────────────
+// The ONLY black in the palette, and the only place black is allowed. Its job
+// is to SUBTRACT LIGHT: drop shadows (shadowColor = this, opacity set per
+// elevation) and the dim scrim behind a rising sheet. Never a surface, a
+// border, or text.
+export const SHADOW_BLACK = '#000000'
 
 // The soft lift shadow every floating tile over a photo casts — the round
 // overlay buttons AND the on-photo chips — so they read as one fabric sitting
@@ -146,26 +116,9 @@ export const PHOTO_INK_SHADOW_FILTER = 'drop-shadow(0px 1px 4px rgba(0,0,0,0.9))
 // carries the Android `elevation` the buttons rely on. Single source: both
 // RoundButton and Chip spread this, never re-type the numbers.
 export const LIFT_SHADOW = {
-  shadowColor: SCRIM_BLACK,
+  shadowColor: SHADOW_BLACK,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.25,
   shadowRadius: 8,
   elevation: 6,
 } as const
-
-// ── Text selection ────────────────────────────────────────────────────────
-// Must stay translucent: an opaque highlight under the ink renders an unreadable
-// solid block. The caret stays opaque via cursorColor.
-export const SELECTION = 'rgba(92,74,148,0.25)'
-
-// ── Semantic signals ──────────────────────────────────────────────────────
-// No red in the palette (2026-07-25): NEGATIVE, an error or a removed-stars
-// delta, is the regular INK purple. No second accent hue, and no deep tone —
-// the deep purple is PRESSED-only now (user directive 2026-07-25).
-export const ONLINE_GREEN = PRIMARY  // presence dot: someone is here NOW (the one purple)
-export const NEGATIVE     = INK      // an error / a removed-stars delta (-N)
-
-// ── Premium ──────────────────────────────────────────────────────────────
-// Paid / premium affordances are the one action purple — the same hue as the heart.
-export const PREMIUM = PRIMARY
-

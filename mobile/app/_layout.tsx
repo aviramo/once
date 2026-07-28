@@ -14,14 +14,12 @@ import {
   NotoSansHebrew_500Medium,
   NotoSansHebrew_600SemiBold,
   NotoSansHebrew_700Bold,
-  NotoSansHebrew_800ExtraBold,
 } from '@expo-google-fonts/noto-sans-hebrew'
 import {
   NotoSans_400Regular,
   NotoSans_500Medium,
   NotoSans_600SemiBold,
   NotoSans_700Bold,
-  NotoSans_800ExtraBold,
 } from '@expo-google-fonts/noto-sans'
 import { supabase } from '../src/lib/supabase'
 import { consumeMagicLinkUrl } from '../src/lib/authRedirect'
@@ -35,7 +33,7 @@ import { clearRosterCaches } from '../src/lib/rosterCache'
 import { clearAllChatCaches } from '../src/lib/chatCache'
 import { stashInviteUrl } from '../src/lib/communities'
 import { DEFAULT_FAMILY, FONT_SCALE, TEXT_START } from '../src/fonts'
-import { BG } from '../src/colors'
+import { PAGE } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
 // Font application happens through the AppText wrapper in src/components/AppText.tsx,
@@ -114,7 +112,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     // NOTE: there is deliberately NO reactive "account exists && on onboarding
     // → /home" branch. Once the account exists the user may VOLUNTARILY reopen
-    // /onboarding (the menu's orange build-profile CTA) to add photos + bio;
+    // /onboarding (the menu's purple build-profile CTA) to add photos + bio;
     // onboarding.tsx routes itself to /home when they finish or back out. A
     // reactive redirect here would bounce them straight out of that flow.
 
@@ -205,7 +203,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   // home-vs-onboarding and `router.replace` off `/login`. Leaving the
   // fully-mounted login screen visible during that wait makes it linger and
   // repaint ("flicker") before the hard `animation: 'none'` cut. Cover it
-  // with a full-bleed BG layer — the same beige page as login and home, so
+  // with a full-bleed PAGE layer — the same page tint as login and home, so
   // login → hold → destination reads as one
   // continuous surface. It stays up only while the user is authenticated but
   // still sitting on `/login` (or the profile hasn't loaded yet), and drops
@@ -221,24 +219,24 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     <>
       {children}
       {authHandoff && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: BG }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: PAGE }]} />
       )}
     </>
   )
 }
 
 export default function RootLayout() {
+  // No 800 face: the app has one emphasis weight, 600 (WEIGHT.semibold in
+  // tokens.ts), so an ExtraBold nobody can ask for is dead weight in the bundle.
   const [fontsLoaded, fontError] = useFonts({
     NotoSansHebrew_400Regular,
     NotoSansHebrew_500Medium,
     NotoSansHebrew_600SemiBold,
     NotoSansHebrew_700Bold,
-    NotoSansHebrew_800ExtraBold,
     NotoSans_400Regular,
     NotoSans_500Medium,
     NotoSans_600SemiBold,
     NotoSans_700Bold,
-    NotoSans_800ExtraBold,
   })
 
   useEffect(() => {
@@ -273,7 +271,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: BG }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: PAGE }}>
       {/* Global status bar: white glyphs over the purple band, everywhere. The
           OS restores the system default when backgrounded — every app owns its
           own status bar style. */}
