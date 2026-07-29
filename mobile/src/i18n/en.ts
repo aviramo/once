@@ -182,8 +182,21 @@ export default {
   // Circles stay locked until the profile is built: photos and a bio
   'communities.gateTitle': 'Circles open once your profile is built',
   'communities.gateDesc': 'Circles connect you to people through groups and friends, and everyone there sees your profile. You need a profile with photos and a short bio first',
+  // The one-shot nudge home raises after the first few profiles, over the
+  // Circles hub it has just opened
+  'communities.nudgeTitle': 'Who you see here depends on your circles',
+  'communities.nudgeDesc': 'Join groups and invite your friends over, and the people shown to you will be more connected to you and to your circles',
+  'communities.nudgeConfirm': 'Explore circles',
   'communities.managedBy': 'Managed by {name}',
   'communities.sharedGroupsTitle': 'Shared groups',
+  // The mutual-friend popup's title and the on-photo chip. English inflects for
+  // neither the friend nor the card's subject, so each pair is the same string
+  // twice; Hebrew is why there are two keys at all (see he.ts).
+  'communities.sharedFriendsTitle': 'Mutual friends',
+  'communities.sharedFriendM': 'Mutual friend',
+  'communities.sharedFriendF': 'Mutual friend',
+  'communities.friendOfM': 'Friend of {name}',
+  'communities.friendOfF': 'Friend of {name}',
   // One list, one empty line: the hub no longer splits managed from joined.
   'communities.emptyGroups': "You haven't created or joined a group yet",
   'communities.loadError': 'Could not load, try again',
@@ -291,9 +304,6 @@ export default {
   'communities.declinedTitle': 'Your request to {name} was declined',
   'communities.declinedDesc': "A manager did not approve the request. You can clear this notice, and ask again in a month",
   'communities.declinedConfirm': 'Clear',
-  'communities.cancelJoinTitle': 'Cancel your request to join {name}?',
-  'communities.cancelJoinDesc': 'The request will be removed from the managers\' queue. You can always send a new one',
-  'communities.cancelJoinConfirm': 'Yes, cancel the request',
   // The pending group's own popup: what the state is, and the button that ends
   // it (the same popup a group you are in opens, with cancel instead of leave).
   'communities.pendingNote': 'Your request is waiting for a manager to approve it',
@@ -463,8 +473,8 @@ export default {
   // the wallet is empty, so it has to answer "when do I get one anyway", which
   // that caption never said. The no-hour variant covers a wallet the server
   // hasn't stamped a next-refill on yet.
-  'credits.buy.desc': 'Every day at {time} a new credit is added to you (if you have none). For every friend who joins through you, you both get another credit',
-  'credits.buy.descNoTime': 'Every day a new credit is added to you (if you have none). For every friend who joins through you, you both get another credit',
+  'credits.buy.desc': 'Every day at {time} a new credit is added to you (if you have none). And in addition, for every friend who joins through you, you both get another credit',
+  'credits.buy.descNoTime': 'Every day a new credit is added to you (if you have none). And in addition, for every friend who joins through you, you both get another credit',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.

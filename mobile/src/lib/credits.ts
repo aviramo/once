@@ -28,6 +28,10 @@ export const CREDIT_COST = {
   // Cancelling forfeits the held credit instead of charging a new one. The
   // spend already happened on send, so the cancel button shows no badge.
   cancel: 0,
+  // An accepted invitation SPENDS the sender's held credit too (2026-07-29):
+  // a chat costs one credit on each side. The hold comes back only when the
+  // invitation dies without a chat — expiry, decline, or the target matching
+  // someone else. See app_approve / app_decline / _expire_invite_pair.
 } as const
 
 /** Daily cap: balance refills up to this number every 20:00 Asia/Jerusalem.

@@ -88,21 +88,50 @@ export const FONT_SCALE = {
 export const iconScale = (size: number, cap: number = FONT_SCALE.body): number =>
   Math.round(size * Math.min(PixelRatio.getFontScale(), cap))
 
-// Noto Sans Hebrew reserves more room above cap height (Latin ascenders, Hebrew
-// diacritic space) than below the baseline, so the visible ink of a line sits
-// BELOW the geometric centre of its line box. A glyph centred on the line box
-// therefore reads a few pixels high — measured on Android at ~0.16 x the
-// rendered font size, consistently across rows.
+// ── Centring a glyph on a line of text ─────────────────────────────────────
+// A line box is NOT symmetric around the ink it carries. Noto Sans Hebrew
+// reserves 1.068 em above the baseline and 0.292 em below it, while the ink a
+// label actually paints reaches only cap height (Latin) or the Hebrew letter
+// body. So a glyph centred on the line box — which is what `alignItems:'center'`
+// and a box one line tall both do — always reads a little HIGH, and by a
+// different amount in each script.
 //
-// `inkOffset` is that correction: nudge a glyph down by this much to centre it
-// on the ink rather than on the box. Takes the UNSCALED font size and applies
-// iconScale itself, so the correction tracks the OS font scale like everything
-// else. includeFontPadding:false does NOT remove this — it trims the box, not
-// the font's own ascent/descent asymmetry (verified on device: zero change).
-// `cap` mirrors iconScale's — pass the same ceiling the labelled text is
-// capped at, so the correction tracks the glyph it nudges.
+// These are the font's own numbers, read out of the bundled NotoSansHebrew
+// files (hhea + the glyph bounds of the Latin capitals and of the Hebrew
+// letters), not a value tuned by eye against one screenshot:
+const FONT_ASCENT = 1.068    // hhea ascender / head yMax — the same value, so
+const FONT_DESCENT = 0.292   // includeFontPadding changes nothing here
+const CAP_HEIGHT = 0.714     // Latin capitals + digits: baseline → 0.714
+const HEBREW_HEIGHT = 0.600  // every Hebrew letter: baseline → 0.600 (only ל rises past it)
+
+// How far BELOW its line box's centre a line's ink centre sits, as a fraction
+// of the font size. Derived rather than measured:
+//
+//   baseline (from the line box top) = A·S + (L − (A+D)·S) / 2
+//   ink centre                       = baseline − inkHeight·S / 2
+//   ⇒ ink centre − L/2               = ((A − D)/2 − inkHeight/2) · S
+//
+// The line height L cancels — which is the whole point. The rendered line
+// height is NOT knowable from JS: Android 14+ scales `lineHeight` through its
+// own non-linear font-scale curve, UNCAPPED by maxFontSizeMultiplier, while
+// `fontSize` stays capped. On a font_scale=2.0 device a 22dp line box comes
+// back ~37dp tall, so anything that computed a line box in JS (`lh(TEXT.md) ×
+// the cap`) placed its glyph against a box the device never drew — the icons
+// sat visibly high there and slightly low at font scale 1. This correction is
+// immune to that: it only ever needs the font size, which IS knowable.
+//
+// Script, not locale-as-decoration: Hebrew ink stops 0.114 em lower than Latin
+// ink does, so the same glyph needs a bigger nudge beside a Hebrew label. The
+// UI renders one language at a time, so the app's own direction picks it.
+const INK_RISE = (FONT_ASCENT - FONT_DESCENT) / 2 - (isRTL ? HEBREW_HEIGHT : CAP_HEIGHT) / 2
+
+// Nudge a glyph down by this much to sit on a label's ink rather than on its
+// line box. Takes the UNSCALED font size and applies the OS font scale itself
+// (same ceiling the labelled text is capped at), and returns a FLOAT: it feeds
+// a transform, and rounding it to whole dp is what used to collapse two
+// different font scales onto the same 3dp nudge.
 export const inkOffset = (fontSize: number, cap: number = FONT_SCALE.body): number =>
-  Math.round(iconScale(fontSize, cap) * 0.16)
+  fontSize * Math.min(PixelRatio.getFontScale(), cap) * INK_RISE
 
 // fontWeight → the real weighted face to render it with. The app itself only
 // ever asks for two of these: 400 (the default) and 600 (WEIGHT.semibold, the

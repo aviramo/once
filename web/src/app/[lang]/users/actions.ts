@@ -67,7 +67,10 @@ export async function deleteUser(
   const { error: cleanupError } = await admin.rpc("app_delete_cleanup", {
     me_id: userId,
   });
-  if (cleanupError) return { ok: false };
+  if (cleanupError) {
+    console.error("[deleteUser] app_delete_cleanup failed:", cleanupError.message);
+    return { ok: false };
+  }
 
   await admin.from("log").delete().eq("user_id", userId);
   await admin
@@ -75,8 +78,15 @@ export async function deleteUser(
     .delete()
     .or(`user_id.eq.${userId},other_id.eq.${userId}`);
 
+  // The auth delete is the step that used to fail silently: it runs as
+  // supabase_auth_admin, so anything the cascade fires (the comm_* triggers)
+  // must not need grants of its own. Log the reason — the UI only has one
+  // generic failure string.
   const { error } = await admin.auth.admin.deleteUser(userId);
-  if (error) return { ok: false };
+  if (error) {
+    console.error("[deleteUser] auth delete failed:", error.message);
+    return { ok: false };
+  }
 
   revalidatePath(ADMIN_USERS_PATH, "page");
   return { ok: true };
@@ -276,7 +286,8 @@ export async function bulkUserAction(
           .delete()
           .or(`user_id.eq.${id},other_id.eq.${id}`);
         const { error } = await admin.auth.admin.deleteUser(id);
-        if (!error) count++;
+        if (error) console.error("[bulkUserAction] auth delete failed:", id, error.message);
+        else count++;
       } else if (action.kind === "release") {
         const { error } = await admin.rpc(
           action.page === 1

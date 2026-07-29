@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { View, StyleSheet, Platform, Linking, ScrollView, Keyboard } from 'react-native'
 import { Text } from '../src/components/AppText'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useBottomInset } from '../src/hooks/useBottomInset'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
@@ -85,7 +86,7 @@ async function sendMagicLink(email: string): Promise<boolean> {
 // ── Screen ─────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   // RN's KeyboardAvoidingView doesn't cope with Android edge-to-edge here
   // (form sits behind the keyboard on focus). Drive bottom padding manually,
   // matching the pattern used in chat.tsx / onboarding.tsx / settings.tsx.
@@ -95,11 +96,11 @@ export default function LoginPage() {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
     const show = Keyboard.addListener(showEvent, (e) => {
-      setKbHeight(Math.max(0, e.endCoordinates.height - insets.bottom))
+      setKbHeight(Math.max(0, e.endCoordinates.height - bottomInset))
     })
     const hide = Keyboard.addListener(hideEvent, () => setKbHeight(0))
     return () => { show.remove(); hide.remove() }
-  }, [insets.bottom])
+  }, [bottomInset])
 
   // Each provider throws on failure / cancellation so the form can clear
   // its in-flight state. On success, the auth state change causes
@@ -153,7 +154,7 @@ export default function LoginPage() {
             </View>
           </ScrollView>
 
-          <View style={[styles.bottom, { paddingBottom: bottomGap(insets.bottom, MD + XS) }]}>
+          <View style={[styles.bottom, { paddingBottom: bottomGap(bottomInset, MD + XS) }]}>
             <Text style={styles.legalText}>
               {t('auth.legalPrefix')}{'\n'}
               <Text style={styles.legalLink} onPress={() => Linking.openURL(legalUrl('terms', lang))} accessibilityRole="link">

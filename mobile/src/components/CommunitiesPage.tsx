@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Pressable, Share, Keyboard, Linking, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle, type TextStyle } from 'react-native'
 import { Path, Circle, Line, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useBottomInset } from '../hooks/useBottomInset'
 import { Text, TextInput } from './AppText'
 import { SheetHeader, type OverlaySheetBody } from './OverlaySheet'
 import { PullContext, PullScrollView, PullPane, usePullBehavior, type PullCtx } from './PullPane'
@@ -28,7 +29,7 @@ import { BottomSheet, SheetScroll, SheetTitle } from './BottomSheet'
 import { Glyph, GroupsIcon, TrashIcon, RankIcon, KeyIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon } from './icons'
 import { ToggleRow } from './Switch'
 import { tap, tapWarning } from '../lib/haptics'
-import { t } from '../i18n'
+import { t, genderize } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
 
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
@@ -170,6 +171,18 @@ const titleFor = (v: CView): string => {
   }
 }
 
+/** WHICH page this is — the kind plus whatever the kind is ABOUT. Two views
+ *  with the same key are the same destination, however many times it was asked
+ *  for. Used to make `push` idempotent (see there). */
+const viewKey = (v: CView): string => {
+  switch (v.k) {
+    case 'owned': case 'settings': case 'requests': return `${v.k}:${v.group.id}`
+    case 'request': return `request:${v.request.id}`
+    case 'person': return `person:${v.person.kind === 'member' ? v.person.member.user_id : v.person.friend.user_id}`
+    default: return v.k
+  }
+}
+
 export function CommunitiesPage({
   onClose, onRegisterBack, target, onTargetConsumed, renderSelfProfile,
   dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged,
@@ -184,7 +197,12 @@ export function CommunitiesPage({
   target?: CommunitiesTarget | null
   onTargetConsumed?: () => void
 }) {
-  const insets = useSafeAreaInsets()
+  // One insets object for the whole hub (it is threaded down to every view as a
+  // prop), with the bottom taken from useBottomInset so nothing anchored to the
+  // page's end can slip under the system navigation bar.
+  const { top: topInset } = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
+  const insets = useMemo(() => ({ top: topInset, bottom: bottomInset }), [topInset, bottomInset])
   const profile = useUserStore(st => st.profile)
   // The air under a contained roster: one small step, or the safe area where
   // there is one (XL was too much — user directive 2026-07-27). Both roster
@@ -195,7 +213,16 @@ export function CommunitiesPage({
     target?.kind === 'friends' || target?.kind === 'friend' ? [{ k: 'hub' }, { k: 'friends' }] : [{ k: 'hub' }]
   ))
   const view = stack[stack.length - 1]
-  const push = useCallback((v: CView) => setStack(sk => [...sk, v]), [])
+  // Opening a page is IDEMPOTENT: asking for the page that is already on top is
+  // not a second page. A row stays tappable while the page it opened is still
+  // sliding up over it (RisingCard's entrance), so two quick taps on one group
+  // — or on one person in a roster — used to stack the very same page twice and
+  // cost two Backs to get out of. The guard lives inside the state updater, not
+  // in a timer or on the rows, so it also catches both taps landing in one
+  // React batch: the second updater sees what the first one produced.
+  const push = useCallback((v: CView) => setStack(sk => (
+    viewKey(sk[sk.length - 1]) === viewKey(v) ? sk : [...sk, v]
+  )), [])
   const pop = useCallback(() => setStack(sk => (sk.length > 1 ? sk.slice(0, -1) : sk)), [])
 
   // A deep-linked group the caller is only a MEMBER of opens the hub's member
@@ -365,6 +392,10 @@ function PageLayer({
   renderSelfProfile?: SelfProfileRenderer
 }) {
   const isSheetLayer = !!sheetPanRef
+  // A profile page is a full-bleed card: no title bar over it, just the close
+  // X floating on the photo (user directive 2026-07-27). Declared up here
+  // because it also decides which pull ARBITRATION the page gets — see below.
+  const floatingChrome = view.k === 'request' || view.k === 'person' || view.k === 'self'
   // The band a drag can start in and still take the page, whatever the inner
   // scroll is doing. It may only ever cover chrome that DOES NOT SCROLL: the
   // inner scroll always outranks the page pull (the iron rule), so the band is
@@ -390,8 +421,20 @@ function PageLayer({
   const closing = useSharedValue(false)
   // Called unconditionally (rules of hooks); the bottom layer leaves it disabled
   // and uses the sheet's pull instead.
+  //
+  // A LIST page takes the 'sheet' arbitration: a manualActivation pan that
+  // hands the drag to the inner scroll first and picks it up mid-gesture where
+  // the list runs out. A PROFILE page must NOT — its body is a full-bleed
+  // MatchCard that owns its own PullContext, and over that card the sheet pan
+  // consumes the raw touch stream and swallows taps on the floating close X.
+  // That is exactly the bug the menu's own profile sheet was fixed for
+  // (home.tsx: activation="scrollPan"), and these pages are the same surface,
+  // so they get the same answer: 'scrollPan', whose gesture declares its
+  // interest up front (activeOffsetY / failOffsetX) and leaves every tap alone.
+  // It ignores `headerBottom`, which is right: a floating header is not a drag
+  // band (see above), so the value stays 0 on these pages either way.
   const pull = usePullBehavior({
-    activation: 'sheet',
+    activation: floatingChrome ? 'scrollPan' : 'sheet',
     enabled: isTop && !isSheetLayer,
     onCommit: useCallback(() => { closing.value = true }, [closing]),
     headerBottom,
@@ -415,11 +458,17 @@ function PageLayer({
   // Every member is stable (a ref, a callback, a shared value), so this value is
   // built once and never changes identity — a drag on this page re-renders
   // nothing below it. See PullCtx.pullEngaged.
+  // `pullY` rides in it too: MatchCard's inner-scroll pin worklet reads it so
+  // Reanimated keeps re-running that worklet for every frame of a pull (the
+  // engaged flag alone flips once and would let the pin go stale). A profile
+  // page's own behavior already builds exactly this object, so take THAT one
+  // rather than a second copy of it.
   const pullCtx = useMemo<PullCtx>(() => (
     isSheetLayer
       ? { panRef: sheetPanRef!, extraRefs: [], setScrollAtTop: onSheetScrollAtTop ?? (() => {}), pullEngaged: sheetPullEngaged! }
-      : { panRef: pull.panRef, extraRefs: [], setScrollAtTop: pull.setScrollAtTop, pullEngaged: pull.pullEngaged }
-  ), [isSheetLayer, sheetPanRef, onSheetScrollAtTop, sheetPullEngaged, pull.panRef, pull.setScrollAtTop, pull.pullEngaged])
+      : pull.pullCtx
+        ?? { panRef: pull.panRef, extraRefs: [], setScrollAtTop: pull.setScrollAtTop, pullEngaged: pull.pullEngaged, pullY: pull.pullY }
+  ), [isSheetLayer, sheetPanRef, onSheetScrollAtTop, sheetPullEngaged, pull.pullCtx, pull.panRef, pull.setScrollAtTop, pull.pullEngaged, pull.pullY])
 
   // Keyboard auto-scroll: when the keyboard opens, scroll the focused input up
   // so it clears the keyboard. Compares the keyboard's real top edge
@@ -442,10 +491,6 @@ function PageLayer({
     })
     return () => sub.remove()
   }, [isTop])
-
-  // A profile page is a full-bleed card: no title bar over it, just the close
-  // X floating on the photo (user directive 2026-07-27).
-  const floatingChrome = view.k === 'request' || view.k === 'person' || view.k === 'self'
 
   // The find page's query lives HERE, because its field lives in the header
   // (user directive 2026-07-28): the search box IS that page's heading, so it
@@ -537,7 +582,7 @@ function PageLayer({
       insets={insets}
     />
   ) : view.k === 'person' ? (
-    <PersonProfileView person={view.person} onDone={closePage} insets={insets} />
+    <PersonProfileView person={view.person} onDone={closePage} onGroupChanged={applyGroup} insets={insets} />
   ) : view.k === 'self' ? (
     // My own profile, opened from a roster row that is me: the very same
     // editable preview the menu opens, not a member page about myself. The
@@ -1009,14 +1054,18 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               />
             </>
           ) : pending ? (
+            // No confirm on this one either (user directive 2026-07-29): taking
+            // back a request that has not been answered yet destroys nothing,
+            // and the request can be sent again at any time.
             <Button
               label={t('communities.cancelJoin')}
               variant="secondary"
               size="lg"
+              loading={busy}
               // Cancelling a request is an X, plainly (user directive
               // 2026-07-28), at the size every other button glyph wears.
               iconStart={<CloseIcon color={INK} />}
-              onPress={() => setConfirm(true)}
+              onPress={quit}
             />
           ) : status === 'declined' ? (
             // No confirm on this one: it dismisses a notice, it does not undo
@@ -1039,12 +1088,14 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
           ) : null}
         </View>
       </BottomSheet>
+      {/* Leaving is the only action here that asks twice: it drops a membership
+          that getting back may not be mine to decide. */}
       <ConfirmDialog
         visible={confirm}
-        title={group ? t(pending ? 'communities.cancelJoinTitle' : 'settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
-        description={t(pending ? 'communities.cancelJoinDesc' : 'settings.groupsLeaveDesc')}
-        confirmLabel={t(pending ? 'communities.cancelJoinConfirm' : 'settings.groupsLeaveConfirm')}
-        confirmIconStart={pending ? <CloseIcon color={WHITE} /> : <SignOutIcon color={WHITE} />}
+        title={group ? t('settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
+        description={t('settings.groupsLeaveDesc')}
+        confirmLabel={t('settings.groupsLeaveConfirm')}
+        confirmIconStart={<SignOutIcon color={WHITE} />}
         busy={busy}
         onCancel={() => setConfirm(false)}
         onConfirm={quit}
@@ -1133,6 +1184,15 @@ function Strip({ icon, title, meta, tag, tagStrong, trailing, first, style, onPr
       {body}
     </Pressable>
   )
+}
+
+// The link field's placeholder tells the READER to paste, so its verb is the
+// user's own gender — one form resolved by genderize, not the "הדבק או הדביקי"
+// double form. Lives here once because both the create form and the settings
+// editor render the same field. English has a single form and passes through.
+function useLinkPlaceholder() {
+  const isMale = useUserStore(st => st.profile?.is_male)
+  return genderize(t('communities.linkPlaceholder'), isMale)
 }
 
 // ── Group kind ─────────────────────────────────────────────────────────────
@@ -1396,6 +1456,7 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
   // who actually gets in.
   const [kind, setKind] = useState<GroupKind>(DEFAULT_GROUP_KIND)
   const [busy, setBusy] = useState(false)
+  const linkPlaceholder = useLinkPlaceholder()
 
   const create = async () => {
     if (busy || name.trim().length === 0) return
@@ -1429,7 +1490,7 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
           style={[s.fieldInput, s.linkInput]}
           value={link}
           onChangeText={setLink}
-          placeholder={t('communities.linkPlaceholder')}
+          placeholder={linkPlaceholder}
           placeholderTextColor={INK_DIM}
           maxLength={GROUP_LINK_MAX}
           keyboardType="url"
@@ -1807,6 +1868,9 @@ function ApproveAllControl({ group, onDone }: { group: OwnedGroup; onDone: () =>
 // decision about a person is taken from a row or a popup any more.
 // The profiles the server sends here carry NO distance: being in a group with
 // someone, or waiting at their door, is not consent to reveal where you are.
+// The card is asked to drop the whole proximity chip (hideProximity) for the
+// same reason: neither where the person is nor when they were last around
+// belongs on a profile opened from a roster (user directive 2026-07-29).
 function ProfilePage({ profile, userId, name, image, insets, caption, children }: {
   profile?: Profile | null
   /** Fallbacks for a row cached by a build that predates the profile payload:
@@ -1817,15 +1881,24 @@ function ProfilePage({ profile, userId, name, image, insets, caption, children }
   insets: { top: number; bottom: number }
   /** One line over the action bar, saying what the answer below is about. */
   caption?: string
-  /** The action bar's buttons. */
+  /** The action bar's buttons. May be entirely absent (a plain member looking
+   *  at another plain member has nothing to decide about them). */
   children: React.ReactNode
 }) {
+  // A page with no decision on it has no bar: a member with no buttons used to
+  // still reserve the bar's padding and leave a dead PAGE-tinted band under the
+  // photo (user directive 2026-07-29). toArray drops the nulls the callers pass
+  // for the actions the viewer's role does not grant, so this is "is there
+  // anything to press", not "was a children slot written".
+  const hasActions = React.Children.toArray(children).length > 0
   return (
     <View style={s.profileFill}>
       {profile ? (
         // chromeInset lines the card's name/age chip up with the floating back
-        // control, exactly as the own-profile preview does.
-        <MatchCard match={profile} actions={[]} bottomInset={0} chromeInset={insets.top} />
+        // control, exactly as the own-profile preview does. The card's own
+        // on-photo chrome clears the navigation bar by itself (it reads
+        // useBottomInset internally), so a barless page needs nothing here.
+        <MatchCard match={profile} actions={[]} bottomInset={0} chromeInset={insets.top} hideProximity />
       ) : (
         <View style={[s.content, s.profileBare]}>
           <View style={s.card}>
@@ -1833,10 +1906,12 @@ function ProfilePage({ profile, userId, name, image, insets, caption, children }
           </View>
         </View>
       )}
-      <View style={[s.profileBar, { paddingBottom: bottomGap(insets.bottom, MD) }]}>
-        {!!caption && <Text style={s.profileBarCaption} numberOfLines={2}>{caption}</Text>}
-        {children}
-      </View>
+      {(hasActions || !!caption) && (
+        <View style={[s.profileBar, { paddingBottom: bottomGap(insets.bottom, MD) }]}>
+          {!!caption && <Text style={s.profileBarCaption} numberOfLines={2}>{caption}</Text>}
+          {children}
+        </View>
+      )}
     </View>
   )
 }
@@ -1892,10 +1967,13 @@ function JoinRequestProfileView({ group, request, onDone, insets }: {
 
 // A member of a group you manage, or one of your friends. Everything that used
 // to sit in the member-actions BottomSheet or on a friend row lives here.
-function PersonProfileView({ person, onDone, insets }: {
+function PersonProfileView({ person, onDone, onGroupChanged, insets }: {
   person: PersonTarget
   /** Pop back: the person is no longer in the list behind this page. */
   onDone: () => void
+  /** My own standing in the group changed under an action taken here (handing
+   *  it over), so the pages behind must be re-seeded with the fresh row. */
+  onGroupChanged: (g: OwnedGroup) => void
   insets: { top: number; bottom: number }
 }) {
   const [busy, setBusy] = useState<'manager' | 'remove' | 'transfer' | null>(null)
@@ -1948,10 +2026,6 @@ function PersonProfileView({ person, onDone, insets }: {
   // ownerless with no way back). The server draws the same two lines.
   const canOwnerAct = iAmOwner && !m.owner
   const canRemove = !m.owner && (iAmOwner || !m.manager)
-  // Removing is the emphasized action on a PLAIN member (user directive
-  // 2026-07-28) — for a manager it stays quiet, because the loud thing to do
-  // with an appointment is to take the appointment back, not the membership.
-  const removePrimary = canRemove && !m.manager
   const doSetManager = async () => {
     setBusy('manager'); tap()
     try { rosters.set(group.id, await setManager(group.id, m.user_id, !m.manager)) } finally { setBusy(null); onDone() }
@@ -1961,14 +2035,26 @@ function PersonProfileView({ person, onDone, insets }: {
     try { rosters.set(group.id, await removeMember(group.id, m.user_id)) } finally { setBusy(null); setConfirmRemove(false); onDone() }
   }
   // The group changes hands: the caller drops from owner to manager, so every
-  // owner-only affordance on the pages behind this one is now wrong. Drop the
-  // group's caches and pop back rather than trying to repaint them — the store
-  // already has the new truth from the response's user row.
+  // owner-only affordance on the pages behind this one is now wrong and so is
+  // every role tag on the roster. Both are REPAINTED rather than dropped (a
+  // dropped cache is shadowed by the group page's own last copy, which is what
+  // left the old owner crowned after the popup closed): the roster comes back
+  // with the response, and the caller's new standing is derived HERE.
+  //
+  // NOT off the store's summary (2026-07-29): `invoke` strips `relations` from
+  // every plain response before merging it (applyServerUser — game state is
+  // Realtime-authoritative), so relations.communities still holds the PRE-
+  // transfer row at the moment this resolves. Re-seeding the stack from it put
+  // is_owner back to true, and the pages behind kept the owner's affordances —
+  // the settings page handed a MANAGER the name / description / link / kind
+  // fields, which the server would then refuse. What the handover did to the
+  // caller needs no round trip anyway: he owned it, he gave it away, he is a
+  // manager of it now. The Realtime echo of the same write follows and agrees.
   const doTransfer = async () => {
     setBusy('transfer'); tapWarning()
     try {
-      await transferOwner(group.id, m.user_id)
-      dropGroupCaches(group.id)
+      rosters.set(group.id, await transferOwner(group.id, m.user_id))
+      onGroupChanged({ ...group, is_owner: false })
     } finally { setBusy(null); setConfirmTransfer(false); onDone() }
   }
 
@@ -1993,10 +2079,14 @@ function PersonProfileView({ person, onDone, insets }: {
           />
         ) : null}
         {canRemove ? (
+          // NO filled background (user directive 2026-07-29, replaces the
+          // 2026-07-28 "emphasized on a plain member" rule): taking someone out
+          // is never the loud thing on the page, whether they are a manager or
+          // a plain member. Quiet, like handing the group over.
           <Button
             label={t('communities.removeFromGroup')}
-            variant={removePrimary ? 'primary' : 'secondary'} size="lg"
-            iconStart={<UserMinusIcon color={removePrimary ? WHITE : INK} />}
+            variant="secondary" size="lg"
+            iconStart={<UserMinusIcon color={INK} />}
             loading={busy === 'remove'} disabled={!!busy}
             onPress={() => { tap(); setConfirmRemove(true) }}
           />
@@ -2050,6 +2140,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
   const [savingLink, setSavingLink] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const linkPlaceholder = useLinkPlaceholder()
 
   // One call sets the whole policy: the kind IS the pair of flags, so there is
   // no window where the group is half-changed. The server enforces the same
@@ -2164,7 +2255,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           singleLine
           keyboardType="url"
           autoCapitalize="none"
-          placeholder={t('communities.linkPlaceholder')}
+          placeholder={linkPlaceholder}
           updateLabel={t('communities.descUpdate')}
           inputStyle={s.linkInput}
           footerStyle={s.descFooter}
@@ -2593,7 +2684,10 @@ const s = StyleSheet.create({
   toggle: { flexDirection: 'row', backgroundColor: INK_WASH, borderRadius: RADIUS, padding: XS, gap: XS },
   // The kind chooser is the same fabric as `toggle`, stacked: three stops, each
   // with the sentence that explains it, so the list reads top to bottom.
-  kindList: { backgroundColor: INK_WASH, borderRadius: RADIUS, padding: XS, gap: XS },
+  // No fill of its own (user directive 2026-07-29): the wash behind the three
+  // stops read as a slab that took over the page. The chosen stop is a white
+  // tile lifted off the page tint and the other two simply sit on it.
+  kindList: { borderRadius: RADIUS, padding: XS, gap: XS },
   kindItem: { paddingVertical: SM, paddingHorizontal: SM, borderRadius: RADIUS, gap: XS },
   toggleItem: { flex: 1, alignItems: 'center', paddingVertical: SM, borderRadius: RADIUS, gap: XS },
   toggleOn: { backgroundColor: SURFACE },

@@ -691,9 +691,10 @@ Deno.serve(async (req) => {
 
       case "transfer_owner": {
         // The owner hands the group to one of its members. The new owner gets
-        // everything; the caller stays a plain MEMBER, so the group moves from
-        // their `managed` list to their `joined` one — hence the fresh user row
-        // rather than a roster (the caller can no longer read one).
+        // everything; the caller drops to MANAGER, so the group stays in their
+        // `managed` list with is_owner off — hence BOTH the fresh user row (the
+        // new standing) and the fresh roster (the crown moved rows), the same
+        // roster set_manager and remove_member answer with.
         const group_id = typeof body.group_id === "string" ? body.group_id : null;
         const member_id = typeof body.user_id === "string" ? body.user_id : null;
         if (!group_id || !member_id) return log.error("transfer_owner", "bad_args", 400);
@@ -702,6 +703,7 @@ Deno.serve(async (req) => {
         if (result?.error) return log.error("transfer_owner", result.error, 400);
         rpcUser = result?.user;
         notifyList = result?.notify ?? [];
+        rpcExtra = { members: result?.members };
         break;
       }
 
@@ -835,6 +837,19 @@ Deno.serve(async (req) => {
         const result = await Tools.rpc(log, "app_shared_groups", { me_id: user.user_id, p_other: other_id });
         await user.persist(log);
         if (result?.error) return log.error("shared_groups", result.error, 400);
+        rpcExtra = result;
+        break;
+      }
+
+      case "shared_friends": {
+        // The friend chip's twin of shared_groups: every person the caller and
+        // `user_id` are both friends with. Read-only, starts no interaction, so
+        // it stays out of requiresPresence.
+        const other_id = typeof body.user_id === "string" ? body.user_id : null;
+        if (!other_id) return log.error("shared_friends", "no_user_id", 400);
+        const result = await Tools.rpc(log, "app_shared_friends", { me_id: user.user_id, p_other: other_id });
+        await user.persist(log);
+        if (result?.error) return log.error("shared_friends", result.error, 400);
         rpcExtra = result;
         break;
       }

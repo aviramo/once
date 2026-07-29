@@ -2,7 +2,7 @@ import { cloneElement, isValidElement, useState, type ReactElement, type ReactNo
 import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
-import { GlyphScale } from './icons'
+import { GlyphSlot } from './GlyphSlot'
 import { FONT_SCALE } from '../fonts'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON } from '../tokens'
 import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
@@ -159,7 +159,7 @@ export function Button({
             {/* The label is pinned at FONT_SCALE.ui and the button's height is a
                 fixed dp, so the glyph beside it may not keep growing either —
                 the same ceiling RoundButton pins, for the same reason. */}
-            {startIcon ? <GlyphScale cap={FONT_SCALE.ui}><View style={styles.startSlot}>{startIcon}</View></GlyphScale> : null}
+            {startIcon ? <GlyphSlot size={TEXT.md} cap={FONT_SCALE.ui} style={styles.startSlot}>{startIcon}</GlyphSlot> : null}
             {/* Icon-only button: an empty label drops the Text entirely rather
                 than rendering a zero-width one, so the labelRow gap doesn't
                 push the glyph off the button's centre. */}

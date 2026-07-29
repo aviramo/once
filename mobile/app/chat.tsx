@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Keyboard, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, requestRecordingPermissionsAsync, setAudioModeAsync, RecordingPresets } from 'expo-audio'
 import { Text, TextInput } from '../src/components/AppText'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -28,6 +28,8 @@ import { RisingCard } from '../src/components/RisingCard'
 import { SheetHeader, type OverlaySheetBody } from '../src/components/OverlaySheet'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import { StatusBarBand } from '../src/components/StatusBarBand'
+import { useBottomInset } from '../src/hooks/useBottomInset'
+import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { chatCacheKey, chatLastOpenedKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
 import { nameFromTitle } from '../src/lib/profileTitle'
@@ -217,6 +219,7 @@ type ChatPageProps = {
 
 export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange, onOnlineChange, autoFocusInput, sheetBody }: ChatPageProps = {}) {
   const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   const { profile } = useUserStore()
   const userId = profile?.user_id ?? ''
   const match = profile?.relations?.match
@@ -661,33 +664,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   // home pager shell on Android edge-to-edge, so we drive bottom padding
   // ourselves: the spacer below the input row grows by the keyboard height
   // when it's open, pushing the input row above the keyboard.
-  const safeBottom = bottomGap(insets.bottom, SM)
+  const safeBottom = bottomGap(bottomInset, SM)
 
-  const [kbHeight, setKbHeight] = useState(0)
-  useEffect(() => {
-    // Compute the keyboard's visible bottom area from screen geometry rather
-    // than from `endCoordinates.height` directly: Gboard's clipboard /
-    // suggestion strip lives in the screen between `screenY` and the bottom
-    // of the device, but isn't always counted in `height`. screenHeight −
-    // screenY gives the full strip + keyboard area.
-    //
-    // We listen to `keyboardWillShow` on both platforms so the spacer
-    // updates *before* the keyboard animation starts — that way the input
-    // bar rides up in sync with the keyboard instead of jumping after it.
-    const onShow = (e: any) => {
-      const screenH = Dimensions.get('screen').height
-      const fromScreenY = screenH - (e.endCoordinates?.screenY ?? screenH)
-      const reportedH = e.endCoordinates?.height ?? 0
-      setKbHeight(Math.max(reportedH, fromScreenY))
-    }
-    const subs = [
-      Keyboard.addListener('keyboardWillShow', onShow),
-      Keyboard.addListener('keyboardDidShow', onShow),
-      Keyboard.addListener('keyboardWillHide', () => setKbHeight(0)),
-      Keyboard.addListener('keyboardDidHide', () => setKbHeight(0)),
-    ]
-    return () => { subs.forEach(s => s.remove()) }
-  }, [])
+  // THE keyboard height (see useKeyboardHeight): it tracks the live IME inset,
+  // not just the show/hide events, so a keyboard that swaps to a TALLER panel
+  // while the field stays focused — Gboard's emoji picker — moves the composer
+  // with it instead of leaving it buried underneath (user report 2026-07-29).
+  const kbHeight = useKeyboardHeight()
 
   // ── Load cached messages instantly ───────────────────────────────────────
   useEffect(() => {
@@ -2329,14 +2312,14 @@ function MessageActionsSheet({ msg, visible, onDismiss, onClosed, onReply, onCop
   onReply: (m: Message) => void
   onCopy: (m: Message) => void
 }) {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   if (!msg) return null
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
       onClosed={onClosed}
-      contentStyle={{ paddingHorizontal: SM, paddingBottom: bottomGap(insets.bottom, SM + SM) }}
+      contentStyle={{ paddingHorizontal: SM, paddingBottom: bottomGap(bottomInset, SM + SM) }}
     >
       {!msg._failed && (
         <SheetActionRow

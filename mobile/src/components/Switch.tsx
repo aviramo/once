@@ -24,11 +24,13 @@ export function Switch({ value }: { value: boolean }) {
   )
 }
 
-// THE labelled toggle: a label (optionally with the sentence that explains it)
-// and the switch opposite it, the whole row being the tap target. Every
-// on/off setting in the app is this row — the family flags in the menu, a
-// group's "hide me here" — so a toggle is a toggle wherever it appears and a
-// variant is a style prop, never a second row.
+// THE labelled toggle: a label with the switch opposite it on the SAME line,
+// and the sentence that explains the setting running the full width beneath
+// them (user directive 2026-07-29 — the switch used to sit opposite the whole
+// text block, squeezing a long sub into a narrow column beside it). The whole
+// thing is the tap target. Every on/off setting in the app is this row — the
+// family flags in the menu, a group's "hide me here" — so a toggle is a toggle
+// wherever it appears and a variant is a style prop, never a second row.
 export function ToggleRow({ label, sub, value, onValueChange, style }: {
   label: string
   /** What the setting does, under the label. Omitted where the label says it. */
@@ -45,23 +47,23 @@ export function ToggleRow({ label, sub, value, onValueChange, style }: {
       accessibilityState={{ checked: value }}
       accessibilityLabel={label}
     >
-      <View style={s.rowText}>
+      <View style={s.head}>
         <Text style={s.rowLabel}>{label}</Text>
-        {sub ? <Text style={s.rowSub}>{sub}</Text> : null}
+        <Switch value={value} />
       </View>
-      <Switch value={value} />
+      {sub ? <Text style={s.rowSub}>{sub}</Text> : null}
     </Pressable>
   )
 }
 
 const s = StyleSheet.create({
-  row: {
+  row: { gap: SM, paddingVertical: SM, paddingHorizontal: MD },
+  head: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: MD, paddingVertical: SM, paddingHorizontal: MD,
+    gap: MD,
   },
-  rowText: { flex: 1, minWidth: 0, gap: SM },
-  rowLabel: { fontSize: TEXT.md, color: INK },
-  rowSub: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lh(TEXT.md) },
+  rowLabel: { flex: 1, minWidth: 0, fontSize: TEXT.md, color: INK },
+  rowSub: { fontSize: TEXT.sm, color: INK_MUTED, lineHeight: lh(TEXT.sm) },
   track: {
     width: SWITCH.width, height: SWITCH.height, borderRadius: RADII.pill,
     padding: SWITCH.pad, justifyContent: 'center',

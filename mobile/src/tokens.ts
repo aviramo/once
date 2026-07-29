@@ -227,6 +227,13 @@ export const SWIPE_DISMISS_PX = 80         // translateY to commit a dismiss
 export const SWIPE_DISMISS_VELOCITY = 800  // px/s velocity that auto-commits
 export const PAN_ACTIVE_OFFSET_Y = 8       // when to start tracking the gesture
 export const PAN_FAIL_OFFSET_Y = -8        // upward drag cancels
+// How close to offset 0 still counts as "the inner scroll is at its top", i.e.
+// has nothing left to give and may hand the surface to the pull. A few px of
+// slack because a throttled onScroll can report the resting position a hair
+// short of zero, and a flag stuck `false` is a surface that can never be swiped
+// away again. One constant: every place that asks the question must ask it the
+// same way (PullScrollView's scroll sync AND its content-size correction).
+export const SCROLL_AT_TOP_PX = 8
 // Fraction of the screen height a pulled card must travel to commit — the
 // SINGLE uniform commit threshold for every pull surface (page1 skip, page2
 // decline, profile-sheet dismiss). The SAME fraction also normalizes the
@@ -269,6 +276,13 @@ export const LIST_PAGE_AHEAD_VIEWPORTS = 1
 // what it already holds does so immediately, so this delay costs nothing that
 // the user can see.
 export const SEARCH_DEBOUNCE_MS = 300
+
+// ── Onboarding nudges ──────────────────────────────────────────────────────
+// How many page1 profiles a user watches (counted from the moment the profile
+// is built) before home raises the one-shot Communities awareness nudge. Small
+// on purpose: the point is to explain what decides WHO shows up before the
+// stream of faces has settled into a habit.
+export const COMMUNITIES_NUDGE_AFTER = 3
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,

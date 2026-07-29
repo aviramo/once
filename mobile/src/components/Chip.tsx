@@ -4,7 +4,8 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
 import { Text } from './AppText'
 import { Path, Circle, Rect } from 'react-native-svg'
 import { Glyph } from './icons'
-import { FONT_SCALE, iconScale, inkOffset } from '../fonts'
+import { GlyphSlot } from './GlyphSlot'
+import { FONT_SCALE } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
 import { PHOTO_CHROME, PAGE, INK, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW } from '../colors'
@@ -250,6 +251,7 @@ export function Chip({
   small = false,
   plusCount,
   renderTrailing,
+  onTrailingPress,
   onPress,
 }: {
   renderIcon?: (color: string) => React.ReactNode
@@ -279,6 +281,11 @@ export function Chip({
    * One size step, a prop, never a second chip component. */
   small?: boolean
   renderTrailing?: (color: string) => React.ReactNode
+  /** Makes the TRAILING glyph its own press target, separate from the chip's
+   * `onPress` — a small affordance riding inside a label chip (the match card's
+   * report flag at the reading-end of the name/age heading, 2026-07-29).
+   * TAP_SLOP widens the target past the tiny glyph. */
+  onTrailingPress?: () => void
   /** When provided, the chip itself becomes the Pressable. Avoids an extra
    * wrapper View that would break the flexShrink chain — wrapping a
    * flexShrink:1 chip in a plain Pressable hides the shrink hint from the
@@ -295,6 +302,10 @@ export function Chip({
   // buttons, so chips and buttons read as one fabric off the image. Outlined
   // chips (an empty add slot) stay flat.
   const tileShadow = onPhoto && !outlined
+  // Every glyph in this chip stands beside the chip's OWN label — the small
+  // tile's label is a size down, and both are capped at FONT_SCALE.heading, so
+  // the icon can never outgrow the text it sits next to on a large-font device.
+  const glyphSlot = { size: small ? TEXT.sm : TEXT.md, cap: FONT_SCALE.heading }
   const Container: any = onPress ? Pressable : View
   // "+N": the mini-chip that chains right after the label's last word. The label
   // is split into word-runs so the pill can flow after the final one and wrap
@@ -325,7 +336,7 @@ export function Chip({
       onPress={onPress}
       style={[styles.chip, small && styles.chipSmall, outlined ? styles.chipOutlined : { backgroundColor: bgColor }, tileShadow && styles.chipShadow]}
     >
-      {renderIcon ? <View style={styles.glyphWrap}>{renderIcon(fg)}</View> : null}
+      {renderIcon ? <GlyphSlot {...glyphSlot}>{renderIcon(fg)}</GlyphSlot> : null}
       {lines ? (
         // A column of wrapping rows: one row per `br`-delimited line, each row a
         // run of text + mini-chip clusters. Each text run is its own flex item
@@ -377,7 +388,14 @@ export function Chip({
           >
             {phraseWrap(text ?? '')}
           </Text>
-          {renderTrailing ? <View style={styles.glyphWrap}>{renderTrailing(fg)}</View> : null}
+          {renderTrailing ? (
+            // The trailing glyph is its own press target when asked (the report
+            // flag inside the name/age chip) — the SAME one-line-tall slot, just
+            // pressable, so it stays level with the label's first line exactly
+            // as the inert version does and wins the responder over the chip's
+            // own onPress.
+            <GlyphSlot {...glyphSlot} onPress={onTrailingPress}>{renderTrailing(fg)}</GlyphSlot>
+          ) : null}
         </>
       )}
     </Container>
@@ -501,20 +519,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingHorizontal: MD - STROKE.thin,
     paddingVertical: SM - STROKE.thin,
-  },
-  // Same treatment the settings select rows use (selectRowIconWrap): a box
-  // exactly one text-line tall so the glyph centres against the FIRST line of a
-  // wrapped chip label instead of drifting into the gap between the two lines.
-  // The parent (`.chip`) top-aligns the row, so this box lands on the first
-  // line; marginTop then lands the glyph on that line's ink rather than on its
-  // line box. Single-line chips are unaffected — the box then equals the row
-  // height, so top-align and centre coincide. The cap matches the label's own
-  // maxFontSizeMultiplier so box and text scale together.
-  glyphWrap: {
-    height: iconScale(lh(TEXT.md), FONT_SCALE.heading),
-    marginTop: inkOffset(TEXT.md, FONT_SCALE.heading),
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   chipText: {
     fontSize: TEXT.md,

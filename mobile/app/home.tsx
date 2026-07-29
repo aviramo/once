@@ -18,12 +18,12 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { INK, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
-import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, lh, bottomGap } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, COMMUNITIES_NUDGE_AFTER, lh, bottomGap } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
-import { SharedGroupsPopup } from '../src/components/SharedGroupsPopup'
-import { sharedGroups, flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type SharedGroup, type CommunitiesTarget } from '../src/lib/communities'
+import { SharedGroupsPopup, SharedFriendsPopup } from '../src/components/SharedListPopup'
+import { sharedGroups, sharedFriends, flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type SharedGroup, type FriendItem, type CommunitiesTarget } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
@@ -42,9 +42,11 @@ import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
+import { useBottomInset } from '../src/hooks/useBottomInset'
 import { FONT_SCALE } from '../src/fonts'
-import { SEEN_FLAGS } from '../src/keys'
-import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale, CloseIcon, BackIcon, UserPlusIcon, ShieldIcon } from '../src/components/icons'
+import { SEEN_FLAGS, SEEN_VALUES } from '../src/keys'
+import { hasSeenFlag, markSeenFlag, readSeenValue, writeSeenValues } from '../src/lib/seenFlags'
+import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale, CloseIcon, BackIcon, UserPlusIcon, ShieldIcon, GroupsIcon } from '../src/components/icons'
 import type { CardAction } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -811,7 +813,8 @@ const statusButtonStyles = StyleSheet.create({
 // ── Screen ─────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
-  const { top: topInset, bottom: bottomInset } = useSafeAreaInsets()
+  const { top: topInset } = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   const { profile } = useUserStore()
   const router = useRouter()
   // A browse-only user (account created, profile not yet built) reaches home and
@@ -1627,12 +1630,28 @@ export default function HomePage() {
   // else needs anchoring any more: a resolved invite closes its own overlay
   // by derivation, and the menu is never yanked out from under the user (they
   // are intentionally in there, and settings actions can change state).
+  //
+  // "Fresh" means the transition happened while home was WATCHING a settled
+  // state, not while the boot answer was still landing. Boot routing runs off
+  // the disk snapshot (hydrate sets `fetched`, index.tsx navigates on it), so
+  // home routinely mounts on a stale `state` and the first fetch reconciles it
+  // a beat later — with `prev !== 'chat'` alone, an ordinary relaunch into an
+  // existing chat read as a brand-new match and raised the sheet on launch,
+  // which is exactly what the user directive of 2026-07-28 banned (see the
+  // launch-notification effect above). `serverSynced` flips false→true in the
+  // same render as that reconciliation, so it is the one signal that tells the
+  // two apart. Only the OPEN is suppressed: a cached 'chat' the server says is
+  // over must still close the sheet and drop the transcript.
+  const serverSynced = useUserStore(s => s.serverSynced)
   const prevStateRef = useRef(state)
+  const prevServerSyncedRef = useRef(serverSynced)
   useEffect(() => {
+    const justSynced = !prevServerSyncedRef.current && serverSynced
+    prevServerSyncedRef.current = serverSynced
     if (prevStateRef.current !== state) {
       const prev = prevStateRef.current
       prevStateRef.current = state
-      const enteringChat = state === 'chat' && prev !== 'chat'
+      const enteringChat = state === 'chat' && prev !== 'chat' && !justSynced
       const leavingChat = state !== 'chat' && prev === 'chat'
 
       if (enteringChat) {
@@ -1649,8 +1668,11 @@ export default function HomePage() {
         clearChatCache(chatPartnerRef.current)
       }
     }
+    // `serverSynced` is a dep in its own right: when the boot answer changes
+    // nothing, the flip must still be consumed here, or the NEXT (genuine)
+    // transition would read as the reconciliation and be swallowed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state])
+  }, [state, serverSynced])
 
   useEffect(() => {
     const prev = prevPage2InviteUserIdRef.current
@@ -2286,6 +2308,16 @@ export default function HomePage() {
     setGroupsOpen(true)
     sharedGroups(userId).then(setGroupsData).catch(() => setGroupsData([]))
   }, [tap])
+  // Mutual-friends popup: the same shape one line down, opened by the friend
+  // chip. Fetched here for the same reason — it rides the sheet's slide-in.
+  const [friendsOpen, setFriendsOpen] = useState(false)
+  const [friendsData, setFriendsData] = useState<FriendItem[] | null>(null)
+  const openFriends = useCallback((userId: string) => {
+    tap()
+    setFriendsData(null)
+    setFriendsOpen(true)
+    sharedFriends(userId).then(setFriendsData).catch(() => setFriendsData([]))
+  }, [tap])
 
   const runAction = (
     endpoint: string,
@@ -2768,6 +2800,62 @@ export default function HomePage() {
     return true
   }
 
+  // ── Communities awareness nudge (once ever) ──────────────────────────────
+  // A brand-new user meets the app as a stream of faces and has no way to learn
+  // that WHO he is shown depends on his circles. So the profiles he watches are
+  // counted from the moment his profile is built, and when the one after
+  // COMMUNITIES_NUDGE_AFTER arrives the Communities hub rises over home with a
+  // popup that says why joining a group and inviting friends makes the people
+  // he sees closer to him. Nothing is taken away: the next profile is already
+  // loaded UNDER the sheet, so swiping it down (the app's one dismissal
+  // gesture) simply reveals it.
+  //
+  // Counted per distinct person and PERSISTED, so a relaunch continues the tally
+  // instead of restarting it, and re-showing the same candidate after that
+  // relaunch doesn't count that person twice. Only `watching` counts — the same
+  // slot carries the chat partner in chat state, who is not a profile being
+  // browsed.
+  const [commNudgePending, setCommNudgePending] = useState(false)
+  const [commNudgeOpen, setCommNudgeOpen] = useState(false)
+  // Latched once the nudge is spent (fired, or found unnecessary), so the
+  // storage round trip below runs only until then and never again per session.
+  const commNudgeDoneRef = useRef(false)
+  const watchedUserId = rawPage1State === 'watching' ? displayedMatch?.user_id ?? null : null
+  useEffect(() => {
+    if (!watchedUserId || !profileBuilt || commNudgeDoneRef.current) return
+    let cancelled = false
+    void (async () => {
+      if (await hasSeenFlag(SEEN_FLAGS.communitiesNudge)) { commNudgeDoneRef.current = true; return }
+      // Deliberately NOT skipped for a user who already has a circle: someone
+      // who arrived through one friend's invite link still hasn't met groups,
+      // and this fires once in a lifetime either way.
+      let count = (await readSeenValue<number>(SEEN_VALUES.watchedCount)) ?? 0
+      if ((await readSeenValue<string>(SEEN_VALUES.watchedLastId)) !== watchedUserId) {
+        count += 1
+        await writeSeenValues({
+          [SEEN_VALUES.watchedCount]: count,
+          [SEEN_VALUES.watchedLastId]: watchedUserId,
+        })
+      }
+      if (cancelled || count <= COMMUNITIES_NUDGE_AFTER) return
+      commNudgeDoneRef.current = true
+      setCommNudgePending(true)
+    })()
+    return () => { cancelled = true }
+  }, [watchedUserId, profileBuilt])
+  // Raised only onto a clear shell: an overlay the user opened himself, the
+  // availability gate, or an invitation the server put up all outrank a nudge,
+  // so it waits for them instead of stacking on top. The seen flag is written
+  // HERE, at the moment it actually shows, so a nudge that never got its moment
+  // isn't silently spent.
+  useEffect(() => {
+    if (!commNudgePending || overlays.length > 0 || overlaysGated || inviteOverlayOpen) return
+    setCommNudgePending(false)
+    void markSeenFlag(SEEN_FLAGS.communitiesNudge)
+    openCommunities()
+    setCommNudgeOpen(true)
+  }, [commNudgePending, overlays.length, overlaysGated, inviteOverlayOpen, openCommunities])
+
   // ── Drag the menu open ──────────────────────────────────────────────────
   // A sideways drag INWARD (from the START edge's direction) anywhere on the
   // shell opens the drawer — the gesture counterpart of the hamburger.
@@ -3166,6 +3254,7 @@ export default function HomePage() {
                               : undefined}
                             onReport={() => openReport(displayedMatch.user_id)}
                             onGroupsTap={() => openGroups(displayedMatch.user_id)}
+                            onFriendsTap={() => openFriends(displayedMatch.user_id)}
                             chromeInset={topInset}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
@@ -3395,6 +3484,20 @@ export default function HomePage() {
                   onDismiss={() => setGroupsOpen(false)}
                 />
 
+                {/* Mutual friends, opened by a card's friend chip. A tapped row
+                    is the person-level twin of a group row opening GroupSheet:
+                    it lands the Communities sheet on that friend's page. */}
+                <SharedFriendsPopup
+                  visible={friendsOpen}
+                  friends={friendsData}
+                  onSelect={f => {
+                    setFriendsOpen(false)
+                    setCommunitiesTarget({ kind: 'friend', userId: f.user_id })
+                    openCommunities()
+                  }}
+                  onDismiss={() => setFriendsOpen(false)}
+                />
+
               </View>
 
               {/* Floating menu button. A sibling AFTER the card layers so it
@@ -3447,6 +3550,7 @@ export default function HomePage() {
               actions={[]}
               onReport={() => openReport(inviteCardMatch.user_id)}
               onGroupsTap={() => openGroups(inviteCardMatch.user_id)}
+              onFriendsTap={() => openFriends(inviteCardMatch.user_id)}
               viewerLocationType={resolveLocationType(profile)}
               bottomInset={0}
               chromeInset={topInset}
@@ -3634,6 +3738,20 @@ export default function HomePage() {
             />
           )}
         </OverlaySheet>
+
+        {/* The awareness nudge, over the hub it just opened. One button, and
+            it only dismisses the popup: the hub stays up to be looked at, and
+            swiping THAT down goes back to the next profile. */}
+        <ConfirmDialog
+          visible={commNudgeOpen}
+          title={genderize(t('communities.nudgeTitle'), isMale)}
+          description={genderize(t('communities.nudgeDesc'), isMale)}
+          confirmLabel={t('communities.nudgeConfirm')}
+          confirmIconStart={<GroupsIcon color={WHITE} />}
+          onConfirm={() => setCommNudgeOpen(false)}
+          onCancel={() => setCommNudgeOpen(false)}
+          draggable
+        />
 
         <BuyExtraPopup
           visible={buyExtraOpen}

@@ -6,8 +6,15 @@ import { STORAGE } from '../keys'
 // pull demos, the watching skip-hint "got it"). ONE read-merge-write helper
 // pair so that logic is never duplicated at a call site, and markSeenFlag
 // always merges (never clobbers a sibling flag).
+//
+// The same map also carries the non-boolean bookkeeping a one-shot needs
+// before it fires — a counter, the id it last counted (see SEEN_VALUES) —
+// through readSeenValue/writeSeenValues, so there is still exactly one storage
+// key and one merge implementation.
 
-async function readFlags(): Promise<Record<string, boolean>> {
+type FlagValue = boolean | number | string
+
+async function readFlags(): Promise<Record<string, FlagValue>> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE.seenFlags)
     return raw ? JSON.parse(raw) : {}
@@ -29,6 +36,24 @@ export async function markSeenFlag(flag: string): Promise<void> {
     if (flags[flag]) return
     flags[flag] = true
     await AsyncStorage.setItem(STORAGE.seenFlags, JSON.stringify(flags))
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** One stored bookkeeping value, or undefined when it was never written (or
+ * the read failed). Same map, same key as the flags above. */
+export async function readSeenValue<T extends FlagValue>(key: string): Promise<T | undefined> {
+  return (await readFlags())[key] as T | undefined
+}
+
+/** Merge-write bookkeeping values. Like markSeenFlag it never clobbers a
+ * sibling entry, and it swallows storage errors — a failed persist only means
+ * a one-shot may count from scratch, never a crash. */
+export async function writeSeenValues(entries: Record<string, FlagValue>): Promise<void> {
+  try {
+    const flags = await readFlags()
+    await AsyncStorage.setItem(STORAGE.seenFlags, JSON.stringify({ ...flags, ...entries }))
   } catch {
     /* best-effort */
   }

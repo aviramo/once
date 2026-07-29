@@ -42,6 +42,13 @@ export interface Profile {
    * group_name; absent/NULL when the pair shares 0 or 1 groups. Drives the
    * "+N" badge inside the group chip. */
   group_extra?: number | null
+  /** Name of a person the viewer and this profile's subject are BOTH friends
+   * with, NULL when none. The person-level twin of `group_name`, embedded by
+   * the same make_profile call and driving the mutual-friend chip. */
+  friend_name?: string | null
+  /** Count of ADDITIONAL mutual friends beyond `friend_name` (2 shared → 1),
+   * absent at 0. Drives the same "+N" pill the group chip uses. */
+  friend_extra?: number | null
 }
 
 export type LocationType = 'device' | 'home' | 'work'
@@ -190,6 +197,14 @@ interface UserStore {
    *  (index.tsx) waits on this, so the disk hit is what lets a relaunch skip
    *  the `users` round trip before showing /home. */
   fetched: boolean
+  /** True once an AUTHORITATIVE server answer has been applied — i.e. fetch()
+   *  actually landed a row. Distinct from `fetched`, which hydrate() also sets
+   *  from the disk snapshot: boot routing runs off the cached profile, so home
+   *  can mount on a STALE state and see the first fetch reconcile it a moment
+   *  later. Consumers that react to state CHANGES (home's chat-transition
+   *  effect) use the false→true flip to tell that reconciliation apart from a
+   *  live in-session transition. */
+  serverSynced: boolean
   fetch: (userId: string) => Promise<void>
   /** Paint the last known profile from disk. Fills an EMPTY store only —
    *  a landed server answer always wins. */
@@ -245,6 +260,23 @@ const lastSeenOf = (p: UserProfile | null | undefined): number => {
 }
 
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+// Fields that ride on the row but that NOTHING renders, so a row differing only
+// in these is not a change as far as React is concerned. `last_seen` is the
+// whole list: the edge function stamps it on EVERY request (app/index.ts), so a
+// pure READ — a group's roster, the friends list, a search page — comes back as
+// a "changed" row that differs from the one on screen in that one field. Only
+// the ordering guard reads it, off the module counter above, which is updated
+// before this comparison is ever reached.
+const VOLATILE_FIELDS = ['last_seen'] as const
+const withoutVolatile = (p: Record<string, unknown>) => {
+  const copy = { ...p }
+  for (const k of VOLATILE_FIELDS) delete copy[k]
+  return copy
+}
+/** Would anything on screen differ? See VOLATILE_FIELDS. */
+const sameForRender = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+  equal(withoutVolatile(a), withoutVolatile(b))
 
 // Messages whose page1 lock represents a failed action the user themselves
 // initiated (so the UI shows it as 'fail' rather than 'missed').
@@ -396,6 +428,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   profile: null,
   loading: false,
   fetched: false,
+  serverSynced: false,
 
   fetch: async (userId: string) => {
     set({ loading: true })
@@ -438,7 +471,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
         if (data) get().applyServerUser(data as Record<string, unknown>, 'fetch')
         else set({ profile: null })
-        set({ fetched: true })
+        // Same tick as applyServerUser's `set`, so React batches them into ONE
+        // render: a consumer sees the reconciled state and the serverSynced
+        // flip together and can tell "the server just answered for the first
+        // time" from "the state changed while I was watching".
+        set({ fetched: true, serverSynced: true })
         return
       }
     } finally {
@@ -551,6 +588,16 @@ export const useUserStore = create<UserStore>((set, get) => ({
       }
     }
     const next = merged as unknown as UserProfile
+    // Nothing on screen changed → keep the SAME object. The store hands every
+    // consumer identity, so publishing a fresh profile here re-renders the
+    // whole app — home and its match card, the menu, the communities stack —
+    // and rewrites the profile to disk. The communities pages fire several
+    // reads per page and each one is answered THREE times over (the HTTP
+    // response, the Realtime echo of the last_seen write, and the snapshot
+    // refresh that follows it) for a row that did not actually change. That
+    // burst of full-tree renders is what left a tap on those pages sitting
+    // unhandled until the answers landed.
+    if (sameForRender(next as unknown as Record<string, unknown>, prev as unknown as Record<string, unknown>)) return
     cacheProfile(next)
     set({ profile: next })
   },
@@ -560,6 +607,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
     lastAppliedLastSeen = 0
     lastRawRelations = null
     void profileCache.clearAll()
-    set({ profile: null, fetched: false })
+    set({ profile: null, fetched: false, serverSynced: false })
   },
 }))

@@ -46,6 +46,24 @@ export const groupLabel = (n: number) => (n === 1 ? t('communities.oneGroup') : 
 export const friendLabel = (n: number) => (n === 1 ? t('communities.oneFriend') : count('communities.friendsCount', n))
 export const requestLabel = (n: number) => (n === 1 ? t('communities.oneRequest') : count('communities.requestsCount', n))
 
+// "Mutual friend" in the right form, for the shared-friends popup's title. The
+// on-photo chip says only the name (its chain-link glyph carries the meaning),
+// so this wording exists in exactly one place. Hebrew inflects for that one
+// friend's gender at n === 1 ('חבר משותף' / 'חברה משותפת'); above one the
+// plural covers a mixed set, exactly as Hebrew does.
+export const sharedFriendLabel = (n: number, isMale?: boolean | null) =>
+  n === 1
+    ? t(isMale === false ? 'communities.sharedFriendF' : 'communities.sharedFriendM')
+    : t('communities.sharedFriendsTitle')
+
+// The on-photo chip's label: "חבר של אסף" / "חברה של אסף". The gender is the
+// CARD SUBJECT's, not the named friend's — the sentence is about the person
+// whose card this is ("she is a friend of Asaf"), so it inflects with
+// `match.is_male`.
+export const friendOfLabel = (name: string, subjectIsMale?: boolean | null) =>
+  t(subjectIsMale === false ? 'communities.friendOfF' : 'communities.friendOfM')
+    .replace('{name}', name)
+
 // ── Group kinds ────────────────────────────────────────────────────────────
 // ONE axis with three stops replaces the is_public × requires_approval pair in
 // every screen (user directive 2026-07-27):
@@ -220,11 +238,12 @@ export const removeMember = (group_id: string, user_id: string): Promise<GroupMe
 export const setManager = (group_id: string, user_id: string, make: boolean): Promise<GroupMember[]> =>
   invoke<{ members: GroupMember[] }>('app/set_manager', { group_id, user_id, make }).then(r => r.members ?? [])
 
-// Hand the group to one of its members (owner only). The caller drops to a
-// plain MEMBER, so there is no roster to return: the response is the fresh user
-// row, which the store merges, moving the group from `managed` to `joined`.
-export const transferOwner = (group_id: string, user_id: string): Promise<unknown> =>
-  invoke('app/transfer_owner', { group_id, user_id })
+// Hand the group to one of its members (owner only). The caller drops to
+// MANAGER, so the group stays in `managed` with is_owner off — the fresh user
+// row rides in the response (the store merges it) and, like every other roster
+// action, so does the roster the handover just rewrote.
+export const transferOwner = (group_id: string, user_id: string): Promise<GroupMember[]> =>
+  invoke<{ members: GroupMember[] }>('app/transfer_owner', { group_id, user_id }).then(r => r.members ?? [])
 
 // name / is_public / requires_approval each omitted = unchanged. `description`
 // and `link` are applied only when the key is present (pass null to clear) —
@@ -322,6 +341,11 @@ export const searchPeople = (q: string): Promise<Person[]> =>
 // as the on-photo chip's named group). Backs the group chip's detail popup.
 export const sharedGroups = (user_id: string): Promise<SharedGroup[]> =>
   invoke<{ groups: SharedGroup[] }>('app/shared_groups', { user_id }).then(r => r.groups ?? [])
+
+// People the caller and `user_id` are BOTH friends with, by name (same order
+// as the on-photo chip's named friend). Backs the friend chip's detail popup.
+export const sharedFriends = (user_id: string): Promise<FriendItem[]> =>
+  invoke<{ friends: FriendItem[] }>('app/shared_friends', { user_id }).then(r => r.friends ?? [])
 
 // 'requested' | 'friends' (auto-linked when a reverse request already existed)
 export const friendRequest = (user_id: string): Promise<string> =>

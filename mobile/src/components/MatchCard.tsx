@@ -3,7 +3,7 @@ import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, Platform } fr
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useBottomInset } from '../hooks/useBottomInset'
 import { PullScrollView, PullContext } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
@@ -14,7 +14,8 @@ import { BIO_MIN, BIO_MAX } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import { buildFamilySegments } from './FamilyCard'
 import { Chip, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, ShieldIcon, GroupsIcon } from './icons'
+import { HeartIcon, ShieldIcon, GroupsIcon, LinkIcon } from './icons'
+import { friendOfLabel } from '../lib/communities'
 import { RoundButton } from './RoundButton'
 import { Button } from './Button'
 import { EditableText } from './EditableText'
@@ -242,6 +243,12 @@ type MatchCardProps = {
   match: Profile
   bottomInset?: number
   hideTime?: boolean
+  /** Drops the proximity chip (distance + last-seen) entirely. Used by the
+   * communities profile page: a group member or a friend is opened from a
+   * list you already belong to, and neither where they are nor when they were
+   * last around is part of what that context reveals (user directive
+   * 2026-07-29). `hideTime` only mutes the time half; this drops the chip. */
+  hideProximity?: boolean
   onReady?: () => void
   topBlock?: React.ReactNode
   /** Fired when the topBlock slide-in animation completes after a transition
@@ -267,6 +274,8 @@ type MatchCardProps = {
   /** When provided, the shared-group chip becomes tappable and opens the
    * shared-groups detail popup. Absent on the own-profile preview (no chip). */
   onGroupsTap?: () => void
+  /** Same, for the mutual-friend chip below it. */
+  onFriendsTap?: () => void
   /** When provided (and `self`), the bio bubble becomes an inline editor:
    * tap-to-place-caret, keyboard-aware scroll, auto-save on blur. Replaces
    * the old onBioTap popup. The bio section renders even when the bio is
@@ -338,6 +347,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   match,
   bottomInset = 0,
   hideTime = false,
+  hideProximity = false,
   onReady,
   topBlock,
   onTopBlockShown,
@@ -346,6 +356,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   onPhotoTap,
   onFamilyTap,
   onGroupsTap,
+  onFriendsTap,
   bioEdit,
   actions,
   addChips,
@@ -460,16 +471,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   }, [match.user_id, match.images, imageUrls, match.bio, bioEditable])
 
   const photoCount = sections.filter(s => s.type === 'photo').length
-  // Key of the LAST photo section — the report button rides the bottom-center
-  // of that photo (user directive 2026-07-25), not the hero's top-END. When
-  // there is a single photo this resolves to the hero, so a one-photo profile
-  // still carries the report affordance.
-  const lastPhotoKey = useMemo(() => {
-    for (let i = sections.length - 1; i >= 0; i--) {
-      if (sections[i].type === 'photo') return sections[i].key
-    }
-    return null
-  }, [sections])
   // Key of the SECOND photo — the remote bio is laid over its bottom (white
   // text + shadow, like the chips) instead of a bubble between photos, so photos
   // 1 and 2 sit flush. Null with <2 photos, where the bio falls back to a
@@ -540,7 +541,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // the `ready` opacity gate below never has to flip mid-slide-up.
   const effectiveCardH = cardHeight && cardHeight > 0 ? cardHeight : cardH
   const photoHeight = Math.max(280, effectiveCardH - bottomInset)
-  const { bottom: safeBottomInset } = useSafeAreaInsets()
+  const safeBottomInset = useBottomInset()
   // The first photo runs to the bottom of the card (callers pass bottomInset=0
   // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
   // must clear the home indicator on its own. This offset is shared by the
@@ -548,24 +549,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // — it lives on the chip column alone (infoLeft), or the heart rides up with
   // it and leaves its anchored position.
   const overlayBottomOffset = bottomGap(safeBottomInset, MD)
-  // Report affordance: DELIBERATELY NOT the hero-heart twin (user directive
-  // 2026-07-26 — the full-size INK tile mirrored the heart on the opposite
-  // corner and read as its equal). It is a secondary, "seen the whole profile,
-  // flag it" flag, so it wears the SMALL chrome circle (ROUND_BUTTON_SIZE_SM,
-  // the hamburger's size / ICON.round glyph) over a TINTED tile (PAGE, the page
-  // purple, vs the heart's plain white SURFACE). The GLYPH is the regular INK
-  // purple, same as the heart (user directive 2026-07-28 — the old muted
-  // INK_MUTED shield read as disabled); size and tile carry the de-emphasis on
-  // their own. Bottom-anchored on the LAST photo, so its bottom
-  // edge still sits level with the heart's. Omitted for the own-profile
-  // preview (no onReport).
-  const renderReportOverlay = () => onReport ? (
-    <View pointerEvents="box-none" style={[styles.reportOverlay, { paddingBottom: overlayBottomOffset }]}>
-      <RoundButton onPress={onReport} size={ROUND_BUTTON_SIZE_SM} bg={PAGE}>
-        <ShieldIcon color={INK} fill={INK} size={ICON.round} />
-      </RoundButton>
-    </View>
-  ) : null
   const ready = effectiveCardH > 0
   const timeIso = match.last_seen
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
@@ -577,7 +560,9 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const subjectLocationType = resolveLocationType(match)
   const viewerType: LocationType = viewerLocationType ?? 'device'
   const hasDistance = match.distance != null && !isNaN(match.distance)
-  const proximityStr = formatProximity(match.distance, timeIso, match.is_male, viewerType, subjectLocationType, hideTime)
+  const proximityStr = hideProximity
+    ? ''
+    : formatProximity(match.distance, timeIso, match.is_male, viewerType, subjectLocationType, hideTime)
   const proximityLive = isDistanceHere(match.distance) || (!hideTime && isLastSeenJustNow(timeIso))
   // Name and age are the two halves of the server's combined `title`, and both
   // ride the first chips line. The name used to live in the home TAB; that
@@ -691,6 +676,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const groupsTapGesture = useMemo(
     () => Gesture.Tap().runOnJS(true).onEnd((_e, success) => { if (success) handleGroupsTap() }),
     [handleGroupsTap],
+  )
+  const handleFriendsTap = useCallback(() => {
+    if (swallowTapWhileEditing()) return
+    onFriendsTap?.()
+  }, [swallowTapWhileEditing, onFriendsTap])
+  const friendsTapGesture = useMemo(
+    () => Gesture.Tap().runOnJS(true).onEnd((_e, success) => { if (success) handleFriendsTap() }),
+    [handleFriendsTap],
   )
   useEffect(() => {
     if (!bioEditable) return
@@ -940,15 +933,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
             </>
           )}
 
-          {/* Report rides the bottom-center of the LAST photo, not the shell
-              chrome. When the profile has a single photo the hero IS the last
-              photo, so it carries the report here; otherwise it lands on the
-              trailing photo section below. Top-START/END are left to the shell
-              (home's hamburger, a sheet's close X). */}
-          {sections[0]?.type === 'photo' && sections[0].key === lastPhotoKey
-            ? renderReportOverlay()
-            : null}
-
           {/* Bottom-of-hero overlay: the fact-chip stack. The name/age heading
               no longer lives here — it is pinned FIXED to the card's top-END
               (opposite the shell's hamburger), out of the scroll (see the
@@ -1016,6 +1000,27 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     </View>
                   </GestureDetector>
                 ) : null}
+                {/* Mutual friend: the person-level twin of the group chip, and
+                    the last fact line. Same tile, same "+N" pill, same native
+                    tap-to-popup. Reads "חבר של אסף" / "חברה של אסף" under a
+                    chain-link glyph (user directive 2026-07-29) — a sentence
+                    about THIS card's subject, so it inflects with the subject's
+                    gender, never the named friend's. */}
+                {match.friend_name ? (
+                  <GestureDetector gesture={friendsTapGesture}>
+                    <View
+                      pointerEvents={onFriendsTap && !chipsHidden ? 'auto' : (chipsToggleable ? 'none' : 'box-none')}
+                      style={styles.chipsLine}
+                    >
+                      <Chip
+                        renderIcon={c => <LinkIcon color={c} size={ICON.sm} />}
+                        text={friendOfLabel(match.friend_name, match.is_male)}
+                        plusCount={match.friend_extra ?? undefined}
+                        onPhoto
+                      />
+                    </View>
+                  </GestureDetector>
+                ) : null}
               </View>
             </View>
           </Animated.View>
@@ -1054,8 +1059,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               ) : null}
               {/* Bio as a big WHITE chip floated at the bottom of the second
                   photo, inset on every side. Its END inset clears the floating
-                  heart (so it is never where the heart is); its bottom inset
-                  lifts it above the report button when this photo carries it. On
+                  heart (so it is never where the heart is). On
                   a remote card it fades with the same tap-toggle as the fact
                   chips (user directive 2026-07-26): the info clears off whichever
                   photo the user is on. */}
@@ -1069,10 +1073,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     styles.photoBioCard,
                     {
                       end: showFloatingAction ? ROUND_BUTTON_SIZE + MD + MD : MD,
-                      // Reserve the report's lane only when a report actually
-                      // renders here (never on the own-profile preview).
-                      bottom: overlayBottomOffset + LG
-                        + (section.key === lastPhotoKey && onReport ? ROUND_BUTTON_SIZE_SM + MD : 0),
+                      bottom: overlayBottomOffset + LG,
                     },
                     chipsToggleable && chipsAnimStyle,
                   ]}
@@ -1084,7 +1085,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   )}
                 </Animated.View>
               ) : null}
-              {section.key === lastPhotoKey ? renderReportOverlay() : null}
             </Animated.View>
           )
           if (section.type === 'bio') {
@@ -1140,12 +1140,12 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           while the profile scrolls under it (user directive 2026-07-25). On the
           own-profile preview the add-chips follow it in the same column. Its
           white tile matches the round overlay buttons — same PHOTO_CHROME. */}
-      {identityChipText || headingAction || (addChips && addChips.length > 0) ? (
+      {identityChipText || onReport || headingAction || (addChips && addChips.length > 0) ? (
         <View
           pointerEvents="box-none"
           style={[styles.topEndFixed, chromeTop > 0 && { paddingTop: chromeTop }]}
         >
-          {identityChipText || headingAction ? (
+          {identityChipText || onReport || headingAction ? (
             // The heading row: the name/age chip pinned at the END, with the
             // optional action chip (chat's "End") beside it on the START side.
             <View style={styles.headingRow}>
@@ -1166,7 +1166,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   />
                 </Animated.View>
               ) : null}
-              {identityChipText ? (
+              {identityChipText || onReport ? (
                 // The name/age chip fades with the fact chips on a toggleable
                 // (remote) card (user directive 2026-07-26): a tap on the photo
                 // clears the whole info set — facts AND identity — so the face is
@@ -1175,8 +1175,14 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                 // none on toggleable cards lets a tap here fall through to the
                 // photo instead of the chip swallowing it. The own-profile
                 // preview (not toggleable) is unaffected — opacity stays 1.
+                // The chip now HOLDS the report flag, so it can no longer be
+                // touch-transparent: it stays live while visible and carries the
+                // photo's toggle itself (Chip's own onPress — the tile is the
+                // Pressable, so the flexShrink chain survives). The flag is a
+                // nested Pressable and wins the responder over it. While hidden
+                // everything goes off, so a tap there reveals instead of acting.
                 <Animated.View
-                  pointerEvents={chipsToggleable ? 'none' : 'auto'}
+                  pointerEvents={chipsToggleable && chipsHidden ? 'none' : 'auto'}
                   style={[styles.identityChipWrap, chipsToggleable && chipsAnimStyle]}
                 >
                   <Chip
@@ -1184,6 +1190,16 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     tone="neutral"
                     onPhoto
                     bold
+                    // The report flag rides INSIDE the heading chip as a small
+                    // TRAILING glyph (user directive 2026-07-29), replacing the
+                    // round button that used to sit at the bottom-START of the
+                    // last photo: reporting is a footnote to "who is this", not
+                    // a second card-level control competing with the heart. Only
+                    // the glyph opens the report — the rest of the tile keeps
+                    // the photo's chip-toggle.
+                    renderTrailing={onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
+                    onTrailingPress={onReport}
+                    onPress={chipsToggleable ? toggleChips : undefined}
                   />
                 </Animated.View>
               ) : null}
@@ -1236,19 +1252,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: MD,
     padding: MD,
-  },
-  // Report button overlay: pinned to the bottom-START of the last photo — the
-  // opposite side from the floating heart/chat action (END), so it never sits in
-  // the middle (user directive 2026-07-25). paddingStart matches the heart's
-  // end inset; paddingBottom (overlayBottomOffset, set inline) matches the
-  // heart so both round buttons sit the same distance off the photo edge.
-  reportOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    start: 0,
-    end: 0,
-    paddingStart: MD,
-    alignItems: 'flex-start',
   },
   // Fixed top-END column: the name/age heading (always) with the own-profile
   // add chips beneath it. Chrome, not content — a sibling of the scroll view

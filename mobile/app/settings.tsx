@@ -23,7 +23,7 @@ import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, bottomGap, SEARCH_DEBOUNCE_MS } from '../src/tokens'
-import { iconScale, inkOffset } from '../src/fonts'
+import { GlyphSlot } from '../src/components/GlyphSlot'
 import { INK_BODY, INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
 import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
@@ -33,6 +33,7 @@ import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { BottomSheet, SheetActionRow, SheetTitle } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
+import { useBottomInset } from '../src/hooks/useBottomInset'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
 import { communitiesSummary, pendingApprovals, metaLine, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
 import { supportMailUrl } from '../src/lib/links'
@@ -227,7 +228,7 @@ function SelectFieldRow({
           tone === 'accent' ? (
             <View style={styles.selectRowAccentIcon}>{icon}</View>
           ) : (
-            <View style={styles.selectRowIconWrap}>{icon}</View>
+            <GlyphSlot width={ICON.md} style={styles.selectRowIconWrap}>{icon}</GlyphSlot>
           )
         ) : null
         // A chip rides the row's LAST TEXT LINE, at its END edge — the subtitle
@@ -461,10 +462,10 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
           // Optical size, not nominal: the eye is a flat lens that fills barely
           // half its box vertically, so at the ICON.md every other row uses it
           // reads visibly smaller than the person/groups/bug glyphs beside it.
-          // ICON.xl is the optical half-step that matches their ink mass without
-          // over-shooting; the icon column keeps its fixed width, so the labels
-          // stay aligned.
-          icon={isHidden ? <EyeOffIcon color={INK} size={ICON.xl} /> : <EyeOpenIcon color={INK} size={ICON.xl} />}
+          // ICON.lg is the half-step that evens out that ink mass without the
+          // eye then reading as the biggest thing in the column (ICON.xl did);
+          // the icon column keeps its fixed width, so the labels stay aligned.
+          icon={isHidden ? <EyeOffIcon color={INK} size={ICON.lg} /> : <EyeOpenIcon color={INK} size={ICON.lg} />}
           labelColor={INK}
         />
         {/* Communities: a navigable row (like Account) that opens the full
@@ -725,7 +726,7 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
 }) {
   const { profile } = useUserStore()
   const { user } = useAuthStore()
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
 
   // Two iOS Modals cannot be presented at the same parent level at once —
   // stacking a ConfirmDialog over this Modal makes the dialog never appear.
@@ -762,7 +763,7 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       visible={visible}
       onDismiss={onDismiss}
       onClosed={handleClosed}
-      contentStyle={{ paddingBottom: bottomGap(insets.bottom, SM + MD) }}
+      contentStyle={{ paddingBottom: bottomGap(bottomInset, SM + MD) }}
     >
       {/* Identity details as chips, stacked one under the other — each pill
           hugs its own text (alignItems:'flex-start' on the column), so the
@@ -815,7 +816,7 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
   groups: Group[] | null
   setGroups: (g: Group[]) => void
 }) {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   const kbHeight = useKeyboardHeight()
   const codeInputRef = useRef<RNTextInput>(null)
 
@@ -879,7 +880,7 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
       visible={visible}
       onDismiss={onDismiss}
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={{ paddingBottom: bottomGap(insets.bottom, SM + SM) }}
+      contentStyle={{ paddingBottom: bottomGap(bottomInset, SM + SM) }}
     >
       {mode === 'leave' && leaveGroup ? (
         <View style={groupsPopupStyles.step}>
@@ -1012,7 +1013,7 @@ function AgeRangePopup({
   onSave: (min: number, max: number) => void
   onDismiss: () => void
 }) {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   const [fromText, setFromText] = useState(String(ageMin))
   const [toText, setToText] = useState(String(ageMax))
   const kbHeight = useKeyboardHeight()
@@ -1043,7 +1044,7 @@ function AgeRangePopup({
       visible={visible}
       onDismiss={handleDismiss}
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={[agePopupStyles.card, { paddingBottom: bottomGap(insets.bottom, SM + SM) }]}
+      contentStyle={[agePopupStyles.card, { paddingBottom: bottomGap(bottomInset, SM + SM) }]}
     >
       <View style={agePopupStyles.row}>
         <View style={agePopupStyles.field}>
@@ -1338,6 +1339,7 @@ function LocationPopup({
   onDismiss: () => void
 }) {
   const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   const screenH = useRef(Dimensions.get('window').height).current
   // Address-step sheet height: full screen minus the home shell's TabStrip
   // area at the top (status bar + ~56 px for the tabs row + a little extra
@@ -1549,7 +1551,7 @@ function LocationPopup({
           <ScrollView
             style={{ flex: 1 }}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: bottomGap(insets.bottom, SM + SM) }}
+            contentContainerStyle={{ paddingBottom: bottomGap(bottomInset, SM + SM) }}
           >
             {predictions.map((p, i) => (
               <SelectListRow
@@ -1697,12 +1699,12 @@ function FamilyValuePopup({
   onPick: (value: number) => void
   onDismiss: () => void
 }) {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: bottomGap(insets.bottom, SM) }]}
+      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: bottomGap(bottomInset, SM) }]}
     >
       <SheetTitle style={familyStyles.valuePopupTitle}>{title}</SheetTitle>
       <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
@@ -1737,7 +1739,7 @@ export function FamilyKidsPopup({
   onDismiss: () => void
   onSave: (data: FamilyData, isForKids: boolean | null) => void
 }) {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   const screenH = useRef(Dimensions.get('window').height).current
   const sheetMaxH = Math.round(screenH * 0.88)
 
@@ -2018,7 +2020,7 @@ export function FamilyKidsPopup({
                 />
               </View>
 
-              <View style={{ paddingBottom: bottomGap(insets.bottom, SM) }} />
+              <View style={{ paddingBottom: bottomGap(bottomInset, SM) }} />
 
       <FamilyValuePopup
         visible={pickerTarget != null}
@@ -2204,12 +2206,12 @@ function PhotoOptionsPopup({
   onReplace: () => void
   onDelete: () => void
 }) {
-  const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: bottomGap(insets.bottom, SM + SM) }]}
+      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: bottomGap(bottomInset, SM + SM) }]}
     >
       <View style={photoOptionsStyles.row}>
         <Pressable
@@ -2872,7 +2874,7 @@ export default function SettingsPage({
   const { profile } = useUserStore()
   const { user } = useAuthStore()
   const router = useRouter()
-  const { bottom: bottomInset } = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
 
   // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
   // not the avatar but a purple CTA into the build-profile flow. A browse-only
@@ -3173,24 +3175,15 @@ const styles = StyleSheet.create({
     backgroundColor: WHITE_SOFT,
     alignItems: 'center', justifyContent: 'center',
   },
-  // alignSelf:'flex-start' + a box exactly one label-line tall: the glyph
-  // centres against the FIRST line of a wrapped label instead of drifting into
-  // the gap between the two lines. Single-line labels are unaffected (the box
-  // then equals the group height, so top-align and centre coincide). iconScale
-  // keeps the box locked to the same OS font scale the label is capped at.
-  // alignSelf:'flex-start' + a box exactly one label-line tall pins the glyph to
-  // the FIRST line of a wrapped label instead of letting it drift into the gap
-  // between the two lines. marginTop lands it on that line's ink rather than on
-  // its line box (see inkOffset). Single-line labels are unaffected by the
-  // alignSelf — the box then equals the group height.
-  // The width is fixed to the nominal glyph size so every row's label starts at
-  // the same x even when a glyph is drawn larger than the column for optical
-  // reasons (the eye — see the visibility row). Overflow is centred, not
-  // clipped.
-  selectRowIconWrap: {
-    alignSelf: 'flex-start', width: ICON.md, height: iconScale(lh(TEXT.md)), marginTop: inkOffset(TEXT.md),
-    alignItems: 'center', justifyContent: 'center',
-  },
+  // The glyph pins to the FIRST line of a wrapped label instead of drifting
+  // into the gap between the two lines — which is why it opts out of the
+  // group's alignItems:'center'. Everything else (the one-line-tall box, the
+  // ink nudge, the font-scale ceiling) belongs to GlyphSlot, the single
+  // implementation shared with the chips and the buttons; the width it is
+  // given is the nominal glyph size, so every row's label starts at the same x
+  // even when a glyph is drawn larger than the column for optical reasons (the
+  // eye — see the visibility row). Overflow is centred, not clipped.
+  selectRowIconWrap: { alignSelf: 'flex-start' },
 
   subPageOptionsCard: {
     marginHorizontal: SM, marginTop: MD,

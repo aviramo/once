@@ -17,6 +17,29 @@ export function markStartupComplete() { startupComplete = true }
 // take longer than the request itself).
 export const API_TIMEOUT_MS = 15_000
 
+// Keys the edge function merges onto the response body ALONGSIDE the user row
+// (app/index.ts's `rpcGroups` + `rpcExtra`, and find/ignore's `lookahead`).
+// They are the ENDPOINT'S ANSWER — a roster, a queue, a page of search results
+// — not columns of the user, and they must never reach the profile: merging
+// them made every communities read mint a fresh profile object carrying the
+// list it had just fetched, which re-renders every consumer of the store (home
+// and its match card, the menu, the whole communities stack) and rewrites the
+// profile to disk. Stripped here, in the one place that already knows this
+// response shape. A key added to the sidecar later and not listed here costs an
+// extra render, nothing worse.
+const SIDECAR_KEYS = [
+  'groups', 'group', 'owned', 'members', 'requests', 'friends',
+  'results', 'has_more', 'join_status', 'status', 'notify', 'lookahead',
+] as const
+
+/** The user row inside an `app/*` response — the sidecar keys removed. */
+function userRowOf(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object') return null
+  const row = { ...(data as Record<string, unknown>) }
+  for (const k of SIDECAR_KEYS) delete row[k]
+  return row
+}
+
 export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
 
   // The session and the position are independent, so they are awaited TOGETHER
@@ -96,7 +119,7 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   const isSelfTransition =
     fn === 'app/find' || fn === 'app/ignore' || fn === 'app/pause' || fn === 'app/resume'
   if (fn === 'app' || fn.startsWith('app/')) {
-    useUserStore.getState().applyServerUser(data as any, isSelfTransition ? 'invoke:self' : 'invoke')
+    useUserStore.getState().applyServerUser(userRowOf(data), isSelfTransition ? 'invoke:self' : 'invoke')
   }
   // Look-ahead: app_find/app_ignore return the next 1-2 ranked candidates.
   // Warm expo-image's disk cache now so the on-arrival prefetch for the

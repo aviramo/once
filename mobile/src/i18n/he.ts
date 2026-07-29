@@ -184,8 +184,23 @@ export default {
   // הכניסה למעגלים חסומה עד שהפרופיל נבנה: תמונות ותיאור
   'communities.gateTitle': 'המעגלים נפתחים אחרי בניית הפרופיל',
   'communities.gateDesc': 'המעגלים מחברים אותך לאנשים דרך קבוצות וחברים, וכולם רואים שם את הפרופיל שלך. קודם צריך פרופיל עם תמונות ותיאור קצר',
+  // הנדנוד החד פעמי שנפתח בבית אחרי הפרופילים הראשונים: מסביר למה בכלל
+  // להצטרף למעגלים, בזמן שדף המעגלים כבר עלה מאחוריו
+  'communities.nudgeTitle': 'מי ש{אתה רואה|את רואה} כאן תלוי במעגלים שלך',
+  'communities.nudgeDesc': '{כשאתה מצטרף|כשאת מצטרפת} לקבוצות ו{מזמין|מזמינה} לכאן חברים, האנשים שיוצגו לך יהיו קשורים יותר {אליך|אלייך} ולמעגלים שלך',
+  'communities.nudgeConfirm': 'לגלות את המעגלים',
   'communities.managedBy': 'מנוהלת על ידי {name}',
   'communities.sharedGroupsTitle': 'קבוצות משותפות',
+  // The mutual-friend popup's title. Hebrew inflects the singular for that one
+  // friend's gender, so it has two forms and sharedFriendLabel picks by the
+  // friend's own is_male.
+  'communities.sharedFriendsTitle': 'חברים משותפים',
+  'communities.sharedFriendM': 'חבר משותף',
+  'communities.sharedFriendF': 'חברה משותפת',
+  // The on-photo chip. Inflects for the CARD SUBJECT ("היא חברה של אסף"), not
+  // for the friend named in it, so the pair here is chosen by match.is_male.
+  'communities.friendOfM': 'חבר של {name}',
+  'communities.friendOfF': 'חברה של {name}',
   // One list, one empty line: the hub no longer splits managed from joined.
   'communities.emptyGroups': 'עוד לא יצרת קבוצה ולא הצטרפת לאף אחת',
   'communities.loadError': 'טעינה נכשלה, נסה שוב',
@@ -228,7 +243,9 @@ export default {
   // קישור לפרטים נוספים: המנהלים מזינים אותו בהגדרות הקבוצה, וכל מי שרואה את
   // הקבוצה מקבל שורה אחת לחיצה מתחת לתיאור.
   'communities.link': 'קישור לפרטים נוספים',
-  'communities.linkPlaceholder': 'הדבק או הדביקי לכאן קישור',
+  // הפועל מדבר אל המשתמש עצמו, ולכן הוא ממוגדר במקום (genderize) ולא נכתב
+  // בשתי הצורות.
+  'communities.linkPlaceholder': '{הדבק|הדביקי} לכאן קישור',
   'communities.moreDetails': 'לפרטים נוספים',
 
   // A group you manage
@@ -292,9 +309,6 @@ export default {
   'communities.declinedTitle': 'הבקשה ל{name} נדחתה',
   'communities.declinedDesc': 'מנהל הקבוצה לא אישר את הבקשה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש',
   'communities.declinedConfirm': 'הסרת ההודעה',
-  'communities.cancelJoinTitle': 'ביטול בקשת ההצטרפות ל{name}?',
-  'communities.cancelJoinDesc': 'הבקשה תוסר מהתור של מנהלי הקבוצה. תמיד אפשר לשלוח בקשה חדשה',
-  'communities.cancelJoinConfirm': 'כן, לבטל את הבקשה',
   // The pending group's own popup: what the state is, and the button that ends
   // it (the same popup a group you are in opens, with cancel instead of leave).
   'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור של מנהלי הקבוצה',
@@ -468,8 +482,8 @@ export default {
   // the wallet is empty, so it has to answer "when do I get one anyway", which
   // that caption never said. The no-hour variant covers a wallet the server
   // hasn't stamped a next-refill on yet.
-  'credits.buy.desc': 'בכל יום בשעה {time} מתווסף לך קרדיט חדש (אם אין). על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף',
-  'credits.buy.descNoTime': 'בכל יום מתווסף לך קרדיט חדש (אם אין). על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף',
+  'credits.buy.desc': 'בכל יום בשעה {time} מתווסף לך קרדיט חדש (אם אין). ובנוסף, על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף',
+  'credits.buy.descNoTime': 'בכל יום מתווסף לך קרדיט חדש (אם אין). ובנוסף, על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.

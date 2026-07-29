@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, Platform, PanResponder, BackHandler, Dimensions } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useBottomInset } from '../src/hooks/useBottomInset'
 import { useRouter } from 'expo-router'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
@@ -141,6 +142,7 @@ export default function OnboardingPage() {
   const { profile } = useUserStore()
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const bottomInset = useBottomInset()
 
   const initialStep =
     profile?.name && profile?.birth_date && !profile.bio
@@ -167,7 +169,7 @@ export default function OnboardingPage() {
 
   // Estimate the pager height for first paint so the initial step renders
   // immediately (rather than flashing an empty background until onLayout fires).
-  const initialPagerH = Math.max(100, Dimensions.get('window').height - insets.top - insets.bottom)
+  const initialPagerH = Math.max(100, Dimensions.get('window').height - insets.top - bottomInset)
   const [containerH, setContainerH] = useState(initialPagerH)
   const measuredOnceRef = useRef(false)
   const slideY = useRef(new Animated.Value(-(initialStep - 1) * initialPagerH)).current
@@ -244,7 +246,7 @@ export default function OnboardingPage() {
       const duration = e.duration ?? 250
       // Subtract bottom safe-area inset: SafeAreaView already reserves it,
       // and the keyboard frame on iOS extends through the home-indicator area.
-      const h = Math.max(0, e.endCoordinates.height - insets.bottom)
+      const h = Math.max(0, e.endCoordinates.height - bottomInset)
       // Only shrink the viewport from the bottom (paddingBottom). The content
       // is top-aligned, so the focused input sits above the keyboard with no
       // upward translate needed; translating up would push the header
@@ -258,7 +260,7 @@ export default function OnboardingPage() {
       Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }).start()
     })
     return () => { show.remove(); hide.remove() }
-  }, [insets.bottom])
+  }, [bottomInset])
 
   useEffect(() => {
     setRenderedSteps(prev => {

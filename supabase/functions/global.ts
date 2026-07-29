@@ -94,16 +94,26 @@ export type Page2 = {
 // shape the client reads. Tier model retired 2026-06-01: there is no
 // `tier` field; total spendable = balance + extra and charging always
 // deducts balance first.
+// The daily pool's cap, mirroring SQL `_credits_cap()`. One a day since
+// 2026-07-22 (was 3): the daily pool has to be a decision, not a number nobody
+// reaches. This is the ONLY place the number appears on the server outside the
+// SQL helper — `user.ts` seeds a new wallet from it. Also mirrored in
+// mobile/src/lib/credits.ts (CREDIT_CAP); change all three in lockstep.
+export const CREDIT_CAP = 1;
+
 export type Credits = {
-  // Daily pool. Refilled to _credits_cap() == 3 every 20:00 Asia/Jerusalem.
+  // Daily pool. Refilled to _credits_cap() == CREDIT_CAP every 20:00
+  // Asia/Jerusalem.
   balance: number;
   // Purchased pool, no daily cap. Bought via app_buy_extra (3/10/50). Charge
   // order is balance FIRST, then extra. Refund overflow lands here so a
   // hold + refund cycle never loses a heart.
   extra: number;
   // Reserved against a live waiting invite. `app_invite` moves 1 from balance
-  // to held (extra if balance was empty); non-cancel exits refund it back,
-  // cancel forfeits it.
+  // to held (extra if balance was empty). It is refunded only when the
+  // invitation dies without a chat (expiry / decline / the target matching
+  // someone else); a MATCH and a self-cancel both consume it (2026-07-29), so
+  // a chat costs one credit on each side.
   held?: number;
   granted_on?: string | null;
   next_grant_at?: string | null;

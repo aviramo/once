@@ -28,7 +28,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { I18nManager } from 'react-native'
 import {
-  PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY,
+  PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY, SCROLL_AT_TOP_PX,
   PULL_TUTORIAL_START_DELAY_MS, PULL_TUTORIAL_HOLD_MS,
 } from '../tokens'
 import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
@@ -90,7 +90,7 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     const ctx = useContext(PullContext)
     const {
       onScroll, onScrollBeginDrag, onScrollEndDrag,
-      onMomentumScrollBegin, onMomentumScrollEnd, scrollEnabled, ...rest
+      onMomentumScrollBegin, onMomentumScrollEnd, onContentSizeChange, scrollEnabled, ...rest
     } = props
     // A freshly-mounted ScrollView is always at offset 0. `onScroll` does NOT
     // fire for that initial position, and a programmatic scrollTo on a card
@@ -102,6 +102,10 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     // at-top on mount so every new card is pullable immediately.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { ctx?.setScrollAtTop(true) }, [])
+    // Last offset the scroll actually reported, kept even through momentum: it
+    // is the only truth available when the CONTENT changes under the list (see
+    // handleContentSizeChange), which fires no scroll event of its own.
+    const lastOffset = useRef(0)
     // `scrollAtTop` gates the card's pull-to-skip gesture. `onScroll` is
     // throttled, so the LAST event before the content settles can land a few
     // px short of 0 and leave the flag stuck `false` — the card then silently
@@ -109,7 +113,7 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     // lifted) and onMomentumScrollEnd (momentum settled) report the definitive
     // resting offset, so the flag is always corrected once a scroll truly ends.
     const syncAtTop = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      ctx?.setScrollAtTop(e.nativeEvent.contentOffset.y < 8)
+      ctx?.setScrollAtTop(e.nativeEvent.contentOffset.y < SCROLL_AT_TOP_PX)
     }
     // A scroll that is still FLYING is not "at the top", even for the frames
     // where it passes offset 0 (user directive 2026-07-27: flinging the list
@@ -119,8 +123,25 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     // tell the truth once the list has come to rest.
     const momentum = useRef(false)
     const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      lastOffset.current = e.nativeEvent.contentOffset.y
       if (!momentum.current) syncAtTop(e)
       onScroll?.(e)
+    }
+    // The list became a DIFFERENT list — a roster landing from the server, a
+    // page of results appended, a card's photos measuring. RN fires no scroll
+    // event for the offset the content settles at, so this is the one moment a
+    // stale flag can be corrected, and it must be: a `momentum` that never got
+    // its matching onMomentumScrollEnd (Android drops it often enough) leaves
+    // the at-top flag latched `false` for the rest of the surface's life, and a
+    // surface whose only drag band is that flag — a floating-header page, which
+    // has no title bar to grab — can then never be swiped closed again. The
+    // refresh is what unsticks it: momentum is over by definition once the
+    // content underneath it changed, and the last reported offset is the
+    // resting truth.
+    const handleContentSizeChange = (w: number, h: number) => {
+      momentum.current = false
+      ctx?.setScrollAtTop(lastOffset.current < SCROLL_AT_TOP_PX)
+      onContentSizeChange?.(w, h)
     }
     const handleMomentumScrollBegin = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       momentum.current = true
@@ -169,6 +190,7 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
         onScrollEndDrag={handleScrollEndDrag}
         onMomentumScrollBegin={handleMomentumScrollBegin}
         onMomentumScrollEnd={handleMomentumScrollEnd}
+        onContentSizeChange={handleContentSizeChange}
         nestedScrollEnabled
         simultaneousHandlers={ctx ? [ctx.panRef, ...ctx.extraRefs].filter(r => r.current) : undefined}
         bounces={false}
@@ -543,6 +565,14 @@ export function usePullBehavior(opts: {
           activated.value = false
           scrollSpent.value = false
           pullBase.value = 0
+          // A new touch means the surface is still here, so any ride-off that
+          // was latched is over — whether it landed or was interrupted. The
+          // 'scrollPan' branch clears this in its onStart; without the same
+          // clear here a 'sheet' surface that latched `slidOut` and did NOT
+          // unmount (an interrupted ride, a commit whose pop never ran) keeps
+          // it forever, and `commit()`'s guard then silently no-ops — which is
+          // a close X that does nothing for the rest of the page's life.
+          slidOut.value = false
           const tch = e.allTouches[0]
           if (tch) {
             swipeStart.value = { x: tch.absoluteX, y: tch.absoluteY }
