@@ -149,7 +149,8 @@ export function SharedCirclesPopup({
 // The rows carry no styles of their own any more: the strip owns its geometry
 // and its type, for every list in the app at once (components/Strip.tsx).
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: MD, paddingBottom: MD, gap: MD },
+  // No paddingBottom: the air under the last row is the BottomSheet's.
+  wrap: { paddingHorizontal: MD, gap: MD },
   // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
   title: { paddingBottom: XS },
   card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden' },

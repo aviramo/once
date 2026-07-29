@@ -18,7 +18,7 @@
 // the bottom edge. This is for full-surface sheets.)
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeSyntheticEvent, type StyleProp, type TextLayoutEventData, type ViewStyle } from 'react-native'
 import { useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
@@ -280,6 +280,20 @@ export function sheetHeaderHeight(topInset: number): number {
   return topInset + OVERLAY.chromeGap + ROUND_BUTTON_SIZE_SM + SM
 }
 
+// The height the device actually draws ONE line of a sheet title at. It depends
+// on nothing per-header — only on the title's font size (one token) and the OS
+// font scale — so the first header to be laid out in a run measures it and
+// every later one opens against the real number. Keyed by the font scale it was
+// taken at: RN re-renders with a new one if the system font changes under a
+// live app, and the old measurement must not survive that.
+const TITLE_LINE_BOX = new Map<number, number>()
+
+// What the very first header lays out against, for the one frame before the
+// text engine answers: the old arithmetic, which is exact at font scale 1 and
+// over-tall above it. Never used as the final value.
+const estimateLineBox = (fontScale: number) =>
+  Math.round(lh(TEXT.lg) * Math.min(fontScale, FONT_SCALE.body))
+
 export function SheetHeader({
   title,
   titleTrailing,
@@ -320,20 +334,34 @@ export function SheetHeader({
   // Where line one of the title sits, measured against the close button's
   // circle. It cannot be a static style value, because the two do NOT grow
   // together: the button is a fixed dp box whose glyph is capped at
-  // FONT_SCALE.ui, while the heading's line box follows the OS font scale. A
-  // padding computed from the unscaled token was therefore only ever right at
-  // font scale 1 — on a large-font device the line box grew, its top edge
-  // stayed put and every sheet title in the app sat visibly below the chrome
-  // beside it. So the line is measured the way the device will actually render
-  // it (same ceiling the Text itself carries, FONT_SCALE.body), and lifted by
-  // `inkOffset`: Noto's Hebrew ink sits below the centre of its line box, so
-  // box-centring alone still reads low against a glyph centred in a circle.
+  // FONT_SCALE.ui, while the heading's line box follows the OS font scale.
+  //
+  // And it cannot be ARITHMETIC either, which is what shipped until now
+  // (`lh(TEXT.lg) × min(fontScale, cap)`): a line box is not knowable from JS.
+  // Android runs `lineHeight` through the OS's non-linear font-scale curve, so
+  // on a large-font device a 28dp line box comes back ~27 at font_scale 1.15
+  // and ~33 at 1.3 — SHORTER than the capped multiplication predicts, not
+  // taller — and the title was lifted by half that error above the chrome
+  // beside it (~2.5dp at 1.15, visible on a real device, 2026-07-29). Same
+  // trap GlyphSlot documents, same answer: the line is MEASURED, by the text
+  // engine that draws it (`onTextLayout` → the first line's real height), and
+  // then lifted by `inkOffset` — Noto's Hebrew ink sits below the centre of
+  // its line box, so box-centring alone still reads low against a glyph
+  // centred in a circle. That correction stays computable: it is a pure
+  // function of the font size, which IS capped.
+  //
   // A margin, not padding — Yoga clamps a negative padding to zero, and the
   // offset genuinely goes negative once the line outgrows the button.
   const { fontScale } = useWindowDimensions()
-  const titleTop =
-    (ROUND_BUTTON_SIZE_SM - Math.round(lh(TEXT.lg) * Math.min(fontScale, FONT_SCALE.body))) / 2
-    - inkOffset(TEXT.lg)
+  const [, setMeasured] = useState(0)
+  const lineBox = TITLE_LINE_BOX.get(fontScale) ?? estimateLineBox(fontScale)
+  const measureTitleLine = (e: NativeSyntheticEvent<TextLayoutEventData>) => {
+    const h = e.nativeEvent.lines[0]?.height
+    if (!h || Math.abs(lineBox - h) < 0.5) return
+    TITLE_LINE_BOX.set(fontScale, h)
+    setMeasured(h)
+  }
+  const titleTop = (ROUND_BUTTON_SIZE_SM - lineBox) / 2 - inkOffset(TEXT.lg)
   // Both side columns are padded out to the WIDER of the two, so the span left
   // for the title is symmetric about the row and the title lands on the SCREEN's
   // true centre — not on the centre of whatever is left between a lone close X
@@ -384,7 +412,7 @@ export function SheetHeader({
         <View style={styles.centerWrap}>{center}</View>
       ) : title ? (
         <View style={[styles.titleWrap, { marginTop: titleTop }]} pointerEvents="none">
-          <Text style={styles.title} numberOfLines={titleLines}>{title}</Text>
+          <Text style={styles.title} numberOfLines={titleLines} onTextLayout={measureTitleLine}>{title}</Text>
           {titleTrailing}
         </View>
       ) : null}

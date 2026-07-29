@@ -9,7 +9,8 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from './AppText'
 import { SURFACE, PAGE, INK, INK_DIM } from '../colors'
-import { MD, SM, RADIUS, TEXT, WEIGHT, lh, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SCROLL_FADE, DRAG_HANDLE } from '../tokens'
+import { useBottomInset } from '../hooks/useBottomInset'
+import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SCROLL_FADE, DRAG_HANDLE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
 // exceed any sheet's height, so the sheet always begins fully hidden no matter
@@ -46,6 +47,9 @@ type BottomSheetProps = {
   // Extra style override (e.g. Android keyboard lift via marginBottom).
   cardWrapStyle?: any
   // Inner padding on the sheet body. Defaults to standard.
+  // NOT the bottom one: the air under the last thing in the popup is the
+  // sheet's, one value for every popup in the app, and it is applied after
+  // this style so a `paddingBottom` here has no effect.
   contentStyle?: any
   // When the sheet body contains a scrollable child (e.g. a ScrollView wrapped
   // in <GestureDetector gesture={Gesture.Native()}>), pass that native gesture
@@ -104,6 +108,17 @@ export function BottomSheet({
   scrollAtTop,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets()
+  // THE air under the last thing in a popup, for EVERY popup (user directive
+  // 2026-07-29). It belongs to the sheet and to nothing else: the card used to
+  // declare no bottom padding at all, so all fourteen call sites invented one
+  // (LG here, MD there, XL on the select lists, three different
+  // `bottomGap(...)` gaps in settings) and no two popups ended the same
+  // distance above the screen. It is applied AFTER `contentStyle` below, so a
+  // body style can no longer quietly differ — the one number wins.
+  // `bottomGap` because the device's safe area absorbs the design gap rather
+  // than stacking with it (tokens.ts).
+  const bottomInset = useBottomInset()
+  const bottomPad = bottomGap(bottomInset, LG)
   const translateY = useSharedValue(SCREEN_H)
   const dragY = useSharedValue(0)
   const cardHeight = useSharedValue(SCREEN_H)
@@ -249,7 +264,7 @@ export function BottomSheet({
             }
           }}
         >
-          <View ref={cardRef} style={[styles.card, { maxHeight }, contentStyle]}>
+          <View ref={cardRef} style={[styles.card, { maxHeight }, contentStyle, { paddingBottom: bottomPad }]}>
             {dragHandle ? <View style={styles.dragHandle} /> : null}
             <SheetScrollContext.Provider value={scrollWiring}>
               {children}

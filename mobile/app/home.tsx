@@ -18,7 +18,7 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { INK, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
-import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, COMMUNITIES_NUDGE_AFTER, lh, bottomGap } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, COMMUNITIES_NUDGE_AFTER, lh } from '../src/tokens'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
@@ -42,7 +42,6 @@ import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
-import { useBottomInset } from '../src/hooks/useBottomInset'
 import { FONT_SCALE } from '../src/fonts'
 import { SEEN_FLAGS, SEEN_VALUES } from '../src/keys'
 import { hasSeenFlag, markSeenFlag, readSeenValue, writeSeenValues } from '../src/lib/seenFlags'
@@ -500,8 +499,10 @@ const statusCardStyles = StyleSheet.create({
   },
   // Ground OFF, for the one use that lives in a POPUP: a popup is WHITE (user
   // directive 2026-07-28) and paints its own ground, so the scaffold must not
-  // lay the page tint over it. See ReplyingInviteCard's `inPopup`.
-  containerInPopup: { backgroundColor: 'transparent' },
+  // lay the page tint over it. Its BOTTOM goes too: the sheet ends every popup
+  // on the one standard gap, so keeping the scaffold's LG here would put 48
+  // under these buttons and 24 under every other popup's.
+  containerInPopup: { backgroundColor: 'transparent', paddingBottom: 0 },
   description: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
@@ -639,9 +640,11 @@ function EventMessageCard({ title, description, frozen, onContinue, busy }: { ti
 //     ghost decline + primary accept. The accept CTA carries the CreditCost
 //     badge (gem × N) both ways so the two sides of an invitation read as
 //     mirror actions and surface what they spend.
-// `footerInset` is supplied only by the page1 popup use: the card sits at the
-// bottom of a BottomSheet, so its bottom padding must clear the home indicator
-// (never below the standard LG).
+// The popup use (`inPopup`) also hands the card's BOTTOM to the sheet: a
+// BottomSheet ends every popup on the one standard gap, so the scaffold's own
+// paddingBottom would stack a second LG under the buttons. The card's old
+// `footerInset` prop — a hand-rolled `Math.max(inset, LG)` for exactly this —
+// is gone with it.
 function ReplyingInviteCard({
   title,
   description,
@@ -654,7 +657,6 @@ function ReplyingInviteCard({
   onUnaffordable,
   busy,
   acceptLoading,
-  footerInset,
   expiresAt,
   onLapsed,
   inPopup,
@@ -689,7 +691,6 @@ function ReplyingInviteCard({
   onUnaffordable?: () => void
   busy?: boolean
   acceptLoading?: boolean
-  footerInset?: number
   /** Fired once when `expiresAt` runs out. No-op on the page1 invite prompt,
    * which carries no clock. */
   onLapsed?: () => void
@@ -710,7 +711,6 @@ function ReplyingInviteCard({
     <View style={[
       statusCardStyles.container,
       inPopup && statusCardStyles.containerInPopup,
-      footerInset != null ? { paddingBottom: Math.max(footerInset, LG) } : null,
     ]}>
       <StatusCardText title={title} description={description} />
       <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
@@ -814,7 +814,6 @@ const statusButtonStyles = StyleSheet.create({
 
 export default function HomePage() {
   const { top: topInset } = useSafeAreaInsets()
-  const bottomInset = useBottomInset()
   const { profile } = useUserStore()
   const router = useRouter()
   // A browse-only user (account created, profile not yet built) reaches home and
@@ -3326,7 +3325,6 @@ export default function HomePage() {
                     // skipped by the page1 pull gesture instead.
                     busy={busy}
                     acceptLoading={busy && pendingKey === 'invite-confirm'}
-                    footerInset={bottomInset}
                     // This one lives in a BottomSheet, and a popup is white.
                     inPopup
                   />
@@ -3402,7 +3400,7 @@ export default function HomePage() {
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
                   onClosed={handleChatMenuClosed}
-                  contentStyle={[chatMenuStyles.sheet, { paddingBottom: bottomGap(bottomInset, SM + MD) }]}
+                  contentStyle={chatMenuStyles.sheet}
                 >
                   <Button
                     label={t('chat.leave')}

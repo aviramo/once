@@ -951,11 +951,11 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
   )
 }
 
-// ONE way out to a group's own page, wherever in the popup it was tapped (user
-// directive 2026-07-29): the "more details" line and the group's whole head
-// above it are the same tap. The server is what guarantees the value is an
-// http(s) URL, so opening it here needs no parsing of its own; a group with no
-// link has no tap anywhere.
+// ONE way out to a group's own page, from either place in the popup that offers
+// it (user directive 2026-07-29): the "more details" line and the group's HEAD
+// above the description are the same tap. The server is what guarantees the
+// value is an http(s) URL, so opening it here needs no parsing of its own; a
+// group with no link has no tap anywhere.
 const openGroupLink = (url?: string | null) => {
   if (!url) return
   tap()
@@ -1053,40 +1053,47 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               it opens showing the head and the first lines, and the link, the
               standing note and the action below it are ALWAYS on screen. */}
           <SheetScroll>
-            {/* The whole introduction is ALSO the tap to the group's own page
-                (user directive 2026-07-29): the face, the fact line, the name
-                and what the group wrote about itself are one object, so
-                pressing any of it does what the "more details" line under it
-                does. A group with no link keeps a plain, dead block. */}
-            <Pressable
-              style={s.sheetHead}
-              disabled={!group?.link}
-              accessibilityRole={group?.link ? 'link' : undefined}
-              onPress={() => openGroupLink(group?.link)}
-            >
-              {/* Who runs the group leads it: their photo, with "managed by
-                  <them>" directly UNDER that photo (user directive 2026-07-28 —
-                  the line belongs to the face above it, not stranded under the
-                  group's name). An admin-owned group has no owner and simply
-                  shows neither. */}
-              {group?.owner ? (
-                <View style={s.sheetAvatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
-              ) : null}
-              {/* Who runs it and how big it is state themselves on ONE line
-                  under the face (user directive 2026-07-29): the app's one fact
-                  line, exactly as the shared-groups popup, the hub strips and
-                  the menu row state theirs, so a group's facts are punctuated
-                  identically wherever they are listed. The count used to sit
-                  alone under the NAME, which split two facts about the same
-                  group across the title standing between them. One rank under
-                  the description below it, because this is the group's meta and
-                  the description is its own words. */}
-              <MetaLine parts={headFacts} color={INK} align="center" />
-              {/* Whole name, wrapping as far as it needs (user directive
-                  2026-07-27) — a popup about one group never abbreviates which. */}
-              <SheetTitle style={s.sheetTitle}>{group?.name}</SheetTitle>
+            {/* The HEAD is also the tap to the group's own page (user directive
+                2026-07-29): the face, the fact line and the name are one
+                object, so pressing any of them does what the "more details"
+                line under the block does. THE DESCRIPTION IS NOT PART OF THAT
+                TAP (user directive 2026-07-29) — it is a paragraph the reader
+                scrolls and re-reads, and a tap that lands in it must not throw
+                the app out to a browser. It therefore sits OUTSIDE the
+                Pressable, as the block's second child, with the head's own SM
+                rhythm between them. A group with no link keeps a plain, dead
+                head. */}
+            <View style={s.sheetHead}>
+              <Pressable
+                style={s.sheetHead}
+                disabled={!group?.link}
+                accessibilityRole={group?.link ? 'link' : undefined}
+                onPress={() => openGroupLink(group?.link)}
+              >
+                {/* Who runs the group leads it: their photo, with "managed by
+                    <them>" directly UNDER that photo (user directive 2026-07-28
+                    — the line belongs to the face above it, not stranded under
+                    the group's name). An admin-owned group has no owner and
+                    simply shows neither. */}
+                {group?.owner ? (
+                  <View style={s.sheetAvatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
+                ) : null}
+                {/* Who runs it and how big it is state themselves on ONE line
+                    under the face (user directive 2026-07-29): the app's one
+                    fact line, exactly as the shared-groups popup, the hub strips
+                    and the menu row state theirs, so a group's facts are
+                    punctuated identically wherever they are listed. The count
+                    used to sit alone under the NAME, which split two facts about
+                    the same group across the title standing between them. One
+                    rank under the description below it, because this is the
+                    group's meta and the description is its own words. */}
+                <MetaLine parts={headFacts} color={INK} align="center" />
+                {/* Whole name, wrapping as far as it needs (user directive
+                    2026-07-27) — a popup about one group never abbreviates which. */}
+                <SheetTitle style={s.sheetTitle}>{group?.name}</SheetTitle>
+              </Pressable>
               {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
-            </Pressable>
+            </View>
           </SheetScroll>
           <GroupLink url={group?.link} />
           {/* What this group is to me right now, in a sentence. A group I have
@@ -1117,14 +1124,17 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
             // No confirm on this one either (user directive 2026-07-29): taking
             // back a request that has not been answered yet destroys nothing,
             // and the request can be sent again at any time.
+            // Full purple (user directive 2026-07-29): in this state it is the
+            // popup's ONLY action, so it wears the ordinary purple fill every
+            // lone CTA wears rather than the recessive tint.
             <Button
               label={t('communities.cancelJoin')}
-              variant="secondary"
+              variant="primary"
               size="lg"
               loading={busy}
               // Cancelling a request is an X, plainly (user directive
               // 2026-07-28), at the size every other button glyph wears.
-              iconStart={<CloseIcon color={INK} />}
+              iconStart={<CloseIcon color={WHITE} />}
               onPress={quit}
             />
           ) : status === 'declined' ? (
@@ -2608,7 +2618,7 @@ const s = StyleSheet.create({
   // `flexShrink` is what lets the popup obey the sheet's height cap: the body
   // gives, and inside it only the description's SheetScroll declares a shrink of
   // its own, so that is where the whole overflow lands.
-  sheetWrap: { paddingHorizontal: MD, paddingBottom: MD, gap: SM, flexShrink: 1 },
+  sheetWrap: { paddingHorizontal: MD, gap: SM, flexShrink: 1 },
   // The introduction inside the SheetScroll: it keeps the same SM rhythm the
   // sheet body spaces its blocks by, so a head that scrolls looks exactly like
   // the head that does not (a short group's popup is unchanged).

@@ -2312,14 +2312,13 @@ function MessageActionsSheet({ msg, visible, onDismiss, onClosed, onReply, onCop
   onReply: (m: Message) => void
   onCopy: (m: Message) => void
 }) {
-  const bottomInset = useBottomInset()
   if (!msg) return null
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
       onClosed={onClosed}
-      contentStyle={{ paddingHorizontal: SM, paddingBottom: bottomGap(bottomInset, SM + SM) }}
+      contentStyle={{ paddingHorizontal: SM }}
     >
       {!msg._failed && (
         <SheetActionRow

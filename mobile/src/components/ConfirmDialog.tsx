@@ -182,7 +182,9 @@ export function ConfirmDialog({
 
 const styles = StyleSheet.create({
   card: {
-    padding: LG,
+    // Sides and top only: the air UNDER the buttons is the BottomSheet's, the
+    // same in every popup in the app.
+    paddingHorizontal: LG,
     paddingTop: MD,
   },
   cardDraggable: {

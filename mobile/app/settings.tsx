@@ -22,7 +22,7 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, bottomGap, SEARCH_DEBOUNCE_MS } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, SEARCH_DEBOUNCE_MS } from '../src/tokens'
 import { GlyphSlot } from '../src/components/GlyphSlot'
 import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
@@ -723,7 +723,6 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
 }) {
   const { profile } = useUserStore()
   const { user } = useAuthStore()
-  const bottomInset = useBottomInset()
 
   // Two iOS Modals cannot be presented at the same parent level at once —
   // stacking a ConfirmDialog over this Modal makes the dialog never appear.
@@ -760,7 +759,6 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       visible={visible}
       onDismiss={onDismiss}
       onClosed={handleClosed}
-      contentStyle={{ paddingBottom: bottomGap(bottomInset, SM + MD) }}
     >
       {/* Identity details as chips, stacked one under the other — each pill
           hugs its own text (alignItems:'flex-start' on the column), so the
@@ -813,7 +811,6 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
   groups: Group[] | null
   setGroups: (g: Group[]) => void
 }) {
-  const bottomInset = useBottomInset()
   const kbHeight = useKeyboardHeight()
   const codeInputRef = useRef<RNTextInput>(null)
 
@@ -877,7 +874,6 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
       visible={visible}
       onDismiss={onDismiss}
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={{ paddingBottom: bottomGap(bottomInset, SM + SM) }}
     >
       {mode === 'leave' && leaveGroup ? (
         <View style={groupsPopupStyles.step}>
@@ -1010,7 +1006,6 @@ function AgeRangePopup({
   onSave: (min: number, max: number) => void
   onDismiss: () => void
 }) {
-  const bottomInset = useBottomInset()
   const [fromText, setFromText] = useState(String(ageMin))
   const [toText, setToText] = useState(String(ageMax))
   const kbHeight = useKeyboardHeight()
@@ -1041,7 +1036,7 @@ function AgeRangePopup({
       visible={visible}
       onDismiss={handleDismiss}
       cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={[agePopupStyles.card, { paddingBottom: bottomGap(bottomInset, SM + SM) }]}
+      contentStyle={agePopupStyles.card}
     >
       <View style={agePopupStyles.row}>
         <View style={agePopupStyles.field}>
@@ -1202,7 +1197,9 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
 }
 
 const selectListStyles = StyleSheet.create({
-  card: { padding: 0, paddingTop: 0, paddingBottom: XL },
+  // Edge-to-edge rows; the air under the last one is the BottomSheet's, the
+  // same in every popup (it used to be an XL of its own here).
+  card: { padding: 0, paddingTop: 0 },
   row: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: MD, paddingHorizontal: MD,
@@ -1336,7 +1333,6 @@ function LocationPopup({
   onDismiss: () => void
 }) {
   const insets = useSafeAreaInsets()
-  const bottomInset = useBottomInset()
   const screenH = useRef(Dimensions.get('window').height).current
   // Address-step sheet height: full screen minus the home shell's TabStrip
   // area at the top (status bar + ~56 px for the tabs row + a little extra
@@ -1545,10 +1541,11 @@ function LocationPopup({
           {searchError && predictions.length === 0 && !searching ? (
             <Text style={locationPopupStyles.errorText}>{searchError}</Text>
           ) : null}
+          {/* No bottom padding of its own: the sheet's own gap sits under the
+              scroll, so a second one here would double it. */}
           <ScrollView
             style={{ flex: 1 }}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: bottomGap(bottomInset, SM + SM) }}
           >
             {predictions.map((p, i) => (
               <SelectListRow
@@ -1577,11 +1574,11 @@ const locationPopupStyles = StyleSheet.create({
     fontSize: TEXT.md, color: WHITE_MID,
     lineHeight: lh(TEXT.md),
   },
-  // Address-step content fills the (now tall) cardWrap.
+  // Address-step content fills the (now tall) cardWrap. The bottom is the
+  // sheet's, as in every popup.
   addressCard: {
     flex: 1,
     paddingTop: 0,
-    paddingBottom: 0,
   },
   addressBody: { flex: 1, paddingHorizontal: MD, paddingTop: SM },
   searchRow: {
@@ -1696,12 +1693,11 @@ function FamilyValuePopup({
   onPick: (value: number) => void
   onDismiss: () => void
 }) {
-  const bottomInset = useBottomInset()
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[familyStyles.valuePopupCard, { paddingBottom: bottomGap(bottomInset, SM) }]}
+      contentStyle={familyStyles.valuePopupCard}
     >
       <SheetTitle style={familyStyles.valuePopupTitle}>{title}</SheetTitle>
       <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
@@ -1736,7 +1732,6 @@ export function FamilyKidsPopup({
   onDismiss: () => void
   onSave: (data: FamilyData, isForKids: boolean | null) => void
 }) {
-  const bottomInset = useBottomInset()
   const screenH = useRef(Dimensions.get('window').height).current
   const sheetMaxH = Math.round(screenH * 0.88)
 
@@ -2017,7 +2012,8 @@ export function FamilyKidsPopup({
                 />
               </View>
 
-              <View style={{ paddingBottom: bottomGap(bottomInset, SM) }} />
+              {/* No tail spacer: the sheet's own bottom gap sits under the
+                  scroll, the same one every popup ends on. */}
 
       <FamilyValuePopup
         visible={pickerTarget != null}
@@ -2049,7 +2045,9 @@ const familyStyles = StyleSheet.create({
     backgroundColor: INK_DIM,
     marginBottom: MD,
   },
-  scrollContent: { paddingTop: SM, paddingBottom: SM },
+  // Top only: the sheet's own gap sits under the scroll, so a bottom pad here
+  // would stack on it.
+  scrollContent: { paddingTop: SM },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2203,12 +2201,11 @@ function PhotoOptionsPopup({
   onReplace: () => void
   onDelete: () => void
 }) {
-  const bottomInset = useBottomInset()
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      contentStyle={[photoOptionsStyles.sheet, { paddingBottom: bottomGap(bottomInset, SM + SM) }]}
+      contentStyle={photoOptionsStyles.sheet}
     >
       <View style={photoOptionsStyles.row}>
         <Pressable
