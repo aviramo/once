@@ -211,29 +211,35 @@ const frames = () => [
   {
     file: 'screenshot-3-communities.png',
     title: 'חברים ומעגלים משותפים',
-    sub: 'רואים איזו קבוצה משותפת לכם, עוד לפני ההזמנה.',
-    // The card's group chip, tapped: the shared-groups popup (SharedGroupsPopup).
+    sub: 'רואים מה משותף לכם, עוד לפני ההזמנה',
+    // The card's circle chip, tapped: everything the two of you share, friends
+    // and groups in one list (SharedCirclesPopup). The chip names the SMALLEST
+    // circle -- here my friends, so it reads "חברה של דנה" -- and counts the
+    // other three.
     screen: `
       ${matchCard({
         src: photo(7),
         name: 'שירה, 34',
         chips: [
           { icon: pin(C.INK), text: "במרחק 800 מ' ממך עכשיו", dot: true },
-          { icon: groups(C.INK), text: 'הורים בשכונה', plus: 2 },
+          { icon: groups(C.INK), text: 'חברה של דנה', plus: 3 },
         ],
       })}
       <div class="sheet">
         <div class="handle"></div>
-        <div class="sheet-title">קבוצות משותפות</div>
+        <div class="sheet-title">מה משותף לנו</div>
         <div class="sheet-card">
+          <div class="srow"><img class="av" src="${photo(2)}"><div class="stext">
+            <div class="sname">דנה</div>
+          </div></div>
           <div class="srow"><img class="av" src="${photo(5)}"><div class="stext">
-            <div class="sname">הורים בשכונה</div><div class="smeta">מנוהלת על ידי דנה</div><div class="smeta">128 חברים</div>
+            <div class="sname">הורים בשכונה</div><div class="smeta">מנוהלת על ידי דנה · 128 חברים</div>
           </div></div>
           <div class="srow"><img class="av" src="${photo(3)}"><div class="stext">
-            <div class="sname">ריצת בוקר בפארק</div><div class="smeta">מנוהלת על ידי איתי</div><div class="smeta">54 חברים</div>
+            <div class="sname">ריצת בוקר בפארק</div><div class="smeta">מנוהלת על ידי איתי · 54 חברים</div>
           </div></div>
           <div class="srow"><img class="av" src="${photo(9)}"><div class="stext">
-            <div class="sname">בוגרי המכללה</div><div class="smeta">מנוהלת על ידי רותם</div><div class="smeta">312 חברים</div>
+            <div class="sname">בוגרי המכללה</div><div class="smeta">מנוהלת על ידי רותם · 312 חברים</div>
           </div></div>
         </div>
         ${homeBar}
@@ -318,7 +324,7 @@ body{background:${C.PAGE};font-family:Noto,sans-serif;direction:rtl}
 .btn{margin-top:${dp(16)};height:${dp(56)};border-radius:${dp(12)};background:${C.INK};color:${C.WHITE};
   display:flex;align-items:center;justify-content:center;gap:${dp(8)};font-size:${dp(16)};font-weight:600}
 
-/* shared-groups popup (SharedGroupsPopup over a BottomSheet — no backdrop dim:
+/* shared-circles popup (SharedCirclesPopup over a BottomSheet — no backdrop dim:
    the sheet is transparent over the screen and floats on SHEET_SHADOW alone) */
 .sheet{position:absolute;left:0;right:0;bottom:0;background:${C.SURFACE};border-radius:${dp(20)} ${dp(20)} 0 0;
   padding:0 ${dp(16)} ${dp(28)};z-index:9;box-shadow:0 ${dp(-4)} ${dp(24)} rgba(0,0,0,.12)}

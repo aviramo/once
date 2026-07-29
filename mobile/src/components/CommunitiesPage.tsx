@@ -12,7 +12,7 @@
 // Communities reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, Share, Keyboard, Linking, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle, type TextStyle } from 'react-native'
+import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Share, Keyboard, Linking, FlatList, TextInput as RNTextInput, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type TextStyle } from 'react-native'
 import { Path, Circle, Line, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../hooks/useBottomInset'
@@ -35,26 +35,30 @@ import { useUserStore, type Profile } from '../stores/userStore'
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
 import { Avatar, SkeletonRows, SyncBar, AVATAR } from './CommunityBits'
 import { Chip } from './Chip'
+import { MetaLine } from './MetaLine'
+import { Strip, STRIP_ROW } from './Strip'
 import { MatchCard } from './MatchCard'
+import type { MetaPart } from '../lib/meta'
 import { rosters, joinRequests, friendsRoster, dropGroupCaches } from '../lib/rosterCache'
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
 import { shareFriendInvite } from '../lib/referral'
 import { groupInviteUrl } from '../lib/links'
 import { EditableText } from './EditableText'
 import { GROUP_NAME_MAX, GROUP_DESCRIPTION_MAX, GROUP_LINK_MAX } from '../lib/groups'
+import { serverErrorCode } from '../lib/api'
 import {
   ownedGroups, myGroups, myFriends, groupMembers, removeMember, deleteGroup,
   updateGroup, createGroup, searchGroups, redeemInvite, leaveGroup, setManager, transferOwner,
   friendRespond, unfriend, communitiesSummary, cancelJoinRequest,
   groupRequests, respondJoin, approveAllJoins, setGroupHidden,
   groupKind, groupKindFlags, GROUP_KINDS, DEFAULT_GROUP_KIND, type GroupKind,
-  metaLine, memberLabel, friendLabel, requestLabel, groupBrief, type GroupBrief,
+  groupFacts, friendLabel, requestLabel, groupBrief, type GroupBrief,
   type OwnedGroup, type GroupMember, type MyFriends, type PublicGroup, type MemberImage,
   type FriendItem, type CommunitiesSummary, type JoinedGroup, type PendingGroup,
   type JoinRequestItem, type CommunitiesTarget,
 } from '../lib/communities'
 import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS } from '../tokens'
-import { PAGE, SURFACE, INK, INK_MUTED, INK_SUBTLE, LINE, INK_WASH, WHITE, INK_DIM } from '../colors'
+import { PAGE, SURFACE, INK, INK_MUTED, INK_SUBTLE, INK_WASH, WHITE, INK_DIM, NEGATIVE } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { fuzzyRank } from '../lib/fuzzy'
 
@@ -209,8 +213,14 @@ export function CommunitiesPage({
   // pages read this one value, so their lists end at exactly the same height.
   const rosterGap = bottomGap(insets.bottom, SM)
 
+  // Seeded synchronously from the target so the sheet's very first frame is the
+  // page that was asked for, not the hub with the real destination arriving a
+  // beat later. `person` is the one target that is the WHOLE stack: it opens on
+  // that person and there is nothing under it (see CommunitiesTarget).
   const [stack, setStack] = useState<CView[]>(() => (
-    target?.kind === 'friends' || target?.kind === 'friend' ? [{ k: 'hub' }, { k: 'friends' }] : [{ k: 'hub' }]
+    target?.kind === 'person' ? [{ k: 'person', person: { kind: 'friend', friend: target.friend } }]
+      : target?.kind === 'friends' || target?.kind === 'friend' ? [{ k: 'hub' }, { k: 'friends' }]
+      : [{ k: 'hub' }]
   ))
   const view = stack[stack.length - 1]
   // Opening a page is IDEMPOTENT: asking for the page that is already on top is
@@ -241,6 +251,13 @@ export function CommunitiesPage({
     const set = (sk: CView[]) => { if (alive) setStack(sk) }
     ;(async () => {
       try {
+        // One person, carried whole: nothing to resolve and nothing under it.
+        // Re-set here as well as in the seed, for a sheet that was already open
+        // on another page when the card handed this over.
+        if (target.kind === 'person') {
+          set([{ k: 'person', person: { kind: 'friend', friend: target.friend } }])
+          return
+        }
         if (target.kind === 'friend') {
           const f = (await myFriends()).friends.find(x => x.user_id === target.userId)
           set(f ? [{ k: 'hub' }, { k: 'friends' }, { k: 'person', person: { kind: 'friend', friend: f } }]
@@ -510,6 +527,11 @@ function PageLayer({
         // The page's name, for a screen reader: the bar has no title to read out
         // because this field is standing in its place.
         accessibilityLabel={t('communities.findTitle')}
+        // The third way out, and the only one that is a labelled control: the
+        // IME's action key says SEARCH instead of a bare tick, and a single-line
+        // field blurs on submit, so pressing it drops the keyboard onto the
+        // results. Nothing is submitted — the list is already live per keystroke.
+        returnKeyType="search"
         autoFocus
       />
     </View>
@@ -660,11 +682,28 @@ function PageLayer({
     </PullScrollView>
   )
 
+  // The page's own background puts the keyboard away. The other half of
+  // PullScrollView's dismiss-on-drag: a tap that lands on nothing is the second
+  // thing a finger tries when a keyboard is in the way, and the search page's
+  // field sits on the HEADER, so there is no form to tap beside. It is the
+  // ROOT, deliberately — every one of these pages has a field somewhere, so the
+  // answer is the same on all of them rather than re-fitted per page. Nothing
+  // is stolen from anything: the responder is only offered to the background
+  // once its children have declined it, and a drag that becomes a pull is
+  // cancelled by the gesture handler before the press can fire.
+  //
+  // TouchableWithoutFeedback and NOT Pressable, deliberately: Pressable keeps a
+  // `pressed` state, so every tap on the background would re-render this whole
+  // page — its header, its list, every row — for a press that draws nothing.
+  // TWF clones the handlers onto the root View it already has and holds no
+  // state, so a dismissing tap costs one Keyboard call and no render.
   const page = (
     <PullContext.Provider value={pullCtx}>
-      <View style={s.root}>
-        {floatingChrome ? <>{body}{header}</> : <>{header}{body}</>}
-      </View>
+      <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+        <View style={s.root}>
+          {floatingChrome ? <>{body}{header}</> : <>{header}{body}</>}
+        </View>
+      </TouchableWithoutFeedback>
     </PullContext.Provider>
   )
 
@@ -758,12 +797,12 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
   const joinedMeta = (g: JoinedGroup) =>
     g.is_public === undefined
       ? undefined
-      : metaLine(memberLabel(g.members ?? 0))
+      : groupFacts(g.members ?? 0)
   // My friends is not a group: its meta is the count. Friend requests waiting on
   // an answer are NOT part of that line — they ride the same strong chip a
   // group's queue does (user directive 2026-07-28), so every row on the page
   // says "someone is waiting on you" the one way.
-  const friendsMeta = data ? metaLine(friendLabel(data.friends)) : t('communities.myFriendsSub')
+  const friendsMeta = data ? [friendLabel(data.friends)] : t('communities.myFriendsSub')
   const friendsWaiting = (data?.requests ?? 0) > 0
 
   // Everything the caller belongs to, in ONE list (user directive 2026-07-28).
@@ -809,10 +848,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
         // state is readable without opening it. What is WAITING is off this line
         // when there is any: it rides the chip instead, and a row never says the
         // same thing twice.
-        const meta = metaLine(
-          memberLabel(g.members),
-          g.hidden && t('communities.hiddenShort'),
-        )
+        const meta = groupFacts(g.members, null, g.hidden && t('communities.hiddenShort'))
         return (
           <Strip
             title={g.name}
@@ -882,7 +918,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
                 and a tap up there land on the same page. */}
             {items != null ? (
               <>
-                <View style={[s.row, s.rosterRow, s.rosterRowLast, s.emptyRow]}>
+                <View style={[STRIP_ROW, s.rosterRow, s.rosterRowLast, s.emptyRow]}>
                   <Empty text={t('communities.emptyGroups')} style={s.emptyRowText} />
                 </View>
                 <View style={s.emptyActions}>
@@ -915,19 +951,23 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
   )
 }
 
+// ONE way out to a group's own page, wherever in the popup it was tapped (user
+// directive 2026-07-29): the "more details" line and the group's whole head
+// above it are the same tap. The server is what guarantees the value is an
+// http(s) URL, so opening it here needs no parsing of its own; a group with no
+// link has no tap anywhere.
+const openGroupLink = (url?: string | null) => {
+  if (!url) return
+  tap()
+  Linking.openURL(url).catch(() => {})
+}
+
 // A group's optional "more details" link, as one tappable line under whatever
-// the group says about itself. Defined once and used by both places a group is
-// described to someone: the member popup and the search preview. It shows the
-// words, never the raw URL, and renders nothing for a group with no link. The
-// server is what guarantees the value is an http(s) URL, so opening it here
-// needs no parsing of its own.
+// the group says about itself. It shows the words, never the raw URL, and
+// renders nothing for a group with no link.
 const GroupLink = ({ url }: { url?: string | null }) =>
   url ? (
-    <Text
-      style={s.sheetLink}
-      accessibilityRole="link"
-      onPress={() => { tap(); Linking.openURL(url).catch(() => {}) }}
-    >
+    <Text style={s.sheetLink} accessibilityRole="link" onPress={() => openGroupLink(url)}>
       {t('communities.moreDetails')}
     </Text>
   ) : null
@@ -936,8 +976,8 @@ const GroupLink = ({ url }: { url?: string | null }) =>
 // THE popup a group opens into, from EVERY surface that lists one (user
 // directive 2026-07-28): the hub's rows, a search result, and a match card's
 // shared-groups list all open THIS. A group therefore reads identically
-// wherever it was tapped — the owner's photo, "managed by <them>" under it, the
-// name, how big it is, what it says about itself, its link — and the only thing
+// wherever it was tapped — the owner's photo, the name, how big it is and
+// "managed by <them>" under it, what it says about itself, its link — and the only thing
 // that changes with where I stand is the ACTION at the bottom, which is always
 // the one thing that standing lets me do:
 //   joined    → share the invite link (public groups only, whose code is not a
@@ -970,6 +1010,11 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const pending = status === 'pending'
+
+  // The head's facts: how big the group is, then who runs it. An admin-owned
+  // group has no owner and an old summary payload carries no count — the line
+  // is simply whichever of them exist, and none at all renders nothing.
+  const headFacts: MetaPart[] = groupFacts(group?.members, group?.owner?.name)
 
   const share = () => {
     if (!group?.invite_code) return
@@ -1008,7 +1053,17 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               it opens showing the head and the first lines, and the link, the
               standing note and the action below it are ALWAYS on screen. */}
           <SheetScroll>
-            <View style={s.sheetHead}>
+            {/* The whole introduction is ALSO the tap to the group's own page
+                (user directive 2026-07-29): the face, the fact line, the name
+                and what the group wrote about itself are one object, so
+                pressing any of it does what the "more details" line under it
+                does. A group with no link keeps a plain, dead block. */}
+            <Pressable
+              style={s.sheetHead}
+              disabled={!group?.link}
+              accessibilityRole={group?.link ? 'link' : undefined}
+              onPress={() => openGroupLink(group?.link)}
+            >
               {/* Who runs the group leads it: their photo, with "managed by
                   <them>" directly UNDER that photo (user directive 2026-07-28 —
                   the line belongs to the face above it, not stranded under the
@@ -1017,16 +1072,21 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               {group?.owner ? (
                 <View style={s.sheetAvatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
               ) : null}
-              {group?.owner?.name ? <Text style={s.sheetDesc}>{t('communities.managedBy').replace('{name}', group.owner.name)}</Text> : null}
+              {/* Who runs it and how big it is state themselves on ONE line
+                  under the face (user directive 2026-07-29): the app's one fact
+                  line, exactly as the shared-groups popup, the hub strips and
+                  the menu row state theirs, so a group's facts are punctuated
+                  identically wherever they are listed. The count used to sit
+                  alone under the NAME, which split two facts about the same
+                  group across the title standing between them. One rank under
+                  the description below it, because this is the group's meta and
+                  the description is its own words. */}
+              <MetaLine parts={headFacts} color={INK} align="center" />
               {/* Whole name, wrapping as far as it needs (user directive
                   2026-07-27) — a popup about one group never abbreviates which. */}
               <SheetTitle style={s.sheetTitle}>{group?.name}</SheetTitle>
-              {/* How big it is: the same fact the row it was opened from states,
-                  and the one thing a searcher weighs a group by. Absent only on
-                  an old summary payload that carried no count. */}
-              {group?.members != null ? <Text style={s.sheetDesc}>{memberLabel(group.members)}</Text> : null}
               {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
-            </View>
+            </Pressable>
           </SheetScroll>
           <GroupLink url={group?.link} />
           {/* What this group is to me right now, in a sentence. A group I have
@@ -1106,85 +1166,11 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
 }
 
 // ── The strip ──────────────────────────────────────────────────────────────
-// THE row of this whole surface (user directive 2026-07-28): a leading
-// icon/avatar, a title, any number of meta lines under it, an optional chip, and
-// a trailing lane for the rare row that answers in place. Every list here is
-// built from this one component — the hub's groups, a search result, a group's
-// members, the waiting queue, my friends — so a strip is a strip wherever it
-// appears, and a variant is a PROP, never a second row.
-//
-// Three rules the strips are shaped by, all absolute:
-//  • The TITLE OWNS THE FULL WIDTH of the strip and is never clipped. A group's
-//    name wraps to as many lines as it needs; nothing sits beside it stealing
-//    room, which is what used to cut "Tel Aviv Weekend Runners" to an ellipsis.
-//  • THE CHIP RIDES THE LAST TEXT LINE, at its end, facing it. On a group row
-//    that is the meta line ("26 members"), so the chip sits opposite the details
-//    rather than beside the name. On a one-line strip (a member, the queue
-//    entry) the last line IS the title, so the chip keeps its old place.
-//  • NO CHEVRON, ever (user directive 2026-07-28). A card of rows on a page that
-//    goes somewhere when you tap it does not need an arrow on every one of them,
-//    and the lane it ate belonged to the name.
-function Strip({ icon, title, meta, tag, tagStrong, trailing, first, style, onPress }: {
-  icon?: React.ReactNode
-  title: string
-  /** One line, or several — falsy entries drop, so a caller can inline a
-   *  condition. Never clipped either: what is said about a group wraps with it. */
-  meta?: string | Array<string | false | null | undefined>
-  /** Nothing to say (null/undefined/empty) renders no chip at all. */
-  tag?: string | number | null
-  /** The chip is a full-strength purple tile with white ink instead of the pale
-   *  one: something is WAITING on the user there (join requests), and the pale
-   *  chip that states a standing role must not read as the same weight. */
-  tagStrong?: boolean
-  /** The one row that answers in place instead of opening something: the
-   *  friend-request row's accept/decline pills. */
-  trailing?: React.ReactNode
-  first?: boolean
-  style?: StyleProp<ViewStyle>
-  onPress?: () => void
-}) {
-  const [pressed, setPressed] = useState(false)
-  const metaLines = (Array.isArray(meta) ? meta : [meta]).filter(Boolean) as string[]
-  // The one chip component, in its small size (`Chip small`): a strip's chip and
-  // the menu row's chip are the same tile, so a count that moves between the two
-  // surfaces does not change shape on the way.
-  const chip = tag != null && tag !== ''
-    ? <Chip small text={String(tag)} tone={tagStrong ? 'solid' : 'positive'} />
-    : null
-  const body = (
-    <>
-      {icon ? <View style={s.rowIcon}>{icon}</View> : null}
-      <View style={s.rowText}>
-        <View style={s.rowLine}>
-          <Text style={[s.rowTitle, s.rowLineText]}>{title}</Text>
-          {metaLines.length === 0 ? chip : null}
-        </View>
-        {metaLines.map((line, i) => (
-          <View key={i} style={s.rowLine}>
-            <Text style={[s.rowMeta, s.rowLineText]}>{line}</Text>
-            {i === metaLines.length - 1 ? chip : null}
-          </View>
-        ))}
-      </View>
-      {trailing}
-    </>
-  )
-  // A strip that says something UNDER the name breathes (MD); one that is a name
-  // and nothing else is the tighter people row (SM) every roster is made of. One
-  // rule, so two rows of the same content can never end up different heights.
-  const rowStyle = [s.row, metaLines.length === 0 && s.rowTight, first && s.rowFirst, style]
-  if (!onPress) return <View style={rowStyle}>{body}</View>
-  return (
-    <Pressable
-      onPress={() => { tap(); onPress() }}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      style={[rowStyle, pressed && { backgroundColor: INK_WASH }]}
-    >
-      {body}
-    </Pressable>
-  )
-}
+// Every list on this surface — the hub's groups, a search result, a group's
+// members, the waiting queue, my friends — is built from the app's ONE row,
+// components/Strip.tsx, which the menu rows and the shared-groups popup are
+// built from too. It moved out of this file on 2026-07-29 (user directive: one
+// strip, used everywhere it repeats); its rules live with it.
 
 // The link field's placeholder tells the READER to paste, so its verb is the
 // user's own gender — one form resolved by genderize, not the "הדבק או הדביקי"
@@ -1456,6 +1442,10 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
   // who actually gets in.
   const [kind, setKind] = useState<GroupKind>(DEFAULT_GROUP_KIND)
   const [busy, setBusy] = useState(false)
+  // The one refusal a filled-in form can earn: the server is what validates the
+  // link's shape, so a bad one fails the whole creation. Saying so beats the
+  // button quietly un-pressing itself (same fix as the settings editor).
+  const [linkError, setLinkError] = useState(false)
   const linkPlaceholder = useLinkPlaceholder()
 
   const create = async () => {
@@ -1469,7 +1459,10 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
         requires_approval: flags.requires_approval,
       })
       onCreated(g)
-    } catch { setBusy(false) }
+    } catch (e) {
+      setBusy(false)
+      setLinkError(serverErrorCode(e) === 'bad_link')
+    }
   }
 
   return (
@@ -1489,7 +1482,7 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
         <TextInput
           style={[s.fieldInput, s.linkInput]}
           value={link}
-          onChangeText={setLink}
+          onChangeText={v => { setLinkError(false); setLink(v) }}
           placeholder={linkPlaceholder}
           placeholderTextColor={INK_DIM}
           maxLength={GROUP_LINK_MAX}
@@ -1498,6 +1491,7 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
           autoCorrect={false}
         />
       </View>
+      {linkError ? <Text style={s.fieldError}>{t('communities.linkInvalid')}</Text> : null}
       <Text style={s.section}>{t('communities.kindLabel')}</Text>
       <KindChooser value={kind} onChange={setKind} />
       <Button label={t('communities.createAction')} variant="primary" size="lg" iconStart={<GroupsIcon color={WHITE} />} loading={busy} disabled={name.trim().length === 0} onPress={create} />
@@ -2174,11 +2168,13 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
   // The stored link is whatever the server made of what was pasted: a bare
   // "example.com/x" comes back with its https://, so the field repaints with
   // the real URL. One the server refuses (any other scheme, or not a host at
-  // all) changes nothing, and the field snaps back to the stored value.
+  // all) changes nothing — and the refusal is RETHROWN rather than swallowed,
+  // which is what puts communities.linkInvalid under the field with the text
+  // still in it. Swallowing it wiped the field and said nothing, which reads as
+  // "the app will not save my link" (2026-07-29).
   const saveLink = async (next: string | null) => {
     setSavingLink(true)
     try { const g = await updateGroup(group.id, { link: next }); onChanged(g) }
-    catch {}
     finally { setSavingLink(false) }
   }
   const doDelete = async () => {
@@ -2212,6 +2208,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           value={group.name}
           saving={savingName}
           onCommit={saveName}
+          errorLabel={t('communities.saveFailed')}
           min={1}
           max={GROUP_NAME_MAX}
           singleLine
@@ -2229,6 +2226,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           value={group.description ?? ''}
           saving={savingDesc}
           onCommit={saveDescription}
+          errorLabel={t('communities.saveFailed')}
           min={0}
           max={GROUP_DESCRIPTION_MAX}
           allowEmpty
@@ -2249,6 +2247,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           value={group.link ?? ''}
           saving={savingLink}
           onCommit={saveLink}
+          errorLabel={t('communities.linkInvalid')}
           min={0}
           max={GROUP_LINK_MAX}
           allowEmpty
@@ -2436,12 +2435,12 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
       })
       .catch(() => { setJoined(m => ({ ...m, [g.id]: false })); setRequested(m => ({ ...m, [g.id]: false })) })
   }
-  // How big it is, and nothing else: a group's KIND is off the strip (user
-  // directive 2026-07-28) — what a tap will do is said by the popup's own
-  // button, which is where the decision is made. How many members are
-  // candidates for me still ORDERS the list, but is not information a searcher
-  // needs on the row, so it is never said out loud either.
-  const groupMeta = (g: PublicGroup) => metaLine(memberLabel(g.members))
+  // How big it is and who runs it, and nothing else: a group's KIND is off the
+  // strip (user directive 2026-07-28) — what a tap will do is said by the
+  // popup's own button, which is where the decision is made. How many members
+  // are candidates for me still ORDERS the list, but is not information a
+  // searcher needs on the row, so it is never said out loud either.
+  const groupMeta = (g: PublicGroup) => groupFacts(g.members, g.owner_name)
 
   // Where I stand with this group RIGHT NOW: the server's answer, overridden by
   // whatever this session has since done about it (the optimistic maps — an
@@ -2492,20 +2491,21 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
         footer={paging ? <View style={[s.rosterRow, s.rosterRowLast]}><SkeletonRows rows={1} lines={2} first={false} avatar={false} /></View> : null}
         row={(g, i, last) => (
           // The SAME strip the hub is made of (user directive 2026-07-28), with
-          // the facts a searcher wants kept exactly as they were: the whole
-          // group name, who manages it, how big it is. NO owner photo — a face
-          // in the leading lane read as the group's own picture — so the row is
-          // all text, and the chip on its meta line says where I stand with this
-          // group (member / waiting / turned down), which is the one thing the
-          // search list could not say before. Tapping opens the details popup.
+          // the facts a searcher wants: the whole group name, then how big it is
+          // and who manages it on ONE fact line under it, in `groupFacts`' one
+          // order — the same line, the same separator, the same component and
+          // the same order as the popup this row opens
+          // (2026-07-29; they used to be two stacked lines here, which was the
+          // one place a group's facts were punctuated differently). NO owner
+          // photo — a face in the leading lane read as the group's own picture —
+          // so the row is all text, and the chip on that line says where I stand
+          // with this group (member / waiting / turned down), which is the one
+          // thing the search list could not say before. Tapping opens the popup.
           <Strip
             first={i === 0}
             style={rosterRowStyle(i, last)}
             title={g.name}
-            meta={[
-              g.owner_name && t('communities.managedBy').replace('{name}', g.owner_name),
-              groupMeta(g),
-            ]}
+            meta={groupMeta(g)}
             tag={statusTag(g)}
             onPress={() => setPreview(g)}
           />
@@ -2571,7 +2571,7 @@ const s = StyleSheet.create({
   profileFill: { flex: 1 },
   profileBare: { flex: 1 },
   profileBar: { paddingHorizontal: MD, paddingTop: MD, gap: SM },
-  profileBarCaption: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK, textAlign: 'center' },
+  profileBarCaption: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK, textAlign: 'center' },
   // A stacked page: opaque, so the page it covers never shows through.
   layerCard: { flex: 1, backgroundColor: PAGE },
   rosterRow: { backgroundColor: SURFACE },
@@ -2585,28 +2585,11 @@ const s = StyleSheet.create({
   // avatar lane (the same one a photo-less member wears) is what marks it as an
   // entry rather than a person.
   requestsGlyph: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' },
-  // THE strip. One geometry for every row on this surface (see Strip): the
-  // leading lane is the avatar's width whatever sits in it, and the text column
-  // takes everything else — there is no trailing lane to speak of, since no
-  // strip wears a chevron.
-  row: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: MD, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
-  // A strip that is a name and nothing under it — the people rows every roster
-  // is made of. Same strip, tighter, because there is one line to hold.
-  rowTight: { paddingVertical: SM },
-  rowFirst: { borderTopWidth: 0 },
-  rowIcon: { width: AVATAR, alignItems: 'center', justifyContent: 'center' },
-  rowText: { flex: 1, minWidth: 0, gap: XS },
-  // One line of the text column: its words take the WHOLE width, and the chip,
-  // when this is the last line, sits at its end facing them.
-  rowLine: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  rowLineText: { flex: 1, minWidth: 0 },
-  // A group's name in a row is a navigation label, exactly like the menu row
-  // that opens this hub (settings.tsx selectRowLabel) and like the member names
-  // below: same size, same weight, same ink, so the whole navigable surface
-  // reads as one voice (user directive 2026-07-28).
-  rowTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK },
-  rowMeta: { fontSize: TEXT.md, color: INK_MUTED },
-  section: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK_MUTED, marginTop: MD, marginStart: XS },
+  // THE strip's geometry lives with the strip (components/Strip.tsx) — this
+  // surface no longer owns a row style of its own. STRIP_ROW is imported for
+  // the one thing here that stands IN a strip's place without being one: the
+  // empty-state row.
+  section: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK_MUTED, marginTop: MD, marginStart: XS },
   // A section heading with a control opposite it. The heading's own top margin
   // is DROPPED (sectionFlat), not moved onto the row: the head already spaces
   // its blocks by its `gap`, and keeping both stacked two MDs above the roster.
@@ -2632,8 +2615,16 @@ const s = StyleSheet.create({
   sheetHead: { gap: SM },
   sheetAvatar: { alignItems: 'center', paddingBottom: XS },
   // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
+  // Spacing only — the type comes from SHEET_TITLE (BottomSheet.tsx). A regular
+  // weight was tried here on 2026-07-29 and reverted: the name is the one thing
+  // in the head that carries the popup, and without the weight it sank into the
+  // meta line above it.
   sheetTitle: { paddingBottom: XS },
   sheetDesc: { fontSize: TEXT.md, color: INK, textAlign: 'center', lineHeight: lhSm() },
+  // The head's meta line carries no style of its own: it is MetaLine, told to
+  // centre and to take full INK like every other line in a popup (user
+  // directive: popup text is never faded) — size alone is what makes it meta,
+  // and the size is the fact line's own.
   // The "more details" line: underlined because it is the one word in a popup
   // that leaves the app (same treatment the sign-in screen gives
   // terms/privacy), and set at the TITLE's size (user directive 2026-07-28) —
@@ -2644,16 +2635,24 @@ const s = StyleSheet.create({
   // a plain readable block; the footer mirrors the bio editor's hint+Update.
   descCard: { backgroundColor: SURFACE, borderRadius: RADIUS, padding: MD, gap: SM },
   descEditorInput: { fontSize: TEXT.md, color: INK, padding: 0, minHeight: 54, lineHeight: lhSm(), includeFontPadding: false },
-  nameInput: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.semibold, padding: 0, includeFontPadding: false },
+  nameInput: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.medium, padding: 0, includeFontPadding: false },
   // The link field: one line, and start-aligned like every other field (the
   // base TextInput does that) — a latin URL still renders LTR inside it.
   linkInput: { fontSize: TEXT.md, color: INK, padding: 0, includeFontPadding: false },
   descFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: MD },
   descHint: { fontSize: TEXT.md, color: INK_MUTED },
+  // Why a field was refused, under the field it belongs to. Full-strength ink
+  // (NEGATIVE): it is the reason nothing was saved, not a hint.
+  fieldError: { fontSize: TEXT.md, color: NEGATIVE },
   descInput: { minHeight: 54, paddingTop: 0 },
   pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS },
-  pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
-  sheetNote: { fontSize: TEXT.md, color: INK_MUTED, lineHeight: lhSm(), textAlign: 'center', marginTop: XS },
+  pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE },
+  // The footnote above a popup's button — what this group is to me right now,
+  // what a friend is worth. It is a HINT, not a paragraph, so it takes the rank
+  // below the body (`sm`, user directive 2026-07-29): at body size it read as a
+  // second description competing with the group's own, and the button under it
+  // is what the eye should land on.
+  sheetNote: { fontSize: TEXT.sm, color: INK_MUTED, lineHeight: lh(TEXT.sm), textAlign: 'center', marginTop: XS },
   // The sentence that stands in for a list: it sits in the card the strips would
   // have filled, so it takes the STRIP's gutter (`row`'s paddingHorizontal) —
   // without it a long line wraps flush to the card's edges on a narrow screen or
@@ -2680,7 +2679,7 @@ const s = StyleSheet.create({
   // beside it (the close X) instead of a form row's, so the bar stays a bar.
   fieldSlim: { paddingVertical: SM },
   fieldInput: { flex: 1, fontSize: TEXT.md, color: INK, padding: 0 },
-  codeInput: { textAlign: 'center', letterSpacing: LG, fontWeight: WEIGHT.semibold },
+  codeInput: { textAlign: 'center', letterSpacing: LG, fontWeight: WEIGHT.medium },
   toggle: { flexDirection: 'row', backgroundColor: INK_WASH, borderRadius: RADIUS, padding: XS, gap: XS },
   // The kind chooser is the same fabric as `toggle`, stacked: three stops, each
   // with the sentence that explains it, so the list reads top to bottom.
@@ -2691,8 +2690,8 @@ const s = StyleSheet.create({
   kindItem: { paddingVertical: SM, paddingHorizontal: SM, borderRadius: RADIUS, gap: XS },
   toggleItem: { flex: 1, alignItems: 'center', paddingVertical: SM, borderRadius: RADIUS, gap: XS },
   toggleOn: { backgroundColor: SURFACE },
-  toggleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK_MUTED },
-  toggleSub: { fontSize: TEXT.sm, fontWeight: WEIGHT.semibold, color: INK_MUTED },
+  toggleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK_MUTED },
+  toggleSub: { fontSize: TEXT.sm, fontWeight: WEIGHT.medium, color: INK_MUTED },
 })
 
 // Body line-height for the muted note (kept a small helper so the ratio lives

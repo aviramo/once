@@ -17,7 +17,7 @@ import { t } from '../i18n'
 // balance up only to the cap — a daily credit refunded into a full pool is
 // dropped, so a hold+refund cycle can never stockpile past the cap.
 //
-// The currency is called CREDITS and is drawn as a coin (CoinIcon). It used
+// The currency is called CREDITS and is drawn as a gem (CreditIcon). It used
 // to be called hearts and drawn as a heart, which collided with the heart on
 // the invite button — that one is the "like" affordance, not money.
 

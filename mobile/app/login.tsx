@@ -196,13 +196,13 @@ const styles = StyleSheet.create({
   },
   brandName: {
     fontSize: TEXT.xxl,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     letterSpacing: -1.4,
   },
   brandSlogan: {
     fontSize: TEXT.lg,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK_BODY,
     letterSpacing: -0.2,
     marginTop: XS,

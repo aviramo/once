@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     fontSize: TEXT.md,
     lineHeight: TEXT.md,
     color: WHITE,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     includeFontPadding: false,
   },
   skipLabel: {

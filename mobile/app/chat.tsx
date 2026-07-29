@@ -2595,7 +2595,7 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
   return (
     <View style={styles.daySep}>
       <View style={styles.daySepLine} />
-      <Text style={[styles.daySepLabel, bold && { fontWeight: WEIGHT.semibold }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{label}</Text>
+      <Text style={[styles.daySepLabel, bold && { fontWeight: WEIGHT.medium }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{label}</Text>
       <View style={styles.daySepLine} />
     </View>
   )
@@ -3336,7 +3336,7 @@ const styles = StyleSheet.create({
   },
   replyQuoteBar: { width: 3, borderRadius: RADII.pill },
   replyQuoteBody: { flex: 1, justifyContent: 'center' },
-  replyQuoteName: { fontSize: TEXT.sm, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.semibold },
+  replyQuoteName: { fontSize: TEXT.sm, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.medium },
   replyQuoteMediaRow: { flexDirection: 'row', alignItems: 'center', gap: XS },
   replyQuoteText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md) },
 
@@ -3533,7 +3533,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: TEXT.md,
     color: WHITE,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
   },
   attachConfirmClose: {
     width: 32, height: 32,
@@ -3552,7 +3552,7 @@ const styles = StyleSheet.create({
   attachConfirmSendLabel: {
     fontSize: TEXT.md,
     color: INK,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
   },
 
   // Image bubble
@@ -3668,7 +3668,7 @@ const styles = StyleSheet.create({
   },
   recTime: {
     fontSize: TEXT.md,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     fontVariant: ['tabular-nums'],
   },
@@ -3713,7 +3713,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  locationLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.semibold },
+  locationLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.medium },
   // The line under the location name: the rank BELOW the body, so TEXT.sm. The
   // old 1px marginTop was an optical nudge against a hand-set 16 lineHeight;
   // with the standard 1.4x line box there is nothing left to nudge.
@@ -3739,7 +3739,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     gap: SM,
   },
-  scheduleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK, marginBottom: XS },
+  scheduleTitle: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK, marginBottom: XS },
   scheduleTitleMine: { color: WHITE },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SM },
   scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: XS },

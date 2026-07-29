@@ -293,7 +293,7 @@ export function BottomSheet({
 export const SHEET_TITLE: TextStyle = {
   fontSize: TEXT.lg,
   lineHeight: lh(TEXT.lg),
-  fontWeight: WEIGHT.semibold,
+  fontWeight: WEIGHT.medium,
   color: INK,
   textAlign: 'center',
 }
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     // the surface that LIFTS off the page — a dialog is a thing laid ON the
     // app, not the page itself rising — so it takes SURFACE, never the PAGE
     // tint. This is the single place the popup ground is set: ConfirmDialog,
-    // BuyExtraPopup, SharedGroupsPopup and every action sheet compose this card.
+    // BuyExtraPopup, SharedCirclesPopup and every action sheet compose this card.
     backgroundColor: SURFACE,
     boxShadow: SHEET_SHADOW,
   },
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   actionRowLabel: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK,
   },
   dragHandle: {
     alignSelf: 'center',

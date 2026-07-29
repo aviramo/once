@@ -1,4 +1,4 @@
-﻿// Central design tokens — single source of truth for sizes, spacing, font sizes,
+// Central design tokens — single source of truth for sizes, spacing, font sizes,
 // radii, durations, easings, gesture thresholds, and shared shadow stops.
 //
 // Every literal that has meaning across the app lives here. Inline numeric
@@ -82,18 +82,26 @@ export const bottomGap = (safeInset: number, gap: number): number => Math.max(sa
 
 // ── Font weights ───────────────────────────────────────────────────────────
 // ONE weight above the regular face (user directive 2026-07-28): every piece of
-// emphasis in the app — popup titles, button labels, section headings, row
-// labels, selected states — is semibold. The old `extrabold: '800'` tier is
-// gone; it drew a hierarchy the app does not actually have, and two weights of
-// emphasis sitting next to each other (a group's name at 800 above a member's
-// at 600) read as two different kinds of thing when they are the same thing.
+// emphasis in the app — popup titles, button labels, section headings, selected
+// states — is this one. The old `extrabold: '800'` tier is gone; it drew a
+// hierarchy the app does not actually have, and two weights of emphasis sitting
+// next to each other (a group's name at 800 above a member's at 600) read as two
+// different kinds of thing when they are the same thing.
+//
+// It is MEDIUM (500) since 2026-07-29, down from semibold (600). The app spent
+// that day taking weight OFF everything that was merely a label — menu rows,
+// group strips, chips, the card's name — and against that quieter page a lighter
+// emphasis is enough. The step is smaller in Hebrew than the same step is in
+// Latin (it was checked on device against an emphasised run inside a chip, and it
+// reads), and it is a real bundled face — NotoSansHebrew_500Medium, never a
+// weight the OS synthesises.
 //
 // Hierarchy is carried by SIZE (TEXT.*) and COLOR (INK vs INK_BODY/INK_HINT), not by
-// a second bold. `fontWeight: '600'` should reference WEIGHT.semibold instead of
-// repeating the magic string; there is deliberately nothing heavier to reach for.
+// a second bold. A call site says WEIGHT.medium rather than repeating the magic
+// string; there is deliberately nothing heavier to reach for.
 
 export const WEIGHT = {
-  semibold: '600',
+  medium: '500',
 } as const
 
 // ── Radii ──────────────────────────────────────────────────────────────────

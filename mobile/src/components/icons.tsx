@@ -178,7 +178,13 @@ export function HamburgerIcon({ color = INK, size = ICON.xxl }: IconProps = {}) 
 export function SlidersIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <G rotation={90} origin="12, 12">
+      {/* scale: this is the one glyph in the row whose ink runs the FULL 1..23
+          of its box, where every neighbour (pin / clock / eye / rings) stops
+          around 3..21. At the same `size` it therefore read a step larger than
+          the rest of the settings list, so the artwork is pulled in to their
+          span rather than the row being given a smaller `size` — the box stays
+          the shared ICON.md and only the drawing changes. */}
+      <G rotation={90} origin="12, 12" scale={0.9}>
         <Line x1="4" y1="21" x2="4" y2="14" />
         <Line x1="4" y1="10" x2="4" y2="3" />
         <Line x1="12" y1="21" x2="12" y2="12" />
@@ -347,25 +353,19 @@ export function TrashIcon({ color = INK, size = ICON.md }: IconProps = {}) {
 export function SupportIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="10" />
-      <Circle cx="12" cy="12" r="4" />
-      <Path d="m4.93 4.93 4.24 4.24" />
-      <Path d="m14.83 14.83 4.24 4.24" />
-      <Path d="m14.83 9.17 4.24-4.24" />
-      <Path d="m4.93 19.07 4.24-4.24" />
-    </Glyph>
-  )
-}
-
-// Two interlocking chain links — "we are both connected to this person". The
-// mutual-friend chip on a match card carries it; the chip says the friend's
-// name and nothing else, so the glyph is what makes the name a CONNECTION
-// rather than a second person on the card (user directive 2026-07-29).
-export function LinkIcon({ color = INK, size = ICON.md }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <Path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+      {/* scale: same correction as SlidersIcon. A life-ring at r 10 runs its
+          ink to 1..23 of the box, the widest possible, and its six strokes make
+          it the heaviest glyph in the settings list too (117dp² of ink against
+          a ~75 median). Pulled in to the column's shared span; the box stays
+          the shared ICON.md and only the drawing changes. */}
+      <G origin="12, 12" scale={0.9}>
+        <Circle cx="12" cy="12" r="10" />
+        <Circle cx="12" cy="12" r="4" />
+        <Path d="m4.93 4.93 4.24 4.24" />
+        <Path d="m14.83 14.83 4.24 4.24" />
+        <Path d="m14.83 9.17 4.24-4.24" />
+        <Path d="m4.93 19.07 4.24-4.24" />
+      </G>
     </Glyph>
   )
 }
@@ -406,17 +406,32 @@ export function UserMinusIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   )
 }
 
-// Two silhouettes. The ink spans x 4..20 of the 24 box — the SAME span as
-// UserIcon — so the glyph sits optically centred in the leading-icon column
-// next to the other rows. (It was drawn spanning 1..17, which put its centre
-// 3 units left of the box centre and left it visibly out of the column.)
+// TWO INTERLACED RINGS — the feature is called CIRCLES, so the glyph is
+// circles, not the generic two-silhouettes every app ships (user directive
+// 2026-07-29). It says the whole idea in one shape: two separate circles that
+// pass through each other. That is equally what a shared group is and what a
+// mutual friend is, so this one mark carries every "you two are already
+// connected" surface — the menu row, the create-group button, and BOTH fact
+// chips on the match card (shared group, friend-of).
+//
+// Drawn as two ARCS, not two circles: each ring is broken by a 52° gap centred
+// on ONE of the two crossings, and they take OPPOSITE crossings, so each ring
+// passes over the other once and under it once. Two plain <Circle>s only ever
+// read as a Venn diagram. The gap must be this wide because the round caps eat
+// a stroke-width of it at each end. (Both gaps on the same crossing is the easy
+// mistake — that draws a hole, not a weave.)
+//
+// The pair runs DIAGONALLY, and that is load-bearing: side by side on one
+// horizontal line, two overlapping rings read as an infinity sign, not as two
+// circles. Geometry: r 6, centres (9.03,9.03)/(14.97,14.97) — 8.4 apart, i.e.
+// 30% of a diameter of overlap, ink spanning 3..21 on both axes. That span is
+// what puts it at the same OPTICAL size as the rest of the settings list; the
+// first cut, at r 5.2, measured the smallest ink box in the whole column.
 export function GroupsIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M20 21v-2a4 4 0 0 0-3-3.87" />
-      <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      <Path d="M18 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <Circle cx="11" cy="7" r="4" />
+      <Path d="M 6.63 14.53 A 6 6 0 1 1 11.32 14.58" />
+      <Path d="M 17.37 9.47 A 6 6 0 1 1 12.68 9.42" />
     </Glyph>
   )
 }
@@ -465,7 +480,7 @@ export function PhotoTrashIcon({ color, size = ICON.xxl }: IconProps & { color: 
 // perimeter halo) and the Menu tab glyph. `stroke` defaults to `color`, so
 // omitting it yields a clean single-color glyph.
 //
-// NOT the currency — that's CoinIcon. The heart is the "invite this person"
+// NOT the currency — that's CreditIcon. The heart is the "invite this person"
 // affordance; drawing money with the same glyph made the cost badge dissolve
 // into the button it sat on (renamed hearts -> credits, 2026-07-22).
 export function HeartIcon({
@@ -480,16 +495,36 @@ export function HeartIcon({
   )
 }
 
-// CoinIcon — the credits currency mark. A thick rim with a centre pip, drawn
-// in ONE colour: the gaps are transparent, so it picks up whatever surface it
-// sits on (the CreditCost capsule, a settings row, the buy sheet) without a
-// second colour or any gradient. Reads as a coin down to ICON.sm (16dp),
-// where a minted-face design would turn to mush.
-export function CoinIcon({ color = INK, size = ICON.md }: IconProps = {}) {
+// CreditIcon — the credits currency mark: a cut gem (user directive
+// 2026-07-29). It used to be a coin — a rim with a centre pip — and that
+// silhouette is the same one every radio button, record dot and target uses,
+// so the settings row read as a toggle rather than a wallet. A faceted gem has
+// no such collision: nothing else in the app is a downward-pointing polygon.
+//
+// Named for the JOB, not the shape, so a future redraw is not a rename.
+//
+// Drawn in ONE colour with transparent gaps, so it picks up whatever surface
+// it sits on (the CreditCost capsule, a settings row, the buy sheet) without a
+// second colour or any gradient. Three strokes only — outline, girdle, crown
+// facets — because a full facet map turns to mush at ICON.sm (16dp).
+//
+// The artwork is OPTICALLY centred, not geometrically: the ink runs y=5..21.5
+// in a 24 box, so there is more air above it than below. A gem is top-heavy —
+// its widest stroke (the girdle) sits in the upper half and everything below
+// converges to a point — so its centre of ink lands ~1 unit above the box
+// centre, and a box-centred gem reads as riding high beside its label. The
+// whole shape is therefore pushed 1 unit down IN THE ARTWORK. Do not "fix"
+// this by nudging the glyph in JS: GlyphSlot centres the BOX by measuring the
+// label's real line box, and that part is already right (see CLAUDE.md).
+export function CreditIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="9" strokeWidth={STROKE.thick} />
-      <Circle cx="12" cy="12" r="3.25" fill={color} stroke="none" />
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      {/* Crown (flat top) → girdle corners → pavilion tip. */}
+      <Path d="M7 5h10l4.5 6L12 21.5 2.5 11z" />
+      {/* The girdle: the widest line, what makes it read as a cut stone. */}
+      <Line x1="2.5" y1="11" x2="21.5" y2="11" />
+      {/* One polyline for both crown facets and both pavilion edges. */}
+      <Polyline points="7 5 9 11 12 21.5 15 11 17 5" />
     </Glyph>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native'
+import { LayoutChangeEvent, NativeSyntheticEvent, Pressable, StyleProp, StyleSheet, TextLayoutEventData, View, ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Text } from './AppText'
 import { Path, Circle, Rect } from 'react-native-svg'
@@ -32,11 +32,6 @@ import { OUTLINE_SKIN } from '../field'
 // the app switcher and reopening), since `forceRTL` updates a native
 // preference applied only at app startup.
 const isRTL = localeIsRTL
-
-// A label counts as RTL when it carries any Hebrew or Arabic letter. Drives the
-// "+N" word-flow row's direction off the label's OWN script (see the render),
-// independent of the UI locale.
-const RTL_SCRIPT = /[֐-׿؀-ۿ]/
 
 const TONES = {
   // INK on the PAGE tint — the palest purple in the palette (user directive
@@ -100,9 +95,8 @@ function segmentLines(segments: ChipSegment[]): ChipRun[][] {
 // runs + mini-chip clusters, and the "+N" name flow) are laid out by the flex
 // engine, and only they need this.
 //
-// Same shape as the meta-line reflow in AppText: lay the label out once, read
-// the item boxes back, and cap the container at the width its widest line
-// actually used. Each item measures to its own ink, so the furthest END edge
+// Measure-then-correct: lay the label out once, read the item boxes back, and
+// cap the container at the width its widest line actually used. Each item measures to its own ink, so the furthest END edge
 // across a line IS that line's width. It cannot loop: the second pass caps the
 // container at exactly that width, so every line breaks where it already broke
 // and measures the same. `maxWidth`, not `width`: if the space ever gets
@@ -167,9 +161,9 @@ function useHugWidth(key: string, lineItems: number[]) {
 
 // The pale-purple mini-chip. Single source for both the "+N" groups hint and
 // the family chip's age/weekend pills so they read as one fabric.
-function Badge({ text, ltr = false, onLayout }: { text: string; ltr?: boolean; onLayout?: (e: LayoutChangeEvent) => void }) {
+function Badge({ text, ltr = false, style, onLayout }: { text: string; ltr?: boolean; style?: StyleProp<ViewStyle>; onLayout?: (e: LayoutChangeEvent) => void }) {
   return (
-    <View style={styles.badge} onLayout={onLayout}>
+    <View style={[styles.badge, style]} onLayout={onLayout}>
       <Text style={[styles.badgeText, ltr && styles.badgeTextLtr]} maxFontSizeMultiplier={FONT_SCALE.heading}>
         {text}
       </Text>
@@ -190,13 +184,15 @@ function Badge({ text, ltr = false, onLayout }: { text: string; ltr?: boolean; o
 // NO-BREAK space. Nothing is forced: a label that fits still renders on one
 // line, and one that doesn't breaks where the meaning breaks.
 const NBSP = '\u00a0'
-// Longer than this, a phrase keeps its ordinary spaces. Glued it would offer
-// the breaker no seam at all, and a phrase too wide for the column would then
-// be split mid-word — worse than the ragged break we started from. The number
-// is the widest phrase the column comfortably fits, in characters.
+// Longer than this, a phrase keeps its ordinary spaces even before anything is
+// measured. A character count can only ever GUESS at what fits — the real guard
+// is the measured un-glue below — but it keeps an obviously long phrase from
+// having to be corrected at all.
 const PHRASE_GLUE_MAX = 20
 
-export function phraseWrap(label: string): string {
+/** The seams a chip label may break at: after a top-level comma, and before a
+ *  parenthetical. What lies between two seams is one phrase. */
+export function splitPhrases(label: string): string[] {
   const phrases: string[] = []
   let depth = 0
   let start = 0
@@ -219,18 +215,70 @@ export function phraseWrap(label: string): string {
     }
   }
   phrases.push(label.slice(start))
-  // Note a SHORT single phrase is glued too, and that is load-bearing beyond
-  // tidy wrapping: a two-word label that fits ("just now", "1 min ago") was
-  // losing its last word on screen — the tile measured at the full width, then
-  // the breaker split the trailing word onto a second line that the one-line
-  // tile clips, leaving "just" plus an empty gap. A glued phrase offers no
-  // break to take. A LONG single phrase keeps its natural spaces (the map's
-  // PHRASE_GLUE_MAX guard): with no seam at all, a phrase too wide for the
-  // narrow column would break MID-WORD instead (a group name like
-  // "אוניברסיטת בן גוריון" split as "גורי/ון").
   return phrases
-    .map(p => (p.length <= PHRASE_GLUE_MAX ? p.replace(/ /g, NBSP) : p))
+}
+
+// Note a SHORT single phrase is glued too, and that is load-bearing beyond tidy
+// wrapping: a two-word label that fits ("just now", "1 min ago") was losing its
+// last word on screen — the tile measured at the full width, then the breaker
+// split the trailing word onto a second line that the one-line tile clips,
+// leaving "just" plus an empty gap. A glued phrase offers no break to take.
+//
+// `loose` un-glues everything: the label goes back to its ordinary spaces. It
+// is what the measured correction below flips on, because GLUE IS A PREFERENCE
+// AND A PREFERENCE THAT CANNOT BE HONOURED MUST NOT BECOME A MID-WORD BREAK
+// (user directive 2026-07-29). A phrase with no seam inside it that still does
+// not fit the column is split by the breaker at whatever CHARACTER overflows —
+// "אימון בוקר בפארק" painted as "אימון בוקר בפאר / ק". Ungluing gives those
+// spaces back, so it breaks between words instead.
+export function phraseWrap(label: string, loose = false): string {
+  const phrases = splitPhrases(label)
+  return phrases
+    .map(p => (!loose && p.length <= PHRASE_GLUE_MAX ? p.replace(/ /g, NBSP) : p))
     .join(' ')
+}
+
+// ── The measured un-glue ───────────────────────────────────────────────────
+// Whether a glued phrase FITS is not knowable from the string: it depends on the
+// column the chip landed in, the font scale, the script. So the label is painted
+// glued and corrected if the breaker had to cut a word in half. With the glue in
+// place a phrase offers no break of its own, so a line beyond the seams
+// (`splitPhrases`) is a break the breaker had to invent — a mid-word one. The
+// one label that trips this without a broken word is a compound whose LONG
+// phrase (past PHRASE_GLUE_MAX, so never glued) wrapped at its own spaces; it
+// loses the glue on its short phrases and reads the same, because a label
+// already wide enough to wrap twice was never going to keep its seams anyway.
+//
+// The same measure-then-correct shape as the hug above, and it carries the same
+// lesson: A CORRECTION IS ONLY AS GOOD AS THE WIDTH IT WAS MEASURED AT.
+// A first pass can land in a box whose parent has not resolved its own width
+// yet, so the box's widest layout is remembered and the un-glue is dropped the
+// moment it is laid out WIDER. It cannot loop: ungluing only ever lets the text
+// break in MORE places, so the tile it produces is never wider than the glued
+// one that produced it, and only a genuinely roomier box resets anything.
+function useUnglue(text: string | undefined) {
+  const [loose, setLoose] = useState(false)
+  const widest = useRef(0)
+  // A new label is a new question: measure it glued, whatever the last one did.
+  const measured = useRef(text)
+  if (measured.current !== text) {
+    measured.current = text
+    widest.current = 0
+    if (loose) setLoose(false)
+  }
+  const seams = text ? splitPhrases(text).length : 0
+  return {
+    label: text != null ? phraseWrap(text, loose) : '',
+    onTextLayout: (e: NativeSyntheticEvent<TextLayoutEventData>) => {
+      if (!loose && e.nativeEvent.lines.length > seams) setLoose(true)
+    },
+    onLayout: (e: LayoutChangeEvent) => {
+      const w = e.nativeEvent.layout.width
+      if (w <= widest.current) return
+      widest.current = w
+      if (loose) setLoose(false)
+    },
+  }
 }
 
 // A chip's outer height, derived from the same tokens its padding box is
@@ -307,30 +355,29 @@ export function Chip({
   // the icon can never outgrow the text it sits next to on a large-font device.
   const glyphSlot = { size: small ? TEXT.sm : TEXT.md, cap: FONT_SCALE.heading }
   const Container: any = onPress ? Pressable : View
-  // "+N": the mini-chip that chains right after the label's last word. The label
-  // is split into word-runs so the pill can flow after the final one and wrap
-  // with it, which an inline element inside the <Text> could not do. RTL mirrors
-  // the plus to the reading-start side ("1+"); `ltr` keeps the weak "+" glued to
-  // the digit.
-  // Direction follows the LABEL's OWN script, not the UI locale: the flex engine
-  // can't bidi-reorder words, so a locale-only direction reversed a Hebrew name
-  // in an English UI. The "+" sits on that script's reading-start side.
-  const nameDir: 'rtl' | 'ltr' | null = plusCount && text ? (RTL_SCRIPT.test(text) ? 'rtl' : 'ltr') : null
-  const plusPill = nameDir ? (nameDir === 'rtl' ? `${plusCount}+` : `+${plusCount}`) : null
-  // The two flex-laid-out label shapes: `br`-delimited lines of runs + pill
-  // clusters, and the name's word-runs + trailing "+N". Both are built here so
-  // the hug hook knows how many boxes each line owes it, and both are capped by
-  // it so the tile ends where the text does (see useHugWidth).
+  // "+N": the mini-chip that TRAILS the label, the same slot the presence dot
+  // rides in — not an item flowing inside the text (user directive 2026-07-29).
+  // The label used to be split into word-runs so the pill could chain after the
+  // final word, but a wrap row is laid out by the flex engine, and the flex
+  // engine cannot shrink-to-fit what it wrapped: the tile kept the width it was
+  // measured at, so the chip painted a dead half-line of white beside the text,
+  // and which line the pill landed on could differ between two runs of the same
+  // card. A plain <Text> has none of that — RN measures it at its widest LINE,
+  // so it hugs by construction — and the pill simply stands after it. `ltr`
+  // keeps the weak "+" glued to its digit; the pill rides the chip's own
+  // trailing side, so it follows the app's direction like every other piece of
+  // chip chrome.
+  const plusPill = plusCount ? (isRTL ? `${plusCount}+` : `+${plusCount}`) : null
+  // The one flex-laid-out label shape left: `br`-delimited lines of text runs +
+  // pill clusters (the family chip). It is built here so the hug hook knows how
+  // many boxes each line owes it, and is capped by it so the tile ends where the
+  // text does (see useHugWidth).
   const lines = segments ? segmentLines(segments) : null
-  const words = !segments && plusPill ? (text ?? '').split(/\s+/).filter(Boolean) : null
   const hug = useHugWidth(
-    lines
-      ? lines.map(l => l.map(s => ('badges' in s ? s.badges.join(',') : s.text)).join('')).join('\n')
-      : words
-        ? `${text}${plusPill}`
-        : '',
-    lines ? lines.map(l => l.length) : words ? [words.length + 1] : [],
+    lines ? lines.map(l => l.map(s => ('badges' in s ? s.badges.join(',') : s.text)).join('')).join('\n') : '',
+    lines ? lines.map(l => l.length) : [],
   )
+  const unglue = useUnglue(!lines ? text : undefined)
   return (
     <Container
       onPress={onPress}
@@ -364,30 +411,22 @@ export function Chip({
             </View>
           ))}
         </View>
-      ) : words ? (
-        // Name + "+N": word-runs in a wrap row directed by the name's script, so
-        // the pill lands right after the final word in any UI locale.
-        <View style={[styles.nameFlow, { direction: nameDir! }, hug.style]} onLayout={hug.onLineLayout(0)}>
-          {words.map((w, i) => (
-            <Text
-              key={i}
-              style={[styles.chipText, small && styles.chipTextSmall, bold && styles.chipTextBold, { color: fg }]}
-              maxFontSizeMultiplier={FONT_SCALE.heading}
-              onLayout={hug.onItemLayout(0, i)}
-            >
-              {w}
-            </Text>
-          ))}
-          <Badge text={plusPill!} ltr onLayout={hug.onItemLayout(0, words.length)} />
-        </View>
       ) : (
         <>
           <Text
             style={[styles.chipText, small && styles.chipTextSmall, bold && styles.chipTextBold, { color: fg }]}
             maxFontSizeMultiplier={FONT_SCALE.heading}
+            onTextLayout={unglue.onTextLayout}
+            onLayout={unglue.onLayout}
           >
-            {phraseWrap(text ?? '')}
+            {unglue.label}
           </Text>
+          {plusPill ? (
+            // Bottom-aligned, so on a label that wrapped it stands beside the
+            // LAST line — where the count belongs — instead of floating up
+            // level with the first one.
+            <Badge text={plusPill} ltr style={styles.plusPill} />
+          ) : null}
           {renderTrailing ? (
             // The trailing glyph is its own press target when asked (the report
             // flag inside the name/age chip) — the SAME one-line-tall slot, just
@@ -523,17 +562,25 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: TEXT.md,
     lineHeight: lh(TEXT.md),
-    fontWeight: WEIGHT.semibold,
+    // Regular weight (user directive 2026-07-29). A chip is a FACT — how far
+    // away, how many kids, which group — not a heading, and a stack of them all
+    // set in semibold read as a column of shouted labels with nothing quiet to
+    // measure against. The white tile and the purple ink already separate a chip
+    // from the photo under it; the weight was doing no work. It also gives the
+    // `bold` opt-in below its meaning back: while every chip was semibold, `bold`
+    // was a no-op and the one thing meant to stand out could not.
     flexShrink: 1,
     // Start-aligned (physically right in RTL) comes from the app-wide reading
     // direction — TEXT_START in src/fonts.ts, applied once in AppText. This
     // used to re-declare it inline. NOTE textAlign:'right' would be RN's RTL
     // trap: it means "end of writing direction", i.e. physically LEFT in RTL.
   },
-  // Heaviest weight at the ordinary chip size: the name/age heading chip reads
-  // as the card's heading without growing the tile past the fact chips beside it.
+  // The one emphasis, at the ordinary chip size: the name/age heading chip reads
+  // as the card's heading without growing the tile past the fact chips beside it,
+  // and FamilyCard's status run (`seg.bold`) stands out inside its sentence.
+  // Only a call site that asks for it gets this — see chipText above.
   chipTextBold: {
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
   },
   // The small tile's label — the list-row size, one step under the chip's own.
   chipTextSmall: {
@@ -555,7 +602,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: TEXT.sm,
     lineHeight: lh(TEXT.md),
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
   },
@@ -599,16 +646,14 @@ const styles = StyleSheet.create({
     rowGap: XS,
     flexShrink: 1,
   },
-  // The group-name "+N" flow: word-runs + trailing pill. `direction` is set
-  // inline per label script (see render). columnGap approximates a word space
-  // (the words were split on whitespace, so the natural spaces are gone).
-  nameFlow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    columnGap: XS,
-    rowGap: XS,
-    flexShrink: 1,
+  // The "+N" pill stands OFF the label: the chip's own SM gap between its parts,
+  // and a step more on top of it, so the count reads as a second object on the
+  // tile rather than as the last word of the name (user directive 2026-07-29).
+  // alignSelf ends it level with the label's LAST line — the chip's row is
+  // aligned flex-start, for the leading glyph.
+  plusPill: {
+    marginStart: XS,
+    alignSelf: 'flex-end',
   },
   presenceDot: {
     width: PRESENCE_DOT_SIZE,

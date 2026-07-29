@@ -169,7 +169,7 @@ export default {
   'communities.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs a manager to approve',
   'communities.membersCount': '{count} members',
   'communities.oneMember': '1 member',
-  // Row meta segments, joined by metaLine(). One string per fact, so the menu
+  // Row meta segments, laid out by MetaLine. One string per fact, so the menu
   // row and the hub rows count the same things in the same words.
   'communities.groupsCount': '{count} groups',
   'communities.oneGroup': '1 group',
@@ -188,13 +188,12 @@ export default {
   'communities.nudgeDesc': 'Join groups and invite your friends over, and the people shown to you will be more connected to you and to your circles',
   'communities.nudgeConfirm': 'Explore circles',
   'communities.managedBy': 'Managed by {name}',
-  'communities.sharedGroupsTitle': 'Shared groups',
-  // The mutual-friend popup's title and the on-photo chip. English inflects for
-  // neither the friend nor the card's subject, so each pair is the same string
-  // twice; Hebrew is why there are two keys at all (see he.ts).
-  'communities.sharedFriendsTitle': 'Mutual friends',
-  'communities.sharedFriendM': 'Mutual friend',
-  'communities.sharedFriendF': 'Mutual friend',
+  // The one popup behind the card's circle chip: every mutual friend and every
+  // shared group in one list.
+  'communities.sharedTitle': 'What we share',
+  // The chip itself. English inflects for neither the friend nor the card's
+  // subject, so the pair is the same string twice; Hebrew is why there are two
+  // keys at all (see he.ts).
   'communities.friendOfM': 'Friend of {name}',
   'communities.friendOfF': 'Friend of {name}',
   // One list, one empty line: the hub no longer splits managed from joined.
@@ -240,6 +239,12 @@ export default {
   // looking at the group gets one tappable line under the description.
   'communities.link': 'Link to more details',
   'communities.linkPlaceholder': 'Paste a link here',
+  // The server decides whether an address is usable (it also completes a bare
+  // host with https://), so this lights up under the field when it refused —
+  // with the refused text still in the field to be corrected.
+  'communities.linkInvalid': 'That link is not valid',
+  // A save refused for any other reason (name, description).
+  'communities.saveFailed': 'Not saved, try again',
   'communities.moreDetails': 'More details',
 
   // A group you manage

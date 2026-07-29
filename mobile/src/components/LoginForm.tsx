@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: TEXT.lg,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
     letterSpacing: -0.3,

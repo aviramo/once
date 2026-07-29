@@ -12,7 +12,6 @@ import { useFonts } from 'expo-font'
 import {
   NotoSansHebrew_400Regular,
   NotoSansHebrew_500Medium,
-  NotoSansHebrew_600SemiBold,
   NotoSansHebrew_700Bold,
 } from '@expo-google-fonts/noto-sans-hebrew'
 import {
@@ -226,12 +225,15 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  // No 800 face: the app has one emphasis weight, 600 (WEIGHT.semibold in
-  // tokens.ts), so an ExtraBold nobody can ask for is dead weight in the bundle.
+  // The app has ONE emphasis weight — 500 (WEIGHT.medium in tokens.ts) — so a
+  // face nobody can ask for is dead weight in the bundle. That took out ExtraBold
+  // with the 800 token, and SemiBold on 2026-07-29 when the emphasis tier moved
+  // 600 → 500: a stray '600' now lands on the Medium file (WEIGHT_TO_FAMILY in
+  // src/fonts.ts), so nothing asks for a face that is not here. Bold stays as the
+  // landing spot for a `fontWeight: 'bold'` the app itself never writes.
   const [fontsLoaded, fontError] = useFonts({
     NotoSansHebrew_400Regular,
     NotoSansHebrew_500Medium,
-    NotoSansHebrew_600SemiBold,
     NotoSansHebrew_700Bold,
     NotoSans_400Regular,
     NotoSans_500Medium,

@@ -1,7 +1,6 @@
-import { forwardRef, useState } from 'react'
-import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps, type NativeSyntheticEvent, type TextLayoutEventData } from 'react-native'
+import { forwardRef } from 'react'
+import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps } from 'react-native'
 import { DEFAULT_FAMILY, FONT_SCALE, INPUT_START, SINGLE_WEIGHT, TEXT_START, WEIGHT_TO_FAMILY } from '../fonts'
-import { META_SEP, reflowMeta } from '../lib/meta'
 import { INK, SELECTION } from '../colors'
 
 // Drop-in replacement for react-native's Text that applies Heebo as the
@@ -33,47 +32,26 @@ function resolveFamily(style: any): string {
 // fontWeight alone so the OS *does* synthesise bold for headings.
 const weightOverride = SINGLE_WEIGHT ? {} : { fontWeight: 'normal' as const }
 
-// A meta line ("Open · 21 members · 11 match you") may not leave a separator
-// dot stranded at the start or the end of a line (user directive 2026-07-28).
-// The composer (lib/meta.ts) glues each dot to the fact after it, which settles
-// the end of a line; the start of one can only be settled by measurement, so it
-// is settled HERE, in the base Text, for every string in the app: a plain-string
-// child carrying the separator is laid out once, and re-rendered with hard
-// newlines where it actually broke and no separator across them. Nothing opts
-// in, so no screen can forget the rule (a communities-only MetaText component
-// used to own this, and the rows that never adopted it kept the stranded dot).
-// Text without the separator never measures: `onTextLayout` is attached only
-// while a reflow is pending, and dropped for good once it lands.
-function useMetaReflow(children: TextProps['children'], onTextLayout: TextProps['onTextLayout']) {
-  const raw = typeof children === 'string' ? children : null
-  const [flow, setFlow] = useState<{ src: string; out: string } | null>(null)
-  const flowed = flow && flow.src === raw ? flow.out : null
-  if (raw == null || flowed != null || !raw.includes(META_SEP)) {
-    return { children: flowed ?? children, onTextLayout }
-  }
-  return {
-    children: raw,
-    onTextLayout: (e: NativeSyntheticEvent<TextLayoutEventData>) => {
-      onTextLayout?.(e)
-      const out = reflowMeta(raw, e.nativeEvent.lines)
-      if (out != null) setFlow({ src: raw, out })
-    },
-  }
-}
-
+// This Text measures NOTHING. It used to: a string carrying the meta separator
+// was laid out once, the lines the platform reported were read back, and it was
+// re-rendered with hard newlines and no interpunct across them — the rule that a
+// separator dot never opens or closes a line. That mechanism is gone
+// (2026-07-29). It rested on `onTextLayout` reporting the TEXT of each line, and
+// on the device it did not: the dot came back at the start of a wrapped line in
+// the shared-circles popup. The rule now lives where it cannot fail, in the fact
+// line itself (components/MetaLine.tsx), which lays its facts out as elements
+// and simply stops painting a separator that lands at a break — so the base Text
+// is back to being a base Text, with no layout handlers on every string in the
+// app.
 export const Text = forwardRef<RNText, TextProps>(function AppText(props, ref) {
   const family = resolveFamily(props.style)
-  const meta = useMetaReflow(props.children, props.onTextLayout)
   return (
     <RNText
       ref={ref}
       maxFontSizeMultiplier={FONT_SCALE.body}
       {...props}
-      onTextLayout={meta.onTextLayout}
       style={[TEXT_START, props.style, { fontFamily: family, ...weightOverride }]}
-    >
-      {meta.children}
-    </RNText>
+    />
   )
 })
 

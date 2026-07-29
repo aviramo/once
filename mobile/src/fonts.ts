@@ -133,16 +133,23 @@ const INK_RISE = (FONT_ASCENT - FONT_DESCENT) / 2 - (isRTL ? HEBREW_HEIGHT : CAP
 export const inkOffset = (fontSize: number, cap: number = FONT_SCALE.body): number =>
   fontSize * Math.min(PixelRatio.getFontScale(), cap) * INK_RISE
 
-// fontWeight → the real weighted face to render it with. The app itself only
-// ever asks for two of these: 400 (the default) and 600 (WEIGHT.semibold, the
-// single emphasis tier — see tokens.ts). 500/700 stay mapped as the landing
-// spot for a stray `fontWeight: 'bold'` or a third-party style we don't own;
-// 800 is gone with the extrabold token, so nothing can resolve to a face that
-// is no longer loaded (see _layout's useFonts).
+// fontWeight → the real weighted face to render it with. The app asks for
+// exactly two: 400 (the default) and 500 (WEIGHT.medium, the single emphasis
+// tier — see tokens.ts). Everything else here is a landing spot for a weight the
+// app itself never writes — a stray `fontWeight: 'bold'`, a third-party style we
+// don't own — and every one of them must resolve to a face that is actually
+// BUNDLED (see _layout's useFonts), or the text silently falls back to the
+// system font mid-paragraph.
+//
+// Which is why 600 points at the Medium file (2026-07-29): the SemiBold face was
+// dropped from the bundle when the emphasis tier moved to 500, and a leftover
+// '600' would otherwise ask for a file that is no longer there. It lands on the
+// app's one emphasis face instead, which is what it meant. 800 went the same way
+// with the extrabold token.
 export const WEIGHT_TO_FAMILY: Record<string, string> = {
   '400': 'NotoSansHebrew_400Regular',
   '500': 'NotoSansHebrew_500Medium',
-  '600': 'NotoSansHebrew_600SemiBold',
+  '600': 'NotoSansHebrew_500Medium',
   '700': 'NotoSansHebrew_700Bold',
   normal: 'NotoSansHebrew_400Regular',
   bold: 'NotoSansHebrew_700Bold',

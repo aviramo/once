@@ -136,6 +136,18 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   return data
 }
 
+/** The code an `app/*` call was REFUSED with, or null when the failure wasn't a
+ *  refusal (no network, a timeout, a 500 with a stack in it). The edge function
+ *  answers a rejected precondition with `log.error(task, code, status)`, whose
+ *  body is the bare code JSON-encoded — so what `invoke` throws is `"bad_link"`,
+ *  quotes and all. One parser for it here, so no caller re-invents the quotes.
+ *  Single source: `Log.error` in supabase/functions/log.ts. */
+export function serverErrorCode(e: unknown): string | null {
+  const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : ''
+  const m = msg.trim().match(/^"?([a-z][a-z0-9_]*)"?$/)
+  return m ? m[1] : null
+}
+
 export function publicImageUrl(userId: string, folder: 'normal' | 'blur', filename: string) {
   // `encodeURI` preserves already-safe chars like `-`, `_`, `.` and slashes
   // in case the filename accidentally carries a path, while still escaping

@@ -31,24 +31,24 @@ export interface Profile {
    * 'work'. Drives the distance chip icon (pin/home/work). Absent on
    * snapshots from a pre-typed build — use resolveLocationType(). */
   location_type?: LocationType | null
-  /** Name of a group the viewer and this profile's subject both belong to,
-   * NULL when none. Server embeds it in make_profile when the snapshot is
-   * written into a single-counterpart slot (page1.profile / page2.profile)
-   * and the pair shares any group. Drives the on-photo group chip. Slim
-   * viewer-list entries strip this. */
+  // ── The circles we share (see lib/communities.ts → sharedCircle) ─────────
+  // The card carries ONE chip for all of these: the smallest circle we share,
+  // where "my friends" is a circle like any group. The server states the sizes,
+  // the client applies the rule. Slim viewer-list entries strip all of them.
+  /** Name of the SMALLEST group the viewer and this profile's subject both
+   * belong to, NULL when none. */
   group_name?: string | null
+  /** How many people are in that group — what ranks it against my friends
+   * circle. Absent on a snapshot written before the server carried it. */
+  group_members?: number | null
   /** Count of ADDITIONAL shared groups beyond the one named in `group_name`
-   * (so 2 shared groups → 1). Server embeds it in make_profile alongside
-   * group_name; absent/NULL when the pair shares 0 or 1 groups. Drives the
-   * "+N" badge inside the group chip. */
+   * (so 2 shared groups → 1); absent/NULL when the pair shares 0 or 1 groups. */
   group_extra?: number | null
   /** Name of a person the viewer and this profile's subject are BOTH friends
-   * with, NULL when none. The person-level twin of `group_name`, embedded by
-   * the same make_profile call and driving the mutual-friend chip. */
+   * with, NULL when none. There is no count beside it: the friends CIRCLE
+   * counts once however many mutual friends it holds, and the popup is where
+   * they are all listed. */
   friend_name?: string | null
-  /** Count of ADDITIONAL mutual friends beyond `friend_name` (2 shared → 1),
-   * absent at 0. Drives the same "+N" pill the group chip uses. */
-  friend_extra?: number | null
 }
 
 export type LocationType = 'device' | 'home' | 'work'

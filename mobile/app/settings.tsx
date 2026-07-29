@@ -24,9 +24,9 @@ import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
 import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, bottomGap, SEARCH_DEBOUNCE_MS } from '../src/tokens'
 import { GlyphSlot } from '../src/components/GlyphSlot'
-import { INK_BODY, INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
+import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CoinIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
 import { creditTotal } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
@@ -35,7 +35,9 @@ import { Button } from '../src/components/Button'
 import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { useBottomInset } from '../src/hooks/useBottomInset'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
-import { communitiesSummary, pendingApprovals, metaLine, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
+import { communitiesSummary, pendingApprovals, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
+import { StripBody } from '../src/components/Strip'
+import type { MetaPart } from '../src/lib/meta'
 import { supportMailUrl } from '../src/lib/links'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
 import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
@@ -175,7 +177,8 @@ function SelectFieldRow({
   trailing,
 }: {
   label?: string
-  subtitle?: string
+  /** The facts under the label, on the app's one fact line (MetaLine). */
+  subtitle?: MetaPart[]
   onPress: () => void | Promise<unknown>
   icon?: React.ReactNode
   avatar?: string
@@ -231,43 +234,37 @@ function SelectFieldRow({
             <GlyphSlot width={ICON.md} style={styles.selectRowIconWrap}>{icon}</GlyphSlot>
           )
         ) : null
-        // A chip rides the row's LAST TEXT LINE, at its END edge — the subtitle
-        // when there is one, the label when there is not — exactly as it does on
-        // the group strips this menu opens (CommunitiesPage's Strip, same
-        // geometry, same small tile). It is never glued beside the label and
-        // never centred against the whole row: centred it read as a control
-        // floating beside the button rather than as a fact stated by its line.
-        const trailingOnLabel = trailing && !subtitle
-        // The subtitle (e.g. the stars renewal note) must align with the LABEL
-        // TEXT, not under the leading icon. It shares the label's column
-        // rather than being indented by a computed icon width: that estimate
-        // (`ICON.md` for a plain glyph) is only ever as good as its guess at
-        // what the icon actually renders, and any icon whose intrinsic width
-        // differs left the subtitle a few pixels off the label. Sharing the
-        // column makes the two flush by construction.
+        // A menu row IS a strip (user directive 2026-07-29): a leading glyph or
+        // face, the label, and the facts under it on the app's one fact line —
+        // the same object, from the same component, as the group rows this menu
+        // opens. Only the row BOX stays here, because a menu row's is its own:
+        // the press fade, the card grouping, the large/locked variants.
+        // What that buys, and what this row therefore no longer decides:
+        //  • The chip rides the row's LAST TEXT LINE, at its END edge — the
+        //    subtitle when there is one, the label when there is not. It is
+        //    never glued beside the label and never centred against the whole
+        //    row: centred it read as a control floating beside the button
+        //    rather than as a fact stated by its line.
+        //  • A subtitle stating several facts (the communities counts) is laid
+        //    out by MetaLine, so it wraps when the column is narrow, drops its
+        //    separator at the break, and never paints its scripts out of order.
+        //  • The subtitle aligns with the LABEL TEXT, not under the leading
+        //    icon: they share one column rather than the subtitle being
+        //    indented by a guess at the icon's width.
+        // The lane wrappers stay: `selectRowLabelGroup` is what centres a taller
+        // leading element (avatar, accent circle) against the label, and the
+        // plain glyph opts out of that on its own (selectRowIconWrap).
         return label != null ? (
           <View style={styles.selectRowTextCol}>
             <View style={styles.selectRowLabelGroup}>
-              {renderedIcon}
-              <View style={styles.selectRowLabelStack}>
-                {/* `selectRowLineFill` only on the line that CARRIES the chip:
-                    it is what pushes the chip to the end, and a line without one
-                    has nothing to push against. */}
-                <View style={styles.selectRowTextLine}>
-                  <Text style={[styles.selectRowLabel, trailingOnLabel ? styles.selectRowLineFill : null, labelColor ? { color: labelColor } : null]}>{label}</Text>
-                  {trailingOnLabel ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
-                </View>
-                {/* A subtitle built by metaLine() (the communities row) loses
-                    its interpunct wherever it wraps, so no line starts or ends
-                    on a separator: the base Text does that for every string in
-                    the app (user directive 2026-07-28). */}
-                {subtitle ? (
-                  <View style={styles.selectRowTextLine}>
-                    <Text style={[styles.selectRowSubtitle, trailing ? styles.selectRowLineFill : null]}>{subtitle}</Text>
-                    {trailing ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
-                  </View>
-                ) : null}
-              </View>
+              <StripBody
+                icon={renderedIcon}
+                iconLane="natural"
+                title={label}
+                titleColor={labelColor}
+                meta={subtitle}
+                lineEnd={trailing ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
+              />
             </View>
           </View>
         ) : renderedIcon
@@ -430,11 +427,10 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
   // its own solid-purple chip, exactly as it does on every row of the hub the
   // tap opens, so "someone is waiting on you" is said the one way in both
   // places. The line keeps the standing facts, what I have.
-  const commSubtitle = !comm ? undefined
-    : metaLine(
-        comm.friends > 0 && friendLabel(comm.friends),
-        commGroups > 0 && groupLabel(commGroups),
-      ) || t('communities.rowEmpty')
+  const commSubtitle: MetaPart[] | undefined = !comm ? undefined
+    : comm.friends > 0 || commGroups > 0
+      ? [comm.friends > 0 && friendLabel(comm.friends), commGroups > 0 && groupLabel(commGroups)]
+      : [t('communities.rowEmpty')]
 
   return (
     <View style={styles.section}>
@@ -459,13 +455,14 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
             />
           ) : undefined}
           onPress={onVisibilityPress}
-          // Optical size, not nominal: the eye is a flat lens that fills barely
-          // half its box vertically, so at the ICON.md every other row uses it
-          // reads visibly smaller than the person/groups/bug glyphs beside it.
-          // ICON.lg is the half-step that evens out that ink mass without the
-          // eye then reading as the biggest thing in the column (ICON.xl did);
-          // the icon column keeps its fixed width, so the labels stay aligned.
-          icon={isHidden ? <EyeOffIcon color={INK} size={ICON.lg} /> : <EyeOpenIcon color={INK} size={ICON.lg} />}
+          // Plain ICON.md, like every other row. The eye used to be bumped to
+          // ICON.lg to make up for a flat lens that fills barely half its box
+          // vertically — but the eye's artwork runs the FULL width of its box
+          // (2..22 of 24), so the bump made it the widest ink in the column by
+          // a wide margin: 18.2dp across, against 15-16.5 for everything else,
+          // which is exactly how it read (user, 2026-07-29). At ICON.md its ink
+          // box is 16.4 x 11.9 and its ink mass 70dp², both mid-pack.
+          icon={isHidden ? <EyeOffIcon color={INK} size={ICON.md} /> : <EyeOpenIcon color={INK} size={ICON.md} />}
           labelColor={INK}
         />
         {/* Communities: a navigable row (like Account) that opens the full
@@ -967,7 +964,7 @@ const groupsPopupStyles = StyleSheet.create({
   header: { paddingHorizontal: MD, paddingBottom: MD },
   // The standard popup title: same size, weight and centring as every other
   // sheet in the app, so this one stops looking like a section heading.
-  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: INK, textAlign: 'center', letterSpacing: -0.3 },
+  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.medium, color: INK, textAlign: 'center', letterSpacing: -0.3 },
   mineSection: { paddingHorizontal: MD, paddingBottom: LG },
   joinSection: { paddingHorizontal: MD, paddingTop: LG },
   // Join and leave steps: one titled block with its own actions row.
@@ -993,7 +990,7 @@ const groupsPopupStyles = StyleSheet.create({
   },
   input: {
     fontSize: TEXT.lg,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
     letterSpacing: 6,
@@ -1087,7 +1084,7 @@ const agePopupStyles = StyleSheet.create({
     paddingTop: 0,
   },
   title: {
-    fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: INK,
+    fontSize: TEXT.lg, fontWeight: WEIGHT.medium, color: INK,
     textAlign: 'center', marginBottom: MD,
   },
   row: {
@@ -1109,7 +1106,7 @@ const agePopupStyles = StyleSheet.create({
   },
   input: {
     fontSize: TEXT.xl,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     // Always black. selectTextOnFocus highlights the digits on focus; the
     // selection tint is AppText's app-standard translucent SELECTION, so the
     // black number stays readable on it (the old bespoke solid-black
@@ -1213,7 +1210,7 @@ const selectListStyles = StyleSheet.create({
   labelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowIcon: { marginEnd: SM },
   label: { fontSize: TEXT.md, color: INK },
-  labelSelected: { color: INK, fontWeight: WEIGHT.semibold },
+  labelSelected: { color: INK, fontWeight: WEIGHT.medium },
   checkSlot: { width: ICON.xxl, height: ICON.xxl, alignItems: 'center', justifyContent: 'center' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: LINE, marginHorizontal: MD },
 })
@@ -2120,7 +2117,7 @@ const familyStyles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: INK,
   },
-  kidChipAddLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
+  kidChipAddLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE },
 
   // + Add kid / + Add week button.
   addKidBtn: { ...OUTLINE_SKIN, paddingVertical: SM, alignItems: 'center', borderStyle: 'dashed' },
@@ -2129,7 +2126,7 @@ const familyStyles = StyleSheet.create({
   weekHeader: { marginBottom: MD, gap: XS },
   weekFooter: { flexDirection: 'row', alignItems: 'center', marginTop: SM },
   weekLabel: { fontSize: TEXT.md, color: INK },
-  weekLabelEmphasis: { fontWeight: WEIGHT.semibold },
+  weekLabelEmphasis: { fontWeight: WEIGHT.medium },
   weekHint: { fontSize: TEXT.md, color: INK_SUBTLE },
   weekRemove: { fontSize: TEXT.md, color: INK_SUBTLE },
   daysRow: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -2169,8 +2166,8 @@ const familyStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE,
   },
   valueRowLabel: { fontSize: TEXT.md, color: INK },
-  valueRowLabelSelected: { color: INK, fontWeight: WEIGHT.semibold },
-  valueRowCheck: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.semibold },
+  valueRowLabelSelected: { color: INK, fontWeight: WEIGHT.medium },
+  valueRowCheck: { fontSize: TEXT.md, color: INK, fontWeight: WEIGHT.medium },
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
@@ -2278,7 +2275,7 @@ const photoOptionsStyles = StyleSheet.create({
     opacity: 0.5,
   },
   tileLabel: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: INK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK,
   },
   tileLabelDisabled: {
     color: INK_SUBTLE,
@@ -2789,7 +2786,7 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           label={t('settings.credits')}
           trailing={<Chip small text={String(heartsTotal)} />}
           onPress={onOpenBuyExtra}
-          icon={<CoinIcon color={INK} size={ICON.md} />}
+          icon={<CreditIcon color={INK} size={ICON.md} />}
           labelColor={INK}
         />
         <SelectFieldRow
@@ -3021,9 +3018,9 @@ const styles = StyleSheet.create({
   section: { marginBottom: 0 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: MD },
   sectionLabelRow: { flexDirection: 'row', marginTop: LG, marginBottom: SM, paddingHorizontal: SM },
-  sectionLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
-  sectionTitle: { fontSize: TEXT.lg, fontWeight: WEIGHT.semibold, color: WHITE, marginBottom: SM },
-  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE },
+  sectionLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE_STRONG, letterSpacing: 1, textAlign: 'center' },
+  sectionTitle: { fontSize: TEXT.lg, fontWeight: WEIGHT.medium, color: WHITE, marginBottom: SM },
+  sectionValue: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE },
   divider: { height: 0 },
 
   photoThumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: SM, justifyContent: 'flex-end', width: 44 * 3 + SM * 2 },
@@ -3059,7 +3056,7 @@ const styles = StyleSheet.create({
   infoRowLast: { borderBottomWidth: 0 },
   infoLabel: { fontSize: TEXT.md, color: WHITE_STRONG },
   infoValue: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.semibold, color: WHITE,
+    fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE,
     flexShrink: 1, marginStart: MD,
   },
 
@@ -3145,27 +3142,12 @@ const styles = StyleSheet.create({
   // centring against the label. Only the plain glyph opts out — see
   // selectRowIconWrap's alignSelf.
   selectRowLabelGroup: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: MD },
-  // Label + optional subtitle, stacked. Owns the whole width beside the icon
-  // so both texts share one start edge.
-  selectRowLabelStack: { flex: 1, minWidth: 0 },
-  // flexShrink:1 lets the text box shrink below its content width so it
-  // wraps (multi-line, flexible) instead of overflowing/clipping.
-  // Both texts own the stack's full width, so both depend on the app-wide
-  // reading direction (TEXT_START in src/fonts.ts) to land on the row's START
-  // edge, beside the icon that names them. The subtitle used to carry that pair
-  // inline while the label carried nothing, which is exactly why the label
-  // drifted to the row's far END on iOS.
-  selectRowLabel: { flexShrink: 1, fontSize: TEXT.md, lineHeight: lh(TEXT.md), color: INK, fontWeight: WEIGHT.semibold },
-  // flexShrink:1 for the same reason the label carries it: a subtitle that
-  // states several facts on one line (the communities counts) must be allowed
-  // to shrink below its content width and wrap, not run off the row's edge.
-  selectRowSubtitle: { flexShrink: 1, fontSize: TEXT.md, color: INK_BODY, marginTop: XS },
+  // The label + subtitle column, the lines they sit on and the type they are
+  // set in all belong to the strip now (components/Strip.tsx): a menu row is the
+  // same object as the group rows it opens (user directive 2026-07-29), so it
+  // cannot state its own version of the label's size or the fact line's ink.
+  // What stays here is the lane the strip's own trailing control rides in.
   selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
-  // One line of the label column, so an END-edge chip can ride it: the words
-  // take the whole width and the chip sits at their end, facing them. Same
-  // geometry as a group strip's line (CommunitiesPage's rowLine).
-  selectRowTextLine: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  selectRowLineFill: { flex: 1, minWidth: 0 },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,
@@ -3195,7 +3177,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   subPageOptionLabel: { fontSize: TEXT.lg, color: WHITE },
-  subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.semibold },
+  subPageCheckmark: { fontSize: TEXT.lg, color: WHITE_STRONG, fontWeight: WEIGHT.medium },
   optionDivider: {
     height: StyleSheet.hairlineWidth, backgroundColor: LINE,
     marginStart: MD,

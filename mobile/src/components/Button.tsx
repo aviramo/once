@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
 // The semibold weight and the fill are what mark it as the thing to press.
 export const BUTTON_LABEL: TextStyle = {
   fontSize: TEXT.md,
-  fontWeight: WEIGHT.semibold,
+  fontWeight: WEIGHT.medium,
   letterSpacing: -0.2,
   textAlign: 'center',
   includeFontPadding: false,
@@ -302,7 +302,7 @@ const VARIANT: Record<Variant, {
   },
   secondary: {
     btn: { backgroundColor: PAGE },
-    text: { color: INK_SUBTLE, fontWeight: WEIGHT.semibold },
+    text: { color: INK_SUBTLE, fontWeight: WEIGHT.medium },
     pressedBtn: { backgroundColor: INK_DIM },
   },
   soft: {
@@ -336,7 +336,7 @@ const VARIANT: Record<Variant, {
   // weight) but on the white-alpha scale so it sits on a tinted bg.
   onPrimaryGhost: {
     btn: { backgroundColor: WHITE_SOFT },
-    text: { color: WHITE, fontWeight: WEIGHT.semibold },
+    text: { color: WHITE, fontWeight: WEIGHT.medium },
     pressedBtn: { backgroundColor: WHITE_MID },
   },
 }

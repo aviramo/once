@@ -44,8 +44,8 @@ function birthdateInWords(yyyy: string, mm: string, dd: string): string {
 // overrides weight only).
 function birthConfirmBody(template: string, date: string, age: string) {
   return template.split(/(\{date\}|\{age\})/).map((part, i) => {
-    if (part === '{date}') return <Text key={i} style={{ fontWeight: WEIGHT.semibold, color: INK }}>{date}</Text>
-    if (part === '{age}') return <Text key={i} style={{ fontWeight: WEIGHT.semibold, color: INK }}>{age}</Text>
+    if (part === '{date}') return <Text key={i} style={{ fontWeight: WEIGHT.medium, color: INK }}>{date}</Text>
+    if (part === '{age}') return <Text key={i} style={{ fontWeight: WEIGHT.medium, color: INK }}>{age}</Text>
     return part
   })
 }
@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: TEXT.xl,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
     letterSpacing: -0.5,
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
   },
   cardLabel: {
     fontSize: TEXT.md,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
   },
   // White ink, because the selected card's fill is the solid purple.
@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
   },
   dateInput: {
     fontSize: TEXT.lg,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
     padding: 0,
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
   },
   datePlaceholderText: {
     fontSize: TEXT.md,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK_HINT,
     textAlign: 'center',
   },

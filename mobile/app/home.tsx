@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition } from 'react-native-reanimated'
 import { Text } from '../src/components/AppText'
@@ -22,7 +22,7 @@ import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUN
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BottomSheet } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
-import { SharedGroupsPopup, SharedFriendsPopup } from '../src/components/SharedListPopup'
+import { SharedCirclesPopup } from '../src/components/SharedListPopup'
 import { sharedGroups, sharedFriends, flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type SharedGroup, type FriendItem, type CommunitiesTarget } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
@@ -348,7 +348,7 @@ function SkipHintLabel({ text }: { text: string }) {
             y={y}
             fill="url(#skipHintFade)"
             fontSize={font}
-            fontWeight={WEIGHT.semibold}
+            fontWeight={WEIGHT.medium}
             textAnchor="middle"
             letterSpacing={2}
             textLength={fit ? w : undefined}
@@ -520,7 +520,7 @@ const statusCardStyles = StyleSheet.create({
   heading: {
     fontSize: TEXT.lg,
     lineHeight: lh(TEXT.lg),
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
     includeFontPadding: false,
@@ -532,7 +532,7 @@ const statusCardStyles = StyleSheet.create({
     marginTop: MD,
     fontSize: STATUS_TIMER_FONT,
     lineHeight: lh(STATUS_TIMER_FONT),
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
@@ -637,7 +637,7 @@ function EventMessageCard({ title, description, frozen, onContinue, busy }: { ti
 //     same StatusCard scaffold + spacings, no standalone heading (the title
 //     rides as a bold lead-in at the start of the body via StatusCardText),
 //     ghost decline + primary accept. The accept CTA carries the CreditCost
-//     badge (coin × N) both ways so the two sides of an invitation read as
+//     badge (gem × N) both ways so the two sides of an invitation read as
 //     mirror actions and surface what they spend.
 // `footerInset` is supplied only by the page1 popup use: the card sits at the
 // bottom of a BottomSheet, so its bottom padding must clear the home indicator
@@ -785,14 +785,14 @@ const statusButtonStyles = StyleSheet.create({
   },
   footerExtended: {
     fontSize: TEXT.sm,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: WHITE,
     opacity: 0.85,
     includeFontPadding: false,
   },
   footerTime: {
     fontSize: TEXT.sm,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     color: WHITE,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
@@ -2296,27 +2296,27 @@ export default function HomePage() {
     setReportNote('')
     setReportTargetId(userId)
   }, [tap])
-  // Shared-groups popup: opened by tapping the on-photo group chip on any match
-  // card. The list is fetched HERE the instant the chip is tapped (not inside
-  // the popup on mount), so it loads in parallel with the sheet's slide-in and
-  // the content is usually ready by the time the sheet is up.
-  const [groupsOpen, setGroupsOpen] = useState(false)
-  const [groupsData, setGroupsData] = useState<SharedGroup[] | null>(null)
-  const openGroups = useCallback((userId: string) => {
+  // Shared-circles popup: opened by tapping the on-photo circle chip on any
+  // match card, and it holds EVERYTHING the pair shares — every mutual friend
+  // and every shared group in one list (user directive 2026-07-29). Both lists
+  // are fetched HERE the instant the chip is tapped (not inside the popup on
+  // mount) and in parallel with each other, so they ride the sheet's slide-in
+  // and the content is usually ready by the time the sheet is up.
+  const [circleOpen, setCircleOpen] = useState(false)
+  const [circleGroups, setCircleGroups] = useState<SharedGroup[] | null>(null)
+  const [circleFriends, setCircleFriends] = useState<FriendItem[] | null>(null)
+  // Whose card the popup was opened from, for the wording of a friend row
+  // ("חברה של אסף"): the row states how THIS person is connected to the friend
+  // it names, so it inflects with the card subject, exactly as the chip does.
+  const [circleIsMale, setCircleIsMale] = useState<boolean | null | undefined>(undefined)
+  const openCircle = useCallback((userId: string, isMale?: boolean | null) => {
     tap()
-    setGroupsData(null)
-    setGroupsOpen(true)
-    sharedGroups(userId).then(setGroupsData).catch(() => setGroupsData([]))
-  }, [tap])
-  // Mutual-friends popup: the same shape one line down, opened by the friend
-  // chip. Fetched here for the same reason — it rides the sheet's slide-in.
-  const [friendsOpen, setFriendsOpen] = useState(false)
-  const [friendsData, setFriendsData] = useState<FriendItem[] | null>(null)
-  const openFriends = useCallback((userId: string) => {
-    tap()
-    setFriendsData(null)
-    setFriendsOpen(true)
-    sharedFriends(userId).then(setFriendsData).catch(() => setFriendsData([]))
+    setCircleGroups(null)
+    setCircleFriends(null)
+    setCircleIsMale(isMale)
+    setCircleOpen(true)
+    sharedGroups(userId).then(setCircleGroups).catch(() => setCircleGroups([]))
+    sharedFriends(userId).then(setCircleFriends).catch(() => setCircleFriends([]))
   }, [tap])
 
   const runAction = (
@@ -3253,8 +3253,7 @@ export default function HomePage() {
                               ? { label: t('chat.endChat'), onPress: () => { tap(); setChatMenuOpen(true) } }
                               : undefined}
                             onReport={() => openReport(displayedMatch.user_id)}
-                            onGroupsTap={() => openGroups(displayedMatch.user_id)}
-                            onFriendsTap={() => openFriends(displayedMatch.user_id)}
+                            onCircleTap={() => openCircle(displayedMatch.user_id, displayedMatch.is_male)}
                             chromeInset={topInset}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
@@ -3475,27 +3474,26 @@ export default function HomePage() {
                   draggable
                 />
 
-                {/* Shared-groups list, opened by tapping a card's group chip.
-                    Same single-instance pattern as the report dialog above:
-                    driven by groupsTargetId, reused across every match card. */}
-                <SharedGroupsPopup
-                  visible={groupsOpen}
-                  groups={groupsData}
-                  onDismiss={() => setGroupsOpen(false)}
-                />
-
-                {/* Mutual friends, opened by a card's friend chip. A tapped row
-                    is the person-level twin of a group row opening GroupSheet:
-                    it lands the Communities sheet on that friend's page. */}
-                <SharedFriendsPopup
-                  visible={friendsOpen}
-                  friends={friendsData}
-                  onSelect={f => {
-                    setFriendsOpen(false)
-                    setCommunitiesTarget({ kind: 'friend', userId: f.user_id })
+                {/* Everything we share, opened by tapping a card's circle chip.
+                    Same single-instance pattern as the report dialog above: one
+                    popup reused across every match card. A tapped group row
+                    opens the app's one GroupSheet from inside the popup; a
+                    tapped person opens THAT PERSON'S PAGE and nothing else
+                    (user directive 2026-07-29) — no My-Friends roster under it,
+                    since the row is one name on a card, not a way into the
+                    friends list. The row's own item is handed over whole, so
+                    the page opens painted with no lookup. */}
+                <SharedCirclesPopup
+                  visible={circleOpen}
+                  groups={circleGroups}
+                  friends={circleFriends}
+                  subjectIsMale={circleIsMale}
+                  onSelectFriend={f => {
+                    setCircleOpen(false)
+                    setCommunitiesTarget({ kind: 'person', friend: f })
                     openCommunities()
                   }}
-                  onDismiss={() => setFriendsOpen(false)}
+                  onDismiss={() => setCircleOpen(false)}
                 />
 
               </View>
@@ -3549,8 +3547,7 @@ export default function HomePage() {
               match={inviteCardMatch}
               actions={[]}
               onReport={() => openReport(inviteCardMatch.user_id)}
-              onGroupsTap={() => openGroups(inviteCardMatch.user_id)}
-              onFriendsTap={() => openFriends(inviteCardMatch.user_id)}
+              onCircleTap={() => openCircle(inviteCardMatch.user_id, inviteCardMatch.is_male)}
               viewerLocationType={resolveLocationType(profile)}
               bottomInset={0}
               chromeInset={topInset}

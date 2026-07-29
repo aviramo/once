@@ -30,7 +30,7 @@ export function Avatar({ userId, name, image, size = AVATAR }: { userId: string;
       {label === '★' ? (
         <StarGlyph size={size * 0.5} color={WHITE} />
       ) : (
-        <Text style={{ color: WHITE, fontWeight: WEIGHT.semibold, fontSize: size * 0.4 }}>{initial}</Text>
+        <Text style={{ color: WHITE, fontWeight: WEIGHT.medium, fontSize: size * 0.4 }}>{initial}</Text>
       )}
     </View>
   )
@@ -149,11 +149,13 @@ export function SyncBar({ visible }: { visible: boolean }) {
 }
 
 // ── Meta line ──────────────────────────────────────────────────────────────
-// There is no MetaText component any more (2026-07-28). A meta line's "the
-// interpunct at a break DISAPPEARS" rule now lives in the app's base `Text`
-// (components/AppText.tsx) and applies to every string in the app, so a plain
-// <Text>{metaLine(...)}</Text> gets it — which is what the search rows and the
-// menu row did NOT get while it was an opt-in component here.
+// The fact line under a row's title is components/MetaLine.tsx, and a row that
+// carries one is components/Strip.tsx — the app's one row, which is what these
+// skeleton bars stand in for. The rule that keeps the interpunct off the edge of
+// a wrapped line lives inside MetaLine — it lays each fact out as its own
+// element, so a separator that lands at a break simply stops painting. No
+// surface opts in and none can forget it (which is how the search rows and the
+// menu row used to miss it, back when it was a component of its own here).
 
 const sk = StyleSheet.create({
   // Mirrors CommunitiesPage's `Strip` — same gutters, same hairline, same

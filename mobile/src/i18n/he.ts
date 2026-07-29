@@ -171,7 +171,7 @@ export default {
   'communities.kindPrivateSub': 'לא מופיעה בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור מנהל',
   'communities.membersCount': '{count} חברים',
   'communities.oneMember': 'חבר אחד',
-  // Row meta segments, joined by metaLine(). One string per fact, so the menu
+  // Row meta segments, laid out by MetaLine. One string per fact, so the menu
   // row and the hub rows count the same things in the same words.
   'communities.groupsCount': '{count} קבוצות',
   'communities.oneGroup': 'קבוצה אחת',
@@ -190,15 +190,12 @@ export default {
   'communities.nudgeDesc': '{כשאתה מצטרף|כשאת מצטרפת} לקבוצות ו{מזמין|מזמינה} לכאן חברים, האנשים שיוצגו לך יהיו קשורים יותר {אליך|אלייך} ולמעגלים שלך',
   'communities.nudgeConfirm': 'לגלות את המעגלים',
   'communities.managedBy': 'מנוהלת על ידי {name}',
-  'communities.sharedGroupsTitle': 'קבוצות משותפות',
-  // The mutual-friend popup's title. Hebrew inflects the singular for that one
-  // friend's gender, so it has two forms and sharedFriendLabel picks by the
-  // friend's own is_male.
-  'communities.sharedFriendsTitle': 'חברים משותפים',
-  'communities.sharedFriendM': 'חבר משותף',
-  'communities.sharedFriendF': 'חברה משותפת',
-  // The on-photo chip. Inflects for the CARD SUBJECT ("היא חברה של אסף"), not
-  // for the friend named in it, so the pair here is chosen by match.is_male.
+  // The one popup behind the card's circle chip: every mutual friend and every
+  // shared group in one list, so it says what the two of you have in common
+  // without naming a kind of connection.
+  'communities.sharedTitle': 'מה משותף לנו',
+  // The chip itself. Inflects for the CARD SUBJECT ("היא חברה של אסף"), not for
+  // the friend named in it, so the pair here is chosen by match.is_male.
   'communities.friendOfM': 'חבר של {name}',
   'communities.friendOfF': 'חברה של {name}',
   // One list, one empty line: the hub no longer splits managed from joined.
@@ -246,6 +243,11 @@ export default {
   // הפועל מדבר אל המשתמש עצמו, ולכן הוא ממוגדר במקום (genderize) ולא נכתב
   // בשתי הצורות.
   'communities.linkPlaceholder': '{הדבק|הדביקי} לכאן קישור',
+  // השרת הוא זה שמחליט אם הכתובת תקינה (הוא גם משלים https:// לכתובת חשופה),
+  // ולכן ההודעה הזו נדלקת מתחת לשדה כשהוא סירב, והטקסט שנדחה נשאר בשדה לתיקון.
+  'communities.linkInvalid': 'הקישור לא תקין',
+  // סירוב כללי של שמירה (שם, תיאור): לא נשמר, אפשר לנסות שוב.
+  'communities.saveFailed': 'לא נשמר, נסו שוב',
   'communities.moreDetails': 'לפרטים נוספים',
 
   // A group you manage

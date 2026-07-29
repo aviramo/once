@@ -183,6 +183,14 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     const effectiveScrollEnabled = locked ? false : scrollEnabled
     return (
       <ScrollView
+        // A drag on a scroll surface puts the keyboard away. Declared HERE, once,
+        // because this is the app's only scroll wrapper: a page whose field lives
+        // on its header (Communities' search) has nothing to tap to get the
+        // keyboard back down, and the list under it is the whole screen — so the
+        // gesture that reads as "I'm done typing, let me look" has to be the one
+        // that closes it. Before `{...rest}`, so a surface that must NOT do this
+        // can say so (MatchCard's reel, whose bio editor lives inside it).
+        keyboardDismissMode="on-drag"
         {...rest}
         ref={ref}
         onScroll={handleScroll}

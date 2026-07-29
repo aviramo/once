@@ -1,13 +1,13 @@
 import { View, StyleSheet } from 'react-native'
 import { Text } from './AppText'
-import { CoinIcon } from './icons'
+import { CreditIcon } from './icons'
 import { FONT_SCALE } from '../fonts'
 import { XS, SM, TEXT, WEIGHT, RADII, ICON } from '../tokens'
 
 // The credits-cost badge shown INSIDE an action button in place of its icon:
-// a rounded capsule holding a coin glyph and the number of credits the
+// a rounded capsule holding the credits glyph and the number of credits the
 // action spends. One component so the invite / approve / broadcast buttons
-// all render the cost identically. The coin (not a heart) is what makes the
+// all render the cost identically. The gem (not a heart) is what makes the
 // badge legible on the invite button, whose own glyph IS a heart.
 //
 // The capsule INVERTS its host button: on the gold action buttons it is a
@@ -24,14 +24,14 @@ export function CreditCost({
   bg,
 }: {
   cost: number
-  /** Coin + text color. Match the host button's label color. */
+  /** Glyph + text color. Match the host button's label color. */
   color: string
   /** Capsule fill. A faint tint of `color` reads as a chip on the button. */
   bg: string
 }) {
   return (
     <View style={[styles.pill, { backgroundColor: bg }]}>
-      <CoinIcon color={color} size={ICON.sm} />
+      <CreditIcon color={color} size={ICON.sm} />
       <Text
         style={[styles.text, { color }]}
         maxFontSizeMultiplier={FONT_SCALE.ui}
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: TEXT.md,
-    fontWeight: WEIGHT.semibold,
+    fontWeight: WEIGHT.medium,
     includeFontPadding: false,
     textAlignVertical: 'center',
     fontVariant: ['tabular-nums'],

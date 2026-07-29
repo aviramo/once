@@ -10,8 +10,9 @@ import { supabase } from './supabase'
 import { STORAGE } from '../keys'
 import { LIST_PAGE_SIZE } from '../tokens'
 import { t } from '../i18n'
+import type { MetaPart } from './meta'
 import type { Group } from './groups'
-import type { Profile } from '../stores/userStore'
+import { useUserStore, type Profile } from '../stores/userStore'
 
 // A member/person's main photo, as embedded by the server (data.images[0]).
 // `normal` is the filename under the user's `normal/` folder — feed it to
@@ -25,16 +26,13 @@ export type MemberImage = { hash?: string; normal?: string } | null
 export type GroupMember = { user_id: string; name: string | null; image: MemberImage; owner?: boolean; manager?: boolean; profile?: Profile | null }
 
 // ── Meta lines ─────────────────────────────────────────────────────────────
-// Every communities row states its facts on one line, separated by the same
-// interpunct: the hub rows ("Approved · 17 members · 3 requests") and the
-// settings menu row ("4 groups · 5 friends · 3 requests"). One separator, one
-// composer — empty/undefined segments drop out so a caller never has to build
-// the string conditionally.
-// The separator itself, the composer, and the rule that a dot never lands at
-// the edge of a wrapped line all live in `lib/meta.ts` (2026-07-28): a leaf
-// module, because the app's base `Text` is what enforces the rule now, for
-// every string in the app rather than for the rows that opted in.
-export { metaLine } from './meta'
+// Every row states its facts on one line, separated by the same interpunct: the
+// hub rows ("17 members · 3 requests") and the settings menu row
+// ("4 groups · 5 friends"). Nothing here JOINS that line — a screen hands its
+// facts to components/MetaLine.tsx (usually through the app's one row,
+// components/Strip.tsx) and that is the only place the separator is put in.
+// This module supplies the WORDINGS below, and — for a group, whose facts are
+// listed on four different surfaces — their one ORDER (`groupFacts`).
 
 // The count wordings every meta line is built from — one definition each, so a
 // number reads the same in the menu row, the hub row and the popup. Each takes
@@ -46,23 +44,95 @@ export const groupLabel = (n: number) => (n === 1 ? t('communities.oneGroup') : 
 export const friendLabel = (n: number) => (n === 1 ? t('communities.oneFriend') : count('communities.friendsCount', n))
 export const requestLabel = (n: number) => (n === 1 ? t('communities.oneRequest') : count('communities.requestsCount', n))
 
-// "Mutual friend" in the right form, for the shared-friends popup's title. The
-// on-photo chip says only the name (its chain-link glyph carries the meaning),
-// so this wording exists in exactly one place. Hebrew inflects for that one
-// friend's gender at n === 1 ('חבר משותף' / 'חברה משותפת'); above one the
-// plural covers a mixed set, exactly as Hebrew does.
-export const sharedFriendLabel = (n: number, isMale?: boolean | null) =>
-  n === 1
-    ? t(isMale === false ? 'communities.sharedFriendF' : 'communities.sharedFriendM')
-    : t('communities.sharedFriendsTitle')
+// A GROUP's facts, in the app's ONE order (user directive 2026-07-29): HOW BIG
+// IT IS always leads, and every other fact about the group follows it. The size
+// is the fact a reader is scanning the list for, and it is the only one every
+// group has, so it must not sit behind a name whose length moves it around from
+// row to row. Every surface that states a group's facts — the hub rows, a search
+// result, the group popup's head, a match card's shared-circles list — composes
+// them HERE, so no two lists can order them differently.
+// `members` null/undefined = a payload too old to carry a count: the fact drops
+// out and the line is whatever is left.
+export const groupFacts = (
+  members: number | null | undefined,
+  ownerName?: string | null,
+  ...rest: MetaPart[]
+): MetaPart[] => [
+  members != null ? memberLabel(members) : null,
+  ownerName ? t('communities.managedBy').replace('{name}', ownerName) : null,
+  ...rest,
+]
 
-// The on-photo chip's label: "חבר של אסף" / "חברה של אסף". The gender is the
-// CARD SUBJECT's, not the named friend's — the sentence is about the person
-// whose card this is ("she is a friend of Asaf"), so it inflects with
-// `match.is_male`.
+// The on-photo chip's label when the circle it names is the friends one:
+// "חבר של אסף" / "חברה של אסף". The gender is the CARD SUBJECT's, not the named
+// friend's — the sentence is about the person whose card this is ("she is a
+// friend of Asaf"), so it inflects with `match.is_male`.
 export const friendOfLabel = (name: string, subjectIsMale?: boolean | null) =>
   t(subjectIsMale === false ? 'communities.friendOfF' : 'communities.friendOfM')
     .replace('{name}', name)
+
+// ── One circle chip: how the two of us are already connected ───────────────
+// MY FRIENDS IS A GROUP LIKE ANY OTHER (user directive 2026-07-29). A card used
+// to carry two chips — a shared GROUP and a mutual FRIEND — each with its own
+// "+N" and its own popup. They answer the same question, so there is one chip,
+// and the friends set is ranked among the groups exactly as a group is:
+//
+//   THE SMALLEST CIRCLE WINS. The friends circle's size is how many friends I
+//   have: "if I have only 2 friends and Asaf is one of them, and the other
+//   groups have more than 2 members, name Asaf; otherwise the group with the
+//   fewest members" (user directive 2026-07-29). The smaller the circle, the
+//   more naming it says about the two of us.
+//
+// This is the ONE place that rule lives — the chip picks its name with it and
+// the popup orders its rows with it, so a row can never contradict the chip that
+// opened it. The server only states the sizes: `group_members` on the smallest
+// shared group (make_profile), `members` on every row of app_shared_groups, and
+// my own friend count off my summary.
+const friendsCircleFirst = (myFriends: number, groupMembers: number) => myFriends < groupMembers
+
+/** What the card's circle chip says: the named circle, plus how many OTHER
+ *  circles we share. Null when we share none. A circle counts once however many
+ *  people are in it, so all my mutual friends with this person are one. */
+export function sharedCircle(
+  m: Pick<Profile, 'group_name' | 'group_extra' | 'group_members' | 'friend_name' | 'is_male'>,
+  myFriends: number,
+): { label: string; extra?: number } | null {
+  const groups = m.group_name ? 1 + (m.group_extra ?? 0) : 0
+  const friends = m.friend_name ? 1 : 0
+  const total = groups + friends
+  if (!total) return null
+  // A snapshot written before the server carried `group_members` cannot be
+  // ranked, so the group it already names keeps the chip.
+  const nameFriend = friends > 0
+    && (groups === 0 || (m.group_members != null && friendsCircleFirst(myFriends, m.group_members)))
+  return {
+    label: nameFriend ? friendOfLabel(m.friend_name!, m.is_male) : m.group_name!,
+    extra: total - 1 || undefined,
+  }
+}
+
+/** One row of the chip's popup: a person we are both friends with, or a group we
+ *  are both in. */
+export type SharedCircleItem =
+  | { kind: 'friend'; friend: FriendItem }
+  | { kind: 'group'; group: SharedGroup }
+
+/** Everything we share, in the order the chip ranks it: the groups smallest
+ *  first (the server's own order), with MY FRIENDS slotted in at its size — so
+ *  row 1 is always the circle the chip named. */
+export function orderSharedCircles(
+  groups: SharedGroup[],
+  friends: FriendItem[],
+  myFriends: number,
+): SharedCircleItem[] {
+  const at = groups.findIndex(g => friendsCircleFirst(myFriends, g.members))
+  const cut = at < 0 ? groups.length : at
+  return [
+    ...groups.slice(0, cut).map(group => ({ kind: 'group' as const, group })),
+    ...friends.map(friend => ({ kind: 'friend' as const, friend })),
+    ...groups.slice(cut).map(group => ({ kind: 'group' as const, group })),
+  ]
+}
 
 // ── Group kinds ────────────────────────────────────────────────────────────
 // ONE axis with three stops replaces the is_public × requires_approval pair in
@@ -214,6 +284,13 @@ export function pendingApprovals(c: CommunitiesSummary | null): number {
   if (!c) return 0
   return c.requests + c.managed.reduce((n, g) => n + (g.pending ?? 0), 0)
 }
+
+/** How many friends I have — the SIZE of "my friends" as a circle, which is
+ *  what ranks it against the shared groups (see sharedCircle). Read straight
+ *  off the denormalized summary, so a card can size the circle without a query;
+ *  a number, so the selector only re-renders the card when it changes. */
+export const useMyFriendCount = (): number =>
+  useUserStore(s => communitiesSummary(s.profile)?.friends ?? 0)
 
 // ── Communities (reuse the existing groups/user_groups machinery server-side) ──
 
@@ -402,6 +479,10 @@ export type InviteOutcome = { kind: 'group' | 'friend' }
 // about a queue opens the queue. Home resolves the push code into one of these
 // and hands it to the sheet, which seeds its whole page stack from it, so Back
 // walks out through the pages that would have led there by hand.
+//
+// The one target with NO path under it is `person`: it does not come from a
+// notification at all but from a tap on a name in a card's shared-circles
+// popup, and the page that led there is the popup, not a Communities page.
 export type CommunitiesTarget =
   /** group_approved: the group I was just let into. */
   | { kind: 'group'; groupId: string }
@@ -413,6 +494,13 @@ export type CommunitiesTarget =
   | { kind: 'friend'; userId: string }
   /** Any other friend-lifecycle push: the list itself. */
   | { kind: 'friends' }
+  /** ONE person and nothing else (user directive 2026-07-29): their page opens
+   *  as the whole sheet, with no My-Friends roster under it to walk back
+   *  through — the tap came from a card, not from the friends list. The person
+   *  is carried whole rather than by id: the shared-circles row already holds
+   *  the full item (`app_shared_friends` embeds each friend's profile), so the
+   *  page paints on the first frame with no lookup. */
+  | { kind: 'person'; friend: FriendItem }
 
 type ParkedInvite = { kind: 'group' | 'friend'; code: string }
 let pendingInvite: ParkedInvite | null = null
