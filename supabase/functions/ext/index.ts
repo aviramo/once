@@ -106,6 +106,56 @@ async function handleLogPurge(log: Log) {
   return log.success({ processed: res?.processed ?? 0, capped: res?.capped ?? false });
 }
 
+// Daily archive purge (user directive 2026-07-31). A deleted account's personal
+// data moved to the `archive` schema and the private `users-archive` bucket the
+// moment it was deleted; _archive_ttl() later it goes for good, and the AUTH
+// IDENTITY goes with it — that last step is what makes the deletion real rather
+// than a hidden account, and it is why this sweep exists at all.
+//
+// The order is load-bearing. app_archive_finish runs BEFORE the auth delete
+// because (a) `log` and `states` are FK NO ACTION against auth.users and would
+// refuse it, and (b) it re-keys every surviving block from the uid that is about
+// to stop existing onto a hash of the identity behind it, so the block still
+// bites if that person ever comes back on a new uid. If the auth delete then
+// fails, the archive row survives as a tombstone and the next tick retries it.
+// Most ticks find nothing.
+type ArchiveDue = { user_id: string; images?: string[]; chat_keys?: { bucket: string; key: string }[] };
+
+async function handleArchivePurge(log: Log) {
+  const due = await Tools.rpc(log, "app_archive_due", { p_limit: 20 });
+  const rows = ((due as unknown as { rows?: ArchiveDue[] })?.rows) ?? [];
+  let purged = 0;
+
+  for (const row of rows) {
+    const entry = log.log("archive_purge", { user_id: row.user_id });
+    try {
+      if (row.images?.length) {
+        await Tools.supabase.storage.from("users-archive").remove(row.images);
+      }
+      // Chat media sat in its own private buckets all along, so it never moved;
+      // it is collected here, with the rows it belonged to.
+      const byBucket = new Map<string, string[]>();
+      for (const m of row.chat_keys ?? []) {
+        if (!m?.bucket || !m?.key) continue;
+        byBucket.set(m.bucket, [...(byBucket.get(m.bucket) ?? []), m.key]);
+      }
+      for (const [bucket, keys] of byBucket) {
+        await Tools.supabase.storage.from(bucket).remove(keys);
+      }
+
+      await Tools.rpc(log, "app_archive_finish", { p_user_id: row.user_id });
+
+      const { error } = await Tools.supabase.auth.admin.deleteUser(row.user_id);
+      if (error) entry.result(`auth_delete_failed:${error.message}`, 500);
+      else { purged++; entry.result("purged", 200); }
+    } catch (err) {
+      entry.result((err as Error).message, 500);
+    }
+  }
+
+  return log.success({ processed: rows.length, purged });
+}
+
 async function handleCron(log: Log) {
   const expire = await Tools.rpc(log, "app_expire_sweep", {});
   // Same resync the admin triggers on demand — here it's the per-minute
@@ -161,6 +211,7 @@ Deno.serve(async (req) => {
     if (route === "resync") return await handleResync(log);
     if (route === "watch") return await handleWatchSweep(log);
     if (route === "purge") return await handleLogPurge(log);
+    if (route === "archive") return await handleArchivePurge(log);
 
     return log.error("route", `unknown route: ${route}`, 404);
   } catch (err) {

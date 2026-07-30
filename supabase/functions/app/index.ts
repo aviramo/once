@@ -33,6 +33,38 @@ const requiresPresence = ["find", "invite", "add", "approve"];
 // client never reaches here; this closes the loop for direct API calls.
 const requiresProfile = ["invite", "add"];
 
+// A deleted account's photos leave the PUBLIC `users` bucket the moment the
+// account goes (user directive 2026-07-31). Nothing used to remove them at all:
+// the row went and the face stayed reachable by URL forever. They move to the
+// private `users-archive`, where the 30-day sweep collects them with the rest of
+// the archive (_archive_ttl). Copy-then-remove rather than a bucket-to-bucket
+// copy — these are a handful of small webp files and this needs no version of
+// the storage client it does not already have. The remove runs whatever the copy
+// did: a lost archive copy is a bad outcome, a photo left public is a worse one.
+async function archivePhotos(log: Log, keys: string[]) {
+  for (const key of keys) {
+    const entry = log.log("archive_photo", { key });
+    let copied = "missing";
+    try {
+      const dl = await Tools.supabase.storage.from("users").download(key);
+      if (dl.data) {
+        const up = await Tools.supabase.storage.from("users-archive").upload(key, dl.data, {
+          contentType: dl.data.type || "image/webp",
+          upsert: true,
+        });
+        copied = up.error ? `copy_failed:${up.error.message}` : "copied";
+      } else {
+        copied = `download_failed:${dl.error?.message ?? "not_found"}`;
+      }
+      const rm = await Tools.supabase.storage.from("users").remove([key]);
+      if (rm.error) entry.result(`${copied};remove_failed:${rm.error.message}`, 500);
+      else entry.result(copied, copied === "copied" ? 200 : 500);
+    } catch (err) {
+      entry.result((err as Error).message, 500);
+    }
+  }
+}
+
 function applyBodyFields(user: User, body: Record<string, unknown>) {
   for (const [k, v] of Object.entries(body)) {
     if (searchable.includes(k)) (user as unknown as Record<string, unknown>)[k] = v;
@@ -1218,7 +1250,16 @@ Deno.serve(async (req) => {
       case "delete": {
         const result = await Tools.rpc(log, "app_delete_cleanup", { me_id: user.user_id });
         notifyList = result?.notify ?? [];
+        // Everything personal moves to the `archive` schema BEFORE the row goes,
+        // since it is that row being copied: the profile, the chat, the reads,
+        // and every restriction except one — a block somebody else placed on him
+        // stays live, so deleting and re-registering is not a way back to
+        // someone who blocked you (user directive 2026-07-31). The photos are
+        // the one part SQL cannot move; the RPC hands back their keys.
+        const archived = await Tools.rpc(log, "app_archive_user", { me_id: user.user_id });
         await user.delete(log);
+        const images = ((archived as unknown as { images?: string[] })?.images) ?? [];
+        if (images.length) EdgeRuntime.waitUntil(archivePhotos(log, images));
         break;
       }
 
