@@ -19,11 +19,11 @@
 //   PullPane                               — the framed element that renders it
 
 import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Dimensions, type ScrollViewProps, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
+import { View, StyleSheet, Dimensions, findNodeHandle, type ScrollViewProps, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector, ScrollView, type GestureType, type ComposedGesture } from 'react-native-gesture-handler'
 import type { NativeViewGestureHandlerProps } from 'react-native-gesture-handler'
 import Animated, {
-  useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withSpring, withSequence, withDelay,
+  useSharedValue, useAnimatedStyle, useAnimatedReaction, useAnimatedRef, withTiming, withSpring, withSequence, withDelay,
   Easing, runOnJS, type SharedValue,
 } from 'react-native-reanimated'
 import { I18nManager } from 'react-native'
@@ -32,6 +32,7 @@ import {
   PULL_TUTORIAL_START_DELAY_MS, PULL_TUTORIAL_HOLD_MS,
 } from '../tokens'
 import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
+import { useKeyboardReveal } from '../hooks/useKeyboard'
 
 /** Which way a surface is dragged away.
  *  'y' — down, off the bottom. Every card surface and every sheet.
@@ -92,6 +93,20 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
       onScroll, onScrollBeginDrag, onScrollEndDrag,
       onMomentumScrollBegin, onMomentumScrollEnd, onContentSizeChange, scrollEnabled, ...rest
     } = props
+    // Our own handle on the scroll, alongside whatever the caller asked for:
+    // shrinking the page for the keyboard is only half the job, and the other
+    // half (below) has to be able to move the content — from a worklet, every
+    // frame, which is what makes it one motion with the keyboard rather than a
+    // correction after it. Hence an animated ref and a shared-value offset.
+    const scrollRef = useAnimatedRef<any>()
+    const scrollOffsetSV = useSharedValue(0)
+    const scrollTagSV = useSharedValue<number | null>(null)
+    const setRef = useCallback((node: any) => {
+      scrollRef(node)
+      scrollTagSV.value = node ? findNodeHandle(node) : null
+      if (typeof ref === 'function') ref(node)
+      else if (ref) (ref as React.MutableRefObject<any>).current = node
+    }, [ref, scrollRef, scrollTagSV])
     // A freshly-mounted ScrollView is always at offset 0. `onScroll` does NOT
     // fire for that initial position, and a programmatic scrollTo on a card
     // swap doesn't reliably fire it either — so without this the pull
@@ -106,6 +121,13 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     // is the only truth available when the CONTENT changes under the list (see
     // handleContentSizeChange), which fires no scroll event of its own.
     const lastOffset = useRef(0)
+    // THE app-wide "keep the field you are typing in on screen" behaviour, wired
+    // here for the same reason `keyboardDismissMode` is: this is the only scroll
+    // surface in the app, so declaring it once here covers every list and form.
+    // The page shrinking to the keyboard cannot do this on its own — a field low
+    // on the page ends up below the fold of the shorter page, and only the
+    // content moving brings it back.
+    useKeyboardReveal(scrollRef, scrollOffsetSV, scrollTagSV)
     // `scrollAtTop` gates the card's pull-to-skip gesture. `onScroll` is
     // throttled, so the LAST event before the content settles can land a few
     // px short of 0 and leave the flag stuck `false` — the card then silently
@@ -124,6 +146,8 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     const momentum = useRef(false)
     const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       lastOffset.current = e.nativeEvent.contentOffset.y
+      // Same number, on the UI thread, for the keyboard ride to start from.
+      scrollOffsetSV.value = lastOffset.current
       if (!momentum.current) syncAtTop(e)
       onScroll?.(e)
     }
@@ -183,16 +207,29 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
     const effectiveScrollEnabled = locked ? false : scrollEnabled
     return (
       <ScrollView
-        // A drag on a scroll surface puts the keyboard away. Declared HERE, once,
-        // because this is the app's only scroll wrapper: a page whose field lives
-        // on its header (Communities' search) has nothing to tap to get the
-        // keyboard back down, and the list under it is the whole screen — so the
-        // gesture that reads as "I'm done typing, let me look" has to be the one
-        // that closes it. Before `{...rest}`, so a surface that must NOT do this
-        // can say so (MatchCard's reel, whose bio editor lives inside it).
-        keyboardDismissMode="on-drag"
+        // THE keyboard-dismissal rule for the whole app, declared HERE, once,
+        // because this is the app's only scroll wrapper (user directive
+        // 2026-07-30, replacing the `on-drag` rule of 2026-07-29):
+        //
+        //   SCROLLING NEVER CLOSES THE KEYBOARD. The field stays in edit mode
+        //   while the user scrolls to see what is around it. ONLY A TAP OUTSIDE
+        //   A TEXT BOX closes it.
+        //
+        // `on-drag` was the opposite, and it made a covered field unreachable:
+        // the one way to bring something out from under the keyboard is to
+        // scroll, and scrolling was the thing that tore the edit down (the group
+        // link, 2026-07-30).
+        //
+        // The two props below are the two halves of that rule and belong
+        // together. `keyboardShouldPersistTaps="handled"` is what makes "tap
+        // outside" work: a tap a child handles (a row, a button) leaves the
+        // keyboard alone, and a tap nothing handles — the background — closes
+        // it. Do not set either at a call site; a surface that opted out of the
+        // old rule has nothing to opt out of now.
+        keyboardDismissMode="none"
+        keyboardShouldPersistTaps="handled"
         {...rest}
-        ref={ref}
+        ref={setRef}
         onScroll={handleScroll}
         onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={handleScrollEndDrag}

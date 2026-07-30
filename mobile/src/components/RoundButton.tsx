@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'rea
 import type { ReactNode } from 'react'
 import { PHOTO_CHROME, LIFT_SHADOW, INK, WHITE } from '../colors'
 import { ROUND_BUTTON_SIZE, NOTIFY_DOT_SIZE, NOTIFY_DOT_RING } from '../tokens'
-import { FONT_SCALE } from '../fonts'
+import { FIXED_BOX_SCALE } from '../fonts'
 import { GlyphScale } from './icons'
 
 // Round icon-button primitive. Single source of truth for every circular tap
@@ -92,9 +92,10 @@ export function RoundButton({
       {/* The diameter above is a plain dp and does NOT follow the OS font
           scale, so neither may the glyph inside it — otherwise the same
           button reads crowded on a device with a bumped font scale and lost
-          on one without. Pinning the ceiling to `ui` keeps the single
-          ROUND_BUTTON_GLYPH_RATIO true on every device. */}
-      <GlyphScale cap={FONT_SCALE.ui}>
+          on one without. Pinning the ceiling to FIXED_BOX_SCALE keeps the single
+          ROUND_BUTTON_GLYPH_RATIO true on every device. This is the ONE thing in
+          the app that does not take FONT_SCALE, and it is geometry, not type. */}
+      <GlyphScale cap={FIXED_BOX_SCALE}>
         <View pointerEvents="none" style={styles.inner}>{children}</View>
       </GlyphScale>
       {badge ? (

@@ -1,10 +1,14 @@
 // Central design tokens — single source of truth for sizes, spacing, font sizes,
 // radii, durations, easings, gesture thresholds, and shared shadow stops.
 //
+// The one import: the bundled font's own line ratio, which `lh` below estimates
+// a line box with. Text METRICS belong to the font, not to the design scale.
+//
 // Every literal that has meaning across the app lives here. Inline numeric
 // values at call sites (fontSize: 16, padding: 12, borderRadius: 8, withTiming
 // duration 350) are DRY violations — pull the value into this module and import
 // it instead.
+import { FONT_LINE_RATIO } from './fonts'
 
 // ── Spacing ────────────────────────────────────────────────────────────────
 // Material-style 5-tier scale, geometric progression (4→8 ×2, 8→16 ×2,
@@ -56,29 +60,89 @@ export const TEXT = {
   xxl: BUTTON_MIN_HEIGHT,  // 56
 } as const
 
-// Line-height helper. 1.4× the font size is the comfortable body-text ratio
-// and fits most surfaces (paragraphs, row labels, button labels, bubble text).
-// Inline lineHeight is still appropriate for titles (tighter ratio, ~1.1×) and
-// for single-glyph decorative text where the line box should equal the glyph
-// size — call sites that don't fit 1.4× simply keep their literal value.
-export const lh = (size: number): number => Math.round(size * 1.4)
+// ── How tall is one line? ──────────────────────────────────────────────────
+// An ESTIMATE, in dp, of the line box the engine will draw for `size` — for a
+// BOX that has to be sized in JS before its text exists: a skeleton row standing
+// in for a name, the composer's max height, the first frame of a header whose
+// title has not been measured yet.
+//
+// It is NOT a `lineHeight`, and no text style in the app declares one (user
+// directive 2026-07-30). A declared lineHeight is a dp number that Android grows
+// through the OS font-scale curve UNCAPPED, while `fontSize` is capped by
+// FONT_SCALE — so above the cap the leading runs away from the ink (2.0 em of
+// leading on a font_scale=2.0 device where the design says 1.4). Leaving it
+// undeclared hands the leading to the FONT's own ascent+descent, which is a
+// multiple of the size actually painted and therefore identical on every device.
+// See FONT_LINE_RATIO in fonts.ts for the measurement and the whole story.
+//
+// The ratio here is that same font ratio, so an estimated box matches the line
+// the engine goes on to draw inside it. And it stays an estimate: where being
+// wrong by a dp matters, MEASURE the line instead (`LineProbe` in
+// components/GlyphSlot.tsx).
+export const lh = (size: number): number => Math.round(size * FONT_LINE_RATIO)
 
 // THE air under the last thing on a surface — the one answer to "how much room
-// below the bottom button / last row".
+// below the bottom button / last row / composer".
 //
-// The rule: the device's bottom safe area ABSORBS the design gap, it never
-// stacks on top of it. An iPhone's home-indicator inset (34) is already a
-// generous band of empty space; adding the surface's own gap to it (the old
-// `Math.max(insets.bottom, SM) + MD` = 50, or a bare `insets.bottom + MD`)
-// pushed the content up off a visibly empty strip that no other iOS app has.
-// Android reports 0 here, which is why this only ever showed on iPhone and why
-// every one of these gaps was tuned blind to it.
+// ONE AIR, THE SAME ON EVERY DEVICE (user directive 2026-07-30). The bottom of
+// the app must not read differently on an iPhone than on an Android, and it did:
+// twice the gap, because the air WAS the device's own bottom band, and those
+// bands are not the same object. An iPhone reports 34 for its home indicator;
+// Android reports 16–24 for the gesture pill. Absorbing the design gap into the
+// band (`max(inset, gap)`, the rule until now) therefore handed the two platforms
+// two different numbers for the same surface, and neither of them was the
+// design's.
 //
-// Pass the gap the surface wants when there is no safe area at all (Android):
-// `bottomGap(insets.bottom, SM + MD)` keeps Android at 24 and cuts iPhone from
-// 50 to 34. It is deliberately NOT additive — if a surface truly needs air
-// BELOW the home indicator, that is a different (and so far nonexistent) case.
-export const bottomGap = (safeInset: number, gap: number): number => Math.max(safeInset, gap)
+// So the band is no longer the air. It is read for exactly one thing — WHETHER
+// IT IS FURNITURE THE APP WOULD BE CLIPPED BY — and the answer is its own size,
+// which is the one property the platform does state honestly on both:
+//
+//   · A band at or under BOTTOM_BAND_HINT_MAX is a HINT: a home indicator (34,
+//     of which the indicator itself is the lowest ~13) or a gesture pill (16–24,
+//     pill in the lowest ~12). It marks a gesture zone; it occupies nothing. The
+//     app clears it with its own air, BOTTOM_AIR, which is above both zones —
+//     and identical on every such device, which is the whole point.
+//   · A band TALLER than that is a drawn navigation BAR (48 for Android's
+//     3-button nav) — real furniture that swallows anything under it, so it is
+//     cleared in full. This is the case that must never be capped: it is what
+//     sliced the match card's buttons in half on a 3-button Redmi (2026-07-29).
+//
+// `gap` is now a FLOOR, not a competitor to the band: a surface that wants MORE
+// than the app's bottom air still gets it (a list's XL of scroll air), and one
+// that asks for less is lifted to it, so no surface can end closer to the edge
+// than any other. It is never additive — no surface needs air BELOW the
+// indicator.
+//
+// And it is the air over the KEYBOARD too, from this same call, because the page
+// ends at the keyboard's top edge exactly as it ends at the top of the band
+// (`KeyboardShrink` in app/_layout.tsx). One air, whatever furniture happens to
+// be standing below the page — which is why nothing in this path may be made
+// keyboard-aware.
+export const BOTTOM_AIR = LG
+export const BOTTOM_BAND_HINT_MAX = XL
+export const bottomGap = (safeInset: number, gap: number): number =>
+  safeInset > BOTTOM_BAND_HINT_MAX
+    ? Math.max(safeInset, gap)   // a drawn navigation bar: clear it in full
+    : Math.max(BOTTOM_AIR, gap)  // an indicator / gesture pill: the app's own air
+
+// ── The air is HALVED while the keyboard is up ──────────────────────────────
+// (user directive 2026-07-30.) The air above exists to keep chrome off the
+// system's bottom band; a keyboard covers that band completely, so half of it is
+// enough — and half is what the app takes, on every device and both platforms.
+//
+// This is how much a surface GIVES BACK, i.e. how far it may extend below the
+// keyboard's top edge: half the air it holds at rest, so what remains visible
+// above the keyboard is the other half. It is consumed inside the two keyboard
+// application points (`useKeyboardShrinkSV`), never at a call site, so no screen,
+// popup or component learns that a keyboard exists.
+//
+// A subtraction here is exactly what was wrong until today — but that one
+// subtracted the DEVICE's band (34 on an iPhone, 16–24 on an Android, 48 on a
+// 3-button bar), which both deleted the whole of the air and made the result a
+// different number per platform. This subtracts half of the APP's air, which is
+// a design value: identical everywhere by construction, and derived from the same
+// `bottomGap` the surface itself used, so the two can never disagree.
+export const keyboardAirCut = (safeInset: number): number => bottomGap(safeInset, BOTTOM_AIR) / 2
 
 // ── Font weights ───────────────────────────────────────────────────────────
 // ONE weight above the regular face (user directive 2026-07-28): every piece of
@@ -229,6 +293,23 @@ export const STROKE = {
 export const NOTIFY_DOT_SIZE = 14
 export const NOTIFY_DOT_RING = STROKE.base
 
+// ── The Circles emblem ─────────────────────────────────────────────────────
+// Diameter of the menu's one big round button (CirclesButton.tsx): the disc that
+// carries the circles mark, the word, each count on its own line and the waiting
+// chip, hanging half over the profile photo and half over the menu list.
+//
+// As wide as TWO hero circles standing side by side with the page gutter between
+// them — derived, so the app's round objects keep one scale between them. That is
+// the smallest disc the stack actually fits in: the counts are STACKED rather
+// than chained on the interpunct, so the column runs mark + name + two counts +
+// chip, and a circle is at its widest only through the middle — the rim closes in
+// on both ends of that column.
+//
+// It is the only round box in the app that GROWS with the OS font scale (the
+// emblem consumes it through `iconScale`), because text stands in it; see
+// FIXED_BOX_SCALE in fonts.ts for the rule and why this is the exception to it.
+export const CIRCLES_BUTTON_SIZE = ROUND_BUTTON_SIZE * 2 + MD
+
 // ── Gesture thresholds ─────────────────────────────────────────────────────
 
 export const SWIPE_DISMISS_PX = 80         // translateY to commit a dismiss
@@ -341,6 +422,35 @@ export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
 // sheet laid on the app rather than a page of its own.
 export const SHEET_TOP_GAP = LG
 
+// ── The rhythm INSIDE a popup ──────────────────────────────────────────────
+// How far apart the four things a popup is made of stand: the air above its
+// first block, the gap under its title, the gap between two body blocks, and
+// the air above its buttons. ONE set for every popup in the app (user directive
+// 2026-07-30, read off the invite popup): a title and the sentence explaining it
+// are ONE block and sit close together, and the actions stand well clear of it,
+// so the eye reads "what this is" and only then "what I can do".
+//
+// It is a token set rather than four literals because the whole point is that
+// two popups cannot differ: before this, the gap over a button row was MD in
+// ConfirmDialog, LG in the groups sheet, XL on the invite card and SM in the
+// group popup, and the gap under a title was SM, XS or nothing depending on
+// which file you were in. A popup body therefore declares NO vertical spacing of
+// its own — it composes SheetTitle / SheetDesc / SheetActions (BottomSheet.tsx),
+// which are the only things allowed to read these.
+//
+// The bottom of a popup is NOT here: that is the app's one bottom gap, and it is
+// `bottomGap(useBottomInset(), LG)` on the sheet's card.
+export const SHEET_GAP = {
+  /** Card top edge (or the bottom of the drag handle) → the first block. */
+  title: LG,
+  /** Title → the description under it. The two are one block. */
+  desc: SM,
+  /** Body block → the next body block (a field, a toggle, a list). */
+  block: MD,
+  /** The last thing said → the button row. The popup's widest gap, on purpose. */
+  actions: XL,
+} as const
+
 // A bounded, scrollable block inside a popup fades out over its bottom edge to
 // say there is more below it (user directive 2026-07-28 — the one gradient in
 // the app, and it is a hint, not decoration: it paints the popup's own white
@@ -403,8 +513,8 @@ export const DRAG_HANDLE = {
 
 export const OVERLAY = {
   // Gap between the safe-area top inset and floating chrome (the home
-  // hamburger, a sheet's close X). Consumed via chromeReserve() so the card
-  // underneath reserves exactly the room the chrome occupies.
+  // hamburger, a sheet's close X). Consumed via chromeTop() below, never added
+  // to an inset by hand.
   chromeGap: SM,
   // How far in from the START/END edge floating chrome sits: the home
   // hamburger's `start`, the card's report flag at `end`, and a sheet's close X
@@ -423,6 +533,15 @@ export const OVERLAY = {
     subPage: 40,
   },
 } as const
+
+/** The ONE line floating chrome hangs from, measured from the top of the screen:
+ *  home's hamburger, a sheet's close X, and anything a body pins LEVEL with them
+ *  (a card's top-END chip column, the menu's edit-profile chip). It is what makes
+ *  the hamburger visually BECOME the X when a sheet opens over it, so the four
+ *  call sites read it here rather than each adding the gap to an inset itself. */
+export function chromeTop(topInset: number): number {
+  return topInset + OVERLAY.chromeGap
+}
 
 
 // ── Home art ───────────────────────────────────────────────────────────────

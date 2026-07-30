@@ -6,7 +6,6 @@ import Svg, { Path, Circle } from 'react-native-svg'
 import { Text, TextInput } from './AppText'
 import { Button, BUTTON_GLYPH, BUTTON_LABEL } from './Button'
 import { t } from '../i18n'
-import { FONT_SCALE } from '../fonts'
 import { INK_SUBTLE, INK, INK_BODY, INK_HINT, SURFACE, WHITE, INK_DIM, LINE, NEGATIVE, WHITE_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { XS, SM, MD, ICON, ICON_CIRCLE_SIZE, TEXT, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, MOTION, lh } from '../tokens'
@@ -91,7 +90,6 @@ function ProviderButton({ icon, label, onPress, loading, disabled }: {
       <Text
         style={ssoBtnStyles.label}
         numberOfLines={2}
-        maxFontSizeMultiplier={FONT_SCALE.ui}
       >
         {label}
       </Text>
@@ -209,7 +207,7 @@ export function LoginForm({
         <Text style={styles.desc}>
           {t('auth.linkSentDesc').replace('{email}', sentTo)}
         </Text>
-        <View style={{ marginTop: MD }}>
+        <View style={styles.resendBlock}>
           <Button
             label={t('auth.linkResend')}
             variant="secondary"
@@ -320,7 +318,6 @@ const styles = StyleSheet.create({
   desc: {
     marginTop: SM,
     fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
     color: INK_BODY,
     textAlign: 'center',
   },
@@ -361,6 +358,9 @@ const styles = StyleSheet.create({
     fontSize: TEXT.md,
     color: INK,
     textAlign: 'center',
+  },
+  resendBlock: {
+    marginTop: MD,
   },
   successCircle: {
     alignSelf: 'center',

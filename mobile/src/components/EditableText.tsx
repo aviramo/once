@@ -24,7 +24,14 @@ import { View, StyleSheet, Keyboard, type StyleProp, type TextStyle, type ViewSt
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { normalizeBio } from '../lib/bio'
+import { useFocusedFieldFooter } from '../hooks/useKeyboard'
 import { INK_DIM, NEGATIVE } from '../colors'
+
+// The footer's measured height, remembered across instances and focuses. The
+// keyboard's reveal needs it at the instant the field takes focus, and on the
+// very first focus of a session the footer has not been laid out yet — every
+// focus after that starts from the real number instead of guessing.
+let lastFooterHeight = 0
 
 export type EditableTextProps = {
   /** Last committed value (server truth, '' when unset). */
@@ -154,6 +161,13 @@ export function EditableText({
   // (a no-op) rather than throwing the fresh save away.
   const handleUpdate = useCallback(() => { commit(); Keyboard.dismiss() }, [commit])
 
+  // Taking focus grows a footer UNDER the input, and the Update button in it is
+  // the only save path — so it is part of what the keyboard must not cover. The
+  // platform only reports the input's own frame, so the field declares the rest
+  // itself (src/hooks/useKeyboard.ts).
+  const [footerHeight, setFooterHeight] = useState(lastFooterHeight)
+  useFocusedFieldFooter(footerHeight, focused)
+
   return (
     <>
       <TextInput
@@ -178,7 +192,13 @@ export function EditableText({
         onBlur={handleBlur}
       />
       {focused || showError ? (
-        <View style={footerStyle}>
+        <View
+          style={footerStyle}
+          onLayout={e => {
+            const h = e.nativeEvent.layout.height
+            if (h > 0 && h !== lastFooterHeight) { lastFooterHeight = h; setFooterHeight(h) }
+          }}
+        >
           {/* Hint slot: the refusal, else the below-minimum requirement. Never
               a count of what is left — the cap is silent. */}
           <Text style={[hintStyle, showError && styles.error]}>

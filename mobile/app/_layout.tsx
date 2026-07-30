@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { LayoutAnimationConfig } from 'react-native-reanimated'
+import Animated, { LayoutAnimationConfig, useAnimatedStyle } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppStatusBar } from '../src/components/AppStatusBar'
@@ -13,6 +13,7 @@ import {
   NotoSansHebrew_400Regular,
   NotoSansHebrew_500Medium,
   NotoSansHebrew_700Bold,
+  NotoSansHebrew_900Black,
 } from '@expo-google-fonts/noto-sans-hebrew'
 import {
   NotoSans_400Regular,
@@ -31,7 +32,10 @@ import { clearCachedGroups } from '../src/lib/groupsCache'
 import { clearRosterCaches } from '../src/lib/rosterCache'
 import { clearAllChatCaches } from '../src/lib/chatCache'
 import { stashInviteUrl } from '../src/lib/communities'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { STORAGE } from '../src/keys'
 import { DEFAULT_FAMILY, FONT_SCALE, TEXT_START } from '../src/fonts'
+import { KeyboardProvider, useKeyboardResizeMode, useKeyboardShrinkSV } from '../src/hooks/useKeyboard'
 import { PAGE } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
@@ -45,14 +49,14 @@ function applyGlobalFont() {
   // (not via React's deprecated defaultProps machinery).
   Text.defaultProps = Text.defaultProps || {}
   // @ts-expect-error
-  Text.defaultProps.maxFontSizeMultiplier = FONT_SCALE.body
+  Text.defaultProps.maxFontSizeMultiplier = FONT_SCALE
   // @ts-expect-error
   Text.defaultProps.style = [{ fontFamily: DEFAULT_FAMILY, ...TEXT_START }, Text.defaultProps.style]
 
   // @ts-expect-error
   TextInput.defaultProps = TextInput.defaultProps || {}
   // @ts-expect-error
-  TextInput.defaultProps.maxFontSizeMultiplier = FONT_SCALE.body
+  TextInput.defaultProps.maxFontSizeMultiplier = FONT_SCALE
   // @ts-expect-error
   const prevStyle = TextInput.defaultProps.style
   // @ts-expect-error
@@ -69,6 +73,15 @@ const queryClient = new QueryClient({
     queries: { retry: 1, staleTime: 1000 * 30 },
   },
 })
+
+// Reading the stored session at launch (see `probe` below): how many times to
+// ask before an unreadable answer is allowed to mean "signed out", the first wait
+// between asks (it doubles each time — 600 / 1200 / 2400ms, so a network that
+// comes up a moment late costs no /login flash), and how long one attempt may
+// leave the boot route undecided before the splash gives up on it.
+const SESSION_PROBE_TRIES = 4
+const SESSION_PROBE_BACKOFF_MS = 600
+const SESSION_PROBE_VALVE_MS = 5000
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, loading, setUser } = useAuthStore()
@@ -123,11 +136,62 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, loading, needsAccount, profileLoading, profileFetched])
 
   useEffect(() => {
-    const timeout = setTimeout(() => setUser(null), 5000)
+    let cancelled = false
+    let probeTimer: ReturnType<typeof setTimeout> | undefined
+    let valve: ReturnType<typeof setTimeout> | undefined
 
-    supabase.auth.getSession().then(({ data }) => {
-      clearTimeout(timeout)
-      const user = data.session?.user ?? null
+    // Splash safety valve. The boot route waits on `user` being decided either
+    // way, and reading the session can HANG rather than fail: auth-js takes a
+    // lock on the storage key and the refresh fetch behind it carries no timeout
+    // of its own. Re-armed per attempt (rather than once for the whole sequence),
+    // so the retries below can never keep the splash up longer than one window.
+    const armValve = () => {
+      clearTimeout(valve)
+      valve = setTimeout(() => setUser(null), SESSION_PROBE_VALVE_MS)
+    }
+
+    // Everything on this disk that belongs to ONE identity. Awaited by both of
+    // its callers — a sign-out, and a different account arriving on the device —
+    // because what comes next reads these caches back.
+    const wipeDeviceData = async () => {
+      clear()
+      await Promise.all([
+        clearSelfAvatar().catch(() => {}),
+        clearCachedGroups().catch(() => {}),
+        clearRosterCaches().catch(() => {}),
+        clearAllChatCaches().catch(() => {}),
+      ])
+    }
+
+    // The stored session is what says whether this person is signed in — and
+    // reading it can fail for a reason that has nothing to do with being signed
+    // in. The access token lives 7 days (the project's `jwt_exp`); once it does
+    // need replacing, auth-js refreshes it here, and that refresh needs the
+    // network — which on a cold start is often not up yet. getSession() then
+    // answers `session: null`, and taking that at face value bounces a perfectly
+    // signed-in user to /login (measured on an emulator 2026-07-30: clock past
+    // the expiry with the network cut lands exactly here). `error` is what tells the two apart: there is no error when there
+    // is simply nothing stored, and auth-js KEEPS the session on disk through a
+    // network failure (it deletes it only when the server refuses the refresh
+    // token — and then the next read answers null with no error, so this settles
+    // on "signed out" one probe later). So an undecided answer is retried with
+    // the wait doubling, and only an empty one means signed out. Nothing here is
+    // destructive either way: the fallback is a route to /login, and a refresh
+    // that lands later emits TOKEN_REFRESHED into the listener below, which
+    // routes the user back to /home on its own.
+    const probe = async (attempt: number) => {
+      armValve()
+      let result: Awaited<ReturnType<typeof supabase.auth.getSession>> | null = null
+      try { result = await supabase.auth.getSession() } catch {}
+      if (cancelled) return
+      const session = result?.data.session ?? null
+      const undecided = !session && (!result || !!result.error)
+      if (undecided && attempt + 1 < SESSION_PROBE_TRIES) {
+        probeTimer = setTimeout(() => probe(attempt + 1), SESSION_PROBE_BACKOFF_MS * 2 ** attempt)
+        return
+      }
+      clearTimeout(valve)
+      const user = session?.user ?? null
       setUser(user)
       if (user) {
         // Disk first, network second — both in flight at once. Whichever lands
@@ -139,33 +203,66 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         subscribeToUserChanges(user.id)
         // Push registration is handled by the home screen notification flow
       }
-    }).catch(() => {
-      clearTimeout(timeout)
-      setUser(null)
-    })
+    }
+    probe(0)
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      clearTimeout(timeout)
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null
-      setUser(user)
       if (user) {
-        hydrateProfile(user.id)
-        fetchProfile(user.id)
-        subscribeToUserChanges(user.id)
-        // Push registration is handled by the home screen notification flow
-      } else {
-        clear()
-        unsubscribeFromUserChanges()
-        unregisterPushNotifications()
-        clearSelfAvatar().catch(() => {})
-        clearCachedGroups().catch(() => {})
-        clearRosterCaches().catch(() => {})
-        clearAllChatCaches().catch(() => {})
+        clearTimeout(valve)
+        setUser(user)
+        // Whose data is on this disk is its own question, and the answer is not
+        // an auth event: the caches are keyed by what they HOLD (`my_groups`,
+        // `roster_<groupId>`, `chat_<otherId>`, the self avatar), so a second
+        // account arriving here would read the first one's. The wipe therefore
+        // hangs off the IDENTITY changing, which no missed event can hide — a
+        // switch that never emitted SIGNED_OUT leaked them before this too. It is
+        // awaited before the hydrate, since that is what reads them back.
+        void (async () => {
+          let previous: string | null = null
+          try { previous = await AsyncStorage.getItem(STORAGE.lastUserId) } catch {}
+          const switched = !!previous && previous !== user.id
+          if (switched) await wipeDeviceData()
+          AsyncStorage.setItem(STORAGE.lastUserId, user.id).catch(() => {})
+          // Disk first, network second — both in flight at once. Whichever lands
+          // first paints; hydrate stands down if the fetch beat it. This is what
+          // lets a relaunch reach /home (and mount the chat sheet, which then
+          // reads its own cached transcript) without waiting on the round trip.
+          // Nothing to hydrate when the disk was just wiped for a new identity.
+          if (!switched) hydrateProfile(user.id)
+          fetchProfile(user.id)
+          subscribeToUserChanges(user.id)
+          // Push registration is handled by the home screen notification flow
+        })()
+        return
       }
+      // A null session is NOT automatically a sign-out. Only two events can carry
+      // one, and they mean opposite things: SIGNED_OUT is the session genuinely
+      // going away (an explicit sign-out, or a refresh the server REFUSED — the
+      // one case where auth-js drops the stored session itself), while
+      // INITIAL_SESSION reports null both for "nothing is stored" and for "the
+      // stored session could not be read or refreshed right now" (see `probe`).
+      // Treating the second as a sign-out wiped every local cache — transcripts,
+      // roster, groups, the self avatar — and unregistered push, for nothing
+      // worse than a launch with no network yet. So the teardown hangs off
+      // SIGNED_OUT alone, and the undecided case belongs to the probe, which is
+      // the only thing that settles it.
+      if (event !== 'SIGNED_OUT') return
+      clearTimeout(valve)
+      setUser(null)
+      // These two are the live connection rather than the disk, so they belong to
+      // a sign-out and NOT to the identity switch above (which has already
+      // subscribed the arriving user and owes them their push registration).
+      unsubscribeFromUserChanges()
+      unregisterPushNotifications()
+      AsyncStorage.removeItem(STORAGE.lastUserId).catch(() => {})
+      void wipeDeviceData()
     })
 
     return () => {
-      clearTimeout(timeout)
+      cancelled = true
+      clearTimeout(valve)
+      clearTimeout(probeTimer)
       listener.subscription.unsubscribe()
       unsubscribeFromUserChanges()
     }
@@ -224,6 +321,51 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+// APPLICATION POINT 1 of 2 for the keyboard (see src/hooks/useKeyboard.ts).
+//
+// The page shrinks by exactly the keyboard's height, so its bottom edge is flush
+// against the top of the keyboard at every frame of the movement. Everything
+// below this in the tree — every route, and every OverlaySheet, since those are
+// absoluteFill children of home's shell — is simply laid out in a shorter box
+// and needs to know nothing about a keyboard. The other application point is the
+// `Modal` in BottomSheet.tsx, which is a separate native window and does not
+// inherit this.
+//
+// `paddingBottom` rather than a transform: the page must SHRINK, not slide. A
+// translate would push the top of the page off the screen. This does cost a Yoga
+// layout pass per frame while the keyboard moves — that is the price of the
+// bottom edge tracking the keyboard instead of jumping to meet it, and it is
+// what the platform's own `adjustResize` does natively.
+//
+// It shrinks by `useKeyboardShrinkSV()` — the keyboard's height less HALF the
+// app's bottom air (user directive 2026-07-30). The keyboard is one more piece of
+// system furniture standing at the bottom of the window, exactly like the
+// navigation bar and the home indicator, so the page stops where the furniture
+// starts; but the air a control holds is there to keep it off the system's bottom
+// band, and a keyboard covers that band, so half of it is enough. Every
+// bottom-anchored control therefore ends `bottomGap(...)` above the screen's edge
+// at rest and half of it above the keyboard, on every device and both platforms.
+//
+// It used to subtract `useBottomInset()` instead, on the same reasoning about the
+// band being dead space — and that was the bug: `bottomGap` is a `max`, so on any
+// device whose band exceeds the design gap (every iPhone: a 34 home-indicator
+// inset against a composer's SM) the band IS the control's whole air, and
+// cancelling it deleted the air rather than the dead space. The chat composer sat
+// flush on the keyboard while sitting well clear of the screen edge at rest ("the
+// gap was destroyed, there is no consistency", 2026-07-30) — and because the
+// number subtracted was the DEVICE's, the result differed per platform too. The
+// cut is a design value now, so the halving is identical everywhere.
+//
+// Both application points consume the same hook — the popup (BottomSheet.tsx) is
+// its own native window and lifts itself by exactly this value.
+function KeyboardShrink({ children }: { children: React.ReactNode }) {
+  // Once, here, at a component that never unmounts.
+  useKeyboardResizeMode()
+  const shrink = useKeyboardShrinkSV()
+  const style = useAnimatedStyle(() => ({ paddingBottom: shrink.value }))
+  return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>
+}
+
 export default function RootLayout() {
   // The app has ONE emphasis weight — 500 (WEIGHT.medium in tokens.ts) — so a
   // face nobody can ask for is dead weight in the bundle. That took out ExtraBold
@@ -235,6 +377,9 @@ export default function RootLayout() {
     NotoSansHebrew_400Regular,
     NotoSansHebrew_500Medium,
     NotoSansHebrew_700Bold,
+    // The one face nothing but the wordmark asks for: the app's name is drawn
+    // at 900, a weight no label in the UI has.
+    NotoSansHebrew_900Black,
     NotoSans_400Regular,
     NotoSans_500Medium,
     NotoSans_600SemiBold,
@@ -273,6 +418,12 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+    {/* The three flags are what the library auto-detects from edge-to-edge, passed
+        explicitly so the app never depends on that detection: they are what makes
+        the reported keyboard height the FULL `WindowInsets.ime()` inset (navigation
+        bar included) rather than the bar-subtracted one, and what stops the library
+        from undoing the app's edge-to-edge drawing. */}
+    <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: PAGE }}>
       {/* Global status bar: white glyphs over the purple band, everywhere. The
           OS restores the system default when backgrounded — every app owns its
@@ -286,13 +437,17 @@ export default function RootLayout() {
               first paint side-steps the race; subsequent mounts animate as
               normal. Keep this wrapper at the root so it covers every screen. */}
           <LayoutAnimationConfig skipEntering>
-            <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+            <KeyboardShrink>
+              <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+            </KeyboardShrink>
           </LayoutAnimationConfig>
         </AuthProvider>
       </QueryClientProvider>
-      {/* Last child so it paints above every screen. */}
+      {/* Last child so it paints above every screen — and OUTSIDE the shrink, so
+          the status band never moves with the keyboard. */}
       <StatusBarBand />
     </GestureHandlerRootView>
+    </KeyboardProvider>
     </SafeAreaProvider>
   )
 }

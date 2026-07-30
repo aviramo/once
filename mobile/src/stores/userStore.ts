@@ -45,10 +45,15 @@ export interface Profile {
    * (so 2 shared groups → 1); absent/NULL when the pair shares 0 or 1 groups. */
   group_extra?: number | null
   /** Name of a person the viewer and this profile's subject are BOTH friends
-   * with, NULL when none. There is no count beside it: the friends CIRCLE
-   * counts once however many mutual friends it holds, and the popup is where
-   * they are all listed. */
+   * with, NULL when none. */
   friend_name?: string | null
+  /** Count of ADDITIONAL mutual friends beyond the one named in `friend_name`
+   * (so 3 mutual friends → 2); absent/NULL at 0 or 1. Exactly what
+   * `group_extra` says about the groups: every mutual friend is a circle of its
+   * own in the chip's "+N", because the popup gives each one its own row (user
+   * directive 2026-07-30). Absent on a snapshot written before the server
+   * carried it. */
+  friend_extra?: number | null
 }
 
 export type LocationType = 'device' | 'home' | 'work'

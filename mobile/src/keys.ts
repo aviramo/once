@@ -31,6 +31,11 @@ export const STORAGE = {
    *  mounts) from disk instead of waiting out the `users` round trip. Wiped on
    *  sign-out. See stores/userStore.ts. */
   profilePrefix: 'profile_',
+  /** The user_id the caches on this disk belong to. Most of them are keyed by
+   *  what they HOLD (`my_groups`, `roster_<groupId>`, `chat_<otherId>`) and not
+   *  by whose device state they are, so the wipe cannot hang off an auth event
+   *  — it hangs off this id changing. See the auth listener in app/_layout.tsx. */
+  lastUserId: 'last_user_id',
 } as const
 
 // One-time "seen" flag names stored inside the STORAGE.seenFlags JSON map

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
-import { View, StyleSheet, Platform, Linking, ScrollView, Keyboard } from 'react-native'
+import { View, StyleSheet, Platform, Linking } from 'react-native'
 import { Text } from '../src/components/AppText'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useBottomInset } from '../src/hooks/useBottomInset'
+import { PullScrollView } from '../src/components/PullPane'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { GoogleSignin } from '@react-native-google-signin/google-signin'
@@ -87,20 +87,6 @@ async function sendMagicLink(email: string): Promise<boolean> {
 
 export default function LoginPage() {
   const bottomInset = useBottomInset()
-  // RN's KeyboardAvoidingView doesn't cope with Android edge-to-edge here
-  // (form sits behind the keyboard on focus). Drive bottom padding manually,
-  // matching the pattern used in chat.tsx / onboarding.tsx / settings.tsx.
-  const [kbHeight, setKbHeight] = useState(0)
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const show = Keyboard.addListener(showEvent, (e) => {
-      setKbHeight(Math.max(0, e.endCoordinates.height - bottomInset))
-    })
-    const hide = Keyboard.addListener(hideEvent, () => setKbHeight(0))
-    return () => { show.remove(); hide.remove() }
-  }, [bottomInset])
 
   // Each provider throws on failure / cancellation so the form can clear
   // its in-flight state. On success, the auth state change causes
@@ -130,11 +116,10 @@ export default function LoginPage() {
       {/* The shared purple band with white glyphs, as on every other screen. */}
       <AppStatusBar />
       <SafeAreaView style={styles.content} edges={['top', 'left', 'right']}>
-        <View style={[styles.flex, { paddingBottom: kbHeight }]}>
-          <ScrollView
+        <View style={styles.flex}>
+          <PullScrollView
             style={styles.flex}
             contentContainerStyle={styles.scrollBody}
-            keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.brand}>
@@ -152,7 +137,7 @@ export default function LoginPage() {
                 showApple={Platform.OS === 'ios'}
               />
             </View>
-          </ScrollView>
+          </PullScrollView>
 
           <View style={[styles.bottom, { paddingBottom: bottomGap(bottomInset, MD + XS) }]}>
             <Text style={styles.legalText}>
@@ -223,7 +208,6 @@ const styles = StyleSheet.create({
     fontSize: TEXT.md,
     color: INK_HINT,
     textAlign: 'center',
-    lineHeight: lh(TEXT.md),
   },
   legalLink: {
     textDecorationLine: 'underline',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, Platform, PanResponder, BackHandler, Dimensions } from 'react-native'
+import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, PanResponder, BackHandler, Dimensions } from 'react-native'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../src/hooks/useBottomInset'
@@ -19,7 +19,7 @@ import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/Photo
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { PAGE, PHOTO_CHROME, INK, INK_HINT, INK_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
 import { FIELD_SKIN } from '../src/field'
-import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, ROUND_BUTTON_SIZE_SM, OVERLAY, ICON } from '../src/tokens'
+import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, ROUND_BUTTON_SIZE_SM, OVERLAY, ICON, bottomGap, BOTTOM_AIR } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 
@@ -167,13 +167,17 @@ export default function OnboardingPage() {
   const [photoError, setPhotoError] = useState<string | null>(null)
   const photoEditorRef = useRef<PhotoEditorRef>(null)
 
+  // The air under every step's last control (the CTA), taken out of the pager's
+  // frame so no step declares one of its own. The app's one bottom air, same on
+  // every device — see bottomGap in tokens.ts.
+  const pagerBottomAir = bottomGap(bottomInset, BOTTOM_AIR)
+
   // Estimate the pager height for first paint so the initial step renders
   // immediately (rather than flashing an empty background until onLayout fires).
-  const initialPagerH = Math.max(100, Dimensions.get('window').height - insets.top - bottomInset)
+  const initialPagerH = Math.max(100, Dimensions.get('window').height - insets.top - pagerBottomAir)
   const [containerH, setContainerH] = useState(initialPagerH)
   const measuredOnceRef = useRef(false)
   const slideY = useRef(new Animated.Value(-(initialStep - 1) * initialPagerH)).current
-  const keyboardOffset = useRef(new Animated.Value(0)).current
   const stepRef = useRef(step)
   const containerHRef = useRef(containerH)
   const bioSubmittingRef = useRef(false)
@@ -238,29 +242,6 @@ export default function OnboardingPage() {
       },
     })
   ).current
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const show = Keyboard.addListener(showEvent, (e) => {
-      const duration = e.duration ?? 250
-      // Subtract bottom safe-area inset: SafeAreaView already reserves it,
-      // and the keyboard frame on iOS extends through the home-indicator area.
-      const h = Math.max(0, e.endCoordinates.height - bottomInset)
-      // Only shrink the viewport from the bottom (paddingBottom). The content
-      // is top-aligned, so the focused input sits above the keyboard with no
-      // upward translate needed; translating up would push the header
-      // off-screen. (Step 5's bio lives in the absolute-fill overlay, which
-      // shrinks with the viewport via this same paddingBottom.)
-      Animated.timing(keyboardOffset, { toValue: h, duration, useNativeDriver: false }).start()
-    })
-    const hide = Keyboard.addListener(hideEvent, (e) => {
-      if (bioSubmittingRef.current) return
-      const duration = (e as any).duration ?? 250
-      Animated.timing(keyboardOffset, { toValue: 0, duration, useNativeDriver: false }).start()
-    })
-    return () => { show.remove(); hide.remove() }
-  }, [bottomInset])
 
   useEffect(() => {
     setRenderedSteps(prev => {
@@ -687,10 +668,22 @@ export default function OnboardingPage() {
 
   return (
     <View style={styles.rootWrap}>
-    <SafeAreaView style={styles.root}>
+    {/* Top edge only. It used to take the bottom one too — the ONE surface in the
+        app still letting the device's band be its bottom air — so every step's CTA
+        ended 34 above the screen edge on an iPhone and 16–24 on an Android, plus
+        the bio step's own LG on top of that. The frame below states the app's one
+        air instead (bottomGap), which is the same on every device. */}
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       {/* The shared purple band with white glyphs, as on every other screen. */}
       <AppStatusBar />
-      <Animated.View style={{ flex: 1, paddingBottom: keyboardOffset }}>
+      {/* The page already ends at the top of the keyboard (_layout.tsx), so this
+          is just the pager's frame. `measuredOnceRef` below is what keeps the
+          steps at their full height inside it: the content is top-aligned, so a
+          shorter frame simply crops the bottom and the focused field stays put,
+          rather than every step resizing and the pager jumping mid-typing.
+          Its paddingBottom is the air under every step's last control — declared
+          HERE, once, rather than in the six step styles, so no step can differ. */}
+      <View style={{ flex: 1, paddingBottom: pagerBottomAir }}>
         <View
           {...panResponder.panHandlers}
           style={styles.pagerWrap}
@@ -726,7 +719,7 @@ export default function OnboardingPage() {
             </Animated.View>
           )}
         </View>
-      </Animated.View>
+      </View>
 
       <ConfirmDialog
         visible={birthConfirmOpen}
@@ -788,7 +781,10 @@ const styles = StyleSheet.create({
   // The bio step's page. Its LG top padding is deliberately tighter than
   // `page`'s XL: those steps open on a title, this one opens straight onto the
   // field, which needs no headroom above it.
-  pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: LG, paddingBottom: LG },
+  // No paddingBottom: the pager's frame already holds the air under the CTA, for
+  // this step exactly as for the other five (see pagerBottomAir). It used to add
+  // its own LG on top of the safe-area band the frame was reserving.
+  pageStretched: { flex: 1, paddingHorizontal: LG, paddingTop: LG },
 
   title: {
     fontSize: TEXT.xl,

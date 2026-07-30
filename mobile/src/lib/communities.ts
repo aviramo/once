@@ -91,14 +91,23 @@ export const friendOfLabel = (name: string, subjectIsMale?: boolean | null) =>
 const friendsCircleFirst = (myFriends: number, groupMembers: number) => myFriends < groupMembers
 
 /** What the card's circle chip says: the named circle, plus how many OTHER
- *  circles we share. Null when we share none. A circle counts once however many
- *  people are in it, so all my mutual friends with this person are one. */
+ *  circles we share. Null when we share none.
+ *
+ *  THE "+N" COUNTS WHAT THE POPUP LISTS (user directive 2026-07-30): a shared
+ *  group is one, and so is EVERY mutual friend — the popup gives each of them a
+ *  row of its own, so a chip that folded them into a single circle said "+2"
+ *  over a list of five rows. (It did, for one day: the 2026-07-29 rule was "a
+ *  circle counts once however many people are in it". Do not restore it without
+ *  also collapsing the popup's friend rows into one.)
+ *
+ *  Which circle is NAMED is a separate question and is unchanged — the smallest
+ *  one wins, with the friends circle ranked at MY friend count. */
 export function sharedCircle(
-  m: Pick<Profile, 'group_name' | 'group_extra' | 'group_members' | 'friend_name' | 'is_male'>,
+  m: Pick<Profile, 'group_name' | 'group_extra' | 'group_members' | 'friend_name' | 'friend_extra' | 'is_male'>,
   myFriends: number,
 ): { label: string; extra?: number } | null {
   const groups = m.group_name ? 1 + (m.group_extra ?? 0) : 0
-  const friends = m.friend_name ? 1 : 0
+  const friends = m.friend_name ? 1 + (m.friend_extra ?? 0) : 0
   const total = groups + friends
   if (!total) return null
   // A snapshot written before the server carried `group_members` cannot be

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Linking, TextInput as RNTextInput } from 'react-native'
-import { SharedValue, useSharedValue } from 'react-native-reanimated'
+import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Linking, TextInput as RNTextInput, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import Animated, { SharedValue, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -14,7 +14,7 @@ import { useAuthStore } from '../src/stores/authStore'
 import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { ToggleRow } from '../src/components/Switch'
-import { MatchCard, type CardAddChip } from '../src/components/MatchCard'
+import { MatchCard, ProfileActionBar } from '../src/components/MatchCard'
 import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import type { OverlaySheetBody } from '../src/components/OverlaySheet'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
@@ -22,23 +22,25 @@ import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } fr
 import { supabase } from '../src/lib/supabase'
 import type { Profile } from '../src/stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, DRAG_HANDLE, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, lh, SEARCH_DEBOUNCE_MS } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SHEET_GAP, OVERLAY, chromeTop, lh, SEARCH_DEBOUNCE_MS, bottomGap, BOTTOM_AIR, CIRCLES_BUTTON_SIZE } from '../src/tokens'
+import { iconScale } from '../src/fonts'
 import { GlyphSlot } from '../src/components/GlyphSlot'
-import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, SURFACE_SUNK, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
+import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
 import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, GroupsIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
+import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
 import { creditTotal } from '../src/lib/credits'
 import { hideProfileConfirm } from '../src/components/visibilityConfirms'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { BottomSheet, SheetActionRow, SheetTitle } from '../src/components/BottomSheet'
+import { BottomSheet, SheetActions, SheetTitle, SheetDesc } from '../src/components/BottomSheet'
 import { Button } from '../src/components/Button'
-import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
 import { useBottomInset } from '../src/hooks/useBottomInset'
 import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
-import { communitiesSummary, pendingApprovals, groupLabel, friendLabel, requestLabel } from '../src/lib/communities'
+import { communitiesSummary, pendingApprovals, groupLabel, friendLabel } from '../src/lib/communities'
+import { CirclesButton } from '../src/components/CirclesButton'
 import { StripBody } from '../src/components/Strip'
+import { MetaLine } from '../src/components/MetaLine'
 import type { MetaPart } from '../src/lib/meta'
-import { supportMailUrl } from '../src/lib/links'
+import { supportMailUrl, brandSiteUrl } from '../src/lib/links'
 import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
 import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
 import { units, M_PER_MI } from '../src/lib/units'
@@ -175,6 +177,7 @@ function SelectFieldRow({
   locked,
   labelColor,
   trailing,
+  trailingBeside,
 }: {
   label?: string
   /** The facts under the label, on the app's one fact line (MetaLine). */
@@ -197,6 +200,9 @@ function SelectFieldRow({
    * count, the waiting-requests count). A live quantity belongs on its own
    * surface, not glued into the label string. */
   trailing?: React.ReactNode
+  /** Stand that chip BESIDE the label instead of at the row's far edge (the
+   * credits count, user directive 2026-07-30) — see Strip's `endBeside`. */
+  trailingBeside?: boolean
 }) {
   const press = useRef(new RNAnimated.Value(0)).current
   const tapProps = useTapResponder(onPress, (pressed) => {
@@ -240,11 +246,11 @@ function SelectFieldRow({
         // opens. Only the row BOX stays here, because a menu row's is its own:
         // the press fade, the card grouping, the large/locked variants.
         // What that buys, and what this row therefore no longer decides:
-        //  • The chip rides the row's LAST TEXT LINE, at its END edge — the
-        //    subtitle when there is one, the label when there is not. It is
-        //    never glued beside the label and never centred against the whole
-        //    row: centred it read as a control floating beside the button
-        //    rather than as a fact stated by its line.
+        //  • The chip rides the row's LAST TEXT LINE — the subtitle when there
+        //    is one, the label when there is not — at that line's END edge, or
+        //    right beside its words with `trailingBeside`. It is never centred
+        //    against the whole row: centred it read as a control floating beside
+        //    the button rather than as a fact stated by its line.
         //  • A subtitle stating several facts (the communities counts) is laid
         //    out by MetaLine, so it wraps when the column is narrow, drops its
         //    separator at the break, and never paints its scripts out of order.
@@ -264,6 +270,7 @@ function SelectFieldRow({
                 titleColor={labelColor}
                 meta={subtitle}
                 lineEnd={trailing ? <View style={styles.selectRowTrailing}>{trailing}</View> : null}
+                endBeside={trailingBeside}
               />
             </View>
           </View>
@@ -355,40 +362,44 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   )
 }
 
-// ── Animated Toggle Button ─────────────────────────────────────────────────
-// Used for the gender chips (and anywhere else two-state pill buttons appear).
-// Animates background color, text color, and a small scale bump on press.
-
-// Visibility + Communities: the menu's FIRST group (user directive
-// 2026-07-27), standing above the preferences group with a full gap under it.
-// Both rows answer "who gets to see me" — one is the switch, the other the
-// circle — so they share one group, ahead of the search preferences and well
-// ahead of the account links at the bottom.
-function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+// ── The visibility chip: the state IS the control ──────────────────────────
+// Visibility (visible <-> hidden) rides the profile photo's own top-END tile,
+// where the "Edit your profile" caption used to sit (user directive
+// 2026-07-30). The state IS the label — "Hidden" / "Visible" — so the chip that
+// says it is also the chip that flips it, and the photo under it keeps the tap
+// that opens profile editing. It is the ONLY way back to visible now that page2
+// has no UI of its own, so it must stay reachable and must not silently fail:
+// going hidden kicks every watcher pinned to the user, so it is confirmed
+// first; going visible is immediate.
+//
+// Visibility is NOT credit-gated any more. The server used to auto-hide a
+// zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
+// control routed an empty wallet to the buy picker instead of app/free2, which
+// would have been undone in the same round trip. That auto-hide is gone
+// (2026-07-22): being broke keeps you visible on purpose — the invitation
+// you can't accept is the moment to buy.
+//
+// It is FLOATING CHROME — a sibling AFTER the menu's scroll, not a layer inside
+// the pinned photo — and that is load-bearing rather than stylistic: the photo
+// is painted and hit-tested UNDER the scroll, which is exactly why a
+// transparent spacer inside the scroll owns the photo's tap, so a pressable
+// tile parked in the photo layer could never be pressed at all. Standing over
+// the scroll it has to take itself out of the way once the content has risen to
+// the chrome line — the fade below, at the same moment the rising white body
+// used to cover the caption. The one re-render that costs (the inert flip, so a
+// faded tile never eats a tap meant for the row under it) happens INSIDE this
+// component, so nothing else in the menu re-renders because the page scrolled.
+function VisibilityChip({ scrollY, contentTop, topPad }: {
+  scrollY: SharedValue<number>
+  /** Where the scroll's first opaque content sits: the tile fades out as that
+   *  content rises to the tile's own bottom edge. */
+  contentTop: number
+  topPad: number
+}) {
   const { profile } = useUserStore()
-  const router = useRouter()
-  // Visibility (visible <-> hidden). This row is the ONLY way back to visible
-  // now that page2 has no UI of its own, so it must stay reachable and must
-  // not silently fail. Going hidden kicks every watcher pinned to the user,
-  // so it is confirmed first; going visible is immediate.
-  //
-  // Visibility is NOT credit-gated any more. The server used to auto-hide a
-  // zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
-  // row routed an empty wallet to the buy picker instead of app/free2, which
-  // would have been undone in the same round trip. That auto-hide is gone
-  // (2026-07-22): being broke keeps you visible on purpose — the invitation
-  // you can't accept is the moment to buy.
   const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
   const [visibilityBusy, setVisibilityBusy] = useState(false)
   const isHidden = selectIsHidden(profile)
-  // Communities are members-only: a browse-only account (profile not yet built)
-  // may not enter the hub at all, because every surface in there shows the user
-  // to other people (a group's member list, a friend request). Same marker the
-  // invite gate uses (selectProfileBuilt), so "full member" means one thing.
-  // The tap opens an explanation whose single button is the build flow, so the
-  // popup that says what is missing is also the way to fix it.
-  const profileBuilt = selectProfileBuilt(profile)
-  const [commGateOpen, setCommGateOpen] = useState(false)
 
   const runVisibility = useCallback(async (endpoint: string) => {
     if (visibilityBusy) return
@@ -403,88 +414,55 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
     runVisibility('app/free2')
   }, [isHidden, runVisibility])
 
+  // The lane measures itself: what has to clear the rising content is the
+  // tile's REAL bottom edge — the chrome line plus however tall the chip (and
+  // the watcher tile under it) actually painted — never a height computed from
+  // tokens, which a large font scale would make wrong (see GlyphSlot).
+  const laneHeight = useSharedValue(0)
+  const covered = useSharedValue(0)
+  const [inert, setInert] = useState(false)
+  useAnimatedReaction(
+    () => laneHeight.value > 0 && scrollY.value > Math.max(0, contentTop - laneHeight.value),
+    (hide, prev) => {
+      if (hide === prev) return
+      covered.value = withTiming(hide ? 1 : 0)
+      runOnJS(setInert)(hide)
+    },
+    [contentTop],
+  )
+  const fade = useAnimatedStyle(() => ({ opacity: 1 - covered.value }))
+
   if (!profile) return null
 
-  // Watcher count drives two surfaces: the chip on the Visible row and the
-  // concrete ripple in the hide confirm. deriveCompat only fills the array
-  // while page2 is free, so a hidden user reads 0 without a separate guard.
+  // Watcher count drives two surfaces: the pill inside the chip and the concrete
+  // ripple in the hide confirm. deriveCompat only fills the array while page2
+  // is free, so a hidden user reads 0 without a separate guard.
   const watcherCount = selectWatcherCount(profile)
   const hideConfirmConfig = hideProfileConfirm(watcherCount)
 
-  // Communities row summary — read from the denormalized relations.communities
-  // field (instant, no query). Friends first, then groups (= managed + joined),
-  // and anything waiting on MY answer (friend requests + join requests on
-  // groups I manage) is the last segment of the same line, the way a managed
-  // group row reads
-  // ("Approved · 17 members · 3 requests") — a decision someone else is
-  // waiting on is a fact about the row, not a badge beside it. An account with
-  // neither groups nor friends still says what the row is for instead of
-  // dropping to a bare label.
-  const comm = communitiesSummary(profile)
-  const commGroups = comm ? comm.managed.length + comm.joined.length : 0
-  const commRequests = pendingApprovals(comm)
-  // What is WAITING is off the meta line (user directive 2026-07-28): it rides
-  // its own solid-purple chip, exactly as it does on every row of the hub the
-  // tap opens, so "someone is waiting on you" is said the one way in both
-  // places. The line keeps the standing facts, what I have.
-  const commSubtitle: MetaPart[] | undefined = !comm ? undefined
-    : comm.friends > 0 || commGroups > 0
-      ? [comm.friends > 0 && friendLabel(comm.friends), commGroups > 0 && groupLabel(commGroups)]
-      : [t('communities.rowEmpty')]
-
   return (
-    <View style={styles.section}>
-      <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
-        {/* Visibility FIRST: it is a game-state control, not an account
-            detail, and it is the only path back to being discoverable. */}
-        {/* The state IS the label: "Visibility  Hidden" says the same thing
-            twice, and the eye glyph already names the field. */}
-        {/* The watcher count is a live quantity, so it rides its own chip
-            instead of a bare "(n)" glued to the label: a number in
-            parentheses says nothing about what it counts, the chip spells
-            it out ("3 watching you"). */}
-        <SelectFieldRow
-          grouped
-          label={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
-          trailing={!isHidden && watcherCount > 0 ? (
-            <Chip
-              small
-              text={watcherCount === 1
-                ? t('settings.watchersOne')
-                : t('settings.watchersMany').replace('{count}', String(watcherCount))}
-            />
-          ) : undefined}
+    <>
+      <Animated.View
+        style={[styles.visibilityChip, { paddingTop: topPad }, fade]}
+        pointerEvents={inert ? 'none' : 'box-none'}
+        onLayout={e => { laneHeight.value = e.nativeEvent.layout.height }}
+      >
+        {/* ONE tile: the state, and the watcher count INSIDE it (user directive
+            2026-07-30) — the count is a fact ABOUT this state, not a second tile
+            beside it, so it rides the chip's own trailing pill: the eye leads,
+            the state reads, the number stands at the far end. The NUMBER ALONE,
+            on the state's own line — the tile is small and floats on a photo,
+            and "Visible" already says what is being counted. */}
+        <Chip
+          onPhoto
+          text={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
+          // The chip baseline every glyph on a tile takes, not the row's
+          // ICON.md: this eye stands beside a chip label now.
+          renderIcon={c => isHidden ? <EyeOffIcon color={c} size={ICON.sm} /> : <EyeOpenIcon color={c} size={ICON.sm} />}
+          count={!isHidden && watcherCount > 0 ? watcherCount : undefined}
           onPress={onVisibilityPress}
-          // Plain ICON.md, like every other row. The eye used to be bumped to
-          // ICON.lg to make up for a flat lens that fills barely half its box
-          // vertically — but the eye's artwork runs the FULL width of its box
-          // (2..22 of 24), so the bump made it the widest ink in the column by
-          // a wide margin: 18.2dp across, against 15-16.5 for everything else,
-          // which is exactly how it read (user, 2026-07-29). At ICON.md its ink
-          // box is 16.4 x 11.9 and its ink mass 70dp², both mid-pack.
-          icon={isHidden ? <EyeOffIcon color={INK} size={ICON.md} /> : <EyeOpenIcon color={INK} size={ICON.md} />}
-          labelColor={INK}
         />
-        {/* Communities: a navigable row (like Account) that opens the full
-            hub — my friends, groups I manage, groups I'm in, create, find.
-            Superseded the inline group chips + join-by-code sheet, which now
-            live inside the hub. */}
-        <SelectFieldRow
-          grouped
-          label={t('communities.menuRow')}
-          subtitle={commSubtitle}
-          // The strips' own chip, exactly: the small tile, in full-strength
-          // purple because something is WAITING here — the pale neutral one the
-          // visibility row wears states a fact, this one asks for an answer.
-          trailing={commRequests > 0 ? <Chip small text={requestLabel(commRequests)} tone="solid" /> : undefined}
-          onPress={() => {
-            if (!profileBuilt) { setCommGateOpen(true); return }
-            return onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })
-          }}
-          icon={<GroupsIcon color={INK} />}
-          labelColor={INK}
-        />
-      </View>
+      </Animated.View>
       {/* The confirm glyph is ICON.md, the size every other button icon wears:
           the icon's own 28 default made it tower over the label beside it. */}
       <ConfirmDialog
@@ -497,6 +475,63 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
         onConfirm={() => runVisibility('app/lock2')}
         busy={visibilityBusy}
         draggable
+      />
+    </>
+  )
+}
+
+// Circles: the ONE thing in this menu that is not a row (user directive
+// 2026-07-30). It is the big round emblem the page hangs on the seam between the
+// profile photo and the list — the mark, the word, the counts and the waiting
+// chip, all INSIDE the disc — because circles are not a preference like the rows
+// under them, they are what decides who the app shows you. There is no Circles
+// row any more; the emblem is the whole entry (see CirclesButton.tsx for the
+// tile, and SettingsPage for where it hangs).
+//
+// This component owns everything ABOUT the entry — what the counts say, the
+// members-only gate, the popup that lifts it — and nothing about where it sits:
+// the seam it hangs on belongs to the page, which parks it in a lane of its own.
+function CirclesEntry({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+  const { profile } = useUserStore()
+  const router = useRouter()
+  // Communities are members-only: a browse-only account (profile not yet built)
+  // may not enter the hub at all, because every surface in there shows the user
+  // to other people (a group's member list, a friend request). Same marker the
+  // invite gate uses (selectProfileBuilt), so "full member" means one thing.
+  // The tap opens an explanation whose single button is the build flow, so the
+  // popup that says what is missing is also the way to fix it.
+  const profileBuilt = selectProfileBuilt(profile)
+  const [commGateOpen, setCommGateOpen] = useState(false)
+
+  if (!profile) return null
+
+  // The counts — read from the denormalized relations.communities field
+  // (instant, no query). Friends first, then groups (= managed + joined), on the
+  // app's one fact line. An account with neither still says what circles are FOR
+  // instead of dropping to a bare name.
+  const comm = communitiesSummary(profile)
+  const commGroups = comm ? comm.managed.length + comm.joined.length : 0
+  // What is WAITING on my answer (friend requests + join requests on groups I
+  // manage) stays off the fact line (user directive 2026-07-28): it rides its own
+  // solid-purple chip, exactly as it does on every row of the hub this opens, so
+  // "someone is waiting on you" is said the one way in both places. Inside the
+  // disc, now, and not on a row's END edge (user directive 2026-07-30).
+  const commRequests = pendingApprovals(comm)
+  const commFacts: MetaPart[] = !comm ? []
+    : comm.friends > 0 || commGroups > 0
+      ? [comm.friends > 0 && friendLabel(comm.friends), commGroups > 0 && groupLabel(commGroups)]
+      : [t('communities.rowEmpty')]
+
+  return (
+    <>
+      <CirclesButton
+        title={t('communities.menuRow')}
+        facts={commFacts}
+        requests={commRequests}
+        onPress={() => {
+          if (!profileBuilt) { setCommGateOpen(true); return }
+          onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })
+        }}
       />
       {/* The one button is the build flow itself, wearing the same label as the
           menu's own build-profile CTA: the popup that says what is missing is
@@ -511,7 +546,7 @@ function AudienceContent({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageCo
         onCancel={() => setCommGateOpen(false)}
         draggable
       />
-    </View>
+    </>
   )
 }
 
@@ -748,10 +783,14 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     : '—'
 
   const nameAndGender = [profile.name, gender !== '—' ? gender : null].filter(Boolean).join(', ') || '—'
-  const detailRows: Array<{ label: string; value: string }> = [
-    { label: 'nameGender',            value: nameAndGender },
-    { label: t('settings.birthDate'), value: profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : '—' },
-    { label: t('settings.email'),     value: user.email ?? '—' },
+  // Who this account is, as facts about one thing — so they go on the app's ONE
+  // fact line (MetaLine), not three stacked pills. A chip is a tile you can act
+  // on or a count that stands apart; these are the details OF the account named
+  // in the title above them, which is exactly what a meta line states.
+  const identityFacts: MetaPart[] = [
+    nameAndGender,
+    profile.birth_date ? `${formatBirthDate(profile.birth_date)} (${age})` : null,
+    user.email ?? null,
   ]
 
   return (
@@ -760,18 +799,18 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
       onDismiss={onDismiss}
       onClosed={handleClosed}
     >
-      {/* Identity details as chips, stacked one under the other — each pill
-          hugs its own text (alignItems:'flex-start' on the column), so the
-          block reads as a list of facts rather than a wrapping chip cloud. */}
-      <View style={styles.accountPopupList}>
-        {detailRows.map(r => (
-          <Chip key={r.label} text={r.value} />
-        ))}
+      {/* The popup says whose account this is, then states it: the title, and
+          under it the identity on the app's one fact line, centred and in full
+          INK the way the group popup's head states a group's facts. The line
+          stands where a description would, so it takes that same gap. */}
+      <View style={styles.accountPopupHead}>
+        <SheetTitle>{t('settings.myAccount')}</SheetTitle>
+        <MetaLine parts={identityFacts} color={INK} align="center" />
       </View>
       {/* The same pair of full-width buttons the chat menu's leave/block sheet
           uses: the action you opened this for is the solid primary, the
           drastic and rarely-wanted one recedes to the muted secondary. */}
-      <View style={styles.accountActions}>
+      <SheetActions>
         <Button
           label={tg('settings.signOut', profile.is_male)}
           iconStart={<SignOutIcon color={WHITE} />}
@@ -783,7 +822,7 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
           iconStart={<TrashIcon color={INK_SUBTLE} />}
           onPress={() => { tapWarning(); dismissThen(onDeletePress) }}
         />
-      </View>
+      </SheetActions>
     </BottomSheet>
   )
 }
@@ -811,7 +850,6 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
   groups: Group[] | null
   setGroups: (g: Group[]) => void
 }) {
-  const kbHeight = useKeyboardHeight()
   const codeInputRef = useRef<RNTextInput>(null)
 
   const [code, setCode] = useState('')
@@ -869,118 +907,96 @@ function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }
     }
   }
 
+  // Leaving a group asks the app's ONE question popup (user directive
+  // 2026-07-30: every popup is the popup component). It used to hand-roll the
+  // same title, the same sentence and the same cancel/confirm pair inside this
+  // sheet, at its own type size (a -0.3 tracking nobody else had), its own
+  // dimmed hint colour and its own gaps — which is precisely why leaving a group
+  // from the menu did not look like leaving one from the Communities hub, where
+  // this identical question is already a ConfirmDialog.
+  if (mode === 'leave') {
+    return (
+      <ConfirmDialog
+        visible={visible && !!leaveGroup}
+        title={leaveGroup ? t('settings.groupsLeaveTitle').replace('{name}', leaveGroup.name) : ''}
+        description={t('settings.groupsLeaveDesc')}
+        cancelLabel={t('settings.groupsBack')}
+        confirmLabel={t('settings.groupsLeaveConfirm')}
+        confirmIconStart={<SignOutIcon color={WHITE} />}
+        busy={leavingId !== null}
+        onCancel={() => { tap(); onDismiss() }}
+        onConfirm={() => { if (leaveGroup) onLeave(leaveGroup.id) }}
+        draggable
+      />
+    )
+  }
+
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
     >
-      {mode === 'leave' && leaveGroup ? (
-        <View style={groupsPopupStyles.step}>
-          <Text style={groupsPopupStyles.title}>
-            {t('settings.groupsLeaveTitle').replace('{name}', leaveGroup.name)}
-          </Text>
-          <Text style={groupsPopupStyles.hint}>{t('settings.groupsLeaveDesc')}</Text>
-          <View style={groupsPopupStyles.actions}>
-            <View style={groupsPopupStyles.action}>
-              <Button
-                label={t('settings.groupsBack')}
-                onPress={() => { tap(); onDismiss() }}
-                disabled={leavingId !== null}
-                variant="secondary"
-                size="lg"
-              />
-            </View>
-            <View style={groupsPopupStyles.action}>
-              <Button
-                label={t('settings.groupsLeaveConfirm')}
-                onPress={() => onLeave(leaveGroup.id)}
-                loading={leavingId !== null}
-                iconStart={<SignOutIcon color={WHITE} />}
-                variant="primary"
-                size="lg"
-              />
-            </View>
-          </View>
+      <SheetTitle>{t('settings.groupsJoinTitle')}</SheetTitle>
+      <SheetDesc>{t('settings.groupsJoinHint')}</SheetDesc>
+      <View style={groupsPopupStyles.inputWrap}>
+        <TextInput
+          ref={codeInputRef}
+          style={groupsPopupStyles.input}
+          value={code}
+          onChangeText={(v) => {
+            const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
+            setCode(digits)
+            if (codeError) setCodeError(null)
+          }}
+          keyboardType="number-pad"
+          maxLength={INVITE_CODE_LEN}
+          placeholder={t('settings.groupsCodePlaceholder')}
+          placeholderTextColor={INK_DIM}
+          autoComplete="off"
+          textContentType="none"
+          editable={!submitting}
+          autoFocus
+        />
+      </View>
+      {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
+      <SheetActions row>
+        <View style={groupsPopupStyles.action}>
+          <Button
+            label={t('settings.groupsBack')}
+            onPress={() => { tap(); Keyboard.dismiss(); onDismiss() }}
+            disabled={submitting}
+            variant="secondary"
+            size="lg"
+          />
         </View>
-      ) : (
-        <View style={groupsPopupStyles.step}>
-          <Text style={groupsPopupStyles.title}>{t('settings.groupsJoinTitle')}</Text>
-          <Text style={groupsPopupStyles.hint}>{t('settings.groupsJoinHint')}</Text>
-          <View style={groupsPopupStyles.inputWrap}>
-            <TextInput
-              ref={codeInputRef}
-              style={groupsPopupStyles.input}
-              value={code}
-              onChangeText={(v) => {
-                const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
-                setCode(digits)
-                if (codeError) setCodeError(null)
-              }}
-              keyboardType="number-pad"
-              maxLength={INVITE_CODE_LEN}
-              placeholder={t('settings.groupsCodePlaceholder')}
-              placeholderTextColor={INK_DIM}
-              autoComplete="off"
-              textContentType="none"
-              editable={!submitting}
-              autoFocus
-            />
-          </View>
-          {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
-          <View style={groupsPopupStyles.actions}>
-            <View style={groupsPopupStyles.action}>
-              <Button
-                label={t('settings.groupsBack')}
-                onPress={() => { tap(); Keyboard.dismiss(); onDismiss() }}
-                disabled={submitting}
-                variant="secondary"
-                size="lg"
-              />
-            </View>
-            <View style={groupsPopupStyles.action}>
-              <Button
-                label={t('settings.groupsJoinAction')}
-                onPress={onJoin}
-                disabled={code.length !== INVITE_CODE_LEN || submitting}
-                loading={submitting}
-                iconStart={<LogInIcon color={WHITE} />}
-                variant="primary"
-                size="lg"
-              />
-            </View>
-          </View>
+        <View style={groupsPopupStyles.action}>
+          <Button
+            label={t('settings.groupsJoinAction')}
+            onPress={onJoin}
+            disabled={code.length !== INVITE_CODE_LEN || submitting}
+            loading={submitting}
+            iconStart={<LogInIcon color={WHITE} />}
+            variant="primary"
+            size="lg"
+          />
         </View>
-      )}
+      </SheetActions>
     </BottomSheet>
   )
 }
 
 const groupsPopupStyles = StyleSheet.create({
-  header: { paddingHorizontal: MD, paddingBottom: MD },
-  // The standard popup title: same size, weight and centring as every other
-  // sheet in the app, so this one stops looking like a section heading.
-  title: { fontSize: TEXT.lg, fontWeight: WEIGHT.medium, color: INK, textAlign: 'center', letterSpacing: -0.3 },
-  mineSection: { paddingHorizontal: MD, paddingBottom: LG },
-  joinSection: { paddingHorizontal: MD, paddingTop: LG },
-  // Join and leave steps: one titled block with its own actions row.
-  step: { paddingHorizontal: MD, paddingTop: SM },
-  actions: { flexDirection: 'row', gap: SM, marginTop: LG },
+  // One of the two buttons in the sheet's action row. The row itself, and the gap
+  // over it, are <SheetActions>'s — the same block every popup's buttons sit in.
   action: { flex: 1 },
-  hint: { fontSize: TEXT.md, color: INK_DIM, marginTop: XS, lineHeight: lh(TEXT.md) },
-  empty: { fontSize: TEXT.md, color: INK_DIM, paddingVertical: SM, textAlign: 'center' },
-  // Wrap: as many chips per line as fit, centred. alignItems keeps a chip
-  // sized to its own content instead of stretching to the tallest on its line.
-  list: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: SM },
-  rowTag: { fontSize: TEXT.sm, color: INK_DIM },
-  sectionDivider: { height: 1, backgroundColor: LINE, marginHorizontal: MD },
   // Reads as a field: a border and a white fill, not just a tinted block. The
   // previous WHITE_SOFT-on-white panel gave no edge to aim at. Skin comes from
   // FIELD_SKIN like every other typing surface — it used to hand-roll its own
   // 1.5px INK_DIM rule, a heavier edge than the login field it sits beside.
+  // The gap above it is the popup's between-blocks one, not a number of its own.
   inputWrap: {
     ...FIELD_SKIN,
-    marginTop: LG,
+    marginTop: SHEET_GAP.block,
     paddingHorizontal: MD,
     paddingVertical: MD,
   },
@@ -1008,7 +1024,6 @@ function AgeRangePopup({
 }) {
   const [fromText, setFromText] = useState(String(ageMin))
   const [toText, setToText] = useState(String(ageMax))
-  const kbHeight = useKeyboardHeight()
   const fromRef = useRef<RNTextInput>(null)
   const toRef = useRef<RNTextInput>(null)
 
@@ -1035,8 +1050,6 @@ function AgeRangePopup({
     <BottomSheet
       visible={visible}
       onDismiss={handleDismiss}
-      cardWrapStyle={kbHeight > 0 ? { marginBottom: kbHeight } : undefined}
-      contentStyle={agePopupStyles.card}
     >
       <View style={agePopupStyles.row}>
         <View style={agePopupStyles.field}>
@@ -1074,18 +1087,13 @@ function AgeRangePopup({
 }
 
 const agePopupStyles = StyleSheet.create({
-  card: {
-    paddingHorizontal: MD,
-    paddingTop: 0,
-  },
-  title: {
-    fontSize: TEXT.lg, fontWeight: WEIGHT.medium, color: INK,
-    textAlign: 'center', marginBottom: MD,
-  },
+  // Two fields side by side and nothing else — no title, so the sheet's own top
+  // air stands above them and its bottom gap under them. It used to declare a
+  // gutter, a paddingTop:0 and an SM above and below the row, which is why this
+  // popup opened tighter than the one that raised it. (Its unused `title` style
+  // went with them: this popup has never rendered one.)
   row: {
     flexDirection: 'row', gap: SM,
-    marginTop: SM,
-    marginBottom: SM,
   },
   field: {
     flex: 1,
@@ -1197,9 +1205,11 @@ function SelectListRow({ label, selected, isLast, onPress, icon }: {
 }
 
 const selectListStyles = StyleSheet.create({
-  // Edge-to-edge rows; the air under the last one is the BottomSheet's, the
-  // same in every popup (it used to be an XL of its own here).
-  card: { padding: 0, paddingTop: 0 },
+  // Edge-to-edge rows: the ONE thing a popup body may override about the frame,
+  // because a row that is tapped runs the full width of the sheet. The air above
+  // the first row and under the last one are still the popup's own, the same in
+  // every popup (they used to be an XL and a 0 of this list's own).
+  card: { paddingHorizontal: 0 },
   row: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: MD, paddingHorizontal: MD,
@@ -1354,11 +1364,6 @@ function LocationPopup({
   const [pendingType, setPendingType] = useState<'home' | 'work'>('home')
   const sessionTokenRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
-  // Keyboard tracking — Modal + statusBarTranslucent prevents window-resize
-  // avoidance on both platforms (BottomSheet no longer carries a global lift),
-  // so we shrink the sheet height and add marginBottom to lift it above the
-  // keyboard. Applies to iOS and Android alike.
-  const kbHeight = useKeyboardHeight()
 
   // Reset every time the sheet opens.
   useEffect(() => {
@@ -1469,21 +1474,15 @@ function LocationPopup({
     }
   }
 
-  // While the keyboard is up we shrink the sheet AND lift it via marginBottom.
-  // BottomSheet no longer carries a global keyboard lift, so this nudge must
-  // apply on iOS too.
-  const addressEffectiveH = kbHeight > 0
-    ? Math.max(240, addressSheetH - kbHeight)
-    : addressSheetH
-
   return (
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      cardWrapStyle={step === 'address' ? {
-        height: addressEffectiveH,
-        ...(kbHeight > 0 ? { marginBottom: kbHeight } : {}),
-      } : undefined}
+      // The address step claims a fixed tall sheet so the results list has room
+      // whether or not it has results yet. Nothing here about the keyboard: the
+      // sheet lifts itself and its `flexShrink` takes this height back down by
+      // however much the keyboard needs (BottomSheet.tsx).
+      cardWrapStyle={step === 'address' ? { height: addressSheetH } : undefined}
       contentStyle={step === 'address' ? locationPopupStyles.addressCard : selectListStyles.card}
     >
       {step === 'menu' ? (
@@ -1569,18 +1568,20 @@ const locationPopupStyles = StyleSheet.create({
     paddingHorizontal: MD, paddingTop: MD,
   },
   statusText: { fontSize: TEXT.md, color: INK_SUBTLE },
+  // Why the address could not be resolved, under the field it belongs to. INK,
+  // not WHITE_MID: popup text is full-strength purple on the white sheet (user
+  // directive 2026-07-26) — a near-white ink here was invisible on it.
   errorText: {
     paddingHorizontal: MD, paddingTop: MD,
-    fontSize: TEXT.md, color: WHITE_MID,
-    lineHeight: lh(TEXT.md),
+    fontSize: TEXT.md, color: INK,
   },
-  // Address-step content fills the (now tall) cardWrap. The bottom is the
-  // sheet's, as in every popup.
-  addressCard: {
-    flex: 1,
-    paddingTop: 0,
-  },
-  addressBody: { flex: 1, paddingHorizontal: MD, paddingTop: SM },
+  // Address-step content fills the (now tall) cardWrap. Its own gutter, because
+  // both steps of this popup are edge-to-edge row lists (`selectListStyles.card`)
+  // and the search field is the one thing here that is not a row. The air ABOVE
+  // it is the popup's, as in every popup — this step used to add an SM of its own
+  // on top of it — and so is the air under the list.
+  addressCard: { flex: 1, paddingHorizontal: 0 },
+  addressBody: { flex: 1, paddingHorizontal: MD },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: SM, marginBottom: SM,
   },
@@ -1681,6 +1682,12 @@ function FamilyDayCell({
 
 const FAMILY_AGE_MAX = 25
 
+// How tall the inline value picker's list may grow before it scrolls. A cap of
+// its own rather than the sheet's, because this picker STACKS over the family
+// sheet: it has to read as a small list laid on that sheet, not as a second
+// full-height popup replacing it.
+const FAMILY_PICKER_MAX_H = 360
+
 // Inline picker triggered from a dropdown row. Stacks above the family sheet
 // using its own Modal, dismisses by tap-outside or selection.
 function FamilyValuePopup({
@@ -1699,8 +1706,8 @@ function FamilyValuePopup({
       onDismiss={onDismiss}
       contentStyle={familyStyles.valuePopupCard}
     >
-      <SheetTitle style={familyStyles.valuePopupTitle}>{title}</SheetTitle>
-      <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+      <SheetTitle>{title}</SheetTitle>
+      <ScrollView style={familyStyles.valuePopupList} keyboardShouldPersistTaps="handled">
         {options.map(opt => {
           const isSelected = selected === opt.value
           return (
@@ -1900,8 +1907,7 @@ export function FamilyKidsPopup({
       contentStyle={familyStyles.sheet}
     >
               <ScrollView
-                style={{ flexShrink: 1 }}
-                contentContainerStyle={familyStyles.scrollContent}
+                style={familyStyles.scrollBody}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
@@ -2028,26 +2034,19 @@ export function FamilyKidsPopup({
 }
 
 const familyStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  shadowGradient: { height: 60, marginBottom: -1 },
-  shadowLayer: { flex: 1, backgroundColor: SURFACE_SUNK },
-  gestureWrap: { flexShrink: 1 },
   sheet: {
-    // No ground of its own: every popup is WHITE and BottomSheet's card paints
-    // it (user directive 2026-07-28). Only metrics here.
-    paddingTop: RADIUS,
+    // No ground and no frame of its own: every popup is WHITE and BottomSheet's
+    // card paints it (user directive 2026-07-28), and the air above the first row
+    // is the popup's (2026-07-30 — this sheet used to add a RADIUS of its own,
+    // and its scroll another SM on top of that). Only the tighter gutter its
+    // full-width rows want, and the shrink that lets the body obey the sheet's
+    // height cap.
     paddingHorizontal: SM,
     flexShrink: 1,
   },
-  dragHandle: {
-    alignSelf: 'center',
-    width: DRAG_HANDLE.width, height: DRAG_HANDLE.height, borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: INK_DIM,
-    marginBottom: MD,
-  },
-  // Top only: the sheet's own gap sits under the scroll, so a bottom pad here
-  // would stack on it.
-  scrollContent: { paddingTop: SM },
+  // The body gives when the sheet hits its height cap; it adds no padding of its
+  // own at either end (both are the popup's).
+  scrollBody: { flexShrink: 1 },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2151,13 +2150,14 @@ const familyStyles = StyleSheet.create({
   // reads as one continuous surface.
   interestedBar: { backgroundColor: SURFACE },
 
-  // Inline picker (count / age) sheet
-  valuePopupOverlay: { flex: 1, justifyContent: 'flex-end' },
+  // Inline picker (count / age) sheet. A tighter gutter than the standard one
+  // because its body is a list of full-width tappable rows, like every other
+  // row-list popup; everything else about the frame — the air above the title,
+  // under the list, and the gap between them — is the popup's own.
   valuePopupCard: {
-    paddingTop: RADIUS, paddingHorizontal: SM,
+    paddingHorizontal: SM,
   },
-  // Spacing only — the type comes from SheetTitle (BottomSheet.tsx).
-  valuePopupTitle: { marginBottom: SM },
+  valuePopupList: { maxHeight: FAMILY_PICKER_MAX_H, marginTop: SHEET_GAP.block },
   valueRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: MD, paddingHorizontal: SM,
@@ -2180,9 +2180,14 @@ const familyStyles = StyleSheet.create({
 
 // ── Photo edit popup ────────────────────────────────────────────────────────
 // Bottom sheet shown when the user taps a photo on their own profile preview.
-// Lays out four actions in a 2-row grid: Move up / Move down on top, then a
-// full-width Replace, then a destructive-tinted Delete. Up/Down are disabled
-// at the photo-list boundaries.
+// Three rows, laid out so the sheet says where each action SENDS the photo
+// (user directive 2026-07-30). "Move up" is the top row and "Move down" the
+// bottom one — each reorder control sits at the end it moves toward — and each
+// stands its chevron on that same edge of its own tile: the up tile's arrow is
+// ABOVE its label, the down tile's is BELOW. The two actions that move nothing,
+// Replace and Delete, share the middle as a side-by-side pair. Every tile is
+// centred on the popup's axis, so the four glyphs read as one column.
+// Up/Down are disabled at the photo-list boundaries.
 
 // ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon imported
 // from '../src/components/icons'.
@@ -2207,72 +2212,129 @@ function PhotoOptionsPopup({
       onDismiss={onDismiss}
       contentStyle={photoOptionsStyles.sheet}
     >
+      {/* Four choices and nothing else, so they are the popup's action block:
+          one gap between them, the popup's own air above and below it. The
+          pair's own gap is that same SM, so the middle row is spaced like the
+          rows around it in both directions. */}
+      <SheetActions flush>
+      <PhotoOptionTile
+        glyph={<ChevronUpIcon color={canMoveUp ? INK : INK_SUBTLE} />}
+        label={t('settings.photoEditMoveUp')}
+        disabled={!canMoveUp}
+        onPress={() => { tap(); onMoveUp() }}
+      />
+
       <View style={photoOptionsStyles.row}>
-        <Pressable
-          style={[photoOptionsStyles.tile, !canMoveUp && photoOptionsStyles.tileDisabled]}
-          onPress={() => { if (canMoveUp) { tap(); onMoveUp() } }}
-        >
-          <ChevronUpIcon color={canMoveUp ? INK : INK_SUBTLE} />
-          <Text style={[photoOptionsStyles.tileLabel, !canMoveUp && photoOptionsStyles.tileLabelDisabled]}>
-            {t('settings.photoEditMoveUp')}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[photoOptionsStyles.tile, !canMoveDown && photoOptionsStyles.tileDisabled]}
-          onPress={() => { if (canMoveDown) { tap(); onMoveDown() } }}
-        >
-          <ChevronDownIcon color={canMoveDown ? INK : INK_SUBTLE} />
-          <Text style={[photoOptionsStyles.tileLabel, !canMoveDown && photoOptionsStyles.tileLabelDisabled]}>
-            {t('settings.photoEditMoveDown')}
-          </Text>
-        </Pressable>
+        <PhotoOptionTile
+          half
+          glyph={replacing ? <ActivityIndicator color={INK} /> : <PhotoReplaceIcon color={INK} />}
+          label={t('settings.photoEditReplace')}
+          disabled={replacing}
+          onPress={() => { tap(); onReplace() }}
+        />
+
+        {/* Deliberately NOT gold: this sheet's tiles are one set of choices and
+            the gold made Delete read as a warning banner rather than a sibling
+            of Move / Replace (user request 2026-07-20). Deleting a photo is
+            reversible by re-adding one, and the confirm still gates it; the
+            warning haptic below carries the caution instead of the colour. */}
+        <PhotoOptionTile
+          half
+          glyph={<PhotoTrashIcon color={canDelete ? INK : INK_SUBTLE} />}
+          label={canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
+          disabled={!canDelete}
+          onPress={() => { tapWarning(); onDelete() }}
+        />
       </View>
 
-      <SheetActionRow
-        icon={replacing ? <ActivityIndicator color={INK} /> : <PhotoReplaceIcon color={INK} />}
-        label={t('settings.photoEditReplace')}
-        disabled={replacing}
-        onPress={() => { tap(); onReplace() }}
+      {/* The one tile that stands its glyph UNDER its label: the chevron sits
+          on the edge of the tile it sends the photo toward, exactly as the up
+          tile's sits on its top edge. */}
+      <PhotoOptionTile
+        glyphBelow
+        glyph={<ChevronDownIcon color={canMoveDown ? INK : INK_SUBTLE} />}
+        label={t('settings.photoEditMoveDown')}
+        disabled={!canMoveDown}
+        onPress={() => { tap(); onMoveDown() }}
       />
-
-      {/* Deliberately NOT gold: this sheet's rows are one set of choices and
-          the gold made Delete read as a warning banner rather than a sibling
-          of Move / Replace (user request 2026-07-20). Deleting a photo is
-          reversible by re-adding one, and the confirm still gates it; the
-          warning haptic below carries the caution instead of the colour. */}
-      <SheetActionRow
-        icon={<PhotoTrashIcon color={canDelete ? INK : INK_SUBTLE} />}
-        label={canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
-        disabled={!canDelete}
-        onPress={() => { tapWarning(); onDelete() }}
-      />
+      </SheetActions>
     </BottomSheet>
   )
 }
 
+// One choice in this sheet: a soft tile with its glyph and its label stacked
+// and centred on the tile's own axis. All four choices are this one object —
+// they differ only in whether they take half a row (`half`, the middle pair)
+// and on which side of the label the glyph stands (`glyphBelow`, "Move down"),
+// so the tile's geometry is stated once.
+function PhotoOptionTile({ glyph, label, disabled, half, glyphBelow, onPress }: {
+  glyph: React.ReactNode
+  label: string
+  disabled?: boolean
+  half?: boolean
+  glyphBelow?: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      style={[
+        photoOptionsStyles.tile,
+        half && photoOptionsStyles.tileHalf,
+        glyphBelow && photoOptionsStyles.tileGlyphBelow,
+        disabled && photoOptionsStyles.tileDisabled,
+      ]}
+      onPress={() => { if (!disabled) onPress() }}
+      accessibilityRole="button"
+    >
+      {glyph}
+      <Text style={[photoOptionsStyles.tileLabel, disabled && photoOptionsStyles.tileLabelDisabled]}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
 const photoOptionsStyles = StyleSheet.create({
+  // A tighter gutter than the app's standard popup one, because the body is a
+  // grid of tiles rather than a column of text; every gap around and between
+  // them is the popup's own.
   sheet: {
     paddingHorizontal: SM,
   },
+  // The middle pair. No `alignItems`, so the default stretch keeps both tiles
+  // as tall as the taller one: the Delete tile grows when it has to explain
+  // itself ("at least 2 photos required") and Replace grows with it, rather
+  // than the pair going lopsided.
   row: {
     flexDirection: 'row',
     gap: SM,
-    marginBottom: SM,
   },
+  // A column, so every tile reads the same way: glyph, then label, both centred
+  // on the tile's middle. The full-width ones take their width from the sheet;
+  // only the pair asks for a share of a row (`tileHalf`).
   tile: {
-    flex: 1,
     backgroundColor: PAGE,
     borderRadius: RADIUS,
     paddingVertical: MD,
+    paddingHorizontal: SM,
     alignItems: 'center',
     justifyContent: 'center',
     gap: SM,
   },
+  tileHalf: {
+    flex: 1,
+  },
+  // Same column, read from the bottom: the label first, the glyph under it.
+  tileGlyphBelow: {
+    flexDirection: 'column-reverse',
+  },
   tileDisabled: {
     opacity: 0.5,
   },
+  // Centred, because the label under a centred glyph in a half-width tile can
+  // run to two lines (the disabled Delete's sentence).
   tileLabel: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK,
+    fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK, textAlign: 'center',
   },
   tileLabelDisabled: {
     color: INK_SUBTLE,
@@ -2618,7 +2680,7 @@ export function PreviewFieldPage({
           <PullContext.Provider value={pullCtx}>
             <MatchCard
               match={previewData}
-              // Puts the pinned add chips on the same line as the sheet's
+              // Puts the pinned name/age chip on the same line as the sheet's
               // floating close X. Only when the sheet owns the top inset —
               // standalone, the root has already padded the card down past it.
               chromeInset={dismissGestureRef ? insets.top : 0}
@@ -2633,28 +2695,43 @@ export function PreviewFieldPage({
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
               bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
               // No round button on your own card: there is nobody to invite,
-              // and the adds moved into the chip column below.
+              // and the adds are the buttons in the bar under it.
               actions={[]}
-              addChips={(() => {
-                const list: CardAddChip[] = []
-                if (photoAddEnabled) list.push({
-                  key: 'photo',
-                  label: t('settings.addPhoto'),
-                  renderIcon: c => photoPicking
-                    ? <ActivityIndicator size="small" color={c} />
-                    : <CameraIcon color={c} size={ICON.sm} />,
-                  onPress: () => { tap(); handleAddPhoto() },
-                })
-                if (familyAddEnabled) list.push({
-                  key: 'family',
-                  label: t('settings.addFamily'),
-                  renderIcon: c => <KidsGlyph color={c} />,
-                  onPress: () => { tap(); setFamilyPopupVisible(true) },
-                })
-                return list
-              })()}
             />
           </PullContext.Provider>
+          {/* THE bar every profile card stands on (user directive 2026-07-30):
+              the adds are BUTTONS in a block beside the card, exactly as a
+              person's page in the communities sheet carries what you can do
+              about them, and no longer chips floating on the photo — an add is
+              not a fact about the profile, and on the photo it competed with the
+              ones that are.
+              Both are quiet `secondary` buttons for the reason a member's page
+              gives: the page is your profile, and neither add is what the page
+              is for, so a solid fill on one would read as the recommended one.
+              An add that no longer applies (6 photos already, family already
+              filled in) renders nothing, and with neither left the bar itself
+              renders nothing and the card fills the screen. */}
+          <ProfileActionBar>
+            {photoAddEnabled ? (
+              <Button
+                label={t('settings.addPhoto')}
+                variant="secondary" size="lg"
+                iconStart={<CameraIcon color={INK} />}
+                // The picker's cold start is slow enough to need saying so; the
+                // button's own spinner takes the icon's place while it comes up.
+                loading={photoPicking}
+                onPress={() => { tap(); handleAddPhoto() }}
+              />
+            ) : null}
+            {familyAddEnabled ? (
+              <Button
+                label={t('settings.addFamily')}
+                variant="secondary" size="lg"
+                iconStart={<KidsGlyph color={INK} />}
+                onPress={() => { tap(); setFamilyPopupVisible(true) }}
+              />
+            ) : null}
+          </ProfileActionBar>
         </View>
       ) : null}
       <PhotoOptionsPopup
@@ -2777,11 +2854,18 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         <SelectFieldRow
           grouped
           // The label is the bare word and the whole wallet rides its own line
-          // as ONE small chip on the END edge (user directive 2026-07-28) — the
-          // same trailing tile the watcher/requests rows wear, so the count
-          // reads as a fact stated by the row rather than a table hung under it.
+          // as ONE small chip (user directive 2026-07-28) — the same trailing
+          // tile the watcher/requests rows wear, so the count reads as a fact
+          // stated by the row rather than a table hung under it. It stands
+          // BESIDE the word rather than on the row's far edge (user directive
+          // 2026-07-30): the number is the wallet the label names, so it reads
+          // as that label's value; across the row it read as a control of its
+          // own, facing the label from the other side. The watcher and
+          // waiting-requests chips keep the edge, because what they count is
+          // not what their row is named for.
           label={t('settings.credits')}
           trailing={<Chip small text={String(heartsTotal)} />}
+          trailingBeside
           onPress={onOpenBuyExtra}
           icon={<CreditIcon color={INK} size={ICON.md} />}
           labelColor={INK}
@@ -2798,6 +2882,17 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
           label={t('settings.support')}
           onPress={() => { Linking.openURL(supportMailUrl(t('support.mailSubject'))).catch(() => {}) }}
           icon={<SupportIcon color={INK} />}
+          labelColor={INK}
+        />
+        {/* The brand site, last in the card: the one row that leaves the app
+            for something that is not a mail composer. brandSiteUrl carries the
+            app's own language, so the landing page opens in the language the
+            user is already reading rather than the browser's guess. */}
+        <SelectFieldRow
+          grouped
+          label={t('settings.site')}
+          onPress={() => { Linking.openURL(brandSiteUrl(lang)).catch(() => {}) }}
+          icon={<GlobeIcon color={INK} />}
           labelColor={INK}
         />
       </View>
@@ -2869,6 +2964,7 @@ export default function SettingsPage({
   const { user } = useAuthStore()
   const router = useRouter()
   const bottomInset = useBottomInset()
+  const insets = useSafeAreaInsets()
 
   // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
   // not the avatar but a purple CTA into the build-profile flow. A browse-only
@@ -2898,6 +2994,22 @@ export default function SettingsPage({
   // sheet chrome (the close X), filling to the very top of the screen.
   const photoHeight = PROFILE_CARD_HEIGHT + photoBleed
 
+  // How far the Circles emblem hangs below the photo's bottom edge: HALF of it,
+  // so the disc straddles the seam evenly (the other half rides the photo). Read
+  // through the same `iconScale` the emblem sizes itself with — the disc grows
+  // with the OS font scale, so the band the list reserves for it has to grow by
+  // the same number or the two come apart on a large-font device.
+  const circlesOverhang = iconScale(CIRCLES_BUTTON_SIZE) / 2
+
+  // Where the list is, for the one floating tile standing over it (the
+  // visibility chip). A shared value written straight from the scroll event: the
+  // page itself must not re-render because it was scrolled, so the threshold
+  // that fades the tile is derived on the UI thread inside the chip.
+  const scrollY = useSharedValue(0)
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollY.value = e.nativeEvent.contentOffset.y
+  }, [scrollY])
+
   const body = (
     <View style={styles.rootOuter}>
       {/* NO 'bottom' edge: reserving the safe area HERE shortens the scroll's
@@ -2926,13 +3038,16 @@ export default function SettingsPage({
         ) : null}
         <PullScrollView
           style={styles.tabScroll}
-          contentContainerStyle={[styles.tabContent, { paddingTop: 0, paddingBottom: bottomInset }]}
+          // The app's one bottom air, not the raw band: a raw inset is 34 on an
+          // iPhone and 16–24 on an Android, so the menu's last row ended at two
+          // different heights on the two platforms (see bottomGap).
+          contentContainerStyle={[styles.tabContent, { paddingTop: 0, paddingBottom: bottomGap(bottomInset, BOTTOM_AIR) }]}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
           delaysContentTouches={false}
           bounces={false}
           overScrollMode="never"
           scrollEventThrottle={16}
+          onScroll={onScroll}
         >
           {profileBuilt ? (
             // Transparent spacer sitting over the fixed photo: tapping it opens
@@ -2941,6 +3056,11 @@ export default function SettingsPage({
             // content body below rises to cover the pinned photo.
             <Pressable
               style={{ height: photoHeight }}
+              accessibilityRole="button"
+              // The only place this is said now that the photo's chip carries
+              // the visibility state instead of an "edit profile" caption: a
+              // screen reader reads it off the target itself.
+              accessibilityLabel={t('settings.profile')}
               onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
             />
           ) : (
@@ -2960,11 +3080,19 @@ export default function SettingsPage({
               the list scrolls up over it. */}
           <View style={styles.scrollBody}>
             <View style={styles.optionsWrap}>
-              <AudienceContent onOpenSubPage={onOpenSubPage} />
+              {/* The Circles emblem's own band. The disc floats (below), so
+                  nothing reflows around it: this is what holds the list clear of
+                  the half of it that hangs down onto the white. Exactly that
+                  half, so the first row starts one gutter under the disc's
+                  bottom edge. With no photo above there is nothing to hang over
+                  and the emblem stands in the flow instead, so no band. */}
+              {profileBuilt ? (
+                <View style={{ height: circlesOverhang }} />
+              ) : (
+                <View style={styles.circlesInFlow}><CirclesEntry onOpenSubPage={onOpenSubPage} /></View>
+              )}
 
-              <View style={{ marginTop: XL }}>
-                <PreferencesContent onOpenSubPage={onOpenSubPage} />
-              </View>
+              <PreferencesContent onOpenSubPage={onOpenSubPage} />
 
               <View style={{ marginTop: XL }}>
                 <AppInlineContent onBack={onBack} onNavigateHome={onNavigateHome} onOpenSubPage={onOpenSubPage} />
@@ -2972,7 +3100,37 @@ export default function SettingsPage({
             </View>
           </View>
 
+          {/* THE Circles button: the menu's one big round emblem, hanging on the
+              seam between the profile photo and the list — half on the photo,
+              half on the white — and CENTRED across the page (user directive
+              2026-07-30), which is the one horizontal position that belongs to
+              neither edge's chrome. It is the LAST child of the scroll's content
+              on purpose: that is what puts it over both layers without any
+              parent having to draw outside its own bounds, and over the photo's
+              transparent spacer, whose tap it must win. It still SCROLLS, unlike
+              the visibility chip, because it is a menu entry and not chrome. */}
+          {profileBuilt ? (
+            <View
+              style={[styles.circlesLane, { top: photoHeight - circlesOverhang }]}
+              // The lane spans the page so the disc can centre in it; only the
+              // disc may take a touch, so the photo beside it keeps its own tap.
+              pointerEvents="box-none"
+            >
+              <CirclesEntry onOpenSubPage={onOpenSubPage} />
+            </View>
+          ) : null}
+
         </PullScrollView>
+        {/* The photo's own top-END tile, floating ABOVE the scroll because that
+            is the only layer a tap can reach here (see VisibilityChip). It
+            hangs from the one chrome line, opposite the sheet's close X, and
+            fades out as the content it stands over rises to meet it: the opaque
+            body for a built profile, the build-profile button otherwise. */}
+        <VisibilityChip
+          scrollY={scrollY}
+          contentTop={profileBuilt ? photoHeight : photoBleed + LG}
+          topPad={chromeTop(insets.top) - topInset}
+        />
       </SafeAreaView>
     </View>
   )
@@ -3069,18 +3227,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     marginBottom: MD,
   },
-  // The user's photo, uncaptioned, at 2x the height of a regular row. It is the
-  // BACKMOST, FIXED layer: pinned to the top of the sheet behind the scroll,
-  // the content body scrolls up and covers it. No label and no scrim over it,
-  // the photo is the affordance (the transparent spacer over it owns the tap).
+  // The user's photo at 2x the height of a regular row. It is the BACKMOST,
+  // FIXED layer: pinned to the top of the sheet behind the scroll, the content
+  // body scrolls up and covers it. No scrim over it — the photo is the
+  // affordance (the transparent spacer over it owns the tap), and the only tile
+  // on it is the visibility chip, which floats over the scroll instead.
   profileCardFixed: {
     position: 'absolute', top: 0, start: 0, end: 0,
     overflow: 'hidden',
     backgroundColor: WHITE_SOFT,
   },
+  // The visibility chip's lane: the full width of the photo so a long label
+  // wraps instead of overflowing, with the tile parked on the END edge — the
+  // card's own top-END corner, opposite the sheet's back arrow at the START.
+  // Its top comes from chromeTop(), the one line every piece of floating chrome
+  // hangs from; the page root has already padded itself down by `topInset`, so
+  // that much of the screen-measured line is subtracted back out.
+  visibilityChip: {
+    position: 'absolute', top: 0, start: 0, end: 0,
+    paddingHorizontal: OVERLAY.chromeInset,
+    alignItems: 'flex-end',
+  },
   // Opaque wrapper around the scrolling menu content: its solid WHITE is what
   // hides the fixed photo behind it as the list rises over the photo.
   scrollBody: { backgroundColor: SURFACE },
+  // The Circles emblem's lane: the full width of the page, so the disc sits at
+  // its horizontal centre. Absolute inside the SCROLL's content — that is what
+  // makes it scroll with the list while painting over both the photo above it and
+  // the white body under it. Only its `top` is per-page (see circlesOverhang).
+  circlesLane: { position: 'absolute', start: 0, end: 0, alignItems: 'center' },
+  // The same disc with no photo to hang over (a profile not yet built): it stands
+  // in the flow at the head of the list, on the same centre line.
+  circlesInFlow: { alignItems: 'center', marginBottom: XL },
   profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
   // Not-yet-built profile: no hero card, just the plain white page. A regular
@@ -3105,16 +3283,11 @@ const styles = StyleSheet.create({
   // against the chip's own exported height rather than a re-typed number.
   groupsRowIcon: { height: CHIP_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   groupsChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: SM },
-  // Two stacked full-width buttons on the page gutter — the same spec as the
-  // chat menu's leave/block sheet (chatMenuStyles.sheet in home.tsx).
-  accountActions: { paddingHorizontal: MD, gap: SM },
-  // Account popup identity block: one chip per field, stacked vertically.
-  // alignItems:'flex-start' keeps each pill at its own text width instead of
-  // stretching it across the sheet.
-  accountPopupList: {
-    paddingHorizontal: MD, paddingBottom: MD, gap: XS,
-    alignItems: 'flex-start',
-  },
+  // Account popup head: the title with the identity fact line under it. Spacing
+  // only — the type of both comes from SheetTitle / MetaLine, the gutter from the
+  // sheet's card, and the air below it from <SheetActions>. The fact line stands
+  // where a popup's description would, so it takes the description's own gap.
+  accountPopupHead: { gap: SHEET_GAP.desc },
 
   // Select field row — tappable row with label + value + forward chevron
   selectRow: {
@@ -3182,6 +3355,6 @@ const styles = StyleSheet.create({
   subPageDesc: {
     marginHorizontal: SM, marginTop: MD,
     fontSize: TEXT.md, color: WHITE_STRONG,
-    textAlign: 'center', lineHeight: lh(TEXT.md),
+    textAlign: 'center',
   },
 })

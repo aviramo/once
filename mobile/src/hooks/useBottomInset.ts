@@ -23,6 +23,24 @@ import { useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-
 // bar we reserve a little unused space; the alternative is clipped controls.
 let maxBottomSeen = initialWindowMetrics?.insets.bottom ?? 0
 
+// It knows NOTHING about the keyboard, and there is nothing for it to know. What
+// this returns is not "how much of the navigation bar to dodge" — it is the raw
+// band, and `bottomGap` (tokens.ts) is what turns it into the app's one bottom
+// air. The keyboard's effect on that air — halving it, since a keyboard covers
+// the band the air is there to clear — is applied once, per frame, inside
+// `useKeyboardShrinkSV()`, and never here.
+//
+// Two earlier attempts to make this hook keyboard-aware are both dead ends,
+// recorded so neither comes back:
+//  · returning 0 while the keyboard is open — a React state flip, i.e. a ~60px
+//    step at each end of the animation (measured 2026-07-30, reported as "two
+//    noticeable stages"). A value that must change smoothly across an animation
+//    cannot live in a re-render.
+//  · subtracting THIS value from the shrink, which was continuous but cancelled
+//    the wrong thing: `bottomGap` is a `max`, so on every iPhone (34) the band IS
+//    the control's whole bottom air, and cancelling it left the chat composer
+//    flush against the keyboard — by a different amount on each platform, since
+//    the number was the device's rather than the design's.
 export function useBottomInset(): number {
   const { bottom } = useSafeAreaInsets()
   if (bottom > maxBottomSeen) maxBottomSeen = bottom

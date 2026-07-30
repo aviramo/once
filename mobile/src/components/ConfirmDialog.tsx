@@ -2,9 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
-import { BottomSheet, SheetTitle } from './BottomSheet'
-import { useKeyboardHeight } from '../hooks/useKeyboardHeight'
-import { SM, MD, LG, RADII, TEXT, WEIGHT, STROKE, lh } from '../tokens'
+import { BottomSheet, SheetTitle, SheetDesc, SheetActions } from './BottomSheet'
+import { SM, MD, RADII, TEXT, WEIGHT, STROKE, SHEET_GAP, lh } from '../tokens'
 import { SURFACE, INK, WHITE, INK_SUBTLE, INK_DIM } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { CloseIcon, CheckIcon } from './icons'
@@ -76,15 +75,6 @@ export function ConfirmDialog({
   useEffect(() => { if (!busy) setPressed(null) }, [busy])
   useEffect(() => { if (!visible) setPressed(null) }, [visible])
 
-  // When this dialog hosts a text field (`noteInput`, e.g. the report flow),
-  // lift the bottom-anchored sheet by exactly the keyboard height so the
-  // field stays visible. Per-screen nudge — the global BottomSheet lift was
-  // removed (see CLAUDE.md "Keyboard avoidance"); a single per-component
-  // marginBottom does not over-shoot the way the old double-lift did.
-  // The extra MD is breathing room: lifting by exactly the keyboard height
-  // leaves the confirm button sitting flush on the top key row.
-  const kbHeight = useKeyboardHeight()
-
   const dismiss = () => {
     if (busy) return
     if (onCancel) onCancel()
@@ -98,14 +88,16 @@ export function ConfirmDialog({
       disableBackdropDismiss={busy}
       swipeToDismiss={!!draggable}
       dragHandle={!!draggable}
-      cardWrapStyle={noteInput && kbHeight > 0 ? { marginBottom: kbHeight + MD } : undefined}
-      // When draggable, the INK drag-handle bar (with its own top/bottom
-      // margins) already supplies the top breathing room — drop the card's
-      // own paddingTop so the gap above the icon isn't doubled up.
-      contentStyle={[styles.card, draggable && styles.cardDraggable]}
+      // No frame and no keyboard lift of its own. The gutter, the air above the
+      // title and the air under the buttons are the sheet's, one set of values
+      // for every popup in the app (BottomSheet.tsx), and the sheet stands itself
+      // on top of the keyboard (CLAUDE.md "Keyboard"). This dialog therefore
+      // passes no `contentStyle` at all — it used to declare LG sides and its own
+      // paddingTop, which is why it sat at a different indent and a different
+      // height from the sheets it stands beside.
     >
       <SheetTitle>{title}</SheetTitle>
-      {description ? <Text style={styles.desc}>{description}</Text> : null}
+      {description ? <SheetDesc>{description}</SheetDesc> : null}
 
       {skipToggle && (
         <TouchableOpacity
@@ -136,7 +128,7 @@ export function ConfirmDialog({
       )}
 
       {(confirmLabel || cancelLabel) ? (
-        <View style={styles.row}>
+        <SheetActions row>
           {cancelLabel ? (
             <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
               <Button
@@ -174,37 +166,20 @@ export function ConfirmDialog({
               />
             </View>
           ) : null}
-        </View>
+        </SheetActions>
       ) : null}
     </BottomSheet>
   )
 }
 
 const styles = StyleSheet.create({
-  card: {
-    // Sides and top only: the air UNDER the buttons is the BottomSheet's, the
-    // same in every popup in the app.
-    paddingHorizontal: LG,
-    paddingTop: MD,
-  },
-  cardDraggable: {
-    paddingTop: 0,
-  },
-  desc: {
-    // Regular purple, full strength: popup body text is the regular INK
-    // purple, never a faded step (user directive 2026-07-26). The muted
-    // INK_SUBTLE read as a washed-out grey on the pale sheet.
-    marginTop: SM,
-    fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
-    color: INK,
-    textAlign: 'center',
-  },
+  // A body block under the description — the popup's one between-blocks gap, not
+  // a number this file gets to pick.
   skipRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SM,
-    marginTop: MD,
+    marginTop: SHEET_GAP.block,
   },
   // The ONE outline in the app allowed to be darker than LINE, and it
   // is not emphasis: an unchecked box IS its rule — there is no fill, no label
@@ -240,18 +215,12 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     ...FIELD_SKIN,
-    marginTop: MD,
+    marginTop: SHEET_GAP.block,
     minHeight: 96,
     paddingHorizontal: MD,
     paddingVertical: SM,
     fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
     color: INK,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: MD,
-    marginTop: MD,
   },
   slot: { flex: 1 },
 })

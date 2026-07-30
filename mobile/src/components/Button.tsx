@@ -3,8 +3,7 @@ import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { GlyphSlot } from './GlyphSlot'
-import { FONT_SCALE } from '../fonts'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, ICON } from '../tokens'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
 import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
@@ -24,11 +23,16 @@ import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MI
 
 // THE glyph size inside an action button, for the whole app: the icon at the
 // start of the label, and the spinner that replaces it while the action is in
-// flight. Sized to the label it stands beside (TEXT.md, see BUTTON_LABEL) so
-// the two read as one object — a 24dp glyph next to a 16dp word read as the
-// button's subject with the label captioning it. Exported for the one button
-// that cannot compose <Button> (LoginForm's provider tiles).
-export const BUTTON_GLYPH = ICON.md
+// flight. It IS the label's own size (TEXT.md, see BUTTON_LABEL) — literally that
+// token, not an ICON tier that happens to match it — so the two read as one
+// object. It came down from 24 (a glyph half again the word beside it read as the
+// button's subject with the label captioning it) and then from ICON.md/18: 18
+// beside a 16dp label is a glyph 12% bigger than the type it labels, standing in
+// a `GlyphSlot size={TEXT.md}` that says 16, and next to Hebrew letters — whose
+// ink is 0.60 em against Latin's 0.714, with no ascenders to raise the eye's
+// reference — it read visibly larger than the label (user report 2026-07-30).
+// Exported for the one button that cannot compose <Button> (LoginForm's tiles).
+export const BUTTON_GLYPH = TEXT.md
 
 type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
 type Size = 'lg' | 'md'
@@ -156,10 +160,13 @@ export function Button({
             with the label squashed up to make room". */}
         <View pointerEvents="none" style={[styles.labelArea, base.labelArea]}>
           <View style={styles.labelRow}>
-            {/* The label is pinned at FONT_SCALE.ui and the button's height is a
-                fixed dp, so the glyph beside it may not keep growing either —
-                the same ceiling RoundButton pins, for the same reason. */}
-            {startIcon ? <GlyphSlot size={TEXT.md} cap={FONT_SCALE.ui} style={styles.startSlot}>{startIcon}</GlyphSlot> : null}
+            {/* No ceiling of its own: the glyph takes the app's one FONT_SCALE
+                (GlyphSlot's default), which is exactly what the label beside it
+                takes, and the label area is a minHeight — it grows with them
+                rather than clipping. It used to be pinned at the old
+                FONT_SCALE.ui alongside a label pinned the same way, back when a
+                button was the one thing that refused to answer the OS slider. */}
+            {startIcon ? <GlyphSlot size={TEXT.md} style={styles.startSlot}>{startIcon}</GlyphSlot> : null}
             {/* Icon-only button: an empty label drops the Text entirely rather
                 than rendering a zero-width one, so the labelRow gap doesn't
                 push the glyph off the button's centre. */}
@@ -168,7 +175,6 @@ export function Button({
               numberOfLines={multiline ? 2 : 1}
               adjustsFontSizeToFit={!multiline}
               minimumFontScale={0.85}
-              maxFontSizeMultiplier={FONT_SCALE.ui}
             >
               {label}
             </Text> : null}

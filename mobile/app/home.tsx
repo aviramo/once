@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform } from 'react-native'
+import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, type DimensionValue } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition } from 'react-native-reanimated'
 import { Text } from '../src/components/AppText'
 const AnimatedText = Animated.createAnimatedComponent(Text)
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from 'react-native-svg'
-import { invoke, markStartupComplete, publicImageUrl, API_TIMEOUT_MS } from '../src/lib/api'
+import { invoke, markStartupComplete, onAuthRecovered, publicImageUrl, API_TIMEOUT_MS } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
 import { matchImageUrls } from '../src/lib/profileImages'
@@ -17,17 +17,18 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { INK, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
-import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, COMMUNITIES_NUDGE_AFTER, lh } from '../src/tokens'
+import { INK, INK_DIM, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, COMMUNITIES_NUDGE_AFTER, SHEET_GAP, bottomGap, chromeTop, lh } from '../src/tokens'
+import { useBottomInset } from '../src/hooks/useBottomInset'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { BottomSheet } from '../src/components/BottomSheet'
+import { BottomSheet, SheetActions, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
-import { SharedCirclesPopup } from '../src/components/SharedListPopup'
-import { sharedGroups, sharedFriends, flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type SharedGroup, type FriendItem, type CommunitiesTarget } from '../src/lib/communities'
+import { SharedCirclesPopup, useSharedCircles } from '../src/components/SharedListPopup'
+import { flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type CommunitiesTarget } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
 import { RoundButton } from '../src/components/RoundButton'
-import { HomeArt, HOME_ART_SIZE } from '../src/components/HomeArt'
+import { HomeArt } from '../src/components/HomeArt'
 import { CreditCost } from '../src/components/CreditCost'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { clearChatCache } from '../src/lib/chatCache'
@@ -42,7 +43,7 @@ import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
-import { FONT_SCALE } from '../src/fonts'
+import { FIXED_BOX_SCALE } from '../src/fonts'
 import { SEEN_FLAGS, SEEN_VALUES } from '../src/keys'
 import { hasSeenFlag, markSeenFlag, readSeenValue, writeSeenValues } from '../src/lib/seenFlags'
 import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale, CloseIcon, BackIcon, UserPlusIcon, ShieldIcon, GroupsIcon } from '../src/components/icons'
@@ -133,10 +134,24 @@ function RadarRings({ active }: { active: boolean }) {
 const HALO_SIZE = Math.round(AVATAR_SIZE * 1.55)
 const DOTTED_RING_SIZE = Math.round(AVATAR_SIZE * 1.55)
 
-// The one gap between the three stacked pieces of the centre column —
-// headline / the round action / the art under it. The pull-tutorial geometry
-// below has to add it up, so it cannot be an inline literal in the stylesheet.
-const CENTER_GROUP_GAP = MD * 4
+// WHERE THE BIG CIRCLE SITS inside the band between the topbar and the art: a
+// THIRD of the way up from the band's bottom (user directive 2026-07-30), which
+// is a step down from the middle it used to sit on. One number, because three
+// things have to agree about that line and any drift between them is visible:
+// the circle is centred ON it, the headline is centred in what is left ABOVE it,
+// and the pull-tutorial lands the descending card's edge on it.
+//
+// It is applied as a PERCENTAGE of the band, never as a computed dp: the band's
+// height is a layout result, and reading it back into React would place the
+// circle a frame late and re-render the page every time the band changed.
+const CIRCLE_FROM_BOTTOM = 1 / 3
+const pct = (f: number) => `${f * 100}%` as DimensionValue
+
+// (There is no centre-column gap constant any more. The three pieces that used
+// to be stacked on one — the headline, the round action and the art — are three
+// independently positioned things now: the headline is centred in the band above
+// the circle, the circle is centred on the page, and the art rides on the
+// wordmark at the foot. Nothing measures a gap to anything.)
 
 function AvatarHaloRings() {
   return (
@@ -175,25 +190,31 @@ function AvatarHaloRings() {
 // Geometry for the pull-to-skip hint label.
 const SKIP_HINT_HEIGHT = 58
 const SKIP_HINT_FONT = 26
-// Horizontal padding applied on each side of the label so text never
-// reaches the screen edges. The SVG is sized to (window - 2 × HPAD). It was
-// MD * 2 while the label shrank to fit — wide side margins cost nothing when
-// the font is free to shrink. Now that the size is fixed, every pixel of pad
-// is a pixel the wrap can't use, and the long notices were breaking into
-// five short lines with a wide empty gutter on both sides.
-const SKIP_HINT_HPAD = MD
-// Vertical advance for each wrapped line beyond the first. Combined with
-// SKIP_HINT_HEIGHT it defines the fixed area that wraps the label, so the
-// avatar below stays put no matter how many lines the text takes.
+// The headline's letter tracking. Named because the app's name at the foot of
+// the page (PageSignature, below) is drawn in the SAME typography — it is this
+// screen's heading type, parked at the bottom — and the two must not drift.
+const SKIP_HINT_TRACKING = 2
+// The headline's symmetric side gutter (user directive 2026-07-30). The SVG is
+// sized to (window − 2 × HPAD), so this is the one number that decides where a
+// line may end on either side.
+//
+// It is read against the ONE thing up there the text must not run into: the
+// shell's floating hamburger, whose column is OVERLAY.chromeInset ..
+// chromeInset + ROUND_BUTTON_SIZE_SM. XL stops short of that column's far edge
+// — a real gutter, still narrower than the chrome it clears, so the headline
+// keeps a usable line width instead of being indented past the button. The
+// clearance that actually guarantees no collision is vertical: the headline is
+// centred in the band BELOW the status bar (permHeadlineBand), which puts its
+// first line far under the hamburger's bottom edge on every screen.
+//
+// It was MD * 2 while the label shrank to fit — wide side margins cost nothing
+// when the font is free to shrink — then MD once the size was fixed, since every
+// pixel of pad is a pixel the wrap can't use.
+const SKIP_HINT_HPAD = XL
+// Vertical advance for each wrapped line beyond the first. With
+// SKIP_HINT_HEIGHT it is what the label's own SVG box grows by per wrapped
+// line — the box hugs the lines it actually drew (see HeadlineArea).
 const SKIP_HINT_LINE_H = 30
-// Lines the reserved area is tall enough to hold. The label draws at ONE
-// size (SKIP_HINT_FONT) and wraps instead of shrinking, so the longest
-// strings that share this slot — the permission / gate notices, ~2× the
-// length of a skip headline — need three. The area is bottom-anchored, so
-// extra lines grow upward into empty space and a rare fourth line spills
-// into the gap above rather than pushing the avatar down.
-const SKIP_HINT_MAX_LINES = 3
-const SKIP_HINT_AREA_H = SKIP_HINT_HEIGHT + SKIP_HINT_LINE_H * (SKIP_HINT_MAX_LINES - 1)
 
 // Estimated rest-state pixel width per character at semibold + the 2px
 // letterSpacing the label draws with. Slightly over-estimates, so wrapping
@@ -349,7 +370,7 @@ function SkipHintLabel({ text }: { text: string }) {
             fontSize={font}
             fontWeight={WEIGHT.medium}
             textAnchor="middle"
-            letterSpacing={2}
+            letterSpacing={SKIP_HINT_TRACKING}
             textLength={fit ? w : undefined}
             lengthAdjust={fit ? 'spacingAndGlyphs' : undefined}
           >
@@ -361,13 +382,20 @@ function SkipHintLabel({ text }: { text: string }) {
   )
 }
 
-// Reserves a fixed 2-line height with top-aligned content around the
-// gradient headline. The first line baseline sits at the same y inside
-// the SVG regardless of line count (see SkipHintLabel), so anchoring the
-// SVG to the top of this fixed-height area keeps the text's first line
-// at the same screen position whether the headline is 1 or 2 lines.
-// The avatar below stays at exactly the same screen position because the
-// area itself is a constant height.
+// The gradient headline, in a box that is exactly as tall as the lines it drew.
+//
+// It used to reserve a FIXED three-line height, bottom-anchored, and that was
+// load-bearing for a reason that no longer exists: the headline and the avatar
+// shared one flow, so a constant height was the only thing keeping the avatar at
+// the same screen position whatever the line count. The circle is centred on the
+// page by itself now (permCenterGroup) and the headline is centred in its own
+// band above it (permHeadlineBand) — a reserved height would simply centre the
+// EMPTY RESERVATION instead of the text, putting a one-line headline low in the
+// band and a three-line one high.
+//
+// The trade the directive makes: a headline's first line no longer lands on a
+// fixed y. Swapping a one-line string for a two-line one now moves both lines,
+// because what stays put is their centre.
 function HeadlineArea({ text }: { text: string }) {
   return (
     <View style={headlineAreaStyle.area}>
@@ -378,11 +406,88 @@ function HeadlineArea({ text }: { text: string }) {
 
 const headlineAreaStyle = StyleSheet.create({
   area: {
-    height: SKIP_HINT_AREA_H,
-    // Bottom-anchored: the last line always sits the same distance above the
-    // avatar, and wrapping grows the block upward.
-    justifyContent: 'flex-end',
     alignItems: 'center',
+  },
+})
+
+// The wordmark's weight, and the only place in the app that is not one of the
+// two WEIGHT tiers. Deliberately local rather than a token in tokens.ts (user
+// directive 2026-07-30): 900 is the app's signature, not an emphasis rank the
+// design offers, and a shared token would invite a second caller. It needs the
+// Black face loaded in _layout and mapped in fonts.ts — an unmapped weight falls
+// through to DEFAULT_FAMILY and paints the name in Regular.
+const WORDMARK_WEIGHT = '900' as const
+
+// ── Page signature ─────────────────────────────────────────────────────────
+// The art and the app's name, as ONE block at the foot of the page (user
+// directive 2026-07-30). They used to be two things at two different heights —
+// the art rode inside the centred headline/action group and the name was pinned
+// to the bottom — so the distance between them was whatever the bottom flex
+// spacer happened to be on that device: a wide band on a small screen, nearly
+// nothing on a tall one. Together they are one signature, and the drawing sits
+// DIRECTLY on the name with no gap at all, on every screen.
+//
+// "No gap" is exactly that: the art declares no margin and the wrap no spacing,
+// so the SVG's bottom edge is the name's line box top. The air that is visibly
+// left between the ink of the two is the art's own FRAME_PAD (HomeArt.tsx) plus
+// the name's leading — both of them part of the things themselves.
+//
+// The name is drawn in this screen's HEADING typography (user directive
+// 2026-07-30): the letter tracking the headline above the centre action is
+// drawn in, one SIZE tier up from it, in the light purple — a name is not a
+// title, so it does not compete on colour and earns the extra size instead.
+//
+// The block is the last child of permScreen, IN the flow, and that is now
+// load-bearing (user directive 2026-07-30): the circle above is centred between
+// the topbar and the TOP OF THIS ART, so the band above has to end exactly
+// where this block begins. Being in the flow is what states that — the band is
+// `flex: 1` beside it, so the art and the name take their height and the band
+// gets the remainder. It was absolute while the circle was centred on the page,
+// where the point was the opposite: nothing above it should move.
+//
+// pointerEvents off for the whole block, the art included: it is page texture,
+// never a control, so a drag here still belongs to the shell's
+// open-the-menu pan.
+//
+// The bottom offset is useBottomInset()/bottomGap(), never the raw safe-area
+// inset — the app draws edge-to-edge, so that is the only thing keeping the
+// name out from under the navigation bar.
+function PageSignature({ bottom }: { bottom: number }) {
+  return (
+    <View pointerEvents="none" style={[signatureStyle.wrap, { marginBottom: bottom }]}>
+      <HomeArt />
+      <Text style={signatureStyle.name}>
+        {t('app.name')}
+      </Text>
+    </View>
+  )
+}
+
+const signatureStyle = StyleSheet.create({
+  wrap: {
+    // A flow child, and the distance to the screen's bottom edge is its own
+    // margin (passed inline) rather than an absolute offset — see the block
+    // comment: the band above ends where this begins.
+    alignItems: 'center',
+  },
+  name: {
+    // One tier ABOVE the headline (user directive 2026-07-30): the app's
+    // largest text step, which the countdown readout already uses. The size is
+    // what gives the name presence now that the colour has stepped back.
+    fontSize: TEXT.xl,
+    fontWeight: WORDMARK_WEIGHT,
+    letterSpacing: SKIP_HINT_TRACKING,
+    // The LIGHT purple (user directive 2026-07-30), not the headline's full
+    // INK: full-strength purple down there read as a second headline. Two steps
+    // back, not one: INK_MUTED (a solid half-strength purple) still competed
+    // with the headline, so the name takes the ramp's INK_DIM instead — over the
+    // opaque PAGE tint it lands at ~#BEB6D9, a whisper of the same purple. The
+    // alpha is safe HERE and nowhere else on this screen: the wordmark only ever
+    // sits on PAGE, so what it composites over is known.
+    color: INK_DIM,
+    // A brand name is a name, not a sentence: it reads the same way in both
+    // languages, so it keeps its Latin direction under RTL too.
+    writingDirection: 'ltr',
   },
 })
 
@@ -390,15 +495,9 @@ const headlineAreaStyle = StyleSheet.create({
 // Centered title + description block. Used as the main content surface for
 // every per-state variant of this screen (HIDDEN, WATCHING, WAITING, etc.).
 
-const chatMenuStyles = StyleSheet.create({
-  // Two stacked full-width buttons on the page gutter.
-  sheet: {
-    paddingHorizontal: MD,
-    paddingTop: MD,
-    gap: SM,
-  },
-})
-
+// (The chat menu's sheet carries no styles of its own: the gutter and the air
+// above its first button are the popup's, and its two buttons are a
+// <SheetActions flush> like every other popup's — see the sheet itself below.)
 
 // ── Invite timer ──────────────────────────────────────────────────────────
 
@@ -497,42 +596,45 @@ const statusCardStyles = StyleSheet.create({
     paddingVertical: LG,
     paddingHorizontal: MD,
   },
-  // Ground OFF, for the one use that lives in a POPUP: a popup is WHITE (user
-  // directive 2026-07-28) and paints its own ground, so the scaffold must not
-  // lay the page tint over it. Its BOTTOM goes too: the sheet ends every popup
-  // on the one standard gap, so keeping the scaffold's LG here would put 48
-  // under these buttons and 24 under every other popup's.
-  containerInPopup: { backgroundColor: 'transparent', paddingBottom: 0 },
+  // Ground and FRAME off, for the one use that lives in a POPUP: a popup is
+  // WHITE (user directive 2026-07-28) and paints its own ground, and its gutter,
+  // its top air and its bottom gap are the sheet's — one set of values for every
+  // popup in the app (BottomSheet.tsx). The scaffold's own LG/MD padding on top
+  // of that is what made this popup sit at a different indent and a different
+  // height from every other one.
+  containerInPopup: {
+    backgroundColor: 'transparent',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  // The body paragraph IS the popup's description (SHEET_DESC in
+  // BottomSheet.tsx) — the same size, the same full-strength ink, the same
+  // centring and, above all, the same gap under the heading, so this card reads
+  // identically whether it is standing on a photo or inside the invite popup.
+  // BODY size, not the heading's (user directive 2026-07-30): the card states one
+  // thing as its heading and explains it underneath, so the explanation is the
+  // app's ordinary paragraph step and the rank difference is carried by SIZE.
+  // No fontWeight: rendered through AppText, so this resolves to the real
+  // NotoSansHebrew_400Regular face, against the heading's Medium.
   description: {
-    fontSize: TEXT.lg,
-    lineHeight: lh(TEXT.lg),
-    // No fontWeight: rendered through AppText, so this resolves to the real
-    // NotoSansHebrew_400Regular face. Kept slightly dimmed so the full-white
-    // SemiBold heading lead-in clearly carries the emphasis.
-    color: INK,
-    textAlign: 'center',
+    ...SHEET_DESC,
     includeFontPadding: false,
   },
   // The heading sits on its own line above the body (user directive
-  // 2026-07-26). Through AppText this picks the real NotoSansHebrew_600SemiBold
-  // face (not a weak synthetic bold); full-strength ink vs the body's dimmed ink
-  // adds a second contrast step so the two ranks read clearly apart. A small
-  // gap below separates it from the body paragraph.
+  // 2026-07-26), and it is THE popup title (SHEET_TITLE) — a status card's
+  // heading and a dialog's are the same rank of text. Through AppText this picks
+  // the real weighted Noto face, not a synthetic bold. The gap under it belongs
+  // to the description above, not here: two margins would stack.
   heading: {
-    fontSize: TEXT.lg,
-    lineHeight: lh(TEXT.lg),
-    fontWeight: WEIGHT.medium,
-    color: INK,
-    textAlign: 'center',
+    ...SHEET_TITLE,
     includeFontPadding: false,
-    marginBottom: SM,
   },
-  // The invitation countdown, sitting between the body text and the buttons.
+  // The invitation countdown, sitting between the body text and the buttons: a
+  // block under the description, so it stands at the popup's between-blocks gap.
   // Tabular figures so the digits don't jitter as the seconds tick.
   timer: {
-    marginTop: MD,
+    marginTop: SHEET_GAP.block,
     fontSize: STATUS_TIMER_FONT,
-    lineHeight: lh(STATUS_TIMER_FONT),
     fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
@@ -545,17 +647,18 @@ const statusCardStyles = StyleSheet.create({
 // EventMessageCard / ReplyingInviteCard). The bold heading gets its own line
 // (real weighted Noto SemiBold face, not synthetic), a small gap, then the
 // body paragraph below it (user directive 2026-07-26 — heading was previously
-// an inline period-terminated lead-in on the same line as the body). Any
-// trailing sentence punctuation is stripped so the standalone heading never
-// carries a period.
+// an inline period-terminated lead-in on the same line as the body). A
+// trailing PERIOD is stripped so the standalone heading never ends on one
+// (CLAUDE.md "i18n text style") — `?` and `!` are left alone, they are the
+// heading's own voice ("להזמין אותה לצ׳אט?").
 function StatusCardText({ title, description }: { title: string; description: string }) {
-  const head = title.trim().replace(/[.!?]+$/, '')
+  const head = title.trim().replace(/\.+$/, '')
   return (
     <>
-      <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.heading} maxFontSizeMultiplier={FONT_SCALE.heading}>
+      <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.heading}>
         {head}
       </AnimatedText>
-      <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.description} maxFontSizeMultiplier={FONT_SCALE.heading}>
+      <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.description}>
         {description}
       </AnimatedText>
     </>
@@ -757,13 +860,18 @@ function ReplyingInviteCard({
 // place so the call sites stay visually identical — the same bar, the same
 // small time text, the same horizontal insets.
 const statusButtonStyles = StyleSheet.create({
+  // The same block of actions a popup ends on (SheetActions in BottomSheet.tsx):
+  // the widest gap in the surface stands between what was just said and what the
+  // user can do about it. Declared here rather than composed because these three
+  // cards animate their stack (`layout={STATUS_LAYOUT}`) — the VALUE is the
+  // shared one.
   stack: {
-    marginTop: XL,
+    marginTop: SHEET_GAP.actions,
     gap: SM,
   },
   // Two-button row inside the StatusCard scaffold (ReplyingInviteCard:
-  // decline secondary + accept primary). The marginTop XL above the row
-  // comes from the enclosing `stack`, so the row itself is layout-only.
+  // decline secondary + accept primary). The gap above the row comes from the
+  // enclosing `stack`, so the row itself is layout-only.
   // declineCell:acceptCell = 1:2 keeps the accept CTA visually dominant.
   btnRow: {
     flexDirection: 'row',
@@ -814,6 +922,11 @@ const statusButtonStyles = StyleSheet.create({
 
 export default function HomePage() {
   const { top: topInset } = useSafeAreaInsets()
+  // Where the page's signature (art + name) sits. The device inset ABSORBS the
+  // design gap (bottomGap), and the inset itself comes from useBottomInset —
+  // never the raw safe-area value, which an IME session can report as 0 and
+  // drop bottom chrome into the navigation bar.
+  const signatureBottom = bottomGap(useBottomInset(), LG)
   const { profile } = useUserStore()
   const router = useRouter()
   // A browse-only user (account created, profile not yet built) reaches home and
@@ -1332,6 +1445,10 @@ export default function HomePage() {
   // fix, or the server response), so the "ready to find" headline + Start
   // button must stay hidden / disabled.
   const [startupCompleted, setStartupCompleted] = useState(false)
+  // Bumped when auth recovers after a request was skipped for want of a token
+  // (see onAuthRecovered below). A dep of the startup effect, so the boot volley
+  // runs again from the top.
+  const [authRecovery, setAuthRecovery] = useState(0)
   const locFetchStartRef = useRef(0)
   const LOC_FETCH_MIN_MS = 1500
   const startLocFetch = () => { locFetchStartRef.current = Date.now(); setLocFetching(true) }
@@ -1394,7 +1511,21 @@ export default function HomePage() {
       claimInstallReferral()
       if (!location && !customLoc) setLocFailed(true)
     })()
-  }, [notifPerm, locPerm, customLoc])
+  }, [notifPerm, locPerm, customLoc, authRecovery])
+
+  // A launch whose session could not be refreshed in time sends nothing (api.ts
+  // fails those calls quietly rather than signing the user out, which is what
+  // used to happen), and the volley above is fired ONCE per mount — so without
+  // this the server would never learn the user is here: no availability, no
+  // auto-find, no presence. When auth comes back, replay it from the top. The
+  // sequence is safe to run twice: `app/start` is a full state statement rather
+  // than an increment, and claimInstallReferral is guarded per install and
+  // idempotent server-side.
+  useEffect(() => onAuthRecovered(() => {
+    startupSentRef.current = false
+    lastFocusRef.current = 0
+    setAuthRecovery(n => n + 1)
+  }), [])
 
   const handleLocRetry = async () => {
     if (locBusy) return
@@ -2297,26 +2428,11 @@ export default function HomePage() {
   }, [tap])
   // Shared-circles popup: opened by tapping the on-photo circle chip on any
   // match card, and it holds EVERYTHING the pair shares — every mutual friend
-  // and every shared group in one list (user directive 2026-07-29). Both lists
-  // are fetched HERE the instant the chip is tapped (not inside the popup on
-  // mount) and in parallel with each other, so they ride the sheet's slide-in
-  // and the content is usually ready by the time the sheet is up.
-  const [circleOpen, setCircleOpen] = useState(false)
-  const [circleGroups, setCircleGroups] = useState<SharedGroup[] | null>(null)
-  const [circleFriends, setCircleFriends] = useState<FriendItem[] | null>(null)
-  // Whose card the popup was opened from, for the wording of a friend row
-  // ("חברה של אסף"): the row states how THIS person is connected to the friend
-  // it names, so it inflects with the card subject, exactly as the chip does.
-  const [circleIsMale, setCircleIsMale] = useState<boolean | null | undefined>(undefined)
-  const openCircle = useCallback((userId: string, isMale?: boolean | null) => {
-    tap()
-    setCircleGroups(null)
-    setCircleFriends(null)
-    setCircleIsMale(isMale)
-    setCircleOpen(true)
-    sharedGroups(userId).then(setCircleGroups).catch(() => setCircleGroups([]))
-    sharedFriends(userId).then(setCircleFriends).catch(() => setCircleFriends([]))
-  }, [tap])
+  // and every shared group in one list (user directive 2026-07-29). The chip is
+  // wired the same way wherever a card is rendered, so the fetching and the
+  // popup's own state live in the one hook the Communities sheet uses too
+  // (components/SharedListPopup.tsx → useSharedCircles).
+  const circles = useSharedCircles()
 
   const runAction = (
     endpoint: string,
@@ -3066,15 +3182,11 @@ export default function HomePage() {
                     pointerEvents={showHiddenPlaceholder || state === 'watching' ? 'auto' : 'none'}
                     onLayout={e => {
                       // Pause-icon (centre circle) centre in the pane's own Y
-                      // space — exactly the pullY that lands a descending
-                      // card's top edge on it. permCenterGroup is flex-centred
-                      // in the pane, so the circle sits off the pane centre by
-                      // half the difference between what is stacked above it
-                      // and what is stacked below.
+                      // space is NOT read here any more — the circle is centred
+                      // in the band between the topbar and the art, not in the
+                      // pane, so the band's own onLayout is the only thing that
+                      // knows where it landed (see permBand below).
                       const paneH = e.nativeEvent.layout.height
-                      const above = SKIP_HINT_AREA_H + CENTER_GROUP_GAP
-                      const below = CENTER_GROUP_GAP + HOME_ART_SIZE.height
-                      tutorialPeekV.value = paneH / 2 + (above - below) / 2
                       if (paneH > 0 && paneH !== paneHeight) setPaneHeight(paneH)
                     }}
                   >
@@ -3091,9 +3203,31 @@ export default function HomePage() {
                         sits behind it; the card sliding down reveals the
                         centered group. */}
                     <View style={styles.permScreen}>
-                      <View style={styles.permFlexSpacerTop} />
-                      <View pointerEvents="box-none" style={styles.permCenterGroup}>
+                      {/* THE BAND: from where the topbar ends down to the top
+                          edge of the art. The circle is centred in THIS, not in
+                          the page (user directive 2026-07-30) — so the band is
+                          a real box with the signature as its floor, and its
+                          height is whatever is left after the art and the name
+                          have taken theirs. Nothing measures the art in JS: the
+                          layout subtracts it. */}
+                      <View
+                        style={[styles.permBand, { marginTop: topInset }]}
+                        pointerEvents="box-none"
+                        onLayout={e => {
+                          // The circle's centre in the pane's own Y space —
+                          // exactly the pullY that lands a descending card's top
+                          // edge on it. The same line the circle is drawn on,
+                          // read off the band's own frame.
+                          const { y, height } = e.nativeEvent.layout
+                          tutorialPeekV.value = y + height * (1 - CIRCLE_FROM_BOTTOM)
+                        }}
+                      >
+                      {/* The headline is centred in what is left ABOVE the
+                          circle — not in the band. */}
+                      <View pointerEvents="none" style={styles.permHeadlineBand}>
                         <HeadlineArea text={headlineText} />
+                      </View>
+                      <View pointerEvents="box-none" style={styles.permCenterGroup}>
                         <View style={styles.permAvatarWrap}>
                           <AvatarHaloRings />
                           <RadarRings active={(startupCompleted && (focusInflight || searching)) || findQueued} />
@@ -3140,7 +3274,7 @@ export default function HomePage() {
                                 fixed dp, so its glyph must not follow the OS
                                 font scale, and its size is the shared
                                 glyph-to-circle ratio rather than a literal. */}
-                            <GlyphScale cap={FONT_SCALE.ui}>
+                            <GlyphScale cap={FIXED_BOX_SCALE}>
                             {centerNotice ? (
                               // When the gate is geo/group we render the user's
                               // OWN profile photo edge-to-edge inside the
@@ -3189,14 +3323,13 @@ export default function HomePage() {
                             </GlyphScale>
                           </Pressable>
                         </View>
-                        {/* Page texture under the action, never a control:
-                            pointerEvents off so a drag here still belongs to
-                            the shell's open-the-menu pan. */}
-                        <View pointerEvents="none">
-                          <HomeArt />
-                        </View>
                       </View>
-                      <View style={styles.permFlexSpacer} />
+                      </View>
+                      {/* The art and the app's name close the page as ONE
+                          block, and they are IN the column's flow: the band
+                          above ends where the art begins, which is what puts the
+                          circle on its line between the topbar and the drawing. */}
+                      <PageSignature bottom={signatureBottom} />
                     </View>
                   </View>
 
@@ -3252,7 +3385,7 @@ export default function HomePage() {
                               ? { label: t('chat.endChat'), onPress: () => { tap(); setChatMenuOpen(true) } }
                               : undefined}
                             onReport={() => openReport(displayedMatch.user_id)}
-                            onCircleTap={() => openCircle(displayedMatch.user_id, displayedMatch.is_male)}
+                            onCircleTap={() => circles.open(displayedMatch.user_id, displayedMatch.is_male)}
                             chromeInset={topInset}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
@@ -3394,25 +3527,26 @@ export default function HomePage() {
                     the user came here for, so it is the solid primary; blocking
                     is the drastic, rarely-wanted one and recedes to the muted
                     secondary. Report is a card-level affordance, not here.
-                    paddingBottom = safe-area bottom + MD so the last button
-                    sits clear of the home-indicator gesture area. */}
+                    The gutter and the air above and below the pair are the
+                    popup's own, like every other sheet in the app. */}
                 <BottomSheet
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
                   onClosed={handleChatMenuClosed}
-                  contentStyle={chatMenuStyles.sheet}
                 >
-                  <Button
-                    label={t('chat.leave')}
-                    iconStart={<SignOutIcon color={WHITE} />}
-                    onPress={() => { tap(); chatMenuIntentRef.current = 'leave'; setChatMenuOpen(false) }}
-                  />
-                  <Button
-                    label={t('chat.block')}
-                    variant="secondary"
-                    iconStart={<BlockIcon color={INK_SUBTLE} />}
-                    onPress={() => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) }}
-                  />
+                  <SheetActions flush>
+                    <Button
+                      label={t('chat.leave')}
+                      iconStart={<SignOutIcon color={WHITE} />}
+                      onPress={() => { tap(); chatMenuIntentRef.current = 'leave'; setChatMenuOpen(false) }}
+                    />
+                    <Button
+                      label={t('chat.block')}
+                      variant="secondary"
+                      iconStart={<BlockIcon color={INK_SUBTLE} />}
+                      onPress={() => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) }}
+                    />
+                  </SheetActions>
                 </BottomSheet>
 
                 <ConfirmDialog
@@ -3482,16 +3616,12 @@ export default function HomePage() {
                     friends list. The row's own item is handed over whole, so
                     the page opens painted with no lookup. */}
                 <SharedCirclesPopup
-                  visible={circleOpen}
-                  groups={circleGroups}
-                  friends={circleFriends}
-                  subjectIsMale={circleIsMale}
+                  {...circles.props}
                   onSelectFriend={f => {
-                    setCircleOpen(false)
+                    circles.close()
                     setCommunitiesTarget({ kind: 'person', friend: f })
                     openCommunities()
                   }}
-                  onDismiss={() => setCircleOpen(false)}
                 />
 
               </View>
@@ -3505,7 +3635,7 @@ export default function HomePage() {
               <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
                 <RoundButton
                   size={ROUND_BUTTON_SIZE_SM}
-                  style={[styles.hamburger, { top: topInset + OVERLAY.chromeGap }]}
+                  style={[styles.hamburger, { top: chromeTop(topInset) }]}
                   onPress={openMenuByTap}
                   badge={menuHasPending}
                   accessibilityLabel={menuHasPending ? t('home.a11y.menuPending') : t('home.a11y.menu')}
@@ -3545,7 +3675,7 @@ export default function HomePage() {
               match={inviteCardMatch}
               actions={[]}
               onReport={() => openReport(inviteCardMatch.user_id)}
-              onCircleTap={() => openCircle(inviteCardMatch.user_id, inviteCardMatch.is_male)}
+              onCircleTap={() => circles.open(inviteCardMatch.user_id, inviteCardMatch.is_male)}
               viewerLocationType={resolveLocationType(profile)}
               bottomInset={0}
               chromeInset={topInset}
@@ -3814,24 +3944,56 @@ const styles = StyleSheet.create({
   permScreen: {
     flex: 1,
   },
-  // Flex spacers above and below permCenterGroup position the visible group
-  // across every screen height. Named (not inline) so both copies of the
-  // layout (page1 watching + page2 pull-to-decline) share the same single
-  // source. EQUAL, so the group is dead-centred vertically (user directive
-  // 2026-07-28): the top spacer used to be the lighter of the two to close
-  // the empty space the group left underneath it, and the art now fills that
-  // space itself.
-  permFlexSpacerTop: {
-    flex: 1,
-  },
-  permFlexSpacer: {
-    flex: 1,
-  },
-  // The visible group, three pieces on one constant gap: gradient SVG
-  // headline, the round centre action, the page art beneath it.
+  // THE CIRCLE, standing on the band's third-from-the-bottom line (user
+  // directive 2026-07-30 — it sat on the band's middle before, and this drops it
+  // a step). `top` is that line as a share of the band and the negative
+  // `marginTop` is half a ring, which is what puts the circle's CENTRE on it
+  // rather than its top edge. Both are layout, so the button's touch target
+  // moves with it — a transform would have shifted only the paint.
+  //
+  // There are no flex spacers left in the band. Two equal ones can only express
+  // "the middle", and a 2:1 pair does not express "a third" either: it splits
+  // the space AROUND the circle, so the line it lands on is off by a sixth of
+  // the ring. A percentage is the fraction the directive actually names.
   permCenterGroup: {
+    position: 'absolute',
+    top: pct(1 - CIRCLE_FROM_BOTTOM),
+    start: 0,
+    end: 0,
+    marginTop: -DOTTED_RING_SIZE / 2,
     alignItems: 'center',
-    gap: CENTER_GROUP_GAP,
+  },
+  // The band the circle is placed in (user directive 2026-07-30): from where
+  // the topbar ends down to the top edge of the art at the foot — not the page.
+  //
+  // Both edges are the layout's, not a measurement. The top is `marginTop:
+  // topInset`, passed inline: the app draws edge-to-edge, so that IS where the
+  // topbar ends. The bottom is wherever the signature block begins, because the
+  // signature is a flow sibling below this and this is `flex: 1` — the art and
+  // the name take their own height and the band gets the rest. Measuring the
+  // art in JS would have meant measuring the NAME too, whose line box is not
+  // knowable at an arbitrary OS font scale.
+  permBand: {
+    flex: 1,
+  },
+  // And the headline is centred in what is left ABOVE the circle. Its bottom is
+  // the circle's own top edge — the same line the circle stands on, off the same
+  // constant, plus the DOTTED_RING_SIZE / 2 that separates the line from the
+  // edge. The RING, not the purple disc: the halo is part of the button the eye
+  // sees, and stopping at the disc would run the text into it.
+  //
+  // No gap constant between the two. The distance from the headline to the
+  // circle is whatever centring leaves, which is the point of the directive:
+  // each is centred in a band, not stacked with a spacer between them.
+  permHeadlineBand: {
+    position: 'absolute',
+    top: 0,
+    start: 0,
+    end: 0,
+    bottom: pct(CIRCLE_FROM_BOTTOM),
+    marginBottom: DOTTED_RING_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   permAvatarWrap: {
     width: DOTTED_RING_SIZE,

@@ -28,7 +28,7 @@ import { RoundButton } from './RoundButton'
 import { CloseIcon, BackIcon } from './icons'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
-import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, chromeTop, lh } from '../tokens'
 import { FONT_SCALE, inkOffset } from '../fonts'
 import { INK, PAGE, SURFACE, SHADOW_BLACK } from '../colors'
 import { SHEET_TITLE } from './BottomSheet'
@@ -277,7 +277,7 @@ export function OverlaySheet({
  *  wants to bleed artwork up behind it — the menu's profile photo — needs to
  *  know exactly how much room that is. */
 export function sheetHeaderHeight(topInset: number): number {
-  return topInset + OVERLAY.chromeGap + ROUND_BUTTON_SIZE_SM + SM
+  return chromeTop(topInset) + ROUND_BUTTON_SIZE_SM + SM
 }
 
 // The height the device actually draws ONE line of a sheet title at. It depends
@@ -292,7 +292,7 @@ const TITLE_LINE_BOX = new Map<number, number>()
 // text engine answers: the old arithmetic, which is exact at font scale 1 and
 // over-tall above it. Never used as the final value.
 const estimateLineBox = (fontScale: number) =>
-  Math.round(lh(TEXT.lg) * Math.min(fontScale, FONT_SCALE.body))
+  Math.round(lh(TEXT.lg) * Math.min(fontScale, FONT_SCALE))
 
 export function SheetHeader({
   title,
@@ -333,8 +333,8 @@ export function SheetHeader({
   const DismissIcon = closeIcon === 'back' ? BackIcon : CloseIcon
   // Where line one of the title sits, measured against the close button's
   // circle. It cannot be a static style value, because the two do NOT grow
-  // together: the button is a fixed dp box whose glyph is capped at
-  // FONT_SCALE.ui, while the heading's line box follows the OS font scale.
+  // together: the button is a fixed dp box whose glyph is pinned at
+  // FIXED_BOX_SCALE, while the heading's line box follows the OS font scale.
   //
   // And it cannot be ARITHMETIC either, which is what shipped until now
   // (`lh(TEXT.lg) × min(fontScale, cap)`): a line box is not knowable from JS.
@@ -380,7 +380,7 @@ export function SheetHeader({
     <View
       style={[
         styles.header,
-        { paddingTop: topInset + OVERLAY.chromeGap },
+        { paddingTop: chromeTop(topInset) },
         floating ? styles.headerFloating : styles.headerBar,
         !floating && barBg ? { backgroundColor: barBg } : null,
       ]}

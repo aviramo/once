@@ -48,7 +48,15 @@ export const Text = forwardRef<RNText, TextProps>(function AppText(props, ref) {
   return (
     <RNText
       ref={ref}
-      maxFontSizeMultiplier={FONT_SCALE.body}
+      // THE font-scale ceiling, for every string in the app — one number, so a
+      // bumped OS font size scales the whole app by one factor instead of
+      // re-ranking it (see FONT_SCALE in ../fonts). Every explicit
+      // `maxFontSizeMultiplier` at a call site was deleted when this landed, and
+      // nothing may reintroduce one: the only override left in the app is
+      // GlyphSlot's invisible LineProbe, which is not painted text but a
+      // measuring stick for a glyph's box, and needs to be able to measure at the
+      // box's ceiling rather than the label's.
+      maxFontSizeMultiplier={FONT_SCALE}
       {...props}
       style={[TEXT_START, props.style, { fontFamily: family, ...weightOverride }]}
     />
@@ -63,7 +71,9 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function AppTex
   return (
     <RNTextInput
       ref={ref}
-      maxFontSizeMultiplier={FONT_SCALE.body}
+      // The same one ceiling a label gets: a field and its own label may never
+      // scale apart.
+      maxFontSizeMultiplier={FONT_SCALE}
       selectionColor={SELECTION}
       cursorColor={INK}
       {...props}

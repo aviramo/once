@@ -51,19 +51,41 @@ export const INPUT_START: TextStyle = {
   textAlign: isRTL ? 'right' : 'left',
 }
 
-// How much each class of text is allowed to grow when the user bumps the OS
-// font-size slider. Pass as `maxFontSizeMultiplier` on <Text>/<TextInput>.
-// - ui:      fixed-size chrome (buttons, badges, timestamps) — scaling would
-//            blow out containers with hard-coded heights/widths.
-// - heading: section titles and card names — small headroom so hierarchy
-//            survives an accessibility bump.
-// - body:    paragraph copy, descriptions, settings rows — this is the text
-//            accessibility bumps are actually meant to help.
-export const FONT_SCALE = {
-  ui: 1.0,
-  heading: 1.15,
-  body: 1.3,
-} as const
+// ── ONE ceiling for every piece of text in the app ─────────────────────────
+// How far the OS font-size slider may grow a label (`maxFontSizeMultiplier`).
+// ONE number for the whole app (user directive 2026-07-30), where this used to
+// be a three-class ramp — ui 1.0 / heading 1.15 / body 1.3 — whose classes
+// silently redesigned the app at a bumped font scale:
+//   - the same SHEET_TITLE rendered 26dp on the communities sheet header (body,
+//     inherited from AppText) and 23dp on home's status card (heading, passed by
+//     hand), so two headings of the identical declared rank came out different
+//     sizes on a large-font device;
+//   - a heading capped at 1.15 standing over a description capped at 1.3 closed
+//     the 20:16 gap that is the only thing saying which of the two IS the
+//     heading;
+//   - chrome pinned at 1.0 stopped growing altogether while the paragraph beside
+//     it grew a third.
+// A single ceiling multiplies the whole app by one factor, so every size
+// RELATION the design states holds at every OS setting.
+//
+// The number is the old `heading` tier (user directive 2026-07-30): the app is a
+// dense single screen of chips, round chrome and on-photo tiles whose boxes are
+// dp, so the app-wide step is the cautious one — 15% of headroom for the OS
+// slider, granted to every string equally, rather than a third granted to
+// paragraphs alone.
+//
+// Declared once and applied once — in AppText's Text/TextInput wrappers. No call
+// site passes `maxFontSizeMultiplier`: there is nothing left to choose.
+export const FONT_SCALE = 1.15
+
+// The one exception, and it is geometry rather than type: a glyph centred inside
+// a box whose dp does NOT follow the font scale (RoundButton's circle, home's
+// centre-notice circle) may not follow it either, or the single
+// glyph-to-circle ratio stops being true and the same button reads crowded on a
+// bumped device and lost on a plain one. Never for TEXT — no label in the app
+// lives in a fixed box; every one of their containers is content-sized or
+// minHeight, so text simply takes FONT_SCALE.
+export const FIXED_BOX_SCALE = 1
 
 // Text and glyphs are sized in two different units: a `fontSize` is MULTIPLIED
 // by the OS font scale before layout, while an Svg `width`/`height` in dp is
@@ -75,17 +97,17 @@ export const FONT_SCALE = {
 // and stop together. Applied once, in icons.tsx's `Glyph` wrapper — call sites
 // keep passing plain ICON.* values.
 //
-// Clamped to `body` by default because that is the tier the icons actually sit
-// beside (settings rows, chips, list labels); a glyph must never outgrow the
-// text it labels. Scales below the ceiling are honoured in full.
+// Defaults to the app's own ceiling, which is also every label's, so a glyph can
+// never outgrow the text it labels. Scales below the ceiling are honoured in
+// full.
 //
-// `cap` lowers that ceiling for a glyph living in a container that does NOT
-// grow with the font scale. Pass FONT_SCALE.ui (1.0) inside a fixed-dp box —
-// a round button is the case that matters: its diameter is a plain dp, so a
-// glyph that keeps scaling changes the glyph-to-circle ratio per device and
-// the same button reads crowded on one and lost on another. Call sites never
-// pass this by hand; RoundButton declares it once via GlyphScale (icons.tsx).
-export const iconScale = (size: number, cap: number = FONT_SCALE.body): number =>
+// `cap` lowers it for a glyph living in a container that does NOT grow with the
+// font scale: pass FIXED_BOX_SCALE inside a fixed-dp box — a round button is the
+// case that matters, its diameter being a plain dp, so a glyph that keeps
+// scaling changes the glyph-to-circle ratio per device and the same button reads
+// crowded on one and lost on another. Call sites never pass this by hand;
+// RoundButton declares it once via GlyphScale (icons.tsx).
+export const iconScale = (size: number, cap: number = FONT_SCALE): number =>
   Math.round(size * Math.min(PixelRatio.getFontScale(), cap))
 
 // ── Centring a glyph on a line of text ─────────────────────────────────────
@@ -103,6 +125,30 @@ const FONT_ASCENT = 1.068    // hhea ascender / head yMax — the same value, so
 const FONT_DESCENT = 0.292   // includeFontPadding changes nothing here
 const CAP_HEIGHT = 0.714     // Latin capitals + digits: baseline → 0.714
 const HEBREW_HEIGHT = 0.600  // every Hebrew letter: baseline → 0.600 (only ל rises past it)
+
+// ── The leading, and why no style may declare one ──────────────────────────
+// The line box the text engine lays out when NOTHING declares a `lineHeight`:
+// the font's own ascent + descent, 1.36 em.
+//
+// This is the app's leading (user directive 2026-07-30). It replaced a declared
+// `lineHeight: lh(size)` (1.4 em) on every text style in the app, and the
+// difference is not the 0.04: a declared lineHeight is a dp value, and RN hands
+// dp text metrics to Android as SP, where the OS font-scale curve grows them
+// UNCAPPED by `maxFontSizeMultiplier` — while `fontSize` IS capped. So above the
+// cap the two came apart: on a font_scale=2.0 device a 16dp/22dp body paragraph
+// painted its ink at 16 × 1.15 = 18.4dp inside a line box of ~37dp, a leading of
+// 2.0 em where the design said 1.4, which is the wide-open paragraph the user
+// reported (Hebrew_Big, 2026-07-30). Lowering the app's ceiling to 1.15 that day
+// did not cause it — it made an existing 1.78 em into 2.0.
+//
+// The font's leading cannot come apart from the ink, because it is a multiple of
+// the font size the device actually painted, whatever ceiling clamped it. So the
+// ratio is 1.36 on every device, at every OS font scale, by construction.
+//
+// Nothing needs to be passed anywhere for that: it is what a `Text` with no
+// `lineHeight` already does. The constant is exported only for the few places
+// that must SIZE A BOX in JS before its text exists (tokens.ts `lh`).
+export const FONT_LINE_RATIO = FONT_ASCENT + FONT_DESCENT
 
 // How far BELOW its line box's centre a line's ink centre sits, as a fraction
 // of the font size. Derived rather than measured:
@@ -130,7 +176,7 @@ const INK_RISE = (FONT_ASCENT - FONT_DESCENT) / 2 - (isRTL ? HEBREW_HEIGHT : CAP
 // (same ceiling the labelled text is capped at), and returns a FLOAT: it feeds
 // a transform, and rounding it to whole dp is what used to collapse two
 // different font scales onto the same 3dp nudge.
-export const inkOffset = (fontSize: number, cap: number = FONT_SCALE.body): number =>
+export const inkOffset = (fontSize: number, cap: number = FONT_SCALE): number =>
   fontSize * Math.min(PixelRatio.getFontScale(), cap) * INK_RISE
 
 // fontWeight → the real weighted face to render it with. The app asks for
@@ -151,6 +197,11 @@ export const WEIGHT_TO_FAMILY: Record<string, string> = {
   '500': 'NotoSansHebrew_500Medium',
   '600': 'NotoSansHebrew_500Medium',
   '700': 'NotoSansHebrew_700Bold',
+  // 900 is the ONE weight outside the 400/500 pair, and exactly one thing in the
+  // app writes it: home's wordmark. It is a real bundled Black face rather than a
+  // landing spot — an unmapped '900' would fall through to DEFAULT_FAMILY and
+  // paint the name in Regular, the opposite of what it asked for.
+  '900': 'NotoSansHebrew_900Black',
   normal: 'NotoSansHebrew_400Regular',
   bold: 'NotoSansHebrew_700Bold',
 }

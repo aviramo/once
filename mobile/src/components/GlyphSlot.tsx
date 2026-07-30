@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { GlyphScale } from './icons'
 import { FONT_SCALE, inkOffset } from '../fonts'
@@ -8,6 +8,45 @@ import { TEXT, lh, TAP_SLOP } from '../tokens'
 // The probe's content: one non-breaking space. It paints nothing, but it is
 // what makes the text engine lay out a line at all (an empty string collapses).
 const PROBE_CHAR = ' '
+
+// ── THE way the app learns how tall a real line of text is ─────────────────
+// An invisible one-character `Text` carrying a label's own fontSize and
+// font-scale ceiling — and, like every label in the app, NO declared lineHeight,
+// so the font's own leading sets its box exactly as it sets the label's (see
+// FONT_LINE_RATIO in ../fonts). It is laid out by the same text engine that draws
+// the label, so it is right by construction on every OS version, density and
+// font scale — which no JS arithmetic can be: Android 14+ runs a declared
+// `lineHeight` through its own non-linear font-scale curve and does NOT cap it
+// with maxFontSizeMultiplier (measured: a 22dp line box rendering ~37dp at
+// font_scale 2.0), while `fontSize` stays capped. That divergence is why nothing
+// declares one any more, and why this probe never did the arithmetic.
+//
+// Two callers, one probe. `GlyphSlot` below lets it SET the height of the box it
+// centres a glyph in. `Chip` reads that height back through `onHeight` to work
+// out the padding that keeps its tile exactly a round chrome button tall — a
+// reader passes a `style` that takes the probe out of flow, so it measures
+// without occupying anything.
+export function LineProbe({
+  size,
+  cap,
+  style,
+  onHeight,
+}: {
+  size: number
+  cap: number
+  style?: StyleProp<TextStyle>
+  onHeight?: (height: number) => void
+}) {
+  return (
+    <Text
+      style={[styles.probe, { fontSize: size }, style]}
+      maxFontSizeMultiplier={cap}
+      onLayout={onHeight ? e => onHeight(e.nativeEvent.layout.height) : undefined}
+    >
+      {PROBE_CHAR}
+    </Text>
+  )
+}
 
 // ── THE way a glyph stands beside a line of text ───────────────────────────
 // One implementation for every icon that labels a line: the chip's leading and
@@ -19,22 +58,17 @@ const PROBE_CHAR = ' '
 //    the gap between them. So the slot is exactly ONE line tall.
 // 2. It centres on that line's INK, not on its line box (see `inkOffset`).
 //
-// The load-bearing detail is HOW the slot gets to be one line tall: an
-// invisible one-character `Text`, carrying the same fontSize / lineHeight /
-// font-scale ceiling as the label it stands beside. NOT a height computed in
-// JS from `lh(...)` — Android 14+ runs `lineHeight` through its own non-linear
-// font-scale curve and does NOT cap it with maxFontSizeMultiplier, so on a
-// large-font device the real line box is far taller than any JS arithmetic
-// predicts (measured: a 22dp line box rendering at ~37dp at font_scale 2.0)
-// and every computed box put its glyph too high. The probe is measured by the
-// same text engine that draws the label, so it is right by construction on
-// every OS version, density and font scale.
+// The load-bearing detail is HOW the slot gets to be one line tall: the
+// `LineProbe` above, laying out a line at the same fontSize and font-scale
+// ceiling as the label it stands beside. NOT a height computed in JS from
+// `lh(...)` — see the probe's own note for why that can never be right on a
+// large-font device.
 //
 // The glyph is centred against that probe by flexbox and then nudged down by
 // `inkOffset` — the one correction that stays a pure function of the font size.
 export function GlyphSlot({
   size = TEXT.md,
-  cap = FONT_SCALE.body,
+  cap = FONT_SCALE,
   width,
   onPress,
   style,
@@ -60,9 +94,7 @@ export function GlyphSlot({
       hitSlop={onPress ? TAP_SLOP : undefined}
       style={[styles.slot, width != null ? { width } : null, style]}
     >
-      <Text style={[styles.probe, { fontSize: size, lineHeight: lh(size) }]} maxFontSizeMultiplier={cap}>
-        {PROBE_CHAR}
-      </Text>
+      <LineProbe size={size} cap={cap} />
       <GlyphScale cap={cap}>
         <View style={{ transform: [{ translateY: inkOffset(size, cap) }] }}>{children}</View>
       </GlyphScale>

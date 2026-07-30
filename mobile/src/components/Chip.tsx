@@ -4,10 +4,10 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
 import { Text } from './AppText'
 import { Path, Circle, Rect } from 'react-native-svg'
 import { Glyph } from './icons'
-import { GlyphSlot } from './GlyphSlot'
+import { GlyphSlot, LineProbe } from './GlyphSlot'
 import { FONT_SCALE } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
-import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, lh } from '../tokens'
+import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
 import { PHOTO_CHROME, PAGE, INK, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 
@@ -46,11 +46,6 @@ const TONES = {
   solid:    { fg: WHITE,  bg: INK },
   // INK on an INK wash: the positive tone is the one purple, laid soft.
   positive: { fg: INK, bg: INK_WASH },
-  // "Do this" rather than "here is a fact". Same white tile as every other
-  // on-photo chip — the tile is the fabric of the card and an add-chip is not
-  // a foreign object on it. It opts out of the on-photo ink override below so
-  // its ink stays the full INK purple whatever the tone rules do around it.
-  action:   { fg: INK, bg: PHOTO_CHROME },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -164,7 +159,7 @@ function useHugWidth(key: string, lineItems: number[]) {
 function Badge({ text, ltr = false, style, onLayout }: { text: string; ltr?: boolean; style?: StyleProp<ViewStyle>; onLayout?: (e: LayoutChangeEvent) => void }) {
   return (
     <View style={[styles.badge, style]} onLayout={onLayout}>
-      <Text style={[styles.badgeText, ltr && styles.badgeTextLtr]} maxFontSizeMultiplier={FONT_SCALE.heading}>
+      <Text style={[styles.badgeText, ltr && styles.badgeTextLtr]}>
         {text}
       </Text>
     </View>
@@ -281,12 +276,61 @@ function useUnglue(text: string | undefined) {
   }
 }
 
-// A chip's outer height, derived from the same tokens its padding box is
-// built from (see `styles.chip`). Exported so anything that has to sit level
-// with a chip — the leading glyph of the settings groups row — centres against
-// the real height instead of a hand-tuned margin that drifts when the tokens
-// move.
-export const CHIP_HEIGHT = lh(TEXT.md) + 2 * SM
+// ── A chip stands exactly as tall as a round chrome button ─────────────────
+// (user directive 2026-07-30.) A chip tile and a round chrome button are the
+// same white object — on the match card's top row the name/age chip and the
+// "End Chat" chip sit directly beside home's hamburger — so the two must read
+// as ONE height, and the chip's height is therefore stated as the button's
+// diameter rather than as a sum of its own paddings.
+//
+// It cannot be a fixed `height`: a label that wraps has to grow the tile. And
+// it cannot be a fixed PADDING either, which is what it used to be — `SM` above
+// and below the label makes exactly this number at font scale 1 and at no other
+// scale, because the OS grows the label's line box through its own curve,
+// UNCAPPED by maxFontSizeMultiplier (see LineProbe). That is why the chips came
+// out ~25% taller than the hamburger beside them on a large-font device.
+//
+// So the PADDING is what is derived: half of whatever room is left inside the
+// button's diameter once the label's REAL measured line box is in it. Nothing is
+// ever clipped — a line box that has outgrown the button simply takes the last
+// of the padding (`Math.max(0, …)`) and the tile grows past it, and a wrapped
+// label grows by whole line boxes exactly as before.
+export const CHIP_HEIGHT = ROUND_BUTTON_SIZE_SM
+
+/** The chip's vertical padding: what is left of CHIP_HEIGHT once one line of
+ *  label is in it, halved. `lineBox` is the probe's measurement; until it has
+ *  reported, the token arithmetic stands in — it is exact at font scale 1, which
+ *  is where a first frame overwhelmingly is, so nothing visibly settles. An
+ *  outlined chip pays for its rule out of the same box, so its outer rectangle
+ *  matches the filled chips beside it. */
+function chipPad(lineBox: number | null, outlined: boolean): number {
+  const pad = Math.max(0, (CHIP_HEIGHT - (lineBox ?? lh(TEXT.md))) / 2)
+  return Math.max(0, pad - (outlined ? STROKE.thin : 0))
+}
+
+/** THE chip's padding box, probe and all: render `probe` inside the tile and put
+ *  `style` on it.
+ *
+ *  Exported because the match card's BIO is one of these tiles too and is not
+ *  allowed to differ from the chips beside it (user directive 2026-07-30). It
+ *  cannot BE a `Chip` — it is absolutely positioned, animated, and holds a
+ *  paragraph or the inline bio editor rather than a label — so it takes the box
+ *  from here rather than re-typing it, which is how it came to sit at a flat
+ *  `padding: MD`: twice the chips' vertical air, and blind to the font scale. */
+export function useChipPadding(outlined = false) {
+  const [lineBox, setLineBox] = useState<number | null>(null)
+  // Only a measurement that CHANGES the padding is worth a render. At font
+  // scale 1 the probe confirms exactly what the token arithmetic already said,
+  // so the ordinary device pays nothing at all for this.
+  const onHeight = useCallback(
+    (h: number) => setLineBox(cur => (chipPad(cur, outlined) === chipPad(h, outlined) ? cur : h)),
+    [outlined],
+  )
+  return {
+    style: { paddingVertical: chipPad(lineBox, outlined) },
+    probe: <LineProbe size={TEXT.md} cap={FONT_SCALE} style={styles.chipProbe} onHeight={onHeight} />,
+  }
+}
 
 export function Chip({
   renderIcon,
@@ -298,6 +342,7 @@ export function Chip({
   bold = false,
   small = false,
   plusCount,
+  count,
   renderTrailing,
   onTrailingPress,
   onPress,
@@ -315,6 +360,14 @@ export function Chip({
    * groups than the one named. The "+N" is composed here (single source) and
    * mirrored under RTL so the plus stays on the reading-start side. */
   plusCount?: number
+  /** A BARE number in a pill after the label, at the label's trailing end — the
+   * opposite side of the tile from the leading glyph (user directive
+   * 2026-07-30). For a live quantity the label itself does not name: the menu's
+   * visibility tile says "Visible" and this says how many people are watching.
+   * The number alone, because the tile is small and its own label already says
+   * what is being counted. Same slot and same pale fabric as `plusCount` (the
+   * two are alternative sources for the one trailing pill). */
+  count?: number
   /** No fill, just a light purple rule. For a chip that ADDS something rather
    * than reporting a fact — it reads as an empty slot waiting to be filled,
    * which a solid chip cannot. */
@@ -351,12 +404,16 @@ export function Chip({
   // chips (an empty add slot) stay flat.
   const tileShadow = onPhoto && !outlined
   // Every glyph in this chip stands beside the chip's OWN label — the small
-  // tile's label is a size down, and both are capped at FONT_SCALE.heading, so
-  // the icon can never outgrow the text it sits next to on a large-font device.
-  const glyphSlot = { size: small ? TEXT.sm : TEXT.md, cap: FONT_SCALE.heading }
+  // tile's label is a size down, and both take the app's one FONT_SCALE ceiling,
+  // so the icon can never outgrow the text it sits next to on a large-font
+  // device.
+  const glyphSlot = { size: small ? TEXT.sm : TEXT.md, cap: FONT_SCALE }
   const Container: any = onPress ? Pressable : View
-  // "+N": the mini-chip that TRAILS the label, the same slot the presence dot
-  // rides in — not an item flowing inside the text (user directive 2026-07-29).
+  // THE trailing pill: the mini-chip that follows the label, the same slot the
+  // presence dot rides in — not an item flowing inside the text (user directive
+  // 2026-07-29). Two callers state it two ways and it is deliberately one slot,
+  // one Badge: `plusCount` composes the "+N more" hint (see below), `count` is a
+  // bare live number ("Visible  3"). A chip has no use for both at once.
   // The label used to be split into word-runs so the pill could chain after the
   // final word, but a wrap row is laid out by the flex engine, and the flex
   // engine cannot shrink-to-fit what it wrapped: the tile kept the width it was
@@ -367,7 +424,9 @@ export function Chip({
   // keeps the weak "+" glued to its digit; the pill rides the chip's own
   // trailing side, so it follows the app's direction like every other piece of
   // chip chrome.
-  const plusPill = plusCount ? (isRTL ? `${plusCount}+` : `+${plusCount}`) : null
+  const trailingPill = plusCount ? (isRTL ? `${plusCount}+` : `+${plusCount}`)
+    : count != null ? String(count)
+      : null
   // The one flex-laid-out label shape left: `br`-delimited lines of text runs +
   // pill clusters (the family chip). It is built here so the hug hook knows how
   // many boxes each line owes it, and is capped by it so the tile ends where the
@@ -378,11 +437,23 @@ export function Chip({
     lines ? lines.map(l => l.length) : [],
   )
   const unglue = useUnglue(!lines ? text : undefined)
+  // The tile's height contract (see CHIP_HEIGHT): the label's real line box is
+  // measured by an out-of-flow probe and the padding is whatever is left of a
+  // round chrome button's diameter. The `small` tile opts out — it is one step
+  // UNDER the chrome on purpose, not level with it — and keeps its token box.
+  const pad = useChipPadding(outlined)
   return (
     <Container
       onPress={onPress}
-      style={[styles.chip, small && styles.chipSmall, outlined ? styles.chipOutlined : { backgroundColor: bgColor }, tileShadow && styles.chipShadow]}
+      style={[
+        styles.chip,
+        small && styles.chipSmall,
+        outlined ? styles.chipOutlined : { backgroundColor: bgColor },
+        tileShadow && styles.chipShadow,
+        !small && pad.style,
+      ]}
     >
+      {small ? null : pad.probe}
       {renderIcon ? <GlyphSlot {...glyphSlot}>{renderIcon(fg)}</GlyphSlot> : null}
       {lines ? (
         // A column of wrapping rows: one row per `br`-delimited line, each row a
@@ -401,7 +472,6 @@ export function Chip({
                   <Text
                     key={i}
                     style={[styles.chipText, small && styles.chipTextSmall, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
-                    maxFontSizeMultiplier={FONT_SCALE.heading}
                     onLayout={hug.onItemLayout(li, i)}
                   >
                     {seg.text}
@@ -415,17 +485,26 @@ export function Chip({
         <>
           <Text
             style={[styles.chipText, small && styles.chipTextSmall, bold && styles.chipTextBold, { color: fg }]}
-            maxFontSizeMultiplier={FONT_SCALE.heading}
             onTextLayout={unglue.onTextLayout}
             onLayout={unglue.onLayout}
           >
             {unglue.label}
           </Text>
-          {plusPill ? (
-            // Bottom-aligned, so on a label that wrapped it stands beside the
-            // LAST line — where the count belongs — instead of floating up
-            // level with the first one.
-            <Badge text={plusPill} ltr style={styles.plusPill} />
+          {trailingPill ? (
+            // CENTRED on the label's line, in the very same measured one-line box
+            // the leading glyph stands in — a mini-chip beside a line of text is
+            // the same geometry problem as a glyph beside one, so it takes the
+            // same one answer (GlyphSlot) rather than a second alignment of its
+            // own. It used to be the bare pill, bottom-aligned to the row: the
+            // pill is a size-down line box and so is SHORTER than the label's, and
+            // hanging it from the bottom of the taller box left every one of them
+            // sitting low against its text (user, 2026-07-30).
+            // The slot is still bottom-aligned (`trailingPill`), which is what
+            // puts that one-line box beside the LAST line of a wrapped label —
+            // where a count belongs — instead of level with the first.
+            <GlyphSlot {...glyphSlot} style={styles.trailingPill}>
+              <Badge text={trailingPill} ltr />
+            </GlyphSlot>
           ) : null}
           {renderTrailing ? (
             // The trailing glyph is its own press target when asked (the report
@@ -489,9 +568,12 @@ export function ClockIcon({ color }: { color: string }) {
   )
 }
 
-export function KidsIcon({ color }: { color: string }) {
+// `size` because this glyph also labels the own-profile preview's "family &
+// kids" BUTTON, where the button injects its own glyph size (BUTTON_GLYPH) —
+// same as its siblings above.
+export function KidsIcon({ color, size = ICON.sm }: { color: string; size?: number }) {
   return (
-    <Glyph width={ICON.sm} height={ICON.sm} viewBox="0 0 24 24" fill="none">
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={8} cy={7} r={3} stroke={color} strokeWidth={2} />
       <Path d="M2 21v-2a6 6 0 0 1 12 0v2" stroke={color} strokeWidth={2} strokeLinecap="round" />
       <Circle cx={17} cy={10} r={2.2} stroke={color} strokeWidth={2} />
@@ -538,6 +620,12 @@ const styles = StyleSheet.create({
     // line tall, so flex-start and centre coincide.
     alignItems: 'flex-start',
     gap: SM,
+    // THE chip's gutter: MD, twice the air the tile keeps above and below its
+    // label (tried at SM on 2026-07-30 and reverted the same day — a chip is a
+    // wide-ish tile on purpose, and a label pressed to 8dp from the tile's edge
+    // read as cramped). `paddingVertical` here is only the pre-measurement
+    // stand-in; the real one is derived (see CHIP_HEIGHT / useChipPadding), and
+    // it is the same number at font scale 1, so nothing moves as the probe lands.
     paddingHorizontal: MD,
     paddingVertical: SM,
     borderRadius: RADIUS,
@@ -546,13 +634,20 @@ const styles = StyleSheet.create({
   // The compact tile: one step in on both axes, so the chip annotates a list row
   // instead of standing beside it as an object of its own weight.
   chipSmall: { paddingHorizontal: SM, paddingVertical: XS, gap: XS },
+  // The line-box probe is a measuring stick, not content: absolute so it neither
+  // takes a slot in the chip's row (the row's `gap` would push the label off by
+  // SM for a zero-width child) nor holds the tile open when the label is taller
+  // than one line. It paints nothing at any size.
+  chipProbe: { position: 'absolute' },
   // Same soft lift the round overlay buttons cast — applied to on-photo tiles so
   // chips and buttons read as one fabric off the image (shared LIFT_SHADOW).
   chipShadow: LIFT_SHADOW,
   // The rule is drawn OUTSIDE the padding box, so an outlined chip would sit
   // taller and wider than the filled chips beside it. Pull the padding in by
   // exactly the border width: same tokens, same outer rectangle, so a row of
-  // chips keeps one height whichever variant it holds.
+  // chips keeps one height whichever variant it holds. (The vertical half of
+  // that is `chipPad`'s job on every chip but the `small` one, which is the only
+  // variant still taking its box from this rule — see CHIP_HEIGHT.)
   chipOutlined: {
     ...OUTLINE_SKIN,
     backgroundColor: 'transparent',
@@ -561,7 +656,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
     // Regular weight (user directive 2026-07-29). A chip is a FACT — how far
     // away, how many kids, which group — not a heading, and a stack of them all
     // set in semibold read as a column of shouted labels with nothing quiet to
@@ -585,14 +679,17 @@ const styles = StyleSheet.create({
   // The small tile's label — the list-row size, one step under the chip's own.
   chipTextSmall: {
     fontSize: TEXT.sm,
-    lineHeight: lh(TEXT.sm),
   },
   // A small pale-purple pill riding inside the chip after the label — the
   // "+N more shared groups" hint. The PAGE tint, the same fill the chip itself
   // wears off-photo (user directive 2026-07-28: every chip is the page purple),
-  // so it reads as a whisper of purple against the white chip tile. Its line
-  // height matches the label's first line (lh(TEXT.md)) so, under the row's
-  // flex-start alignment, the pill sits level with line one of a wrapped label.
+  // so it reads as a whisper of purple against the white chip tile. It hugs its
+  // own line and the row aligns it flex-start, so the pill sits level with the TOP
+  // of line one of a wrapped label. It used to stretch its text's line box to the
+  // label's (a declared `lineHeight: lh(TEXT.md)` under a TEXT.sm font) to fill
+  // that line edge to edge — a declared line box grows uncapped with the OS font
+  // scale, so on a large-font device the pill would have stood TALLER than the
+  // label line it was there to sit inside.
   badge: {
     backgroundColor: PAGE,
     borderRadius: RADIUS,
@@ -601,7 +698,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: TEXT.sm,
-    lineHeight: lh(TEXT.md),
     fontWeight: WEIGHT.medium,
     color: INK,
     textAlign: 'center',
@@ -646,12 +742,13 @@ const styles = StyleSheet.create({
     rowGap: XS,
     flexShrink: 1,
   },
-  // The "+N" pill stands OFF the label: the chip's own SM gap between its parts,
-  // and a step more on top of it, so the count reads as a second object on the
-  // tile rather than as the last word of the name (user directive 2026-07-29).
-  // alignSelf ends it level with the label's LAST line — the chip's row is
-  // aligned flex-start, for the leading glyph.
-  plusPill: {
+  // The trailing pill's SLOT stands OFF the label: the chip's own SM gap between
+  // its parts, and a step more on top of it, so the count reads as a second
+  // object on the tile rather than as the last word of the label (user directive
+  // 2026-07-29). alignSelf lands the slot on the label's LAST line — the chip's
+  // row is aligned flex-start, for the leading glyph — and the pill is centred
+  // inside it, so a one-line label reads as plainly centred either way.
+  trailingPill: {
     marginStart: XS,
     alignSelf: 'flex-end',
   },

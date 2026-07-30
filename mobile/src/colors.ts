@@ -113,8 +113,9 @@ export const SHADOW_BLACK = '#000000'
 // The soft lift shadow every floating tile over a photo casts — the round
 // overlay buttons AND the on-photo chips — so they read as one fabric sitting
 // off the image. Discrete RN shadow props (not a boxShadow string) so it also
-// carries the Android `elevation` the buttons rely on. Single source: both
-// RoundButton and Chip spread this, never re-type the numbers.
+// carries the Android `elevation` the buttons rely on. Single source: RoundButton,
+// Chip and the match card's oversized bio tile all spread this, never re-type the
+// numbers.
 export const LIFT_SHADOW = {
   shadowColor: SHADOW_BLACK,
   shadowOffset: { width: 0, height: 4 },

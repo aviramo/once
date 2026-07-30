@@ -63,7 +63,7 @@ const s = StyleSheet.create({
     gap: MD,
   },
   rowLabel: { flex: 1, minWidth: 0, fontSize: TEXT.md, color: INK },
-  rowSub: { fontSize: TEXT.sm, color: INK_MUTED, lineHeight: lh(TEXT.sm) },
+  rowSub: { fontSize: TEXT.sm, color: INK_MUTED },
   track: {
     width: SWITCH.width, height: SWITCH.height, borderRadius: RADII.pill,
     padding: SWITCH.pad, justifyContent: 'center',

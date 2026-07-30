@@ -10,7 +10,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from './AppText'
 import { SURFACE, PAGE, INK, INK_DIM } from '../colors'
 import { useBottomInset } from '../hooks/useBottomInset'
-import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SCROLL_FADE, DRAG_HANDLE } from '../tokens'
+import { useKeyboardShrinkSV } from '../hooks/useKeyboard'
+import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SHEET_GAP, SCROLL_FADE, DRAG_HANDLE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
 // exceed any sheet's height, so the sheet always begins fully hidden no matter
@@ -44,12 +45,20 @@ type BottomSheetProps = {
   // Disable the backdrop tap → dismiss (e.g. while a network call is in flight).
   // Defaults to allowed.
   disableBackdropDismiss?: boolean
-  // Extra style override (e.g. Android keyboard lift via marginBottom).
+  // Extra style override on the card wrapper (e.g. a `maxHeight` cap a body
+  // wants to impose on itself). NEVER a keyboard lift: the sheet handles the
+  // keyboard itself, below, and a second lift at a call site double-applies.
   cardWrapStyle?: any
-  // Inner padding on the sheet body. Defaults to standard.
-  // NOT the bottom one: the air under the last thing in the popup is the
-  // sheet's, one value for every popup in the app, and it is applied after
-  // this style so a `paddingBottom` here has no effect.
+  // Metrics override on the sheet body, for the few popups whose content is not
+  // a column of text and buttons: an edge-to-edge list of rows
+  // (`paddingHorizontal: 0`), a tighter gutter around full-width tiles, a
+  // `flex`/`flexShrink` a tall body needs.
+  //
+  // NOT the standard frame: the gutter, the air above the first block and the air
+  // under the last one are the SHEET's (see the card below), one set of values
+  // for every popup in the app, and the vertical rhythm inside the body belongs
+  // to SheetTitle/SheetDesc/SheetActions. A `paddingBottom` here has no effect at
+  // all — it is applied after this style.
   contentStyle?: any
   // When the sheet body contains a scrollable child (e.g. a ScrollView wrapped
   // in <GestureDetector gesture={Gesture.Native()}>), pass that native gesture
@@ -127,7 +136,14 @@ export function BottomSheet({
   // (user directive 2026-07-28). Everything above the cap used to be pushed off
   // the screen, head first. What gives inside the card is whatever declares
   // `flexShrink` — in practice a <SheetScroll>; every other part keeps its size.
+  // ...and the same reserve as PADDING on the container, because `maxHeight`
+  // alone stops governing the moment the keyboard is up: what bounds the card
+  // then is `flexShrink` against the space left over the keyboard, and that
+  // space starts at the top of the SCREEN. A sheet tall enough to want all of it
+  // (the address search) climbed under the status bar. Padding the container is
+  // what puts the safe area out of reach of the shrink too.
   const maxHeight = Dimensions.get('window').height - insets.top - SHEET_TOP_GAP
+  const topReserve = insets.top + SHEET_TOP_GAP
   // The wiring for a <SheetScroll> anywhere in the body. Created here, once, so
   // the dismiss-pan can be told about it before it exists.
   const bodyScroll = useMemo(() => Gesture.Native(), [])
@@ -238,12 +254,34 @@ export function BottomSheet({
       }
     })
 
+  // APPLICATION POINT 2 of 2 for the keyboard (see src/hooks/useKeyboard.ts).
+  //
+  // A RN `Modal` is its own native window: it never resizes for the IME on
+  // either platform, and it does not inherit the root shrink in _layout.tsx. So
+  // THE POPUP LIFTS ITSELF, here, once, for all fourteen popups — a call site
+  // must never nudge itself again (that double-applied and overshot, which is
+  // what the per-screen rule of 2026-05-19 was working around; with the lift in
+  // exactly one place there is nothing left to double).
+  //
+  // `marginBottom` and not a transform, because it has to do two jobs at once:
+  // stand the card on top of the keyboard AND take that height out of the space
+  // the card is allowed to occupy, so a tall sheet gives at the bottom instead
+  // of growing off the top of the screen. `flexShrink` on the wrap and the card
+  // (styles below) is what carries the reduction down to the <SheetScroll>.
+  //
+  // The value is the page's own (`useKeyboardShrinkSV`): the keyboard's height
+  // less half the app's bottom air, so `bottomPad` above ends up half-spent over
+  // a keyboard and whole over the navigation bar — the same air a page's chrome
+  // keeps, from the same hook, since a popup must not sit at a different height
+  // above the keyboard than the composer under it does.
+  const kb = useKeyboardShrinkSV()
   const animStyle = useAnimatedStyle(() => ({
+    marginBottom: kb.value,
     transform: [{ translateY: translateY.value + dragY.value }],
   }))
 
   const Inner = (
-    <View style={styles.overlay}>
+    <View style={[styles.overlay, { paddingTop: topReserve }]}>
       <Pressable
         style={StyleSheet.absoluteFill}
         onPress={disableBackdropDismiss ? undefined : onDismiss}
@@ -264,7 +302,20 @@ export function BottomSheet({
             }
           }}
         >
-          <View ref={cardRef} style={[styles.card, { maxHeight }, contentStyle, { paddingBottom: bottomPad }]}>
+          <View
+            ref={cardRef}
+            style={[
+              styles.card,
+              // The air above the popup's first block. With a drag handle it
+              // comes from the handle's own bottom margin, so only a handle-less
+              // sheet needs it here — either way it is the same one number, so
+              // every popup starts its content at the same height.
+              !dragHandle && styles.cardNoHandle,
+              { maxHeight },
+              contentStyle,
+              { paddingBottom: bottomPad },
+            ]}
+          >
             {dragHandle ? <View style={styles.dragHandle} /> : null}
             <SheetScrollContext.Provider value={scrollWiring}>
               {children}
@@ -302,12 +353,14 @@ export function BottomSheet({
 // to claw back the width it cost — at 18 there is nothing to claw back, so the
 // tracking goes with it.
 //
-// Spacing is deliberately NOT in here: a popup's gap under its title belongs to
-// that popup's layout (a desc follows in one, a list in another). Call sites
-// pass it via `style`.
+// No spacing in here, and none at the call site either: the gap under a title
+// belongs to whatever comes NEXT, and that thing knows which gap it is — the
+// description's own (SheetDesc), the between-blocks one (a list, a field), or the
+// actions' (SheetActions). Every one of them is SHEET_GAP in tokens.ts. A title
+// declaring its own marginBottom on top of that is how two of these popups ended
+// up 4px apart from the rest.
 export const SHEET_TITLE: TextStyle = {
   fontSize: TEXT.lg,
-  lineHeight: lh(TEXT.lg),
   fontWeight: WEIGHT.medium,
   color: INK,
   textAlign: 'center',
@@ -414,6 +467,11 @@ export function SheetScroll({ children, style }: { children: ReactNode; style?: 
     <ScrollView
       style={styles.scrollBody}
       showsVerticalScrollIndicator={false}
+      // The app-wide keyboard rule, for the one field-bearing scroll surface
+      // that is not a `PullScrollView` (see PullPane.tsx): scrolling never
+      // closes the keyboard — no `keyboardDismissMode`, so it stays `none` —
+      // and a tap the body does not handle does.
+      keyboardShouldPersistTaps="handled"
       // The sheet is already a bounce-free surface; a rubber band here would
       // fight the dismiss-pan for the same drag at the top.
       bounces={false}
@@ -462,8 +520,15 @@ export function SheetActionRow({ icon, label, onPress, disabled }: {
 const styles = StyleSheet.create({
   rootView: { flex: 1 },
   overlay: { flex: 1, justifyContent: 'flex-end' },
-  cardWrap: {},
+  // `flexShrink` on both, so the keyboard's `marginBottom` (above) does not just
+  // push the card up but genuinely takes the room away: the overlay column is
+  // over-subscribed by exactly the keyboard's height, and these two are what let
+  // that reduction travel down to the one child that can absorb it, the
+  // <SheetScroll>'s `scrollBox`. Inert when the keyboard is down — nothing is
+  // over-subscribed, so nothing shrinks.
+  cardWrap: { flexShrink: 1 },
   card: {
+    flexShrink: 1,
     // WHITE (user directive 2026-07-28): EVERY popup is a white sheet. It is
     // the surface that LIFTS off the page — a dialog is a thing laid ON the
     // app, not the page itself rising — so it takes SURFACE, never the PAGE
@@ -471,7 +536,16 @@ const styles = StyleSheet.create({
     // BuyExtraPopup, SharedCirclesPopup and every action sheet compose this card.
     backgroundColor: SURFACE,
     boxShadow: SHEET_SHADOW,
+    // THE gutter of every popup in the app, exactly as the bottom gap below is
+    // THE air under its last row (user directive 2026-07-30). It used to be the
+    // call site's: LG in ConfirmDialog, MD on the group and shared-lists popups,
+    // MD-inside-MD in the groups sheet, so no two popups indented their title to
+    // the same place. A body that genuinely is not a text column — an
+    // edge-to-edge row list, a grid of tiles — overrides it through
+    // `contentStyle`, and nothing else may.
+    paddingHorizontal: MD,
   },
+  cardNoHandle: { paddingTop: SHEET_GAP.title },
   // The box a <SheetScroll> claims: whatever height is left under the cap, and
   // never a pixel more than its own text needs. `flexShrink` is what hands the
   // overflow to it; `flexGrow: 0` is what keeps a SHORT description from
@@ -484,6 +558,11 @@ const styles = StyleSheet.create({
   scrollFade: { position: 'absolute', start: 0, end: 0, height: SCROLL_FADE },
   scrollFadeTop: { top: 0 },
   scrollFadeBottom: { bottom: 0 },
+  // No margin of its own: a list of these rows is a <SheetActions flush>, so the
+  // gap between them is the same one that separates any two buttons in a popup,
+  // and the last row does not leave an extra SM standing on top of the sheet's
+  // bottom gap (which is what made the photo-options and message-actions sheets
+  // end lower than every other popup).
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -492,7 +571,6 @@ const styles = StyleSheet.create({
     paddingVertical: MD,
     paddingHorizontal: MD,
     gap: MD,
-    marginBottom: SM,
   },
   actionRowDisabled: {
     opacity: 0.55,
@@ -507,6 +585,58 @@ const styles = StyleSheet.create({
     borderRadius: DRAG_HANDLE.radius,
     backgroundColor: INK_DIM,
     marginTop: MD,
-    marginBottom: MD,
+    // The handle stands IN the popup's top air rather than beside it: what
+    // follows it is the same distance below it as a handle-less popup's first
+    // block is below the card's edge (`cardNoHandle`).
+    marginBottom: SHEET_GAP.title,
   },
+  // ── The popup's own vertical rhythm ──────────────────────────────────────
+  // The three gaps a popup body is built from, in the three components below.
+  // Nothing else in the app may declare them (SHEET_GAP in tokens.ts).
+  desc: {
+    marginTop: SHEET_GAP.desc,
+    // Regular purple, FULL strength: popup body text is the regular INK purple,
+    // never a faded step (user directive 2026-07-26). A muted INK_SUBTLE /
+    // INK_DIM reads as washed-out grey on the white sheet — which is what the
+    // groups sheet's own hint style was doing until this replaced it.
+    fontSize: TEXT.md,
+    color: INK,
+    textAlign: 'center',
+  },
+  actions: { marginTop: SHEET_GAP.actions, gap: SM },
+  actionsFlush: { marginTop: 0 },
+  actionsRow: { flexDirection: 'row', gap: MD },
 })
+
+// THE sentence under a popup's title — every popup that has one. Same size,
+// same full-strength ink, same centring and, above all, the same distance under
+// the title, whether the popup is a confirm dialog, a group sheet or the invite
+// prompt. Rich content is allowed (a bold <Text> span inside it inherits the
+// size and colour and overrides only what it sets).
+export const SHEET_DESC: TextStyle = styles.desc
+
+export function SheetDesc({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
+  return <Text style={[styles.desc, style]}>{children}</Text>
+}
+
+// THE block of buttons at the foot of a popup. It owns the one gap that stands
+// between whatever the popup said and what the user can do about it — the widest
+// gap in the popup, so the actions never read as another line of the paragraph.
+// `row` lays two buttons side by side (a cancel/confirm pair); without it they
+// stack full-width.
+//
+// `flush` is for the action sheets that are NOTHING BUT buttons (the chat menu's
+// leave/block pair): there is nothing above them to stand clear of, so the
+// popup's own top air is the only gap and this adds none.
+export function SheetActions({ children, row, flush, style }: {
+  children: ReactNode
+  row?: boolean
+  flush?: boolean
+  style?: StyleProp<ViewStyle>
+}) {
+  return (
+    <View style={[styles.actions, flush && styles.actionsFlush, row && styles.actionsRow, style]}>
+      {children}
+    </View>
+  )
+}

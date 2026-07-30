@@ -1,7 +1,6 @@
 import { View, StyleSheet } from 'react-native'
 import { Text } from './AppText'
 import { CreditIcon } from './icons'
-import { FONT_SCALE } from '../fonts'
 import { XS, SM, TEXT, WEIGHT, RADII, ICON } from '../tokens'
 
 // The credits-cost badge shown INSIDE an action button in place of its icon:
@@ -34,7 +33,6 @@ export function CreditCost({
       <CreditIcon color={color} size={ICON.sm} />
       <Text
         style={[styles.text, { color }]}
-        maxFontSizeMultiplier={FONT_SCALE.ui}
         numberOfLines={1}
       >
         {/* Just the amount — the "×" was removed at the user's request. */}

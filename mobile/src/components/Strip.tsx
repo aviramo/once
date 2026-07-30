@@ -63,6 +63,13 @@ export type StripProps = {
    *  For a caller whose own control belongs on that line (the menu's watcher
    *  count, its switch-like chips) rather than a plain count. */
   lineEnd?: ReactNode
+  /** The chip stands immediately BESIDE the words instead of at the line's END
+   *  edge (user directive 2026-07-30, the menu's credits count): a number that
+   *  IS the row's subject reads as part of what the row says, so it follows the
+   *  label like a value, where a chip parked at the far edge read as a separate
+   *  control facing it across the row. Only the line carrying the chip stops
+   *  taking the full width; the title still wraps rather than clipping. */
+  endBeside?: boolean
   /** The one row that answers in place instead of opening something: the
    *  friend-request row's accept/decline pills. A lane AFTER the text column. */
   trailing?: ReactNode
@@ -78,7 +85,7 @@ export type StripProps = {
 const stripFacts = (meta: StripProps['meta']): string[] =>
   (Array.isArray(meta) ? meta : [meta]).filter(Boolean) as string[]
 
-export function StripBody({ icon, iconLane = 'avatar', title, titleColor, meta, tag, tagStrong, lineEnd, trailing }: StripProps) {
+export function StripBody({ icon, iconLane = 'avatar', title, titleColor, meta, tag, tagStrong, lineEnd, endBeside, trailing }: StripProps) {
   const facts = stripFacts(meta)
   // The one chip component, in its small size (`Chip small`): a strip's chip and
   // the menu row's chip are the same tile, so a count that moves between the two
@@ -86,19 +93,22 @@ export function StripBody({ icon, iconLane = 'avatar', title, titleColor, meta, 
   const end = tag != null && tag !== ''
     ? <Chip small text={String(tag)} tone={tagStrong ? 'solid' : 'positive'} />
     : lineEnd ?? null
+  // Only the line the chip rides gives up the full width, and only when asked
+  // to: that is the whole of `endBeside`.
+  const endLineText = end != null && endBeside ? s.lineTextHug : s.lineText
   return (
     <>
       {icon ? (iconLane === 'avatar' ? <View style={s.icon}>{icon}</View> : icon) : null}
       <View style={s.text}>
         {title != null ? (
           <View style={s.line}>
-            <Text style={[s.title, s.lineText, titleColor ? { color: titleColor } : null]}>{title}</Text>
+            <Text style={[s.title, facts.length === 0 ? endLineText : s.lineText, titleColor ? { color: titleColor } : null]}>{title}</Text>
             {facts.length === 0 ? end : null}
           </View>
         ) : null}
         {facts.length > 0 ? (
           <View style={s.line}>
-            <MetaLine parts={facts} style={s.lineText} />
+            <MetaLine parts={facts} style={endLineText} />
             {end}
           </View>
         ) : null}
@@ -146,6 +156,10 @@ const s = StyleSheet.create({
   // when this is the last line, sits at its end facing them.
   line: { flexDirection: 'row', alignItems: 'center', gap: SM },
   lineText: { flex: 1, minWidth: 0 },
+  // The `endBeside` line: the words take only what they need, so the chip after
+  // them starts where they stop. Still `flexShrink`, so a long label wraps
+  // instead of pushing the chip off the row.
+  lineTextHug: { flexShrink: 1, minWidth: 0 },
   // A row's name is a navigation label wherever it appears — a group in the hub,
   // a person in a roster, a field in the menu: same size, same weight, same ink,
   // so the whole navigable surface reads as one voice (user directive

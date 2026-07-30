@@ -1,4 +1,8 @@
 export default {
+  // Brand. The app's name, once — every screen that shows it (home's wordmark)
+  // reads it from here. It is a name, so both languages carry the same word.
+  'app.name': 'Once',
+
   // Landing
 
 
@@ -125,10 +129,11 @@ export default {
   'settings.account': 'Account',
   'settings.visibilityVisible': 'Visible',
   'settings.visibilityHidden': 'Hidden',
-  // Watcher chip on the visibility row. The number alone says nothing, so the
-  // chip carries the whole phrase.
-  'settings.watchersOne': '1 person watching you',
-  'settings.watchersMany': '{count} people watching you',
+  // The watcher count is not a string any more: it rides the visibility chip's
+  // trailing pill as the BARE NUMBER (user directive 2026-07-30) — the tile
+  // floats on a photo and its own label already says what is being counted, so
+  // "1 is watching you" was a sentence where a digit does the whole job. The
+  // hide confirm below still spells it out, where there is room for a sentence.
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
@@ -318,6 +323,9 @@ export default {
   // support inbox, with this subject prefilled.
   'settings.support': 'Support',
   'support.mailSubject': 'Once support',
+  // Site: the row under support. Opens the brand site's landing page in the
+  // device browser, in the language the app is running in.
+  'settings.site': 'Website',
   'settings.preview': 'Preview',
   'settings.myProfile': 'Profile',
   'settings.photo': 'My Photos',
@@ -330,6 +338,8 @@ export default {
   'settings.male': 'Male',
   'settings.female': 'Female',
   'settings.accountDetails': 'Details',
+  // Title of the account popup (the sheet the "Details" row opens).
+  'settings.myAccount': 'My Account',
   'settings.deleteAccount': 'Delete Account',
   'settings.deleteConfirmTitle': 'Delete account',
   'settings.deleteConfirmDesc': 'All data, photos, and conversations will be permanently deleted. Active invitations, chats, and connections will be cancelled. This action cannot be undone',
@@ -922,7 +932,6 @@ Next may surprise`,
   'home.locationUnavailableTitle': 'Location unavailable',
   'home.locationUnavailableDesc': 'We couldn\'t determine your location. Try moving to a spot with better reception and tap Broadcast Location',
   'home.locationUnavailableButton': 'Broadcast Location',
-  'home.hiddenHeader2': 'Once',
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   // Accessibility labels for the floating shell chrome (no visible text).

@@ -14,6 +14,12 @@ export const SUPPORT_EMAIL = 'once.app.support@gmail.com'
 export const supportMailUrl = (subject: string): string =>
   `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`
 
+/** The brand site's landing page. Carries the app's own language for the same
+ *  reason legalUrl does: index.html honours `?lang=` over the browser's
+ *  preference list, so the site opens in the language the user is already
+ *  reading the app in. */
+export const brandSiteUrl = (lang: string): string => `${BRAND_SITE}/?lang=${lang}`
+
 export type LegalPage = 'terms' | 'privacy' | 'child-safety'
 
 export const legalUrl = (page: LegalPage, lang: string): string =>

@@ -16,12 +16,12 @@ import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
-import { FONT_SCALE } from '../src/fonts'
-import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM } from '../src/tokens'
+import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM, TAP_SLOP } from '../src/tokens'
+import { inkOffset } from '../src/fonts'
 import { FIELD_SKIN } from '../src/field'
 import { INK, SURFACE, SURFACE_SUNK, PAGE, INK_MUTED, INK_PALE, INK_WASH, LINE, WHITE, INK_SUBTLE, INK_DIM, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW, SHADOW_BLACK } from '../src/colors'
-import { SendIcon, MicIcon, ReplyIcon, CopyIcon } from '../src/components/icons'
-import { BottomSheet, SheetActionRow } from '../src/components/BottomSheet'
+import { SendIcon, MicIcon, StopIcon, PlusIcon, ReplyIcon, CopyIcon } from '../src/components/icons'
+import { BottomSheet, SheetActionRow, SheetActions } from '../src/components/BottomSheet'
 import { copyToClipboard } from '../src/lib/clipboard'
 import { PullPane, usePullBehavior, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
@@ -29,7 +29,7 @@ import { SheetHeader, type OverlaySheetBody } from '../src/components/OverlayShe
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import { StatusBarBand } from '../src/components/StatusBarBand'
 import { useBottomInset } from '../src/hooks/useBottomInset'
-import { useKeyboardHeight } from '../src/hooks/useKeyboardHeight'
+import { useKeyboardOpen } from '../src/hooks/useKeyboard'
 import { chatCacheKey, chatLastOpenedKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
 import { nameFromTitle } from '../src/lib/profileTitle'
@@ -43,12 +43,46 @@ const N_REC_BARS = 34
 const CACHE_PERSIST_MS = 800
 
 // Auto-growing message input: one line = one line-height, capped at 10 lines.
-// The floor keeps the empty field square-ish; the ceiling turns the field into
-// a scroll view once the text passes ten lines.
+// The ceiling turns the field into a scroll view once the text passes ten lines.
+//
+// INPUT_MIN_HEIGHT is the PILL's box — the composer's own compact height, not
+// tokens' 56dp form field (a name that collides; do not import that one here).
+// The TEXT is NOT stretched to it: the field is exactly as tall as its content
+// and is CENTRED in the box, which is how every other field in the app is built
+// (login's and onboarding's wraps state the box height and centre a
+// content-sized input in it). It used to be the other way round — the input
+// itself was floored at the box height — and a box taller than its content puts
+// the text wherever the platform happens to align it: Android centres it
+// (`textAlignVertical`), iOS top-aligns it, so the placeholder sat ~3dp above
+// the centre of the pill and above the two glyph discs beside it, which is the
+// off-centre text the user reported on an iPhone (2026-07-30). `textAlignVertical`
+// could never have fixed it — it is an Android-only prop, and the fix has to be
+// geometry, not an OS-specific alignment hint.
+//
+// INPUT_REST_HEIGHT is what one line measures, and it is only the SEED: the text
+// engine reports the real content height on the first layout (`lh` is an
+// estimate — exact at font scale 1, see tokens.ts). Nothing lays out against it
+// for longer than that first frame.
 const INPUT_VPAD = SM * 2
 const INPUT_MIN_HEIGHT = 44
+const INPUT_REST_HEIGHT = lh(TEXT.md) + INPUT_VPAD
 const INPUT_MAX_LINES = 10
 const INPUT_MAX_HEIGHT = lh(TEXT.md) * INPUT_MAX_LINES + INPUT_VPAD
+
+// The audio bar's two fixed pieces, shared by BOTH of the pill's audio states so
+// they are literally the same bar (user directive 2026-07-30): the leading MARK's
+// cell — the recording dot, and in preview the play glyph standing on exactly its
+// footprint — and the track's height. Everything after the mark (the clock, then
+// the track filling the rest) is the same row with the same gaps, so the track
+// starts at the same x and is the same size whichever state the pill is in.
+const REC_MARK = SM
+const REC_WAVE_H = 24
+
+// mm:ss, the one clock in the composer and the bubbles.
+function clock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
 
 function buildRecWavePath(bars: number[], W: number, H: number): string {
   const n = bars.length
@@ -228,11 +262,17 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const matchIsMale = match?.is_male ?? null
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
-  const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT)
-  // The composer field's actual rendered outer height at rest (single line). It
-  // depends on the device's font metrics / display scale, so a fixed number for
-  // the round send button never lines up. We measure the field and match it.
-  const [fieldRestHeight, setFieldRestHeight] = useState(INPUT_MIN_HEIGHT + STROKE.thin * 2)
+  const [inputHeight, setInputHeight] = useState(INPUT_REST_HEIGHT)
+  // Centring the field's line BOX in the pill still leaves the INK sitting low
+  // in it: a line box is not symmetric about the letters it carries, and in
+  // Hebrew the ink centre falls ~0.09 em below the box centre (inkOffset, the
+  // app's one correction for this — the same number GlyphSlot nudges a glyph by
+  // to stand on a label's ink). Taken off the top padding and given back to the
+  // bottom, so the ink lands on the pill's centre — level with the plus and the
+  // send disc, which are glyph-centred in their own square slots — while the
+  // field's total height is still INPUT_VPAD + its lines, which is what the
+  // grow/cap arithmetic above counts.
+  const inkPad = inkOffset(TEXT.md)
   const [sending, setSending] = useState(false)
   const [otherIsOnline, setOtherIsOnline] = useState(false)
   // The dots are chrome, not a message: they float next to the sheet's close X
@@ -659,18 +699,15 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     prevActiveRef.current = isActive
   }, [isActive])
 
-  // ── Keyboard avoidance ───────────────────────────────────────────────────
-  // RN's KeyboardAvoidingView doesn't cope with the chat sitting inside the
-  // home pager shell on Android edge-to-edge, so we drive bottom padding
-  // ourselves: the spacer below the input row grows by the keyboard height
-  // when it's open, pushing the input row above the keyboard.
+  // No keyboard avoidance here, and none anywhere else either. The page ends near
+  // the top of the keyboard (src/hooks/useKeyboard.ts), so the composer — an
+  // ordinary flex sibling at the bottom of this page — rides it up and down with
+  // nothing to do. ONE number, stated once: the app's bottom air, which the root
+  // shrink spends HALF of while the keyboard is up (the band this air clears is
+  // under the keyboard) and none of at rest. Nothing about that is this file's
+  // business, and there is deliberately no second, keyboard-aware value here.
   const safeBottom = bottomGap(bottomInset, SM)
-
-  // THE keyboard height (see useKeyboardHeight): it tracks the live IME inset,
-  // not just the show/hide events, so a keyboard that swaps to a TALLER panel
-  // while the field stays focused — Gboard's emoji picker — moves the composer
-  // with it instead of leaving it buried underneath (user report 2026-07-29).
-  const kbHeight = useKeyboardHeight()
+  const keyboardOpen = useKeyboardOpen()
 
   // ── Load cached messages instantly ───────────────────────────────────────
   useEffect(() => {
@@ -991,14 +1028,22 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     return () => { sub.remove(); clearInterval(id) }
   }, [fetchMissed])
 
-  // A keyboard height change scrolls back to the bottom (offset 0 in the
-  // inverted list). The typing indicator deliberately does NOT: it is the
-  // list's header, i.e. the bottom-most row of an inverted list, so at offset
-  // 0 it is already on screen, and firing an animated scroll here only raced
-  // the one the arriving message schedules and made the list lurch.
+  // The keyboard opening or closing re-pins the inverted list to its bottom
+  // (offset 0). NOT animated, deliberately: the page is already shrinking to the
+  // keyboard over the same quarter-second, and a second animation running
+  // alongside it is precisely what makes the whole thing read as two motions
+  // instead of one (user report 2026-07-30). `useKeyboardOpen` flips at the
+  // START of an opening, so this lands before the shrink begins rather than
+  // competing with it — and when the list is already at 0, which is the common
+  // case, it is a no-op.
+  //
+  // The typing indicator deliberately does NOT re-pin: it is the list's header,
+  // i.e. the bottom-most row of an inverted list, so at offset 0 it is already
+  // on screen, and firing a scroll here only raced the one the arriving message
+  // schedules and made the list lurch.
   useEffect(() => {
-    requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
-  }, [kbHeight])
+    requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: false }))
+  }, [keyboardOpen])
 
   // ── Load older messages ───────────────────────────────────────────────────
   const loadMore = useCallback(async () => {
@@ -1147,7 +1192,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     tap()
     setSending(true)
     setText('')
-    setInputHeight(INPUT_MIN_HEIGHT)
+    setInputHeight(INPUT_REST_HEIGHT)
     const now = new Date().toISOString()
     const reply = takeReply()
     seenSet.current.add(userId + now)
@@ -1773,7 +1818,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   {msg.text}
                 </Text>
                 <View style={styles.textBubbleFooter}>
-                  <Text style={[styles.inlineTime, isMine ? styles.inlineTimeMine : styles.inlineTimeTheirs]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+                  <Text style={[styles.inlineTime, isMine ? styles.inlineTimeMine : styles.inlineTimeTheirs]}>
                     {displayTime}
                   </Text>
                   {isMine && msgStatus !== 'failed' && <CheckMark status={msgStatus} isMine />}
@@ -1812,12 +1857,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       activePlayingKey, handlePlayStart])
 
   return (
-    <View style={[styles.root, { paddingTop: topInset, paddingBottom: Math.max(safeBottom, kbHeight > 0 ? kbHeight + 8 : 0) }]}>
+    <View style={[styles.root, { paddingTop: topInset, paddingBottom: safeBottom }]}>
       {/* ── Messages ──
-          The body uses a plain View. Keyboard avoidance is driven entirely
-          by the bottom spacer below the input row: spacer = kbHeight when
-          the keyboard is open pushes the input row to sit exactly on top of
-          the keyboard, regardless of platform-specific OS resize behavior. */}
+          A plain View, and one bottom padding for every case: the page itself
+          ends at the top of the keyboard, so this is the design gap above it. */}
       <View style={styles.body}>
         <View style={styles.messagesArea}>
         <PullContext.Provider value={pullCtx}>
@@ -1876,13 +1919,11 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         </View>
 
         {/* ── Input bar ──
-            Fixed-height white footer with the input field and the send
-            button on one horizontal line. The root view's paddingBottom
-            (Math.max(safeBottom, kbHeight)) carries the bottom inset for
-            both the nav-bar / home-indicator gesture area when the keyboard
-            is closed and the keyboard height when it's open, so the input
-            bar lands just above whatever sits at the bottom of the screen
-            via flex layout — no per-platform spacer needed. */}
+            Fixed-height white footer with the input field and the send button
+            on one horizontal line. It is an ordinary flex sibling at the bottom
+            of the page and knows nothing about the keyboard: the page's own
+            bottom edge is the keyboard's top edge, so the composer lands above
+            it by layout alone. */}
         <View style={styles.inputBarOuter}>
           {replyTo && (
             <View style={styles.replyComposer}>
@@ -1932,21 +1973,33 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           {/* Always render the text input row so the keyboard stays open while
               recording/previewing. The recording and preview UIs overlay on top. */}
           <View style={styles.inputRow}>
-            <ReAnimated.View style={[styles.inputWrap, inputWrapBorderStyle]} onLayout={e => {
-              setInputWrapWidth(e.nativeEvent.layout.width)
-              // Only capture while the field is at its single-line rest height, so
-              // the button matches the resting field and doesn't grow with it.
-              if (inputHeight <= INPUT_MIN_HEIGHT) setFieldRestHeight(e.nativeEvent.layout.height)
-            }}>
+            <ReAnimated.View
+              style={[styles.inputWrap, inputWrapBorderStyle]}
+              onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}
+            >
+              {/* Add — the LEADING glyph, standing before the first character of
+                  the message. A plus rather than a paperclip: what opens behind
+                  it is a photo / a place / a time, which is "add something to
+                  this message", not "attach a file to it". */}
+              <ComposerGlyph
+                disabled={attachVisible}
+                onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
+              >
+                <PlusIcon size={ICON.xl} color={INK} />
+              </ComposerGlyph>
               <View style={styles.inputAnimWrap}>
                 <TextInput
                   ref={inputRef}
-                  style={[styles.input, { height: inputHeight }]}
+                  style={[styles.input, { height: inputHeight, paddingTop: INPUT_VPAD / 2 - inkPad, paddingBottom: INPUT_VPAD / 2 + inkPad }]}
                   value={text}
                   onChangeText={onInputChange}
                   onContentSizeChange={e => {
+                    // The field is its CONTENT tall — no floor at the pill's box
+                    // height, which is what left the text top-aligned in a taller
+                    // box on iOS. The box is the wrap's (inputAnimWrap), and it
+                    // centres this.
                     const h = e.nativeEvent.contentSize.height
-                    setInputHeight(Math.min(INPUT_MAX_HEIGHT, Math.max(INPUT_MIN_HEIGHT, h)))
+                    setInputHeight(Math.min(INPUT_MAX_HEIGHT, h))
                   }}
                   scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
@@ -1956,20 +2009,23 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   autoFocus={false}
                 />
               </View>
-              <Pressable
-                disabled={attachVisible}
-                onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
-                style={({ pressed }) => [styles.attachBtn, pressed && styles.attachBtnPressed]}
+              {/* Mic or send, INSIDE the field at its trailing edge, off the SAME
+                  state that renders the character in it. It used to be a second
+                  source of truth — a shared value written alongside setText —
+                  which could sit at 0 while the field already held text, leaving
+                  the mic up on a composed message. One source can't drift, and it
+                  flips in the very commit the character lands. */}
+              <ComposerGlyph
+                disabled={hasText && sending}
+                onPress={() => hasText ? handleSend() : handleMicPress()}
               >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={INK_MUTED} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                </Svg>
-              </Pressable>
+                {hasText
+                  ? <SendIcon size={ICON.md} color={INK} />
+                  : <MicIcon size={ICON.md} color={INK} />}
+              </ComposerGlyph>
               {attachVisible && inputWrapWidth > 0 && (
-                <ReAnimated.View
-                  style={[styles.attachBar, { width: inputWrapWidth }, attachBarStyle]}
-                >
-                  <View style={[styles.attachBarInner, { width: inputWrapWidth }]}>
+                <ReAnimated.View style={[styles.attachBar, attachBarStyle]}>
+                  <View style={styles.attachBarInner}>
                     <View style={styles.attachBarItems}>
                       <Pressable
                         onPress={handlePickImage}
@@ -2028,91 +2084,83 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 </ReAnimated.View>
               )}
             </ReAnimated.View>
-            {/* Mic or send, off the SAME state that renders the character in
-                the field. It used to be a second source of truth — a shared
-                value written alongside setText — which could sit at 0 while
-                the field already held text, leaving the mic up on a composed
-                message. One source can't drift, and it flips in the very
-                commit the character lands. */}
-            <Pressable
-              onPress={() => hasText ? handleSend() : handleMicPress()}
-              disabled={hasText && sending}
-              style={({ pressed }) => [
-                styles.sendBtn,
-                { width: fieldRestHeight, height: fieldRestHeight },
-                hasText && sending && styles.sendBtnDisabled,
-                pressed && styles.sendBtnPressed,
-              ]}
-            >
-              {hasText ? <SendIcon size={ICON.lg} /> : <MicIcon size={ICON.lg} />}
-            </Pressable>
 
+            {/* Recording and preview are the SAME box in another state, so they
+                wear the same pill with the same bare glyphs inside it — never a
+                control standing beside the field. Centred rather than flex-end:
+                nothing here is a growing line of text. */}
             {recordPhase === 'recording' && (
               <View style={[styles.inputRow, styles.recordOverlay]}>
-                <Pressable onPress={handleCancelRecording} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_SUBTLE} strokeWidth={2.5} strokeLinecap="round">
-                    <Path d="M18 6L6 18M6 6l12 12" />
-                  </Svg>
-                </Pressable>
-                <View style={styles.recBar}>
-                  <View style={styles.recDot} />
-                  <Text style={styles.recTime} maxFontSizeMultiplier={FONT_SCALE.ui}>
-                    {`${Math.floor(recordElapsed / 60)}:${String(recordElapsed % 60).padStart(2, '0')}`}
-                  </Text>
-                  <View style={styles.recWaveWrap} onLayout={e => setRecWaveWidth(e.nativeEvent.layout.width)}>
-                    {recWaveWidth > 0 && (
-                      <Svg width={recWaveWidth} height={24}>
-                        <Path d={buildRecWavePath(liveBars, recWaveWidth, 24)} fill={INK} />
-                      </Svg>
-                    )}
+                <View style={[styles.inputWrap, styles.inputWrapCentered]}>
+                  <ComposerGlyph onPress={handleCancelRecording}>
+                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_SUBTLE} strokeWidth={2.5} strokeLinecap="round">
+                      <Path d="M18 6L6 18M6 6l12 12" />
+                    </Svg>
+                  </ComposerGlyph>
+                  <View style={styles.recBar}>
+                    <View style={styles.recDot} />
+                    <Text style={styles.recTime}>{clock(recordElapsed)}</Text>
+                    <View style={styles.recWaveWrap} onLayout={e => setRecWaveWidth(e.nativeEvent.layout.width)}>
+                      {recWaveWidth > 0 && (
+                        <Svg width={recWaveWidth} height={REC_WAVE_H}>
+                          <Path d={buildRecWavePath(liveBars, recWaveWidth, REC_WAVE_H)} fill={INK} />
+                        </Svg>
+                      )}
+                    </View>
                   </View>
+                  <ComposerGlyph onPress={handleStopRecording}>
+                    <StopIcon size={ICON.md} color={INK} />
+                  </ComposerGlyph>
                 </View>
-                <Pressable onPress={handleStopRecording} style={[styles.sendBtn, { width: fieldRestHeight, height: fieldRestHeight }]}>
-                  <Svg width={20} height={20} viewBox="0 0 24 24" fill={WHITE}>
-                    <Rect x={4} y={4} width={16} height={16} rx={3} />
-                  </Svg>
-                </Pressable>
               </View>
             )}
 
             {recordPhase === 'preview' && (
               <View style={[styles.inputRow, styles.recordOverlay]}>
-                <Pressable onPress={handleCancelRecording} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_SUBTLE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M3 6h18M19 6l-1 14H6L5 6M8 6V4h8v2" />
-                  </Svg>
-                </Pressable>
-                <Pressable onPress={handlePreviewPlayPause} style={styles.recSideBtn} hitSlop={8}>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill={INK}>
-                    {previewPlaying
-                      ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" />
-                      : <Path d="M8 5v14l11-7z" />}
-                  </Svg>
-                </Pressable>
-                <View style={styles.previewWaveWrap}>
-                  <Waveform
-                    bars={previewBars}
-                    height={28}
-                    inactiveColor={INK_MUTED}
-                    activeColor={INK}
-                    thumbColor={INK}
-                    progressAnim={previewProgressAnim}
-                    seekable={(previewStatus.duration ?? 0) > 0}
-                    onScrub={r => {
-                      if (r != null) {
-                        const dur = previewStatus.duration ?? 0
-                        setPreviewPos(Math.round(r * dur * 1000))
-                      }
-                    }}
-                    onSeek={handlePreviewSeek}
-                  />
+                <View style={[styles.inputWrap, styles.inputWrapCentered]}>
+                  <ComposerGlyph onPress={handleCancelRecording}>
+                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_SUBTLE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M3 6h18M19 6l-1 14H6L5 6M8 6V4h8v2" />
+                    </Svg>
+                  </ComposerGlyph>
+                  {/* The SAME bar the recording state wears: the play stands on the
+                      recording dot's own cell, the clock follows it, and the track
+                      fills the rest — so the track begins at the same x and is the
+                      same size in both states (user directive 2026-07-30). It used
+                      to be a second full-width glyph berth beside the trash, with
+                      the track hard against it and the clock exiled to the far end. */}
+                  <View style={styles.recBar}>
+                    <ComposerGlyph mark onPress={handlePreviewPlayPause}>
+                      <Svg width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill={INK}>
+                        {previewPlaying
+                          ? <Path d="M6 4h4v16H6zM14 4h4v16h-4z" />
+                          : <Path d="M8 5v14l11-7z" />}
+                      </Svg>
+                    </ComposerGlyph>
+                    <Text style={styles.recTime}>
+                      {clock((previewPlaying ? previewPos : audioDuration) / 1000)}
+                    </Text>
+                    <Waveform
+                      bars={previewBars}
+                      height={REC_WAVE_H}
+                      inactiveColor={INK_MUTED}
+                      activeColor={INK}
+                      thumbColor={INK}
+                      progressAnim={previewProgressAnim}
+                      seekable={(previewStatus.duration ?? 0) > 0}
+                      onScrub={r => {
+                        if (r != null) {
+                          const dur = previewStatus.duration ?? 0
+                          setPreviewPos(Math.round(r * dur * 1000))
+                        }
+                      }}
+                      onSeek={handlePreviewSeek}
+                    />
+                  </View>
+                  <ComposerGlyph onPress={handleSendAudio}>
+                    <SendIcon size={ICON.md} color={INK} />
+                  </ComposerGlyph>
                 </View>
-                <Text style={styles.previewDuration} maxFontSizeMultiplier={FONT_SCALE.ui}>
-                  {(() => { const s = Math.floor((previewPlaying ? previewPos : audioDuration) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}
-                </Text>
-                <Pressable onPress={handleSendAudio} style={[styles.sendBtn, { width: fieldRestHeight, height: fieldRestHeight }]}>
-                  <SendIcon size={ICON.lg} />
-                </Pressable>
               </View>
             )}
           </View>
@@ -2134,6 +2182,63 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 }
 
 // ── Small pieces ──────────────────────────────────────────────────────────
+
+// Every control that stands INSIDE the composer pill: the add plus at the
+// leading edge, mic/send at the trailing one, and the recording states' cancel /
+// play / stop. One element, six uses.
+//
+// **A glyph and nothing else** (user directive 2026-07-30) — no background, no
+// border, no shadow, purple ink, in a berth exactly as tall as the resting line
+// (`composerSlot`). Both ends of the field are therefore the same object, and the
+// field reads as one box carrying its own text and its own marks rather than a
+// box with buttons parked in it. It went through a filled INK disc and then a
+// full-height INK tile on the way here; neither survives, and neither should
+// come back for one end without the other.
+//
+// A bare mark is read as its INK, so it is sized as a mark beside a line of text
+// and not as the standalone ICON.xxl a glyph centred in a filled tile could
+// carry: the same 24 that looked right inside a purple disc read heavy the moment
+// the disc was gone (user directive 2026-07-30). Send / mic / stop are dense
+// glyphs — they paint nearly their whole box — so they take ICON.md, which lands
+// their ink about where the 16dp line beside them does. The plus takes ICON.xl,
+// the tokens' optical half-step, for the opposite reason: its cross paints only
+// the middle 14 of its 24 box, so the same nominal size would read as the
+// smaller mark. Checked at font_scale 2.0 (where FONT_SCALE caps both the text
+// and the glyph at 1.15), which is where a too-large mark shows first.
+//
+// `mark`: the one glyph that does NOT stand at an edge of the field — preview's
+// play, which stands INSIDE the audio bar on the recording dot's own cell. The
+// square berth exists so the marks at the two ENDS sit the same distance in from
+// their own edge; an interior mark instead has to sit exactly where the dot it
+// replaces sits, or the clock and the track after it start at a different x than
+// they do while recording. Its berth is therefore the dot's width and its tap
+// target comes from the slop, which reaches only into the bar's own air (it stops
+// short of the trash's ink on one side and of the clock on the other).
+function ComposerGlyph({ onPress, disabled, mark, children }: {
+  onPress: () => void
+  disabled?: boolean
+  mark?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      // Kept inside the slot's own footprint: a wider slop would reach over the
+      // text and fire on a tap meant to place the caret.
+      hitSlop={mark ? TAP_SLOP : XS}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.composerSlot,
+        mark && styles.composerMarkSlot,
+        disabled && styles.composerSlotDisabled,
+        pressed && !disabled && styles.composerSlotPressed,
+      ]}
+    >
+      {children}
+    </Pressable>
+  )
+}
 
 // ── Reply-to-message ───────────────────────────────────────────────────────
 
@@ -2318,22 +2423,28 @@ function MessageActionsSheet({ msg, visible, onDismiss, onClosed, onReply, onCop
       visible={visible}
       onDismiss={onDismiss}
       onClosed={onClosed}
-      contentStyle={{ paddingHorizontal: SM }}
+      // The one thing this sheet overrides about the popup frame: a tighter
+      // gutter, because its body is a list of full-width tinted tiles (the same
+      // override the photo-options sheet makes). Every other gap — above the
+      // first row, under the last — is the popup's own.
+      contentStyle={styles.msgActionsSheet}
     >
-      {!msg._failed && (
-        <SheetActionRow
-          icon={<ReplyIcon color={INK} size={ICON.xxl} />}
-          label={t('chat.msgActions.reply')}
-          onPress={() => onReply(msg)}
-        />
-      )}
-      {!!msg.text?.trim() && (
-        <SheetActionRow
-          icon={<CopyIcon color={INK} size={ICON.xxl} />}
-          label={t('chat.msgActions.copy')}
-          onPress={() => onCopy(msg)}
-        />
-      )}
+      <SheetActions flush>
+        {!msg._failed && (
+          <SheetActionRow
+            icon={<ReplyIcon color={INK} size={ICON.xxl} />}
+            label={t('chat.msgActions.reply')}
+            onPress={() => onReply(msg)}
+          />
+        )}
+        {!!msg.text?.trim() && (
+          <SheetActionRow
+            icon={<CopyIcon color={INK} size={ICON.xxl} />}
+            label={t('chat.msgActions.copy')}
+            onPress={() => onCopy(msg)}
+          />
+        )}
+      </SheetActions>
     </BottomSheet>
   )
 }
@@ -2382,7 +2493,7 @@ function ImageBubble({ animate, isMine, isLast, msg, getChatImageUrl, time, onPr
         </View>
       )}
       <View style={[styles.imageTimeRow, { flexDirection: 'row', alignItems: 'center', gap: XS }]}>
-        <Text style={styles.imageTimeText} maxFontSizeMultiplier={FONT_SCALE.ui}>
+        <Text style={styles.imageTimeText}>
           {time}
         </Text>
         {isMine && status !== 'failed' && <CheckMark status={status} isMine />}
@@ -2448,7 +2559,7 @@ function LocationBubble({ animate, isMine, isLast, location, time, status, reply
       </Pressable>
       {location && (
         <View style={styles.locationFooter}>
-          <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+          <Text style={[styles.inlineTime, { color: timeColor }]}>
             {time}
           </Text>
           {isMine && status !== 'failed' && <CheckMark status={status} isMine />}
@@ -2553,7 +2664,7 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
         </View>
       ))}
       <View style={styles.scheduleFooter}>
-        <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+        <Text style={[styles.inlineTime, { color: timeColor }]}>
           {time}
         </Text>
         {isMine && status !== 'failed' && <CheckMark status={status} isMine />}
@@ -2594,7 +2705,7 @@ function DaySeparator({ label, bold }: { label: string; bold?: boolean }) {
   return (
     <View style={styles.daySep}>
       <View style={styles.daySepLine} />
-      <Text style={[styles.daySepLabel, bold && { fontWeight: WEIGHT.medium }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{label}</Text>
+      <Text style={[styles.daySepLabel, bold && { fontWeight: WEIGHT.medium }]}>{label}</Text>
       <View style={styles.daySepLine} />
     </View>
   )
@@ -2992,7 +3103,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
   const barActive = isMine ? WHITE_STRONG : INK
   const barInactive = isMine ? WHITE_MID : INK_MUTED
   const timeColor = isMine ? WHITE_STRONG : INK_MUTED
-  const fmt = (ms: number) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
+  const fmt = (ms: number) => clock(ms / 1000)
 
   const routeBtn = playing ? (
     <Pressable
@@ -3054,7 +3165,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
           </View>
         </View>
         <View style={styles.audioDurationRow}>
-          <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>
+          <Text style={[styles.inlineTime, { color: timeColor }]}>
             {scrubMs != null
               ? fmt(scrubMs)
               : duration > 0
@@ -3062,7 +3173,7 @@ function AudioBubble({ animate, isMine, isLast, msg, getChatAudioUrl, time, msgS
                 : (msg.audio_duration_ms ? fmt(msg.audio_duration_ms) : '–:––')}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: XS }}>
-            <Text style={[styles.inlineTime, { color: timeColor }]} maxFontSizeMultiplier={FONT_SCALE.ui}>{time}</Text>
+            <Text style={[styles.inlineTime, { color: timeColor }]}>{time}</Text>
             {isMine && msgStatus !== 'failed' && <CheckMark status={msgStatus} isMine />}
           </View>
         </View>
@@ -3280,6 +3391,9 @@ const lbStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: PAGE },
+  // The long-press sheet's gutter — see the sheet itself for why it is tighter
+  // than the app's standard popup one.
+  msgActionsSheet: { paddingHorizontal: SM },
 
   body: { flex: 1 },
   messagesArea: { flex: 1 },
@@ -3335,9 +3449,9 @@ const styles = StyleSheet.create({
   },
   replyQuoteBar: { width: 3, borderRadius: RADII.pill },
   replyQuoteBody: { flex: 1, justifyContent: 'center' },
-  replyQuoteName: { fontSize: TEXT.sm, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.medium },
+  replyQuoteName: { fontSize: TEXT.sm, fontWeight: WEIGHT.medium },
   replyQuoteMediaRow: { flexDirection: 'row', alignItems: 'center', gap: XS },
-  replyQuoteText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md) },
+  replyQuoteText: { fontSize: TEXT.md },
 
   // The composer bar above the input while answering a message.
   replyComposer: {
@@ -3371,11 +3485,11 @@ const styles = StyleSheet.create({
   // White vs the solid INK of mine is the same pairing as everywhere else.
   bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: SURFACE },
   bubbleTheirsLast: { borderBottomStartRadius: 4 },
-  bubbleText: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), flexShrink: 1 },
+  bubbleText: { fontSize: TEXT.md, flexShrink: 1 },
   bubbleTextMine: { color: WHITE },
   bubbleTextTheirs: { color: INK },
 
-  inlineTime: { fontSize: TEXT.sm, lineHeight: lh(TEXT.sm), letterSpacing: 0.3 },
+  inlineTime: { fontSize: TEXT.sm, letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
   inlineTimeTheirs: { color: INK_MUTED },
   bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
@@ -3418,74 +3532,107 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: 'row',
-    // flex-end so the send button stays pinned to the bottom as the input
-    // grows across multi-line content.
+    // flex-end so the pill stays pinned to the bottom as the input grows across
+    // multi-line content.
     alignItems: 'flex-end',
     paddingTop: SM,
     paddingHorizontal: SM,
-    gap: SM,
   },
   inputWrap: {
     // The composer is a typing surface, so it wears the standard field skin.
     // `borderColor` is then animated to INK while the attach bar is open
     // (inputWrapBorderStyle) — the one allowed override, and it is state.
+    //
+    // It is the row's ONLY child, so it spans the whole width: both of its
+    // controls stand inside it, each a bare glyph in a `composerSlot` (see
+    // ComposerGlyph). No horizontal padding of its own — the attach bar slides in
+    // over the full pill, and an inset containing block would leave a sliver of
+    // white down its edges.
     ...FIELD_SKIN,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
     minHeight: INPUT_MIN_HEIGHT,
     maxHeight: INPUT_MAX_HEIGHT,
-    paddingEnd: XS,
     overflow: 'hidden',
   },
+  // The recording / preview states of the same pill: fixed-height content, so
+  // it centres instead of hanging off the last text line.
+  inputWrapCentered: { alignItems: 'center' },
+  // Every in-pill glyph's berth (see ComposerGlyph): a square as tall as the
+  // resting line, so a glyph at either end of the field stands the same distance
+  // in from its own edge. Nothing paints here — the box is a hit target and a
+  // centring frame, and the mark inside it is the whole control. Full-height
+  // (with the wrap's flex-end) keeps it on the LAST line as the field grows.
+  composerSlot: {
+    width: INPUT_MIN_HEIGHT, height: INPUT_MIN_HEIGHT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // An interior mark's berth (see ComposerGlyph `mark`): the leading cell of the
+  // audio bar, i.e. exactly the recording dot's width, so preview's play sits on
+  // the dot's footprint and everything after it lines up with the recording state.
+  // The height stays the pill's — only the cell narrows.
+  composerMarkSlot: { width: REC_MARK },
+  composerSlotPressed: { opacity: 0.4 },
+  composerSlotDisabled: { opacity: 0.3 },
+  // THE box the typed text lives in, and the thing that centres it: the field
+  // inside is exactly its content tall (see INPUT_REST_HEIGHT), so at rest a
+  // single line is centred in the pill's own height, and once the text wraps the
+  // column simply grows with it and centring costs nothing. Same shape as every
+  // other field in the app (login / onboarding: the wrap holds the box height and
+  // centres a content-sized input).
   inputAnimWrap: {
     flex: 1,
+    minHeight: INPUT_MIN_HEIGHT,
+    justifyContent: 'center',
   },
   input: {
     // Height is driven imperatively from onContentSizeChange (see the input
     // row); a `flex: 1` here made the field fill its parent instead of
     // growing it from content, so it never expanded past one line.
     width: '100%',
-    paddingStart: MD,
-    paddingEnd: SM,
-    paddingVertical: SM,
+    // A breath off the glyphs either side; the slots already carry the indent
+    // from the pill's own edges.
+    paddingStart: XS,
+    paddingEnd: XS,
+    // The vertical pair is INPUT_VPAD, split unevenly to centre the ink rather
+    // than the line box — applied at the call site, where the font scale is
+    // live (`inkPad`).
     fontSize: TEXT.md,
-    lineHeight: lh(TEXT.md),
     color: INK,
     textAlign: isRTL ? 'right' : 'left',
+    // A no-op now that the box is content-sized, and kept only as a floor for the
+    // one case that can still overflow it: text past INPUT_MAX_LINES, where the
+    // field scrolls inside a capped box. It is Android-only in any case — the
+    // vertical placement of this text is geometry, not this prop.
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
-  sendBtn: {
-    // Match the composer field's OUTER box: its inner surface is INPUT_MIN_HEIGHT
-    // tall, and FIELD_SKIN's hairline adds STROKE.thin top + bottom. The send
-    // button has no border, so it needs those two strokes added to line up.
-    width: INPUT_MIN_HEIGHT + STROKE.thin * 2, height: INPUT_MIN_HEIGHT + STROKE.thin * 2, borderRadius: RADIUS,
-    backgroundColor: INK,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtnDisabled: { opacity: 0.3 },
-  sendBtnPressed: { opacity: 0.85 },
-
-  // Attach popup (inline, above input bar)
-  attachBtn: {
-    // Full single-line height so the icon centers on the text row; with
-    // alignItems 'flex-end' on the wrap it stays on the last line as the
-    // field grows. A fixed 36 + marginBottom sat 4px above center.
-    width: 36, height: INPUT_MIN_HEIGHT,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  attachBtnPressed: { opacity: 0.4 },
+  // The attachments strip does not sit NEXT TO the field — for as long as it is
+  // open it IS the field, so its frame is stated as the pill's own box on all
+  // four sides and nothing about it is measured. It used to be a JS width pinned
+  // to one edge, and that width was the wrap's OUTER layout width: 2 ×
+  // STROKE.thin more than the box it had to fill, so the strip ran past the start
+  // edge and only `overflow:'hidden'` hid the difference — which left it to the
+  // platform's rounded-corner clip to decide where the purple stopped, and iOS
+  // and Android do not decide that identically (reported on an iPhone,
+  // 2026-07-30: the strip did not sit flush on the box). The measured width still
+  // drives the SLIDE, which is all a distance was ever good for.
+  //
+  // It carries the field's own INNER corner (RADIUS less the rule it sits
+  // inside), so it lands on the box exactly with or without the clip; its own
+  // `overflow` is what keeps an item's press flash from squaring those corners.
   attachBar: {
     position: 'absolute',
-    end: 0, top: 0, bottom: 0,
+    start: 0, end: 0, top: 0, bottom: 0,
+    borderRadius: RADIUS - STROKE.thin,
     backgroundColor: INK,
+    overflow: 'hidden',
   },
   attachBarInner: {
-    position: 'absolute',
-    end: 0, top: 0, bottom: 0,
+    flex: 1,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
   attachBarItems: {
     flex: 1,
@@ -3592,7 +3739,6 @@ const styles = StyleSheet.create({
   },
   imageTimeText: {
     fontSize: TEXT.sm,
-    lineHeight: lh(TEXT.sm),
     letterSpacing: 0.3,
     color: WHITE_STRONG,
   },
@@ -3650,10 +3796,6 @@ const styles = StyleSheet.create({
     top: 0, start: 0, end: 0, bottom: 0,
     backgroundColor: PAGE,
   },
-  recSideBtn: {
-    width: 40, height: 49,
-    alignItems: 'center', justifyContent: 'center',
-  },
   recBar: {
     flex: 1,
     flexDirection: 'row',
@@ -3661,10 +3803,12 @@ const styles = StyleSheet.create({
     gap: SM,
   },
   recDot: {
-    width: 8, height: 8,
-    borderRadius: 4,
+    width: REC_MARK, height: REC_MARK,
+    borderRadius: RADII.pill,
     backgroundColor: INK,
   },
+  // Both states' clock. Tabular figures so a running count never shifts the track
+  // that starts after it.
   recTime: {
     fontSize: TEXT.md,
     fontWeight: WEIGHT.medium,
@@ -3674,19 +3818,6 @@ const styles = StyleSheet.create({
   recWaveWrap: {
     flex: 1,
     justifyContent: 'center',
-  },
-  previewWaveWrap: {
-    flex: 1,
-    height: 49,
-    justifyContent: 'center',
-  },
-  previewDuration: {
-    fontSize: TEXT.md,
-    color: INK_SUBTLE,
-    fontVariant: ['tabular-nums'],
-    minWidth: 34,
-    textAlign: 'right',
-    paddingEnd: XS,
   },
 
   // Location bubble
@@ -3712,11 +3843,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  locationLabel: { fontSize: TEXT.md, lineHeight: lh(TEXT.md), fontWeight: WEIGHT.medium },
+  locationLabel: { fontSize: TEXT.md, fontWeight: WEIGHT.medium },
   // The line under the location name: the rank BELOW the body, so TEXT.sm. The
   // old 1px marginTop was an optical nudge against a hand-set 16 lineHeight;
   // with the standard 1.4x line box there is nothing left to nudge.
-  locationSubLabel: { fontSize: TEXT.sm, lineHeight: lh(TEXT.sm) },
+  locationSubLabel: { fontSize: TEXT.sm },
   locationFooter: {
     flexDirection: 'row',
     alignItems: 'center',

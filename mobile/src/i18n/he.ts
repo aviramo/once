@@ -1,4 +1,8 @@
 export default {
+  // Brand. The app's name, once — every screen that shows it (home's wordmark)
+  // reads it from here. It is a name, so both languages carry the same word.
+  'app.name': 'Once',
+
   // Landing
 
 
@@ -127,10 +131,10 @@ export default {
   'settings.account': 'חשבון',
   'settings.visibilityVisible': 'גלוי',
   'settings.visibilityHidden': 'מוסתר',
-  // Watcher chip on the visibility row. The number alone says nothing, so the
-  // chip carries the whole phrase.
-  'settings.watchersOne': '1 צופה בך',
-  'settings.watchersMany': '{count} צופים בך',
+  // The watcher count is not a string any more: it rides the visibility chip's
+  // trailing pill as the BARE NUMBER (user directive 2026-07-30) — the tile
+  // floats on a photo and its own label already says what is being counted. The
+  // hide confirm below still spells it out, where there is room for a sentence.
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
@@ -321,6 +325,9 @@ export default {
   // support inbox, with this subject prefilled.
   'settings.support': 'תמיכה',
   'support.mailSubject': 'תמיכה Once',
+  // Site: the row under support. Opens the brand site's landing page in the
+  // device browser, in the language the app is running in.
+  'settings.site': 'אתר',
   'settings.preview': 'תצוגה מקדימה',
   'settings.myProfile': 'פרופיל',
   'settings.photo': 'התמונות שלי',
@@ -333,6 +340,8 @@ export default {
   'settings.male': 'גבר',
   'settings.female': 'אישה',
   'settings.accountDetails': 'פרטים',
+  // Title of the account popup (the sheet the "Details" row opens).
+  'settings.myAccount': 'החשבון שלי',
   'settings.deleteAccount': 'מחיקת חשבון',
   'settings.deleteConfirmTitle': 'מחיקת חשבון',
   'settings.deleteConfirmDesc': 'כל המידע, התמונות והשיחות יימחקו לצמיתות. הזמנות פעילות, שיחות וצפיות יבוטלו. לא ניתן לבטל פעולה זו',
@@ -1053,7 +1062,6 @@ export default {
   'home.locationUnavailableDesc': 'לא הצלחנו לאתר את המיקום שלך. נסה לעבור למקום עם קליטה טובה יותר ולחץ על שדר מיקום',
   'home.locationUnavailableButton_m': 'שדר מיקום',
   'home.locationUnavailableButton_f': 'שדרי מיקום',
-  'home.hiddenHeader2': 'Once',
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   // Accessibility labels for the floating shell chrome (no visible text).

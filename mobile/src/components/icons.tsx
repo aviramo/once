@@ -5,14 +5,15 @@ import { INK, INK_SUBTLE, WHITE } from '../colors'
 import { ICON, STROKE } from '../tokens'
 import { iconScale, FONT_SCALE } from '../fonts'
 
-// The OS-font-scale ceiling every Glyph below this point obeys. Default is
-// `body`, matching iconScale's own default: a glyph beside text grows with it.
-const GlyphScaleContext = createContext<number>(FONT_SCALE.body)
+// The OS-font-scale ceiling every Glyph below this point obeys. Default is the
+// app's own, matching iconScale's default: a glyph beside text grows with it, and
+// text has exactly one ceiling (FONT_SCALE in ../fonts).
+const GlyphScaleContext = createContext<number>(FONT_SCALE)
 
 /** Declares the font-scale ceiling for every glyph rendered inside it.
  *
- *  A container whose own size is a fixed dp must pin this to FONT_SCALE.ui
- *  (1.0), otherwise the glyph keeps growing while the box does not and the
+ *  A container whose own size is a fixed dp must pin this to FIXED_BOX_SCALE,
+ *  otherwise the glyph keeps growing while the box does not and the
  *  glyph-to-box ratio drifts per device font scale — the same round button
  *  reading crowded on one screen and lost on another. RoundButton is the one
  *  caller today; it wraps its children, so every in-circle icon in the app
@@ -169,6 +170,18 @@ export function HamburgerIcon({ color = INK, size = ICON.xxl }: IconProps = {}) 
       <Line x1="4" y1="7" x2="20" y2="7" />
       <Line x1="4" y1="12" x2="20" y2="12" />
       <Line x1="4" y1="17" x2="20" y2="17" />
+    </Glyph>
+  )
+}
+
+// A plus: "add something to this". The chat composer's attach affordance, at
+// the leading edge of the field. Same STROKE.base weight and 24-box as
+// CloseIcon / HamburgerIcon, so the chrome glyphs read as one set.
+export function PlusIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round">
+      <Line x1="12" y1="5" x2="12" y2="19" />
+      <Line x1="5" y1="12" x2="19" y2="12" />
     </Glyph>
   )
 }
@@ -370,6 +383,27 @@ export function SupportIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   )
 }
 
+// Globe glyph — the settings "site" row, which opens the brand site in the
+// device browser. A sphere stated with the fewest strokes that still read as
+// one: the outline, its equator and one meridian.
+//
+// It takes SupportIcon's scale correction, and for the same reason, doubled: a
+// circle at r 10 runs its ink to 1..23 of the box — the widest anything in the
+// column gets — and this row sits DIRECTLY under the lifebuoy, so the two
+// full-box circles would be the one pair in the list where a difference in the
+// correction is visible as a difference in size.
+export function GlobeIcon({ color = INK, size = ICON.md }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <G origin="12, 12" scale={0.9}>
+        <Circle cx="12" cy="12" r="10" />
+        <Path d="M2 12h20" />
+        <Path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </G>
+    </Glyph>
+  )
+}
+
 export function UserIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
@@ -551,6 +585,16 @@ export function MicIcon({ color = WHITE, size = ICON.xxl }: IconProps = {}) {
 }
 
 // ── Media transport ────────────────────────────────────────────────────────
+
+// Stop — the filled rounded square that ends a recording. Same rounded-square
+// family as PauseIcon's bars, at the same default size.
+export function StopIcon({ color = WHITE, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Rect x={4} y={4} width={16} height={16} rx={3} />
+    </Glyph>
+  )
+}
 
 export function PauseIcon({ color = WHITE, stroke, size = ICON.xxl }: IconProps & { stroke?: string } = {}) {
   return (

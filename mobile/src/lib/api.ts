@@ -40,6 +40,64 @@ function userRowOf(data: unknown): Record<string, unknown> | null {
   return row
 }
 
+// One in-flight run per operation, shared by every caller that asks for it while
+// that run is still going. The app's startup volley is 4-6 requests fired in the
+// same frame (start + location + my_groups + find), so a session that went stale
+// while the device slept fails them ALL at once — and without this each failure
+// would spend the refresh token again (the rotated token races the spend before
+// it, and the server can legitimately refuse the loser) and each would sign the
+// user out on its own. One refresh and one sign-out serve the whole volley.
+function shared<T>(fn: () => Promise<T>): () => Promise<T> {
+  let inflight: Promise<T> | null = null
+  return () => {
+    if (!inflight) inflight = fn().finally(() => { inflight = null })
+    return inflight
+  }
+}
+
+/** A fresh access token, or null when one can't be had right now.
+ *  NEVER read that null as "signed out". auth-js KEEPS the stored session when a
+ *  refresh fails on the NETWORK — the normal case on a device that just woke
+ *  with its radio still coming up — and deletes it only when the server actually
+ *  REFUSES the refresh token, in which case auth-js emits SIGNED_OUT itself and
+ *  the app is already on its way to /login without us having to guess. */
+const refreshAccessToken = shared(async (): Promise<string | null> => {
+  try {
+    const { data } = await supabase.auth.refreshSession()
+    return data.session?.access_token ?? null
+  } catch {
+    return null
+  }
+})
+
+/** scope 'local': the token being signed out on is already invalid, so a global
+ *  /logout would 401 and revoke nothing — but when it DOES have a live token it
+ *  revokes every session this user has on every other device. */
+const signOutLocal = shared(async () => {
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+})
+
+// Set when a call could not be attempted at all for want of a usable token. It
+// is the one cost of failing quietly instead of signing out: the server is now
+// missing something the app believed it had sent, and `app/start` — fired ONCE
+// per mount of /home — is the case that matters, because nothing would ever
+// retry it on its own and without it the user is not marked available. So the
+// skip is remembered, and the moment auth comes back the caller replays.
+let authSkipped = false
+
+/** Runs `cb` once auth recovers after a call was skipped for want of a token.
+ *  Returns an unsubscribe. Nothing fires when no call was skipped — a plain
+ *  token rotation is not a recovery and must not replay anything. */
+export function onAuthRecovered(cb: () => void): () => void {
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event !== 'TOKEN_REFRESHED' && event !== 'SIGNED_IN') return
+    if (!authSkipped) return
+    authSkipped = false
+    cb()
+  })
+  return () => data.subscription.unsubscribe()
+}
+
 export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
 
   // The session and the position are independent, so they are awaited TOGETHER
@@ -62,40 +120,84 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
     ...(loc && !(body as any)?.location ? { location: { latitude: loc.lat, longitude: loc.lng } } : {}),
   }
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
-  let res: Response
-  try {
-    res = await fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+  // Each attempt owns its own timeout budget, so a retry gets a full one.
+  const send = (bearer: string) => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+    return fetch(`${supabaseUrl}/functions/v1/${fn}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token ?? ''}`,
+        'Authorization': `Bearer ${bearer}`,
         'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
-    })
-  } finally {
-    clearTimeout(timeout)
+    }).finally(() => clearTimeout(timeout))
+  }
+
+  // NEVER fire a request with no token. `Bearer ` with an empty string is not a
+  // credential, so there is nothing the server can answer but 401 — and that
+  // MANUFACTURED 401 is what used to log people out of the app. getSession()
+  // answers with no session at all whenever the stored one needs a refresh it
+  // cannot complete; the access token itself lives 7 days (the project's
+  // `jwt_exp`), so that is a device waking into a genuinely stale session, or any
+  // moment the refresh call cannot reach the network. The startup volley behind
+  // it then fired 4-6 credential-less requests in the same frame, took 4-6 401s,
+  // and each one called signOut — which DELETES the stored session, throwing away
+  // the one thing that recovers by itself (auth-js retries the refresh every 30s,
+  // and a success re-routes the app to home) and leaving the user to log in again.
+  // Reproduced on an emulator 2026-07-30: clock moved past the 7-day expiry with
+  // the network cut, the refresh fails with AuthRetryableFetchError, and the
+  // session SURVIVES on disk — 46s after the network came back the whole volley
+  // landed 200. Failing quietly is what makes that recovery possible, and the
+  // skip is remembered so /home can replay what never went out.
+  if (!token) {
+    authSkipped = true
+    return null as any
+  }
+
+  let res = await send(token)
+
+  // A 401 WITH a token in hand is a different claim: the credential we sent was
+  // refused. Usually that is an access token that expired between the session
+  // read and the request (auth-js hands out tokens up to EXPIRY_MARGIN — 90s —
+  // from expiry), so refresh once and send it again. Only a SECOND refusal, of a
+  // token minted seconds earlier, means the session is genuinely dead — that is
+  // the one case that still signs out. A refresh that couldn't complete returns
+  // null and we simply fail the call (see refreshAccessToken).
+  //
+  // Re-sending is only safe because the server's ONLY 401 is its auth gate
+  // (`User.getByRequest` → `unauthenticated`, app/index.ts), which runs before
+  // any RPC — a request refused there never reached one, so nothing can
+  // half-apply and a replay cannot double-apply. That is a property of the
+  // server, not of the status code, so the retry is gated on the CODE: a 401
+  // introduced later with some other meaning (one a handler reached) falls
+  // through to the ordinary throw instead of being replayed or signed out on.
+  if (res.status === 401) {
+    const refusal = await res.text()
+    if (serverErrorCode(refusal) !== 'unauthenticated') throw new Error(refusal)
+    const fresh = await refreshAccessToken()
+    if (!fresh) {
+      authSkipped = true
+      return null as any
+    }
+    res = await send(fresh)
+    if (res.status === 401) {
+      const again = await res.text()
+      if (serverErrorCode(again) !== 'unauthenticated') throw new Error(again)
+      await signOutLocal()
+      return null as any
+    }
   }
 
   if (!res.ok) {
-    // 401 ONLY. 401 means "we don't know who you are" — the session is dead
-    // and signing out is the correct recovery. 403 means "we know who you are
-    // and the answer is no", which the server uses for ordinary business
-    // rules: the presence gate (`unavailable`, app/index.ts) and the chat
-    // validators (schedule_not_allowed / invalid_image_key /
-    // invalid_audio_key). Signing out on those logged the user clean out of
-    // the app for tapping play while geo-gated.
-    //
-    // scope 'local': the token is already invalid, so the global /logout call
-    // would 401 and revoke nothing — but when it DOES have a live token it
-    // revokes every session this user has on every other device.
-    if (res.status === 401) {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-      return null as any
-    }
+    // 401 ONLY, handled above. 403 means "we know who you are and the answer is
+    // no", which the server uses for ordinary business rules: the presence gate
+    // (`unavailable`, app/index.ts) and the chat validators
+    // (schedule_not_allowed / invalid_image_key / invalid_audio_key). Signing
+    // out on those logged the user clean out of the app for tapping play while
+    // geo-gated.
     throw new Error(await res.text())
   }
 

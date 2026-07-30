@@ -207,6 +207,16 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** drop this entry.
 - **Verify before removing:** check the live mobile version distribution; `SELECT count(*) FROM log WHERE key = 'update_group' AND body->>'error' = 'not_owner' AND created_at > now() - interval '14 days'` should be zero once no old client is left driving those controls as a manager.
 
+### Ownership is handed only to a manager (informational)
+
+- **Added:** 2026-07-30 (migration `20260730120000_transfer_owner_managers_only`)
+- **Reason:** Ownership passes through management (user directive 2026-07-30): the owner promotes someone first and hands the group over second, so `app_transfer_owner` now returns `not_manager` when the target is a plain member. A permission tightening has to take effect the moment it deploys and cannot be staged Expand→Migrate→Contract (a precondition cannot be added "alongside" its absence), so this entry records the cross-version window instead.
+- **Old shape (kept alive):** Nothing removed from the response shapes. The deployed build (the transfer button shipped 2026-07-28 and is not yet at the live floor) offers "Transfer ownership" on **every** member's page. Picking a plain member there now comes back `not_manager` (HTTP 400) instead of applying; the roster and the caller's standing are untouched, so nothing an old client can do corrupts state. Owners handing the group to a manager — the normal path — are unaffected.
+- **New shape (preferred):** the new build shows the key only on a manager's page (`canTransfer = iAmOwner && !m.owner && !!m.manager` in `mobile/src/components/CommunitiesPage.tsx`); a plain member's page offers "Make manager" and "Remove from group".
+- **Safe to remove after:** the manager-only-transfer build is the live floor. Nothing to delete either way, this is a note.
+- **How to remove:** drop this entry.
+- **Verify before removing:** `SELECT count(*) FROM log WHERE key = 'transfer_owner' AND created_at > now() - interval '14 days' AND EXISTS (SELECT 1 FROM jsonb_array_elements(log) e WHERE e->>'error' = 'not_manager')` — zero means no old client is still offering the key on a plain member's page.
+
 ### `group_owner` push code on old clients (informational)
 
 - **Added:** 2026-07-28
