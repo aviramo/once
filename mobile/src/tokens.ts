@@ -293,22 +293,9 @@ export const STROKE = {
 export const NOTIFY_DOT_SIZE = 14
 export const NOTIFY_DOT_RING = STROKE.base
 
-// ── The Circles emblem ─────────────────────────────────────────────────────
-// Diameter of the menu's one big round button (CirclesButton.tsx): the disc that
-// carries the circles mark, the word, each count on its own line and the waiting
-// chip, hanging half over the profile photo and half over the menu list.
-//
-// As wide as TWO hero circles standing side by side with the page gutter between
-// them — derived, so the app's round objects keep one scale between them. That is
-// the smallest disc the stack actually fits in: the counts are STACKED rather
-// than chained on the interpunct, so the column runs mark + name + two counts +
-// chip, and a circle is at its widest only through the middle — the rim closes in
-// on both ends of that column.
-//
-// It is the only round box in the app that GROWS with the OS font scale (the
-// emblem consumes it through `iconScale`), because text stands in it; see
-// FIXED_BOX_SCALE in fonts.ts for the rule and why this is the exception to it.
-export const CIRCLES_BUTTON_SIZE = ROUND_BUTTON_SIZE * 2 + MD
+// (The Circles emblem's diameter stood here, with `CirclesButton.tsx`. Both went
+// with the menu page that hung the disc on the seam between its profile photo and
+// its list — Circles is an entry on home's dock now, 2026-07-30.)
 
 // ── Gesture thresholds ─────────────────────────────────────────────────────
 
@@ -352,6 +339,16 @@ export const PULL_TUTORIAL_HOLD_MS = 2_000
 // it gates when a handler activates, it does not time an animation.
 export const LONG_PRESS_MS = 400
 
+// ── "You cannot use this yet" ──────────────────────────────────────────────
+// THE fade for a control that is present but not available to this user — the
+// app's one answer, so a door that is shut looks the same wherever it is. It is
+// deliberately a FADE and not a removal: the control stays where it will be, and
+// it stays PRESSABLE, because a dimmed key that says nothing when tapped only
+// tells the user he is stuck. Every use of it must open something that explains
+// (home's dock fades Circles until the profile is built and taps into the
+// members-only popup, which offers the way out).
+export const DISABLED_OPACITY = 0.45
+
 // ── Paged lists ────────────────────────────────────────────────────────────
 // Rows a server-paged list asks for at a time (group browse / search).
 export const LIST_PAGE_SIZE = 20
@@ -365,13 +362,6 @@ export const LIST_PAGE_AHEAD_VIEWPORTS = 1
 // what it already holds does so immediately, so this delay costs nothing that
 // the user can see.
 export const SEARCH_DEBOUNCE_MS = 300
-
-// ── Onboarding nudges ──────────────────────────────────────────────────────
-// How many page1 profiles a user watches (counted from the moment the profile
-// is built) before home raises the one-shot Communities awareness nudge. Small
-// on purpose: the point is to explain what decides WHO shows up before the
-// stream of faces has settled into a habit.
-export const COMMUNITIES_NUDGE_AFTER = 3
 
 // ── Motion (animation durations, ms) ───────────────────────────────────────
 // Three-tier duration scale. Every timed animation (fade, slide, scale,
@@ -412,6 +402,26 @@ export const SEARCH_WATCHDOG_SLACK_MS = 6_000
 // a different lift fork via a prop, not by redefining the string.
 
 export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
+
+// ── The dock's lift ────────────────────────────────────────────────────────
+// The upward shadow home's bottom strip floats on (HomeDock.tsx). It is a
+// SEPARATE and much stronger stop than the sheet's above, on purpose (user
+// directive 2026-07-30): a sheet is a surface of its own colour sliding over the
+// page, so the faintest edge is enough to say it is on top — but the strip's
+// ground IS the page's, so the shadow is the ONLY thing saying it is a
+// foreground at all, and the directive is that it read as HOVERING. Hence the
+// deeper drop and the wider blur: at the sheet's 4/24/0.12 the band simply
+// looked like the bottom of the page.
+//
+// The STOP, though, is barely above the sheet's, and that is a correction rather
+// than a compromise (user directive 2026-07-30): at 0.26 the drop stopped
+// reading as a shadow and painted a visible grey BAND across the page above the
+// strip, which on a purple-and-white app is a colour that does not exist in it.
+// What makes this read as hovering is the distance it falls, not how dark it is.
+//
+// There is no rule along the strip's top and there must never be one — this
+// gradient is what stands in its place.
+export const DOCK_SHADOW = '0px -8px 20px 0px rgba(0,0,0,0.13)'
 
 // The air a popup leaves above itself once it has grown as tall as it is
 // allowed to. A sheet rises from the bottom, so an over-long body used to push
@@ -512,33 +522,25 @@ export const DRAG_HANDLE = {
 // full-screen sheet. See OverlaySheet.tsx.
 
 export const OVERLAY = {
-  // Gap between the safe-area top inset and floating chrome (the home
-  // hamburger, a sheet's close X). Consumed via chromeTop() below, never added
-  // to an inset by hand.
+  // Gap between the safe-area top inset and floating chrome (a sheet's close X).
+  // Consumed via chromeTop() below, never added to an inset by hand.
   chromeGap: SM,
-  // How far in from the START/END edge floating chrome sits: the home
-  // hamburger's `start`, the card's report flag at `end`, and a sheet's close X
-  // all land on this one gutter so the hamburger visually BECOMES the X when a
-  // sheet opens over it (same line, both axes). The page gutter, MD.
+  // How far in from the START/END edge floating chrome sits: a sheet's close X
+  // at the START, the card's report flag at `end`. The page gutter, MD.
   chromeInset: MD,
-  // How far the finger must travel before a sideways drag on home is claimed
-  // as "open the menu drawer" (below it the touch is still up for grabs).
-  menuDragSlop: SM,
-  // Paint order. Menu sits above everything on purpose: it is the one surface
-  // that stays reachable while the availability gate is on.
+  // Paint order. (There is no `menu` step any more — the drawer is deleted,
+  // 2026-07-30. Do not renumber the rest: the gaps are deliberate room.)
   z: {
     invite: 10,
     chat: 20,
-    menu: 30,
     subPage: 40,
   },
 } as const
 
 /** The ONE line floating chrome hangs from, measured from the top of the screen:
- *  home's hamburger, a sheet's close X, and anything a body pins LEVEL with them
- *  (a card's top-END chip column, the menu's edit-profile chip). It is what makes
- *  the hamburger visually BECOME the X when a sheet opens over it, so the four
- *  call sites read it here rather than each adding the gap to an inset itself. */
+ *  a sheet's close X, and anything a body pins LEVEL with it (a card's top-END
+ *  chip column). The call sites read it here rather than each adding the gap to
+ *  an inset themselves. */
 export function chromeTop(topInset: number): number {
   return topInset + OVERLAY.chromeGap
 }

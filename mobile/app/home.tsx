@@ -17,26 +17,26 @@ import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocati
 import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
-import { INK, INK_DIM, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
-import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, ROUND_BUTTON_SIZE_SM, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SWIPE_DISMISS_VELOCITY, COMMUNITIES_NUDGE_AFTER, SHEET_GAP, bottomGap, chromeTop, lh } from '../src/tokens'
+import { INK, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE, SHADOW_BLACK } from '../src/colors'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SHEET_GAP, bottomGap } from '../src/tokens'
 import { useBottomInset } from '../src/hooks/useBottomInset'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
+import { BuildProfileGate } from '../src/components/BuildProfileGate'
 import { BottomSheet, SheetActions, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedCirclesPopup, useSharedCircles } from '../src/components/SharedListPopup'
 import { flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type CommunitiesTarget } from '../src/lib/communities'
 import { RisingCard } from '../src/components/RisingCard'
-import { OverlaySheet, sheetHeaderHeight } from '../src/components/OverlaySheet'
-import { RoundButton } from '../src/components/RoundButton'
+import { OverlaySheet } from '../src/components/OverlaySheet'
 import { HomeArt } from '../src/components/HomeArt'
+import { HomeDock, type DockItem } from '../src/components/HomeDock'
 import { CreditCost } from '../src/components/CreditCost'
 import { CREDIT_COST, creditTotal } from '../src/lib/credits'
 import { clearChatCache } from '../src/lib/chatCache'
 import { claimInstallReferral } from '../src/lib/referral'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { PullPane, usePullBehavior, AXIS_X_OPEN_SIGN } from '../src/components/PullPane'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import SettingsPage, { SubPageConfig, PreviewFieldPage } from './settings'
+import { PullPane, usePullBehavior } from '../src/components/PullPane'
+import { PreviewFieldPage, PreferencesPopup, AppSettingsPopup } from '../src/components/SettingsSurfaces'
 import { CommunitiesPage } from '../src/components/CommunitiesPage'
 import ChatPage from './chat'
 import { Image } from 'expo-image'
@@ -44,9 +44,9 @@ import { localPhotoUriCache } from '../src/components/PhotoEditor'
 import { useSelfAvatar, setSelfAvatarFromLocal, setSelfAvatarFromRemote } from '../src/lib/selfAvatar'
 import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
 import { FIXED_BOX_SCALE } from '../src/fonts'
-import { SEEN_FLAGS, SEEN_VALUES } from '../src/keys'
-import { hasSeenFlag, markSeenFlag, readSeenValue, writeSeenValues } from '../src/lib/seenFlags'
-import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, HamburgerIcon, GlyphScale, CloseIcon, BackIcon, UserPlusIcon, ShieldIcon, GroupsIcon } from '../src/components/icons'
+import { SEEN_FLAGS } from '../src/keys'
+import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
+import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, GlyphScale, CloseIcon, BackIcon, UserIcon, ShieldIcon, GroupsIcon, SlidersIcon, CreditIcon } from '../src/components/icons'
 import type { CardAction } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
@@ -134,24 +134,23 @@ function RadarRings({ active }: { active: boolean }) {
 const HALO_SIZE = Math.round(AVATAR_SIZE * 1.55)
 const DOTTED_RING_SIZE = Math.round(AVATAR_SIZE * 1.55)
 
-// WHERE THE BIG CIRCLE SITS inside the band between the topbar and the art: a
-// THIRD of the way up from the band's bottom (user directive 2026-07-30), which
-// is a step down from the middle it used to sit on. One number, because three
-// things have to agree about that line and any drift between them is visible:
-// the circle is centred ON it, the headline is centred in what is left ABOVE it,
-// and the pull-tutorial lands the descending card's edge on it.
+// WHERE THE BIG CIRCLE SITS in the band between the topbar and the dock: dead
+// CENTRE (user directive 2026-07-30). The page is then read as three bands of
+// its own making — the headline centred in everything above the circle, the
+// circle on the middle line, the art centred in everything below it — and each
+// of the three is centred in ITS band rather than stacked with a gap, so nothing
+// on this page measures a distance to anything else.
+//
+// One number, because four things have to agree about that line and any drift
+// between them is visible: the circle is centred ON it, the headline band ends
+// at it, the art band begins at it, and the pull-tutorial lands the descending
+// card's edge on it.
 //
 // It is applied as a PERCENTAGE of the band, never as a computed dp: the band's
 // height is a layout result, and reading it back into React would place the
 // circle a frame late and re-render the page every time the band changed.
-const CIRCLE_FROM_BOTTOM = 1 / 3
+const CIRCLE_CENTER = 1 / 2
 const pct = (f: number) => `${f * 100}%` as DimensionValue
-
-// (There is no centre-column gap constant any more. The three pieces that used
-// to be stacked on one — the headline, the round action and the art — are three
-// independently positioned things now: the headline is centred in the band above
-// the circle, the circle is centred on the page, and the art rides on the
-// wordmark at the foot. Nothing measures a gap to anything.)
 
 function AvatarHaloRings() {
   return (
@@ -190,22 +189,17 @@ function AvatarHaloRings() {
 // Geometry for the pull-to-skip hint label.
 const SKIP_HINT_HEIGHT = 58
 const SKIP_HINT_FONT = 26
-// The headline's letter tracking. Named because the app's name at the foot of
-// the page (PageSignature, below) is drawn in the SAME typography — it is this
-// screen's heading type, parked at the bottom — and the two must not drift.
+// The headline's letter tracking — this screen's heading type.
 const SKIP_HINT_TRACKING = 2
 // The headline's symmetric side gutter (user directive 2026-07-30). The SVG is
 // sized to (window − 2 × HPAD), so this is the one number that decides where a
 // line may end on either side.
 //
-// It is read against the ONE thing up there the text must not run into: the
-// shell's floating hamburger, whose column is OVERLAY.chromeInset ..
-// chromeInset + ROUND_BUTTON_SIZE_SM. XL stops short of that column's far edge
-// — a real gutter, still narrower than the chrome it clears, so the headline
-// keeps a usable line width instead of being indented past the button. The
-// clearance that actually guarantees no collision is vertical: the headline is
-// centred in the band BELOW the status bar (permHeadlineBand), which puts its
-// first line far under the hamburger's bottom edge on every screen.
+// It used to be read against the shell's floating hamburger, whose column the
+// text was not allowed to run into. That button is gone (its menu is the dock at
+// the foot of the page now) and the top of the screen belongs to nothing, so XL
+// is simply the gutter the headline reads best at: wide enough to frame it,
+// narrow enough to leave a usable line width.
 //
 // It was MD * 2 while the label shrank to fit — wide side margins cost nothing
 // when the font is free to shrink — then MD once the size was fixed, since every
@@ -410,86 +404,10 @@ const headlineAreaStyle = StyleSheet.create({
   },
 })
 
-// The wordmark's weight, and the only place in the app that is not one of the
-// two WEIGHT tiers. Deliberately local rather than a token in tokens.ts (user
-// directive 2026-07-30): 900 is the app's signature, not an emphasis rank the
-// design offers, and a shared token would invite a second caller. It needs the
-// Black face loaded in _layout and mapped in fonts.ts — an unmapped weight falls
-// through to DEFAULT_FAMILY and paints the name in Regular.
-const WORDMARK_WEIGHT = '900' as const
-
-// ── Page signature ─────────────────────────────────────────────────────────
-// The art and the app's name, as ONE block at the foot of the page (user
-// directive 2026-07-30). They used to be two things at two different heights —
-// the art rode inside the centred headline/action group and the name was pinned
-// to the bottom — so the distance between them was whatever the bottom flex
-// spacer happened to be on that device: a wide band on a small screen, nearly
-// nothing on a tall one. Together they are one signature, and the drawing sits
-// DIRECTLY on the name with no gap at all, on every screen.
-//
-// "No gap" is exactly that: the art declares no margin and the wrap no spacing,
-// so the SVG's bottom edge is the name's line box top. The air that is visibly
-// left between the ink of the two is the art's own FRAME_PAD (HomeArt.tsx) plus
-// the name's leading — both of them part of the things themselves.
-//
-// The name is drawn in this screen's HEADING typography (user directive
-// 2026-07-30): the letter tracking the headline above the centre action is
-// drawn in, one SIZE tier up from it, in the light purple — a name is not a
-// title, so it does not compete on colour and earns the extra size instead.
-//
-// The block is the last child of permScreen, IN the flow, and that is now
-// load-bearing (user directive 2026-07-30): the circle above is centred between
-// the topbar and the TOP OF THIS ART, so the band above has to end exactly
-// where this block begins. Being in the flow is what states that — the band is
-// `flex: 1` beside it, so the art and the name take their height and the band
-// gets the remainder. It was absolute while the circle was centred on the page,
-// where the point was the opposite: nothing above it should move.
-//
-// pointerEvents off for the whole block, the art included: it is page texture,
-// never a control, so a drag here still belongs to the shell's
-// open-the-menu pan.
-//
-// The bottom offset is useBottomInset()/bottomGap(), never the raw safe-area
-// inset — the app draws edge-to-edge, so that is the only thing keeping the
-// name out from under the navigation bar.
-function PageSignature({ bottom }: { bottom: number }) {
-  return (
-    <View pointerEvents="none" style={[signatureStyle.wrap, { marginBottom: bottom }]}>
-      <HomeArt />
-      <Text style={signatureStyle.name}>
-        {t('app.name')}
-      </Text>
-    </View>
-  )
-}
-
-const signatureStyle = StyleSheet.create({
-  wrap: {
-    // A flow child, and the distance to the screen's bottom edge is its own
-    // margin (passed inline) rather than an absolute offset — see the block
-    // comment: the band above ends where this begins.
-    alignItems: 'center',
-  },
-  name: {
-    // One tier ABOVE the headline (user directive 2026-07-30): the app's
-    // largest text step, which the countdown readout already uses. The size is
-    // what gives the name presence now that the colour has stepped back.
-    fontSize: TEXT.xl,
-    fontWeight: WORDMARK_WEIGHT,
-    letterSpacing: SKIP_HINT_TRACKING,
-    // The LIGHT purple (user directive 2026-07-30), not the headline's full
-    // INK: full-strength purple down there read as a second headline. Two steps
-    // back, not one: INK_MUTED (a solid half-strength purple) still competed
-    // with the headline, so the name takes the ramp's INK_DIM instead — over the
-    // opaque PAGE tint it lands at ~#BEB6D9, a whisper of the same purple. The
-    // alpha is safe HERE and nowhere else on this screen: the wordmark only ever
-    // sits on PAGE, so what it composites over is known.
-    color: INK_DIM,
-    // A brand name is a name, not a sentence: it reads the same way in both
-    // languages, so it keeps its Latin direction under RTL too.
-    writingDirection: 'ltr',
-  },
-})
+// (There is no page-signature block any more. The drawing is centred in the band
+// BELOW the circle now — see `permArtBand` — and the two things that used to
+// stand under it there are both gone: the app's wordmark was deleted outright,
+// and the dock is not part of page1 at all, it is a strip below it.)
 
 // ── Message ────────────────────────────────────────────────────────────────
 // Centered title + description block. Used as the main content surface for
@@ -922,11 +840,11 @@ const statusButtonStyles = StyleSheet.create({
 
 export default function HomePage() {
   const { top: topInset } = useSafeAreaInsets()
-  // Where the page's signature (art + name) sits. The device inset ABSORBS the
-  // design gap (bottomGap), and the inset itself comes from useBottomInset —
-  // never the raw safe-area value, which an IME session can report as 0 and
-  // drop bottom chrome into the navigation bar.
-  const signatureBottom = bottomGap(useBottomInset(), LG)
+  // How far the dock's glyphs stand above the screen edge. The device inset
+  // ABSORBS the design gap (bottomGap), and the inset itself comes from
+  // useBottomInset — never the raw safe-area value, which an IME session can
+  // report as 0 and drop bottom chrome into the navigation bar.
+  const dockBottom = bottomGap(useBottomInset(), LG)
   const { profile } = useUserStore()
   const router = useRouter()
   // A browse-only user (account created, profile not yet built) reaches home and
@@ -943,9 +861,9 @@ export default function HomePage() {
   // Two kinds of overlay, deliberately modelled differently:
   //
   //   STACKED (this state) — user-driven surfaces the user opens and closes:
-  //     menu (settings), and the profile sheet stacked on top of it. Chat is
-  //     here too: it is opened from the card's chat button (or a push tap) and
-  //     closed by the user; the conversation itself lives on regardless.
+  //     the profile preview and the Circles hub (both from the dock), and chat,
+  //     which is opened from the card's chat button (or a push tap) and closed
+  //     by the user; the conversation itself lives on regardless.
   //
   //   DERIVED (not in this state) — the incoming-invite / dead-invite card.
   //     Its lifetime belongs to the server, so it is computed from `relations`
@@ -953,20 +871,21 @@ export default function HomePage() {
   //     makes it impossible for it to fall out of sync with the server, and it
   //     is why a push-cold-start into an invite needs no routing at all.
   //
-  // Paint order is low → high: home < invite < chat < menu < profile sheet.
-  // Menu sits above everything on purpose — it is the one surface that stays
-  // reachable while the availability gate is on.
-  type Overlay = 'menu' | 'chat' | 'profile' | 'communities'
+  // Paint order is low → high: home < invite < chat < profile sheet.
+  //
+  // There is no 'menu' any more (user directive 2026-07-30): the drawer, the
+  // page it carried and the button that opened it are all deleted, and what it
+  // held is home's dock plus the two popups the dock raises.
+  type Overlay = 'chat' | 'profile' | 'communities'
   const [overlays, setOverlays] = useState<Overlay[]>([])
   // Assigned during render, NOT in an effect: the BackHandler is registered
   // once with [] deps and reads this ref, so it must never lag a render.
   const overlaysRef = useRef(overlays)
   overlaysRef.current = overlays
-  const menuOpen = overlays.includes('menu')
   const chatOpen = overlays.includes('chat')
   const profileSheetOpen = overlays.includes('profile')
-  // Communities hub: stacks on top of the menu (like the profile sheet). Its
-  // own internal view stack is popped first by hardware-back via the ref below.
+  // Circles hub. Its own internal view stack is popped first by hardware-back
+  // via the ref below.
   const communitiesSheetOpen = overlays.includes('communities')
 
   const openOverlay = useCallback((kind: Overlay) => {
@@ -981,12 +900,6 @@ export default function HomePage() {
     tap()
     setOverlays(prev => prev.slice(0, -1))
   }, [])
-  // Removes the drawer from the stack once its slide-out has played. Split
-  // from closeMenu (below) because the motion has to finish BEFORE the
-  // unmount: the drawer animates on pullY, not on a layout animation, so
-  // unmounting first would make it vanish instead of slide.
-  const finishMenuClose = useCallback(() => { closeOverlay('menu') }, [closeOverlay])
-
   // If the app was launched from a killed state by tapping a push, open the
   // matching overlay up front so the user lands on it instead of seeing a
   // flash of home first. Cleared after first read so it doesn't replay on
@@ -1076,6 +989,47 @@ export default function HomePage() {
   // relations.communities summary the settings row already counts from — one
   // source, so the dot and the row it leads to can never disagree.
   const menuHasPending = pendingApprovals(communitiesSummary(profile)) > 0
+  // ── "You haven't met your circles yet" ──────────────────────────────────
+  // A brand-new user meets the app as a stream of faces and has no way to learn
+  // that WHO he is shown depends on his circles. The app used to say that by
+  // FORCE: after the third profile he watched, the Communities hub was thrown
+  // over the card he was looking at with a popup explaining itself. That is
+  // deleted (user directive 2026-07-30) — nothing takes the screen away from a
+  // user to teach him something. The DOCK says it instead, in the app's own
+  // vocabulary for "there is something for you behind here": the notification
+  // dot on Circles, which is spent by the door OPENING. He taps Circles, the hub
+  // is there, the dot is gone; after that only a real queue (someone waiting on
+  // my approval) can light it again — which is the badge's other half below.
+  //
+  // Starts `true` so a returning user never gets a frame of dot before the disk
+  // answers; only an unset flag turns it on.
+  const [circlesSeen, setCirclesSeen] = useState(true)
+  useEffect(() => {
+    void (async () => {
+      if (!(await hasSeenFlag(SEEN_FLAGS.circlesSeen))) setCirclesSeen(false)
+    })()
+  }, [])
+  // Spent by the hub actually OPENING, not by the tap that asked for it: the tap
+  // is one of four routes in (the dock, a push, an invite link, a cold start's
+  // initial notification) and one of them is refused outright — a user with no
+  // profile yet gets the members-only gate and never sees the page, so his dot
+  // must stay. One effect covers all four, and no route can forget to.
+  //
+  // **`profileBuilt` is part of the condition, not decoration.** Not every route
+  // in runs the gate: the cold-start notification effect sets the overlay stack
+  // DIRECTLY (`setOverlays(['communities'])`), and on a cold start `profile` is
+  // still null when it does, so the hub is briefly "open" before the guard effect
+  // below sees the loaded profile, closes it and raises the members-only popup.
+  // Marking on `circlesOpen` alone therefore burned the flag for a user who never
+  // saw the page — and, being persisted, it burned it forever: he finished his
+  // profile and the dot never came. Requiring entitlement here makes the flag mean
+  // exactly what its name says, "has been INSIDE Circles", on every route in.
+  const circlesOpen = overlays.includes('communities')
+  useEffect(() => {
+    if (!circlesOpen || !profileBuilt) return
+    setCirclesSeen(true)
+    void markSeenFlag(SEEN_FLAGS.circlesSeen)
+  }, [circlesOpen, profileBuilt])
   // Whether the chat partner is currently online — reported by ChatPage via
   // its presence channel. Drives the presence dot in the chat sheet's header.
   const [partnerOnline, setPartnerOnline] = useState(false)
@@ -1111,11 +1065,6 @@ export default function HomePage() {
   // asks the shell to close the sheet once it is back at its hub (returns false).
   const communitiesBackRef = useRef<() => boolean>(() => false)
 
-  const shellWidth = useSharedValue(Dimensions.get('window').width)
-
-  // Resolved when subPageOpen flips to true — lets a button that triggered
-  // the open await the moment the slide actually starts and show a loading
-  // state until then.
   // chatAvailable: state is 'chat'
   const chatAvailable = profile?.state === 'chat'
   const [chatJustStarted, setChatJustStarted] = useState(false)
@@ -1188,7 +1137,12 @@ export default function HomePage() {
   const profileRef = useRef(profile)
   profileRef.current = profile
   const routeToCommunities = useCallback(() => {
-    if (profileRef.current && !selectProfileBuilt(profileRef.current)) { setCommGateOpen(true); return }
+    // The refused branch taps too. The dock's keys carry no haptic of their own
+    // (their openers fire it), and the faded Circles key reaches ONLY this
+    // branch — without it, the one key in the strip that is dimmed would also be
+    // the only one that feels dead under the finger, which reads as broken
+    // rather than as closed.
+    if (profileRef.current && !selectProfileBuilt(profileRef.current)) { tap(); setCommGateOpen(true); return }
     openOverlayRef.current('communities')
   }, [])
   useEffect(() => {
@@ -1237,37 +1191,120 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const openShellSubPage = (config: SubPageConfig): Promise<void> => {
-    if (config.kind === 'profileSection') openProfileSheet()
-    else if (config.kind === 'communities') openCommunities()
-    return Promise.resolve()
-  }
+  // (`openShellSubPage` is gone with the menu page that called it: the dock
+  // opens the profile sheet and the Circles hub directly, so there is no
+  // sub-page config to route.)
+
+  // ── The dock: home's four entries ───────────────────────────────────────
+  // Everything the menu page held, stated on the page itself (user directive
+  // 2026-07-30) — profile, circles, preferences, more, in that order. Two of them
+  // are SURFACES the app already had (the profile preview and the Communities
+  // hub, both stacked sheets), and the other two are the menu's two CARDS of
+  // settings rows, lifted into popups verbatim (see PreferencesPopup /
+  // AppSettingsPopup in src/components/SettingsSurfaces.tsx). Nothing is
+  // re-implemented here: this list is only which glyph and which word open which
+  // of the four.
+  //
+  // **Circles carries the notification dot** — an open request in Circles is
+  // said on the entry that leads to it (user directive 2026-07-30). It reads the
+  // same `menuHasPending` the shell's hamburger used to, which is why deleting
+  // that button lost nothing: the queue it counted (join requests on a group I
+  // manage + incoming friend requests) has always lived inside Circles.
+  //
+  // It carries a SECOND reason, and only until it is answered once: a user who
+  // has never opened Circles is told there is something here to find (see
+  // `circlesSeen`) — the whole of what the forced onboarding nudge used to do.
+  //
+  // **The entry has three states, in this order, and they are one story** (user
+  // directive 2026-07-30):
+  //   1. no profile yet → the key is FADED (`dimmed`), glyph and word together,
+  //      and carries NO dot. Circles is members-only, so the dot would point at
+  //      a door the gate will refuse; the dot this user needs is the one on the
+  //      PROFILE entry, which is the door that unlocks this one. The key stays
+  //      pressable and taps into the members-only popup (`routeToCommunities` →
+  //      `commGateOpen`), which explains the closed door and offers onboarding.
+  //   2. profile built, never opened Circles → full strength, WITH the dot. Not
+  //      counted, not delayed: it is there from the moment the profile exists.
+  //   3. opened once → clean, until a real queue lights it again (`menuHasPending`).
+  //
+  // `routeToCommunities` is the one place the members-only rule is enforced,
+  // shared with the push and invite-link routers, so the fade is only ever a
+  // picture of a decision made there — never a second copy of it.
+  const [prefsPopupOpen, setPrefsPopupOpen] = useState(false)
+  const [appSettingsPopupOpen, setAppSettingsPopupOpen] = useState(false)
+  const dockItems = useMemo<DockItem[]>(() => [
+    {
+      key: 'profile',
+      label: t('home.dock.profile'),
+      icon: <UserIcon color={INK} size={ICON.xxl} />,
+      // An UNFINISHED account opens ONBOARDING, not the preview (user directive
+      // 2026-07-30) — and it lands on the step the user stopped at, photos or
+      // bio. That resume is onboarding's own (`initialStep`, which reads the
+      // profile: fewer than 2 photos → the photo step, photos but no bio → the
+      // bio step), so this passes no step and nothing here can disagree with it.
+      // A preview of a profile that does not exist yet is a blank card with
+      // nothing to do on it; the door has to be the flow that fills it.
+      onPress: profileBuilt
+        ? openProfileSheet
+        : () => { tap(); router.push('/onboarding') },
+      // Onboarding not finished (no bio yet → the server treats this account as
+      // "browse only"). Same dot the Circles entry wears for a pending queue —
+      // one marker, so the entry that fixes the problem is the one that says so.
+      badge: !profileBuilt,
+    },
+    {
+      key: 'circles',
+      label: t('communities.menuRow'),
+      icon: <GroupsIcon color={INK} size={ICON.xxl} />,
+      onPress: routeToCommunities,
+      // BOTH reasons for the dot hang off entitlement, not just the first-visit
+      // one: an unbuilt account can still be sent a friend request, and a dot
+      // over a faded key would point at a door the gate refuses — the one thing
+      // this rule says must not happen. While dimmed the key carries no dot at
+      // all, whatever is queued behind it; it comes back the moment the profile
+      // does, with the queue intact.
+      badge: profileBuilt && (menuHasPending || !circlesSeen),
+      dimmed: !profileBuilt,
+    },
+    {
+      key: 'preferences',
+      label: t('home.dock.preferences'),
+      // The age-range row's own glyph (user directive 2026-07-30), not a
+      // magnifying glass: what this opens is a set of RANGES to sit inside, and
+      // the sliders say that where a search glass said "type something in".
+      icon: <SlidersIcon color={INK} size={ICON.xxl} />,
+      onPress: () => { tap(); setPrefsPopupOpen(true) },
+    },
+    {
+      key: 'settings',
+      // "More", not "Settings" (user directive 2026-07-30): what it opens is the
+      // wallet first and then the account, support and the site — a drawer of
+      // everything else, not a preferences screen. The glyph follows the label
+      // to the thing at the head of that list, the CREDITS mark.
+      label: t('home.dock.more'),
+      icon: <CreditIcon color={INK} size={ICON.xxl} />,
+      onPress: () => { tap(); setAppSettingsPopupOpen(true) },
+    },
+  ], [openProfileSheet, routeToCommunities, menuHasPending, profileBuilt, circlesSeen, router])
 
 
 
   // Android hardware back. Priority, top of the stack downward:
-  //   1. the topmost stacked overlay (profile sheet → menu → chat) pops
+  //   1. the topmost stacked overlay (profile sheet → Circles → chat) pops
   //   2. the derived invite overlay: pending declines (through its confirm),
   //      dead is swallowed so back can't leave a card the server still owns
   //   3. nothing left → false, i.e. leave the app
   // Assigned during render (below) because step 2 needs values declared after
   // this effect; the effect itself must stay mounted once.
   const inviteBackRef = useRef<(() => boolean) | null>(null)
-  // The BackHandler registers once with [] deps, so it reaches closeMenu (which
-  // is defined further down, next to the pull it drives) through a ref.
-  const closeMenuRef = useRef<() => void>(() => {})
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       const stack = overlaysRef.current
       if (stack.length > 0) {
-        // The drawer animates itself out on pullY, so Back must go through its
-        // own closer rather than yanking it off the stack (which would make it
-        // vanish with no motion).
         const top = stack[stack.length - 1]
-        if (top === 'menu') closeMenuRef.current()
         // The hub pops its own internal view first; only when it's back at the
         // hub (ref returns false) do we close the whole sheet.
-        else if (top === 'communities' && communitiesBackRef.current()) { /* handled internally */ }
+        if (top === 'communities' && communitiesBackRef.current()) { /* handled internally */ }
         else closeTopOverlay()
         return true
       }
@@ -2432,7 +2469,13 @@ export default function HomePage() {
   // wired the same way wherever a card is rendered, so the fetching and the
   // popup's own state live in the one hook the Communities sheet uses too
   // (components/SharedListPopup.tsx → useSharedCircles).
-  const circles = useSharedCircles()
+  //
+  // A tapped person opens the Communities sheet OVER this popup, so the sheet
+  // being open is exactly "the popup is covered": it hides under that page and
+  // comes back the moment the sheet closes, by whatever route it closed (user
+  // directive 2026-07-30). It used to close outright, which cost the user the
+  // chip again to get back to a list they had only stepped away from.
+  const circles = useSharedCircles(communitiesSheetOpen)
 
   const runAction = (
     endpoint: string,
@@ -2915,226 +2958,12 @@ export default function HomePage() {
     return true
   }
 
-  // ── Communities awareness nudge (once ever) ──────────────────────────────
-  // A brand-new user meets the app as a stream of faces and has no way to learn
-  // that WHO he is shown depends on his circles. So the profiles he watches are
-  // counted from the moment his profile is built, and when the one after
-  // COMMUNITIES_NUDGE_AFTER arrives the Communities hub rises over home with a
-  // popup that says why joining a group and inviting friends makes the people
-  // he sees closer to him. Nothing is taken away: the next profile is already
-  // loaded UNDER the sheet, so swiping it down (the app's one dismissal
-  // gesture) simply reveals it.
-  //
-  // Counted per distinct person and PERSISTED, so a relaunch continues the tally
-  // instead of restarting it, and re-showing the same candidate after that
-  // relaunch doesn't count that person twice. Only `watching` counts — the same
-  // slot carries the chat partner in chat state, who is not a profile being
-  // browsed.
-  const [commNudgePending, setCommNudgePending] = useState(false)
-  const [commNudgeOpen, setCommNudgeOpen] = useState(false)
-  // Latched once the nudge is spent (fired, or found unnecessary), so the
-  // storage round trip below runs only until then and never again per session.
-  const commNudgeDoneRef = useRef(false)
-  const watchedUserId = rawPage1State === 'watching' ? displayedMatch?.user_id ?? null : null
-  useEffect(() => {
-    if (!watchedUserId || !profileBuilt || commNudgeDoneRef.current) return
-    let cancelled = false
-    void (async () => {
-      if (await hasSeenFlag(SEEN_FLAGS.communitiesNudge)) { commNudgeDoneRef.current = true; return }
-      // Deliberately NOT skipped for a user who already has a circle: someone
-      // who arrived through one friend's invite link still hasn't met groups,
-      // and this fires once in a lifetime either way.
-      let count = (await readSeenValue<number>(SEEN_VALUES.watchedCount)) ?? 0
-      if ((await readSeenValue<string>(SEEN_VALUES.watchedLastId)) !== watchedUserId) {
-        count += 1
-        await writeSeenValues({
-          [SEEN_VALUES.watchedCount]: count,
-          [SEEN_VALUES.watchedLastId]: watchedUserId,
-        })
-      }
-      if (cancelled || count <= COMMUNITIES_NUDGE_AFTER) return
-      commNudgeDoneRef.current = true
-      setCommNudgePending(true)
-    })()
-    return () => { cancelled = true }
-  }, [watchedUserId, profileBuilt])
-  // Raised only onto a clear shell: an overlay the user opened himself, the
-  // availability gate, or an invitation the server put up all outrank a nudge,
-  // so it waits for them instead of stacking on top. The seen flag is written
-  // HERE, at the moment it actually shows, so a nudge that never got its moment
-  // isn't silently spent.
-  useEffect(() => {
-    if (!commNudgePending || overlays.length > 0 || overlaysGated || inviteOverlayOpen) return
-    setCommNudgePending(false)
-    void markSeenFlag(SEEN_FLAGS.communitiesNudge)
-    openCommunities()
-    setCommNudgeOpen(true)
-  }, [commNudgePending, overlays.length, overlaysGated, inviteOverlayOpen, openCommunities])
-
-  // ── Drag the menu open ──────────────────────────────────────────────────
-  // A sideways drag INWARD (from the START edge's direction) anywhere on the
-  // shell opens the drawer — the gesture counterpart of the hamburger.
-  //
-  // It is deliberately NOT an edge band, which is the obvious design and does
-  // not work: Android gesture navigation (`navigation_mode=2`, the default)
-  // owns both screen edges for its system BACK gesture and consumes those
-  // touches before the app's view tree sees them. An edge strip there is dead
-  // on arrival — verified on the emulator, where a start-edge swipe left the
-  // app entirely instead of reaching a single JS handler. Do not reintroduce
-  // one, and do not reach for setSystemGestureExclusionRects to force it:
-  // that fights the user's own OS back gesture for a gesture we can host
-  // perfectly well away from the edges.
-  //
-  // The gesture is attached to the SHELL ITSELF, not to an overlaying view. An
-  // ancestor always receives touches alongside its descendants, so there is no
-  // hit-testing race with the card underneath and nothing is swallowed: it is
-  // invisible to taps, and it only claims sideways-DOMINANT drags, so page1's
-  // pull-to-skip (which fails on horizontal anyway) keeps every vertical pull.
-  //
-  // The drawer TRACKS THE FINGER while it opens, exactly as it tracks the
-  // finger while it closes — one continuous position, never a gesture that
-  // merely triggers a canned animation. That is why `menuPull` is created HERE
-  // and handed to the sheet (see OverlaySheet's `pull` prop): the closing pan
-  // lives on the sheet, the opening pan lives on the shell, and both write the
-  // same `pullY`. `pullY` is the distance from OPEN: 0 = fully out, screenW =
-  // fully hidden. So the opening drag is just `screenW - travel`.
-  const menuPull = usePullBehavior({
-    activation: 'sheet',
-    axis: 'x',
-    // Only the sheet's own closing pan is gated on being open; the shell pan
-    // below has its own gate.
-    enabled: menuOpen && !profileSheetOpen,
-    onCommit: finishMenuClose,
-  })
-  const { pullY: menuPullY, commitDistance: menuCommitDistance, screenSpan: menuSpan } = menuPull
-  // Slide the drawer out on pullY, THEN unmount. Guarded so the X, Back and a
-  // committed swipe can't each start their own close.
-  const menuClosingRef = useRef(false)
-  const closeMenu = useCallback(() => {
-    if (menuClosingRef.current) return
-    menuClosingRef.current = true
-    menuPullY.value = withTiming(menuSpan, undefined, () => {
-      'worklet'
-      // Fired even when the animation is INTERRUPTED (finished === false), so
-      // a close can never be stranded half-played with the sheet still in the
-      // overlay stack. Getting this wrong once already produced a drawer that
-      // no control could dismiss.
-      runOnJS(finishMenuClose)()
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuSpan, finishMenuClose])
-  useEffect(() => { if (!menuOpen) menuClosingRef.current = false }, [menuOpen])
-  closeMenuRef.current = closeMenu
-  // The drawer is ALWAYS mounted (OverlaySheet keepMounted), parked off-screen
-  // at pullY = menuSpan while closed. Its position IS its state.
-  //
-  // Why not mount it on demand: it has to already exist to be dragged in, and
-  // an earlier version that mounted it on drag-start had to juggle a
-  // `menuDragging` flag that gated the mount, the entrance animation and the
-  // unmount — which stranded the sheet mounted-but-unclosable the first time
-  // an animation was interrupted. Keeping it mounted deletes that state
-  // machine outright: the drag has nothing to create or destroy, only a
-  // position to move.
-  useEffect(() => {
-    // Park it hidden on first paint — usePullBehavior starts pullY at 0, which
-    // for an always-mounted drawer means "fully open".
-    menuPullY.value = menuSpan
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  const commitMenuDrag = useCallback(() => { openOverlay('menu') }, [openOverlay])
-  // The tap path slides the drawer in on pullY, exactly like the drag — it
-  // just supplies the motion itself instead of taking it from a finger. One
-  // mechanism owns the drawer's position in every path (tap, drag, close), so
-  // there is no second source of truth for where it sits and no layout
-  // animation to keep in sync with the gesture.
-  const openMenuByTap = useCallback(() => {
-    menuPullY.value = menuSpan
-    openOverlay('menu')
-    menuPullY.value = withTiming(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuSpan, openOverlay])
-
-  const dragStart = useSharedValue({ x: 0, y: 0 })
-  const dragClaimed = useSharedValue(false)
-  // Live over home AND over the derived invite card (which has no horizontal
-  // gesture, and whose hamburger is tappable for the same reason). Off while a
-  // STACKED overlay is up so it can't fight that surface's own pans.
-  // Gated through a SHARED VALUE, never through `.enabled()`. Committing a
-  // drag opens the menu, which flips this condition — and with `.enabled()`
-  // that rebuilds the gesture object while the pan is still live, which makes
-  // RNGH detach and reattach the handler mid-drag. Reading the gate inside the
-  // handler keeps the gesture object constant for the life of the screen.
-  // Written from an effect, not during render: a render-phase shared-value
-  // write is the pattern Reanimated's strict mode warns about.
-  const menuDragEnabled = useSharedValue(true)
-  useEffect(() => { menuDragEnabled.value = overlays.length === 0 }, [overlays, menuDragEnabled])
-  const menuDragGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        // Same arbitration OverlaySheet's axis-'x' close uses: wait out the
-        // slop, then claim only a sideways-dominant inward drag. An
-        // activeOffsetX/failOffsetY pair looks equivalent and is not —
-        // whichever axis crosses its slop first wins, so a normal slightly
-        // diagonal swipe fails on Y before it ever activates on X.
-        .manualActivation(true)
-        .onTouchesDown(e => {
-          'worklet'
-          dragClaimed.value = false
-          const tch = e.allTouches[0]
-          if (tch) dragStart.value = { x: tch.absoluteX, y: tch.absoluteY }
-        })
-        .onTouchesMove((e, manager) => {
-          'worklet'
-          // onTouchesMove keeps firing after activate(); the latch keeps the
-          // claim (and the mount) to once per drag.
-          if (dragClaimed.value) return
-          if (!menuDragEnabled.value) { manager.fail(); return }
-          const tch = e.allTouches[0]
-          if (!tch) return
-          const dx = tch.absoluteX - dragStart.value.x
-          const dy = tch.absoluteY - dragStart.value.y
-          if (Math.abs(dx) < OVERLAY.menuDragSlop && Math.abs(dy) < OVERLAY.menuDragSlop) return
-          if (dx * AXIS_X_OPEN_SIGN > 0 && Math.abs(dx) > Math.abs(dy) * 0.8) {
-            dragClaimed.value = true
-            manager.activate()
-            return
-          }
-          manager.fail()
-        })
-        .onUpdate(e => {
-          'worklet'
-          if (!dragClaimed.value) return
-          const travel = Math.max(0, e.translationX * AXIS_X_OPEN_SIGN)
-          // 1:1 with the finger, clamped at fully-open. Same no-resistance
-          // tracking the closing drag uses.
-          menuPullY.value = Math.max(0, menuSpan - travel)
-        })
-        .onEnd(e => {
-          'worklet'
-          if (!dragClaimed.value) return
-          const travel = Math.max(0, e.translationX * AXIS_X_OPEN_SIGN)
-          const speed = e.velocityX * AXIS_X_OPEN_SIGN
-          // Past half, or flicked: settle open. Otherwise back off-screen.
-          // Mirrors the closing pan's commit test so both directions agree.
-          if (travel >= menuCommitDistance || speed > SWIPE_DISMISS_VELOCITY) {
-            menuPullY.value = withTiming(0)
-            runOnJS(commitMenuDrag)()
-          } else {
-            // Abandoned: slide back off-screen. Nothing to unmount, nothing to
-            // reconcile — the drawer simply returns to its parked position.
-            menuPullY.value = withTiming(menuSpan)
-          }
-          dragClaimed.value = false
-        }),
-    // Every dep is stable for the life of the screen (shared values, screen
-    // dimensions, a []-dep callback), so this gesture is built exactly once.
-    // Keep it that way — see the shared-value gate above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [menuCommitDistance, menuSpan, commitMenuDrag],
-  )
-
-  // Space the floating chrome (hamburger here, the close X on a sheet) occupies
-  // at the top of the screen. The card's topBlock starts below it.
+  // The Communities awareness nudge that used to live here — a watched-profile
+  // counter that threw the hub + a popup over the card after the third face —
+  // is DELETED (user directive 2026-07-30). Nothing takes the screen away from
+  // the user to teach him something; the dock's Circles entry wears a dot until
+  // he opens it himself (see `circlesSeen`), and that is the whole of it. Do not
+  // reintroduce a counter, a one-shot popup, or an auto-raised hub here.
 
   // Never paint the shell without a profile. Every branch below reads through
   // `profile?.…`, so a null profile renders a bare INK screen: no card, no
@@ -3158,16 +2987,19 @@ export default function HomePage() {
           edge-to-edge (see AppStatusBar) — the paused "muted" tone comes from
           the page behind the band, not from a status-bar colour. */}
       <AppStatusBar style="light" />
-      <View style={styles.shell} onLayout={e => { shellWidth.value = e.nativeEvent.layout.width }}>
-            {/* page1 — the only standalone screen, and ALL of it is the
-                drag-to-open-menu surface (see menuDragGesture). The detector
-                wraps this subtree rather than riding page1's card pan: the
-                card is absent in the empty and gated states, and the drawer
-                must still be draggable there. */}
-            <GestureDetector gesture={menuDragGesture}>
+      <View style={styles.shell}>
+            {/* page1 — the only standalone screen. The shell-wide sideways pan
+                that used to wrap this subtree went with the drawer it opened. */}
             <View style={{ flex: 1 }}>
               <View style={styles.root}>
-                <View style={{ flex: 1 }}>
+                {/* page1's own box, and it stops at the dock (user directive
+                    2026-07-30). The strip is a FLOW SIBLING under this, not a
+                    layer over it, so the empty pane and the match card are laid
+                    out in what is left above it and a card can never cover it.
+                    `overflow:'hidden'` is the other half of that promise: a
+                    pulled card rides off the bottom of THIS box, disappearing
+                    INTO the strip's top edge instead of sliding across it. */}
+                <View style={styles.page1}>
                   {/* Empty / no-match pane — always mounted underneath. The
                       match pane sits on top with a transparent inner card,
                       so when the match Animated.View slides off-screen the
@@ -3203,13 +3035,11 @@ export default function HomePage() {
                         sits behind it; the card sliding down reveals the
                         centered group. */}
                     <View style={styles.permScreen}>
-                      {/* THE BAND: from where the topbar ends down to the top
-                          edge of the art. The circle is centred in THIS, not in
-                          the page (user directive 2026-07-30) — so the band is
-                          a real box with the signature as its floor, and its
-                          height is whatever is left after the art and the name
-                          have taken theirs. Nothing measures the art in JS: the
-                          layout subtracts it. */}
+                      {/* THE BAND: from where the topbar ends down to the top of
+                          the dock — i.e. the whole of page1. The circle is
+                          centred in THIS (user directive 2026-07-30), and the
+                          headline and the art are then each centred in the half
+                          left above and below it. */}
                       <View
                         style={[styles.permBand, { marginTop: topInset }]}
                         pointerEvents="box-none"
@@ -3219,7 +3049,7 @@ export default function HomePage() {
                           // edge on it. The same line the circle is drawn on,
                           // read off the band's own frame.
                           const { y, height } = e.nativeEvent.layout
-                          tutorialPeekV.value = y + height * (1 - CIRCLE_FROM_BOTTOM)
+                          tutorialPeekV.value = y + height * CIRCLE_CENTER
                         }}
                       >
                       {/* The headline is centred in what is left ABOVE the
@@ -3252,14 +3082,15 @@ export default function HomePage() {
                                 runPauseFromSkip()
                                 return
                               }
-                              // openMenuByTap, NOT openOverlay('menu'): the
-                              // drawer is keepMounted and parked at
-                              // pullY = menuSpan, so marking it open without
-                              // animating pullY leaves it off-screen and the
-                              // tap does nothing. Same opener the hamburger
-                              // uses — one mechanism owns the position.
+                              // Nothing to find and nothing to pause: this is the
+                              // no-one-nearby state, so the one useful thing the
+                              // circle can do is open the SEARCH PREFERENCES —
+                              // who, what ages, how far. That was always the
+                              // intent (it used to open the whole menu drawer to
+                              // get there); with the drawer gone it opens the
+                              // popup itself, and wears that popup's own glyph.
                               tap()
-                              openMenuByTap()
+                              setPrefsPopupOpen(true)
                             }}
                             // The play button is intentionally NOT disabled
                             // during the startup/focus window — requestFind
@@ -3312,24 +3143,28 @@ export default function HomePage() {
                                 <PauseIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
                               </View>
                             ) : (
-                              // No candidate to show. The circle's tap opens the
-                              // menu (openMenuByTap), so it wears the same
-                              // hamburger glyph as the floating menu button —
-                              // a heart here promised an action it never had.
+                              // No candidate to show. The tap opens the search
+                              // preferences, so the circle wears that popup's own
+                              // mark — the same sliders the dock's Preferences
+                              // entry does. A heart here promised an action it
+                              // never had, and a hamburger named a drawer that no
+                              // longer exists.
                               <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <HamburgerIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
+                                <SlidersIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
                               </View>
                             )}
                             </GlyphScale>
                           </Pressable>
                         </View>
                       </View>
+                      {/* And the drawing is centred in what is left BELOW the
+                          circle — the mirror of the headline band above it, so
+                          the page reads as three bands with the one action on
+                          the middle line. */}
+                      <View pointerEvents="none" style={styles.permArtBand}>
+                        <HomeArt />
                       </View>
-                      {/* The art and the app's name close the page as ONE
-                          block, and they are IN the column's flow: the band
-                          above ends where the art begins, which is what puts the
-                          circle on its line between the topbar and the drawing. */}
-                      <PageSignature bottom={signatureBottom} />
+                      </View>
                     </View>
                   </View>
 
@@ -3413,6 +3248,13 @@ export default function HomePage() {
                   </PullPane>
                 </View>
 
+                {/* THE DOCK. Under page1, in the flow, so it is the one thing on
+                    this screen a match card is never laid over — see the note on
+                    `page1` above. Full-screen overlays (menu, chat, invite,
+                    profile, Circles) still rise over it; those are surfaces the
+                    user opened, not the page itself. */}
+                <HomeDock items={dockItems} bottom={dockBottom} />
+
                 {/* Invite prompt popup — raised by the hero heart in the
                     watching state (moved off the MatchCard footer 2026-07-25).
                     Same ReplyingInviteCard body as the page2 incoming side.
@@ -3463,31 +3305,23 @@ export default function HomePage() {
                   />
                 </BottomSheet>
 
-                <ConfirmDialog
+                <BuildProfileGate
                   visible={buildProfileOpen}
                   title={genderize(t('home.buildProfileTitle'), isMale)}
                   description={t('home.buildProfileDesc')}
-                  confirmLabel={t('home.buildProfileConfirm')}
-                  confirmIconStart={<UserPlusIcon color={WHITE} />}
-                  onConfirm={() => { setBuildProfileOpen(false); router.push('/onboarding') }}
-                  onCancel={() => setBuildProfileOpen(false)}
-                  draggable
+                  onClose={() => setBuildProfileOpen(false)}
                 />
 
-                {/* The Communities members-only gate, raised by the routed
-                    entries above (push tap / redeemed invite link). Same text
-                    and same way out as the menu row's own gate: the one button
-                    is the build flow, so the popup that says what is missing is
-                    also what fixes it. */}
-                <ConfirmDialog
+                {/* The Communities members-only gate, raised by the dock's faded
+                    circles key and by the routed entries above (push tap /
+                    redeemed invite link). Same popup as the two other shut
+                    doors, only the sentence differs: the one button is the build
+                    flow, so what says what is missing is also what fixes it. */}
+                <BuildProfileGate
                   visible={commGateOpen}
                   title={t('communities.gateTitle')}
                   description={t('communities.gateDesc')}
-                  confirmLabel={t('settings.buildProfile')}
-                  confirmIconStart={<UserPlusIcon color={WHITE} />}
-                  onConfirm={() => { setCommGateOpen(false); router.push('/onboarding') }}
-                  onCancel={() => setCommGateOpen(false)}
-                  draggable
+                  onClose={() => setCommGateOpen(false)}
                 />
 
                 <ConfirmDialog
@@ -3614,11 +3448,12 @@ export default function HomePage() {
                     (user directive 2026-07-29) — no My-Friends roster under it,
                     since the row is one name on a card, not a way into the
                     friends list. The row's own item is handed over whole, so
-                    the page opens painted with no lookup. */}
+                    the page opens painted with no lookup. Nothing closes the
+                    popup here: the sheet rising over it is what hides it, and
+                    the sheet going away is what brings it back. */}
                 <SharedCirclesPopup
                   {...circles.props}
                   onSelectFriend={f => {
-                    circles.close()
                     setCommunitiesTarget({ kind: 'person', friend: f })
                     openCommunities()
                   }}
@@ -3626,25 +3461,13 @@ export default function HomePage() {
 
               </View>
 
-              {/* Floating menu button. A sibling AFTER the card layers so it
-                  is the deepest responder within its own bounds and does NOT
-                  translate when a card is pulled off. It sits at top-START,
-                  opposite the group chip the card renders at top-END. The
-                  card's own chrome stays clear of it: the report flag rides
-                  the bottom action stack, above the heart. */}
-              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-                <RoundButton
-                  size={ROUND_BUTTON_SIZE_SM}
-                  style={[styles.hamburger, { top: chromeTop(topInset) }]}
-                  onPress={openMenuByTap}
-                  badge={menuHasPending}
-                  accessibilityLabel={menuHasPending ? t('home.a11y.menuPending') : t('home.a11y.menu')}
-                >
-                  <HamburgerIcon color={INK} size={ICON.round} />
-                </RoundButton>
-              </View>
+              {/* The floating menu button is GONE (user directive 2026-07-30),
+                  and so is the menu it opened. Everything it held is the dock at
+                  the foot of the page, including the notification dot it used to
+                  carry — which rides the Circles entry, the one that actually
+                  leads to the queue it counts. Home's top-START corner belongs to
+                  nothing: do not put a control back there. */}
             </View>
-            </GestureDetector>
 
         {/* ── Overlays, painted low → high ────────────────────────────────
             Each is an OverlaySheet: rises from the bottom, closes on a
@@ -3663,7 +3486,7 @@ export default function HomePage() {
           activation="scrollPan"
           commit={page2PendingInvite ? 'confirm' : 'dismiss'}
           onClose={closeInviteOverlay}
-          isTop={!chatOpen && !menuOpen && !profileSheetOpen && !communitiesSheetOpen}
+          isTop={!chatOpen && !profileSheetOpen && !communitiesSheetOpen}
           floatingHeader
           zIndex={OVERLAY.z.invite}
           cardStyle={styles.overlayCardBare}
@@ -3718,7 +3541,7 @@ export default function HomePage() {
           open={chatOpen}
           onClose={() => closeOverlay('chat')}
           dragFrom="header"
-          isTop={!menuOpen && !profileSheetOpen && !communitiesSheetOpen}
+          isTop={!profileSheetOpen && !communitiesSheetOpen}
           keepMounted
           zIndex={OVERLAY.z.chat}
           // No title bar: just a floating close X (white round button, purple
@@ -3731,7 +3554,7 @@ export default function HomePage() {
           {(sheetBody) => (
           <ChatPage
             key={profile?.relations?.match?.user_id ?? 'no-match'}
-            isActive={chatOpen && !menuOpen && !profileSheetOpen && !communitiesSheetOpen}
+            isActive={chatOpen && !profileSheetOpen && !communitiesSheetOpen}
             onUnreadChange={setChatUnread}
             onOnlineChange={setPartnerOnline}
             // No top inset at all: the message list starts at the very top edge
@@ -3751,58 +3574,16 @@ export default function HomePage() {
         </OverlaySheet>
         ) : null}
 
-        {/* Menu. Above everything on purpose: it is the one surface that
-            stays reachable while the availability gate is on. */}
-        <OverlaySheet
-          open={menuOpen}
-          onClose={closeMenu}
-          // Always mounted, parked off-screen — see the drawer note in home's
-          // menu-drag block. `open` here means interactive, not mounted.
-          keepMounted
-          isTop={!profileSheetOpen && !communitiesSheetOpen}
-          // The one drawer: it slides in from the START edge, where its own
-          // hamburger sits, and closes back toward it. Every other sheet rises
-          // from the bottom.
-          axis="x"
-          // Host-owned pull, so the shell's opening drag and this sheet's
-          // closing drag move the same surface — see menuDragGesture.
-          pull={menuPull}
-          // A drag supplies its own motion; only the hamburger tap animates.
-          // animateExit is not cosmetic: an abandoned drag unmounts the sheet
-          // MID-GESTURE, and an exit animation there crashes Fabric (see
-          // RisingCard.animateExit). A tap-opened menu never sets this flag,
-          // so its X / Back close keeps the normal slide-out.
-          // No layout animation in either direction — pullY carries the drawer
-          // both ways (openMenuByTap / closeMenu). A slide-in animation on a
-          // permanently-mounted sheet would never fire anyway, and a slide-out
-          // would fight the pullY the gesture is already driving.
-          animateEnter={false}
-          animateExit={false}
-          zIndex={OVERLAY.z.menu}
-          // No title bar: the profile photo runs to the top of the screen and
-          // the X floats over it in its own chip, exactly as it does on the
-          // profile card this row opens.
-          floatingHeader
-          closeAccessibilityLabel={t('home.a11y.closeMenu')}
-        >
-          {ctx => (
-            <SettingsPage
-              embedded
-              topInset={0}
-              photoBleed={sheetHeaderHeight(topInset)}
-              onOpenSubPage={openShellSubPage}
-              onNavigateHome={() => closeOverlay('menu')}
-              {...ctx}
-            />
-          )}
-        </OverlaySheet>
+        {/* (The MENU drawer stood here. It, the page it carried and the button
+            that opened it are deleted — user directive 2026-07-30. Everything it
+            held is home's dock and the two popups the dock raises, so nothing
+            about the app is reachable only from a drawer any more.) */}
 
-        {/* Profile preview, stacked ON TOP of the menu it was opened from —
-            swiping it down returns to the menu, not to home.
+        {/* Profile preview, opened from the dock's first entry — swiping it down
+            returns to home.
             floatingHeader: PreviewFieldPage takes an `onBack` but renders no
-            control for it (its close affordance used to be the Menu TAB
-            rendered as an X), so the sheet must supply the X itself. The body
-            is a full-bleed photo card, so the X floats over it. */}
+            control for it, so the sheet supplies the X itself. The body is a
+            full-bleed photo card, so the X floats over it. */}
         <OverlaySheet
           open={profileSheetOpen}
           // Its body is a full-bleed MatchCard that owns a PullContext (via
@@ -3820,7 +3601,6 @@ export default function HomePage() {
         >
           {ctx => (
             <PreviewFieldPage
-              config={{ kind: 'preview', title: t('settings.myProfile') }}
               onBack={closeProfileSheet}
               clipBottom
               {...ctx}
@@ -3847,11 +3627,10 @@ export default function HomePage() {
               target={communitiesTarget}
               onTargetConsumed={() => setCommunitiesTarget(null)}
               // Tapping myself in a group roster opens MY profile — the same
-              // editable preview the menu opens. It lives in the settings
-              // route, so home (which owns both) hands it in.
+              // editable preview the dock's profile key opens. It lives in
+              // SettingsSurfaces, so home (which owns both) hands it in.
               renderSelfProfile={selfCtx => (
                 <PreviewFieldPage
-                  config={{ kind: 'preview', title: t('settings.profile') }}
                   onBack={selfCtx.onBack}
                   dismissGestureRef={selfCtx.dismissGestureRef}
                   onScrollAtTop={selfCtx.onScrollAtTop}
@@ -3864,18 +3643,19 @@ export default function HomePage() {
           )}
         </OverlaySheet>
 
-        {/* The awareness nudge, over the hub it just opened. One button, and
-            it only dismisses the popup: the hub stays up to be looked at, and
-            swiping THAT down goes back to the next profile. */}
-        <ConfirmDialog
-          visible={commNudgeOpen}
-          title={genderize(t('communities.nudgeTitle'), isMale)}
-          description={genderize(t('communities.nudgeDesc'), isMale)}
-          confirmLabel={t('communities.nudgeConfirm')}
-          confirmIconStart={<GroupsIcon color={WHITE} />}
-          onConfirm={() => setCommNudgeOpen(false)}
-          onCancel={() => setCommNudgeOpen(false)}
-          draggable
+        {/* The dock's two settings keys. Popups, not sheets: each is a short
+            list of rows the user reads and closes, where the profile and
+            Circles keys open surfaces you stay in. They render out here beside
+            the shell's other popups rather than inside the dock, because the
+            dock is a row of buttons and nothing else — it never owns what it
+            opens. */}
+        <PreferencesPopup
+          visible={prefsPopupOpen}
+          onDismiss={() => setPrefsPopupOpen(false)}
+        />
+        <AppSettingsPopup
+          visible={appSettingsPopupOpen}
+          onDismiss={() => setAppSettingsPopupOpen(false)}
         />
 
         <BuyExtraPopup
@@ -3904,12 +3684,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: PAGE,
   },
-  // Floating menu button on page1, at top-START (opposite the card's group
-  // chip at top-END). `start` rather than `left` so it mirrors under RTL.
-  hamburger: {
-    position: 'absolute',
-    start: OVERLAY.chromeInset,
-  },
   // The invite sheet's body is a full-bleed MatchCard that paints its own
   // background, so the sheet card underneath carries no fill or lift of its
   // own — otherwise its shadow would sit over the photo.
@@ -3921,6 +3695,12 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: PAGE,
+  },
+  // page1's box: everything above the dock. It CLIPS, which is what keeps a
+  // pulled card off the strip — see the note at the call site.
+  page1: {
+    flex: 1,
+    overflow: 'hidden',
   },
 
   // Hidden MatchCard used to drive expo-image's onLoad before promoting the
@@ -3944,54 +3724,62 @@ const styles = StyleSheet.create({
   permScreen: {
     flex: 1,
   },
-  // THE CIRCLE, standing on the band's third-from-the-bottom line (user
-  // directive 2026-07-30 — it sat on the band's middle before, and this drops it
-  // a step). `top` is that line as a share of the band and the negative
-  // `marginTop` is half a ring, which is what puts the circle's CENTRE on it
-  // rather than its top edge. Both are layout, so the button's touch target
-  // moves with it — a transform would have shifted only the paint.
+  // THE CIRCLE, standing on the band's MIDDLE line (user directive 2026-07-30).
+  // `top` is that line as a share of the band and the negative `marginTop` is
+  // half a ring, which is what puts the circle's CENTRE on it rather than its
+  // top edge. Both are layout, so the button's touch target moves with it — a
+  // transform would have shifted only the paint.
   //
-  // There are no flex spacers left in the band. Two equal ones can only express
-  // "the middle", and a 2:1 pair does not express "a third" either: it splits
-  // the space AROUND the circle, so the line it lands on is off by a sixth of
-  // the ring. A percentage is the fraction the directive actually names.
+  // A percentage rather than two flex spacers, so the ONE constant all three
+  // bands read (CIRCLE_CENTER) is the only thing deciding the line: spacers split
+  // the space AROUND the circle, which lands it half a ring off the moment the
+  // fraction is anything but dead centre.
   permCenterGroup: {
     position: 'absolute',
-    top: pct(1 - CIRCLE_FROM_BOTTOM),
+    top: pct(CIRCLE_CENTER),
     start: 0,
     end: 0,
     marginTop: -DOTTED_RING_SIZE / 2,
     alignItems: 'center',
   },
-  // The band the circle is placed in (user directive 2026-07-30): from where
-  // the topbar ends down to the top edge of the art at the foot — not the page.
+  // The band the circle is centred in: from where the topbar ends down to the
+  // top of the dock — the whole of page1, which is exactly what this pane is.
   //
   // Both edges are the layout's, not a measurement. The top is `marginTop:
   // topInset`, passed inline: the app draws edge-to-edge, so that IS where the
-  // topbar ends. The bottom is wherever the signature block begins, because the
-  // signature is a flow sibling below this and this is `flex: 1` — the art and
-  // the name take their own height and the band gets the rest. Measuring the
-  // art in JS would have meant measuring the NAME too, whose line box is not
-  // knowable at an arbitrary OS font scale.
+  // topbar ends. The bottom is the pane's own, and the pane stops at the dock
+  // because the dock is a flow sibling BELOW page1 (see `page1` in this file).
   permBand: {
     flex: 1,
   },
-  // And the headline is centred in what is left ABOVE the circle. Its bottom is
-  // the circle's own top edge — the same line the circle stands on, off the same
-  // constant, plus the DOTTED_RING_SIZE / 2 that separates the line from the
-  // edge. The RING, not the purple disc: the halo is part of the button the eye
-  // sees, and stopping at the disc would run the text into it.
+  // The headline is centred in what is left ABOVE the circle, and the drawing in
+  // what is left BELOW it — one band each, mirrored on the same middle line.
+  // Their inner edge is the circle's own: the middle line, plus the
+  // DOTTED_RING_SIZE / 2 that separates that line from the edge. The RING, not
+  // the purple disc: the halo is part of the button the eye sees, and stopping at
+  // the disc would run the text (or the drawing) into it.
   //
-  // No gap constant between the two. The distance from the headline to the
-  // circle is whatever centring leaves, which is the point of the directive:
-  // each is centred in a band, not stacked with a spacer between them.
+  // No gap constant anywhere in here. The distance from the headline to the
+  // circle, and from the circle to the art, is whatever centring leaves — which
+  // is the point of the directive: each is centred in a band, never stacked with
+  // a spacer between them.
   permHeadlineBand: {
     position: 'absolute',
     top: 0,
     start: 0,
     end: 0,
-    bottom: pct(CIRCLE_FROM_BOTTOM),
+    bottom: pct(1 - CIRCLE_CENTER),
     marginBottom: DOTTED_RING_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permArtBand: {
+    position: 'absolute',
+    top: pct(CIRCLE_CENTER),
+    start: 0,
+    end: 0,
+    bottom: 0,
+    marginTop: DOTTED_RING_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

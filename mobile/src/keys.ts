@@ -46,21 +46,11 @@ export const SEEN_FLAGS = {
   homeDemo: 'home_demo',
   /** Page2 pull-to-decline first-run demo choreography. */
   page2Demo: 'page2_demo',
-  /** The Communities awareness nudge home raises once, after the first few
-   *  profiles a built-profile user has watched (see COMMUNITIES_NUDGE_AFTER). */
-  communitiesNudge: 'communities_nudge',
-} as const
-
-// Non-boolean entries kept in that SAME map (counters, last-seen ids) — one
-// storage key for every one-shot bookkeeping value, read/written through
-// lib/seenFlags. Referenced by symbol, never a bare string at a call site.
-export const SEEN_VALUES = {
-  /** How many distinct page1 profiles have been watched since the profile was
-   *  built. Feeds the Communities nudge. */
-  watchedCount: 'watched_count',
-  /** The last profile counted into `watchedCount`, so a relaunch that re-shows
-   *  the very same candidate doesn't count that person twice. */
-  watchedLastId: 'watched_last_id',
+  /** The user has opened the Communities hub at least once. Until he has, home's
+   *  dock wears the notification dot on its Circles entry — the app's whole
+   *  "your circles decide who you see" onboarding, replacing the forced nudge
+   *  that used to raise the hub over the card after three watched profiles. */
+  circlesSeen: 'circles_seen',
 } as const
 
 // ── Per-conversation chat storage ─────────────────────────────────────────

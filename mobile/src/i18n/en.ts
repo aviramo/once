@@ -11,9 +11,6 @@ export default {
   'auth.signInApple': 'Sign in with Apple',
   'auth.reviewCodePlaceholder': 'Review code',
   'auth.reviewSubmit': 'Enter',
-  'auth.tagline': 'One encounter in real time',
-  'auth.msg1': 'Not a catalog. Not endless chats',
-  'auth.msg2': 'One encounter\nin real time',
   'auth.orDivider': 'or',
   'auth.emailPlaceholder': 'you@example.com',
   'auth.sendLink': 'Send a sign-in link',
@@ -22,10 +19,6 @@ export default {
   'auth.linkSentDesc': 'We sent a sign-in link to {email}. Tap the link in the email to continue',
   'auth.linkResend': 'Send another link',
   'auth.linkError': 'Could not send the link. Please try again',
-  'auth.howItWorksLink': 'How Once works',
-  'auth.howItWorksTitle': 'How Once works',
-  'auth.howItWorksBody': 'Once is built for one real encounter at a time\n\nChoose one person\nSend one invitation\nMeet in real time\n\nNo catalog. No parallel chats',
-  'auth.howItWorksBtn': 'Got it',
   'auth.legalPrefix': 'By continuing, you agree to the',
   'auth.legalConnTerms': '',
   'auth.legalTerms': 'Terms',
@@ -104,31 +97,23 @@ export default {
   // Location
 
   // Settings
-  'settings.preferences': 'Menu',
-  'settings.searchPreferences': 'Search preferences',
-  'settings.myInfo': 'My info',
-  'settings.appSettings': 'App',
-  'settings.about': 'A Different Way to Meet',
-  'settings.profileSubtitle': 'Edit your profile',
-  'settings.aboutSubtitle': 'Learn more about our approach',
-
-
-  // About page
-  'about.heroTitle': 'Real meetings\nReally close\nIn real time',
-  'about.heroSub': 'Meetings with people who are right next to you, in real time',
-  'about.feature1.title': 'One-on-one connection',
-  'about.feature1.desc': "When a connection forms, it's exclusive to the two of you. No parallel chats, no competing for attention. You meet a person, not another option",
-  'about.feature2.title': 'From screen to reality',
-  'about.feature2.desc': "When you're both in sync, the connection becomes a real meeting, here and now. No more endless chats that lead nowhere",
-  'about.feature3.title': "You're in control",
-  'about.feature3.desc': 'You choose when to search and who to invite. Got an invitation? You decide whether to accept. Your pace, your choice',
-  'about.feature4.title': 'Mutual consent, always',
-  'about.feature4.desc': "A connection only forms when you're both interested. No one will surprise you, and you won't surprise anyone",
   'settings.profile': 'Edit your profile',
   'settings.buildProfile': 'Build your profile',
   'settings.account': 'Account',
   'settings.visibilityVisible': 'Visible',
   'settings.visibilityHidden': 'Hidden',
+  // The same state as a full sentence, for the preferences popup's leading ROW
+  // (user directive 2026-07-30): a row is read as a line of text where the
+  // photo's chip is read as a badge, so it says who it is about. No {m|f}
+  // markers — English has no gendered adjective here, and genderize passes a
+  // marker-less string straight through.
+  'settings.visibilityStateVisible': "I'm visible",
+  'settings.visibilityStateHidden': "I'm hidden",
+  // Why the row is shut for a user who has not built a profile: he reads the
+  // hidden sentence like anyone else, and this is what the tap answers with. The
+  // title and the button are the app's one build-profile gate (BuildProfileGate),
+  // so only the blocked door is named here.
+  'settings.visibilityGateDesc': 'For people to see you, you need a profile with photos and a short bio. It only takes a minute',
   // The watcher count is not a string any more: it rides the visibility chip's
   // trailing pill as the BARE NUMBER (user directive 2026-07-30) — the tile
   // floats on a photo and its own label already says what is being counted, so
@@ -138,20 +123,10 @@ export default {
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
   'settings.credits': 'Credits',
-  // Groups: row in the account card, plus the "my groups" sheet (list + join input).
-  'settings.groups': 'My groups',
-  'settings.groupsMine': 'My groups',
-  'settings.groupsNone': 'No groups joined',
-  'settings.groupsMore': 'more...',
-  'settings.groupsEmpty': "You haven't joined any group yet",
-  'settings.groupsDisabled': 'Disabled',
-  'settings.groupsAdd': 'Add a group',
-  'settings.groupsJoinTitle': 'Join a group',
-  'settings.groupsJoinHint': "Enter the code you got from the group's manager. You can be a member of several groups at once",
-  'settings.groupsCodePlaceholder': '6 digits',
-  'settings.groupsJoinAction': 'Join',
-  'settings.groupsInviteInvalid': 'Invalid or inactive code',
-  'settings.groupsBack': 'Back',
+  // Leaving a group. The only strings left from the menu's old groups sheet:
+  // joining by code, the membership list and the row that opened them all live
+  // in Circles now, and the sheet itself is deleted. Circles' own leave popup
+  // reads these three.
   'settings.groupsLeaveTitle': 'Leave {name}?',
   'settings.groupsLeaveDesc': 'You can join again later with the group code',
   'settings.groupsLeaveConfirm': 'Leave group',
@@ -169,9 +144,9 @@ export default {
   'communities.kindOpen': 'Open group',
   'communities.kindOpenSub': 'Appears in search, and joining is instant',
   'communities.kindApproved': 'Approved group',
-  'communities.kindApprovedSub': 'Appears in search, and every join request needs a manager to approve',
+  'communities.kindApprovedSub': 'Appears in search, and every join request needs approval',
   'communities.kindPrivate': 'Private group',
-  'communities.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs a manager to approve',
+  'communities.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs approval',
   'communities.membersCount': '{count} members',
   'communities.oneMember': '1 member',
   // Row meta segments, laid out by MetaLine. One string per fact, so the menu
@@ -187,11 +162,6 @@ export default {
   // Circles stay locked until the profile is built: photos and a bio
   'communities.gateTitle': 'Circles open once your profile is built',
   'communities.gateDesc': 'Circles connect you to people through groups and friends, and everyone there sees your profile. You need a profile with photos and a short bio first',
-  // The one-shot nudge home raises after the first few profiles, over the
-  // Circles hub it has just opened
-  'communities.nudgeTitle': 'Who you see here depends on your circles',
-  'communities.nudgeDesc': 'Join groups and invite your friends over, and the people shown to you will be more connected to you and to your circles',
-  'communities.nudgeConfirm': 'Explore circles',
   'communities.managedBy': 'Managed by {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared group in one list.
@@ -203,6 +173,14 @@ export default {
   'communities.friendOfF': 'Friend of {name}',
   // One list, one empty line: the hub no longer splits managed from joined.
   'communities.emptyGroups': "You haven't created or joined a group yet",
+  // ...and what belonging is WORTH, under it (user directive 2026-07-30): an
+  // empty page that only names what is missing never says why to fill it. Both
+  // facts are literally what the server does (20260730150000): a fellow member
+  // of a shared group and a friend OF a friend each carry the x3 relevance
+  // factor in `others()`, symmetric, so it is true in both directions, and the
+  // card names the circle. My own friends are NOT in that sentence: they are
+  // excluded from the game outright.
+  'communities.emptyGroupsWhy': 'Someone you share a friend or a group with reaches you first, and the card shows what connects you',
   'communities.loadError': 'Could not load, try again',
 
   // My friends
@@ -216,7 +194,15 @@ export default {
   'communities.decline': 'Decline',
   'communities.remove': 'Remove',
   'communities.noFriends': "You don't have friends here yet",
-  'communities.friendsHint': 'Invite friends or link existing ones, and you will see each other first',
+  // What a friend is FOR (user directive 2026-07-30): not the friend himself,
+  // who needs no introduction and is excluded from the game outright as of
+  // 20260730150000, but the people one hop past him, who carry both the x3 and
+  // the "friend of Asaf" chip on their card. The line names ONLY them (user
+  // directive 2026-07-30, second pass): the exclusion is a rule about who is
+  // absent, and an empty page has to say what the user GETS. (Was
+  // `friendsHint`, which no surface rendered and which still offered the
+  // people-search flow removed 2026-07-26.)
+  'communities.friendsWhy': 'Every friend opens up their circle to you: people you have not met, who reach you first with a friend in common',
   'communities.unfriendTitle': 'Remove {name} from friends?',
   'communities.unfriendDesc': 'You can link again later',
   'communities.unfriendConfirm': 'Remove',
@@ -263,7 +249,7 @@ export default {
   // game. A checkbox in Group settings, under the group's kind, with the
   // sentence that explains it as its own sub-line.
   'communities.hiddenToggle': 'Hide me from the group members',
-  'communities.hiddenSub': 'The people in this group will not see you in the game, and you will not see them. You keep managing the group exactly as before',
+  'communities.hiddenSub': 'The people in this group will not see you in the game, and you will not see them. Your rights in the group stay exactly as before',
   'communities.hiddenShort': 'Not playing',
   'communities.deleteGroup': 'Delete group',
   'communities.deleteTitle': 'Delete {name}?',
@@ -285,13 +271,20 @@ export default {
   'communities.approveAllDesc': 'Everyone waiting in the queue joins {name}, and each of them is notified',
   'communities.declineJoin': 'Decline',
   'communities.owner': 'Owner',
-  'communities.manager': 'Manager',
-  'communities.makeManager': 'Make manager',
-  'communities.removeManager': 'Remove as manager',
+  // The role is named for the one thing it does: answer join requests (user
+  // directive 2026-07-30, replacing "manager" everywhere a user reads it). An
+  // OPEN group has no such role at all, because nothing there waits on an
+  // answer, so the appointment is offered on approved/private groups only.
+  'communities.manager': 'Approver',
+  'communities.makeManager': 'Make approver',
+  'communities.removeManager': 'Remove approver',
   'communities.removeFromGroup': 'Remove from group',
   'communities.transferOwner': 'Transfer ownership',
   'communities.transferOwnerTitle': 'Hand {name} the group?',
-  'communities.transferOwnerDesc': 'The group becomes {name}\'s, and you stay on as a manager. This cannot be undone',
+  'communities.transferOwnerDesc': 'The group becomes {name}\'s, and you stay on as an approver. This cannot be undone',
+  // An open group has no approvers, so the outgoing owner keeps nothing: he is
+  // a plain member of it from that moment.
+  'communities.transferOwnerDescOpen': 'The group becomes {name}\'s, and you keep no rights in it. This cannot be undone',
 
   // A group you are in
   'communities.leave': 'Leave group',
@@ -312,11 +305,11 @@ export default {
   'communities.declinedTag': 'Declined',
   'communities.declined': 'Request declined',
   'communities.declinedTitle': 'Your request to {name} was declined',
-  'communities.declinedDesc': "A manager did not approve the request. You can clear this notice, and ask again in a month",
+  'communities.declinedDesc': "Your request was not approved. You can clear this notice, and ask again in a month",
   'communities.declinedConfirm': 'Clear',
   // The pending group's own popup: what the state is, and the button that ends
   // it (the same popup a group you are in opens, with cancel instead of leave).
-  'communities.pendingNote': 'Your request is waiting for a manager to approve it',
+  'communities.pendingNote': 'Your request is waiting for the group to approve it',
   'communities.cancelJoin': 'Cancel request',
   'communities.shareMessage': 'Join {name}\n{link}',
   // Support: row in the account card. Opens the device mail composer at the
@@ -511,35 +504,8 @@ export default {
   'settings.kidsNa': 'Not relevant',
 
   // Match
-  'match.justNow': 'Online just now',
-  'match.justNow_m': 'Online just now',
-  'match.justNow_f': 'Online just now',
-  'match.minAgo': 'Online 1 min ago',
-  'match.minAgo_m': 'Online 1 min ago',
-  'match.minAgo_f': 'Online 1 min ago',
-  'match.minsAgo': 'Online {n} min ago',
-  'match.minsAgo_m': 'Online {n} min ago',
-  'match.minsAgo_f': 'Online {n} min ago',
-  'match.hrAgo': 'Online 1 hr ago',
-  'match.hrAgo_m': 'Online 1 hr ago',
-  'match.hrAgo_f': 'Online 1 hr ago',
-  'match.hrs2Ago': 'Online 2 hr ago',
-  'match.hrs2Ago_m': 'Online 2 hr ago',
-  'match.hrs2Ago_f': 'Online 2 hr ago',
-  'match.hrsAgo': 'Online {n} hr ago',
-  'match.hrsAgo_m': 'Online {n} hr ago',
-  'match.hrsAgo_f': 'Online {n} hr ago',
-  'match.dayAgo': 'Online 1 day ago',
-  'match.dayAgo_m': 'Online 1 day ago',
-  'match.dayAgo_f': 'Online 1 day ago',
-  'match.days2Ago': 'Online 2 days ago',
-  'match.days2Ago_m': 'Online 2 days ago',
-  'match.days2Ago_f': 'Online 2 days ago',
-  'match.daysAgo': 'Online {n} days ago',
-  'match.daysAgo_m': 'Online {n} days ago',
-  'match.daysAgo_f': 'Online {n} days ago',
-  // Relative time without the "Online" prefix: the suffix of the merged
-  // proximity chip (formatAgo). Standalone status keeps match.*Ago.
+  // THE relative-time set, and the only one: the old standalone `match.*Ago`
+  // wording is deleted, so formatAgo (lib/lastSeen.ts) is the single reader.
   'match.ago.now': 'just now',
   'match.ago.min': '1 min ago',
   'match.ago.mins': '{n} min ago',
@@ -549,9 +515,6 @@ export default {
   'match.ago.day': '1 day ago',
   'match.ago.days2': '2 days ago',
   'match.ago.days': '{n} days ago',
-  'match.connected': 'Connected',
-  'match.connected_m': 'Connected',
-  'match.connected_f': 'Connected',
 
   // Errors
 
@@ -830,9 +793,13 @@ Next may surprise`,
   'home.waitingFirstInLineSubtext': 'We\'ll let you know if she responds',
   'home.waitingFirstInLineSubtext_m': 'We\'ll let you know if he responds',
   'home.waitingFirstInLineSubtext_f': 'We\'ll let you know if she responds',
+  // The invite door's own sentence for the app's one build-profile gate. Its
+  // button is `settings.buildProfile`, which is what every one of those doors
+  // says: there was a second key here reading "Build my profile", so the same
+  // popup asked for the same thing in two voices depending on which door it came
+  // through.
   'home.buildProfileTitle': 'Build your profile first',
   'home.buildProfileDesc': 'To send an invitation you need a profile with photos and a short bio. It only takes a minute',
-  'home.buildProfileConfirm': 'Build my profile',
   'home.cancelWaitingTitle': 'Cancel invitation?',
   'home.cancelWaitingBtn': 'Cancel invitation',
   'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting',
@@ -886,10 +853,8 @@ Next may surprise`,
   'chat.leave': 'Leave',
   'chat.a11y.close': 'Close chat',
   'chat.a11y.closeImage': 'Close image',
-  'chat.a11y.menu': 'Chat options',
   'chat.report': 'Report',
   'chat.reportTitle': 'Report user',
-  'chat.reportDesc': 'Your report will be sent to our team for review. This user will be blocked and you will not be matched again. Any active connection between you will end',
   'chat.reportPlaceholder': "What's wrong? (optional)",
   'chat.reportConfirm': 'Report and block',
   'chat.newMessages': 'New messages',
@@ -920,12 +885,6 @@ Next may surprise`,
   'chat.msgActions.reply': 'Reply to message',
   'chat.msgActions.copy': 'Copy text',
 
-  // Push notifications
-  'push.WATCHING': 'New opportunity',
-  'push.WAITING': 'Invitation sent',
-  'push.REPLYING': 'Someone chose you',
-  'push.OTHER_CANCELLED': 'Invitation cancelled',
-
   // Gender-aware: user gender (English has no grammatical gender, base key used as fallback)
   'home.tapForMore_m': 'Back to the game',
   'home.tapForMore_f': 'Back to the game',
@@ -934,12 +893,19 @@ Next may surprise`,
   'home.locationUnavailableButton': 'Broadcast Location',
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
-  // Accessibility labels for the floating shell chrome (no visible text).
-  'home.a11y.menu': 'Open menu',
-  // Same button while its notification dot is up (someone is waiting on an
-  // answer inside: a join request, a friend request).
-  'home.a11y.menuPending': 'Open menu, someone is waiting for an answer',
-  'home.a11y.closeMenu': 'Close menu',
+  // The four entries in the strip at the foot of home (HomeDock). ONE WORD each:
+  // the caption names the glyph over it in a quarter of the screen's width, so
+  // anything longer wraps to two lines on every phone. Circles takes the one
+  // Circles string the whole app shares (communities.menuRow). The last one is
+  // "More" rather than "Settings" (user directive 2026-07-30) — what it opens is
+  // the wallet, the account, support and the site, which is everything else
+  // rather than a preferences screen.
+  'home.dock.profile': 'Profile',
+  'home.dock.preferences': 'Preferences',
+  'home.dock.more': 'More',
+  // Accessibility labels for controls with no visible text: a sheet's floating
+  // close X. The menu button's two labels went with the button (2026-07-30), and
+  // the dock's entries are labelled by their own captions, so nothing is unlabelled.
   'home.a11y.closeInvite': 'Close invitation',
   'home.a11y.closeProfile': 'Close profile',
   'home.locatingDesc': 'Scanning for people around you',

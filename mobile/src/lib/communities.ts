@@ -320,7 +320,10 @@ export const groupMembers = (group_id: string): Promise<GroupMember[]> =>
 export const removeMember = (group_id: string, user_id: string): Promise<GroupMember[]> =>
   invoke<{ members: GroupMember[] }>('app/remove_member', { group_id, user_id }).then(r => r.members ?? [])
 
-// Promote / demote a manager (owner only). Returns the fresh roster.
+// Appoint / unappoint an APPROVER (owner only) — the role that answers join
+// requests, called `manager` on the wire and in the DB. Returns the fresh
+// roster. Refused with `open_group` on an OPEN group (user directive
+// 2026-07-30): there is nothing to approve there, so there is no role to give.
 export const setManager = (group_id: string, user_id: string, make: boolean): Promise<GroupMember[]> =>
   invoke<{ members: GroupMember[] }>('app/set_manager', { group_id, user_id, make }).then(r => r.members ?? [])
 

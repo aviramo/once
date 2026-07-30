@@ -69,8 +69,11 @@ function availabilityState(u: unknown): string {
 // self-seed in /app/start below, so a not-yet-built user can look but is never
 // seen, seeded a viewer, or allowed to invite. others() already drops a
 // zero-image user from every match pool, so this is the symmetric half.
-function profileComplete(u: User): boolean {
-  const data = u.data as { images?: unknown[]; bio?: unknown } | null | undefined;
+// Takes any user-SHAPED object, not only a User: the profile action has to ask
+// this of the row an RPC just handed back (a plain json row) to know whether the
+// save is the one that crossed the gate.
+function profileComplete(u: { data?: unknown } | null | undefined): boolean {
+  const data = u?.data as { images?: unknown[]; bio?: unknown } | null | undefined;
   const imgs = data?.images;
   const bio = data?.bio;
   return Array.isArray(imgs) && imgs.length >= 1
@@ -1118,8 +1121,26 @@ Deno.serve(async (req) => {
             : null;
         }
         if (Object.keys(payload).length === 0) return log.error(key, "empty_payload", 400);
-        const result = await Tools.rpc(log, "app_save_profile", { me_id: user.user_id, payload });
+        // Read the gate BEFORE the save: the auto-visible below fires on the
+        // TRANSITION into a built profile and on nothing else, so a built user
+        // who hid on purpose and later edits his bio stays hidden.
+        const wasBuilt = profileComplete(user);
+        // PERSIST FIRST, then save. This is the one action whose RPC writes the
+        // same COLUMN the persist does (`data`), and persist writes the whole
+        // column from a copy read before the RPC ran — so in the other order the
+        // save was undone by the update right behind it. It only shows when the
+        // in-memory copy differs from the row, which the User constructor can
+        // make happen on its own: it merges the row over a default `data`
+        // ({images, os, lang, push_token}), so a row missing any of those keys
+        // comes back with them, `delta()` sees `data` as changed, and the whole
+        // column is written back — bio included, i.e. removed. A row created by
+        // anything other than User.insert (a seed, a restore) is born that way,
+        // and its first profile save was silently dropped; the SECOND stuck,
+        // because by then the shape had been normalized. Reproduced on the
+        // review account 2026-07-30. Persisting first also means the RPC reads a
+        // row that already carries this request's body fields.
         await user.persist(log);
+        const result = await Tools.rpc(log, "app_save_profile", { me_id: user.user_id, payload });
         if (result?.error) return log.error(key, result.error, 400);
         rpcUser = result?.user;
         // Referral payout hook. Saving a profile is the round trip in which an
@@ -1148,6 +1169,47 @@ Deno.serve(async (req) => {
           if (findResult && !findResult.error) {
             rpcUser = findResult.user;
             notifyList = findResult.notify ?? [];
+          }
+        }
+        // FINISHING THE PROFILE IS WHAT MAKES YOU VISIBLE (user directive
+        // 2026-07-30). Up to this save the user was unseeable by construction --
+        // others() drops a photo-less row from every pool and the seed below is
+        // gated on the same profileComplete -- and the app says so, on the one
+        // control that states it (the preferences popup's visibility row, shut
+        // for exactly this reason). So the round trip that closes that gap must
+        // also do what the row promised: be visible, and have someone looking.
+        //
+        // Two steps, both no-ops in the ordinary case:
+        //  • app_free2 only touches a page2 that is 'locked'. A fresh account is
+        //    born 'free' (user.ts newRelations), so this is here for the row
+        //    that got locked before the profile existed -- an older mobile build
+        //    whose visibility row was still tappable, or a logout marker that no
+        //    start has cleared yet -- and never for the built user above, whose
+        //    hide is his own.
+        //  • app_seed_viewer gives him his first watcher, so home is not an
+        //    empty count after the one action that was supposed to change
+        //    everything. It re-checks every precondition under the row lock
+        //    (available / page2 free / no viewers / an idle candidate exists),
+        //    so the guard here is only about not spending the round trip.
+        // Synchronous, not waitUntil: both write the caller's OWN page2 and the
+        // response body (and the Realtime row this triggers) has to carry them,
+        // or the user lands on home still reading "hidden" until his next start.
+        if (!wasBuilt && profileComplete(rpcUser ?? user.db.new)) {
+          const built = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string } } };
+          if (built.relations?.page2?.state === "locked") {
+            const freed = await Tools.rpc(log, "app_free2", { me_id: user.user_id });
+            if (freed && !freed.error) rpcUser = freed.user;
+          }
+          const seedUser = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string; profiles?: unknown[] } } };
+          const p2 = seedUser.relations?.page2;
+          const profiles = p2?.profiles;
+          const noViewers = !Array.isArray(profiles) || profiles.length === 0;
+          if (availabilityState(seedUser) === "available" && p2?.state === "free" && noViewers) {
+            const seeded = await Tools.rpc(log, "app_seed_viewer", { me_id: user.user_id });
+            if (seeded && !seeded.error) {
+              rpcUser = seeded.user;
+              notifyList = [...notifyList, ...(seeded.notify ?? [])];
+            }
           }
         }
         break;

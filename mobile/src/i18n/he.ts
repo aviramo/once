@@ -11,9 +11,6 @@ export default {
   'auth.signInApple': 'התחברות עם Apple',
   'auth.reviewCodePlaceholder': 'קוד ביקורת',
   'auth.reviewSubmit': 'כניסה',
-  'auth.tagline': 'מפגש אחד בזמן אמת',
-  'auth.msg1': 'לא קטלוג. לא צ\'אטים אינסופיים',
-  'auth.msg2': 'מפגש אחד\nבזמן אמת',
   'auth.orDivider': 'או',
   'auth.emailPlaceholder': 'you@example.com',
   'auth.sendLink': 'שליחת קישור התחברות',
@@ -22,10 +19,6 @@ export default {
   'auth.linkSentDesc': 'שלחנו קישור התחברות ל-{email}. לחצו על הקישור באימייל כדי להמשיך',
   'auth.linkResend': 'שליחת קישור נוסף',
   'auth.linkError': 'לא הצלחנו לשלוח את הקישור. נסו שוב',
-  'auth.howItWorksLink': 'איך Once עובד',
-  'auth.howItWorksTitle': 'איך Once עובד',
-  'auth.howItWorksBody': 'Once בנויה למפגש אחד ואמיתי בכל פעם\n\nבחר אדם אחד\nשלח הזמנה אחת\nפגוש בזמן אמת\n\nלא קטלוג. לא צ\'אטים מקבילים',
-  'auth.howItWorksBtn': 'הבנתי',
   'auth.legalPrefix': 'בהמשך, אתה/את מסכים/ה',
   'auth.legalConnTerms': 'ל',
   'auth.legalTerms': 'תנאי השימוש',
@@ -106,31 +99,22 @@ export default {
   // Location
 
   // Settings
-  'settings.preferences': 'תפריט',
-  'settings.searchPreferences': 'העדפות חיפוש',
-  'settings.myInfo': 'המידע שלי',
-  'settings.appSettings': 'האפליקציה',
-  'settings.about': 'דרך אחרת להכיר',
-  'settings.profileSubtitle': 'עריכת הפרופיל שלך',
-  'settings.aboutSubtitle': 'הסיפור שמאחורי האפליקציה',
-
-
-  // About page
-  'about.heroTitle': 'מפגשים אמיתיים\nממש קרוב\nבזמן אמת',
-  'about.heroSub': 'מפגשים עם אנשים שנמצאים ממש קרובים אליכם, בזמן אמת',
-  'about.feature1.title': 'קשר של אחד על אחד',
-  'about.feature1.desc': 'כשנוצר חיבור, הוא בלעדי לשניכם. אין שיחות מקבילות ואין תחרות על תשומת לב. פוגשים אדם, לא עוד אופציה',
-  'about.feature2.title': 'מהמסך למציאות',
-  'about.feature2.desc': 'כשיש סנכרון בין שניכם, הקשר הופך למפגש אמיתי, כאן ועכשיו. לא עוד שיחות אינסופיות שלא מובילות לשום מקום',
-  'about.feature3.title': 'אתם שולטים',
-  'about.feature3.desc': 'אתם בוחרים מתי לחפש ואת מי להזמין. קיבלתם פנייה? אתם מחליטים אם לאשר. הקצב שלכם, הבחירה שלכם',
-  'about.feature4.title': 'הסכמה הדדית תמיד',
-  'about.feature4.desc': 'רק כשגם אתם וגם הצד השני מעוניינים, הקשר נוצר. אף אחד לא יפתיע אתכם ואתם לא תפתיעו אף אחד',
   'settings.profile': 'עריכת הפרופיל',
   'settings.buildProfile': 'בניית הפרופיל',
   'settings.account': 'חשבון',
   'settings.visibilityVisible': 'גלוי',
   'settings.visibilityHidden': 'מוסתר',
+  // The same state as a full sentence, for the preferences popup's leading ROW
+  // (user directive 2026-07-30). A row is read as a line of text where the
+  // photo's chip is read as a badge, so it says who it is about; the {m|f}
+  // markers are resolved by `genderize` against the user's own sex.
+  'settings.visibilityStateVisible': 'אני {גלוי|גלויה}',
+  'settings.visibilityStateHidden': 'אני {מוסתר|מוסתרת}',
+  // Why the row is shut for a user who has not built a profile: he reads the
+  // hidden sentence like anyone else, and this is what the tap answers with. The
+  // title and the button are the app's one build-profile gate (BuildProfileGate),
+  // so only the blocked door is named here.
+  'settings.visibilityGateDesc': 'כדי שיראו אותך צריך פרופיל עם תמונות ותיאור קצר. זה לוקח דקה',
   // The watcher count is not a string any more: it rides the visibility chip's
   // trailing pill as the BARE NUMBER (user directive 2026-07-30) — the tile
   // floats on a photo and its own label already says what is being counted. The
@@ -139,20 +123,10 @@ export default {
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
   'settings.credits': 'קרדיטים',
-  // Groups: row in the account card, plus the "my groups" sheet (list + join input).
-  'settings.groups': 'הקבוצות שלי',
-  'settings.groupsMine': 'הקבוצות שלי',
-  'settings.groupsNone': 'אין קבוצות מחוברות',
-  'settings.groupsMore': 'עוד...',
-  'settings.groupsEmpty': 'עוד לא הצטרפת לקבוצה',
-  'settings.groupsDisabled': 'מושבתת',
-  'settings.groupsAdd': 'הוספת קבוצה',
-  'settings.groupsJoinTitle': 'הצטרפות לקבוצה',
-  'settings.groupsJoinHint': 'הזן את הקוד שקיבלת ממנהל הקבוצה. אפשר להיות חבר בכמה קבוצות במקביל',
-  'settings.groupsCodePlaceholder': '6 ספרות',
-  'settings.groupsJoinAction': 'הצטרפות',
-  'settings.groupsInviteInvalid': 'הקוד שגוי או לא פעיל',
-  'settings.groupsBack': 'חזרה',
+  // Leaving a group. The only strings left from the menu's old groups sheet:
+  // joining by code, the membership list and the row that opened them all live
+  // in Circles now, and the sheet itself is deleted. Circles' own leave popup
+  // reads these three.
   'settings.groupsLeaveTitle': 'לעזוב את {name}?',
   'settings.groupsLeaveDesc': 'אפשר להצטרף שוב בהמשך בעזרת קוד הקבוצה',
   'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
@@ -170,9 +144,9 @@ export default {
   'communities.kindOpen': 'קבוצה פתוחה',
   'communities.kindOpenSub': 'מופיעה בחיפוש וההצטרפות אוטומטית',
   'communities.kindApproved': 'קבוצה מאושרת',
-  'communities.kindApprovedSub': 'מופיעה בחיפוש וכל בקשת הצטרפות דורשת אישור מנהל',
+  'communities.kindApprovedSub': 'מופיעה בחיפוש וכל בקשת הצטרפות דורשת אישור',
   'communities.kindPrivate': 'קבוצה פרטית',
-  'communities.kindPrivateSub': 'לא מופיעה בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור מנהל',
+  'communities.kindPrivateSub': 'לא מופיעה בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור',
   'communities.membersCount': '{count} חברים',
   'communities.oneMember': 'חבר אחד',
   // Row meta segments, laid out by MetaLine. One string per fact, so the menu
@@ -188,11 +162,6 @@ export default {
   // הכניסה למעגלים חסומה עד שהפרופיל נבנה: תמונות ותיאור
   'communities.gateTitle': 'המעגלים נפתחים אחרי בניית הפרופיל',
   'communities.gateDesc': 'המעגלים מחברים אותך לאנשים דרך קבוצות וחברים, וכולם רואים שם את הפרופיל שלך. קודם צריך פרופיל עם תמונות ותיאור קצר',
-  // הנדנוד החד פעמי שנפתח בבית אחרי הפרופילים הראשונים: מסביר למה בכלל
-  // להצטרף למעגלים, בזמן שדף המעגלים כבר עלה מאחוריו
-  'communities.nudgeTitle': 'מי ש{אתה רואה|את רואה} כאן תלוי במעגלים שלך',
-  'communities.nudgeDesc': '{כשאתה מצטרף|כשאת מצטרפת} לקבוצות ו{מזמין|מזמינה} לכאן חברים, האנשים שיוצגו לך יהיו קשורים יותר {אליך|אלייך} ולמעגלים שלך',
-  'communities.nudgeConfirm': 'לגלות את המעגלים',
   'communities.managedBy': 'מנוהלת על ידי {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared group in one list, so it says what the two of you have in common
@@ -204,6 +173,14 @@ export default {
   'communities.friendOfF': 'חברה של {name}',
   // One list, one empty line: the hub no longer splits managed from joined.
   'communities.emptyGroups': 'עוד לא יצרת קבוצה ולא הצטרפת לאף אחת',
+  // ...and what belonging is WORTH, under it (user directive 2026-07-30): an
+  // empty page that only names what is missing never says why to fill it. Both
+  // facts are literally what the server does (20260730150000): a fellow member
+  // of a shared group and a friend OF a friend each carry the x3 relevance
+  // factor in `others()`, symmetric, so it is true in both directions, and the
+  // card names the circle. My own friends are NOT in that sentence: they are
+  // excluded from the game outright.
+  'communities.emptyGroupsWhy': 'מי שיש לכם איתו חבר משותף או קבוצה משותפת מגיע אליכם ראשון, והכרטיס מראה מה מחבר ביניכם',
   'communities.loadError': 'טעינה נכשלה, נסה שוב',
 
   // My friends
@@ -217,7 +194,15 @@ export default {
   'communities.decline': 'דחייה',
   'communities.remove': 'הסרה',
   'communities.noFriends': 'עוד אין לך חברים כאן',
-  'communities.friendsHint': 'הזמן חברים או שייך חברים קיימים, ותראו זה את זה בעדיפות גבוהה',
+  // What a friend is FOR (user directive 2026-07-30): not the friend himself,
+  // who needs no introduction and is excluded from the game outright as of
+  // 20260730150000, but the people one hop past him, who carry both the x3 and
+  // the "friend of Asaf" chip on their card. The line names ONLY them (user
+  // directive 2026-07-30, second pass): the exclusion is a rule about who is
+  // absent, and an empty page has to say what the user GETS. (Was
+  // `friendsHint`, which no surface rendered and which still offered the
+  // people-search flow removed 2026-07-26.)
+  'communities.friendsWhy': 'כל חבר פותח לכם את המעגל שלו: אנשים שעוד לא הכרתם, שמגיעים אליכם ראשונים עם חבר משותף',
   'communities.unfriendTitle': 'להסיר את {name} מהחברים?',
   'communities.unfriendDesc': 'אפשר לשייך שוב בהמשך',
   'communities.unfriendConfirm': 'הסרה',
@@ -264,7 +249,7 @@ export default {
   // והחברים בקבוצה לא נפגשים במשחק. צ'קבוקס בהגדרות הקבוצה, מתחת לסוג הקבוצה,
   // וההסבר הוא שורת המשנה שלו.
   'communities.hiddenToggle': 'להסתיר אותי מחברי הקבוצה',
-  'communities.hiddenSub': 'החברים בקבוצה לא יראו אותך במשחק ואתה לא תראה אותם. אתה ממשיך לנהל את הקבוצה בדיוק כמו קודם',
+  'communities.hiddenSub': 'החברים בקבוצה לא יראו אותך במשחק ואתה לא תראה אותם. ההרשאות שלך בקבוצה נשארות בדיוק כמו קודם',
   'communities.hiddenShort': 'לא משחק',
   'communities.deleteGroup': 'מחיקת הקבוצה',
   'communities.deleteTitle': 'למחוק את {name}?',
@@ -286,13 +271,20 @@ export default {
   'communities.approveAllDesc': 'כל מי שממתין בתור יצורף לקבוצה {name}, ויקבל על כך התראה',
   'communities.declineJoin': 'דחייה',
   'communities.owner': 'בעלים',
-  'communities.manager': 'מנהל',
-  'communities.makeManager': 'מינוי כמנהל',
-  'communities.removeManager': 'הסרת ניהול',
+  // The role is named for the one thing it does: answer join requests (user
+  // directive 2026-07-30, replacing "manager" everywhere a user reads it). An
+  // OPEN group has no such role at all, because nothing there waits on an
+  // answer, so the appointment is offered on approved/private groups only.
+  'communities.manager': 'מאשר',
+  'communities.makeManager': 'מינוי כמאשר',
+  'communities.removeManager': 'ביטול המינוי',
   'communities.removeFromGroup': 'הסרה מהקבוצה',
   'communities.transferOwner': 'העברת בעלות',
   'communities.transferOwnerTitle': 'להעביר את הבעלות ל{name}?',
-  'communities.transferOwnerDesc': 'הקבוצה תעבור לבעלות של {name}, ואצלך יישארו הרשאות ניהול בלבד. אי אפשר לבטל',
+  'communities.transferOwnerDesc': 'הקבוצה תעבור לבעלות של {name}, ואצלך יישארו הרשאות אישור בלבד. אי אפשר לבטל',
+  // An open group has no approvers, so the outgoing owner keeps nothing: he is
+  // a plain member of it from that moment.
+  'communities.transferOwnerDescOpen': 'הקבוצה תעבור לבעלות של {name}, ואצלך לא יישארו הרשאות בקבוצה. אי אפשר לבטל',
 
   // A group you are in
   'communities.leave': 'עזיבת הקבוצה',
@@ -313,11 +305,11 @@ export default {
   'communities.declinedTag': 'נדחתה',
   'communities.declined': 'הבקשה נדחתה',
   'communities.declinedTitle': 'הבקשה ל{name} נדחתה',
-  'communities.declinedDesc': 'מנהל הקבוצה לא אישר את הבקשה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש',
+  'communities.declinedDesc': 'הבקשה שלכם לא אושרה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש',
   'communities.declinedConfirm': 'הסרת ההודעה',
   // The pending group's own popup: what the state is, and the button that ends
   // it (the same popup a group you are in opens, with cancel instead of leave).
-  'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור של מנהלי הקבוצה',
+  'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור של הקבוצה',
   'communities.cancelJoin': 'ביטול הבקשה',
   'communities.shareMessage': 'הצטרפו לקבוצה {name}\n{link}',
 
@@ -519,35 +511,9 @@ export default {
   'settings.kidsNa': 'לא רלוונטי',
 
   // Match
-  'match.justNow': 'מחובר עכשיו',
-  'match.justNow_m': 'מחובר עכשיו',
-  'match.justNow_f': 'מחוברת עכשיו',
-  'match.minAgo': 'מחובר לפני דקה',
-  'match.minAgo_m': 'מחובר לפני דקה',
-  'match.minAgo_f': 'מחוברת לפני דקה',
-  'match.minsAgo': 'מחובר לפני {n} דקות',
-  'match.minsAgo_m': 'מחובר לפני {n} דקות',
-  'match.minsAgo_f': 'מחוברת לפני {n} דקות',
-  'match.hrAgo': 'מחובר לפני שעה',
-  'match.hrAgo_m': 'מחובר לפני שעה',
-  'match.hrAgo_f': 'מחוברת לפני שעה',
-  'match.hrs2Ago': 'מחובר לפני שעתיים',
-  'match.hrs2Ago_m': 'מחובר לפני שעתיים',
-  'match.hrs2Ago_f': 'מחוברת לפני שעתיים',
-  'match.hrsAgo': 'מחובר לפני {n} שעות',
-  'match.hrsAgo_m': 'מחובר לפני {n} שעות',
-  'match.hrsAgo_f': 'מחוברת לפני {n} שעות',
-  'match.dayAgo': 'מחובר לפני יום',
-  'match.dayAgo_m': 'מחובר לפני יום',
-  'match.dayAgo_f': 'מחוברת לפני יום',
-  'match.days2Ago': 'מחובר לפני יומיים',
-  'match.days2Ago_m': 'מחובר לפני יומיים',
-  'match.days2Ago_f': 'מחוברת לפני יומיים',
-  'match.daysAgo': 'מחובר לפני {n} ימים',
-  'match.daysAgo_m': 'מחובר לפני {n} ימים',
-  'match.daysAgo_f': 'מחוברת לפני {n} ימים',
-  // Relative time, genderless and without the "מחובר" prefix: the suffix of
-  // the merged proximity chip (formatAgo). Standalone status keeps match.*Ago.
+  // Relative time, genderless and without the "מחובר" prefix: the suffix of the
+  // merged proximity chip (formatAgo), and the only set there is — the old
+  // standalone match.*Ago wording is deleted.
   'match.ago.now': 'עכשיו',
   'match.ago.min': 'לפני דקה',
   'match.ago.mins': 'לפני {n} דקות',
@@ -557,9 +523,6 @@ export default {
   'match.ago.day': 'לפני יום',
   'match.ago.days2': 'לפני יומיים',
   'match.ago.days': 'לפני {n} ימים',
-  'match.connected': 'מחובר',
-  'match.connected_m': 'מחובר',
-  'match.connected_f': 'מחוברת',
 
   // Errors
 
@@ -954,9 +917,12 @@ export default {
   'home.waitingFirstInLineSubtext': 'נעדכן אותך כשתהיה תשובה',
   'home.waitingFirstInLineSubtext_m': 'נעדכן אותך כשהוא יענה',
   'home.waitingFirstInLineSubtext_f': 'נעדכן אותך כשהיא תענה',
+  // The invite door's own sentence for the app's one build-profile gate. Its
+  // button is `settings.buildProfile`, which is what every one of those doors
+  // says: there was a second key here with the identical Hebrew word, and the
+  // two drifted in English alone.
   'home.buildProfileTitle': 'בנ{ה|י} קודם פרופיל',
   'home.buildProfileDesc': 'כדי לשלוח הזמנה צריך פרופיל עם תמונות ותיאור קצר. זה לוקח דקה',
-  'home.buildProfileConfirm': 'בניית הפרופיל',
   'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
   'home.cancelWaitingBtn': 'ביטול הזמנה',
   'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין',
@@ -1013,10 +979,8 @@ export default {
   'chat.leave': 'עזיבה',
   'chat.a11y.close': 'סגירת הצ\'אט',
   'chat.a11y.closeImage': 'סגירת התמונה',
-  'chat.a11y.menu': 'אפשרויות צ\'אט',
   'chat.report': 'דיווח',
   'chat.reportTitle': 'דיווח על המשתמש',
-  'chat.reportDesc': 'הדיווח יישלח לצוות שלנו לבדיקה. המשתמש ייחסם ולא תותאמו שוב. כל קשר פעיל ביניכם יסתיים',
   'chat.reportPlaceholder': 'מה לא בסדר? (אופציונאלי)',
   'chat.reportConfirm': 'דיווח וחסימה',
   'chat.newMessages': 'הודעות חדשות',
@@ -1047,14 +1011,6 @@ export default {
   'chat.msgActions.reply': 'תגובה להודעה',
   'chat.msgActions.copy': 'העתקת הטקסט',
 
-  // Push notifications
-  'push.WATCHING': 'הזדמנות חדשה',
-  'push.WAITING': 'ההזמנה נשלחה',
-  'push.REPLYING': 'מישהו בחר אותך',
-  'push.REPLYING_m': 'מישהו בחר אותך',
-  'push.REPLYING_f': 'מישהי בחרה אותך',
-  'push.OTHER_CANCELLED': 'ההזמנה בוטלה',
-
   // Gender-aware: user gender
   'home.tapForMore_m': 'בחזרה למשחק',
   'home.tapForMore_f': 'בחזרה למשחק',
@@ -1064,12 +1020,19 @@ export default {
   'home.locationUnavailableButton_f': 'שדרי מיקום',
   // Broadcast countdown, now shown as a line in the viewers info card
   // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
-  // Accessibility labels for the floating shell chrome (no visible text).
-  'home.a11y.menu': 'פתיחת התפריט',
-  // Same button while its notification dot is up (someone is waiting on an
-  // answer inside: a join request, a friend request).
-  'home.a11y.menuPending': 'פתיחת התפריט, מישהו ממתין לתשובה',
-  'home.a11y.closeMenu': 'סגירת התפריט',
+  // The four entries in the strip at the foot of home (HomeDock). ONE WORD each:
+  // the caption names the glyph over it in a quarter of the screen's width, so
+  // anything longer wraps to two lines on every phone. Circles takes the one
+  // Circles string the whole app shares (communities.menuRow). The last one is
+  // "More" rather than "Settings" (user directive 2026-07-30) — what it opens is
+  // the wallet, the account, support and the site, which is everything else
+  // rather than a preferences screen.
+  'home.dock.profile': 'פרופיל',
+  'home.dock.preferences': 'העדפות',
+  'home.dock.more': 'עוד',
+  // Accessibility labels for controls with no visible text: a sheet's floating
+  // close X. The menu button's two labels went with the button (2026-07-30), and
+  // the dock's entries are labelled by their own captions, so nothing is unlabelled.
   'home.a11y.closeInvite': 'סגירת ההזמנה',
   'home.a11y.closeProfile': 'סגירת הפרופיל',
   'home.locatingDesc': 'סורק אנשים בסביבתך',

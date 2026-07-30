@@ -12,7 +12,7 @@
 // Communities reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Share, Keyboard, Linking, FlatList, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type TextStyle } from 'react-native'
+import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Share, Keyboard, Linking, FlatList, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
 import { Path, Circle, Line, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../hooks/useBottomInset'
@@ -600,6 +600,7 @@ function PageLayer({
       request={view.request}
       onDone={closePage}
       onOpenFriend={openFriend}
+      isTop={isTop}
       insets={insets}
     />
   ) : view.k === 'person' ? (
@@ -607,7 +608,9 @@ function PageLayer({
       person={view.person}
       onDone={closePage}
       onGroupChanged={applyGroup}
+      onGroupDropped={removeGroupViews}
       onOpenFriend={openFriend}
+      isTop={isTop}
       insets={insets}
     />
   ) : view.k === 'self' ? (
@@ -923,7 +926,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
             {items != null ? (
               <>
                 <View style={[STRIP_ROW, s.rosterRow, s.rosterRowLast, s.emptyRow]}>
-                  <Empty text={t('communities.emptyGroups')} style={s.emptyRowText} />
+                  <Empty text={t('communities.emptyGroups')} why={t('communities.emptyGroupsWhy')} style={s.emptyRowBlock} />
                 </View>
                 <View style={s.emptyActions}>
                   <Button
@@ -1044,8 +1047,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   }
 
   return (
-    <>
-      <BottomSheet visible={!!group && !confirm} onDismiss={onClose} onClosed={onClosed}>
+      <BottomSheet visible={!!group} onDismiss={onClose} onClosed={onClosed}>
         <View style={s.sheetWrap}>
           {/* The group's whole introduction is ONE scrolling block (user
               directive 2026-07-28): the owner's face, "managed by <them>", the
@@ -1103,7 +1105,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
           {/* What this group is to me right now, in a sentence. A group I have
               not asked to join yet says nothing: the button below says it. */}
           {status !== 'none' ? (
-            <Text style={s.sheetNote}>
+            <Text style={s.note}>
               {t(status === 'joined' ? 'communities.memberNote'
                 : pending ? 'communities.pendingNote'
                 : 'communities.declinedDesc')}
@@ -1172,9 +1174,16 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
           ) : null}
         </SheetActions>
         ) : null}
-      </BottomSheet>
       {/* Leaving is the only action here that asks twice: it drops a membership
-          that getting back may not be mine to decide. */}
+          that getting back may not be mine to decide.
+          It stands INSIDE this popup's own window, so the group stays lit under
+          the question and a "no" leaves it exactly where it was (user directive
+          2026-07-30, the same rule as the shared-circles list one level out).
+          This sheet used to switch itself off for it (`!confirm`), which slid the
+          group away and slid it back in for a question the user answered without
+          ever leaving it. Nested is also the only way two popups may overlap at
+          all: as siblings iOS refuses to present the second (see BottomSheet's
+          `onClosed`). */}
       <ConfirmDialog
         visible={confirm}
         title={group ? t('settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
@@ -1186,7 +1195,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
         onConfirm={quit}
         draggable
       />
-    </>
+    </BottomSheet>
   )
 }
 
@@ -1392,7 +1401,7 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
           <View style={[s.rosterRow, requests.length === 0 && s.rosterRowFirst, s.rosterRowLast]}>
             {friends == null && friendCount !== 0
               ? <SkeletonRows rows={friendCount ?? undefined} first={requests.length === 0} />
-              : <Empty text={t('communities.noFriends')} />}
+              : <Empty text={t('communities.noFriends')} why={t('communities.friendsWhy')} />}
           </View>
         )}
         // Incoming friend requests, at the top of the same card the friends are
@@ -1449,7 +1458,7 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
           auto-links the pair as mutual friends (no request, no approval).
           People-search + friend requests were removed 2026-07-26. */}
       <View style={[s.friendsInvite, { marginBottom: bottomInset }]}>
-        <Text style={s.sheetNote}>{t('communities.inviteReward')}</Text>
+        <Text style={s.note}>{t('communities.inviteReward')}</Text>
         <Button label={t('communities.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
       </View>
     </View>
@@ -1907,7 +1916,7 @@ function ApproveAllControl({ group, onDone }: { group: OwnedGroup; onDone: () =>
 // The card is asked to drop the whole proximity chip (hideProximity) for the
 // same reason: neither where the person is nor when they were last around
 // belongs on a profile opened from a roster (user directive 2026-07-29).
-function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFriend, children }: {
+function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFriend, isTop, children }: {
   profile?: Profile | null
   /** Fallbacks for a row cached by a build that predates the profile payload:
    *  the page still works, just without the card. */
@@ -1925,6 +1934,11 @@ function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFrie
   /** A mutual friend picked out of the shared-circles popup: opens THAT
    *  person's page on top of this one, the same as tapping them in a roster. */
   onOpenFriend?: (friend: FriendItem) => void
+  /** False while that friend's page is stacked over this one. Pages stay
+   *  mounted under each other, so this is what tells the shared-circles popup it
+   *  is COVERED rather than closed: it hides under the page it opened and comes
+   *  back when it pops (user directive 2026-07-30). */
+  isTop: boolean
   /** The action bar's buttons. May be entirely absent (a plain member looking
    *  at another plain member has nothing to decide about them). */
   children: React.ReactNode
@@ -1933,7 +1947,10 @@ function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFrie
   // directive 2026-07-30): a profile is a profile, so the one chip that says how
   // the two of you are already connected opens the one popup that lists it all.
   // Same hook home uses, so neither surface can fetch or order it differently.
-  const circles = useSharedCircles()
+  // A tapped person is pushed as a page OVER this one and this page stays mounted
+  // under it, so `!isTop` is exactly "the popup is covered": it hides for as long
+  // as that page is up and is back the moment it pops, by its X, a swipe or Back.
+  const circles = useSharedCircles(!isTop)
   return (
     <View style={s.profileFill}>
       {profile ? (
@@ -1964,23 +1981,27 @@ function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFrie
       {/* Everything the two of you share, opened by the card's circle chip. A
           tapped person opens THAT PERSON'S PAGE on top of this one (user
           directive 2026-07-29) — the same push a roster row makes, so Back
-          walks straight back to the card that named them. */}
+          walks straight back to this list, and from it to the card that named
+          them (user directive 2026-07-30): the page only covers the popup, so
+          nothing here closes it. */}
       <SharedCirclesPopup
         {...circles.props}
-        onSelectFriend={f => { circles.close(); onOpenFriend?.(f) }}
+        onSelectFriend={f => onOpenFriend?.(f)}
       />
     </View>
   )
 }
 
 // One requester's profile: approve or decline, right under the face.
-function JoinRequestProfileView({ group, request, onDone, onOpenFriend, insets }: {
+function JoinRequestProfileView({ group, request, onDone, onOpenFriend, isTop, insets }: {
   group: OwnedGroup
   request: JoinRequestItem
   /** Pop back to the queue — the answer is done. */
   onDone: () => void
   /** A mutual friend picked out of the card's shared-circles popup. */
   onOpenFriend: (friend: FriendItem) => void
+  /** False while a friend's page is stacked over this one — see ProfilePage. */
+  isTop: boolean
   insets: { top: number; bottom: number }
 }) {
   const [busy, setBusy] = useState<'accept' | 'decline' | null>(null)
@@ -2010,6 +2031,7 @@ function JoinRequestProfileView({ group, request, onDone, onOpenFriend, insets }
       insets={insets}
       caption={t('communities.joinRequestFor').replace('{name}', group.name)}
       onOpenFriend={onOpenFriend}
+      isTop={isTop}
     >
       <Button
         label={t('communities.approve')} variant="primary" size="lg"
@@ -2029,15 +2051,20 @@ function JoinRequestProfileView({ group, request, onDone, onOpenFriend, insets }
 
 // A member of a group you manage, or one of your friends. Everything that used
 // to sit in the member-actions BottomSheet or on a friend row lives here.
-function PersonProfileView({ person, onDone, onGroupChanged, onOpenFriend, insets }: {
+function PersonProfileView({ person, onDone, onGroupChanged, onGroupDropped, onOpenFriend, isTop, insets }: {
   person: PersonTarget
   /** Pop back: the person is no longer in the list behind this page. */
   onDone: () => void
   /** A mutual friend picked out of the card's shared-circles popup. */
   onOpenFriend: (friend: FriendItem) => void
+  /** False while a friend's page is stacked over this one — see ProfilePage. */
+  isTop: boolean
   /** My own standing in the group changed under an action taken here (handing
    *  it over), so the pages behind must be re-seeded with the fresh row. */
   onGroupChanged: (g: OwnedGroup) => void
+  /** ...or I stopped running it altogether, and the pages behind are not mine
+   *  to be on any more. */
+  onGroupDropped: (id: string) => void
   insets: { top: number; bottom: number }
 }) {
   const [busy, setBusy] = useState<'manager' | 'remove' | 'transfer' | null>(null)
@@ -2065,6 +2092,7 @@ function PersonProfileView({ person, onDone, onGroupChanged, onOpenFriend, inset
           profile={f.profile} userId={f.user_id} name={f.name} image={f.image} insets={insets}
           caption={t('communities.myFriends')}
           onOpenFriend={onOpenFriend}
+          isTop={isTop}
         >
           <Button
             label={t('communities.unfriendConfirm')} variant="secondary" size="lg"
@@ -2096,13 +2124,24 @@ function PersonProfileView({ person, onDone, onGroupChanged, onOpenFriend, inset
   // the owner is untouchable even to himself (removing him would leave the group
   // ownerless with no way back). The server draws the same two lines.
   const canOwnerAct = iAmOwner && !m.owner
+  // AN OPEN GROUP HAS NO APPROVERS (user directive 2026-07-30). The role is
+  // one job — answering join requests — and an open group has none to answer,
+  // so there is nothing to appoint anyone to: the button is not offered here,
+  // and the server strips whatever approvers a group had the moment it turns
+  // open (so no member of one can be wearing the tag either).
+  const openGroup = groupKind(group) === 'open'
+  const canPromote = canOwnerAct && !openGroup
   // ...and the group is handed only to someone who already RUNS it (user
   // directive 2026-07-30): ownership passes through management, so the owner
   // promotes first and hands over second, and the person receiving the group
   // has already been trusted with it once. A plain member's page therefore
-  // offers "Make manager" and "Remove", never the key. The server draws the
+  // offers "Make approver" and "Remove", never the key. The server draws the
   // same line (`not_manager`).
-  const canTransfer = canOwnerAct && !!m.manager
+  //
+  // EXCEPT in an open group (user directive 2026-07-30), where that route does
+  // not exist: with no approver to promote anyone to, the key would be
+  // unreachable, so it goes straight to any member.
+  const canTransfer = canOwnerAct && (openGroup || !!m.manager)
   const canRemove = !m.owner && (iAmOwner || !m.manager)
   const doSetManager = async () => {
     setBusy('manager'); tap()
@@ -2132,7 +2171,13 @@ function PersonProfileView({ person, onDone, onGroupChanged, onOpenFriend, inset
     setBusy('transfer'); tapWarning()
     try {
       rosters.set(group.id, await transferOwner(group.id, m.user_id))
-      onGroupChanged({ ...group, is_owner: false })
+      // An OPEN group leaves the outgoing owner nothing to stand on: there is
+      // no approver role for him to drop into, so he is a plain member from
+      // this moment and the manage + settings pages under this one are not his
+      // any more. They are dropped rather than re-seeded (the roster behind
+      // them would come back `not_manager` on its next read).
+      if (openGroup) onGroupDropped(group.id)
+      else onGroupChanged({ ...group, is_owner: false })
     } finally { setBusy(null); setConfirmTransfer(false); onDone() }
   }
 
@@ -2145,8 +2190,9 @@ function PersonProfileView({ person, onDone, onGroupChanged, onOpenFriend, inset
         profile={m.profile} userId={m.user_id} name={m.name} image={m.image} insets={insets}
         caption={group.name}
         onOpenFriend={onOpenFriend}
+        isTop={isTop}
       >
-        {canOwnerAct ? (
+        {canPromote ? (
           // The SAME quiet button as the two below it (user directive
           // 2026-07-30, finishing what 2026-07-29 started on "remove"): this
           // page offers three things an owner can do to a person, none of them
@@ -2197,7 +2243,7 @@ function PersonProfileView({ person, onDone, onGroupChanged, onOpenFriend, inset
       <ConfirmDialog
         visible={confirmTransfer}
         title={t('communities.transferOwnerTitle').replace('{name}', m.name ?? '')}
-        description={t('communities.transferOwnerDesc').replace('{name}', m.name ?? '')}
+        description={t(openGroup ? 'communities.transferOwnerDescOpen' : 'communities.transferOwnerDesc').replace('{name}', m.name ?? '')}
         confirmLabel={t('communities.transferOwner')}
         confirmIconStart={<KeyIcon color={WHITE} />}
         busy={busy === 'transfer'}
@@ -2244,7 +2290,10 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
       onChanged(g)
       // Going OPEN admits everyone who was queued (the server drains the queue
       // and pushes them), so the cached queue is empty from this moment and the
-      // roster it grew by has to be re-read.
+      // roster it grew by has to be re-read. The same flip STRIPS the group's
+      // approvers (user directive 2026-07-30 — an open group has none), which
+      // is the second reason the roster cannot be kept: every one of those rows
+      // was wearing a tag it no longer has.
       if (next === 'open') { joinRequests.set(group.id, []); rosters.drop(group.id) }
     } catch { setKind(prev) }
   }
@@ -2634,10 +2683,20 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
 }
 
 // ── shared bits ────────────────────────────────────────────────────────────
-// The sentence that stands in for a list. Inside a card it wears its own air
-// (`empty`); the hub hands it a `style` to flatten that, because there it is a
-// description over the buttons and the block around it does the spacing.
-const Empty = ({ text, style }: { text: string, style?: StyleProp<TextStyle> }) => <Text style={[s.empty, style]}>{text}</Text>
+// The sentence that stands in for a list, and — where the list is empty because
+// the user has not JOINED anything yet — the reason to (user directive
+// 2026-07-30, `why`): a page that only names what is missing tells the user
+// what he lacks and never what he gains. It is a HINT under the sentence, at
+// the rank the other notes on this page take (`note`), never a second body line
+// competing with the sentence it explains. Inside a card the block wears its own
+// air (`emptyBlock`); the hub hands it a `style` to flatten that, because there
+// it is a description over the buttons and the block around it does the spacing.
+const Empty = ({ text, why, style }: { text: string, why?: string, style?: StyleProp<ViewStyle> }) => (
+  <View style={[s.emptyBlock, style]}>
+    <Text style={s.empty}>{text}</Text>
+    {why ? <Text style={s.note}>{why}</Text> : null}
+  </View>
+)
 
 // A bare glyph in a section heading — the play-here eye — has to sit on the
 // same vertical line as the page HEADER's controls above it (the gear), or the
@@ -2752,17 +2811,20 @@ const s = StyleSheet.create({
   descInput: { minHeight: 54, paddingTop: 0 },
   pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS },
   pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE },
-  // The footnote above a popup's button — what this group is to me right now,
-  // what a friend is worth. It is a HINT, not a paragraph, so it takes the rank
-  // below the body (`sm`, user directive 2026-07-29): at body size it read as a
-  // second description competing with the group's own, and the button under it
-  // is what the eye should land on.
-  sheetNote: { fontSize: TEXT.sm, color: INK_MUTED, textAlign: 'center', marginTop: XS },
+  // THE footnote of this page, wherever one stands: above a popup's button (what
+  // this group is to me right now, what a friend is worth) and under an empty
+  // list's sentence (what belonging is worth). It is a HINT, not a paragraph, so
+  // it takes the rank below the body (`sm`, user directive 2026-07-29): at body
+  // size it read as a second description competing with the one thing it is
+  // explaining, and what follows it is what the eye should land on.
+  note: { fontSize: TEXT.sm, color: INK_MUTED, textAlign: 'center', marginTop: XS },
   // The sentence that stands in for a list: it sits in the card the strips would
-  // have filled, so it takes the STRIP's gutter (`row`'s paddingHorizontal) —
-  // without it a long line wraps flush to the card's edges on a narrow screen or
-  // at a large font size.
-  empty: { fontSize: TEXT.md, color: INK_MUTED, textAlign: 'center', paddingVertical: LG, paddingHorizontal: MD },
+  // have filled, so its block takes the STRIP's gutter (`row`'s
+  // paddingHorizontal) — without it a long line wraps flush to the card's edges
+  // on a narrow screen or at a large font size. The air is the BLOCK's, so the
+  // "why belong" note under the sentence sits inside it rather than under it.
+  emptyBlock: { paddingVertical: LG, paddingHorizontal: MD },
+  empty: { fontSize: TEXT.md, color: INK_MUTED, textAlign: 'center' },
   // The empty hub's two ways forward, under the card rather than in it: the card
   // is the list, and these are what to do when there is no list yet.
   emptyActions: { gap: SM, paddingTop: MD },
@@ -2770,7 +2832,7 @@ const s = StyleSheet.create({
   // 2026-07-28): it composes `row`, so it carries a group strip's padding and
   // its hairline off the row above, and centres in the width it is given.
   emptyRow: { justifyContent: 'center' },
-  emptyRowText: { flex: 1, paddingVertical: 0, paddingHorizontal: 0 },
+  emptyRowBlock: { flex: 1, paddingVertical: 0, paddingHorizontal: 0 },
   // The friends page's invite block: the reward line and the button it explains,
   // held together under the roster so the two never drift apart.
   friendsInvite: { gap: SM },

@@ -98,14 +98,20 @@ export function RoundButton({
       <GlyphScale cap={FIXED_BOX_SCALE}>
         <View pointerEvents="none" style={styles.inner}>{children}</View>
       </GlyphScale>
-      {badge ? (
-        <View
-          pointerEvents="none"
-          style={[styles.badge, { top: dotInset, end: dotInset }]}
-        />
-      ) : null}
+      {badge ? <NotifyDot style={{ top: dotInset, end: dotInset }} /> : null}
     </Pressable>
   )
+}
+
+// THE "there is something here for you" marker — one implementation, one size,
+// wherever it appears (user directive 2026-07-28): unread messages on the card's
+// chat action, someone waiting on an answer on home's menu button, and the
+// Circles tile on home's dock. It is the same object in all of them, so it is
+// the same component; only WHERE it is pinned is the host's, because that is
+// geometry (an arc's 45° point on a circle, a corner on a tile) rather than a
+// token. Never hand-roll a second dot beside a control.
+export function NotifyDot({ style }: { style?: StyleProp<ViewStyle> }) {
+  return <View pointerEvents="none" style={[styles.badge, style]} />
 }
 
 const styles = StyleSheet.create({

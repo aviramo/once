@@ -42,7 +42,7 @@ export type SharedRow = {
 }
 
 export function SharedListPopup({
-  visible, title, rows, skeletonLines = 1, onDismiss,
+  visible, title, rows, skeletonLines = 1, onDismiss, children,
 }: {
   visible: boolean
   title: string
@@ -52,6 +52,13 @@ export function SharedListPopup({
    *  final height instead of growing under the user's thumb. */
   skeletonLines?: number
   onDismiss: () => void
+  /** A popup a ROW opens, rendered INSIDE this one's Modal so it presents over
+   *  the list instead of replacing it — see SharedCirclesPopup below. A popup is
+   *  its own native window, and two of them as SIBLINGS is the case iOS refuses
+   *  to present (why BottomSheet has `onClosed`); nested, the inner one simply
+   *  stands on the outer one's window. It sits outside the body column and is
+   *  absolutely positioned by RN, so it takes no room and adds no gap. */
+  children?: ReactNode
 }) {
   return (
     <BottomSheet visible={visible} onDismiss={onDismiss}>
@@ -79,6 +86,7 @@ export function SharedListPopup({
           ))}
         </View>
       </View>
+      {children}
     </BottomSheet>
   )
 }
@@ -87,14 +95,21 @@ export function SharedListPopup({
 // A group row states who manages it and how many members on one meta line, and
 // opens the app's one group popup (share link / leave) — the same surface the
 // Communities hub and the group search open, in the `joined` state, since a
-// group listed here is one we are both IN. The list hides while that is open
-// (same pattern GroupSheet uses for its own confirm) and reappears on close.
+// group listed here is one we are both IN. THE LIST STAYS EXACTLY WHERE IT IS
+// while that stands over it (user directive 2026-07-30): the group popup is
+// nested inside this one's window (see `children` above), so it rises over the
+// list and leaving it reveals the list already there. It used to be a sibling
+// popup with the list switched off underneath (`visible && !selected`), which
+// slid the list away on the tap and slid it back in on the way out — two full
+// animations to look at one row of a list the user never left.
 //
 // A person row is a face and a name: there is no second fact about a mutual
 // friend worth inventing. Tapping hands the person — the whole item, profile
 // and all — to the opener, which opens THAT PERSON'S PAGE and nothing else
 // (user directive 2026-07-29): a name on a card is not a way into My Friends,
-// so no roster is stacked under it and closing the page goes back to the card.
+// so no roster is stacked under it. Whatever a row opens only COVERS this list,
+// group and person alike, so closing it comes back here rather than to the bare
+// card (user directive 2026-07-30) — see `covered` on useSharedCircles.
 export function SharedCirclesPopup({
   visible, groups, friends, subjectIsMale, onSelectFriend, onDismiss,
 }: {
@@ -116,37 +131,36 @@ export function SharedCirclesPopup({
   const myFriends = useMyFriendCount()
   const items = groups && friends ? orderSharedCircles(groups, friends, myFriends) : null
   return (
-    <>
-      <SharedListPopup
-        visible={visible && !selected}
-        title={t('communities.sharedTitle')}
-        skeletonLines={2}
-        rows={items?.map(item => item.kind === 'group' ? {
-          key: item.group.id,
-          // A group with no owner to show a face for wears the groups glyph in
-          // the same lane — the strip centres whatever sits in it.
-          leading: item.group.owner
-            ? <Avatar userId={item.group.owner.user_id} name={item.group.owner.name} image={item.group.owner.image} />
-            : <GroupsIcon color={INK} />,
-          title: item.group.name,
-          meta: groupFacts(item.group.members, item.group.owner?.name),
-          onPress: () => setSelected(item.group),
-        } : {
-          key: item.friend.user_id,
-          leading: <Avatar userId={item.friend.user_id} name={item.friend.name} image={item.friend.image} />,
-          // A row NAMES THE CIRCLE, never the person in it (user directive
-          // 2026-07-29): the friends circle is "חברה של אסף", the same sentence
-          // the card's chip says when it names this circle, off the same one
-          // composer — so the row and the chip that opened it cannot word the
-          // connection differently. A friend with no name to state falls back to
-          // nothing rather than to a half sentence.
-          title: item.friend.name ? friendOfLabel(item.friend.name, subjectIsMale) : '',
-          onPress: () => onSelectFriend(item.friend),
-        }) ?? null}
-        onDismiss={onDismiss}
-      />
+    <SharedListPopup
+      visible={visible}
+      title={t('communities.sharedTitle')}
+      skeletonLines={2}
+      rows={items?.map(item => item.kind === 'group' ? {
+        key: item.group.id,
+        // A group with no owner to show a face for wears the groups glyph in
+        // the same lane — the strip centres whatever sits in it.
+        leading: item.group.owner
+          ? <Avatar userId={item.group.owner.user_id} name={item.group.owner.name} image={item.group.owner.image} />
+          : <GroupsIcon color={INK} />,
+        title: item.group.name,
+        meta: groupFacts(item.group.members, item.group.owner?.name),
+        onPress: () => setSelected(item.group),
+      } : {
+        key: item.friend.user_id,
+        leading: <Avatar userId={item.friend.user_id} name={item.friend.name} image={item.friend.image} />,
+        // A row NAMES THE CIRCLE, never the person in it (user directive
+        // 2026-07-29): the friends circle is "חברה של אסף", the same sentence
+        // the card's chip says when it names this circle, off the same one
+        // composer — so the row and the chip that opened it cannot word the
+        // connection differently. A friend with no name to state falls back to
+        // nothing rather than to a half sentence.
+        title: item.friend.name ? friendOfLabel(item.friend.name, subjectIsMale) : '',
+        onPress: () => onSelectFriend(item.friend),
+      }) ?? null}
+      onDismiss={onDismiss}
+    >
       <GroupSheet group={selected} status="joined" onClose={() => setSelected(null)} />
-    </>
+    </SharedListPopup>
   )
 }
 
@@ -161,7 +175,22 @@ export function SharedCirclesPopup({
 // Both lists are fetched HERE the instant the chip is tapped (not inside the
 // popup on mount) and in parallel with each other, so they ride the sheet's
 // slide-in and the content is usually ready by the time the sheet is up.
-export function useSharedCircles() {
+//
+// `covered` is the host saying "the page a row opened is standing over my card".
+// The popup is HIDDEN while that is true, never closed (user directive
+// 2026-07-30): it is still the surface the user was reading, so it comes back
+// the moment that page goes away instead of asking them to find the chip again.
+// It is the same rule a GROUP row runs on above, by the only means each has: a
+// group's popup is a Modal like this one, so it is NESTED and the list simply
+// stays lit under it; a person's page is a full-screen OverlaySheet in the app's
+// ROOT window, which a Modal always stands above, so the only way to be under it
+// is to be switched off — hence `covered`, and hence a returning person page
+// costs the slide the group popup no longer does.
+// Declarative rather than a suspend()/resume() pair on purpose: the host states
+// what is on top of it, so a page that leaves by ANY route — its close X, a
+// swipe, the hardware back, an action that finishes with it — brings the popup
+// back, and no route can forget to.
+export function useSharedCircles(covered?: boolean) {
   const [visible, setVisible] = useState(false)
   const [groups, setGroups] = useState<SharedGroup[] | null>(null)
   const [friends, setFriends] = useState<FriendItem[] | null>(null)
@@ -179,7 +208,10 @@ export function useSharedCircles() {
     sharedGroups(userId).then(setGroups).catch(() => setGroups([]))
     sharedFriends(userId).then(setFriends).catch(() => setFriends([]))
   }, [])
-  return { open, close, props: { visible, groups, friends, subjectIsMale, onDismiss: close } }
+  // No `close` for a host to call: the only thing that ends this popup is the
+  // user dismissing it (onDismiss), because opening a page from a row merely
+  // covers it — see `covered`.
+  return { open, props: { visible: visible && !covered, groups, friends, subjectIsMale, onDismiss: close } }
 }
 
 // The rows carry no styles of their own any more: the strip owns its geometry

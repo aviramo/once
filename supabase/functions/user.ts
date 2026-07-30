@@ -9,11 +9,24 @@ import { Data, Pages, PushToken, CREDIT_CAP } from "./global.ts";
 // extra 0 / held 0 == nothing purchased, nothing reserved against a live
 // waiting invite. granted_on / next_grant_at are intentionally omitted: the
 // next /ext/cron tick (≤60s) runs app_credits_grant, which fills both.
-const defaultRelations: Pages = {
+//
+// A FACTORY, never a shared module constant (2026-07-30). It used to be a
+// single `const defaultRelations` handed out by reference, and the constructor
+// below runs `lodash.merge(this, data)` while `this.relations` still points AT
+// it — lodash merges INTO the destination, so every user loaded by an isolate
+// deep-merged their own page1/page2/credits/communities into the one shared
+// seed. The next signup served by that warm isolate was then INSERTED carrying
+// the previous user's relations: a phantom watcher, a candidate they never
+// drew, someone else's wallet. It happened in production to a user who deleted
+// his account and immediately re-registered (2026-07-30 16:03Z): the auth
+// identity survives a delete, so he came back on the same user_id and his new,
+// photo-less row was born with his own pre-delete page1/page2 restored.
+// Nothing may hand out this object; every caller gets its own copy.
+const newRelations = (): Pages => ({
   page1: { state: "locked" },
   page2: { state: "free" },
   credits: { balance: CREDIT_CAP, extra: 0, held: 0 },
-};
+});
 
 export default class User {
   user_id: string;
@@ -28,7 +41,7 @@ export default class User {
   is_for_female?: boolean;
   name: string | null = null;
   data: Data = { images: [], os: "unknown", lang: "unknown", push_token: null };
-  relations: Pages = defaultRelations;
+  relations: Pages = newRelations();
   db: { new: Record<string, unknown>; old: Record<string, unknown> } = { new: {}, old: {} };
 
   static LEGAL = 18;
@@ -40,7 +53,7 @@ export default class User {
       lodash.merge(this, data);
       // lodash.merge can clobber the relations subtree by merging keys instead
       // of replacing the page1/page2 objects wholesale; override to preserve.
-      this.relations = (data.relations as Pages) ?? defaultRelations;
+      this.relations = (data.relations as Pages) ?? newRelations();
       this.db = { new: { ...data }, old: lodash.cloneDeep(data) };
     }
   }
@@ -78,7 +91,7 @@ export default class User {
     // NULL range as "no distance filter" (LEAST(me.range, other.range) IS NULL
     // skips st_dwithin, and the relevance_location factor falls back to 1.0).
     this.range = undefined;
-    this.relations = defaultRelations;
+    this.relations = newRelations();
     const { db: _db, ...rest } = this;
     const data = await Tools.invoke(log, "insert", Tools.supabase.from("users").insert(rest).select());
     if (data && data[0]) {

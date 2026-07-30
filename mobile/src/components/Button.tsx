@@ -3,7 +3,7 @@ import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { GlyphSlot } from './GlyphSlot'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT } from '../tokens'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, DISABLED_OPACITY } from '../tokens'
 import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   // wrapped in flex:1 slots.
   wrap: { alignSelf: 'stretch' },
   btn: {},
-  disabled: { opacity: 0.45 },
+  disabled: { opacity: DISABLED_OPACITY },
   // The label region of the button. Owns the size invariants (minHeight,
   // paddingVertical) so a button-with-footer keeps the exact same label-area
   // geometry as a plain button — the footer just adds height below.

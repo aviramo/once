@@ -161,22 +161,13 @@ export function CloseBoldIcon({ color = INK, stroke, size = ICON.xxl }: IconProp
   )
 }
 
-// Hamburger. The floating menu affordance on the home screen: three even
-// rounded rules at the same STROKE.base weight as CloseIcon, so the open glyph
-// and the close glyph of the menu sheet read as one pair.
-export function HamburgerIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
-  return (
-    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round">
-      <Line x1="4" y1="7" x2="20" y2="7" />
-      <Line x1="4" y1="12" x2="20" y2="12" />
-      <Line x1="4" y1="17" x2="20" y2="17" />
-    </Glyph>
-  )
-}
+// (HamburgerIcon stood here. It drew the floating menu button and the centre
+// circle's no-candidate state, and both went with the drawer on 2026-07-30 —
+// what it opened is home's dock. Do not bring it back: there is no menu.)
 
 // A plus: "add something to this". The chat composer's attach affordance, at
 // the leading edge of the field. Same STROKE.base weight and 24-box as
-// CloseIcon / HamburgerIcon, so the chrome glyphs read as one set.
+// CloseIcon, so the chrome glyphs read as one set.
 export function PlusIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round">
@@ -461,11 +452,22 @@ export function UserMinusIcon({ color = INK, size = ICON.md }: IconProps = {}) {
 // 30% of a diameter of overlap, ink spanning 3..21 on both axes. That span is
 // what puts it at the same OPTICAL size as the rest of the settings list; the
 // first cut, at r 5.2, measured the smallest ink box in the whole column.
+// It MIRRORS under RTL (user directive 2026-07-30), in the one place it is
+// drawn, so every surface it appears on flips together: the dock, the Circles
+// emblem, the create-group button, and both "you two are already connected"
+// chips. The pair runs on a diagonal, and a diagonal is direction — read
+// right-to-left it has to lean the other way, exactly as the app's chevrons do
+// (BackIcon). A horizontal flip about the box's own centre, which is what
+// `translate(24,0) scale(-1,1)` is on a 24-unit viewBox: the two rings are
+// mirror images of each other, so the weave (each ring passing over the other
+// once and under it once) survives the flip untouched.
 export function GroupsIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M 6.63 14.53 A 6 6 0 1 1 11.32 14.58" />
-      <Path d="M 17.37 9.47 A 6 6 0 1 1 12.68 9.42" />
+      <G transform={isRTL ? 'translate(24, 0) scale(-1, 1)' : undefined}>
+        <Path d="M 6.63 14.53 A 6 6 0 1 1 11.32 14.58" />
+        <Path d="M 17.37 9.47 A 6 6 0 1 1 12.68 9.42" />
+      </G>
     </Glyph>
   )
 }

@@ -271,14 +271,10 @@ export function OverlaySheet({
 // edge so the sheet's pan knows what counts as "dragging the header" (a drag
 // started here always pulls, even when the body's scroll is not at the top).
 
-/** Height SheetHeader occupies for a given top inset. Mirrors the `header`
- *  style below (paddingTop + button + paddingBottom) and must move with it.
- *  A `floatingHeader` sheet draws the header OVER its body, so a body that
- *  wants to bleed artwork up behind it — the menu's profile photo — needs to
- *  know exactly how much room that is. */
-export function sheetHeaderHeight(topInset: number): number {
-  return chromeTop(topInset) + ROUND_BUTTON_SIZE_SM + SM
-}
+// (`sheetHeaderHeight` stood here — the room a floating header occupies, which
+// only the menu page needed, to bleed its profile photo up behind the X. It went
+// with the drawer on 2026-07-30. The sheets left either draw a real header or,
+// like chat, deliberately reserve NO band for the floating one.)
 
 // The height the device actually draws ONE line of a sheet title at. It depends
 // on nothing per-header — only on the title's font size (one token) and the OS

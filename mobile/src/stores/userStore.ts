@@ -415,6 +415,27 @@ export function selectIsHidden(profile: UserProfile | null | undefined): boolean
   return profile?.relations?.page2State === 'locked' && !hasInviteCard
 }
 
+/** WHY nobody can see this user right now, or null when they can.
+ *
+ *  Two different facts put a user out of the pool and the app must not present
+ *  one as the other:
+ *   • 'unbuilt' — the profile was never built. others() drops a photo-less row
+ *     from every candidate pool and the server refuses to seed such a user a
+ *     viewer (profileComplete, app/index.ts), so they are just as unseen as a
+ *     user who hid on purpose. Saying "I am visible" to them is a lie, and it
+ *     is the one that costs the most: they wait for a viewer that can never
+ *     arrive. It leads, because it also decides whether the control may be
+ *     touched at all.
+ *   • 'hidden' — they turned themselves off (page2 locked), which is theirs to
+ *     undo at any time.
+ *
+ *  One definition, because the row that states it and the tap that answers it
+ *  must never disagree about which of the two is true. */
+export function selectInvisibleReason(profile: UserProfile | null | undefined): 'unbuilt' | 'hidden' | null {
+  if (!selectProfileBuilt(profile)) return 'unbuilt'
+  return selectIsHidden(profile) ? 'hidden' : null
+}
+
 /** How many people are currently watching this user. Reads the synthesized
  * `watchers` array, which deriveCompat only populates while page2 is `free` —
  * in any other page2 state there is no viewer list, so 0 is the honest answer

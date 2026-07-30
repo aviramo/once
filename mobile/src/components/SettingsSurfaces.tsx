@@ -1,58 +1,46 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Linking, TextInput as RNTextInput, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
-import Animated, { SharedValue, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
-import { Text, TextInput } from '../src/components/AppText'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Linking, TextInput as RNTextInput } from 'react-native'
+import { useSharedValue, type SharedValue } from 'react-native-reanimated'
+import { Text, TextInput } from './AppText'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getLocales } from 'expo-localization'
 import * as ImagePicker from 'expo-image-picker'
-import { Path, Line, Circle, Rect } from 'react-native-svg'
-import { invoke } from '../src/lib/api'
-import { tap, tapWarning } from '../src/lib/haptics'
-import { useUserStore, resolveLocationType, selectIsHidden, selectWatcherCount, selectProfileBuilt, type LocationType } from '../src/stores/userStore'
-import { useAuthStore } from '../src/stores/authStore'
-import { t, tg, lang, genderize, lowerFirst } from '../src/i18n'
-import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { ToggleRow } from '../src/components/Switch'
-import { MatchCard, ProfileActionBar } from '../src/components/MatchCard'
-import { PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
-import type { OverlaySheetBody } from '../src/components/OverlaySheet'
+import { invoke } from '../lib/api'
+import { tap, tapWarning } from '../lib/haptics'
+import { useUserStore, resolveLocationType, selectIsHidden, selectInvisibleReason, selectWatcherCount, type LocationType } from '../stores/userStore'
+import { useAuthStore } from '../stores/authStore'
+import { t, tg, lang, genderize, lowerFirst } from '../i18n'
+import { ConfirmDialog } from './ConfirmDialog'
+import { BuildProfileGate } from './BuildProfileGate'
+import { ToggleRow } from './Switch'
+import { MatchCard, ProfileActionBar } from './MatchCard'
+import { PullContext, type PullCtx } from './PullPane'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
-import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from '../src/components/PhotoEditor'
-import { supabase } from '../src/lib/supabase'
-import type { Profile } from '../src/stores/userStore'
-import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../src/lib/family'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SHEET_GAP, OVERLAY, chromeTop, lh, SEARCH_DEBOUNCE_MS, bottomGap, BOTTOM_AIR, CIRCLES_BUTTON_SIZE } from '../src/tokens'
-import { iconScale } from '../src/fonts'
-import { GlyphSlot } from '../src/components/GlyphSlot'
-import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../src/colors'
-import { FIELD_SKIN, OUTLINE_SKIN } from '../src/field'
-import { Glyph, SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, UserPlusIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon, LogInIcon } from '../src/components/icons'
-import { creditTotal } from '../src/lib/credits'
-import { hideProfileConfirm } from '../src/components/visibilityConfirms'
-import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
-import { BottomSheet, SheetActions, SheetTitle, SheetDesc } from '../src/components/BottomSheet'
-import { Button } from '../src/components/Button'
-import { useBottomInset } from '../src/hooks/useBottomInset'
-import { INVITE_CODE_LEN, type Group } from '../src/lib/groups'
-import { communitiesSummary, pendingApprovals, groupLabel, friendLabel } from '../src/lib/communities'
-import { CirclesButton } from '../src/components/CirclesButton'
-import { StripBody } from '../src/components/Strip'
-import { MetaLine } from '../src/components/MetaLine'
-import type { MetaPart } from '../src/lib/meta'
-import { supportMailUrl, brandSiteUrl } from '../src/lib/links'
-import { useCachedGroups, setCachedGroups } from '../src/lib/groupsCache'
-import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from '../src/components/Chip'
-import { units, M_PER_MI } from '../src/lib/units'
-import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../src/lib/location'
+import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from './PhotoEditor'
+import { supabase } from '../lib/supabase'
+import type { Profile } from '../stores/userStore'
+import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../lib/family'
+import { XS, SM, MD, LG, RADIUS, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SHEET_GAP, SEARCH_DEBOUNCE_MS, DISABLED_OPACITY } from '../tokens'
+import { GlyphSlot } from './GlyphSlot'
+import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../colors'
+import { OUTLINE_SKIN } from '../field'
+import { SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon } from './icons'
+import { creditTotal } from '../lib/credits'
+import { hideProfileConfirm } from './visibilityConfirms'
+import { BuyExtraPopup } from './BuyExtraPopup'
+import { BottomSheet, SheetActions, SheetTitle } from './BottomSheet'
+import { Button } from './Button'
+import { StripBody } from './Strip'
+import { MetaLine } from './MetaLine'
+import type { MetaPart } from '../lib/meta'
+import { supportMailUrl, brandSiteUrl } from '../lib/links'
+import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from './Chip'
+import { units, M_PER_MI } from '../lib/units'
+import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../lib/location'
 
 const isRTL = I18nManager.isRTL
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
-// Profile card is sized like a regular menu row, just at 2× the height. A
-// grouped row is `ICON.xxl + 2*MD` tall (the icon + its vertical padding), so
-// double that. The card keeps the photo as its background but reads as one of
-// the menu buttons rather than a hero.
-const PROFILE_CARD_HEIGHT = (ICON.xxl + MD * 2) * 2
 
 // Returns responder props that fire `onPress` only on clean taps (movement < TAP_SLOP).
 // `onPressStateChange` lets the caller drive a visual pressed-state (e.g. fade
@@ -91,64 +79,11 @@ function useTapResponder(onPress: () => void | Promise<unknown>, onPressStateCha
 
 // ── Select Field Types ─────────────────────────────────────────────────────
 
-export type SelectOption = { value: string; label: string }
-
-export type SelectFieldConfig = {
-  kind: 'select'
-  title: string
-  options: SelectOption[]
-  value: string
-  onSelect: (value: string) => void | Promise<void>
-  description?: string
-}
-
-export type AgeRangeFieldConfig = {
-  kind: 'ageRange'
-  title: string
-  ageMin: number
-  ageMax: number
-  sliderMin: number
-  sliderMax: number
-  onChangeLocal: (min: number, max: number) => void
-  onClose: (min: number, max: number) => void | Promise<void>
-}
-
-export type RadiusFieldConfig = {
-  kind: 'radius'
-  title: string
-  stepCount: number
-  value: number
-  onChangeLocal: (v: number) => void
-  onClose: (v: number) => void | Promise<void>
-  formatStep: (i: number) => string
-}
-
-export type AccountFieldConfig = {
-  kind: 'account'
-  title: string
-}
-
-export type PreviewFieldConfig = {
-  kind: 'preview'
-  title: string
-}
-
-export type ProfileSectionFieldConfig = {
-  kind: 'profileSection'
-  title: string
-}
-
-export type AppSectionFieldConfig = {
-  kind: 'appSection'
-  title: string
-}
-
-export type CommunitiesFieldConfig = {
-  kind: 'communities'
-  title: string
-}
-
-export type SubPageConfig = SelectFieldConfig | AgeRangeFieldConfig | RadiusFieldConfig | AccountFieldConfig | PreviewFieldConfig | ProfileSectionFieldConfig | AppSectionFieldConfig | CommunitiesFieldConfig
+// (The `SubPageConfig` union and its eight member types stood here. They were
+// the menu page's sub-page ROUTER — "open this field as a screen" — and the menu
+// page is deleted, 2026-07-30. Every one of those fields is a popup raised by
+// its own row now, so a config object describing a screen has nothing left to
+// describe.)
 
 // ── Select Field Row ───────────────────────────────────────────────────────
 // Shared tappable settings row used across Preferences, Profile, App and the
@@ -325,52 +260,20 @@ function calcAge(birthDate: string): number {
   return age
 }
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
+// (The per-tab TabIcon that used to live here is gone with the tabs it named.
+// Only its `profile` branch had a caller left — the photo placeholder below —
+// and it was a second hand-drawn person standing beside the app's own UserIcon.
+// One glyph, one place: components/icons.tsx.)
 
-type Tab = 'preferences' | 'profile' | 'app'
-
-// Per-tab glyph used in the avatar preview row. Sized to ICON.lg.
-
-function TabIcon({ tab, color }: { tab: Tab; color: string }) {
-  const stroke = color
-  if (tab === 'preferences') {
-    // Magnifying glass
-    return (
-      <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-        <Circle cx="11" cy="11" r="7" />
-        <Line x1="16.5" y1="16.5" x2="21" y2="21" />
-      </Glyph>
-    )
-  }
-  if (tab === 'profile') {
-    // Person — head + shoulders
-    return (
-      <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-        <Circle cx="12" cy="8" r="4" />
-        <Path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-      </Glyph>
-    )
-  }
-  // app → 2×2 grid (app icon)
-  return (
-    <Glyph width={ICON.lg} height={ICON.lg} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Rect x="3" y="3" width="8" height="8" rx="2" />
-      <Rect x="13" y="3" width="8" height="8" rx="2" />
-      <Rect x="3" y="13" width="8" height="8" rx="2" />
-      <Rect x="13" y="13" width="8" height="8" rx="2" />
-    </Glyph>
-  )
-}
-
-// ── The visibility chip: the state IS the control ──────────────────────────
-// Visibility (visible <-> hidden) rides the profile photo's own top-END tile,
-// where the "Edit your profile" caption used to sit (user directive
-// 2026-07-30). The state IS the label — "Hidden" / "Visible" — so the chip that
-// says it is also the chip that flips it, and the photo under it keeps the tap
-// that opens profile editing. It is the ONLY way back to visible now that page2
-// has no UI of its own, so it must stay reachable and must not silently fail:
-// going hidden kicks every watcher pinned to the user, so it is confirmed
-// first; going visible is immediate.
+// ── Visibility: the state IS the control ───────────────────────────────────
+// The row that LEADS the preferences popup home's dock opens (VisibilityRow)
+// says the state as its label and flips it when tapped, so the rule about HOW it
+// flips lives here rather than in the row: going hidden kicks every watcher
+// pinned to the user, so it is confirmed first; going visible is immediate. It
+// is also the only way back to visible now that page2 has no UI of its own, so
+// it must stay reachable and must not silently fail. (It used to be one control
+// on two surfaces, the second being the chip on the menu's profile photo; the
+// menu is deleted, 2026-07-30.)
 //
 // Visibility is NOT credit-gated any more. The server used to auto-hide a
 // zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
@@ -379,178 +282,124 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
 // (2026-07-22): being broke keeps you visible on purpose — the invitation
 // you can't accept is the moment to buy.
 //
-// It is FLOATING CHROME — a sibling AFTER the menu's scroll, not a layer inside
-// the pinned photo — and that is load-bearing rather than stylistic: the photo
-// is painted and hit-tested UNDER the scroll, which is exactly why a
-// transparent spacer inside the scroll owns the photo's tap, so a pressable
-// tile parked in the photo layer could never be pressed at all. Standing over
-// the scroll it has to take itself out of the way once the content has risen to
-// the chrome line — the fade below, at the same moment the rising white body
-// used to cover the caption. The one re-render that costs (the inert flip, so a
-// faded tile never eats a tap meant for the row under it) happens INSIDE this
-// component, so nothing else in the menu re-renders because the page scrolled.
-function VisibilityChip({ scrollY, contentTop, topPad }: {
-  scrollY: SharedValue<number>
-  /** Where the scroll's first opaque content sits: the tile fades out as that
-   *  content rises to the tile's own bottom edge. */
-  contentTop: number
-  topPad: number
-}) {
+// The haptic is deliberately NOT in here: one caller is a Chip, which fires none
+// of its own, and the other is a SelectFieldRow, whose tap responder already
+// does. A tap in the hook would double on the row.
+function useVisibility() {
   const { profile } = useUserStore()
-  const [hideConfirmOpen, setHideConfirmOpen] = useState(false)
-  const [visibilityBusy, setVisibilityBusy] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   const isHidden = selectIsHidden(profile)
 
-  const runVisibility = useCallback(async (endpoint: string) => {
-    if (visibilityBusy) return
-    setVisibilityBusy(true)
+  const run = useCallback(async (endpoint: string) => {
+    if (busy) return
+    setBusy(true)
     try { await invoke(endpoint) } catch (e) { console.error(e) }
-    finally { setVisibilityBusy(false); setHideConfirmOpen(false) }
-  }, [visibilityBusy])
+    finally { setBusy(false); setConfirmOpen(false) }
+  }, [busy])
 
-  const onVisibilityPress = useCallback(() => {
-    tap()
-    if (!isHidden) { setHideConfirmOpen(true); return }
-    runVisibility('app/free2')
-  }, [isHidden, runVisibility])
+  const toggle = useCallback(() => {
+    if (!isHidden) { setConfirmOpen(true); return }
+    run('app/free2')
+  }, [isHidden, run])
 
-  // The lane measures itself: what has to clear the rising content is the
-  // tile's REAL bottom edge — the chrome line plus however tall the chip (and
-  // the watcher tile under it) actually painted — never a height computed from
-  // tokens, which a large font scale would make wrong (see GlyphSlot).
-  const laneHeight = useSharedValue(0)
-  const covered = useSharedValue(0)
-  const [inert, setInert] = useState(false)
-  useAnimatedReaction(
-    () => laneHeight.value > 0 && scrollY.value > Math.max(0, contentTop - laneHeight.value),
-    (hide, prev) => {
-      if (hide === prev) return
-      covered.value = withTiming(hide ? 1 : 0)
-      runOnJS(setInert)(hide)
-    },
-    [contentTop],
-  )
-  const fade = useAnimatedStyle(() => ({ opacity: 1 - covered.value }))
-
-  if (!profile) return null
-
-  // Watcher count drives two surfaces: the pill inside the chip and the concrete
-  // ripple in the hide confirm. deriveCompat only fills the array while page2
-  // is free, so a hidden user reads 0 without a separate guard.
+  // Watcher count drives two surfaces: the count beside the state, and the
+  // concrete ripple in the hide confirm. deriveCompat only fills the array while
+  // page2 is free, so a hidden user reads 0 without a separate guard.
   const watcherCount = selectWatcherCount(profile)
-  const hideConfirmConfig = hideProfileConfirm(watcherCount)
+  const confirm = hideProfileConfirm(watcherCount)
 
-  return (
-    <>
-      <Animated.View
-        style={[styles.visibilityChip, { paddingTop: topPad }, fade]}
-        pointerEvents={inert ? 'none' : 'box-none'}
-        onLayout={e => { laneHeight.value = e.nativeEvent.layout.height }}
-      >
-        {/* ONE tile: the state, and the watcher count INSIDE it (user directive
-            2026-07-30) — the count is a fact ABOUT this state, not a second tile
-            beside it, so it rides the chip's own trailing pill: the eye leads,
-            the state reads, the number stands at the far end. The NUMBER ALONE,
-            on the state's own line — the tile is small and floats on a photo,
-            and "Visible" already says what is being counted. */}
-        <Chip
-          onPhoto
-          text={isHidden ? t('settings.visibilityHidden') : t('settings.visibilityVisible')}
-          // The chip baseline every glyph on a tile takes, not the row's
-          // ICON.md: this eye stands beside a chip label now.
-          renderIcon={c => isHidden ? <EyeOffIcon color={c} size={ICON.sm} /> : <EyeOpenIcon color={c} size={ICON.sm} />}
-          count={!isHidden && watcherCount > 0 ? watcherCount : undefined}
-          onPress={onVisibilityPress}
-        />
-      </Animated.View>
-      {/* The confirm glyph is ICON.md, the size every other button icon wears:
-          the icon's own 28 default made it tower over the label beside it. */}
+  return {
+    // No `isHidden` out of here: what the row PAINTS is selectInvisibleReason,
+    // which knows the second reason this hook does not (an unbuilt profile), and
+    // two answers to "am I hidden" on one row is one too many.
+    watcherCount,
+    toggle,
+    /** The confirm that gates going hidden. Rendered by whichever surface owns
+     *  the control — it is the same dialog either way. The glyph is ICON.md, the
+     *  size every other button icon wears: the icon's own 28 default made it
+     *  tower over the label beside it. */
+    dialog: (
       <ConfirmDialog
-        visible={hideConfirmOpen}
-        title={hideConfirmConfig.title}
-        description={hideConfirmConfig.description}
-        confirmLabel={hideConfirmConfig.confirmLabel}
+        visible={confirmOpen}
+        title={confirm.title}
+        description={confirm.description}
+        confirmLabel={confirm.confirmLabel}
         confirmIconStart={<EyeOffIcon color={WHITE} />}
-        onCancel={() => { if (!visibilityBusy) setHideConfirmOpen(false) }}
-        onConfirm={() => runVisibility('app/lock2')}
-        busy={visibilityBusy}
+        onCancel={() => { if (!busy) setConfirmOpen(false) }}
+        onConfirm={() => run('app/lock2')}
+        busy={busy}
         draggable
       />
-    </>
-  )
+    ),
+  }
 }
 
-// Circles: the ONE thing in this menu that is not a row (user directive
-// 2026-07-30). It is the big round emblem the page hangs on the seam between the
-// profile photo and the list — the mark, the word, the counts and the waiting
-// chip, all INSIDE the disc — because circles are not a preference like the rows
-// under them, they are what decides who the app shows you. There is no Circles
-// row any more; the emblem is the whole entry (see CirclesButton.tsx for the
-// tile, and SettingsPage for where it hangs).
+// The same control as a MENU ROW — the first field of the preferences popup
+// (user directive 2026-07-30). It states the whole thing as a sentence about the
+// user ("I am visible" / "I am hidden"), because a row is read as a line of text
+// where the photo's chip is read as a badge, and the live watcher count rides
+// BESIDE that sentence on the credits row's own trailing pill: the number is a
+// fact about the state the label just named, so it reads as that label's value
+// rather than as a control facing it from the row's far edge.
 //
-// This component owns everything ABOUT the entry — what the counts say, the
-// members-only gate, the popup that lifts it — and nothing about where it sits:
-// the seam it hangs on belongs to the page, which parks it in a lane of its own.
-function CirclesEntry({ onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+// A user who has not built a profile reads HIDDEN here, because that is what he
+// is (user directive 2026-07-30): others() drops a photo-less row from every
+// pool, so the honest sentence is the same one an explicit hide gets, and the
+// row is the one place in the app that states this fact. The control is SHUT
+// while that is the reason — `locked`, the app's shut-door fade — but it stays
+// pressable and answers with the door that opens it, the build-profile gate,
+// exactly as the dock's faded Circles key does. A shut control that says nothing
+// when tapped is the one thing this must never be.
+function VisibilityRow({ onBuildProfile }: {
+  /** Raised when the shut row's gate is confirmed. The popup this row lives in
+   *  has to close before onboarding can be pushed — see PreferencesPopup. */
+  onBuildProfile: () => void
+}) {
   const { profile } = useUserStore()
-  const router = useRouter()
-  // Communities are members-only: a browse-only account (profile not yet built)
-  // may not enter the hub at all, because every surface in there shows the user
-  // to other people (a group's member list, a friend request). Same marker the
-  // invite gate uses (selectProfileBuilt), so "full member" means one thing.
-  // The tap opens an explanation whose single button is the build flow, so the
-  // popup that says what is missing is also the way to fix it.
-  const profileBuilt = selectProfileBuilt(profile)
-  const [commGateOpen, setCommGateOpen] = useState(false)
-
+  const vis = useVisibility()
+  const [gateOpen, setGateOpen] = useState(false)
   if (!profile) return null
-
-  // The counts — read from the denormalized relations.communities field
-  // (instant, no query). Friends first, then groups (= managed + joined), on the
-  // app's one fact line. An account with neither still says what circles are FOR
-  // instead of dropping to a bare name.
-  const comm = communitiesSummary(profile)
-  const commGroups = comm ? comm.managed.length + comm.joined.length : 0
-  // What is WAITING on my answer (friend requests + join requests on groups I
-  // manage) stays off the fact line (user directive 2026-07-28): it rides its own
-  // solid-purple chip, exactly as it does on every row of the hub this opens, so
-  // "someone is waiting on you" is said the one way in both places. Inside the
-  // disc, now, and not on a row's END edge (user directive 2026-07-30).
-  const commRequests = pendingApprovals(comm)
-  const commFacts: MetaPart[] = !comm ? []
-    : comm.friends > 0 || commGroups > 0
-      ? [comm.friends > 0 && friendLabel(comm.friends), commGroups > 0 && groupLabel(commGroups)]
-      : [t('communities.rowEmpty')]
-
+  const reason = selectInvisibleReason(profile)
+  const unbuilt = reason === 'unbuilt'
   return (
     <>
-      <CirclesButton
-        title={t('communities.menuRow')}
-        facts={commFacts}
-        requests={commRequests}
-        onPress={() => {
-          if (!profileBuilt) { setCommGateOpen(true); return }
-          onOpenSubPage?.({ kind: 'communities', title: t('communities.menuRow') })
-        }}
+      <SelectFieldRow
+        grouped
+        label={genderize(
+          reason ? t('settings.visibilityStateHidden') : t('settings.visibilityStateVisible'),
+          profile.is_male,
+        )}
+        icon={reason ? <EyeOffIcon color={INK} size={ICON.md} /> : <EyeOpenIcon color={INK} size={ICON.md} />}
+        labelColor={INK}
+        locked={unbuilt}
+        trailing={!reason && vis.watcherCount > 0 ? <Chip small text={String(vis.watcherCount)} /> : undefined}
+        trailingBeside
+        // No haptic here for either branch: the row's tap responder fires one.
+        onPress={() => { if (unbuilt) { setGateOpen(true); return } vis.toggle() }}
       />
-      {/* The one button is the build flow itself, wearing the same label as the
-          menu's own build-profile CTA: the popup that says what is missing is
-          also the way to fix it. Dismissed by swiping down / the backdrop. */}
-      <ConfirmDialog
-        visible={commGateOpen}
-        title={t('communities.gateTitle')}
-        description={t('communities.gateDesc')}
-        confirmLabel={t('settings.buildProfile')}
-        confirmIconStart={<UserPlusIcon color={WHITE} />}
-        onConfirm={() => { setCommGateOpen(false); router.push('/onboarding') }}
-        onCancel={() => setCommGateOpen(false)}
-        draggable
+      {vis.dialog}
+      {/* Nested inside the preferences popup, which is the only way two popups
+          may overlap (BottomSheet.tsx) — the list stays lit underneath. */}
+      <BuildProfileGate
+        visible={gateOpen}
+        title={genderize(t('home.buildProfileTitle'), profile.is_male)}
+        description={t('settings.visibilityGateDesc')}
+        onClose={() => setGateOpen(false)}
+        onConfirm={onBuildProfile}
       />
     </>
   )
 }
 
-function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function PreferencesContent({ leading }: {
+  /** A row to stand at the HEAD of the same card, before the four preferences.
+   *  The popup home's dock opens leads with the visibility row (VisibilityRow);
+   *  the menu does not, because the profile photo above it already carries that
+   *  state as its chip and two controls for one state on one screen is one too
+   *  many. A prop, never a forked second copy of this block. */
+  leading?: React.ReactNode
+}) {
   const { profile, update } = useUserStore()
   const [agePopupVisible, setAgePopupVisible] = useState(false)
   const [radiusPopupVisible, setRadiusPopupVisible] = useState(false)
@@ -613,6 +462,7 @@ function PreferencesContent({ onOpenSubPage: _onOpenSubPage }: { onOpenSubPage?:
   return (
     <View style={styles.section}>
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        {leading}
         {/* Order (user request): gender, then ages, then distance, location. */}
         <SelectFieldRow
           grouped
@@ -826,190 +676,6 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
     </BottomSheet>
   )
 }
-
-// ── Groups Popup ───────────────────────────────────────────────────────────
-
-/**
- * "My groups" sheet. Lists the caller's current group memberships with a
- * per-row leave button, plus an input to redeem a 6-digit invite code at the
- * bottom. Both actions speak to /app/leave_group and /app/redeem_invite,
- * whose responses carry a fresh `groups` sidecar so the list updates in one
- * round trip per mutation.
- */
-function GroupsPopup({ visible, onDismiss, mode, leaveGroup, groups, setGroups }: {
-  visible: boolean
-  onDismiss: () => void
-  /** Which act to show. The sheet no longer lists the groups — the menu does
-   * that with chips — so it opens straight into joining or leaving. */
-  mode: 'join' | 'leave'
-  /** The group a chip was tapped on. Only read when mode is 'leave'. */
-  leaveGroup: Group | null
-  // Lifted up to AppInlineContent so the settings menu row can render the
-  // chained group names alongside this sheet, sharing one source of truth.
-  // null = not yet loaded (initial fetch in flight); [] = loaded, empty.
-  groups: Group[] | null
-  setGroups: (g: Group[]) => void
-}) {
-  const codeInputRef = useRef<RNTextInput>(null)
-
-  const [code, setCode] = useState('')
-  const [codeError, setCodeError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [leavingId, setLeavingId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!visible) return
-    let cancelled = false
-    setCode('')
-    setCodeError(null)
-    invoke<{ groups?: Group[] }>('app/my_groups')
-      .then(data => {
-        if (cancelled) return
-        setGroups(data?.groups ?? [])
-      })
-      .catch(() => { /* my_groups fetch failed; keep last-known groups */ })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible])
-
-  const onJoin = async () => {
-    if (code.length !== INVITE_CODE_LEN || submitting) return
-    tap()
-    Keyboard.dismiss()
-    setSubmitting(true)
-    setCodeError(null)
-    try {
-      const result = await invoke<{ groups?: Group[] }>('app/redeem_invite', { code })
-      if (result?.groups) setGroups(result.groups)
-      setCode('')
-      // Nothing left to show here once joined — the new chip appears in the menu.
-      onDismiss()
-    } catch {
-      setCodeError(t('settings.groupsInviteInvalid'))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const onLeave = async (id: string) => {
-    if (leavingId) return
-    tapWarning()
-    setLeavingId(id)
-    try {
-      const result = await invoke<{ groups?: Group[] }>('app/leave_group', { group_id: id })
-      if (result?.groups) setGroups(result.groups)
-      else setGroups((groups ?? []).filter(g => g.id !== id))
-    } catch {
-      // Silently fail; the row stays. User can retry.
-    } finally {
-      setLeavingId(null)
-      onDismiss()
-    }
-  }
-
-  // Leaving a group asks the app's ONE question popup (user directive
-  // 2026-07-30: every popup is the popup component). It used to hand-roll the
-  // same title, the same sentence and the same cancel/confirm pair inside this
-  // sheet, at its own type size (a -0.3 tracking nobody else had), its own
-  // dimmed hint colour and its own gaps — which is precisely why leaving a group
-  // from the menu did not look like leaving one from the Communities hub, where
-  // this identical question is already a ConfirmDialog.
-  if (mode === 'leave') {
-    return (
-      <ConfirmDialog
-        visible={visible && !!leaveGroup}
-        title={leaveGroup ? t('settings.groupsLeaveTitle').replace('{name}', leaveGroup.name) : ''}
-        description={t('settings.groupsLeaveDesc')}
-        cancelLabel={t('settings.groupsBack')}
-        confirmLabel={t('settings.groupsLeaveConfirm')}
-        confirmIconStart={<SignOutIcon color={WHITE} />}
-        busy={leavingId !== null}
-        onCancel={() => { tap(); onDismiss() }}
-        onConfirm={() => { if (leaveGroup) onLeave(leaveGroup.id) }}
-        draggable
-      />
-    )
-  }
-
-  return (
-    <BottomSheet
-      visible={visible}
-      onDismiss={onDismiss}
-    >
-      <SheetTitle>{t('settings.groupsJoinTitle')}</SheetTitle>
-      <SheetDesc>{t('settings.groupsJoinHint')}</SheetDesc>
-      <View style={groupsPopupStyles.inputWrap}>
-        <TextInput
-          ref={codeInputRef}
-          style={groupsPopupStyles.input}
-          value={code}
-          onChangeText={(v) => {
-            const digits = v.replace(/\D/g, '').slice(0, INVITE_CODE_LEN)
-            setCode(digits)
-            if (codeError) setCodeError(null)
-          }}
-          keyboardType="number-pad"
-          maxLength={INVITE_CODE_LEN}
-          placeholder={t('settings.groupsCodePlaceholder')}
-          placeholderTextColor={INK_DIM}
-          autoComplete="off"
-          textContentType="none"
-          editable={!submitting}
-          autoFocus
-        />
-      </View>
-      {codeError ? <Text style={groupsPopupStyles.error}>{codeError}</Text> : null}
-      <SheetActions row>
-        <View style={groupsPopupStyles.action}>
-          <Button
-            label={t('settings.groupsBack')}
-            onPress={() => { tap(); Keyboard.dismiss(); onDismiss() }}
-            disabled={submitting}
-            variant="secondary"
-            size="lg"
-          />
-        </View>
-        <View style={groupsPopupStyles.action}>
-          <Button
-            label={t('settings.groupsJoinAction')}
-            onPress={onJoin}
-            disabled={code.length !== INVITE_CODE_LEN || submitting}
-            loading={submitting}
-            iconStart={<LogInIcon color={WHITE} />}
-            variant="primary"
-            size="lg"
-          />
-        </View>
-      </SheetActions>
-    </BottomSheet>
-  )
-}
-
-const groupsPopupStyles = StyleSheet.create({
-  // One of the two buttons in the sheet's action row. The row itself, and the gap
-  // over it, are <SheetActions>'s — the same block every popup's buttons sit in.
-  action: { flex: 1 },
-  // Reads as a field: a border and a white fill, not just a tinted block. The
-  // previous WHITE_SOFT-on-white panel gave no edge to aim at. Skin comes from
-  // FIELD_SKIN like every other typing surface — it used to hand-roll its own
-  // 1.5px INK_DIM rule, a heavier edge than the login field it sits beside.
-  // The gap above it is the popup's between-blocks one, not a number of its own.
-  inputWrap: {
-    ...FIELD_SKIN,
-    marginTop: SHEET_GAP.block,
-    paddingHorizontal: MD,
-    paddingVertical: MD,
-  },
-  input: {
-    fontSize: TEXT.lg,
-    fontWeight: WEIGHT.medium,
-    color: INK,
-    textAlign: 'center',
-    letterSpacing: 6,
-    padding: 0,
-  },
-  error: { marginTop: XS, fontSize: TEXT.md, color: INK, textAlign: 'center' },
-})
 
 // ── App Tab ────────────────────────────────────────────────────────────────
 
@@ -2190,7 +1856,7 @@ const familyStyles = StyleSheet.create({
 // Up/Down are disabled at the photo-list boundaries.
 
 // ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon imported
-// from '../src/components/icons'.
+// from './icons'.
 
 function PhotoOptionsPopup({
   visible, canMoveUp, canMoveDown, canDelete, replacing, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
@@ -2345,9 +2011,8 @@ const photoOptionsStyles = StyleSheet.create({
 // profile tab via the sub-page mechanism.
 
 export function PreviewFieldPage({
-  config, onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged, clipBottom: _clipBottom,
+  onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged, clipBottom: _clipBottom,
 }: {
-  config: PreviewFieldConfig
   onBack: () => void
   dismissGestureRef?: React.MutableRefObject<GestureType | undefined>
   onScrollAtTop?: (atTop: boolean) => void
@@ -2763,41 +2428,15 @@ export function PreviewFieldPage({
 // Used by ProfileSectionPage and AppSectionPage to render a second-level
 // ── App Inline Content ─────────────────────────────────────────────────────
 
-function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, onOpenSubPage }: { onBack?: () => void; onNavigateHome?: () => void; onOpenSubPage?: (config: SubPageConfig) => Promise<void> }) {
+function AppInlineContent() {
   const router = useRouter()
   const { profile } = useUserStore()
   const { signOut } = useAuthStore()
   const [accountPopupVisible, setAccountPopupVisible] = useState(false)
-  const [groupsPopupVisible, setGroupsPopupVisible] = useState(false)
-  // The groups sheet is opened straight into one of its two acts by the chip
-  // that was tapped: a group chip leaves it, the trailing chip joins a new one.
-  const [groupsMode, setGroupsMode] = useState<'join' | 'leave'>('join')
-  const [groupsLeaveTarget, setGroupsLeaveTarget] = useState<Group | null>(null)
-  const openJoinGroup = () => { tap(); setGroupsLeaveTarget(null); setGroupsMode('join'); setGroupsPopupVisible(true) }
-  const openLeaveGroup = (g: Group) => { tapWarning(); setGroupsLeaveTarget(g); setGroupsMode('leave'); setGroupsPopupVisible(true) }
-  // Lifted from GroupsPopup so the menu row can render the chained group
-  // names from the same fetched list — one source of truth shared between
-  // the row label and the popup.
-  //
-  // Seeded from the persisted cache so the row paints its names with the
-  // screen rather than popping in when `app/my_groups` lands; the response
-  // then overwrites both. A failed fetch keeps the cached names (falling back
-  // to "no groups" only when there is nothing cached to show).
-  const cachedGroups = useCachedGroups()
-  const [fetchedGroups, setFetchedGroups] = useState<Group[] | null>(null)
-  const [groupsFetchFailed, setGroupsFetchFailed] = useState(false)
-  const groups = fetchedGroups ?? cachedGroups ?? (groupsFetchFailed ? [] : null)
-  const setGroups = useCallback((g: Group[]) => {
-    setFetchedGroups(g)
-    setCachedGroups(g)
-  }, [])
-  useEffect(() => {
-    let cancelled = false
-    invoke<{ groups?: Group[] }>('app/my_groups')
-      .then(data => { if (!cancelled) setGroups(data?.groups ?? []) })
-      .catch(() => { if (!cancelled) setGroupsFetchFailed(true) })
-    return () => { cancelled = true }
-  }, [setGroups])
+  // No groups state here any more: joining by code, leaving, and the list of
+  // memberships all live in Circles (the hub sheet). The menu's old "my groups"
+  // row and its join-by-code popup were unreachable — nothing had opened them
+  // since the hub took the job — so they are gone rather than kept warm.
   const [signOutDialog, setSignOutDialog] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -2902,14 +2541,6 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
         onSignOutPress={() => setSignOutDialog(true)}
         onDeletePress={() => setDeleteDialog(true)}
       />
-      <GroupsPopup
-        visible={groupsPopupVisible}
-        onDismiss={() => setGroupsPopupVisible(false)}
-        mode={groupsMode}
-        leaveGroup={groupsLeaveTarget}
-        groups={groups}
-        setGroups={setGroups}
-      />
       <ConfirmDialog
         visible={signOutDialog}
         title={t('settings.signOutConfirmTitle')}
@@ -2941,204 +2572,67 @@ function AppInlineContent({ onBack: _onBack, onNavigateHome: _onNavigateHome, on
 
 
 
-type SettingsPageProps = {
-  topInset?: number
-  /** Height of the floating sheet chrome drawn OVER this page. The profile
-   *  photo grows by this much and bleeds up behind the chrome, so the photo
-   *  fills to the very top of the screen while its bottom edge — and the
-   *  caption row on it — stay exactly where they were. 0 = opaque chrome
-   *  above the page, nothing to bleed behind. */
-  photoBleed?: number
-  onBack?: () => void
-  onNavigateHome?: () => void
-  focused?: boolean
-  onOpenSubPage?: (config: SubPageConfig) => Promise<void>
-  embedded?: boolean
-} & Partial<OverlaySheetBody>
+// ── The two popups home's dock opens ───────────────────────────────────────
+// The menu page is being taken apart (user directive 2026-07-30): its four
+// entries are home's four arched keys now, and the two of them that are LISTS of
+// settings rather than surfaces of their own — the search preferences and the
+// app's own settings — open as popups from the dock instead of as a page you
+// first have to find a drawer for.
+//
+// Both are the menu's own blocks VERBATIM: the same PreferencesContent and
+// AppInlineContent, so every row keeps its glyph, its one-sentence label and the
+// popup it raises, and neither of these wrappers states a preference of its own.
+// That is the whole point — there is no second copy of the settings list to
+// drift, and when the menu page finally goes nothing here changes.
+//
+// `selectListStyles.card` is the one frame override a popup body is allowed to
+// make (BottomSheet.tsx): these bodies are lists of full-width tappable rows
+// that already carry the page gutter inside each row, so the sheet's own gutter
+// would indent them twice. Everything else about the frame — the air above the
+// first row, the gap under the last, the white — is the sheet's, identical to
+// every other popup in the app.
+//
+// The row popups each of these raises (gender, ages, distance, location, the buy
+// picker, the account sheet) are Modals rendered INSIDE this Modal's tree. That
+// is nesting, not the two-sheets-at-one-level case the account popup works
+// around with `onClosed` — a nested Modal presents over its parent, which is
+// exactly what a row opening a picker over its list should look like.
 
-export default function SettingsPage({
-  topInset = 0, photoBleed = 0, onBack, onNavigateHome, focused: _focused = true, onOpenSubPage, embedded = false,
-  dismissGestureRef, onScrollAtTop, pullEngaged,
-}: SettingsPageProps = {}) {
-  const { profile } = useUserStore()
-  const { user } = useAuthStore()
+/** Search preferences: whether you are visible at all, then who / at what ages /
+ *  how far / from where. Visibility LEADS because it is the preference that
+ *  decides whether any of the others matter (user directive 2026-07-30). */
+export function PreferencesPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
   const router = useRouter()
-  const bottomInset = useBottomInset()
-  const insets = useSafeAreaInsets()
-
-  // While the profile is not yet BUILT (photos + bio), the menu's hero slot is
-  // not the avatar but a purple CTA into the build-profile flow. A browse-only
-  // user reaches settings freely (the menu is never gated), so this is their
-  // way to finish. Same completion marker the invite popup and the server gate
-  // use — one source of truth.
-  const profileBuilt = selectProfileBuilt(profile)
-
-  const firstPhoto = profile?.images?.[0]?.normal
-  const avatarUri = firstPhoto
-    ? (localPhotoUriCache.get(firstPhoto) ?? `${SUPABASE_URL}/storage/v1/object/public/users/${user?.id ?? profile?.user_id}/normal/${firstPhoto}`)
-    : undefined
-
-  // Same wiring PreviewFieldPage uses: when this page is the body of an
-  // OverlaySheet, its scroll has to negotiate with the sheet's dismiss pan
-  // (PullScrollView reports at-top and drops scrollEnabled mid-pull) or the
-  // two fight and the content lands nudged after a swipe + snap-back.
-  const idlePull = useSharedValue(false)
-  const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
-    panRef: dismissGestureRef,
-    extraRefs: [],
-    setScrollAtTop: onScrollAtTop ?? (() => {}),
-    pullEngaged: pullEngaged ?? idlePull,
-  } : null, [dismissGestureRef, onScrollAtTop, pullEngaged, idlePull])
-
-  // The photo grows by `photoBleed` so the image bleeds up behind the floating
-  // sheet chrome (the close X), filling to the very top of the screen.
-  const photoHeight = PROFILE_CARD_HEIGHT + photoBleed
-
-  // How far the Circles emblem hangs below the photo's bottom edge: HALF of it,
-  // so the disc straddles the seam evenly (the other half rides the photo). Read
-  // through the same `iconScale` the emblem sizes itself with — the disc grows
-  // with the OS font scale, so the band the list reserves for it has to grow by
-  // the same number or the two come apart on a large-font device.
-  const circlesOverhang = iconScale(CIRCLES_BUTTON_SIZE) / 2
-
-  // Where the list is, for the one floating tile standing over it (the
-  // visibility chip). A shared value written straight from the scroll event: the
-  // page itself must not re-render because it was scrolled, so the threshold
-  // that fades the tile is derived on the UI thread inside the chip.
-  const scrollY = useSharedValue(0)
-  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollY.value = e.nativeEvent.contentOffset.y
-  }, [scrollY])
-
-  const body = (
-    <View style={styles.rootOuter}>
-      {/* NO 'bottom' edge: reserving the safe area HERE shortens the scroll's
-          viewport, so the menu was permanently clipped a home-indicator's
-          height above the screen edge and rode over a dead empty band that
-          never scrolled away (iPhone only — Android reports 0 here, which is
-          why it went unseen). The inset belongs to the scroll CONTENT below,
-          where the list runs to the very bottom edge and only its last row is
-          held clear of the indicator. */}
-      <SafeAreaView style={[styles.root, { paddingTop: topInset }]} edges={['left', 'right']}>
-        {/* The profile photo is the BACKMOST, FIXED layer: it stays pinned to
-            the top while the menu content scrolls UP and covers it (user
-            request 2026-07-26). pointerEvents 'none' so the transparent spacer
-            in the scroll below owns the tap (open profile) and the scroll
-            gesture, while the photo shows through behind it. */}
-        {profileBuilt ? (
-          <View style={[styles.profileCardFixed, { height: photoHeight }]} pointerEvents="none">
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.profileCardImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.profileCardPlaceholder}>
-                <TabIcon tab="profile" color={INK_SUBTLE} />
-              </View>
-            )}
-          </View>
-        ) : null}
-        <PullScrollView
-          style={styles.tabScroll}
-          // The app's one bottom air, not the raw band: a raw inset is 34 on an
-          // iPhone and 16–24 on an Android, so the menu's last row ended at two
-          // different heights on the two platforms (see bottomGap).
-          contentContainerStyle={[styles.tabContent, { paddingTop: 0, paddingBottom: bottomGap(bottomInset, BOTTOM_AIR) }]}
-          showsVerticalScrollIndicator={false}
-          delaysContentTouches={false}
-          bounces={false}
-          overScrollMode="never"
-          scrollEventThrottle={16}
-          onScroll={onScroll}
-        >
-          {profileBuilt ? (
-            // Transparent spacer sitting over the fixed photo: tapping it opens
-            // profile editing, dragging it scrolls, and the photo behind shows
-            // through. As the user scrolls, this spacer rides up and the opaque
-            // content body below rises to cover the pinned photo.
-            <Pressable
-              style={{ height: photoHeight }}
-              accessibilityRole="button"
-              // The only place this is said now that the photo's chip carries
-              // the visibility state instead of an "edit profile" caption: a
-              // screen reader reads it off the target itself.
-              accessibilityLabel={t('settings.profile')}
-              onPress={() => { tap(); onOpenSubPage?.({ kind: 'profileSection', title: t('settings.profile') }) }}
-            />
-          ) : (
-            // Not-yet-built profile: no hero card. Plain page, one regular
-            // button sitting just below the sheet's close (X) chrome.
-            <View style={[styles.buildProfileWrap, { paddingTop: photoBleed + LG }]}>
-              <Button
-                label={t('settings.buildProfile')}
-                onPress={() => { tap(); router.push('/onboarding') }}
-                variant="primary"
-                size="lg"
-              />
-            </View>
-          )}
-
-          {/* Opaque body: its solid WHITE fill is what covers the fixed photo as
-              the list scrolls up over it. */}
-          <View style={styles.scrollBody}>
-            <View style={styles.optionsWrap}>
-              {/* The Circles emblem's own band. The disc floats (below), so
-                  nothing reflows around it: this is what holds the list clear of
-                  the half of it that hangs down onto the white. Exactly that
-                  half, so the first row starts one gutter under the disc's
-                  bottom edge. With no photo above there is nothing to hang over
-                  and the emblem stands in the flow instead, so no band. */}
-              {profileBuilt ? (
-                <View style={{ height: circlesOverhang }} />
-              ) : (
-                <View style={styles.circlesInFlow}><CirclesEntry onOpenSubPage={onOpenSubPage} /></View>
-              )}
-
-              <PreferencesContent onOpenSubPage={onOpenSubPage} />
-
-              <View style={{ marginTop: XL }}>
-                <AppInlineContent onBack={onBack} onNavigateHome={onNavigateHome} onOpenSubPage={onOpenSubPage} />
-              </View>
-            </View>
-          </View>
-
-          {/* THE Circles button: the menu's one big round emblem, hanging on the
-              seam between the profile photo and the list — half on the photo,
-              half on the white — and CENTRED across the page (user directive
-              2026-07-30), which is the one horizontal position that belongs to
-              neither edge's chrome. It is the LAST child of the scroll's content
-              on purpose: that is what puts it over both layers without any
-              parent having to draw outside its own bounds, and over the photo's
-              transparent spacer, whose tap it must win. It still SCROLLS, unlike
-              the visibility chip, because it is a menu entry and not chrome. */}
-          {profileBuilt ? (
-            <View
-              style={[styles.circlesLane, { top: photoHeight - circlesOverhang }]}
-              // The lane spans the page so the disc can centre in it; only the
-              // disc may take a touch, so the photo beside it keeps its own tap.
-              pointerEvents="box-none"
-            >
-              <CirclesEntry onOpenSubPage={onOpenSubPage} />
-            </View>
-          ) : null}
-
-        </PullScrollView>
-        {/* The photo's own top-END tile, floating ABOVE the scroll because that
-            is the only layer a tap can reach here (see VisibilityChip). It
-            hangs from the one chrome line, opposite the sheet's close X, and
-            fades out as the content it stands over rises to meet it: the opaque
-            body for a built profile, the build-profile button otherwise. */}
-        <VisibilityChip
-          scrollY={scrollY}
-          contentTop={profileBuilt ? photoHeight : photoBleed + LG}
-          topPad={chromeTop(insets.top) - topInset}
-        />
-      </SafeAreaView>
-    </View>
+  // The visibility row's gate is the one thing in here that LEAVES: onboarding
+  // is a route, and a route pushed under an open Modal comes up behind it. So
+  // the confirm only closes this sheet, and the jump runs from `onClosed`, after
+  // it is gone — the same chaining home does when one of its popups opens
+  // another. A ref, not state: nothing about this sheet re-renders for it.
+  const goBuild = useRef(false)
+  return (
+    <BottomSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      onClosed={() => { if (goBuild.current) { goBuild.current = false; router.push('/onboarding') } }}
+      contentStyle={selectListStyles.card}
+    >
+      <PreferencesContent leading={
+        <VisibilityRow onBuildProfile={() => { goBuild.current = true; onDismiss() }} />
+      } />
+    </BottomSheet>
   )
-
-  return pullCtx
-    ? <PullContext.Provider value={pullCtx}>{body}</PullContext.Provider>
-    : body
 }
+
+/** The app's own settings: the wallet (with its count), the account, support,
+ *  and the brand site. The menu's second card, unchanged. */
+export function AppSettingsPopup({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+  return (
+    <BottomSheet visible={visible} onDismiss={onDismiss} contentStyle={selectListStyles.card}>
+      <AppInlineContent />
+    </BottomSheet>
+  )
+}
+
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
@@ -3227,44 +2721,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     marginBottom: MD,
   },
-  // The user's photo at 2x the height of a regular row. It is the BACKMOST,
-  // FIXED layer: pinned to the top of the sheet behind the scroll, the content
-  // body scrolls up and covers it. No scrim over it — the photo is the
-  // affordance (the transparent spacer over it owns the tap), and the only tile
-  // on it is the visibility chip, which floats over the scroll instead.
-  profileCardFixed: {
-    position: 'absolute', top: 0, start: 0, end: 0,
-    overflow: 'hidden',
-    backgroundColor: WHITE_SOFT,
-  },
-  // The visibility chip's lane: the full width of the photo so a long label
-  // wraps instead of overflowing, with the tile parked on the END edge — the
-  // card's own top-END corner, opposite the sheet's back arrow at the START.
-  // Its top comes from chromeTop(), the one line every piece of floating chrome
-  // hangs from; the page root has already padded itself down by `topInset`, so
-  // that much of the screen-measured line is subtracted back out.
-  visibilityChip: {
-    position: 'absolute', top: 0, start: 0, end: 0,
-    paddingHorizontal: OVERLAY.chromeInset,
-    alignItems: 'flex-end',
-  },
-  // Opaque wrapper around the scrolling menu content: its solid WHITE is what
-  // hides the fixed photo behind it as the list rises over the photo.
-  scrollBody: { backgroundColor: SURFACE },
-  // The Circles emblem's lane: the full width of the page, so the disc sits at
-  // its horizontal centre. Absolute inside the SCROLL's content — that is what
-  // makes it scroll with the list while painting over both the photo above it and
-  // the white body under it. Only its `top` is per-page (see circlesOverhang).
-  circlesLane: { position: 'absolute', start: 0, end: 0, alignItems: 'center' },
-  // The same disc with no photo to hang over (a profile not yet built): it stands
-  // in the flow at the head of the list, on the same centre line.
-  circlesInFlow: { alignItems: 'center', marginBottom: XL },
-  profileCardImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  profileCardPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE_SOFT },
-  // Not-yet-built profile: no hero card, just the plain white page. A regular
-  // button sits below the sheet's close (X) chrome; the inline paddingTop
-  // clears that chrome (photoBleed) so the button never hides under it.
-  buildProfileWrap: { paddingHorizontal: LG, paddingBottom: MD },
   // A plain white card. The GROUP's meaning is carried by its ink (the purple
   // for the account/status rows), never by tinting the card itself.
   accentCard: { backgroundColor: 'transparent' },
@@ -3304,7 +2760,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD, paddingVertical: MD,
   },
   selectRowLarge: { paddingVertical: MD },
-  selectRowLocked: { opacity: 0.45 },
+  // The app's one shut-door fade, shared with Button and the dock's keys.
+  selectRowLocked: { opacity: DISABLED_OPACITY },
   selectRowTextCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
   // minWidth:0 so a long single-sentence label (e.g. "מהמיקום הנוכחי שלי")
   // wraps to a second line instead of clipping.
