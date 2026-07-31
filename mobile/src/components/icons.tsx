@@ -177,6 +177,33 @@ export function PlusIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   )
 }
 
+// The magnifying glass — home's dock says "preferences" with it (user directive
+// 2026-07-30, replacing the sliders that stood there): what the popup behind it
+// decides is WHO I am shown, so the mark is the one every app uses for looking
+// for someone. Same STROKE.base weight and 3..21 ink span as the dock's other
+// glyphs, so the four read as one set.
+//
+// MIRRORED under RTL (user directive 2026-07-30): the glass is an object held in
+// a hand, so its handle belongs on the reading-START side — the same treatment
+// BackIcon gets, and for the same reason. Mirroring is stated as the artwork's
+// own coordinates reflected about the box's centre (x → 24 − x) rather than a
+// negative transform, so the stroke caps and the Glyph's font-scale sizing are
+// untouched by it.
+//
+// AND IT IS THE APP'S ONLY MAGNIFIER (user directive 2026-07-31): the Communities
+// sheet drew a `SearchGlyph` of its own — the hub's find, a group roster's
+// people-search, the field's own leading mark and the empty hub's "find a group"
+// button — so four glasses in the app pointed the Latin way while the dock's
+// pointed the Hebrew one. That copy is deleted; every one of them renders this.
+export function SearchIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={isRTL ? '13.5' : '10.5'} cy="10.5" r="7" />
+      <Line x1={isRTL ? '8.4' : '15.6'} y1="15.6" x2={isRTL ? '3' : '21'} y2="21" />
+    </Glyph>
+  )
+}
+
 // ── Field / list-row icons (gray stroke by default) ────────────────────────
 
 export function SlidersIcon({ color = INK_SUBTLE, size = ICON.md }: IconProps = {}) {
@@ -486,7 +513,11 @@ export function CameraIcon({ color = INK, size = ICON.lg }: IconProps = {}) {
   )
 }
 
-// ── Photo-options popup icons ──────────────────────────────────────────────
+// ── The photo menu's icons ─────────────────────────────────────────────────
+// Two arrows swapping: this photo goes, that one comes, and the slot stays
+// where it is. (It was deleted for an afternoon on 2026-07-31, on "replacing is
+// deleting and adding" — the user put the row back the same day, so the mark
+// came back with it.)
 
 export function PhotoReplaceIcon({ color, size = ICON.xxl }: IconProps & { color: string }) {
   return (

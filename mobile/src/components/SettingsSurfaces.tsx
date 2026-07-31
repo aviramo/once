@@ -14,10 +14,12 @@ import { t, tg, lang, genderize, lowerFirst } from '../i18n'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BuildProfileGate } from './BuildProfileGate'
 import { ToggleRow } from './Switch'
-import { MatchCard, ProfileActionBar } from './MatchCard'
+import { MatchCard } from './MatchCard'
 import { PullContext, type PullCtx } from './PullPane'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from './PhotoEditor'
+import { MIN_PHOTOS, MAX_PHOTOS } from '../lib/photos'
+import { TapMenu, TAP_MENU_ICON, type TapPoint } from './TapMenu'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../lib/family'
@@ -25,11 +27,11 @@ import { XS, SM, MD, LG, RADIUS, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SHEET_GAP
 import { GlyphSlot } from './GlyphSlot'
 import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../colors'
 import { OUTLINE_SKIN } from '../field'
-import { SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon } from './icons'
+import { SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon, PlusIcon } from './icons'
 import { creditTotal } from '../lib/credits'
 import { hideProfileConfirm } from './visibilityConfirms'
 import { BuyExtraPopup } from './BuyExtraPopup'
-import { BottomSheet, SheetActions, SheetTitle } from './BottomSheet'
+import { BottomSheet, SheetActionPair, SheetTitle } from './BottomSheet'
 import { Button } from './Button'
 import { StripBody } from './Strip'
 import { MetaLine } from './MetaLine'
@@ -172,7 +174,7 @@ function SelectFieldRow({
           tone === 'accent' ? (
             <View style={styles.selectRowAccentIcon}>{icon}</View>
           ) : (
-            <GlyphSlot width={ICON.md} style={styles.selectRowIconWrap}>{icon}</GlyphSlot>
+            <GlyphSlot width={ICON.md} label={label} style={styles.selectRowIconWrap}>{icon}</GlyphSlot>
           )
         ) : null
         // A menu row IS a strip (user directive 2026-07-29): a leading glyph or
@@ -329,17 +331,27 @@ function useVisibility() {
         onCancel={() => { if (!busy) setConfirmOpen(false) }}
         onConfirm={() => run('app/lock2')}
         busy={busy}
-        draggable
       />
     ),
   }
 }
 
+// What the watcher count SAYS on that row (user directive 2026-07-31): the row
+// states its state as a sentence about the user, so the pill beside it finishes
+// that sentence instead of dropping a bare digit into it — a number alone says
+// nothing about what it counts, and here there is a whole line to say it on. The
+// dock's preferences key keeps the bare number (see HomeDock): a mark beside a
+// glyph has no room for a sentence, and this row is the sentence it points at.
+// One definition, in the app's own `xLabel(n)` shape, with the singular as its
+// own string because Hebrew inflects the verb for a single watcher.
+const watcherLabel = (n: number) =>
+  n === 1 ? t('settings.watchersOne') : t('settings.watchersMany').replace('{count}', String(n))
+
 // The same control as a MENU ROW — the first field of the preferences popup
 // (user directive 2026-07-30). It states the whole thing as a sentence about the
 // user ("I am visible" / "I am hidden"), because a row is read as a line of text
 // where the photo's chip is read as a badge, and the live watcher count rides
-// BESIDE that sentence on the credits row's own trailing pill: the number is a
+// BESIDE that sentence on the credits row's own trailing pill: the count is a
 // fact about the state the label just named, so it reads as that label's value
 // rather than as a control facing it from the row's far edge.
 //
@@ -373,7 +385,7 @@ function VisibilityRow({ onBuildProfile }: {
         icon={reason ? <EyeOffIcon color={INK} size={ICON.md} /> : <EyeOpenIcon color={INK} size={ICON.md} />}
         labelColor={INK}
         locked={unbuilt}
-        trailing={!reason && vis.watcherCount > 0 ? <Chip small text={String(vis.watcherCount)} /> : undefined}
+        trailing={!reason && vis.watcherCount > 0 ? <Chip small text={watcherLabel(vis.watcherCount)} /> : undefined}
         trailingBeside
         // No haptic here for either branch: the row's tap responder fires one.
         onPress={() => { if (unbuilt) { setGateOpen(true); return } vis.toggle() }}
@@ -576,9 +588,8 @@ function PreferencesContent({ leading }: {
       <ConfirmDialog
         visible={locationLockedInfoVisible}
         title={t('settings.locationLockedTitle')}
-        description={t('settings.locationLockedDesc')}
+        description={genderize(t('settings.locationLockedDesc'), profile.is_male)}
         confirmLabel={t('common.gotIt')}
-        draggable
         onConfirm={() => setLocationLockedInfoVisible(false)}
         onCancel={() => setLocationLockedInfoVisible(false)}
       />
@@ -657,22 +668,30 @@ function AccountPopup({ visible, onDismiss, onSignOutPress, onDeletePress }: {
         <SheetTitle>{t('settings.myAccount')}</SheetTitle>
         <MetaLine parts={identityFacts} color={INK} align="center" />
       </View>
-      {/* The same pair of full-width buttons the chat menu's leave/block sheet
-          uses: the action you opened this for is the solid primary, the
-          drastic and rarely-wanted one recedes to the muted secondary. */}
-      <SheetActions>
-        <Button
-          label={tg('settings.signOut', profile.is_male)}
-          iconStart={<SignOutIcon color={WHITE} />}
-          onPress={() => { tap(); dismissThen(onSignOutPress) }}
-        />
-        <Button
-          label={t('settings.deleteAccount')}
-          variant="secondary"
-          iconStart={<TrashIcon color={INK_SUBTLE} />}
-          onPress={() => { tapWarning(); dismissThen(onDeletePress) }}
-        />
-      </SheetActions>
+      {/* WHAT I MAY DO, BESIDE WHAT I AM BEING OFFERED — the app's one pair at
+          the foot of a popup (user directive 2026-07-31, the group popup's own
+          row): deleting the account is a bare mark on NO GROUND AT ALL, passed on
+          the way past, and signing out is the purple, ending the row under the
+          thumb. They were two full-width tiles stacked, the drastic one receding
+          into a muted secondary — but a tile is a tile, and the thing you must
+          never press by accident was still painted as something to press. Bare
+          ink beside a filled button is the strongest form of that difference the
+          app has, and the confirm dialog behind it is what actually guards it. */}
+      <SheetActionPair
+        options={[{
+          key: 'delete',
+          label: t('settings.deleteAccount'),
+          icon: <TrashIcon color={INK} size={ICON.xxl} />,
+          onPress: () => { tapWarning(); dismissThen(onDeletePress) },
+        }]}
+        action={
+          <Button
+            label={tg('settings.signOut', profile.is_male)}
+            iconStart={<SignOutIcon color={WHITE} />}
+            onPress={() => { tap(); dismissThen(onSignOutPress) }}
+          />
+        }
+      />
     </BottomSheet>
   )
 }
@@ -1008,6 +1027,9 @@ function LocationPopup({
   onSelectTyped: (type: 'home' | 'work', label: string, lat: number, lng: number) => void
   onDismiss: () => void
 }) {
+  // Both sentences this popup addresses the user with (the address field's
+  // placeholder and the no-results line) are imperatives, so they take his sex.
+  const isMale = useUserStore(st => st.profile?.is_male)
   const insets = useSafeAreaInsets()
   const screenH = useRef(Dimensions.get('window').height).current
   // Address-step sheet height: full screen minus the home shell's TabStrip
@@ -1078,10 +1100,10 @@ function LocationPopup({
         const results = await placesAutocomplete(trimmed, sessionTokenRef.current, lang, controller.signal)
         if (controller.signal.aborted) return
         setPredictions(results)
-        if (results.length === 0) setSearchError(t('settings.locationNoResults'))
+        if (results.length === 0) setSearchError(genderize(t('settings.locationNoResults'), isMale))
       } catch (err: unknown) {
         if ((err as { name?: string })?.name === 'AbortError') return
-        setSearchError(t('settings.locationNoResults'))
+        setSearchError(genderize(t('settings.locationNoResults'), isMale))
       } finally {
         if (!controller.signal.aborted) setSearching(false)
       }
@@ -1129,7 +1151,7 @@ function LocationPopup({
       // time the user re-enters this step.
       sessionTokenRef.current = ''
       if (!details) {
-        setSearchError(t('settings.locationNoResults'))
+        setSearchError(genderize(t('settings.locationNoResults'), isMale))
         return
       }
       const label = details.label || p.description
@@ -1190,7 +1212,7 @@ function LocationPopup({
               style={locationPopupStyles.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder={t('settings.locationAddressPrompt')}
+              placeholder={genderize(t('settings.locationAddressPrompt'), isMale)}
               placeholderTextColor={INK_DIM}
               autoFocus
               returnKeyType="search"
@@ -1844,176 +1866,93 @@ const familyStyles = StyleSheet.create({
   triOptionPillLabelSelected: { color: WHITE },
 })
 
-// ── Photo edit popup ────────────────────────────────────────────────────────
-// Bottom sheet shown when the user taps a photo on their own profile preview.
-// Three rows, laid out so the sheet says where each action SENDS the photo
-// (user directive 2026-07-30). "Move up" is the top row and "Move down" the
-// bottom one — each reorder control sits at the end it moves toward — and each
-// stands its chevron on that same edge of its own tile: the up tile's arrow is
-// ABOVE its label, the down tile's is BELOW. The two actions that move nothing,
-// Replace and Delete, share the middle as a side-by-side pair. Every tile is
-// centred on the popup's axis, so the four glyphs read as one column.
-// Up/Down are disabled at the photo-list boundaries.
+// ── What a photo on your own card opens ─────────────────────────────────────
+// (user directive 2026-07-31.) A `BottomSheet` of four labelled tiles stood
+// here — move up / replace / delete / move down, a whole surface raised from the
+// bottom of the screen to say four words about the photo the user had just put a
+// finger on. It is a `TapMenu` now (components/TapMenu.tsx): the same four
+// verbs, as rows that pop out of the tap itself. Nothing is being announced, so
+// nothing is raised; the verbs stand where the thing they act on is.
+//
+// The SURFACE changed and the LIST did not. Replace was dropped along with the
+// popup that morning, on "replacing is deleting and adding, and both are one tap
+// away", and the user put it back the same day: it had been there all along and
+// worked, and it is the one edit that leaves the ORDER of the photos — which is
+// what the card reads top to bottom — untouched.
+//
+// The two cases the sheet spelled out in words are not spelled out at all now:
+// a move at either end of the list, and the delete at the two-photo floor, are
+// simply absent (see TapMenu — only what applies is listed).
 
-// ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon imported
-// from './icons'.
-
-function PhotoOptionsPopup({
-  visible, canMoveUp, canMoveDown, canDelete, replacing, onDismiss, onMoveUp, onMoveDown, onReplace, onDelete,
+// ── What the profile's plus opens ──────────────────────────────────────────
+// (user directive 2026-07-31.) The two things that can still be ADDED to your
+// own profile — a photo, the family & kids entry — raised by the plus on the
+// card's heading tile, in place of the permanent bar of buttons that stood under
+// the card until now.
+//
+// It is the PREFERENCES list verbatim: `SelectFieldRow`s in the same grouped
+// card, each a glyph and one sentence, over the same edge-to-edge frame
+// (`selectListStyles.card`, the one frame override a popup body may make). An
+// add is a settings row like any other, so nothing here states a design of its
+// own — and no title: the two rows say what they are, and a heading over two
+// lines of text would be a third.
+//
+// An add that no longer applies renders nothing, and with neither left the card
+// carries no plus at all, so this can never open empty.
+function ProfileAddPopup({
+  visible, photoEnabled, familyEnabled, picking, onDismiss, onClosed, onAddPhoto, onAddFamily,
 }: {
   visible: boolean
-  canMoveUp: boolean
-  canMoveDown: boolean
-  canDelete: boolean
-  replacing: boolean
+  photoEnabled: boolean
+  familyEnabled: boolean
+  /** True while the OS image picker is coming up — see the row's spinner. */
+  picking: boolean
   onDismiss: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
-  onReplace: () => void
-  onDelete: () => void
+  onClosed: () => void
+  onAddPhoto: () => void
+  onAddFamily: () => void
 }) {
   return (
-    <BottomSheet
-      visible={visible}
-      onDismiss={onDismiss}
-      contentStyle={photoOptionsStyles.sheet}
-    >
-      {/* Four choices and nothing else, so they are the popup's action block:
-          one gap between them, the popup's own air above and below it. The
-          pair's own gap is that same SM, so the middle row is spaced like the
-          rows around it in both directions. */}
-      <SheetActions flush>
-      <PhotoOptionTile
-        glyph={<ChevronUpIcon color={canMoveUp ? INK : INK_SUBTLE} />}
-        label={t('settings.photoEditMoveUp')}
-        disabled={!canMoveUp}
-        onPress={() => { tap(); onMoveUp() }}
-      />
-
-      <View style={photoOptionsStyles.row}>
-        <PhotoOptionTile
-          half
-          glyph={replacing ? <ActivityIndicator color={INK} /> : <PhotoReplaceIcon color={INK} />}
-          label={t('settings.photoEditReplace')}
-          disabled={replacing}
-          onPress={() => { tap(); onReplace() }}
-        />
-
-        {/* Deliberately NOT gold: this sheet's tiles are one set of choices and
-            the gold made Delete read as a warning banner rather than a sibling
-            of Move / Replace (user request 2026-07-20). Deleting a photo is
-            reversible by re-adding one, and the confirm still gates it; the
-            warning haptic below carries the caution instead of the colour. */}
-        <PhotoOptionTile
-          half
-          glyph={<PhotoTrashIcon color={canDelete ? INK : INK_SUBTLE} />}
-          label={canDelete ? t('settings.photoEditDelete') : t('settings.photoMinTwo')}
-          disabled={!canDelete}
-          onPress={() => { tapWarning(); onDelete() }}
-        />
+    <BottomSheet visible={visible} onDismiss={onDismiss} onClosed={onClosed} contentStyle={selectListStyles.card}>
+      <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
+        {photoEnabled ? (
+          <SelectFieldRow
+            grouped
+            label={t('settings.addPhoto')}
+            // The picker's cold start is slow enough to need saying so, and the
+            // row's own glyph is where it is said — the same spinner-in-place-of
+            // -the-glyph the photo menu's Replace row gives. The row is shut
+            // while it runs (a second tap would launch a second picker) and the
+            // popup closes itself the moment the picker is up.
+            icon={picking ? <ActivityIndicator color={INK} /> : <CameraIcon color={INK} size={ICON.md} />}
+            locked={picking}
+            labelColor={INK}
+            onPress={onAddPhoto}
+          />
+        ) : null}
+        {familyEnabled ? (
+          <SelectFieldRow
+            grouped
+            label={t('settings.addFamily')}
+            icon={<KidsGlyph color={INK} size={ICON.md} />}
+            labelColor={INK}
+            onPress={onAddFamily}
+          />
+        ) : null}
       </View>
-
-      {/* The one tile that stands its glyph UNDER its label: the chevron sits
-          on the edge of the tile it sends the photo toward, exactly as the up
-          tile's sits on its top edge. */}
-      <PhotoOptionTile
-        glyphBelow
-        glyph={<ChevronDownIcon color={canMoveDown ? INK : INK_SUBTLE} />}
-        label={t('settings.photoEditMoveDown')}
-        disabled={!canMoveDown}
-        onPress={() => { tap(); onMoveDown() }}
-      />
-      </SheetActions>
     </BottomSheet>
   )
 }
 
-// One choice in this sheet: a soft tile with its glyph and its label stacked
-// and centred on the tile's own axis. All four choices are this one object —
-// they differ only in whether they take half a row (`half`, the middle pair)
-// and on which side of the label the glyph stands (`glyphBelow`, "Move down"),
-// so the tile's geometry is stated once.
-function PhotoOptionTile({ glyph, label, disabled, half, glyphBelow, onPress }: {
-  glyph: React.ReactNode
-  label: string
-  disabled?: boolean
-  half?: boolean
-  glyphBelow?: boolean
-  onPress: () => void
-}) {
-  return (
-    <Pressable
-      style={[
-        photoOptionsStyles.tile,
-        half && photoOptionsStyles.tileHalf,
-        glyphBelow && photoOptionsStyles.tileGlyphBelow,
-        disabled && photoOptionsStyles.tileDisabled,
-      ]}
-      onPress={() => { if (!disabled) onPress() }}
-      accessibilityRole="button"
-    >
-      {glyph}
-      <Text style={[photoOptionsStyles.tileLabel, disabled && photoOptionsStyles.tileLabelDisabled]}>
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-const photoOptionsStyles = StyleSheet.create({
-  // A tighter gutter than the app's standard popup one, because the body is a
-  // grid of tiles rather than a column of text; every gap around and between
-  // them is the popup's own.
-  sheet: {
-    paddingHorizontal: SM,
-  },
-  // The middle pair. No `alignItems`, so the default stretch keeps both tiles
-  // as tall as the taller one: the Delete tile grows when it has to explain
-  // itself ("at least 2 photos required") and Replace grows with it, rather
-  // than the pair going lopsided.
-  row: {
-    flexDirection: 'row',
-    gap: SM,
-  },
-  // A column, so every tile reads the same way: glyph, then label, both centred
-  // on the tile's middle. The full-width ones take their width from the sheet;
-  // only the pair asks for a share of a row (`tileHalf`).
-  tile: {
-    backgroundColor: PAGE,
-    borderRadius: RADIUS,
-    paddingVertical: MD,
-    paddingHorizontal: SM,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SM,
-  },
-  tileHalf: {
-    flex: 1,
-  },
-  // Same column, read from the bottom: the label first, the glyph under it.
-  tileGlyphBelow: {
-    flexDirection: 'column-reverse',
-  },
-  tileDisabled: {
-    opacity: 0.5,
-  },
-  // Centred, because the label under a centred glyph in a half-width tile can
-  // run to two lines (the disabled Delete's sentence).
-  tileLabel: {
-    fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK, textAlign: 'center',
-  },
-  tileLabelDisabled: {
-    color: INK_SUBTLE,
-  },
-})
-
-// Full-screen pane showing the user's profile card preview, opened from the
-// profile tab via the sub-page mechanism.
+// Full-screen pane showing the user's profile card preview: the sheet the dock's
+// profile key raises, and the page a roster row that is ME opens inside Circles.
+// It renders NO way out of itself and never did — it took an `onBack` it never
+// called, back when the sheet above it supplied a floating X. Both of those Xs
+// went on 2026-07-31, so the prop went with them: the swipe is the way out.
 
 export function PreviewFieldPage({
-  onBack, dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged, clipBottom: _clipBottom,
+  dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged, clipBottom: _clipBottom,
 }: {
-  onBack: () => void
   dismissGestureRef?: React.MutableRefObject<GestureType | undefined>
   onScrollAtTop?: (atTop: boolean) => void
   headerBottomShared?: SharedValue<number>
@@ -2029,8 +1968,20 @@ export function PreviewFieldPage({
   const insets = useSafeAreaInsets()
   const { profile, update } = useUserStore()
   const { user } = useAuthStore()
-  const [photoPopupImageIndex, setPhotoPopupImageIndex] = useState<number | null>(null)
+  // WHICH photo was tapped and WHERE — the menu of verbs pops out of that point
+  // (see TapMenu). One piece of state because the two are one fact: there is no
+  // moment where a photo is chosen and the finger that chose it is unknown.
+  const [photoMenu, setPhotoMenu] = useState<{ index: number; at: TapPoint } | null>(null)
+  const photoMenuIndex = photoMenu?.index ?? null
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
+  // What the heading chip's plus opens (see ProfileAddPopup).
+  const [addPopupVisible, setAddPopupVisible] = useState(false)
+  // The family sheet is a SIBLING Modal of the add popup, and iOS silently
+  // refuses to present a second sheet while the first is still up — so the add
+  // row closes its own popup and the family one is raised from `onClosed`, the
+  // same chaining the account popup and the preferences gate do. A ref: nothing
+  // about this page re-renders for it.
+  const goFamily = useRef(false)
   // Serializes the background family writes (see handleSaveFamily).
   const familySaveChain = useRef<Promise<void>>(Promise.resolve())
   const [bioSaving, setBioSaving] = useState(false)
@@ -2039,10 +1990,14 @@ export function PreviewFieldPage({
   // bridge). Drive a spinner in whichever UI initiated the pick so the user
   // gets immediate visual feedback while the picker dialog comes up.
   const [photoPicking, setPhotoPicking] = useState(false)
-  // True while the picker is loading specifically for the Replace flow inside
-  // PhotoOptionsPopup — keeps the popup open with a spinner on the Replace
-  // tile, so the user sees what's loading instead of a blank screen between
-  // popup-close and picker-open.
+  // The same, for the photo menu's Replace row: it keeps the menu OPEN with a
+  // spinner in that row's own glyph while the picker comes up, so the user sees
+  // what is loading instead of a blank screen between the tap and the picker.
+  // (The row was deleted for an afternoon on 2026-07-31, on "replacing is
+  // deleting and adding, and both are one tap away". The user put it back the
+  // same day — it had been there all along and worked — so this flow is the one
+  // that stood here: its own picker, its own optimistic swap into the SLOT, and
+  // its own restore-on-failure, none of which delete-then-add can give.)
   const [photoReplacing, setPhotoReplacing] = useState(false)
 
   // Warm up the image picker on mount: getMediaLibraryPermissionsAsync()
@@ -2118,10 +2073,11 @@ export function PreviewFieldPage({
   }, [profile, user?.id])
 
   const photoCount = profile?.images?.length ?? 0
-  const photoAddEnabled = photoCount < 6
+  const photoAddEnabled = photoCount < MAX_PHOTOS
   const familyAddEnabled = profile?.family == null
-  const canMoveUp = photoPopupImageIndex != null && photoPopupImageIndex > 0
-  const canMoveDown = photoPopupImageIndex != null && photoPopupImageIndex < photoCount - 1
+  const canMoveUp = photoMenuIndex != null && photoMenuIndex > 0
+  const canMoveDown = photoMenuIndex != null && photoMenuIndex < photoCount - 1
+  const canDelete = photoCount > MIN_PHOTOS
 
   const swapImages = (a: number, b: number) => {
     const images = profile?.images
@@ -2133,29 +2089,29 @@ export function PreviewFieldPage({
   }
 
   const handleMoveUp = () => {
-    if (photoPopupImageIndex == null || photoPopupImageIndex <= 0) return
-    const from = photoPopupImageIndex
-    setPhotoPopupImageIndex(null)
+    if (photoMenuIndex == null || photoMenuIndex <= 0) return
+    const from = photoMenuIndex
+    setPhotoMenu(null)
     swapImages(from, from - 1)
   }
 
   const handleMoveDown = () => {
-    if (photoPopupImageIndex == null || photoPopupImageIndex >= photoCount - 1) return
-    const from = photoPopupImageIndex
-    setPhotoPopupImageIndex(null)
+    if (photoMenuIndex == null || photoMenuIndex >= photoCount - 1) return
+    const from = photoMenuIndex
+    setPhotoMenu(null)
     swapImages(from, from + 1)
   }
 
   const handleDelete = () => {
-    if (photoPopupImageIndex == null || !profile?.images) return
-    if (photoCount <= 2) {
-      setPhotoPopupImageIndex(null)
+    if (photoMenuIndex == null || !profile?.images) return
+    if (!canDelete) {
+      setPhotoMenu(null)
       return
     }
-    const target = profile.images[photoPopupImageIndex]
+    const target = profile.images[photoMenuIndex]
     const filename = target?.normal
-    const idx = photoPopupImageIndex
-    setPhotoPopupImageIndex(null)
+    const idx = photoMenuIndex
+    setPhotoMenu(null)
     if (filename) {
       localPhotoUriCache.delete(filename)
       pendingDeferred.delete(filename)
@@ -2174,7 +2130,15 @@ export function PreviewFieldPage({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    }).finally(() => setPhotoPicking(false))
+    }).finally(() => {
+      // The picker is up (or was cancelled), so the popup that raised it has
+      // nothing left to say. It stays open until this point on purpose: the
+      // picker's cold start is slow enough to need saying so, and the row's own
+      // spinner is where it is said — exactly what the photo menu's Replace row
+      // does.
+      setPhotoPicking(false)
+      setAddPopupVisible(false)
+    })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
 
@@ -2210,16 +2174,21 @@ export function PreviewFieldPage({
     persistImages()
   }
 
+  // Pick a new photo INTO the tapped slot. The order of the list is what the
+  // card reads top to bottom, so replacing is not deleting and adding: it is the
+  // one edit that leaves every other photo where it is.
   const handleReplace = async () => {
-    if (photoPopupImageIndex == null || !user || !profile?.images || photoReplacing) return
-    const targetIndex = photoPopupImageIndex
+    if (photoMenuIndex == null || !user || !profile?.images || photoReplacing) return
+    const targetIndex = photoMenuIndex
     setPhotoReplacing(true)
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
     }).finally(() => {
+      // The picker is up (or was cancelled), so the menu that raised it has
+      // nothing left to say — same as the add popup above.
       setPhotoReplacing(false)
-      setPhotoPopupImageIndex(null)
+      setPhotoMenu(null)
     })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
@@ -2231,21 +2200,21 @@ export function PreviewFieldPage({
     const { filename, uploaded } = processAndUploadPhotoDeferred(asset.uri, userId, token)
 
     // Kept so a failed upload can put the previous photo BACK (see the catch
-    // below). The old file is still in storage and still valid -- only the
+    // below). The old file is still in storage and still valid — only the
     // reference is being swapped here.
     const current = useUserStore.getState().profile
     const oldEntry = current?.images?.[targetIndex]
     if (current?.images) {
-      // Swap the slot optimistically -- processAndUploadPhotoDeferred already
+      // Swap the slot optimistically — processAndUploadPhotoDeferred already
       // primed localPhotoUriCache with the picked URI, so the new photo renders
       // straight away. The OLD photo's local cache + deferred marker are
       // deliberately NOT torn down here: until the new upload lands, the old
       // photo is still the one we fall back to. Tearing its state down eagerly
       // meant a failed replace restored an entry with no local cache (visible
-      // flash), and -- worse -- replacing a photo that was ITSELF still
-      // uploading un-marked it from pendingDeferred, letting persistImages()
-      // write it to the server before its upload had landed. Both cleanups now
-      // live on the success path below.
+      // flash), and — worse — replacing a photo that was ITSELF still uploading
+      // un-marked it from pendingDeferred, letting persistImages() write it to
+      // the server before its upload had landed. Both cleanups live on the
+      // success path below.
       const next = [...current.images]
       next[targetIndex] = { normal: filename, hash: '' }
       useUserStore.getState().update({ images: next })
@@ -2293,9 +2262,11 @@ export function PreviewFieldPage({
   const familyInitial = profile?.family ?? null
   const bioInitial = profile?.bio ?? ''
 
-  // Commit handler for the inline bio editor (MatchCard's BioField). Called
-  // once on blur with the already-normalized text (>= BIO_MIN, or null for a
-  // cleared bio). No popup to close — the field stays in place.
+  // Commit handler for the inline bio editor (MatchCard's BioField). Called by
+  // the field's Update button with the already-normalized text, or null for a
+  // cleared bio — which is an ordinary save since the bio stopped being
+  // required (user directive 2026-07-31) and no longer un-builds the profile.
+  // No popup to close: the field stays in place.
   const handleSaveBio = async (next: string | null) => {
     if (bioSaving) return
     const value = next ?? ''
@@ -2338,6 +2309,12 @@ export function PreviewFieldPage({
       .catch(e => { console.error('Save family error:', e) })
   }
 
+  // AN ADD IS A THING YOU DO ABOUT THIS PROFILE, SO IT LIVES ON THE PROFILE'S
+  // OWN HEADING (user directive 2026-07-31). With nothing left to add — six
+  // photos and a family entry already filled in — there is no plus at all,
+  // exactly as the bar used to render nothing.
+  const canAdd = photoAddEnabled || familyAddEnabled
+
   return (
     <View style={[styles.root, dismissGestureRef ? null : { paddingTop: insets.top }]}>
       {previewData ? (
@@ -2346,70 +2323,115 @@ export function PreviewFieldPage({
             <MatchCard
               match={previewData}
               // Puts the pinned name/age chip on the same line as the sheet's
-              // floating close X. Only when the sheet owns the top inset —
-              // standalone, the root has already padded the card down past it.
+              // floating close X (which stands at the opposite, END corner). Only
+              // when the sheet owns the top inset — standalone, the root has
+              // already padded the card down past it.
               chromeInset={dismissGestureRef ? insets.top : 0}
               bottomInset={0}
               isForKids={profile?.family?.isForKids ?? null}
               self
-              onPhotoTap={(imageIndex) => {
+              // THE PLUS, in the very block the chat card's "End chat" stands
+              // in: the heading tile names the person and carries the one thing
+              // you can do about them, and on your own card that thing is adding
+              // to it. A mark and not a word — what is behind it is a list of
+              // two named options, and a label on the block would only say the
+              // first line of that list twice.
+              //
+              // ICON.xxl because the block is exactly a small chrome circle tall
+              // (CHIP_HEIGHT is ROUND_BUTTON_SIZE_SM), so this is a glyph
+              // centred in a chrome tile — one step UP from the ICON.round such
+              // a circle carries, since a plus paints only the middle of its box
+              // and would otherwise read as the smaller mark (the composer's own
+              // optical half-step, for the same glyph).
+              headingAction={canAdd ? {
+                renderIcon: c => <PlusIcon color={c} size={ICON.xxl} />,
+                a11yLabel: t('settings.a11y.addToProfile'),
+                onPress: () => { tap(); setAddPopupVisible(true) },
+              } : undefined}
+              onPhotoTap={(imageIndex, at) => {
                 if (imageIndex < 0) return
                 tap()
-                setPhotoPopupImageIndex(imageIndex)
+                setPhotoMenu({ index: imageIndex, at })
               }}
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
               bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
               // No round button on your own card: there is nobody to invite,
-              // and the adds are the buttons in the bar under it.
+              // and the one thing you can do about this profile is the plus on
+              // its heading.
               actions={[]}
             />
           </PullContext.Provider>
-          {/* THE bar every profile card stands on (user directive 2026-07-30):
-              the adds are BUTTONS in a block beside the card, exactly as a
-              person's page in the communities sheet carries what you can do
-              about them, and no longer chips floating on the photo — an add is
-              not a fact about the profile, and on the photo it competed with the
-              ones that are.
-              Both are quiet `secondary` buttons for the reason a member's page
-              gives: the page is your profile, and neither add is what the page
-              is for, so a solid fill on one would read as the recommended one.
-              An add that no longer applies (6 photos already, family already
-              filled in) renders nothing, and with neither left the bar itself
-              renders nothing and the card fills the screen. */}
-          <ProfileActionBar>
-            {photoAddEnabled ? (
-              <Button
-                label={t('settings.addPhoto')}
-                variant="secondary" size="lg"
-                iconStart={<CameraIcon color={INK} />}
-                // The picker's cold start is slow enough to need saying so; the
-                // button's own spinner takes the icon's place while it comes up.
-                loading={photoPicking}
-                onPress={() => { tap(); handleAddPhoto() }}
-              />
-            ) : null}
-            {familyAddEnabled ? (
-              <Button
-                label={t('settings.addFamily')}
-                variant="secondary" size="lg"
-                iconStart={<KidsGlyph color={INK} />}
-                onPress={() => { tap(); setFamilyPopupVisible(true) }}
-              />
-            ) : null}
-          </ProfileActionBar>
         </View>
       ) : null}
-      <PhotoOptionsPopup
-        visible={photoPopupImageIndex != null}
-        canMoveUp={canMoveUp}
-        canMoveDown={canMoveDown}
-        canDelete={photoCount > 2}
-        replacing={photoReplacing}
-        onDismiss={() => { if (!photoReplacing) setPhotoPopupImageIndex(null) }}
-        onMoveUp={handleMoveUp}
-        onMoveDown={handleMoveDown}
-        onReplace={handleReplace}
-        onDelete={handleDelete}
+      {/* The two adds, in the popup the plus opens (user directive 2026-07-31).
+          They used to be a permanent BAR of buttons under the card — a block of
+          chrome standing on the screen at all times to state two things that are
+          done once each, and which pushed the photo up off the bottom of the
+          page for as long as either was still available. The card fills the
+          screen again and the adds are a list you ASK for. */}
+      <ProfileAddPopup
+        visible={addPopupVisible}
+        photoEnabled={photoAddEnabled}
+        familyEnabled={familyAddEnabled}
+        picking={photoPicking}
+        onDismiss={() => { if (!photoPicking) setAddPopupVisible(false) }}
+        onClosed={() => { if (goFamily.current) { goFamily.current = false; setFamilyPopupVisible(true) } }}
+        onAddPhoto={handleAddPhoto}
+        onAddFamily={() => { goFamily.current = true; setAddPopupVisible(false) }}
+      />
+      {/* WHAT CAN BE DONE TO THIS PHOTO, TOP-DOWN: move up, replace, delete,
+          move down (user directive 2026-07-31). One white tile with the app's
+          hairline between its rows — the very object the card's fact set is —
+          and each row a glyph and the words for it. ONLY WHAT APPLIES IS LISTED:
+          a move at either end of the list, and a delete at the two-photo floor,
+          are not doors being held shut, they are things that do not exist for
+          this photo, so nothing stands in for them.
+          REPLACE IS ALWAYS ONE OF THEM (user directive 2026-07-31, putting back
+          what that morning's simplification had dropped): every photo can be
+          swapped, and swapping is the one edit that keeps the ORDER — which is
+          what the card reads top to bottom — so it is not the delete and the add
+          standing either side of it. It sits directly under "move up", where the
+          old popup put it.
+          The delete is deliberately not a warning colour: these are one set of
+          choices about one photo, and a red row among them would read as an alarm
+          rather than as a sibling of the others. Deleting a photo is undone by
+          adding one; the caution rides the haptic instead of the ink. */}
+      <TapMenu
+        at={photoMenu?.at ?? null}
+        onDismiss={() => { if (!photoReplacing) setPhotoMenu(null) }}
+        actions={[
+          ...(canMoveUp ? [{
+            key: 'up',
+            label: t('settings.photoEditMoveUp'),
+            renderIcon: (c: string) => <ChevronUpIcon color={c} size={TAP_MENU_ICON} />,
+            onPress: () => { tap(); handleMoveUp() },
+          }] : []),
+          {
+            key: 'replace',
+            label: t('settings.photoEditReplace'),
+            // The picker's cold start is slow enough to need saying so, and the
+            // row's own glyph is where it is said — the same spinner-in-place-of
+            // -the-mark the add-photo row gives. The menu stays up until the
+            // picker is, and a second tap while it runs is refused by the
+            // handler rather than launching a second picker.
+            renderIcon: (c: string) => photoReplacing
+              ? <ActivityIndicator color={c} />
+              : <PhotoReplaceIcon color={c} size={TAP_MENU_ICON} />,
+            onPress: () => { tap(); handleReplace() },
+          },
+          ...(canDelete ? [{
+            key: 'delete',
+            label: t('settings.photoEditDelete'),
+            renderIcon: (c: string) => <PhotoTrashIcon color={c} size={TAP_MENU_ICON} />,
+            onPress: () => { tapWarning(); handleDelete() },
+          }] : []),
+          ...(canMoveDown ? [{
+            key: 'down',
+            label: t('settings.photoEditMoveDown'),
+            renderIcon: (c: string) => <ChevronDownIcon color={c} size={TAP_MENU_ICON} />,
+            onPress: () => { tap(); handleMoveDown() },
+          }] : []),
+        ]}
       />
       <FamilyKidsPopup
         visible={familyPopupVisible}
@@ -2549,7 +2571,6 @@ function AppInlineContent() {
         confirmIconStart={<SignOutIcon color={WHITE} />}
         onCancel={() => setSignOutDialog(false)}
         onConfirm={onSignOutConfirmed}
-        draggable
       />
       <ConfirmDialog
         visible={deleteDialog}
@@ -2560,7 +2581,6 @@ function AppInlineContent() {
         busy={deleting}
         onCancel={() => setDeleteDialog(false)}
         onConfirm={onDeleteConfirmed}
-        draggable
       />
       <BuyExtraPopup
         visible={buyExtraOpen}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { cloneElement, createContext, isValidElement, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, View, Keyboard, Dimensions, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import { GestureHandlerRootView, Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
@@ -8,6 +8,7 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from './AppText'
+import { OptionStrip, type StripOption } from './OptionStrip'
 import { SURFACE, PAGE, INK, INK_DIM } from '../colors'
 import { useBottomInset } from '../hooks/useBottomInset'
 import { useKeyboardShrinkSV } from '../hooks/useKeyboard'
@@ -24,7 +25,7 @@ const SCREEN_H = Dimensions.get('screen').height
 // and the 20-layer translucent-black shadow gradient that lifts the sheet
 // off the background.
 //
-// Composers (ConfirmDialog, AccountDetailsPopup, PhotoOptionsPopup, ...)
+// Composers (ConfirmDialog, AccountDetailsPopup, ProfileAddPopup, ...)
 // pass their own `children` for the sheet body and don't re-implement the
 // animation, gesture, or shadow.
 
@@ -495,8 +496,8 @@ export function SheetScroll({ children, style }: { children: ReactNode; style?: 
 }
 
 // One choice inside a sheet: a full-width soft tile with a leading glyph and
-// its label. Every sheet that offers a list of actions (photo options, the
-// chat's long-press message actions) composes this, so the tile geometry and
+// its label. Every sheet that offers a list of actions (the chat's long-press
+// message actions, the card's leave/block pair) composes this, so the geometry and
 // its disabled treatment are defined once. The haptic stays at the call site —
 // a destructive row wants a different one from a neutral one.
 export function SheetActionRow({ icon, label, onPress, disabled }: {
@@ -606,6 +607,16 @@ const styles = StyleSheet.create({
   actions: { marginTop: SHEET_GAP.actions, gap: SM },
   actionsFlush: { marginTop: 0 },
   actionsRow: { flexDirection: 'row', gap: MD },
+  // ── The pair (SheetActionPair) ───────────────────────────────────────────
+  // The quiet strip beside the purple: its own width (OptionStrip's `hug`), and
+  // the first to give when the row is tight, so the action being offered keeps
+  // its word on one line.
+  pairQuiet: { flexShrink: 1 },
+  // The action takes everything left of the row — and keeps its own height in
+  // it. A Button stretches to its row by itself (`wrap`'s alignSelf), so it
+  // rides a slot that centres it instead: a popup's button may not come out
+  // taller than every other popup's because of what is standing beside it.
+  pairAction: { flex: 1, justifyContent: 'center' },
 })
 
 // THE sentence under a popup's title — every popup that has one. Same size,
@@ -638,5 +649,54 @@ export function SheetActions({ children, row, flush, style }: {
     <View style={[styles.actions, flush && styles.actionsFlush, row && styles.actionsRow, style]}>
       {children}
     </View>
+  )
+}
+
+// WHAT I MAY DO, BESIDE WHAT I AM BEING OFFERED — one row at the foot of a popup
+// (user directive 2026-07-31). Two popups end this way, the group's and the
+// account's, so the shape is stated once here rather than assembled at each:
+//
+//   [ ⎋ leave ]  [ ⇧ share invite link ]      [ 🗑 delete ]  [ ⎋ sign out ]
+//
+// The QUIET options lead — bare marks on no ground at all (`OptionStrip`), things
+// I may do, passed on the way past — and the ONE action the popup is asking for
+// ENDS the row, in the app's purple, under the thumb. They were stacked, a strip
+// over a full-width button, which spent two bands of the popup's foot on a pair
+// where one side is a single small word under a glyph.
+//
+// THE PAIR IS ONE SHAPE, and only the fill tells the two apart: the action is
+// handed `stack` (the mark over the word, in the strip's own mark size, gap and
+// caption rank — see Button) the moment it stands beside an option. A glyph
+// beside a label next to a glyph above one reads as two unrelated controls that
+// happen to share a row.
+//
+// Either side may be absent, and then the other one is the full width by itself
+// and no row forms: a private group with nothing to share, an account popup is
+// always both. With neither there is no block at all — an empty one would leave
+// the actions' own XL of dead white above the popup's edge.
+export function SheetActionPair({ options, action, flush }: {
+  /** The things I MAY do, as `OptionStrip` data. */
+  options?: StripOption[]
+  /** The one thing the popup is OFFERING: a `<Button>`, whose props are the call
+   *  site's to state — except `stack`, which is this row's business and is
+   *  injected, exactly as `Button` injects the size of the glyph it is handed. */
+  action?: ReactNode
+  /** `SheetActions`' own: for the popup that is NOTHING BUT this row (chat's
+   *  leave/block), where there is nothing above it to stand clear of and the
+   *  popup's top air is the only gap. */
+  flush?: boolean
+}) {
+  const opts = options ?? []
+  const beside = opts.length > 0 && !!action
+  if (!opts.length && !action) return null
+  return (
+    <SheetActions row={beside} flush={flush}>
+      {opts.length > 0 ? (
+        <OptionStrip options={opts} hug={beside} style={beside ? styles.pairQuiet : undefined} />
+      ) : null}
+      {beside && isValidElement(action)
+        ? <View style={styles.pairAction}>{cloneElement(action as ReactElement<{ stack?: boolean }>, { stack: true })}</View>
+        : action}
+    </SheetActions>
   )
 }

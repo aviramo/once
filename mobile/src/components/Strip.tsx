@@ -31,11 +31,18 @@ import { INK, LINE, INK_WASH } from '../colors'
 //    goes somewhere when you tap it does not need an arrow on every one of them,
 //    and the lane it ate belonged to the name.
 
-/** The row box itself, for a caller that lays out its own contents in a strip's
- *  place (the hub's empty-state row). */
-export const STRIP_ROW: ViewStyle = {
+/** How far in from the card's edge a strip holds its contents — the app's page
+ *  gutter, MD. Exported because a bare glyph in the `trailing` lane has to be
+ *  measured against it to line up with the chrome above the list (see
+ *  CommunitiesPage's ROW_GLYPH_INSET): a mark's own box is not the tile a
+ *  chrome control wears, so the two cannot simply share this edge. */
+export const STRIP_GUTTER = MD
+
+/** The row box itself. Not exported: nothing stands in a strip's place any more
+ *  (the hub's empty-state row was the one caller, deleted 2026-07-30). */
+const STRIP_ROW: ViewStyle = {
   flexDirection: 'row', alignItems: 'center', gap: MD,
-  paddingHorizontal: MD, paddingVertical: MD,
+  paddingHorizontal: STRIP_GUTTER, paddingVertical: MD,
   borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE,
 }
 
@@ -70,8 +77,11 @@ export type StripProps = {
    *  control facing it across the row. Only the line carrying the chip stops
    *  taking the full width; the title still wraps rather than clipping. */
   endBeside?: boolean
-  /** The one row that answers in place instead of opening something: the
-   *  friend-request row's accept/decline pills. A lane AFTER the text column. */
+  /** A lane AFTER the text column, for a row that can be ANSWERED where it
+   *  stands: the friend-request row's accept/decline pills, and the join
+   *  queue's one-tap approve tick. Not a substitute for where the row goes —
+   *  the queue's row still opens the requester's profile, and the lane only
+   *  saves the trip for the answer that is nearly always the one given. */
   trailing?: ReactNode
 }
 

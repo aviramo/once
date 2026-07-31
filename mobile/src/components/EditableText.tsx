@@ -20,11 +20,11 @@
 // The bio wrapper (BioField in MatchCard) keeps the card pixel-identical; the
 // group description passes allowEmpty so a cleared field commits null.
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Keyboard, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
+import { View, StyleSheet, Keyboard, type StyleProp, type TextStyle, type TextInput as RNTextInput, type ViewStyle } from 'react-native'
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { normalizeBio } from '../lib/bio'
-import { useFocusedFieldFooter } from '../hooks/useKeyboard'
+import { useFocusedFieldFooter, useKeyboardOpen } from '../hooks/useKeyboard'
 import { INK_DIM, NEGATIVE } from '../colors'
 
 // The footer's measured height, remembered across instances and focuses. The
@@ -161,6 +161,29 @@ export function EditableText({
   // (a no-op) rather than throwing the fresh save away.
   const handleUpdate = useCallback(() => { commit(); Keyboard.dismiss() }, [commit])
 
+  // THE KEYBOARD GOING AWAY ENDS THE EDIT (user directive 2026-07-30) — by
+  // whichever of the three routes took it away: BACK, the IME's own hide key,
+  // or a tap outside the field. Only the last of those passes through JS
+  // (`Keyboard.dismiss()`, which blurs); the other two are handled by the IME
+  // and never reach the app at all, so they used to leave the field FOCUSED,
+  // with its caret and its Update footer standing under a keyboard that was no
+  // longer there — the app believing the edit was over (paging back on, taps
+  // live again) while the platform believed it was still running. The field
+  // ends it itself, here, for the bio and for all three group editors at once.
+  //
+  // A field that never saw the keyboard is left alone: focus lands one beat
+  // BEFORE the keyboard starts moving, and blurring in that window would undo
+  // the tap that opened the editor.
+  const inputRef = useRef<RNTextInput | null>(null)
+  const hadKeyboardRef = useRef(false)
+  const keyboardOpen = useKeyboardOpen()
+  useEffect(() => {
+    if (keyboardOpen) { hadKeyboardRef.current = true; return }
+    const had = hadKeyboardRef.current
+    hadKeyboardRef.current = false
+    if (had && focused) inputRef.current?.blur()
+  }, [keyboardOpen, focused])
+
   // Taking focus grows a footer UNDER the input, and the Update button in it is
   // the only save path — so it is part of what the keyboard must not cover. The
   // platform only reports the input's own frame, so the field declares the rest
@@ -171,6 +194,7 @@ export function EditableText({
   return (
     <>
       <TextInput
+        ref={inputRef}
         style={inputStyle}
         value={draft}
         onChangeText={v => {

@@ -1,7 +1,6 @@
 import * as Location from 'expo-location'
 import { Linking, Platform } from 'react-native'
 import * as IntentLauncher from 'expo-intent-launcher'
-import Constants from 'expo-constants'
 
 export type LocPermission = 'granted' | 'denied' | 'undetermined' | 'services-off'
 
@@ -150,25 +149,28 @@ export async function watchLocation(
   )
 }
 
-/** Open the location permission settings page for this app directly. */
+/** Open the app's own settings page — the deepest destination either platform
+ *  offers for a runtime permission the user has permanently denied.
+ *
+ *  iOS lands on Settings > Once, whose Location row IS the
+ *  Never / Ask / While-Using choice, one tap down.
+ *
+ *  Android lands on App info, whose Permissions > Location row is the same
+ *  choice two taps down. The per-permission page itself cannot be reached from
+ *  here: `android.intent.action.MANAGE_APP_PERMISSION` resolves to
+ *  PermissionController's ManagePermissionsActivity, declared with
+ *  `android:permission="android.permission.GRANT_RUNTIME_PERMISSIONS"` — a
+ *  signature|installer|verifier permission no third-party app can hold — and
+ *  no public Settings action exposes a runtime permission (only the special
+ *  accesses: overlay, all-files). Notifications ARE deep-linkable, via the
+ *  public APP_NOTIFICATION_SETTINGS (see openNotifSettings); location has no
+ *  equivalent. This used to try `android.settings.APP_PERMISSION_DETAILS`
+ *  first, which is not an Android action at all — it resolves to no activity,
+ *  so every call already threw and fell through to exactly this page.
+ *
+ *  Linking.openSettings() IS that intent on Android
+ *  (ACTION_APPLICATION_DETAILS_SETTINGS + `package:<self>`), plus NO_HISTORY,
+ *  so backing out of the permission page returns straight to the app. */
 export function openLocPermSettings() {
-  if (Platform.OS === 'android') {
-    const pkg = Constants.expoConfig?.android?.package ?? 'com.aviramo.once'
-    IntentLauncher.startActivityAsync(
-      'android.settings.APP_PERMISSION_DETAILS',
-      {
-        extra: {
-          'android.intent.extra.PERMISSION_NAME': 'android.permission.ACCESS_FINE_LOCATION',
-          'android.intent.extra.PACKAGE_NAME': pkg,
-        },
-      },
-    ).catch(() =>
-      IntentLauncher.startActivityAsync(
-        IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
-        { data: `package:${pkg}` },
-      ).catch(() => Linking.openSettings()),
-    )
-  } else {
-    Linking.openSettings()
-  }
+  Linking.openSettings()
 }

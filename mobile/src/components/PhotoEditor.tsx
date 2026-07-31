@@ -20,15 +20,10 @@ import { t } from '../i18n'
 import { SM, RADIUS, STROKE, ICON } from '../tokens'
 import { INK, INK_HINT, INK_DIM, PHOTO_CHROME, SURFACE, WHITE_MID, SHADOW_BLACK } from '../colors'
 import { FIELD_SKIN } from '../field'
+import { MIN_PHOTOS, MAX_PHOTOS } from '../lib/photos'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!
-
-// How many photos a profile may hold, and how many onboarding requires. The
-// grid, the picker limit and the onboarding CTA gate all read these — the
-// numbers were previously inlined at each of those sites.
-export const MAX_PHOTOS = 6
-export const MIN_PHOTOS = 2
 
 function uuidv4(): string {
   const bytes = new Uint8Array(16)
@@ -756,7 +751,6 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         description={t('settings.duplicatePhotoBody')}
         confirmLabel={t('common.gotIt')}
         onConfirm={() => setDuplicateDialog(false)}
-        draggable
       />
     </>
   )

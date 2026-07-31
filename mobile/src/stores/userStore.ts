@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import { createPersistedMap } from '../lib/persistedCache'
 import { STORAGE } from '../keys'
+import { MIN_PHOTOS } from '../lib/photos'
 import type { FamilyData } from '../lib/family'
 
 export interface Image {
@@ -384,7 +385,7 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
  *  name + birthdate → app/account) writes the row and derives the matching
  *  fields (preferred gender, age span, range), which is everything others()
  *  needs to place the user in pools. This — NOT a built profile — is the only
- *  hard gate before /home: a user with an account but no photos/bio browses
+ *  hard gate before /home: a user with an account but no photos browses
  *  freely (they simply cannot be seen or invite until they build one; see
  *  selectProfileBuilt).
  *
@@ -399,14 +400,21 @@ export function selectNeedsAccount(profile: UserProfile | null | undefined): boo
   return !profile || !profile.name || !profile.birth_date
 }
 
-/** A profile is BUILT once it carries a non-empty bio — the last step of the
- *  onboarding build flow, saved together with the (2-6) photos. This is the
- *  single marker for "full member": while false the menu shows the purple
- *  build-profile CTA in place of the avatar and the invite prompt opens the
+/** A profile is BUILT once it carries MIN_PHOTOS photos — and that is the
+ *  WHOLE definition (user directive 2026-07-31). The bio is optional: it used
+ *  to be the marker (a non-empty bio, saved last), which made the one field
+ *  nobody has to fill in the thing that decided whether the account worked at
+ *  all — and it disagreed with itself the moment the preview's inline editor
+ *  let a built profile clear its bio back to null.
+ *
+ *  This is the single marker for "full member": while false the dock's profile
+ *  key wears its dot and routes to /onboarding, the Circles key is faded, the
+ *  visibility row reads 'unbuilt', and the invite prompt opens the
  *  build-profile popup instead of sending. Matches the server's profileComplete
- *  gate (app/index.ts) one-for-one. */
+ *  gate (app/index.ts) and others()'s pool filter one-for-one — all three state
+ *  MIN_PHOTOS, and none of them may state it alone. */
 export function selectProfileBuilt(profile: UserProfile | null | undefined): boolean {
-  return !!(profile && profile.bio && profile.bio.trim() !== '')
+  return (profile?.images?.length ?? 0) >= MIN_PHOTOS
 }
 
 export function selectIsHidden(profile: UserProfile | null | undefined): boolean {
@@ -419,9 +427,10 @@ export function selectIsHidden(profile: UserProfile | null | undefined): boolean
  *
  *  Two different facts put a user out of the pool and the app must not present
  *  one as the other:
- *   • 'unbuilt' — the profile was never built. others() drops a photo-less row
- *     from every candidate pool and the server refuses to seed such a user a
- *     viewer (profileComplete, app/index.ts), so they are just as unseen as a
+ *   • 'unbuilt' — the profile was never built. others() drops a row with fewer
+ *     than MIN_PHOTOS photos from every candidate pool and the server refuses
+ *     to seed such a user a viewer (profileComplete, app/index.ts), so they
+ *     are just as unseen as a
  *     user who hid on purpose. Saying "I am visible" to them is a lie, and it
  *     is the one that costs the most: they wait for a viewer that can never
  *     arrive. It leads, because it also decides whether the control may be

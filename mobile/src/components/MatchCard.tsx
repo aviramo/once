@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
-import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard } from 'react-native'
+import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, type GestureResponderEvent } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
@@ -9,21 +9,24 @@ import { PullScrollView, PullContext } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
-import { t, isRTL } from '../i18n'
+import { t, genderize, isRTL } from '../i18n'
 import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
-import { BIO_MIN, BIO_MAX } from '../lib/bio'
+import { BIO_MAX } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import { buildFamilySegments } from './FamilyCard'
-import { Chip, useChipPadding, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, ShieldIcon, GroupsIcon } from './icons'
+import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot, type ChipEndAction } from './Chip'
+import { HeartIcon, ShieldIcon, GroupsIcon, CloseIcon } from './icons'
+import type { TapPoint } from './TapMenu'
 import { sharedCircle, useMyFriendCount } from '../lib/communities'
 import { RoundButton } from './RoundButton'
-import { SheetTitle, SheetActions } from './BottomSheet'
+import { SheetTitle } from './BottomSheet'
+import { OptionStrip, type StripOption } from './OptionStrip'
 import { EditableText } from './EditableText'
-import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, SCROLL_AT_TOP_PX, SHEET_GAP, chromeTop, lh, bottomGap } from '../tokens'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, SCROLL_AT_TOP_PX, SHEET_GAP, DOCK_SHADOW, chromeTop, lh, bottomGap } from '../tokens'
 import { PAGE, PHOTO_CHROME, INK, SURFACE, WHITE, INK_DIM, INK_SUBTLE, LIFT_SHADOW } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
+import { useSecsLeft, formatClock } from '../lib/countdown'
 
 // Display-only card for non-resting states. Action buttons live in the
 // home screen's pinned bottom bar so they share spacing + positioning with
@@ -34,7 +37,7 @@ const SCROLL_TO_END_MS = 1400
 // One round icon-button overlaid on the hero photo. CardActionStack stacks
 // these vertically growing upward from the heart's anchor. Default usage is
 // a single heart button (invite affordance); the own-profile preview passes `[]`
-// — its adds are the buttons in the bar UNDER the card (ProfileActionBar). The
+// — the one thing to do about that card is the plus on its heading tile. The
 // button shape / size / shadow / press feedback live in RoundButton — this just
 // stacks them.
 // `onPress` is optional: when omitted, MatchCard fills it with its built-in
@@ -52,6 +55,42 @@ export type CardAction = {
   /** When true, the shared notification dot rides the button's top-END arc
    *  (the open-chat button uses it to signal new messages). */
   badge?: boolean
+}
+
+// ── The invitation countdown ───────────────────────────────────────────────
+// THE CLOCK RIDES THE NAME (user directive 2026-07-30): an invitation's
+// countdown is stated inside the name/age chip, ENDING it behind the chip's
+// hairline rule ("Moran, 46 | 07:44"), on the card of the person the
+// invitation concerns. The name leads and the clock finishes the line (user
+// directive 2026-07-31): the tile exists to say who this is, and a clock in
+// front of the name pushed the person out of the corner the card is read from.
+// It used to be a big centred readout inside the status
+// card that announces the invitation, which is a block the user scrolls off the
+// top of the card — so the one number with a deadline on it left the screen. The
+// chip is pinned to the card's top-END and never scrolls, so the clock is now
+// always where the person is.
+//
+// A COUNTDOWN IS ALWAYS RUNNING (user directive 2026-07-31). It used to be
+// held at a `frozen` 00:00 once the invitation was over, so that "this ended"
+// was said by the same clock — but a stopped clock states a number that cannot
+// change any more, in the one slot on the card that exists for a number that
+// can. What stands there on a card that is over is the X (see `ended` below),
+// which is the one thing left to do with the person on it.
+export type CardCountdown = {
+  expiresAt?: string | null
+  /** Fired once, the moment the clock reaches zero. */
+  onLapsed?: () => void
+}
+
+// Its own component for one reason: A SECOND OF THE COUNTDOWN RE-RENDERS THE
+// CLOCK AND NOTHING ELSE. The card it stands on measures photo boxes, holds a
+// reel and paints a profile — none of that may be re-rendered once a second — so
+// the interval lives down here, below the Chip, and reaches it as a render slot
+// (Chip's renderAfterRule) rather than as a string the card would recompute.
+function InviteCountdown({ countdown, color }: { countdown: CardCountdown; color: string }) {
+  const { expiresAt, onLapsed } = countdown
+  const secsLeft = useSecsLeft(expiresAt ?? null, onLapsed)
+  return <Text style={[styles.countdown, { color }]}>{formatClock(secsLeft)}</Text>
 }
 
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
@@ -81,18 +120,22 @@ export type BioEdit = {
   value: string
   /** Server round-trip in flight — locks the field. */
   saving?: boolean
-  /** Called with the normalized bio once on blur, only when it changed and
-   * is at least BIO_MIN chars. `null` is reserved for a cleared bio (never
-   * produced today since sub-min reverts, but the contract allows it). */
+  /** Called with the normalized bio when Update is pressed, only when it
+   * changed. `null` is a CLEARED bio — a real answer since 2026-07-31, when
+   * the bio stopped being required at all. */
   onCommit: (next: string | null) => void
 }
 
 function BioField({
   edit,
+  isMale,
   onFocusRequested,
   onPhoto = false,
 }: {
   edit: BioEdit
+  /** Whose card this is, for the placeholder's gendered verb. Only ever the
+   * user's own — the field is editable on the self preview alone. */
+  isMale?: boolean | null
   /** Ask the parent card to scroll this field above the keyboard. */
   onFocusRequested: () => void
   /** When rendered inside the on-photo bio chip (own-profile preview), the
@@ -101,20 +144,25 @@ function BioField({
    * bubble (own-profile editor with a single photo). */
   onPhoto?: boolean
 }) {
-  // Thin wrapper over the shared EditableText: pass the bio's min/max, i18n
-  // labels and the card's bio styles so the card stays pixel-identical while
-  // the draft/commit/Update behavior lives in one place (also used by the group
+  // Thin wrapper over the shared EditableText: pass the bio's cap, i18n labels
+  // and the card's bio styles so the card stays pixel-identical while the
+  // draft/commit/Update behavior lives in one place (also used by the group
   // description editor).
+  //
+  // NO MINIMUM AND allowEmpty (user directive 2026-07-31): the bio is optional,
+  // so clearing the field is a save that commits null, exactly like the group
+  // description. There is no hint slot to fill either — a minLabel would state
+  // a requirement that no longer exists.
   return (
     <EditableText
       value={edit.value}
       saving={edit.saving}
       onCommit={edit.onCommit}
-      min={BIO_MIN}
+      min={0}
+      allowEmpty
       max={BIO_MAX}
-      placeholder={t('bio.placeholder')}
+      placeholder={genderize(t('bio.placeholder'), isMale)}
       updateLabel={t('bio.update')}
-      minLabel={t('bio.min')}
       // On-photo: omitted, so the editor follows the writing direction exactly
       // like the static bio it must be pixel-identical to. The white fallback
       // bubble is centred text, so its editor is too.
@@ -278,8 +326,11 @@ type MatchCardProps = {
    * continuous tone instead of revealing the parent's white. */
   footerBg?: string
   /** When provided, each photo becomes tappable and the callback receives the
-   * photo's index in `match.images` (own-profile preview / edit mode). */
-  onPhotoTap?: (imageIndex: number) => void
+   * photo's index in `match.images` (own-profile preview / edit mode) plus the
+   * point that was touched, in window coordinates — what the photo's actions open
+   * out of (see TapMenu). The card knows where the finger was and nothing else
+   * does, so it is the card that says. */
+  onPhotoTap?: (imageIndex: number, at: TapPoint) => void
   /** When provided, the family/kids card becomes tappable (own-profile preview). */
   onFamilyTap?: () => void
   /** When provided, the shared-circle chip becomes tappable and opens the popup
@@ -298,13 +349,41 @@ type MatchCardProps = {
    * own-profile preview, whose adds are the buttons in the bar UNDER the card
    * (ProfileActionBar). */
   actions?: CardAction[]
-  /** An action chip pinned UNDER the name/age heading at the card's top-END
-   * (chat state only, user directive 2026-07-30 — it used to stand beside the
-   * name). A solid PURPLE tile with the same soft lift shadow the on-photo chips
-   * cast — today the "End chat" control, moved onto the card from the chat
-   * sheet header (user directive 2026-07-26) so ending the conversation lives
-   * with whom it ends. */
-  headingAction?: { label: string; onPress: () => void }
+  /** An action riding INSIDE the name/age chip, as the tile's own purple trailing
+   * EDGE (user directive 2026-07-30 — it used to be a second solid chip standing
+   * on a row under the name, and two tiles stacked in one corner said "this
+   * person" twice). Two cards carry one: in chat it is "End chat", moved onto the
+   * card from the chat sheet header (user directive 2026-07-26) so ending the
+   * conversation lives with whom it ends; on your OWN preview it is a PLUS
+   * (user directive 2026-07-31) opening what you can add to the profile — the
+   * same block, because both are the one thing the heading tile lets you DO about
+   * the person it names, and on your own card that person is you. */
+  headingAction?: ChipEndAction
+  /** The live invitation countdown, drawn INSIDE the name/age chip after the
+   * name and age (see CardCountdown). Set by home for the three states that have
+   * a deadline — the invitation this user sent, the one he received, and the
+   * one he received. Absent everywhere else — including on a card that is
+   * OVER, whose tile carries the X below instead. */
+  countdown?: CardCountdown
+  /** THIS PERSON IS OVER, AND THE WAY BACK IS AT THE TOP OF THE CARD (user
+   * directive 2026-07-31). Set for exactly the states whose topBlock is the
+   * "back to the game" message card: an invitation that lapsed, one that was
+   * declined or missed, a chat the other side ended. The heading tile's purple
+   * edge is then an X — the very block chat's "End chat" and the own card's
+   * plus stand in — IN PLACE OF the clock, which is either stopped or was never
+   * there at all (an ended chat has no deadline). It says the one thing left to
+   * do with this candidate.
+   *
+   * IT IS THE HANDLER ITSELF, not a flag beside one: pass what the message
+   * card's own button carries and its presence is what draws the X, so the mark
+   * and the button under it cannot disagree about whether this person is
+   * finished with. The X asks the card where it is: scrolled INTO the profile it
+   * scrolls back up to the message (the card's own scroll — no host holds a ref
+   * for it), and at the top, where that message and its button are already in
+   * front of the user, it simply IS that button (user directive 2026-07-31).
+   * Pressing it twice therefore always ends in the same place, which is what an
+   * X on a finished card promises. */
+  endedBack?: () => void
   /** When provided, a report (flag) RoundButton is overlaid at the TOP corner
    * of the hero photo (the chips side), in EVERY state — separate from the
    * bottom action stack so the report affordance lives in one consistent
@@ -337,9 +416,20 @@ type MatchCardProps = {
   /** The shell's safe-area top inset, when floating chrome is painted over this
    * card (home's hamburger, an OverlaySheet's close X). Two things derive from
    * it and must stay in lockstep, which is why it is one prop rather than two:
-   * the card's own top-END row lines up WITH the chrome, and the topBlock
+   * the card's own heading row lines up WITH the chrome, and the topBlock
    * status card starts BELOW it. 0 / omitted = no chrome above the card. */
   chromeInset?: number
+  /** THE CARD DOES NOT STAND ON THE SCREEN EDGE: something of the app's own is
+   * under it — home's dock, a profile page's ProfileActionBar — and that thing
+   * owns the clearance off the system's bottom band. The on-photo set then ends
+   * at the card's own MD gutter, the same inset its other three edges take,
+   * instead of spending BOTTOM_AIR on furniture that is not below it (that dead
+   * strip between the chat button and the dock, user directive 2026-07-30).
+   * Left off by a host whose card genuinely runs to the bottom of the screen —
+   * a profile page whose bar renders nothing (`profileActionBarShows`) — which
+   * must still clear a drawn navigation bar itself: not doing that is what
+   * sliced these very buttons in half on a 3-button Redmi (2026-07-29). */
+  bottomChrome?: boolean
 }
 
 /** Imperative handle exposed to parents that need to drive the card's
@@ -363,16 +453,20 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   bioEdit,
   actions,
   headingAction,
+  countdown,
+  endedBack,
   onReport,
   isForKids,
   viewerLocationType,
   self = false,
   cardHeight,
   chromeInset = 0,
+  bottomChrome = false,
 }: MatchCardProps, ref) {
-  // The bio tile is a chip (an oversized one), so its padding box comes from the
-  // chip itself — see useChipPadding.
-  const bioPad = useChipPadding()
+  // (The bio's padding box used to be pulled from `useChipPadding` here, so the
+  // oversized tile could not drift from the pill chips beside it. Those chips are
+  // BLOCKS now and the bio is one too, so its box is the flat CHIP_BLOCK_PAD —
+  // stated in `photoBioCard` below, still from the chip's own constant.)
   // Top of the shell's floating chrome, and the bottom of the band it occupies.
   // The card's top-END row aligns with the first; the topBlock clears the second.
   // The line itself is `chromeTop()` in tokens — the same one the hamburger, a
@@ -594,13 +688,28 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const effectiveCardH = cardHeight && cardHeight > 0 ? cardHeight : cardH
   const photoHeight = Math.max(280, effectiveCardH - bottomInset)
   const safeBottomInset = useBottomInset()
-  // The first photo runs to the bottom of the card (callers pass bottomInset=0
-  // to keep it full-bleed), so the on-photo overlay (name + chips + heart)
-  // must clear the home indicator on its own. This offset is shared by the
-  // chips AND the heart, so the chips' extra breathing room is NOT added here
-  // — it lives on the chip column alone (infoLeft), or the heart rides up with
-  // it and leaves its anchored position.
-  const overlayBottomOffset = bottomGap(safeBottomInset, MD)
+  // WHERE THE ON-PHOTO SET ENDS. The first photo runs to the bottom of the card
+  // (callers pass bottomInset=0 to keep it full-bleed), so this one offset is
+  // the bottom gutter of everything painted on it — the chips AND the heart, so
+  // the chips' extra breathing room is NOT added here: it lives on the chip
+  // column alone (infoLeft), or the heart rides up with it and leaves its
+  // anchored position.
+  //
+  // WITH FURNITURE UNDER THE CARD IT IS THE CARD'S OWN GUTTER, MD (user
+  // directive 2026-07-30) — the very inset its other three edges take
+  // (`photoBioCard.start`, `actionStackFixed.end`, `topEndFixed.padding`), so
+  // the set is bedded in the photo evenly on all four sides. It used to be
+  // `bottomGap` unconditionally, from the days when a card DID run to the
+  // bottom of the screen and had to clear the system band itself; home's dock
+  // stands there now (and a profile page's ProfileActionBar does, with its own
+  // `bottomGap`), so the card was buying a second clearance for a band that is
+  // nowhere near it and leaving a dead strip of photo between the chat button
+  // and the dock — which is exactly what the user marked.
+  //
+  // Without it, `bottomGap` still: a card with nothing under it reaches the
+  // screen edge and a drawn navigation bar would swallow these buttons whole
+  // (the 3-button Redmi, 2026-07-29). See the `bottomChrome` prop.
+  const overlayBottomOffset = bottomChrome ? MD : bottomGap(safeBottomInset, MD)
   // The extra lift under the bottom-START info (fact chips AND the bio tile)
   // exists ONLY to clear the floating heart's lane (user directive 2026-07-30):
   // a card with no floating action has nothing down there to clear, so its
@@ -616,10 +725,17 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // subject are 'device', else it reads as anchored to a fixed address. Either
   // half may be missing and the chip still renders with the other one — only a
   // phrase with NEITHER half comes back empty, and then the chip is dropped.
+  //
+  // NEVER ON YOUR OWN CARD (user directive 2026-07-31). The chip answers "how far
+  // away is this person and when were they last about" — of yourself it can only
+  // ever say "here, now", which is the one thing the reader already knows, and it
+  // was the last row of the fact tile on the profile preview. It is stated here
+  // rather than as a `hideProximity` at the preview's call site so a `self` card
+  // anywhere in the app is the same card.
   const subjectLocationType = resolveLocationType(match)
   const viewerType: LocationType = viewerLocationType ?? 'device'
   const hasDistance = match.distance != null && !isNaN(match.distance)
-  const proximityStr = hideProximity
+  const proximityStr = hideProximity || self
     ? ''
     : formatProximity(match.distance, timeIso, match.is_male, viewerType, subjectLocationType, hideTime)
   const proximityLive = isDistanceHere(match.distance) || (!hideTime && isLastSeenJustNow(timeIso))
@@ -641,6 +757,16 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // rather than threaded through every call site.
   const myFriends = useMyFriendCount()
   const circle = useMemo(() => sharedCircle(match, myFriends), [match.group_name, match.group_members, match.group_extra, match.friend_name, match.friend_extra, match.is_male, myFriends])
+
+  // The circle's name with the "+N more" pill FLOWING after it (user directive
+  // 2026-07-30): the same segment list the kids' ages ride, so the pill sits
+  // beside the last WORD of the name wherever that word lands, instead of after
+  // the label's whole box — which on a wrapped name left it stranded a dead
+  // half-tile away from the circle it counts.
+  const circleSegments = useMemo(
+    () => (circle ? [{ text: circle.label }, ...(circle.extra ? [plusBadge(circle.extra)] : [])] : []),
+    [circle],
+  )
 
   // Several facts in one label; Chip's phraseWrap decides where it breaks.
   const familySegments = useMemo(
@@ -712,9 +838,13 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     Keyboard.dismiss()
     return true
   }, [])
-  const handlePhotoTap = useCallback((imageIndex: number) => {
+  const handlePhotoTap = useCallback((imageIndex: number, e: GestureResponderEvent) => {
     if (swallowTapWhileEditing()) return
-    onPhotoTap?.(imageIndex)
+    // Window coordinates, straight off the touch: what opens is a menu that grows
+    // out of the finger (TapMenu), and this is the only place that knows where it
+    // was. Read on the frame of the tap — the card scrolls and rises, so a point
+    // measured later is a point somewhere else.
+    onPhotoTap?.(imageIndex, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })
   }, [swallowTapWhileEditing, onPhotoTap])
   const handleFamilyTap = useCallback(() => {
     if (swallowTapWhileEditing()) return
@@ -743,12 +873,49 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
     bioFocusedRef.current = false
     setBioFocused(false)
   }, [keyboardOpen])
+  // Read from `onLayout`, which is not a render — assigned during render, the
+  // same way `photoIsPageRef` is. See the card's onLayout for what it gates.
+  const keyboardOpenRef = useRef(false)
+  keyboardOpenRef.current = keyboardOpen
 
-  // Let parents drive the inner scroll back to the top (skip-hint "got it"
-  // returns the user to where the swipe-down-to-skip gesture is armed).
-  useImperativeHandle(ref, () => ({
-    scrollToTop: () => { scrollRef.current?.scrollTo({ y: 0, animated: true }) },
-  }), [])
+  // Back to the top of the card, animated. TWO things ask for it and they ask
+  // for the same one: a parent driving the inner scroll (the skip-hint's "got
+  // it" returns the user to where the swipe-down-to-skip gesture is armed), and
+  // the heading tile's own X on a card that is over (`ended`).
+  const scrollToTop = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true })
+  }, [])
+  useImperativeHandle(ref, () => ({ scrollToTop }), [scrollToTop])
+  // THE HEADING TILE'S PURPLE EDGE, one block with three tenants. Chat puts
+  // "End chat" here and your own card puts the plus; a card that is OVER puts
+  // an X, and that one wins — the candidate is no longer relevant, so an action
+  // about carrying on with them cannot also be standing there.
+  //
+  // ICON.round, which is the size a small chrome circle carries its close X at
+  // (the sheet's own dismiss, chat's 3-dot): this block is exactly that circle
+  // tall (CHIP_HEIGHT is ROUND_BUTTON_SIZE_SM), so the same mark in a tile of
+  // the same height takes the same size and the app's one X reads identically
+  // wherever it stands. It went in at the plus's ICON.xxl — the half-step UP a
+  // plus needs because its cross paints only the middle of its box — and an X
+  // does not need it: its diagonals carry the whole width of the mark's ink, so
+  // at 24 it read as a big X crammed into the tile (user, 2026-07-31).
+  //
+  // WHERE IT TAKES YOU DEPENDS ON WHERE THE CARD IS. Scrolled into the profile,
+  // it scrolls back to the message that explains the ending. Already at the top,
+  // that message is on screen with its button under it, so a second X would be a
+  // scroll to where we already are — it does what the button does instead (user
+  // directive 2026-07-31). Read live off `scrollYRef`, with the same arrival
+  // slack every other at-top question in the app uses.
+  const chipEndAction: ChipEndAction | undefined = endedBack
+    ? {
+        renderIcon: c => <CloseIcon color={c} size={ICON.round} />,
+        a11yLabel: t('home.a11y.endedMessage'),
+        onPress: () => {
+          if (scrollYRef.current <= SCROLL_AT_TOP_PX) endedBack()
+          else scrollToTop()
+        },
+      }
+    : headingAction
   // Snap the scroll back to the top whenever a new profile is shown. The
   // ScrollView is the same instance across profile swaps, so a previously
   // scrolled position from card A would otherwise carry over into card B and
@@ -767,10 +934,15 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const viewportHRef = useRef(0)
   // The reel is a pager whose page IS the viewport: every photo is `photoHeight`
   // tall and the snap points are multiples of it. So when the viewport height
-  // changes under a resting scroll — which now happens every time the keyboard
-  // opens or closes, since the page shrinks to it — the snap points move out
-  // from under the offset and the reel is left showing the seam between two
-  // photos. Re-pin to the page it was on.
+  // changes under a resting scroll the snap points move out from under the
+  // offset and the reel is left showing the seam between two photos. Re-pin to
+  // the page it was on.
+  //
+  // The KEYBOARD is no longer one of those changes — the card refuses to be
+  // re-measured while one is up (see its onLayout), so the grid holds still
+  // through an edit and there is no seam to come back from. What is left here
+  // is a genuine change of the card's box: the action bar under it appearing or
+  // going away as the last add is spent.
   //
   // Skipped while the bio is focused, because the shared reveal in
   // PullScrollView owns the scroll position then (it has just lifted the field
@@ -891,7 +1063,27 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   return (
     <View
       style={[styles.wrap, !ready && styles.hidden]}
-      onLayout={e => setCardH(e.nativeEvent.layout.height)}
+      onLayout={e => {
+        // THE REEL'S PAGE HEIGHT IS MEASURED WITH THE KEYBOARD DOWN, and the
+        // keyboard never re-measures it: a shorter window CROPS this card, it
+        // does not resize its pages. Two reasons, and either alone is enough.
+        //
+        // The shrink is driven on the UI thread (a shared value on the root's
+        // padding), so what reaches JS is an unreliable trickle of onLayout
+        // events rather than a value per frame ending on the truth — the card
+        // was left sized to a mid-animation FRAME of a keyboard that had
+        // already gone, and painted two photos in one screen with the action
+        // bar crammed under them (Pixel, 2026-07-30). And a pager whose page IS
+        // the viewport re-flows its whole grid under a resting offset every
+        // time that viewport moves, which is the same thing onboarding already
+        // refuses to do with its `measuredOnceRef`.
+        //
+        // Rejecting the measurement leaves the last one taken with the keyboard
+        // down, which IS the card's full height — so there is nothing to
+        // restore when the keyboard leaves.
+        if (keyboardOpenRef.current && cardH > 0) return
+        setCardH(e.nativeEvent.layout.height)
+      }}
     >
       <AnimatedPullScrollView
         ref={scrollRef}
@@ -988,7 +1180,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               {onPhotoTap ? (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1)}
+                  onPress={e => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1, e)}
                 />
               ) : chipsToggleable ? (
                 // Remote match card: a tap on the open photo toggles the
@@ -1008,16 +1200,15 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               taps on empty regions fall through to the photo. */}
           <View
             // box-none so taps on empty regions fall through to the photo's
-            // toggle Pressable. THE TILES THEMSELVES DO NOT (user directive
+            // toggle Pressable. THE TILE ITSELF DOES NOT (user directive
             // 2026-07-30): a chip is the thing the user is reading, so a tap on
             // one must never be the tap that takes it away — only the open photo
-            // toggles. Each fact line is box-none as well, so the slack beside a
-            // short chip still reaches the photo while the chip's own tile (a
-            // real view: white ground + lift shadow, and a Pressable when it has
-            // an action) swallows the touch where it is painted. While the set is
-            // HIDDEN every line drops to 'none': the chips are zoomed away, so a
-            // tap where one used to sit has to reach the photo and bring the
-            // whole set back.
+            // toggles. The fact tile is 'auto' and swallows the touch everywhere
+            // it is painted, which since the facts were merged into ONE tile
+            // (see ChipStack) is the whole white block, its widest row included.
+            // While the set is HIDDEN it drops to 'none': the tile is zoomed
+            // away, so a tap where it used to sit has to reach the photo and
+            // bring the whole set back.
             pointerEvents="box-none"
             style={[styles.infoOverlay, { paddingBottom: overlayBottomOffset }]}
           >
@@ -1035,65 +1226,66 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   scale would have dragged the column toward the middle of the
                   screen instead of shrinking it in place. */}
               <Animated.View pointerEvents="box-none" style={[styles.chipsStack, chipsAnimStyle]}>
-                {/* The chip column reads TOP-DOWN: circle → kids/family →
-                    time/distance (user directive 2026-07-30). How we are already
-                    connected comes first — it is the fact that decides whether
-                    the rest is worth reading — then who is in this person's life,
-                    and the where/when last, since it is the one fact that is true
-                    of any stranger.
+                {/* ONE TILE, NOT THREE (user directive 2026-07-30): these facts
+                    are one set of facts about one person, so they share a single
+                    white tile and the app's hairline stands between the KINDS —
+                    see ChipStack, which owns the tile, the rules and the rows'
+                    shared ground. Three separate tiles read as three unrelated
+                    labels stacked in the corner.
 
-                    The circle we share: ONE chip for every kind of connection
+                    The set reads TOP-DOWN: circle → kids/family → time/distance
+                    (user directive 2026-07-30). How we are already connected
+                    comes first — it is the fact that decides whether the rest is
+                    worth reading — then who is in this person's life, and the
+                    where/when last, since it is the one fact that is true of any
+                    stranger.
+
+                    'auto' while the set is up: the tile is painted white
+                    everywhere its widest row reaches, so it swallows its own
+                    touch there (a chip never carries the tap that takes it away)
+                    — and RNGH hit-tests through pointerEvents too, so this is
+                    also what lets the circle row's tap be recognized. 'none' when
+                    hidden, so a reveal-tap passes straight through to the photo.
+
+                    The circle we share: ONE row for every kind of connection
                     (user directive 2026-07-29) — a shared group and a mutual
                     friend answer the same question, so "my friends" is ranked
                     among the groups as a group and the SMALLEST circle is the one
                     named (the rule lives in lib/communities.ts → sharedCircle).
-                    "+N" counts the other circles; tapping lists them all. Same
-                    on-photo tile as the chips under it, wearing the circles
-                    feature's own interlaced-rings mark. Interactive via a native
-                    RNGH tap (not the Chip's Pressable) so the popup opens the
-                    instant it's tapped, without waiting on the scroll/pull pan.
-                    'auto' so the gesture receives the touch while the chips are
-                    visible (RNGH hit-tests through pointerEvents too, so box-none
-                    would leave the tap unrecognized); when hidden it drops to
-                    'none' so a reveal-tap passes through. */}
-                {circle ? (
-                  <GestureDetector gesture={circleTapGesture}>
-                    <View
-                      pointerEvents={chipsHidden ? 'none' : (onCircleTap ? 'auto' : 'box-none')}
-                      style={styles.chipsLine}
-                    >
-                      <Chip
-                        renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
-                        text={circle.label}
-                        plusCount={circle.extra}
-                        onPhoto
-                      />
-                    </View>
-                  </GestureDetector>
-                ) : null}
-                {familySegments.length ? (
-                  <View pointerEvents={chipsHidden ? 'none' : 'box-none'} style={styles.chipsLine}>
+                    "+N" counts the other circles; tapping lists them all. It
+                    wears the circles feature's own interlaced-rings mark, and is
+                    interactive via a native RNGH tap (not the Chip's Pressable)
+                    so the popup opens the instant it's tapped, without waiting on
+                    the scroll/pull pan. */}
+                <ChipStack onPhoto pointerEvents={chipsHidden ? 'none' : 'auto'}>
+                  {circle ? (
+                    <GestureDetector gesture={circleTapGesture}>
+                      <View style={styles.chipsLine}>
+                        <Chip
+                          renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
+                          segments={circleSegments}
+                        />
+                      </View>
+                    </GestureDetector>
+                  ) : null}
+                  {familySegments.length ? (
                     <Chip
                       renderIcon={c => <KidsIcon color={c} />}
                       segments={familySegments}
-                      onPhoto
                       onPress={onFamilyTap ? handleFamilyTap : undefined}
                     />
-                  </View>
-                ) : null}
-                {proximityStr ? (
-                  <View pointerEvents={chipsHidden ? 'none' : 'box-none'} style={styles.chipsLine}>
+                  ) : null}
+                  {proximityStr ? (
                     <Chip
                       renderIcon={c => hasDistance
                         ? (subjectLocationType === 'work' ? <WorkIcon color={c} /> : subjectLocationType === 'home' ? <HomeIcon color={c} /> : <PinIcon color={c} />)
                         : <ClockIcon color={c} />}
                       text={proximityStr}
                       tone="neutral"
-                      onPhoto
                       renderTrailing={proximityLive ? (c => <PresenceDot color={c} />) : undefined}
                     />
-                  </View>
-                ) : null}
+                  ) : null}
+                </ChipStack>
               </Animated.View>
             </View>
           </View>
@@ -1118,7 +1310,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               {onPhotoTap ? (
                 <Pressable
                   style={StyleSheet.absoluteFill}
-                  onPress={() => handlePhotoTap(section.imageIndex)}
+                  onPress={e => handlePhotoTap(section.imageIndex, e)}
                 />
               ) : chipsToggleable ? (
                 // Same toggle as the hero: a tap on this photo fades its bio chip
@@ -1143,7 +1335,6 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                   pointerEvents={chipsHidden ? 'none' : 'auto'}
                   style={[
                     styles.photoBioCard,
-                    bioPad.style,
                     {
                       end: showFloatingAction ? ROUND_BUTTON_SIZE + MD + MD : MD,
                       bottom: overlayBottomOffset + infoBottomLift,
@@ -1151,9 +1342,8 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
                     chipsToggleable && chipsAnimStyle,
                   ]}
                 >
-                  {bioPad.probe}
                   {bioEditable && bioEdit ? (
-                    <BioField edit={bioEdit} onFocusRequested={onBioFocusRequested} onPhoto />
+                    <BioField edit={bioEdit} isMale={match.is_male} onFocusRequested={onBioFocusRequested} onPhoto />
                   ) : (
                     <Text style={styles.photoBioText}>{match.bio}</Text>
                   )}
@@ -1169,7 +1359,7 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               >
                 <View style={styles.aboutBubble}>
                   {bioEditable && bioEdit ? (
-                    <BioField edit={bioEdit} onFocusRequested={onBioFocusRequested} />
+                    <BioField edit={bioEdit} isMale={match.is_male} onFocusRequested={onBioFocusRequested} />
                   ) : (
                     <Text style={styles.aboutText}>{section.value}</Text>
                   )}
@@ -1206,91 +1396,87 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
           })()}
         </View>
       ) : null}
-      {/* Top-END fixed column: the name/age heading, pinned opposite the
-          shell's hamburger (top-START) and OUT of the scroll so it stays put
-          while the profile scrolls under it (user directive 2026-07-25). Its
-          white tile matches the round overlay buttons — same PHOTO_CHROME. */}
-      {identityChipText || onReport || headingAction ? (
+      {/* THE CARD'S HEADING: ONE TILE IN THE TOP-START CORNER (user directive
+          2026-07-30). Everything that names this person and everything that can
+          be done ABOUT the naming shares a single chip, read start-to-end: the
+          report flag, the name and age, the invitation countdown, and in chat the
+          "End chat" block on its trailing edge. It stands at the START because that is where
+          reading begins; it sat at the END for as long as the shell owned the
+          other corner (the hamburger, deleted 2026-07-30), and there is nothing
+          to sit opposite any more. It is OUT of the scroll, so it stays put while
+          the profile scrolls under it (user directive 2026-07-25), and its white
+          matches the round overlay buttons (same PHOTO_CHROME).
+
+          The box is stretched to the card's full width so a long name can wrap;
+          `box-none` keeps it from eating every tap across the top of the photo —
+          only the tile standing in it does. That is also what keeps it off the
+          invite status card underneath: with the box transparent and the chip no
+          longer toggling, a tap on the status card reaches the card and stays
+          there. */}
+      {identityChipText || onReport || countdown || chipEndAction ? (
         <View
           pointerEvents="box-none"
-          style={[styles.topEndFixed, chromeRowTop > 0 && { paddingTop: chromeRowTop }]}
+          style={[styles.topStartFixed, chromeRowTop > 0 && { paddingTop: chromeRowTop }]}
         >
-          {identityChipText || onReport ? (
-            // The heading row: the name/age chip, alone, pinned at the END.
-            // box-none: the row is stretched to the card's full width so a long
-            // name can wrap, and that box must not eat every tap across the top
-            // of the photo — only the tile standing in it does. It is also what
-            // keeps this row off the invite status card underneath: with the row
-            // transparent and the chip no longer toggling, a tap on the status
-            // card reaches the card itself and stays there.
-            <View pointerEvents="box-none" style={styles.headingRow}>
-              {identityChipText || onReport ? (
-                // The name/age chip fades with the fact chips on a toggleable
-                // (remote) card (user directive 2026-07-26): a tap on the photo
-                // clears the whole info set — facts AND identity — so the face is
-                // fully unobscured. flexShrink on the wrapper keeps the chip's
-                // shrink/wrap chain intact through the extra View. The own-profile
-                // preview (not toggleable) is unaffected — it never zooms away.
-                // 'auto' while it is painted: the tile swallows its own tap and
-                // does NOT toggle (user directive 2026-07-30) — it holds the
-                // report flag, and it is also the one chip that floats over the
-                // invite status card, where a toggle read as the status card
-                // itself flipping the chips. Only the flag inside it acts (a
-                // nested Pressable that wins the responder over the tile). While
-                // hidden everything goes off, so a tap there reveals.
-                <Animated.View
-                  pointerEvents={chipsToggleable && chipsHidden ? 'none' : 'auto'}
-                  style={[styles.identityChipWrap, chipsToggleable && chipsAnimStyle]}
-                >
-                  <Chip
-                    text={identityChipText}
-                    tone="neutral"
-                    onPhoto
-                    // Regular weight like every other chip (user directive
-                    // 2026-07-29). Its POSITION is what makes it the heading —
-                    // pinned to the card's top-END, alone up there opposite the
-                    // shell's hamburger — so the weight was saying a second time
-                    // what the corner already says.
-                    // The report flag rides INSIDE the heading chip as a small
-                    // TRAILING glyph (user directive 2026-07-29), replacing the
-                    // round button that used to sit at the bottom-START of the
-                    // last photo: reporting is a footnote to "who is this", not
-                    // a second card-level control competing with the heart. The
-                    // glyph is the tile's ONLY action: the rest of it is inert
-                    // (no onPress, so Chip stays a plain View), because a tap on
-                    // a chip must not hide it.
-                    renderTrailing={onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
-                    onTrailingPress={onReport}
-                  />
-                </Animated.View>
-              ) : null}
-            </View>
-          ) : null}
-          {headingAction ? (
-            // "End chat" stands BELOW the name (user directive 2026-07-30),
-            // second row of the same top-END column, not beside it: the pair
-            // side by side is as wide as the two labels together, and at a large
-            // font scale that ran straight under the shell's hamburger. A column
-            // is bounded by the widest single chip instead, so each tile keeps
-            // its own row and the hamburger's corner stays clear whatever the
-            // name's length or the font scale.
-            //
-            // It fades with the rest of the info set on a toggleable card (user
-            // directive 2026-07-26). While hidden its taps are off, so a tap
-            // where it sat reveals the overlays again instead of ending the chat
-            // by accident.
-            <Animated.View
-              pointerEvents={chipsToggleable && chipsHidden ? 'none' : 'auto'}
-              style={[styles.headingChipWrap, chipsToggleable && chipsAnimStyle]}
-            >
-              <Chip
-                tone="solid"
-                onPhoto
-                text={headingAction.label}
-                onPress={headingAction.onPress}
-              />
-            </Animated.View>
-          ) : null}
+          {/* WHO THIS IS NEVER LEAVES THE SCREEN (user directive 2026-07-30).
+              This one chip is OUT of the tap-toggle: a tap on the photo zooms the
+              fact chips and the bio card away, and the heading stays exactly
+              where it is. It used to fade with them (2026-07-26, "clear the whole
+              info set so the face is unobscured") — but this tile is the card's
+              heading, and it now carries the one number on the screen with a
+              deadline on it and the only way out of a conversation. A face with
+              nothing naming it, and a clock or an End that a stray tap could take
+              away, are all worse than the sliver of photo this covers.
+
+              So it is always painted and always live: the tile swallows its own
+              tap and does NOT toggle — only the pieces INSIDE it act (the report
+              flag and the End block, each its own Pressable winning the responder
+              over the tile). Nothing is gated on `chipsHidden` any more: a chip
+              that never zooms away leaves no footprint for a reveal tap to fall
+              through, so there is nothing to switch off. flexShrink on the
+              wrapper keeps the chip's shrink/wrap chain intact through the extra
+              View. */}
+          <View style={styles.identityChipWrap}>
+            <Chip
+              text={identityChipText}
+              tone="neutral"
+              onPhoto
+              // Regular weight like every other chip (user directive
+              // 2026-07-29). Its POSITION is what makes it the heading —
+              // pinned to the card's top-END, alone up there opposite the
+              // shell's own corner — so the weight was saying a second time
+              // what the corner already says.
+              // The tile's own trailing EDGE, painted purple (user directive
+              // 2026-07-30): it used to be a second solid chip on a row under
+              // the name, and two tiles stacked in one corner said "this person"
+              // twice. The tile is read name-first and ENDS on the action. No
+              // rule between the two — the fill is already the division. Chat
+              // puts "End chat" here; your own preview puts the plus that opens
+              // what you can add (user directive 2026-07-31); a card that is over
+              // puts the X back to its message (`endedBack`, user directive
+              // 2026-07-31), which is what stands where the clock used to.
+              endAction={chipEndAction}
+              // The countdown ENDS the tile, after the name and behind the
+              // chip's hairline rule (user directive 2026-07-31): one tile
+              // saying who this is and how long is left with them. It LED the
+              // tile for a day — but the name is what the tile is FOR, and a
+              // clock standing in front of it pushed the person's name out of
+              // the corner the card is read from.
+              renderAfterRule={countdown ? c => <InviteCountdown countdown={countdown} color={c} /> : undefined}
+              // The report flag rides INSIDE the heading chip (user directive
+              // 2026-07-29), replacing the round button that used to sit at the
+              // bottom-START of the last photo: reporting is a footnote to "who
+              // is this", not a second card-level control competing with the
+              // heart. It is the tile's FIRST mark (user directive 2026-07-30) —
+              // it stood between the name and the "End chat" block, i.e. between
+              // two things that belong side by side, and a mark wedged between
+              // them read as belonging to neither. The rest of the tile is inert
+              // (no `onPress`, so Chip stays a plain View), because a tap on a
+              // chip must not hide it.
+              renderIcon={onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
+              onIconPress={onReport}
+            />
+          </View>
         </View>
       ) : null}
     </View>
@@ -1299,53 +1485,104 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
 
 // ── The bar under a profile card ───────────────────────────────────────────
 // THE block that stands under a full-screen profile card and carries what can be
-// done about the person on it: the decisions on a communities person page
-// (approve / make manager / remove) and the adds on your own preview (a photo,
-// family & kids — moved off the card's top-END chip column, user directive
-// 2026-07-30). One component, so a control under a face is placed and spaced the
-// same wherever the card is rendered.
+// done ABOUT the person on it: the decisions on a communities person page
+// (approve / make approver / remove). One component, so a control under a face is
+// placed and spaced the same wherever the card is rendered.
+//
+// THE ACTIONS ARE A STRIP, NOT A COLUMN OF BUTTONS (user directive 2026-07-31):
+// side by side, each a glyph with one small word under it, no tile behind either
+// of them, and the app's one hairline between. It is `OptionStrip` — literally
+// home's dock, which is the same object: a set of marks along the foot of a
+// surface, none of them what the surface is FOR. What stood here before was a
+// stack of full-width tinted pills, one of them (approve) solid purple, and a
+// page about a person read as a page asking a question. A person page asks
+// nothing; it shows someone, and states quietly what may be done about them.
+//
+// Your OWN preview used to stand on one too, carrying its two adds. It does not
+// any more (user directive 2026-07-31): an add is not a decision someone else's
+// page puts to you, it is a thing you go and do — so it is the plus on the card's
+// heading tile and a popup behind it, and the card fills the screen again
+// instead of paying for a permanent bar that states two one-off actions.
 //
 // It is the FOOT OF A POPUP, standing on a page — WHITE included (user directive
-// 2026-07-30): `SheetTitle` for the circle the person is standing in,
-// `SheetActions` for the buttons, the two gaps that belong to those
-// (SHEET_GAP.title above a title, SheetActions' own above the buttons), and the
-// popup's own SURFACE under all of it, so it can never state a rhythm or a
-// ground the popups don't. That white is what makes a set of buttons READ as a
-// set: every non-purple button in the app is a PAGE-tinted tile, and on a
-// PAGE-tinted page (the communities sheet) those tiles came out the same colour
-// as the ground they stood on — a person page's "make manager / remove" were
-// ink floating on the page. Only the gutter and the bottom gap are its own, and
-// the bottom gap is the app's one bottom gap (bottomGap over useBottomInset),
-// read HERE rather than passed in — a caller cannot get it wrong.
+// 2026-07-30): `SheetTitle` for the circle the person is standing in, and the two
+// gaps that belong to a popup's head (SHEET_GAP.title above a title, .actions
+// between it and what can be done), so the bar can never state a rhythm the
+// popups don't. The ground is the popup's own SURFACE — every popup in the app is
+// white, and this block is one. (It used to be defended by the tiles that stood
+// on it: a PAGE-tinted pill on a PAGE-tinted page was ink floating on the ground.
+// Those tiles are gone, and the white stands on the popup rule alone.) Only the
+// gutter and the bottom gap are its own, and the bottom gap is the app's one
+// bottom gap (bottomGap over useBottomInset), read HERE rather than passed in —
+// a caller cannot get it wrong.
 //
 // It is a SIBLING of the card, not a layer over it: the card takes the room that
 // is left, so the profile ends where the bar begins. With nothing to put in it
 // the bar does not render AT ALL and the profile fills the whole screen (user
 // directive 2026-07-30) — an empty bar used to leave a dead band under the photo.
-// Children.toArray drops the nulls callers pass for the actions a viewer's role
-// (or a full photo set) does not grant, so this is "is there anything to press",
-// not "was a children slot written": one add left renders one button.
-export function ProfileActionBar({ caption, children }: {
-  /** WHICH CIRCLE this person is standing in — a group's name, "my friends" —
-   *  or what the answer below is about. Absent on your own preview: the card is
-   *  yours, there is nothing to name. */
-  caption?: string
-  children: React.ReactNode
+// A caller builds its list by filtering on the viewer's role, so the question is
+// simply how long that list is: one action left renders one option, across the
+// whole strip, with no rule to draw.
+//
+// The question is asked from OUTSIDE too, which is why it is a function and not
+// four lines in the body: the card above the bar has to know whether it is
+// standing on it or on the screen edge (MatchCard's `bottomChrome`), and if the
+// two answered it separately they could disagree about who clears the
+// navigation band — leaving either a dead strip or a sliced button.
+export const profileActionBarShows = (caption: React.ReactNode, actions: StripOption[]) =>
+  !!caption || actions.length > 0
+
+export function ProfileActionBar({ caption, actions }: {
+  /** WHICH CIRCLE this person is standing in. A STRING is the popup title this
+   *  block has always been ("my friends"); a NODE is a heading that says more
+   *  than a name, and there is exactly one — a group's own head (`GroupHead`),
+   *  which a person's page inside a group wears whole (user directive
+   *  2026-07-31: the group's heading, not just its name). Absent on your own
+   *  preview: the card is yours, there is nothing to name. */
+  caption?: React.ReactNode
+  /** What can be done about this person, as DATA rather than nodes (user
+   *  directive 2026-07-31): the bar owns how an action looks — a glyph with one
+   *  word under it — so a call site states what the actions ARE and cannot state
+   *  a second appearance for them. An empty list is the normal case (a plain
+   *  member looking at another plain member decides nothing about them). */
+  actions: StripOption[]
 }) {
   const bottomInset = useBottomInset()
-  const hasActions = React.Children.toArray(children).length > 0
-  if (!hasActions && !caption) return null
+  // WHILE THE BIO IS BEING EDITED, NOTHING ON THE PAGE IS LIVE (user directive
+  // 2026-07-30): a tap ends the edit and does nothing else, and only a second
+  // tap — with the editor closed — performs the action it landed on. The card
+  // already answers for itself (`swallowTapWhileEditing`); this bar is the one
+  // thing on a profile page that is NOT the card, so it answers the same way
+  // rather than firing an add out from under an open editor. The keyboard is
+  // the question asked, because on this page the only thing that can have
+  // raised one is the bio.
+  const editing = useKeyboardOpen()
+  if (!profileActionBarShows(caption, actions)) return null
   return (
     <View style={[styles.profileBar, {
       // A title leads the block, so the air above it is the popup's own; with
-      // nothing but buttons the bar keeps its MD.
+      // nothing but the options the bar keeps its MD.
       paddingTop: caption ? SHEET_GAP.title : MD,
       paddingBottom: bottomGap(bottomInset, MD),
     }]}>
-      {!!caption && <SheetTitle>{caption}</SheetTitle>}
-      {/* `flush` for a bar with no title: there is nothing above the buttons to
-          stand clear of, so the bar's own top air is the only gap. */}
-      {hasActions && <SheetActions flush={!caption}>{children}</SheetActions>}
+      {/* A bare name is the popup title this block states it as; a heading that
+          is already a block (a group's head) paints itself. */}
+      {typeof caption === 'string' ? <SheetTitle>{caption}</SheetTitle> : caption ?? null}
+      {/* The popup's own gap above a set of actions, and only when there is a
+          title to stand clear of: with none, the bar's own top air is the gap. */}
+      {actions.length > 0 && (
+        <OptionStrip options={actions} style={caption ? styles.profileBarStrip : undefined} />
+      )}
+      {/* The swallow: a lid over the whole bar while an edit is open, so the
+          tap lands on ONE thing however many options are under it. */}
+      {editing ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => Keyboard.dismiss()}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
+      ) : null}
     </View>
   )
 }
@@ -1382,52 +1619,74 @@ const styles = StyleSheet.create({
     gap: MD,
     padding: MD,
   },
-  // The bar under the card (ProfileActionBar). Only the gutter and the ground are
-  // here — the title's type is SheetTitle's, the gap under it is SheetActions',
-  // and the top and bottom air are set inline from the same tokens, so the bar
-  // states no rhythm of its own. The ground is the popup's SURFACE: the buttons
-  // standing on it are PAGE-tinted tiles, which vanish on a PAGE-tinted page.
-  profileBar: { paddingHorizontal: MD, backgroundColor: SURFACE },
+  // The bar under the card (ProfileActionBar). Only the gutter, the ground and
+  // the lift are here — the title's type is SheetTitle's, the options are
+  // OptionStrip's, and the top, bottom and between air are set inline from the
+  // popup's own tokens, so the bar states no rhythm of its own. The ground is the
+  // popup's SURFACE, because this block is the foot of a popup standing on a page.
+  //
+  // And the lift is THE DOCK'S, the same shadow and no other (user directive
+  // 2026-07-31): this bar and home's dock are one object — the strip along the
+  // foot of a surface — so the band must hover off what it stands over by exactly
+  // the same amount in both places. There is no rule along its top and there must
+  // never be one; DOCK_SHADOW is what says it is a foreground. (It had no lift at
+  // all until now, so the one band in the app that was a strip on a page read as
+  // pasted onto the photo above it.)
+  profileBar: { paddingHorizontal: MD, backgroundColor: SURFACE, boxShadow: DOCK_SHADOW },
+  // The popup's widest gap, the one it puts between what a thing IS and what can
+  // be done about it (SHEET_GAP.actions) — here between the circle's name and the
+  // strip of options. Only when there is a title: see the render.
+  // LG, not the popup's own XL over a button row (user directive 2026-07-31):
+  // the heading above this strip is a BLOCK — a face, a fact line and a name —
+  // so the widest gap in the app opened a hole in the middle of the bar. A
+  // popup's XL is for holding one line of title off a row of named buttons; a
+  // block of three lines already separates itself.
+  profileBarStrip: { marginTop: LG },
   // Fixed top-END column: the name/age heading, with chat's "End" chip beneath
   // it. Chrome, not content — a sibling of the scroll view
   // (not a layer inside the hero), so it stays pinned to the card's top-END
   // while the profile scrolls under it, opposite the shell's hamburger / level
   // with a sheet's close X. Spans the full width so a long label wraps instead
   // of overflowing; alignItems keeps the column parked on the END edge.
-  topEndFixed: {
+  // A ROW, spanning the card's full width, holding the ONE heading tile parked on
+  // the START edge (user directive 2026-07-30: everything up here is one chip
+  // now, so this is a single box rather than the column-of-rows plus stretched
+  // row it used to be — and it reads from the START, where reading begins, rather
+  // than from the corner it was pushed to when the shell still owned the other
+  // one). The width is what lets a long name flexShrink and wrap instead of
+  // overflowing; justifyContent keeps the tile against the START edge whatever it
+  // wraps to. Nothing else is ever in this corner: a sheet's floating close X
+  // stands at the END (OverlaySheet's SheetHeader), which is what freed it.
+  topStartFixed: {
     position: 'absolute',
     top: 0,
     start: 0,
     end: 0,
     padding: MD,
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: SM,
-  },
-  // The name/age heading row. alignSelf:'stretch' so it spans the fixed
-  // column's full width, letting justifyContent push the chip to the END edge
-  // and a long name flexShrink/wrap rather than overflow. Everything else in
-  // this column — chat's "End" chip — is a row of its own below it, parked on
-  // the same END edge by the column's alignItems.
-  headingRow: {
-    alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'flex-end',
-    gap: SM,
+    justifyContent: 'flex-start',
   },
-  // Wraps the name/age chip so it can fade with the tap-toggle. flexShrink keeps
-  // the chip's shrink/wrap chain intact through the extra View (a plain wrapper
-  // would otherwise hide the shrink hint and let a long name overflow the row).
+  // Wraps the name/age chip. flexShrink keeps the chip's shrink/wrap chain intact
+  // through the extra View (a plain wrapper would otherwise hide the shrink hint
+  // and let a long name overflow the row). It carries NO transformOrigin: this
+  // chip is out of the tap-toggle and never zooms — see the render.
   identityChipWrap: {
     flexShrink: 1,
-    // Both heading chips zoom into the top-END corner they are pinned to, so
-    // the pair pulls back into that corner as one gesture rather than each
-    // shrinking around its own middle. END is physically LEFT under RTL.
-    transformOrigin: isRTL ? 'left top' : 'right top',
   },
-  headingChipWrap: {
-    transformOrigin: isRTL ? 'left top' : 'right top',
+  // The countdown inside the name/age chip: the chip's own label SIZE, because it
+  // is a second fact on that tile and not a readout — but the chip's one
+  // emphasis on top of it (user directive 2026-07-30), the same WEIGHT.medium
+  // `Chip bold` puts on a label, so the two can never drift apart. It is the only
+  // thing on the card with a deadline attached, and the weight is what says so
+  // now that it is no longer the biggest number on the screen. Through AppText
+  // this picks the real weighted Noto face, not a synthetic bold.
+  // Tabular figures so the tile does not breathe as the digits tick. Its ink is
+  // the chip's (handed in by the render slot), never stated here.
+  countdown: {
+    fontSize: TEXT.md,
+    fontWeight: WEIGHT.medium,
+    fontVariant: ['tabular-nums'],
   },
   infoLeft: {
     flex: 1,
@@ -1456,12 +1715,12 @@ const styles = StyleSheet.create({
     end: MD,
     alignItems: 'center',
   },
-  // Gap between the frosted-glass chips (name + fact lines). SM keeps each
-  // frosted label a distinct, readable pill without the block feeling loose.
+  // The box that carries the fact set's zoom. It holds ONE child now — the
+  // merged fact tile (ChipStack) — so it states no gap: the facts are divided by
+  // the tile's own hairline, not by photo showing between three tiles.
   chipsStack: {
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: SM,
     // The anchor the tap-toggle's zoom collapses into: the corner the fact
     // column actually lives in. transformOrigin is PHYSICAL (there is no
     // `start`), so the horizontal half follows the app's reading direction the
@@ -1469,11 +1728,12 @@ const styles = StyleSheet.create({
     // vertically, so `bottom` is the last chip's own baseline edge.
     transformOrigin: isRTL ? 'right bottom' : 'left bottom',
   },
+  // The circle row's gesture host — a plain box around one row, so RNGH has a
+  // native view to attach its tap to. It adds nothing to the row's own box.
   chipsLine: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: SM,
   },
   aboutSection: {
     alignItems: 'center',
@@ -1486,18 +1746,22 @@ const styles = StyleSheet.create({
   // the SAME white tile as every other on-photo chip and round button
   // (PHOTO_CHROME) just oversized — user directive 2026-07-28 — so it is the
   // same tile in EVERY respect and not just in its fill (user directive
-  // 2026-07-30): the same RADIUS, the same MD gutter, the chip's own derived
-  // vertical padding (`useChipPadding`, applied over this) and the same
-  // LIFT_SHADOW every on-photo tile casts. It used to differ in two of those —
-  // a flat `padding: MD` all round, twice the chips' vertical air, and no lift
-  // at all, so the one biggest white tile on the card was the one that did not
-  // read as lifted off the photo.
+  // 2026-07-30): the same RADIUS, the same gutter, the same padding box as the
+  // chips beside it and the same LIFT_SHADOW every on-photo tile casts.
+  //
+  // That box is CHIP_BLOCK_PAD — the chip's gutter on all four sides (user
+  // directive 2026-07-31). The tile is a PARAGRAPH in a wide white block, and so
+  // are the fact rows stacked above it now, so both take the air the gutter
+  // states rather than whatever a round chrome button has left over once a line
+  // of label is in it. It is still the chips' own constant and not a re-typed
+  // `MD`: the two tiles must move together, which is the whole reason the bio
+  // stopped declaring its own padding in the first place.
   photoBioCard: {
     position: 'absolute',
     start: MD,
     backgroundColor: PHOTO_CHROME,
     borderRadius: RADIUS,
-    paddingHorizontal: MD,
+    padding: CHIP_BLOCK_PAD,
     ...LIFT_SHADOW,
     // Same corner the fact column collapses into (user directive 2026-07-29):
     // the bio used to zoom around its own centre, which on a tile this wide read

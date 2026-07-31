@@ -3,6 +3,10 @@ import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from
 import { Text } from './AppText'
 import { Spinner } from './Spinner'
 import { GlyphSlot } from './GlyphSlot'
+// A STACKED BUTTON IS A STRIP OPTION THAT HAPPENS TO BE FILLED, so it takes the
+// shape's three values from the strip that owns it rather than restating them
+// here — the mark's size, the gap under it and the word's rank (see `stack`).
+import { STRIP_GLYPH, STRIP_GLYPH_GAP, STRIP_LABEL } from './OptionStrip'
 import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, DISABLED_OPACITY } from '../tokens'
 import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
 
@@ -51,6 +55,7 @@ export function Button({
   silentDisabled,
   disabledHint,
   iconStart,
+  stack,
   footer,
   multiline,
   style,
@@ -79,6 +84,20 @@ export function Button({
   // Same intent as SelectFieldRow's `locked`.
   disabledHint?: () => void
   iconStart?: ReactNode
+  // THE MARK STANDS OVER THE LABEL, NOT BESIDE IT — a glyph with one word under
+  // it, which is an `OptionStrip` option's shape (user directive 2026-07-31). For
+  // a button standing NEXT TO one of those options: the group popup's purple
+  // invitation beside its one quiet option, where the pair must read as the same
+  // object differing only in the fill that says which of them is the offer.
+  //
+  // IT IS THE SHAPE ENTIRE, not the arrangement alone (user report 2026-07-31,
+  // "they are not the same component"): the strip's mark size, the strip's gap
+  // and the strip's WORD — one rank below the body, not the button's own label
+  // type. A big mark over a small word is what makes the mark the subject; the
+  // button's 16dp semibold label beside a 24dp glyph inverted that and read as a
+  // different control. The glyph also leaves its GlyphSlot — that slot centres a
+  // mark on a LINE of text, the wrong question when the text is underneath.
+  stack?: boolean
   // Optional strip docked to the bottom edge of the button, full width,
   // clipped to the rounded corners. Used for the page2 broadcast cooldown
   // and the invite waiting timer (small time text + horizontal progress bar)
@@ -117,11 +136,12 @@ export function Button({
   // one by one with `size={ICON.md}` (six of them) while the rest ran a glyph
   // half again the size of the label beside it. Injected here, so every button
   // in the app carries the same object and no call site can forget.
+  const glyphSize = stack ? STRIP_GLYPH : BUTTON_GLYPH
   const startIcon = loading
-    ? <Spinner color={textColor} size={BUTTON_GLYPH} />
+    ? <Spinner color={textColor} size={glyphSize} />
     : isValidElement(iconStart)
       ? cloneElement(iconStart as ReactElement<{ color?: string; size?: number }>, {
-          size: BUTTON_GLYPH,
+          size: glyphSize,
           ...(useVariantDisabled ? { color: textColor } : null),
         })
       : iconStart
@@ -159,19 +179,28 @@ export function Button({
             as "regular button + extra strip below" rather than "regular button
             with the label squashed up to make room". */}
         <View pointerEvents="none" style={[styles.labelArea, base.labelArea]}>
-          <View style={styles.labelRow}>
+          <View style={[styles.labelRow, stack && styles.labelStack]}>
             {/* No ceiling of its own: the glyph takes the app's one FONT_SCALE
                 (GlyphSlot's default), which is exactly what the label beside it
                 takes, and the label area is a minHeight — it grows with them
                 rather than clipping. It used to be pinned at the old
                 FONT_SCALE.ui alongside a label pinned the same way, back when a
-                button was the one thing that refused to answer the OS slider. */}
-            {startIcon ? <GlyphSlot size={TEXT.md} style={styles.startSlot}>{startIcon}</GlyphSlot> : null}
+                button was the one thing that refused to answer the OS slider.
+                STACKED, the mark has nothing beside it to line up with, so it
+                stands in the strip's own plain centred box instead — the same
+                fixed mark at every font scale as the option next to it. */}
+            {startIcon ? (
+              stack
+                ? <View style={styles.stackGlyph}>{startIcon}</View>
+                : <GlyphSlot size={TEXT.md} label={label} style={styles.startSlot}>{startIcon}</GlyphSlot>
+            ) : null}
             {/* Icon-only button: an empty label drops the Text entirely rather
                 than rendering a zero-width one, so the labelRow gap doesn't
                 push the glyph off the button's centre. */}
             {label ? <Text
-              style={[BUTTON_LABEL, styles.text, skin.text, useVariantDisabled && skin.disabledText]}
+              // Stacked, the word is the strip's caption rank, not the button's
+              // own label type: only the fill may tell the pair apart.
+              style={[stack ? STRIP_LABEL : BUTTON_LABEL, styles.text, skin.text, useVariantDisabled && skin.disabledText]}
               numberOfLines={multiline ? 2 : 1}
               adjustsFontSizeToFit={!multiline}
               minimumFontScale={0.85}
@@ -211,6 +240,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SM,
   },
+  // The mark over the word (`stack`): the same column an OptionStrip option is,
+  // down to the gap between the two — the pair stands side by side and must be
+  // one shape. The button's own minHeight is a FLOOR under it, so a stacked
+  // button is a few dp taller than a plain one and never shorter.
+  labelStack: { flexDirection: 'column', gap: STRIP_GLYPH_GAP },
+  // The stacked mark's box: no line of text to centre on (see the render), so it
+  // is the strip's — a plain centred box at the mark's own size, which keeps the
+  // word under it from riding up when the glyph is the smaller of the two.
+  stackGlyph: { minHeight: STRIP_GLYPH, alignItems: 'center', justifyContent: 'center' },
   // Fixed-width start slot: whatever sits here (a provided iconStart or the
   // loading Spinner) is centered inside exactly BUTTON_GLYPH — the size both of
   // them are given above. This is what keeps the label from shifting when a tap

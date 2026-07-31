@@ -31,6 +31,7 @@ import { clearSelfAvatar } from '../src/lib/selfAvatar'
 import { clearCachedGroups } from '../src/lib/groupsCache'
 import { clearRosterCaches } from '../src/lib/rosterCache'
 import { clearAllChatCaches } from '../src/lib/chatCache'
+import { clearBrowseAllowance } from '../src/lib/browseGate'
 import { stashInviteUrl } from '../src/lib/communities'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { STORAGE } from '../src/keys'
@@ -93,7 +94,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   // while the fetch is still in flight. index.tsx owns the *first* decision
   // (this effect bails while segments is empty) — see selectNeedsAccount.
   // Only the ACCOUNT (not a built profile) gates /home: a user with an account
-  // but no photos/bio belongs on /home, browsing.
+  // but no photos belongs on /home, browsing.
   const needsAccount = selectNeedsAccount(profile)
 
   // ── Routing guard ─────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     // NOTE: there is deliberately NO reactive "account exists && on onboarding
     // → /home" branch. Once the account exists the user may VOLUNTARILY reopen
-    // /onboarding (the menu's purple build-profile CTA) to add photos + bio;
+    // /onboarding (the dock's profile key) to add the photos that build it;
     // onboarding.tsx routes itself to /home when they finish or back out. A
     // reactive redirect here would bounce them straight out of that flow.
 
@@ -160,6 +161,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         clearCachedGroups().catch(() => {}),
         clearRosterCaches().catch(() => {}),
         clearAllChatCaches().catch(() => {}),
+        clearBrowseAllowance().catch(() => {}),
       ])
     }
 
@@ -438,7 +440,43 @@ export default function RootLayout() {
               normal. Keep this wrapper at the root so it covers every screen. */}
           <LayoutAnimationConfig skipEntering>
             <KeyboardShrink>
-              <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+              <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
+                {/* ONBOARDING IS A LAYER OVER HOME, NOT A PAGE THAT REPLACES IT.
+                    A stack screen is opaque by default and react-native-screens
+                    stops drawing whatever is beneath it, so dragging onboarding
+                    down (its build-profile steps close by the app's one dismiss
+                    gesture) revealed nothing but its own empty background — a
+                    layer over a void. The transparent presentation is what keeps
+                    home on screen underneath it.
+
+                    It is declared HERE, on the navigator, and not in the route:
+                    `presentation` is read when the native screen is CREATED, so
+                    the same options passed from an in-route <Stack.Screen> — a
+                    setOptions on a screen that already exists — are silently
+                    dropped (measured on the emulator, 2026-07-31).
+
+                    CONTAINED is load-bearing rather than a detail: it keeps the
+                    screen inside the app's one native window
+                    (UIModalPresentationOverCurrentContext on iOS, the same
+                    fragment container on Android), so it still lays out inside
+                    the keyboard shrink above. A plain 'transparentModal' presents
+                    its OWN window on iOS, which inherits none of that and would
+                    put onboarding's bio field back under the keyboard — the app
+                    has exactly two native windows (see useKeyboard.ts) and this
+                    must not become a third.
+
+                    `animation: 'none'` is inherited on purpose: the ROUTE must
+                    not animate, because the surface inside it does. It rises on
+                    RisingCard, the app's one bottom-up entrance, so onboarding
+                    arrives exactly as every other page in the app does. */}
+                <Stack.Screen
+                  name="onboarding"
+                  options={{
+                    presentation: 'containedTransparentModal',
+                    contentStyle: { backgroundColor: 'transparent' },
+                  }}
+                />
+              </Stack>
             </KeyboardShrink>
           </LayoutAnimationConfig>
         </AuthProvider>

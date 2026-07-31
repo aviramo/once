@@ -1,7 +1,8 @@
-import { forwardRef } from 'react'
+import { forwardRef, useCallback, useEffect, useRef } from 'react'
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps } from 'react-native'
 import { DEFAULT_FAMILY, FONT_SCALE, INPUT_START, SINGLE_WEIGHT, TEXT_START, WEIGHT_TO_FAMILY } from '../fonts'
 import { INK, SELECTION } from '../colors'
+import { useRiseArrived } from './RisingCard'
 
 // Drop-in replacement for react-native's Text that applies Heebo as the
 // default font family and picks the correct weighted face (real bold, not
@@ -68,15 +69,35 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function AppTex
   // Start-align every field, unless the call site already said where its text
   // goes — as a prop or in its style (see INPUT_START in ../fonts).
   const aligned = props.textAlign != null || flatten(props.style)?.textAlign != null
+  // `autoFocus` means "focus when my surface has ARRIVED" — see RiseArrival in
+  // RisingCard.tsx for why a field focused mid-entrance stays mis-measured for
+  // as long as it holds focus. Captured at mount and never re-read, so a field
+  // in a settled surface (every field outside a rising one) is handed the
+  // platform's own autoFocus, untouched, exactly as before.
+  const arrived = useRiseArrived()
+  const deferred = useRef(!arrived).current
+  const own = useRef<RNTextInput | null>(null)
+  const focusedOnce = useRef(false)
+  const setRef = useCallback((node: RNTextInput | null) => {
+    own.current = node
+    if (typeof ref === 'function') ref(node)
+    else if (ref) (ref as { current: RNTextInput | null }).current = node
+  }, [ref])
+  useEffect(() => {
+    if (!deferred || !arrived || !props.autoFocus || focusedOnce.current) return
+    focusedOnce.current = true
+    own.current?.focus()
+  }, [deferred, arrived, props.autoFocus])
   return (
     <RNTextInput
-      ref={ref}
+      ref={setRef}
       // The same one ceiling a label gets: a field and its own label may never
       // scale apart.
       maxFontSizeMultiplier={FONT_SCALE}
       selectionColor={SELECTION}
       cursorColor={INK}
       {...props}
+      autoFocus={props.autoFocus && !deferred}
       style={[TEXT_START, aligned ? null : INPUT_START, props.style, { fontFamily: family, ...weightOverride }]}
     />
   )

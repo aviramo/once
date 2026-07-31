@@ -9,7 +9,8 @@ import { invoke } from './api'
 import { supabase } from './supabase'
 import { STORAGE } from '../keys'
 import { LIST_PAGE_SIZE } from '../tokens'
-import { t } from '../i18n'
+import { getLocales } from 'expo-localization'
+import { t, pinDirection } from '../i18n'
 import type { MetaPart } from './meta'
 import type { Group } from './groups'
 import { useUserStore, type Profile } from '../stores/userStore'
@@ -23,7 +24,11 @@ export type MemberImage = { hash?: string; normal?: string } | null
 // the communities sheet opens the same card the app shows for a match (server
 // 2026-07-27). Always without a distance. Optional: a row cached by an older
 // build predates it.
-export type GroupMember = { user_id: string; name: string | null; image: MemberImage; owner?: boolean; manager?: boolean; profile?: Profile | null }
+// `joined_at` is when this person came into the group (user_groups.created_at,
+// the very column the roster is ordered by). Optional: a row cached by a build
+// that predates the field simply has none, and the line that states it is then
+// not drawn.
+export type GroupMember = { user_id: string; name: string | null; image: MemberImage; joined_at?: string | null; owner?: boolean; manager?: boolean; profile?: Profile | null }
 
 // ── Meta lines ─────────────────────────────────────────────────────────────
 // Every row states its facts on one line, separated by the same interpunct: the
@@ -39,6 +44,60 @@ export type GroupMember = { user_id: string; name: string | null; image: MemberI
 // the singular form at 1 (Hebrew has no "1 קבוצות").
 const count = (key: 'communities.membersCount' | 'communities.groupsCount' | 'communities.friendsCount' | 'communities.requestsCount', n: number) =>
   t(key).replace('{count}', String(n))
+// ── When this person turned up in this circle ──────────────────────────────
+// The line under a group's name on a person's page (user directive 2026-07-31):
+// when they JOINED, or — for someone still at the door — when they ASKED. Both
+// are one date, stated as a date and not as "3 days ago": a relative phrase is
+// right for a presence chip, where recency IS the fact, and wrong for a
+// standing membership, where it turns into "412 days ago" the moment a group
+// has any history.
+//
+// The date is written in the OS's own locale rather than the UI language, the
+// same choice the family calendar makes (SettingsSurfaces' dayMonthFormatter):
+// a Hebrew UI on a US phone still reads month/day, because that is the order
+// the reader is used to everywhere else on the device.
+//
+// Both sentences are GENDERLESS on purpose ("in the group since", not "joined"
+// / "הצטרף"), so neither needs the subject's gender to be known — a row cached
+// by an older build carries no profile at all.
+const joinDateFormatter = new Intl.DateTimeFormat(
+  getLocales()[0]?.languageTag ?? 'en-US',
+  { year: 'numeric', month: 'numeric', day: 'numeric' },
+)
+
+// THE LINE SAYS WHO IT IS ABOUT (user directive 2026-07-31): "Ofir in the group
+// since 30.7.2026", not a bare "in the group since". It stands under a block
+// that is entirely about the GROUP — the owner's face, the group's facts, its
+// name — so a sentence with no subject was read as one more fact about the
+// circle. A row cached with no name still reads: the placeholder empties and the
+// old subjectless sentence is what is left.
+const onDate = (
+  key: 'communities.inGroupSince' | 'communities.waitingSince',
+  iso: string | null | undefined,
+  name: string | null | undefined,
+): string | null => {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  // ...and the sentence reads in the UI's direction whatever script the name is
+  // in: a Latin name at the head of a Hebrew line turned the whole line around
+  // and left the date sitting between the name and its own words (user report
+  // 2026-07-31). See pinDirection.
+  return pinDirection(
+    t(key)
+      .replace('{name}', name?.trim() ?? '')
+      .replace('{date}', joinDateFormatter.format(d))
+      .trim(),
+  )
+}
+
+/** "Ofir in the group since 20.6.2026" — a member's own line. */
+export const memberSince = (iso: string | null | undefined, name?: string | null) =>
+  onDate('communities.inGroupSince', iso, name)
+/** "Ofir waiting since 20.6.2026" — the same line for someone still at the door. */
+export const waitingSince = (iso: string | null | undefined, name?: string | null) =>
+  onDate('communities.waitingSince', iso, name)
+
 export const memberLabel = (n: number) => (n === 1 ? t('communities.oneMember') : count('communities.membersCount', n))
 export const groupLabel = (n: number) => (n === 1 ? t('communities.oneGroup') : count('communities.groupsCount', n))
 export const friendLabel = (n: number) => (n === 1 ? t('communities.oneFriend') : count('communities.friendsCount', n))

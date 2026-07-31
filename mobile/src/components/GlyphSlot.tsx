@@ -65,11 +65,15 @@ export function LineProbe({
 // large-font device.
 //
 // The glyph is centred against that probe by flexbox and then nudged down by
-// `inkOffset` — the one correction that stays a pure function of the font size.
+// `inkOffset` — the one correction that stays a pure function of the font size
+// and of WHICH SCRIPT the label is written in, which is why `label` is worth
+// passing: Hebrew ink stops lower than Latin ink, and a person's name is user
+// data, not UI language (see inkOffset).
 export function GlyphSlot({
   size = TEXT.md,
   cap = FONT_SCALE,
   width,
+  label,
   onPress,
   style,
   children,
@@ -82,6 +86,12 @@ export function GlyphSlot({
   /** Fixes the slot's width so a column of rows starts its labels at the same
    *  x even when one glyph is drawn wider than the others. Omit to hug. */
   width?: number
+  /** THE TEXT THIS GLYPH STANDS BESIDE. Not for reading — for measuring: the
+   *  line's own script decides how far below its box centre its ink sits, and a
+   *  label is not always the app's language (a name, a number). Omitted, the
+   *  nudge falls back to the app's direction, which is what every call site did
+   *  before there was a way to say otherwise. */
+  label?: string
   /** Makes the glyph its own press target (the chip's report shield). */
   onPress?: () => void
   style?: StyleProp<ViewStyle>
@@ -96,7 +106,7 @@ export function GlyphSlot({
     >
       <LineProbe size={size} cap={cap} />
       <GlyphScale cap={cap}>
-        <View style={{ transform: [{ translateY: inkOffset(size, cap) }] }}>{children}</View>
+        <View style={{ transform: [{ translateY: inkOffset(size, cap, label) }] }}>{children}</View>
       </GlyphScale>
     </Container>
   )

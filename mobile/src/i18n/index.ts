@@ -59,6 +59,30 @@ export function lowerFirst(text: string): string {
   return text.charAt(0).toLocaleLowerCase() + text.slice(1)
 }
 
+// THE UI LANGUAGE DECIDES WHICH WAY A SENTENCE READS, NEVER THE DATA SPLICED
+// INTO IT (user report 2026-07-31: "Yoav בקבוצה מאז 30.7.2026" came out laid
+// left to right, with the date wedged between the name and the words that
+// belong to it). Both platforms resolve a paragraph's direction from its FIRST
+// STRONG character, so a Latin name at the head of a Hebrew sentence turns the
+// whole line around — and the style prop that would say otherwise,
+// `writingDirection`, is iOS-only (see fonts.ts: Android's text pipeline never
+// reads it, it goes by the string's own script). The one thing both platforms DO
+// read is the string itself, so the direction is stated IN it: an invisible
+// RLM/LRM at the head is a strong character of the app's own direction, and the
+// first-strong scan stops on it before it ever reaches the name.
+//
+// Only a sentence carrying USER DATA needs this — a person's name, a group's
+// title, anything the app did not write. A sentence the app wrote whole already
+// starts with its own script.
+// Written as escapes, never as the characters themselves: they are invisible,
+// and a mark pasted into source is a character nobody can see to maintain.
+const DIRECTION_MARK = isRTL ? '\u200F' : '\u200E'
+
+/** Pins a composed sentence to the UI language's reading direction. See above. */
+export function pinDirection(text: string): string {
+  return DIRECTION_MARK + text
+}
+
 /** Double-gender lookup: key_mm, key_mf, key_fm, key_ff → falls back to tg → t. */
 export function tgg(key: keyof Translations, userMale: boolean | null | undefined, otherMale: boolean | null | undefined): string {
   const dict = translations as Record<string, string>

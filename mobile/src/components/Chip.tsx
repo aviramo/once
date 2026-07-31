@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Children, Fragment, createContext, isValidElement, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { LayoutChangeEvent, NativeSyntheticEvent, Pressable, StyleProp, StyleSheet, TextLayoutEventData, View, ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Text } from './AppText'
@@ -8,7 +8,7 @@ import { GlyphSlot, LineProbe } from './GlyphSlot'
 import { FONT_SCALE } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { PHOTO_CHROME, PAGE, INK, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW } from '../colors'
+import { PHOTO_CHROME, PAGE, INK, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW, LINE } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
@@ -64,17 +64,42 @@ export type ChipSegment =
   // status wants to stand on a line of its own, not trail the kids sentence).
   | { br: true }
 
+/** The "+N more circles" hint as a segment: a mini-chip FLOWING with the label,
+ *  exactly the kids' ages (user directive 2026-07-30 — "the same way, flowing
+ *  with the text"). It is composed here, once, and mirrored under RTL so the
+ *  plus stays on the reading-start side; `ltr` then keeps the weak "+" glued to
+ *  its digit against an RTL paragraph, like every other numeric pill. */
+export function plusBadge(n: number): ChipSegment {
+  return { badges: [isRTL ? `${n}+` : `+${n}`], ltr: true }
+}
+
 // Split a segment list into lines at each `br`. The lines then render as a
 // COLUMN of wrapping rows rather than one row with a full-width spacer: a
 // flexBasis:'100%' break item makes the wrap row claim the entire available
 // width, which stretched the chip tile edge-to-edge instead of letting it hug
 // its text (user directive 2026-07-27). A column hugs the widest line.
+//
+// TWO TEXT RUNS WITH NOTHING BETWEEN THEM ARE ONE RUN, joined by an ordinary
+// SPACE (user, 2026-07-30). The row's `columnGap` is what stands a mini-chip off
+// the words around it; between two words it is a second space, and a visibly
+// wider one ("אין לי ילדים  ורוצה ילדים"). A segment list is a sentence with
+// pills IN it, so wherever a pill is absent — a profile with no ages set — the
+// words on either side must close back up into plain prose. Joining them also
+// hands the pair to the text engine as one paragraph, which breaks it at its own
+// spaces instead of at the flex row's item boundary.
 type ChipRun = Exclude<ChipSegment, { br: true }>
 function segmentLines(segments: ChipSegment[]): ChipRun[][] {
   const lines: ChipRun[][] = [[]]
   for (const seg of segments) {
-    if ('br' in seg) lines.push([])
-    else lines[lines.length - 1].push(seg)
+    if ('br' in seg) {
+      lines.push([])
+      continue
+    }
+    const line = lines[lines.length - 1]
+    const prev = line[line.length - 1]
+    if ('text' in seg && prev && 'text' in prev && !!prev.bold === !!seg.bold) {
+      line[line.length - 1] = { text: `${prev.text} ${seg.text}`, bold: seg.bold }
+    } else line.push(seg)
   }
   return lines.filter(l => l.length)
 }
@@ -297,6 +322,38 @@ function useUnglue(text: string | undefined) {
 // label grows by whole line boxes exactly as before.
 export const CHIP_HEIGHT = ROUND_BUTTON_SIZE_SM
 
+/** THE gutter of a chip: the air between the tile's edge and what it carries.
+ *  Stated once because it is now read on BOTH axes — see CHIP_BLOCK_PAD. */
+export const CHIP_GUTTER = MD
+
+/** ── A chip that is a BLOCK pays the SAME air on all four sides ─────────────
+ *  (user directive 2026-07-31.) The rule above derives a PILL's vertical padding
+ *  from the round-button height, which is right for a tile carrying one short
+ *  line — but the match card's bottom-START set is not that: the merged fact tile
+ *  stacks three sentences, two of which wrap, and the bio tile is a paragraph.
+ *  Against their MD gutter the derived 8dp read as text pressed against the top
+ *  and bottom edges of a wide white block.
+ *
+ *  So a block-shaped chip takes the gutter on the vertical too: the stacked rows
+ *  (ChipStack) and the match card's bio tile, which imports this rather than
+ *  re-typing it so the two can never drift (the bio sat at a flat `padding: MD`
+ *  once before, and the whole point of `useChipPadding` was to stop it from
+ *  differing from the chips beside it — this is the same guarantee, now that the
+ *  chips beside it are blocks too).
+ *
+ *  A LONE pill is untouched: it is still exactly a round chrome button tall. */
+export const CHIP_BLOCK_PAD = CHIP_GUTTER
+
+/** ── A SEAM is half a gutter, because two rows pay it together ──────────────
+ *  (user directive 2026-07-31.) The air above the tile's first row and below its
+ *  last is the block's own gutter — it stands between the text and the OUTSIDE.
+ *  A seam is not that: the rule between two facts has a row's padding on EACH
+ *  side of it, so the full gutter twice over opened a band of empty white wider
+ *  than the tile's own edges and read as three tiles again, which is the very
+ *  thing the merge undid. Each side gives half, so the facts sit a gutter apart
+ *  and the tile's four outer edges are untouched. */
+export const CHIP_BLOCK_SEAM_PAD = CHIP_BLOCK_PAD / 2
+
 /** The chip's vertical padding: what is left of CHIP_HEIGHT once one line of
  *  label is in it, halved. `lineBox` is the probe's measurement; until it has
  *  reported, the token arithmetic stands in — it is exact at font scale 1, which
@@ -308,15 +365,14 @@ function chipPad(lineBox: number | null, outlined: boolean): number {
   return Math.max(0, pad - (outlined ? STROKE.thin : 0))
 }
 
-/** THE chip's padding box, probe and all: render `probe` inside the tile and put
- *  `style` on it.
+/** THE PILL's padding box, probe and all: render `probe` inside the tile and put
+ *  `style` on it. Only a chip carrying one short line of label uses this — the
+ *  block-shaped ones take CHIP_BLOCK_PAD instead.
  *
- *  Exported because the match card's BIO is one of these tiles too and is not
- *  allowed to differ from the chips beside it (user directive 2026-07-30). It
- *  cannot BE a `Chip` — it is absolutely positioned, animated, and holds a
- *  paragraph or the inline bio editor rather than a label — so it takes the box
- *  from here rather than re-typing it, which is how it came to sit at a flat
- *  `padding: MD`: twice the chips' vertical air, and blind to the font scale. */
+ *  (The match card's BIO used to take its box from here, so that the biggest white
+ *  tile on the card could not drift from the chips beside it. Those chips are
+ *  blocks now, so the bio is one too and takes CHIP_BLOCK_PAD — the same
+ *  guarantee, from the other constant.) */
 export function useChipPadding(outlined = false) {
   const [lineBox, setLineBox] = useState<number | null>(null)
   // Only a measurement that CHANGES the padding is worth a render. At font
@@ -332,8 +388,73 @@ export function useChipPadding(outlined = false) {
   }
 }
 
+// ── The rule INSIDE a chip ─────────────────────────────────────────────────
+// A hairline dividing the tile's label from a second fact trailing it —
+// the match card's "Moran, 46 | 07:44". It is the app's ONE rule, the very
+// hairline the dock draws between its options (LINE at StyleSheet.hairlineWidth),
+// so a division inside a tile and a division between two keys read as the same
+// mark.
+//
+// Its height is NOT computed. A zero-width `LineProbe` standing beside it lays
+// out a real line of the label's own size and the row stretches the rule to that
+// box, so the rule is exactly one line of label tall at every font scale — the
+// same reason `GlyphSlot` measures a line rather than deriving one from `lh()`.
+// It rides line ONE of a wrapped label, like the leading glyph, because the chip
+// row is aligned flex-start.
+function ChipRule({ size }: { size: number }) {
+  return (
+    <View style={styles.rule}>
+      <LineProbe size={size} cap={FONT_SCALE} />
+      <View style={styles.ruleInk} />
+    </View>
+  )
+}
+
+// ── Several facts sharing ONE tile ─────────────────────────────────────────
+// (user directive 2026-07-30.) Set by `ChipStack` below: a chip rendered inside
+// one is a ROW of a shared tile rather than a tile of its own, so it drops the
+// two things that made it a separate object — the fill and the lift — and keeps
+// everything that makes it a chip: its glyph slot and its gutter — which it now
+// pays on the vertical as well (CHIP_BLOCK_PAD, in place of the pill's derived
+// padding). A context and not a prop, so no call site can put a chip in a stack
+// and forget to say so.
+//
+// It carries WHERE in the tile the row is, because that is what decides each of
+// its two vertical edges: an edge facing the outside pays the block's gutter, an
+// edge facing a seam pays half of it (see CHIP_BLOCK_SEAM_PAD). The stack knows
+// the order of its rows and a row does not, so the answer is stated here rather
+// than inferred anywhere else. `null` = not in a stack at all.
+type ChipStackRow = { first: boolean; last: boolean }
+// The four positions are module constants so a re-render hands each row the SAME
+// context value it had before, and only a row whose position actually changed
+// re-renders.
+const ROW_ONLY: ChipStackRow = { first: true, last: true }
+const ROW_FIRST: ChipStackRow = { first: true, last: false }
+const ROW_MID: ChipStackRow = { first: false, last: false }
+const ROW_LAST: ChipStackRow = { first: false, last: true }
+const rowPos = (i: number, n: number): ChipStackRow =>
+  i === 0 ? (n === 1 ? ROW_ONLY : ROW_FIRST) : i === n - 1 ? ROW_LAST : ROW_MID
+const ChipStacked = createContext<ChipStackRow | null>(null)
+
+/** THE action that rides a chip's trailing edge — see `endAction` below. One
+ *  type, so the match card's `headingAction` and the chip's own slot cannot
+ *  drift apart. It says its name (`label`) or it IS its name (`renderIcon`): the
+ *  chat's "End chat" spells the consequence out, while the own-profile card's
+ *  plus is a mark everyone already reads, and a word for it would only repeat
+ *  what the popup behind it lists. Never both. */
+export type ChipEndAction = {
+  label?: string
+  /** Handed the block's own white ink, like every other render slot here is
+   *  handed the tone's. */
+  renderIcon?: (color: string) => React.ReactNode
+  /** What the GLYPH form says to a screen reader; a label form says itself. */
+  a11yLabel?: string
+  onPress: () => void
+}
+
 export function Chip({
   renderIcon,
+  onIconPress,
   text,
   segments,
   tone = 'neutral',
@@ -341,32 +462,34 @@ export function Chip({
   outlined = false,
   bold = false,
   small = false,
-  plusCount,
   count,
+  endAction,
+  renderAfterRule,
   renderTrailing,
   onTrailingPress,
   onPress,
 }: {
   renderIcon?: (color: string) => React.ReactNode
+  /** Makes the LEADING glyph its own press target, separate from the chip's
+   *  `onPress` — the mirror of `onTrailingPress`, and what the match card's
+   *  report flag rides on now that it leads the heading tile (user directive
+   *  2026-07-30). TAP_SLOP widens the target past the small glyph. */
+  onIconPress?: () => void
   text?: string
   /** Interleaved text runs + mini-chips, an alternative to the plain `text`
-   * label. When set, the chip renders these wrapping segments (used by the
-   * family/kids chip) and `text`/`plusCount`/`renderTrailing` are ignored. */
+   * label. When set, the chip renders these wrapping segments (the family/kids
+   * chip, the shared-circle chip) and `text`/`renderTrailing` are ignored. */
   segments?: ChipSegment[]
   tone?: ChipTone
   onPhoto?: boolean
-  /** When > 0, renders a small light-purple "+N" pill AFTER the text, inside
-   * the same chip. Used by the group chip to hint that the pair shares more
-   * groups than the one named. The "+N" is composed here (single source) and
-   * mirrored under RTL so the plus stays on the reading-start side. */
-  plusCount?: number
   /** A BARE number in a pill after the label, at the label's trailing end — the
    * opposite side of the tile from the leading glyph (user directive
    * 2026-07-30). For a live quantity the label itself does not name: the menu's
    * visibility tile says "Visible" and this says how many people are watching.
    * The number alone, because the tile is small and its own label already says
-   * what is being counted. Same slot and same pale fabric as `plusCount` (the
-   * two are alternative sources for the one trailing pill). */
+   * what is being counted. The same pale fabric as the mini-chips a `segments`
+   * label flows (`Badge`), standing in the tile's own trailing slot rather than
+   * in the sentence: nothing here is being counted INSIDE a phrase. */
   count?: number
   /** No fill, just a light purple rule. For a chip that ADDS something rather
    * than reporting a fact — it reads as an empty slot waiting to be filled,
@@ -381,6 +504,36 @@ export function Chip({
    * a group strip, and the same chip on the menu row that opens those strips.
    * One size step, a prop, never a second chip component. */
   small?: boolean
+  /** AN ACTION THAT IS PART OF THE TILE, NOT A SECOND TILE (user directive
+   *  2026-07-30): a solid purple block CONTINUING the chip at its TRAILING edge,
+   *  bleeding to the tile's own three edges and carrying its corner, with the
+   *  label's white ink on it. Chat's "End chat" — which used to be a `solid`
+   *  chip of its own, standing on a row under the name — is the one of these:
+   *  ending the conversation belongs with whom it ends, and two tiles stacked in
+   *  the corner said that twice. The tile is read name-first and the action is
+   *  what it ends on (user directive 2026-07-30 — it led for an afternoon, and
+   *  an action before the name reads as the tile being an action). It takes NO
+   *  rule (unlike `renderAfterRule`, which stands inside the tile): the fill is already the
+   *  division, and a hairline at a purple-to-white seam would be a second one.
+   *  Nothing here is stacked (ChipStack) — this is a lone tile's own edge.
+   *  It carries a word or a GLYPH (see ChipEndAction): the own-profile card's
+   *  add is a plus standing in the very block the chat's "End chat" stands in,
+   *  because both are the one thing the heading tile lets you DO about the
+   *  person it names. */
+  endAction?: ChipEndAction
+  /** A SECOND fact on the same tile, TRAILING it — after the label, behind the
+   *  app's hairline rule (see ChipRule). Handed the tone's own ink, like every
+   *  other render slot here. Today: the invitation countdown, which rides inside
+   *  the match card's name/age chip (user directive 2026-07-30) instead of
+   *  standing as a readout on the status card. It TRAILS the name (user
+   *  directive 2026-07-31): the tile is read for who this is, and the deadline is
+   *  what is happening to that person, so the name comes first and the clock
+   *  finishes the line — the same shape as every other chip in the app, where the
+   *  label leads and a second fact follows it.
+   *  A SLOT and not a string, deliberately — the countdown ticks, and a slot
+   *  keeps that second inside the element it paints instead of re-rendering the
+   *  chip (and the card carrying it) once a second. */
+  renderAfterRule?: (color: string) => React.ReactNode
   renderTrailing?: (color: string) => React.ReactNode
   /** Makes the TRAILING glyph its own press target, separate from the chip's
    * `onPress` — a small affordance riding inside a label chip (the match card's
@@ -394,6 +547,11 @@ export function Chip({
   onPress?: () => void
 }) {
   const { fg, bg } = TONES[tone]
+  // Inside a ChipStack this chip is a row of a shared tile, so the tile's own
+  // fill, rule and lift are stated ONCE by the stack and not by each row. What
+  // the row itself answers for is its two vertical edges — see ChipStackRow.
+  const stackRow = useContext(ChipStacked)
+  const stacked = !!stackRow
   // On a photo a chip is a solid tile that matches the round overlay buttons:
   // the same PHOTO_CHROME white fill, with the tone's own fg as ink. `solid`
   // keeps its full INK fill + white ink so the chat's "End" still reads as a
@@ -402,35 +560,31 @@ export function Chip({
   // A filled tile over a photo casts the same soft lift as the round overlay
   // buttons, so chips and buttons read as one fabric off the image. Outlined
   // chips (an empty add slot) stay flat.
-  const tileShadow = onPhoto && !outlined
+  const tileShadow = onPhoto && !outlined && !stacked
   // Every glyph in this chip stands beside the chip's OWN label — the small
   // tile's label is a size down, and both take the app's one FONT_SCALE ceiling,
   // so the icon can never outgrow the text it sits next to on a large-font
-  // device.
-  const glyphSlot = { size: small ? TEXT.sm : TEXT.md, cap: FONT_SCALE }
+  // device. And the label itself goes with them: a chip's text is as often user
+  // data as UI language (a name, a group's name, a distance), and which script
+  // it is written in is what decides where its ink sits inside the line — the
+  // report shield beside "Inbal, 51" in a Hebrew build was being centred on
+  // Hebrew ink the tile does not paint (user report 2026-07-31, see inkOffset).
+  const glyphSlot = {
+    size: small ? TEXT.sm : TEXT.md,
+    cap: FONT_SCALE,
+    label: text ?? segments?.map(s => ('badges' in s ? s.badges.join(' ') : 'br' in s ? '' : s.text)).join(' '),
+  }
   const Container: any = onPress ? Pressable : View
-  // THE trailing pill: the mini-chip that follows the label, the same slot the
-  // presence dot rides in — not an item flowing inside the text (user directive
-  // 2026-07-29). Two callers state it two ways and it is deliberately one slot,
-  // one Badge: `plusCount` composes the "+N more" hint (see below), `count` is a
-  // bare live number ("Visible  3"). A chip has no use for both at once.
-  // The label used to be split into word-runs so the pill could chain after the
-  // final word, but a wrap row is laid out by the flex engine, and the flex
-  // engine cannot shrink-to-fit what it wrapped: the tile kept the width it was
-  // measured at, so the chip painted a dead half-line of white beside the text,
-  // and which line the pill landed on could differ between two runs of the same
-  // card. A plain <Text> has none of that — RN measures it at its widest LINE,
-  // so it hugs by construction — and the pill simply stands after it. `ltr`
-  // keeps the weak "+" glued to its digit; the pill rides the chip's own
-  // trailing side, so it follows the app's direction like every other piece of
-  // chip chrome.
-  const trailingPill = plusCount ? (isRTL ? `${plusCount}+` : `+${plusCount}`)
-    : count != null ? String(count)
-      : null
-  // The one flex-laid-out label shape left: `br`-delimited lines of text runs +
-  // pill clusters (the family chip). It is built here so the hug hook knows how
-  // many boxes each line owes it, and is capped by it so the tile ends where the
-  // text does (see useHugWidth).
+  // THE trailing pill: a mini-chip in the tile's own trailing slot, the same one
+  // the presence dot rides in — for a number the SENTENCE does not contain
+  // ("Visible  3"). A quantity that belongs INSIDE the label flows with the
+  // words instead, as a `badges` segment (the kids' ages, the shared circles'
+  // "+N") — see `plusBadge`.
+  const trailingPill = count != null ? String(count) : null
+  // The flex-laid-out label shape: `br`-delimited lines of text runs + pill
+  // clusters. It is built here so the hug hook knows how many boxes each line
+  // owes it, and is capped by it so the tile ends where the text does (see
+  // useHugWidth).
   const lines = segments ? segmentLines(segments) : null
   const hug = useHugWidth(
     lines ? lines.map(l => l.map(s => ('badges' in s ? s.badges.join(',') : s.text)).join('')).join('\n') : '',
@@ -439,22 +593,36 @@ export function Chip({
   const unglue = useUnglue(!lines ? text : undefined)
   // The tile's height contract (see CHIP_HEIGHT): the label's real line box is
   // measured by an out-of-flow probe and the padding is whatever is left of a
-  // round chrome button's diameter. The `small` tile opts out — it is one step
-  // UNDER the chrome on purpose, not level with it — and keeps its token box.
+  // round chrome button's diameter. Two variants opt out — the `small` tile (one
+  // step UNDER the chrome on purpose, so it keeps its token box) and a STACKED
+  // row (a block, not a pill; see CHIP_BLOCK_PAD).
+  //
+  // (A `markOnly` variant lived here for an afternoon — a tile carrying a glyph
+  // and NO label, for the photo menu's actions when they were four bare marks.
+  // It had to opt out of BOTH the padding above and the glyph-beside-text slot
+  // below, since neither means anything without a line of text to be beside. The
+  // menu says its rows in words now, so nothing in the app is an icon-only chip.
+  // If one is ever wanted again, note that the label branch below renders its
+  // `Text` unconditionally: a chip with no label still lays out an EMPTY one, and
+  // the row's `gap` for it, which pushes the mark half a gap off centre.)
   const pad = useChipPadding(outlined)
+  const derivedPad = !small && !stacked
   return (
     <Container
       onPress={onPress}
       style={[
         styles.chip,
         small && styles.chipSmall,
-        outlined ? styles.chipOutlined : { backgroundColor: bgColor },
+        stacked ? styles.chipBlock : null,
+        stackRow && !stackRow.first && styles.chipBlockSeamTop,
+        stackRow && !stackRow.last && styles.chipBlockSeamBottom,
+        stacked ? null : outlined ? styles.chipOutlined : { backgroundColor: bgColor },
         tileShadow && styles.chipShadow,
-        !small && pad.style,
+        derivedPad && pad.style,
       ]}
     >
-      {small ? null : pad.probe}
-      {renderIcon ? <GlyphSlot {...glyphSlot}>{renderIcon(fg)}</GlyphSlot> : null}
+      {derivedPad ? pad.probe : null}
+      {renderIcon ? <GlyphSlot {...glyphSlot} onPress={onIconPress}>{renderIcon(fg)}</GlyphSlot> : null}
       {lines ? (
         // A column of wrapping rows: one row per `br`-delimited line, each row a
         // run of text + mini-chip clusters. Each text run is its own flex item
@@ -490,6 +658,16 @@ export function Chip({
           >
             {unglue.label}
           </Text>
+          {renderAfterRule ? (
+            // The hairline and then the second fact, both BEHIND the label. The
+            // chip's own SM gap stands on each side of the rule, so the tile
+            // reads as two facts sharing one box rather than as a label with
+            // something stuck to it.
+            <>
+              <ChipRule size={glyphSlot.size} />
+              {renderAfterRule(fg)}
+            </>
+          ) : null}
           {trailingPill ? (
             // CENTRED on the label's line, in the very same measured one-line box
             // the leading glyph stands in — a mini-chip beside a line of text is
@@ -514,9 +692,122 @@ export function Chip({
             // own onPress.
             <GlyphSlot {...glyphSlot} onPress={onTrailingPress}>{renderTrailing(fg)}</GlyphSlot>
           ) : null}
+          {endAction ? (
+            // The tile's own trailing EDGE, painted purple. It cancels the chip's
+            // gutter on the end side and its derived vertical padding on both
+            // others (negative margins, read straight off the box the chip is
+            // using — never a second guess at it), states the gutter again as its
+            // own, and takes the tile's corner where it meets it.
+            // `alignSelf:'stretch'` is what makes it full height whatever the
+            // label does: the chip's row is aligned flex-start, for the leading
+            // glyph, so without it the block would be one line tall inside a
+            // wrapped tile.
+            <Pressable
+              onPress={endAction.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={endAction.a11yLabel}
+              style={[
+                styles.endAction,
+                { marginVertical: -pad.style.paddingVertical, borderColor: bgColor },
+              ]}
+            >
+              {endAction.renderIcon ? (
+                // A MARK IN THIS BLOCK IS CENTRED IN THE BLOCK, not on a line of
+                // text (user report 2026-07-31: the plus sat visibly off the
+                // block's middle). It used to stand in the app's glyph-beside-text
+                // slot — but there is no text beside it here, and that slot pays
+                // for a text neighbour twice over: its box is one LINE of label
+                // tall rather than the block's own height, and `inkOffset` then
+                // nudges the mark down onto ink that is not there. The block is a
+                // plain tile with a mark in the middle of it, exactly like the
+                // close X in a round chrome button, so it is centred by the
+                // block's own `justifyContent` and this wrapper's `alignSelf`.
+                // (The WORD form keeps the default stretch: it is a line of text
+                // and lays itself out as one.)
+                <View style={styles.endActionGlyph}>{endAction.renderIcon(WHITE)}</View>
+              ) : (
+                <Text style={[styles.chipText, styles.endActionText]}>{endAction.label}</Text>
+              )}
+            </Pressable>
+          ) : null}
         </>
       )}
     </Container>
+  )
+}
+
+// ── THE stacked chip: one tile, several facts, a rule between them ─────────
+// (user directive 2026-07-30.) The match card's bottom-START facts — the circle
+// we share, the kids/family sentence, the where/when — were three separate white
+// tiles in a column with photo showing between them. They are ONE tile now,
+// divided by the app's hairline: they are one set of facts about one person, and
+// a set is an object. The photo shows around it, not through it.
+//
+// The divider is the app's ONE rule — LINE at StyleSheet.hairlineWidth, the very
+// hairline the dock draws between its options and `ChipRule` draws inside a chip
+// — laid ACROSS the tile because these facts are stacked, and edge to edge
+// because this is one object being divided rather than a list of rows in a box.
+//
+// The rows are ordinary `Chip`s: each keeps its glyph slot and the chip's own
+// gutter, so the tile declares no padding of its own and the rule needs no inset.
+// What a row drops is only what made it a separate OBJECT — the fill and the
+// lift — and it drops it through the context above rather than by a prop at the
+// call site.
+//
+// What it takes ON is the gutter on the VERTICAL too (user directive 2026-07-31,
+// see CHIP_BLOCK_PAD): a stacked row is a wrapping sentence in a wide white
+// block, not a short line in a capsule, so the pill's derived padding — which is
+// whatever a round chrome button has left over — read as text pressed against the
+// block's top and bottom edges. The rows are the one part of the app that pays
+// the same air on all four sides; a lone chip is still exactly a button tall.
+//
+// On its OUTER edges, that is (user directive 2026-07-31): the two rows meeting
+// at a seam pay it together, half each, so the facts stand a gutter apart
+// instead of two (see CHIP_BLOCK_SEAM_PAD). The tile's own four edges are
+// unchanged — a row learns which of its edges is which from the context below.
+//
+// alignItems:'flex-start' so every row hugs its own label and the tile hugs the
+// WIDEST of them (a stretch-aligned column would have made every row as wide as
+// the widest and defeated each chip's own hug). The rule then takes
+// `alignSelf:'stretch'`, which is what lets a zero-width hairline span whatever
+// width the rows settled on.
+export function ChipStack({
+  tone = 'neutral',
+  onPhoto = false,
+  pointerEvents,
+  style,
+  children,
+}: {
+  tone?: ChipTone
+  onPhoto?: boolean
+  /** The tile is PAINTED where its widest row reaches, so it swallows its own
+   *  touch everywhere it is white — see the match card's toggle rule. Stated
+   *  here rather than per row for exactly that reason. */
+  pointerEvents?: 'auto' | 'none' | 'box-none' | 'box-only'
+  style?: StyleProp<ViewStyle>
+  children?: React.ReactNode
+}) {
+  // toArray drops the nulls a conditional row renders, so the rules land between
+  // the facts that are actually there — and an empty set paints no tile at all.
+  const rows = Children.toArray(children)
+  if (!rows.length) return null
+  const { bg } = TONES[tone]
+  const bgColor = onPhoto && tone !== 'solid' ? PHOTO_CHROME : bg
+  return (
+    <View
+      pointerEvents={pointerEvents}
+      style={[styles.stack, { backgroundColor: bgColor }, onPhoto && styles.chipShadow, style]}
+    >
+      {rows.map((row, i) => (
+        <Fragment key={isValidElement(row) ? row.key ?? i : i}>
+          {i ? <View style={styles.stackRule} /> : null}
+          {/* A provider per ROW, not one around the set: what a row needs to know
+              is its own position, which is what decides whether each of its
+              vertical edges pays the block's gutter or half of it. */}
+          <ChipStacked.Provider value={rowPos(i, rows.length)}>{row}</ChipStacked.Provider>
+        </Fragment>
+      ))}
+    </View>
   )
 }
 
@@ -626,7 +917,7 @@ const styles = StyleSheet.create({
     // read as cramped). `paddingVertical` here is only the pre-measurement
     // stand-in; the real one is derived (see CHIP_HEIGHT / useChipPadding), and
     // it is the same number at font scale 1, so nothing moves as the probe lands.
-    paddingHorizontal: MD,
+    paddingHorizontal: CHIP_GUTTER,
     paddingVertical: SM,
     borderRadius: RADIUS,
     flexShrink: 1,
@@ -634,6 +925,17 @@ const styles = StyleSheet.create({
   // The compact tile: one step in on both axes, so the chip annotates a list row
   // instead of standing beside it as an object of its own weight.
   chipSmall: { paddingHorizontal: SM, paddingVertical: XS, gap: XS },
+  // A chip that is a BLOCK rather than a pill — a stacked row of the match card's
+  // fact tile. The gutter on all four sides (see CHIP_BLOCK_PAD): these rows are
+  // wrapping sentences in a wide white block, not one short line in a capsule, so
+  // the pill's derived 8dp read as text pressed against the block's edges.
+  chipBlock: { paddingVertical: CHIP_BLOCK_PAD },
+  // …and half of it on an edge that faces a SEAM rather than the outside, since
+  // the row on the other side of that hairline pays the other half (see
+  // CHIP_BLOCK_SEAM_PAD). Two styles and not four, so each edge is decided on its
+  // own and a one-row stack keeps the block's air on both.
+  chipBlockSeamTop: { paddingTop: CHIP_BLOCK_SEAM_PAD },
+  chipBlockSeamBottom: { paddingBottom: CHIP_BLOCK_SEAM_PAD },
   // The line-box probe is a measuring stick, not content: absolute so it neither
   // takes a slot in the chip's row (the row's `gap` would push the label off by
   // SM for a zero-width child) nor holds the tile open when the label is taller
@@ -642,6 +944,25 @@ const styles = StyleSheet.create({
   // Same soft lift the round overlay buttons cast — applied to on-photo tiles so
   // chips and buttons read as one fabric off the image (shared LIFT_SHADOW).
   chipShadow: LIFT_SHADOW,
+  // The stacked tile (see ChipStack): the chip's own ground and corner, with the
+  // rows' boxes inside it. It states no padding — every row is a whole chip box
+  // already — and hugs its widest row, the same way a lone chip hugs its label.
+  stack: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    borderRadius: RADIUS,
+    flexShrink: 1,
+  },
+  // The divider between two facts on one tile: the app's ONE hairline, run edge
+  // to edge (`alignSelf:'stretch'` — the rows carry the gutter, so the rule needs
+  // no inset of its own and reads as the tile being divided rather than as a
+  // list separator sitting inside it).
+  stackRule: {
+    alignSelf: 'stretch',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: LINE,
+  },
   // The rule is drawn OUTSIDE the padding box, so an outlined chip would sit
   // taller and wider than the filled chips beside it. Pull the padding in by
   // exactly the border width: same tokens, same outer rectangle, so a row of
@@ -651,7 +972,7 @@ const styles = StyleSheet.create({
   chipOutlined: {
     ...OUTLINE_SKIN,
     backgroundColor: 'transparent',
-    paddingHorizontal: MD - STROKE.thin,
+    paddingHorizontal: CHIP_GUTTER - STROKE.thin,
     paddingVertical: SM - STROKE.thin,
   },
   chipText: {
@@ -679,6 +1000,72 @@ const styles = StyleSheet.create({
   // The small tile's label — the list-row size, one step under the chip's own.
   chipTextSmall: {
     fontSize: TEXT.sm,
+  },
+  // The in-chip rule's box: one line of label tall (the probe beside it says how
+  // tall that is) with the hairline stretched to fill it. It hugs its content on
+  // the cross axis in the chip's flex-start row, so on a wrapped label it stands
+  // beside line one.
+  rule: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  ruleInk: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: LINE,
+  },
+  // The purple block continuing the tile at its trailing edge (see `endAction`).
+  // It carries the chip's OWN gutter — the same MD the label stands in on the
+  // other side — so the tile reads as one box with a purple end, not as a button
+  // parked inside a chip. Its END corners are the tile's (RADIUS), its start
+  // edge is square, because that edge is where the tile continues. The vertical
+  // half of the bleed is inline: only the chip knows its derived padding.
+  endAction: {
+    alignSelf: 'stretch',
+    // …and a FLOOR under that stretch, because the stretch is the one part of
+    // this box that is not guaranteed: the chip's row is aligned flex-start (for
+    // the leading glyph), so `alignSelf` is a per-child override — the very kind
+    // Fabric is known to drop silently on this component (see `chip` above, where
+    // the same lesson is recorded about the glyph wrapper). Dropped, the block
+    // collapses to its own content and stands SHORT of the tile's bottom edge,
+    // which reads as the mark inside it sitting high (user report 2026-07-31).
+    // A chip is exactly a round chrome button tall, so that height is the floor,
+    // and it is inert wherever the stretch does work: a one-line tile is exactly
+    // CHIP_HEIGHT, and a wrapped one is taller still.
+    minHeight: CHIP_HEIGHT,
+    justifyContent: 'center',
+    marginEnd: -CHIP_GUTTER,
+    // The tile's own white, laid as a RING around the purple (user directive
+    // 2026-07-30). It is an optical correction, not a decoration: a dark block
+    // butted against a light one of the same height reads SMALLER than it is
+    // (irradiation), so the purple looked like a short button dropped into the
+    // tile. Setting it back off the tile's edges by a stroke — in the very white
+    // the name stands on, so the ring reads as the tile and not as a border —
+    // makes the two ends read as one object again. `borderColor` is inline: only
+    // the chip knows which ground it is painting (PHOTO_CHROME on a photo, the
+    // tone's own bg off it).
+    borderWidth: STROKE.thin,
+    // The block's outer edge is the tile's, so the label's gutter is measured
+    // from there: a border is drawn INSIDE the box, so the padding gives back
+    // exactly what the stroke took (same correction as `chipOutlined`).
+    paddingHorizontal: CHIP_GUTTER - STROKE.thin,
+    // For whatever precedes it this block is an edge, not a neighbouring part,
+    // so the label stands at the tile's GUTTER from it rather than at the row's
+    // inter-part gap: the tile's own MD, less the SM the chip's `gap` already
+    // puts there.
+    marginStart: CHIP_GUTTER - SM,
+    backgroundColor: INK,
+    borderTopEndRadius: RADIUS,
+    borderBottomEndRadius: RADIUS,
+  },
+  // The mark inside that block, hugging itself and centred across it. The block
+  // is a column, so `alignSelf` is the horizontal half and its own
+  // `justifyContent` the vertical one — between them the mark sits in the middle
+  // of the purple, which is the whole point (see the slot it replaced).
+  endActionGlyph: {
+    alignSelf: 'center',
+  },
+  endActionText: {
+    color: WHITE,
   },
   // A small pale-purple pill riding inside the chip after the label — the
   // "+N more shared groups" hint. The PAGE tint, the same fill the chip itself

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Dimensions } from 'react-native'
 import { useEffect } from 'react'
 import {
-  makeMutable, runOnJS, scrollTo, useAnimatedReaction, useDerivedValue, useSharedValue,
+  makeMutable, measure, runOnJS, scrollTo, useAnimatedReaction, useDerivedValue, useSharedValue,
   type AnimatedRef, type SharedValue,
 } from 'react-native-reanimated'
 import {
@@ -196,6 +196,18 @@ export function useFocusedFieldFooter(height: number, active: boolean): void {
  *
  * Wired once, into `PullScrollView` (the app's only scroll surface), so it
  * covers every list and form in the app.
+ *
+ * WHERE THE FIELD IS is not a live number and cannot be made one here: the
+ * platform measures a focused input when it takes focus and when the input
+ * itself re-lays-out, and nothing else — an ancestor sliding under it is
+ * neither. So a field focused while its surface is still arriving reports the
+ * position it had mid-flight for as long as it holds focus, and this ride
+ * scrolls the form to a place that was never right (the create-group name field
+ * ended up above the top of its own page, Pixel 2026-07-30). The fix belongs at
+ * the focus, not here: `RiseArrival` in components/RisingCard.tsx, which makes
+ * `autoFocus` wait for the surface to land. Do not try to compensate for a
+ * stale measurement in this file — every number it could be corrected against
+ * is stale in the same way.
  */
 export function useKeyboardReveal(
   // An `useAnimatedRef`, so the scroll can be driven from a worklet — a JS
@@ -214,10 +226,38 @@ export function useKeyboardReveal(
   const fromHeight = useSharedValue(0)
   const toHeight = useSharedValue(0)
   const riding = useSharedValue(false)
+  const cut = keyboardAirCut(useBottomInset())
 
-  /** How far the content must move for the focused field to clear the keyboard
-   *  at `keyboardHeight`, or 0 if it already does. */
-  const overlapFor = (keyboardHeight: number): number => {
+  /**
+   * The lowest point on screen THIS SURFACE can actually show, once the page has
+   * finished giving up `pendingShrink` to the keyboard.
+   *
+   * Not the keyboard's top: a scroll surface that does not reach the keyboard
+   * must not pretend it does. The profile preview is a card with a fixed action
+   * bar UNDER it, so its scroll ends a bar's height above the keyboard — and a
+   * reveal aimed at the keyboard's top lifted the bio field into the strip the
+   * card cannot show, i.e. behind that bar, which reads exactly like the
+   * keyboard covering the field (emulator, 2026-07-30).
+   *
+   * The surface gives up exactly what the page gives up, because everything
+   * below it keeps its height and the surface is the flexible one — so its
+   * post-shrink bottom is its measured bottom less the shrink. For a surface
+   * that IS the page (every form and list in the app) that lands one `cut`
+   * below the keyboard's top, and the `min` hands it back the keyboard's top,
+   * which is what those surfaces always used. `measure` failing is the same
+   * answer, so a null is not a special case.
+   */
+  const visibleBottomFor = (keyboardHeight: number, pendingShrink: number): number => {
+    'worklet'
+    const keyboardTop = SCREEN_H - keyboardHeight
+    const m = measure(scrollRef)
+    if (!m) return keyboardTop
+    return Math.min(keyboardTop, m.pageY + m.height - pendingShrink)
+  }
+
+  /** How far the content must move for the focused field to clear the bottom of
+   *  its own surface at `keyboardHeight`, or 0 if it already does. */
+  const overlapFor = (keyboardHeight: number, pendingShrink: number): number => {
     'worklet'
     const focused = input.value
     if (!focused) return 0
@@ -228,7 +268,7 @@ export function useKeyboardReveal(
     // ScrollView and reports its tag; ours has to be that one.
     if (scrollTag.value == null || focused.parentScrollViewTarget !== scrollTag.value) return 0
     const fieldBottom = focused.layout.absoluteY + focused.layout.height + focusedFieldFooter.value
-    return Math.max(0, fieldBottom + LG - (SCREEN_H - keyboardHeight))
+    return Math.max(0, fieldBottom + LG - visibleBottomFor(keyboardHeight, pendingShrink))
   }
 
   useGenericKeyboardHandler(
@@ -236,8 +276,10 @@ export function useKeyboardReveal(
       onStart: (e) => {
         'worklet'
         // `e` carries the DESTINATION, so the whole ride is known before the
-        // keyboard has moved a pixel.
-        const overlap = e.progress === 1 ? overlapFor(e.height) : 0
+        // keyboard has moved a pixel — which is also why the shrink is PENDING
+        // here: the surface still measures at its full height, and what it is
+        // about to give up is the same value the two application points take.
+        const overlap = e.progress === 1 ? overlapFor(e.height, Math.max(0, e.height - cut)) : 0
         if (overlap <= 0) { riding.value = false; return }
         from.value = scrollOffset.value
         to.value = scrollOffset.value + overlap
@@ -283,7 +325,9 @@ export function useKeyboardReveal(
   const revealNow = () => {
     'worklet'
     if (kb.value <= 0 || riding.value) return
-    const overlap = overlapFor(kb.value)
+    // No pending shrink here: the keyboard is already up, so the surface
+    // measures at the height it has given up to already.
+    const overlap = overlapFor(kb.value, 0)
     if (overlap > 0) scrollTo(scrollRef, 0, scrollOffset.value + overlap, true)
   }
 

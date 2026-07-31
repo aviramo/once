@@ -10,12 +10,28 @@ import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, wi
 import { Path } from 'react-native-svg'
 import { Text } from './AppText'
 import { Glyph } from './icons'
+import { MetaLine } from './MetaLine'
+import { SheetTitle } from './BottomSheet'
 import { publicImageUrl } from '../lib/api'
-import { type MemberImage } from '../lib/communities'
-import { XS, SM, MD, TEXT, WEIGHT, PULSE, SKELETON, SYNC, lh } from '../tokens'
-import { INK, INK_DIM, WHITE, LINE, SURFACE_SUNK } from '../colors'
+import { groupFacts, type MemberImage } from '../lib/communities'
+import { XS, SM, MD, TEXT, WEIGHT, PULSE, SKELETON, SYNC, SHEET_GAP, lh } from '../tokens'
+import { INK, INK_DIM, INK_MUTED, WHITE, LINE, SURFACE_SUNK } from '../colors'
 
 export const AVATAR = 40
+
+// THE purple disc the avatar lane wears when there is no photograph in it: a
+// person's initial, the friends star, or — on the roster's queue row — how many
+// people are waiting at the door. ONE object, so a count standing in that lane
+// is the same disc as a face and lines up with every name under it by
+// construction. `text` is the short way in (a letter, a number); `children` is
+// for a mark that is not a character.
+export function AvatarDisc({ size = AVATAR, text, children }: { size?: number; text?: string; children?: React.ReactNode }) {
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' }}>
+      {children ?? <Text style={{ color: WHITE, fontWeight: WEIGHT.medium, fontSize: size * 0.4 }}>{text}</Text>}
+    </View>
+  )
+}
 
 // A member's / person's / owner's main photo, or their initial on a brand
 // ground. The literal '★' name renders the friends star instead of a letter.
@@ -26,15 +42,65 @@ export function Avatar({ userId, name, image, size = AVATAR }: { userId: string;
   return uri ? (
     <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
   ) : (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' }}>
-      {label === '★' ? (
-        <StarGlyph size={size * 0.5} color={WHITE} />
-      ) : (
-        <Text style={{ color: WHITE, fontWeight: WEIGHT.medium, fontSize: size * 0.4 }}>{initial}</Text>
-      )}
+    <AvatarDisc size={size} text={initial}>
+      {label === '★' ? <StarGlyph size={size * 0.5} color={WHITE} /> : undefined}
+    </AvatarDisc>
+  )
+}
+
+// ── A group's own heading ──────────────────────────────────────────────────
+// WHICH GROUP THIS IS, said the one way, wherever it is said (user directive
+// 2026-07-31): the face of whoever runs it, the group's facts on the app's one
+// fact line under that face, and the group's NAME under them. It is the group
+// popup's head — the surface a searcher, an invitee and a member all meet a
+// group in — and since a person's page inside a group is standing IN that
+// group, its heading is this same block rather than a name on its own. One
+// component, so the two can never drift; the popup adds its own description and
+// its link tap around it, and nothing else differs.
+//
+// The order is the popup's and is load-bearing: the facts belong to the FACE
+// above them ("managed by <them>"), which is why they sit between the photo and
+// the name rather than stranded under it — and THE NAME ENDS THE BLOCK, in the
+// popup and on a person's page alike (user directive 2026-07-31). Everything
+// before it is a fact in the app's footnote rank; the name is the one heading,
+// and it is what the block is naming, so it lands last and closest to whatever
+// the surface puts under it.
+export function GroupHead({ group, note }: {
+  group: { name: string; members?: number | null; owner?: { user_id: string; name: string | null; image: MemberImage } | null }
+  /** One line about the PERSON whose page this heading is standing on, ABOVE
+   *  the group's name (user directive 2026-07-31, having sat under it for the
+   *  morning): who they are and when they joined, or how long they have been
+   *  waiting at its door (memberSince / waitingSince, which is where the name
+   *  comes from). The group popup itself passes none: it is about the group and
+   *  nobody else, and its head is this same block one line shorter. It takes the
+   *  fact line's own rank and muted ink because that is what it is — the second
+   *  fact over the name, the one about the person rather than the circle. */
+  note?: string | null
+}) {
+  return (
+    <View style={gh.head}>
+      {group.owner ? (
+        <View style={gh.avatar}><Avatar userId={group.owner.user_id} name={group.owner.name} image={group.owner.image} /></View>
+      ) : null}
+      <MetaLine parts={groupFacts(group.members, group.owner?.name)} color={INK} align="center" />
+      {note ? <Text style={gh.note}>{note}</Text> : null}
+      {/* Whole name, wrapping as far as it needs (user directive 2026-07-27):
+          a surface about one group never abbreviates which. */}
+      <SheetTitle>{group.name}</SheetTitle>
     </View>
   )
 }
+
+const gh = StyleSheet.create({
+  // The popup's own title-to-description rhythm, because that is what this
+  // block is: a heading and the line that explains it.
+  head: { alignItems: 'center', gap: SHEET_GAP.desc },
+  avatar: { paddingBottom: XS },
+  // The app's footnote rank, the same one the fact line it follows takes: it is
+  // a fact, not a heading. No margin of its own — the block's `gap` is what
+  // stands it off the name under it.
+  note: { fontSize: TEXT.sm, color: INK_MUTED, textAlign: 'center' },
+})
 
 export const StarGlyph = ({ size, color }: { size: number; color: string }) => (
   <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">

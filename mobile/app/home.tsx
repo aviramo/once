@@ -10,7 +10,7 @@ import { invoke, markStartupComplete, onAuthRecovered, publicImageUrl, API_TIMEO
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
 import { matchImageUrls } from '../src/lib/profileImages'
-import { useUserStore, resolveLocationType, selectProfileBuilt, type Profile, type Page2Invite } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectProfileBuilt, selectWatcherCount, selectInvisibleReason, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, getInitialNotificationGroupId, getInitialNotificationActorId, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
@@ -22,7 +22,8 @@ import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, GLYP
 import { useBottomInset } from '../src/hooks/useBottomInset'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BuildProfileGate } from '../src/components/BuildProfileGate'
-import { BottomSheet, SheetActions, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
+import { useBrowseAllowance } from '../src/lib/browseGate'
+import { BottomSheet, SheetActionPair, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedCirclesPopup, useSharedCircles } from '../src/components/SharedListPopup'
 import { flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type CommunitiesTarget } from '../src/lib/communities'
@@ -46,8 +47,8 @@ import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
 import { FIXED_BOX_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, GlyphScale, CloseIcon, BackIcon, UserIcon, ShieldIcon, GroupsIcon, SlidersIcon, CreditIcon } from '../src/components/icons'
-import type { CardAction } from '../src/components/MatchCard'
+import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, GlyphScale, CloseIcon, BackIcon, UserIcon, UserPlusIcon, ShieldIcon, GroupsIcon, SearchIcon, CreditIcon } from '../src/components/icons'
+import type { CardAction, CardCountdown } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
 
@@ -418,48 +419,10 @@ const headlineAreaStyle = StyleSheet.create({
 // <SheetActions flush> like every other popup's — see the sheet itself below.)
 
 // ── Invite timer ──────────────────────────────────────────────────────────
-
-// `onZero` fires the moment the clock runs out — including on mount, when the
-// target is already in the past. Exactly once per target: an expired
-// invitation is a one-shot event, and the handler hits the network.
-//
-// Held in a ref so callers can pass an inline arrow without restarting the
-// interval every render, which would reset the countdown a caller never asked
-// to reset.
-function useSecsLeft(expiresAt: string | null | undefined, onZero?: () => void) {
-  const target = expiresAt ? new Date(expiresAt).getTime() : 0
-  const [secsLeft, setSecsLeft] = useState(() =>
-    target ? Math.max(0, Math.floor((target - Date.now()) / 1000)) : 0
-  )
-  const onZeroRef = useRef(onZero)
-  onZeroRef.current = onZero
-  const firedRef = useRef(false)
-  useEffect(() => {
-    firedRef.current = false
-    if (!target) { setSecsLeft(0); return }
-    const tick = () => {
-      const left = Math.max(0, Math.floor((target - Date.now()) / 1000))
-      setSecsLeft(left)
-      if (left === 0 && !firedRef.current) {
-        firedRef.current = true
-        onZeroRef.current?.()
-      }
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [target])
-  return secsLeft
-}
-
-function formatClock(secsLeft: number): string {
-  const h = Math.floor(secsLeft / 3600)
-  const m = Math.floor((secsLeft % 3600) / 60)
-  const s = secsLeft % 60
-  return h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
+// The visible countdown is NOT here any more (user directive 2026-07-30): it
+// rides inside the name/age chip on the card itself — see CardCountdown in
+// MatchCard.tsx, which owns both the tick (src/lib/countdown.ts) and the clock's
+// place on screen. This screen only decides WHICH card has a deadline on it.
 
 // True once `expiresAt` has passed. Unlike useSecsLeft this does NOT tick every
 // second — it schedules a single timeout for the exact remaining interval and
@@ -484,22 +447,17 @@ function useLapsed(expiresAt: string | null | undefined): boolean {
 // ── StatusCard scaffold ──────────────────────────────────────────────────
 // Visual scaffolding shared by InviteTimerCard (page1 invite timer), EventMessageCard
 // (terminal locked-message states) and ViewersStatusCard (Viewers empty-state).
-// All three render the same card surface with optional title,
-// description, and a stack of full-width Buttons below. The live timer for
-// invite/cooldown rides inside the primary Button itself (footer slot), so
-// no separate clock/bar row lives in this scaffold.
+// All three render the same card surface with optional title, description, and
+// a stack of full-width Buttons below — and NOTHING between the two (user
+// directive 2026-07-30): the invitation countdown that used to stand there is on
+// the card's name/age chip now, so what is left is the popup's own rhythm, a
+// heading with its sentence and then SHEET_GAP.actions of air before what the
+// user can do about it.
 
 // Smooth layout transition for the card interior. When the description text
 // or the button stack grows/shrinks, height changes animate in sync instead
 // of snapping.
 const STATUS_LAYOUT = LinearTransition
-
-// Invitation-countdown type size. Deliberately its own token rather than a
-// TEXT step: the clock is the one glanceable number on the card and reads a
-// notch above the body copy. Sized at the "large numeric readout" step so the
-// countdown carries real presence on the card instead of reading as another
-// line of text (user request 2026-07-19).
-const STATUS_TIMER_FONT = TEXT.xl
 
 const statusCardStyles = StyleSheet.create({
   // The message card is INVERTED relative to the page it announces on: a light
@@ -547,18 +505,6 @@ const statusCardStyles = StyleSheet.create({
     ...SHEET_TITLE,
     includeFontPadding: false,
   },
-  // The invitation countdown, sitting between the body text and the buttons: a
-  // block under the description, so it stands at the popup's between-blocks gap.
-  // Tabular figures so the digits don't jitter as the seconds tick.
-  timer: {
-    marginTop: SHEET_GAP.block,
-    fontSize: STATUS_TIMER_FONT,
-    fontWeight: WEIGHT.medium,
-    color: INK,
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
-    includeFontPadding: false,
-  },
 })
 
 // Shared heading+body text for every StatusCard variant (InviteTimerCard /
@@ -583,37 +529,18 @@ function StatusCardText({ title, description }: { title: string; description: st
   )
 }
 
-// The live invitation countdown, drawn inside whichever status card is
-// announcing that invitation. It used to ride in the TabStrip as a sub-label;
-// with the tabs gone it moved here (user decision 2026-07-19), which also
-// removed the sequencing hack that held the tab clock back until the card had
-// slid in — a clock rendered inside its own card cannot precede it.
-//
-// `frozen` holds it at 00:00 after an invitation expires, so "this is over" is
-// said by the same clock rather than by its disappearance.
-//
-// The tick lives in this component, not in HomePage, so a second of the
-// countdown re-renders only the card.
-function StatusTimer({ expiresAt, frozen, onLapsed }: { expiresAt?: string | null; frozen?: boolean; onLapsed?: () => void }) {
-  const secsLeft = useSecsLeft(frozen ? null : expiresAt ?? null, onLapsed)
-  if (!frozen && !expiresAt) return null
-  return (
-    <AnimatedText layout={STATUS_LAYOUT} style={statusCardStyles.timer}>
-      {formatClock(frozen ? 0 : secsLeft)}
-    </AnimatedText>
-  )
-}
-
-// Page1 "you sent an invitation" timer card. Heading-led body
-// (StatusCardText) + the live countdown + a plain full-width cancel button.
-function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, onLapsed, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; expiresAt?: string | null; onCancel: () => void; onLapsed?: () => void; busy?: boolean }) {
+// Page1 "you sent an invitation" card. Heading-led body (StatusCardText) + a
+// plain full-width cancel button. The countdown it is named for is no longer
+// drawn here — it rides the card's name/age chip (CardCountdown in
+// MatchCard.tsx), which is also where the lapse now fires from, so this card
+// takes neither `expiresAt` nor `onLapsed`.
+function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean }) {
   const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
   const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
 
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={description} />
-      <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.cancelWaitingBtn')}
@@ -631,13 +558,13 @@ function InviteTimerCard({ targetIsMale, userIsMale, expiresAt, onCancel, onLaps
 // Top-of-card info component for terminal locked-message states (page1 after
 // a terminal event, page2 dead invite). Same scaffold as InviteTimerCard —
 // heading-led body (StatusCardText) + a single full-width "back to game"
-// button. `frozen` shows the countdown held at 00:00 when the invitation ended
-// by expiring; every other terminal message draws no clock.
-function EventMessageCard({ title, description, frozen, onContinue, busy }: { title: string; description: string; frozen?: boolean; onContinue: () => void; busy?: boolean }) {
+// button. It carries no clock: a card that is over has no deadline left on it,
+// and what stands in the name/age chip while this card is the topBlock is the X
+// that scrolls back UP to it (MatchCard's `ended`).
+function EventMessageCard({ title, description, onContinue, busy }: { title: string; description: string; onContinue: () => void; busy?: boolean }) {
   return (
     <View style={statusCardStyles.container}>
       <StatusCardText title={title} description={description} />
-      {frozen ? <StatusTimer frozen /> : null}
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <Button
           label={t('home.endedBack')}
@@ -678,8 +605,6 @@ function ReplyingInviteCard({
   onUnaffordable,
   busy,
   acceptLoading,
-  expiresAt,
-  onLapsed,
   inPopup,
 }: {
   title: string
@@ -689,9 +614,6 @@ function ReplyingInviteCard({
    * 2026-07-25: no Skip button there — the card is dismissed by swiping the
    * sheet down, and a person is skipped by the page1 pull gesture instead). */
   declineLabel?: string
-  /** Live countdown for an INCOMING invitation (the page2 use). The page1
-   * send-prompt has nothing ticking yet, so it passes none. */
-  expiresAt?: string | null
   /** Stars the accept action spends — shown as the in-button cost badge
    * (heart + N). Reads "0" on the free page1 invite prompt so the user
    * sees that inviting costs nothing. */
@@ -712,9 +634,6 @@ function ReplyingInviteCard({
   onUnaffordable?: () => void
   busy?: boolean
   acceptLoading?: boolean
-  /** Fired once when `expiresAt` runs out. No-op on the page1 invite prompt,
-   * which carries no clock. */
-  onLapsed?: () => void
   /** Set by the page1 invite POPUP use. Drops the scaffold's PAGE ground so the
    * popup's own white shows through (user directive 2026-07-28: every popup is
    * white). The page2 topBlock use leaves it off and keeps the tint, because
@@ -734,7 +653,6 @@ function ReplyingInviteCard({
       inPopup && statusCardStyles.containerInPopup,
     ]}>
       <StatusCardText title={title} description={description} />
-      <StatusTimer expiresAt={expiresAt} onLapsed={onLapsed} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
         <View style={statusButtonStyles.btnRow}>
           {declineLabel != null && onDecline != null && (
@@ -853,6 +771,19 @@ export default function HomePage() {
   // same rule (profileComplete). One marker, shared with the menu CTA.
   const profileBuilt = selectProfileBuilt(profile)
   const [buildProfileOpen, setBuildProfileOpen] = useState(false)
+  // …AND HE MAY WATCH TWO PEOPLE BEFORE THAT (user directive 2026-07-31). The
+  // browse allowance (lib/browseGate.ts) counts the faces this account has been
+  // shown while it has no profile; once it is SPENT the third candidate does not
+  // rise at all and home's one action surface becomes the build-profile gate.
+  // Three places read it and nothing else does: the play button (there is none),
+  // the centre notice (which becomes the gate), and the two paths a fresh
+  // candidate could arrive by — the skip's commit and the promote effect.
+  const browse = useBrowseAllowance(profileBuilt)
+  const [browseGateOpen, setBrowseGateOpen] = useState(false)
+  // Read from the pull's commit, which must not change identity because a face
+  // was counted — assigned during render, like overlaysRef.
+  const browseSpentRef = useRef(false)
+  browseSpentRef.current = browse.spent
   // ── Single-screen shell ─────────────────────────────────────────────────
   // The app is ONE screen: page1 (home). Everything else rises over it as a
   // full-screen OverlaySheet and is dismissed by swiping down — the same
@@ -983,12 +914,16 @@ export default function HomePage() {
   // this works while the chat is CLOSED — exactly when the dot is needed. See
   // useChatHasUnread.
   const chatHasUnread = useChatHasUnread(chatOpen)
-  // Same marker on the menu button: someone is waiting on an answer of mine
-  // (a join request on a group I manage, or an incoming friend request), and
-  // the menu is the only way to that queue. Read off the denormalized
+  // The queue on the dock's Circles entry: someone is waiting on an answer of
+  // mine (a join request on a group I manage, or an incoming friend request),
+  // and the dock is the only way to it. Read off the denormalized
   // relations.communities summary the settings row already counts from — one
-  // source, so the dot and the row it leads to can never disagree.
-  const menuHasPending = pendingApprovals(communitiesSummary(profile)) > 0
+  // source, so the marker and the row it leads to can never disagree.
+  //
+  // A COUNT, not a boolean (user directive 2026-07-30): people waiting is a
+  // QUANTITY, and the dock says a quantity with a chip rather than a dot — see
+  // the dock block below.
+  const pendingCount = pendingApprovals(communitiesSummary(profile))
   // ── "You haven't met your circles yet" ──────────────────────────────────
   // A brand-new user meets the app as a stream of faces and has no way to learn
   // that WHO he is shown depends on his circles. The app used to say that by
@@ -1205,31 +1140,66 @@ export default function HomePage() {
   // re-implemented here: this list is only which glyph and which word open which
   // of the four.
   //
-  // **Circles carries the notification dot** — an open request in Circles is
-  // said on the entry that leads to it (user directive 2026-07-30). It reads the
-  // same `menuHasPending` the shell's hamburger used to, which is why deleting
-  // that button lost nothing: the queue it counted (join requests on a group I
-  // manage + incoming friend requests) has always lived inside Circles.
+  // **Circles carries the queue** — an open request in Circles is said on the
+  // entry that leads to it (user directive 2026-07-30). It reads the same count
+  // the shell's hamburger used to, which is why deleting that button lost
+  // nothing: the queue it counted (join requests on a group I manage + incoming
+  // friend requests) has always lived inside Circles.
+  //
+  // It says it with the NUMBER, not a dot (user directive 2026-07-30): people
+  // are waiting, and how many of them is the fact. A queue is what the dot used
+  // to mean, so the number stands exactly where it stood and takes precedence
+  // over it (see HomeDock's `count`).
   //
   // It carries a SECOND reason, and only until it is answered once: a user who
   // has never opened Circles is told there is something here to find (see
   // `circlesSeen`) — the whole of what the forced onboarding nudge used to do.
+  // That one stays a DOT: there is nothing to count about a page never opened.
   //
   // **The entry has three states, in this order, and they are one story** (user
   // directive 2026-07-30):
   //   1. no profile yet → the key is FADED (`dimmed`), glyph and word together,
-  //      and carries NO dot. Circles is members-only, so the dot would point at
-  //      a door the gate will refuse; the dot this user needs is the one on the
-  //      PROFILE entry, which is the door that unlocks this one. The key stays
-  //      pressable and taps into the members-only popup (`routeToCommunities` →
-  //      `commGateOpen`), which explains the closed door and offers onboarding.
+  //      and carries NO marker at all. Circles is members-only, so it would
+  //      point at a door the gate will refuse; the dot this user needs is the
+  //      one on the PROFILE entry, which is the door that unlocks this one. The
+  //      key stays pressable and taps into the members-only popup
+  //      (`routeToCommunities` → `commGateOpen`), which explains the closed door
+  //      and offers onboarding.
   //   2. profile built, never opened Circles → full strength, WITH the dot. Not
   //      counted, not delayed: it is there from the moment the profile exists.
-  //   3. opened once → clean, until a real queue lights it again (`menuHasPending`).
+  //   3. opened once → clean, until a real queue lights it again (`pendingCount`,
+  //      as the purple chip).
   //
   // `routeToCommunities` is the one place the members-only rule is enforced,
   // shared with the push and invite-link routers, so the fade is only ever a
   // picture of a decision made there — never a second copy of it.
+  //
+  // **A QUANTITY is a number; a dot is only for what cannot be counted** (user
+  // directive 2026-07-30). Three of the four entries open on a quantity — the
+  // requests waiting in Circles, the people watching me, the credits I hold —
+  // and each states it beside its glyph, exactly where the dot stands. The dot
+  // survives for the two facts that have no number: onboarding unfinished, and
+  // Circles never opened.
+  //
+  // **The number is bare ink: no tile, no fill, no shadow** (user directive
+  // 2026-07-30, after all three wore the app's `Chip` for an afternoon — the
+  // very tile each of these numbers rides on the ROW its popup opens). A tile in
+  // that corner reads as a second object stuck to a 24dp mark, and it took the
+  // strip's own colour question with it (which fill on which ground). The ink
+  // says the whole thing, and the purple/white distinction the tiles needed is
+  // simply gone. See `HomeDock`'s `count`.
+  //
+  // Each still follows the rule of the row it leads to, including when it is
+  // absent: the watcher count only while I am actually visible AND someone is
+  // there (a hidden or unbuilt user is watched by nobody, and 0 watchers is not
+  // a fact worth painting), the credits count always, because a wallet always
+  // has an amount — zero included, which is the number that matters most.
+  const watcherCount = selectWatcherCount(profile)
+  const invisibleReason = selectInvisibleReason(profile)
+  // Affordability: total spendable = balance + extra. Charging deducts
+  // balance first, but the user can spend any heart they have. The
+  // balance/extra split is displayed in settings, not here.
+  const starsBalance = creditTotal(profile)
   const [prefsPopupOpen, setPrefsPopupOpen] = useState(false)
   const [appSettingsPopupOpen, setAppSettingsPopupOpen] = useState(false)
   const dockItems = useMemo<DockItem[]>(() => [
@@ -1238,18 +1208,21 @@ export default function HomePage() {
       label: t('home.dock.profile'),
       icon: <UserIcon color={INK} size={ICON.xxl} />,
       // An UNFINISHED account opens ONBOARDING, not the preview (user directive
-      // 2026-07-30) — and it lands on the step the user stopped at, photos or
-      // bio. That resume is onboarding's own (`initialStep`, which reads the
-      // profile: fewer than 2 photos → the photo step, photos but no bio → the
-      // bio step), so this passes no step and nothing here can disagree with it.
+      // 2026-07-30), and it lands on the one step that is still missing: the
+      // photos. That resume is onboarding's own (`initialStep`, which reads the
+      // profile — fewer than MIN_PHOTOS photos → the photo step), so this
+      // passes no step and nothing here can disagree with it. There is only one
+      // resume point since 2026-07-31, when two photos became the whole
+      // definition of a built profile and the bio stopped being required.
       // A preview of a profile that does not exist yet is a blank card with
       // nothing to do on it; the door has to be the flow that fills it.
       onPress: profileBuilt
         ? openProfileSheet
         : () => { tap(); router.push('/onboarding') },
-      // Onboarding not finished (no bio yet → the server treats this account as
-      // "browse only"). Same dot the Circles entry wears for a pending queue —
-      // one marker, so the entry that fixes the problem is the one that says so.
+      // Onboarding not finished (under two photos → the server treats this
+      // account as "browse only"). Same dot the Circles entry wears for a
+      // pending queue — one marker, so the entry that fixes the problem is the
+      // one that says so.
       badge: !profileBuilt,
     },
     {
@@ -1257,22 +1230,31 @@ export default function HomePage() {
       label: t('communities.menuRow'),
       icon: <GroupsIcon color={INK} size={ICON.xxl} />,
       onPress: routeToCommunities,
-      // BOTH reasons for the dot hang off entitlement, not just the first-visit
-      // one: an unbuilt account can still be sent a friend request, and a dot
-      // over a faded key would point at a door the gate refuses — the one thing
-      // this rule says must not happen. While dimmed the key carries no dot at
-      // all, whatever is queued behind it; it comes back the moment the profile
-      // does, with the queue intact.
-      badge: profileBuilt && (menuHasPending || !circlesSeen),
+      // BOTH reasons hang off entitlement, not just the first-visit one: an
+      // unbuilt account can still be sent a friend request, and a marker over a
+      // faded key would point at a door the gate refuses — the one thing this
+      // rule says must not happen. While dimmed the key carries nothing at all,
+      // whatever is queued behind it; it comes back the moment the profile does,
+      // with the queue intact.
+      //
+      // The queue is a number and the first visit is a dot, and the number wins
+      // when both are true: it says everything the dot says and how many besides.
+      count: profileBuilt && pendingCount > 0 ? pendingCount : undefined,
+      badge: profileBuilt && !circlesSeen,
       dimmed: !profileBuilt,
     },
     {
       key: 'preferences',
       label: t('home.dock.preferences'),
-      // The age-range row's own glyph (user directive 2026-07-30), not a
-      // magnifying glass: what this opens is a set of RANGES to sit inside, and
-      // the sliders say that where a search glass said "type something in".
-      icon: <SlidersIcon color={INK} size={ICON.xxl} />,
+      // The magnifying glass (user directive 2026-07-30, replacing the sliders
+      // that stood here): what these preferences decide is WHO the app goes
+      // looking for, and that is the mark every app uses for looking. The age
+      // rows keep their sliders INSIDE — a row states its own field, the key
+      // states what the whole set is for.
+      icon: <SearchIcon color={INK} size={ICON.xxl} />,
+      // The live watcher count, under the same condition the visibility row
+      // inside this popup states it by, so the two are one statement of one fact.
+      count: !invisibleReason && watcherCount > 0 ? watcherCount : undefined,
       onPress: () => { tap(); setPrefsPopupOpen(true) },
     },
     {
@@ -1283,9 +1265,13 @@ export default function HomePage() {
       // to the thing at the head of that list, the CREDITS mark.
       label: t('home.dock.more'),
       icon: <CreditIcon color={INK} size={ICON.xxl} />,
+      // The wallet is the head of what this opens and the glyph already says so;
+      // the number says how much is in it — always shown, exactly as the credits
+      // row shows it, zero included.
+      count: starsBalance,
       onPress: () => { tap(); setAppSettingsPopupOpen(true) },
     },
-  ], [openProfileSheet, routeToCommunities, menuHasPending, profileBuilt, circlesSeen, router])
+  ], [openProfileSheet, routeToCommunities, pendingCount, profileBuilt, circlesSeen, router, watcherCount, invisibleReason, starsBalance])
 
 
 
@@ -1327,8 +1313,36 @@ export default function HomePage() {
   const state = watchingLapsed ? null : rawState
   const page2Raw = profile?.relations?.page2
   const page2InviteObj: Page2Invite | null = page2Raw && !Array.isArray(page2Raw) ? page2Raw as Page2Invite : null
-  const page2PendingInvite = page2InviteObj?.state === 'pending' ? page2InviteObj : null
-  const page2DeadInvite = (page2InviteObj?.state === 'missed' || page2InviteObj?.state === 'fail') ? page2InviteObj : null
+  // AN INVITATION'S OWN CLOCK IS WHAT ENDS IT, ON THE CLIENT TOO — the same
+  // rule the watching card above is torn down by, and for the same reason:
+  // nothing that has reached 00:00 on screen may still be carrying a live
+  // button. The lapse does ask the server to settle (handleInviteLapsed →
+  // /app/focus → app_expire_self), but the client cannot LEARN the answer from
+  // that call: a plain `invoke` response has its relations stripped
+  // (userStore.applyServerUser), because page2 is only ever written by the
+  // OTHER user's RPCs and is therefore Realtime-owned. So the settled card
+  // arrives over the socket alone — and when that event is late, dropped, or
+  // the socket is asleep, the invitation sat at 00:00 with "Open chat" still
+  // live and pressing it answered `"no_incoming"` (reported 2026-07-30 on one
+  // emulator while the other, whose event did land, had flipped).
+  const page2ServerPending = page2InviteObj?.state === 'pending' ? page2InviteObj : null
+  const page2InviteLapsed = useLapsed(page2ServerPending?.expires_at)
+  const page2PendingInvite = page2InviteLapsed ? null : page2ServerPending
+  // Nothing is invented here: an invitation that runs out of time dies exactly
+  // one way, so the card drawn from the local clock is the card the server is
+  // writing at that same moment (_expire_invite_pair → page2 locked/'expire' →
+  // the store's `missed` synthesis). The Realtime event, whenever it lands,
+  // replaces this with an identical one — and the dead card it draws is what
+  // takes the clock off the chip and puts the X there (page2Ended below).
+  const page2LapsedInvite = useMemo(
+    () => (page2ServerPending && page2InviteLapsed
+      ? { ...page2ServerPending, state: 'missed' as const, message: 'expire' }
+      : null),
+    [page2ServerPending, page2InviteLapsed],
+  )
+  const page2DeadInvite = (page2InviteObj?.state === 'missed' || page2InviteObj?.state === 'fail')
+    ? page2InviteObj
+    : page2LapsedInvite
   const rawPage1State = profile?.relations?.page1?.state
   const page1Profile = (profile?.relations?.page1 as { profile?: { user_id?: string } } | undefined)?.profile
   // Broadcast ("show me to people" / app_add) was RETIRED from the client on
@@ -1344,10 +1358,6 @@ export default function HomePage() {
   const [page2Discovery, setPage2Discovery] = useState(false)
   const [chatUnreadAlerting, setChatUnreadAlerting] = useState(false)
   const prevChatUnreadRef = useRef(0)
-  // Affordability: total spendable = balance + extra. Charging deducts
-  // balance first, but the user can spend any heart they have. The
-  // balance/extra split is displayed in settings, not here.
-  const starsBalance = creditTotal(profile)
   const page2InviteUserId = page2PendingInvite?.user_id ?? null
   const prevPage2InviteUserIdRef = useRef<string | null | undefined>(undefined)
 
@@ -2072,6 +2082,15 @@ export default function HomePage() {
   const runIgnore = useCallback(() => {
     if (busy || ignoreLoading) return
     tap()
+    // A SKIP WITH THE ALLOWANCE SPENT ASKS FOR NOTHING NEXT. app/ignore is
+    // "restrict this person and find me another", and the other half of it is
+    // what must not happen here: app_find would draw a stranger AND push them a
+    // 'candidate' notification for a watch this client is about to release. So
+    // the card is put away with app/pause instead — page1 goes `locked`, which
+    // detaches me from that person's viewer list and is the one state the
+    // server's auto-find leaves alone. No restriction is written either, which
+    // is right: the app took the game away, the user did not reject anyone.
+    const stopping = browseSpentRef.current
     // A gesture skip arrives here already in 'pull'; a button skip arrives in
     // 'idle', so restart the choreography clock from 0. Either way it settles
     // at 1 while the card rides off.
@@ -2083,7 +2102,9 @@ export default function HomePage() {
     setBusy(true)
     setPendingKey('watching-reject')
     setIgnoreLoading(true)
-    setSearching(true)
+    // Nothing is being scanned for when nothing is being asked for, so the
+    // radar stays down and the pane comes up on the gate instead.
+    if (!stopping) setSearching(true)
     // Fresh scan starts in the "no candidate yet" phase, not the
     // image-loading one (matters if a previous skip's loadingProfile
     // hadn't cleared yet).
@@ -2097,7 +2118,7 @@ export default function HomePage() {
     // null) and the sync effect clears the loading state.
     setDisplayedMatch(null)
     // Keep the request so a pause tapped mid-skip can be chained after it.
-    const ignorePromise = invoke('app/ignore', {})
+    const ignorePromise = invoke(stopping ? 'app/pause' : 'app/ignore', {})
     inflightSkipRef.current = ignorePromise
     ignorePromise.catch(err => {
       console.error(err)
@@ -2227,6 +2248,24 @@ export default function HomePage() {
         setPendingKey(null)
       }
     }
+    // THE THIRD FACE DOES NOT RISE. A candidate the browse allowance no longer
+    // covers is never promoted — and it is RELEASED rather than merely hidden,
+    // because a watch nobody is looking at is a lie on the other person's row
+    // (they carry me in their viewer list for a card that is not on screen).
+    // app/pause is the one release that leaves page1 `locked`, which is also
+    // what stops the server's auto-find from seeding another on the next
+    // start/focus: this path is the safety net for that auto-find, since the
+    // skip below never asks for a next candidate once the allowance is spent.
+    // Gated on `watching` — the allowance is about faces watched, and a chat or
+    // an invitation is not something to take away (an unbuilt account can reach
+    // neither, so this is belt and braces).
+    if (remoteMatch && rawPage1State === 'watching' && !browse.allows(remoteMatch.user_id)) {
+      invoke('app/pause', {}).catch(() => {})
+      setLoadingProfile(false)
+      setSearching(false)
+      clearLoading()
+      return () => { cancelled = true }
+    }
     if (!remoteMatch) {
       skipAbortedRef.current = false
       setDisplayedMatch(null)
@@ -2324,6 +2363,16 @@ export default function HomePage() {
       setDisplayedMatch(remoteMatch)
     }
   }, [remoteMatch])
+
+  // The allowance is spent on a face that actually ROSE, never on one the server
+  // merely drew: a candidate released unseen (the guard above) or aborted
+  // mid-skip cost the user no look at all. `watch` is idempotent per person, so
+  // the same card read again after a relaunch — page1 keeps its occupant — is
+  // the same view and spends nothing.
+  useEffect(() => {
+    if (state !== 'watching' || !displayedMatch) return
+    browse.watch(displayedMatch.user_id)
+  }, [displayedMatch?.user_id, state])
 
   // Hidden preloader fires onReady once all photos have rendered. That's the
   // signal to promote the match into the visible slot — at that point the
@@ -2616,29 +2665,28 @@ export default function HomePage() {
       })
   }, [busy])
 
-  // ── Page2 pending-invite swipe-down ──────────────────────────────────────
-  // Same unified behaviour/threshold/commit motion as page1 (slide off, then
-  // onCommit). Independent instance from page1's — both panes can be mounted
-  // at once and shared values can't be aliased across the two gesture trees.
-  // `openRefuseConfirm` still backs the explicit decline BUTTON (confirm
-  // dialog, decline is irreversible); the SWIPE now declines directly, per
-  // the uniform-commit decision (decline-without-confirm accepted).
+  // ── Declining a pending invitation ───────────────────────────────────────
+  // The ONE route: the status card's own Skip button, through this confirm
+  // (decline is irreversible). Nothing else on the screen reaches it.
   const openRefuseConfirm = useCallback(() => {
     tap()
     setRefuseConfirmOpen(true)
   }, [])
-  // The incoming invitation's own pull behaviour (`page2Pull`) is gone: the
-  // card is now the body of an OverlaySheet, which owns the gesture. That
-  // sheet is configured commit='confirm', so a committed swipe opens the
-  // decline confirm and the card springs back.
+  // A PENDING INVITATION IS NOT SWIPEABLE (user directive 2026-07-30). The
+  // sheet is handed swipeToClose={!page2PendingInvite}, so while the question
+  // is open the card does not move under the finger at all.
   //
-  // This REVERSES an earlier decision that an incoming invitation must not be
-  // swipeable at all (the gesture used to be created with enabled:false). The
-  // user re-decided on 2026-07-19 with the single-screen redesign, where
-  // swipe-down-to-close is the one dismissal gesture every surface shares —
-  // an invitation that alone refused it read as broken. Declining still
-  // routes through the same confirm dialog as the decline button, so the
-  // swipe cannot discard an invitation by accident.
+  // Third position on this, and the reasoning is worth keeping: it was
+  // unswipeable originally (`enabled:false`), then made swipeable on 2026-07-19
+  // with the single-screen redesign, on the ground that swipe-down-to-close is
+  // the one dismissal gesture every surface shares and a card that alone
+  // refused it read as broken. What that missed is that this card is not a
+  // surface the user OPENED — it is the app asking him something, and the two
+  // answers are both named buttons on it. The dismiss gesture had nothing of
+  // its own to do here, so it became a second, silent Skip.
+  //
+  // The DEAD card (missed/fail) is the opposite case and keeps the swipe: it
+  // asks nothing, so riding it off is exactly its Continue button (app/free2).
 
   // Watching-state invite prompt lives in a popup raised by the hero heart,
   // NOT inside the MatchCard scroll (user directive 2026-07-25 — moved off the
@@ -2691,17 +2739,15 @@ export default function HomePage() {
   // (topBlock), mirroring how InviteTimerCard sits on the page1 sent-invite
   // card. StatusCard scaffold, no standalone heading (the title rides as a
   // bold lead-in inside the body via StatusCardText), accept CTA + decline
-  // secondary inside the card, and the live countdown between the two. The
-  // decline button opens the same refuse-confirm dialog as the swipe-down
-  // gesture on the sheet.
+  // secondary inside the card. Its clock is on the card's name/age chip, not in
+  // here (see page2Countdown below). The decline button opens the same
+  // refuse-confirm dialog as the swipe-down gesture on the sheet.
   const replyingInviteCard = page2PendingInvite ? (
     <ReplyingInviteCard
       title={tg('home.replyingTitle', page2PendingInvite.is_male)}
       description={tgg('home.replyingDesc', isMale, page2PendingInvite.is_male)}
       acceptLabel={t('home.replyingAccept')}
       declineLabel={t('home.watchingReject')}
-      expiresAt={page2PendingInvite.expires_at}
-      onLapsed={handleInviteLapsed}
       costCredits={CREDIT_COST.approve}
       affordable={starsBalance >= CREDIT_COST.approve}
       onAccept={() => runAction('app/approve', 'replying-accept')}
@@ -2764,7 +2810,10 @@ export default function HomePage() {
   // find" — when state is `free` we surface the no-one-nearby + Search Preferences UI.
   // Never offer the find/play button while geo-gated — the server returns no
   // candidates for a gated user anyway, so the button would be a dead end.
-  const isReadyToFind = !geoGated && state === null && rawPage1State !== 'free'
+  // …and never once the browse allowance is spent: the play button IS the
+  // request for a candidate, so a spent allowance has no play button. What
+  // stands in its place is the gate below.
+  const isReadyToFind = !geoGated && !browse.spent && state === null && rawPage1State !== 'free'
   const isPermMode = showNotifOverlay || (state !== 'chat' && (showLocOverlay || locFailed || isNetMode))
 
   // While gated — by the server availability gate OR a missing device
@@ -2864,23 +2913,68 @@ export default function HomePage() {
               // wait for the gate to lift. Static InboxIcon is the fallback
               // for a fresh install where the avatar hasn't been resolved yet.
               : { text: t('home.geoGate.unavailable'), icon: <InboxIcon color={WHITE} size={64} />, avatarUri: gateAvatarUri, onPress: openProfileSheet })
-        : null
+        // The browse allowance, spent (lib/browseGate.ts). LAST of the three:
+        // a missing permission and the server's own gate are things the user
+        // must fix before anything works at all, and this one is a door he can
+        // walk through whenever he likes. It is also the one notice that does
+        // NOT take the card away (see blockingNotice, which is deliberately not
+        // told about it): the person on screen is one of the two he is allowed
+        // to be watching, and the gate stands where the NEXT one would rise.
+        // The circle wears the mark of what it opens — the build-profile
+        // popup's own glyph, exactly as the no-candidate circle wears the
+        // search popup's.
+        : browse.spent
+          ? {
+              text: t('home.browseGateTitle'),
+              icon: <UserPlusIcon color={WHITE} size={CENTER_GLYPH_SIZE} />,
+              onPress: () => { tap(); setBrowseGateOpen(true) },
+            }
+          : null
 
   // ── Invitation countdowns ───────────────────────────────────────────────
-  // Both clocks used to ride in the TabStrip as sub-labels. With the tabs gone
-  // they moved INTO the card block that announces the invitation (user
-  // decision 2026-07-19), which is where they belonged anyway: the countdown
-  // is now drawn inside the very component it describes, so it can no longer
-  // appear before that component has (see StatusTimer + the deleted
-  // waitingChipReady sequencing that existed only to hold the tab back).
+  // A COUNTDOWN BELONGS TO THE PERSON, NOT TO THE MESSAGE ABOUT HIM (user
+  // directive 2026-07-30). Both clocks used to be a big centred readout inside
+  // the status card that announces the invitation — a block at the TOP of the
+  // card's scroll, which the user scrolls past to see the face, taking the one
+  // number with a deadline on it off the screen with it. They ride the card's
+  // name/age chip now (MatchCard's `countdown`), which is pinned out of the
+  // scroll, so the clock is wherever the person is.
   //
-  // Outgoing (this user invited someone and is waiting) → InviteTimerCard.
-  // Incoming (someone invited this user) → ReplyingInviteCard.
-  // Expired either way → the EventMessageCard freezes at 00:00, so "this is
-  // over" is communicated by the same clock rather than its disappearance.
+  // Each is derived HERE, beside the state that decides which status card the
+  // topBlock is showing, so the card and the clock on it can never disagree:
+  // outgoing (this user invited someone and is waiting) → InviteTimerCard;
+  // incoming (someone invited this user) → ReplyingInviteCard.
+  //
+  // AND A CARD THAT IS OVER CARRIES NO CLOCK AT ALL (user directive
+  // 2026-07-31). An invitation that ended used to hold the chip's clock at a
+  // frozen 00:00, so that "this is over" was said by the same number that had
+  // been counting; it says it with an X now — the same purple block, in the
+  // same place — because a stopped clock states a number that cannot change any
+  // more, and because the states with no deadline of their own (a chat the
+  // other side ended, a declined invitation) had nothing standing there at all.
+  // One mark for every ending, and it is the way back: `endedBack` on the card
+  // scrolls the profile up to the EventMessageCard, or — when the card is
+  // already at the top, so that message and its button are in front of the user
+  // — simply IS that button. Which is why it is handed the very handler the
+  // button carries rather than a flag beside it: one statement of what "back to
+  // the game" means on this board, read by both. The two predicates below are
+  // what BOTH the topBlock branch and that prop read, so the mark and the card
+  // under it can never disagree about whether this person is finished with.
   const waitingExpiresAt = displayedCardMode === 'waiting' ? inviteExpiresAt ?? null : null
-  const page1ExpiredInvite = displayedCardMode === 'missed' && invitedPage1?.message === 'expire'
-  const page2ExpiredInvite = !chatAvailable && page2DeadInvite?.message === 'expire'
+  const page1Ended = isEndedState && !!page1MessageTitle
+  const page2Ended = !page2PendingInvite && !!page2MessageTitle
+  const page1Back = () => runAction('app/clear1', 'ended-stop')
+  const page2Back = () => runAction('app/free2', 'free2')
+  // The lapse fires from the clock, so it travels with it: the moment the chip's
+  // countdown hits zero it asks the server to settle the invitation.
+  const page1Countdown: CardCountdown | undefined =
+    displayedCardMode === 'waiting' && inviteExpiresAt
+      ? { expiresAt: waitingExpiresAt, onLapsed: handleInviteLapsed }
+      : undefined
+  const page2Countdown: CardCountdown | undefined =
+    page2PendingInvite
+      ? { expiresAt: page2PendingInvite.expires_at, onLapsed: handleInviteLapsed }
+      : undefined
 
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
@@ -2938,20 +3032,21 @@ export default function HomePage() {
   // above the page1 card, and it goes away only when the invitation resolves.
   const inviteOverlayOpen = !overlaysGated && !!(page2PendingInvite || page2DeadInvite)
   const inviteCardMatch = page2PendingInvite ?? page2DeadInvite
-  // Swiping the invite card down declines it (through the confirm dialog), so
-  // the sheet must SPRING BACK rather than ride off — the user may cancel.
-  // Reversal of the earlier "an incoming invitation must not be swipeable"
-  // decision; re-decided by the user on 2026-07-19 with the single-screen
-  // redesign, where swipe-down-to-close is the one dismissal gesture. The
-  // dead-invite card has nothing to confirm and closes via app/free2.
+  // The sheet's onClose. Only the DEAD card can reach it now — a pending
+  // invitation is not swipeable and wears no X (see openRefuseConfirm above) —
+  // but it stays total on purpose: one sheet instance spans both states, so a
+  // gesture begun on a card that expires under the finger must still land
+  // somewhere sane rather than on a branch that does not exist.
   const closeInviteOverlay = useCallback(() => {
     if (page2PendingInvite) openRefuseConfirm()
     else runAction('app/free2', 'free2')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page2PendingInvite])
-  // Back button, step 2 (see the BackHandler effect). Pending declines through
-  // the confirm; dead is swallowed so back can't dismiss a card the server
-  // still owns.
+  // Back button, step 2 (see the BackHandler effect). Pending raises the decline
+  // confirm — a NAMED, cancellable dialog, which is why back is left alone by
+  // the no-swipe rule above: what that rule bans is putting the card away with
+  // no answer, not answering it. Dead is swallowed so back can't dismiss a card
+  // the server still owns.
   inviteBackRef.current = () => {
     if (!inviteOverlayOpen) return false
     if (page2PendingInvite) { openRefuseConfirm(); return true }
@@ -3112,7 +3207,7 @@ export default function HomePage() {
                               // circle (no white background, no inner icon).
                               // Otherwise (perm/push/loading/notYet-without-avatar)
                               // fall back to the centered icon-on-white tile.
-                              <View style={[styles.permAvatar, centerNotice.avatarUri && !centerNotice.busy ? null : styles.permSlidersButton]}>
+                              <View style={[styles.permAvatar, centerNotice.avatarUri && !centerNotice.busy ? null : styles.permGlyphCircle]}>
                                 {centerNotice.busy
                                   ? <Spinner color={WHITE} size={CENTER_GLYPH_SIZE} />
                                   : centerNotice.avatarUri
@@ -3145,12 +3240,13 @@ export default function HomePage() {
                             ) : (
                               // No candidate to show. The tap opens the search
                               // preferences, so the circle wears that popup's own
-                              // mark — the same sliders the dock's Preferences
-                              // entry does. A heart here promised an action it
-                              // never had, and a hamburger named a drawer that no
-                              // longer exists.
-                              <View style={[styles.permAvatar, styles.permSlidersButton]}>
-                                <SlidersIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
+                              // mark — the same magnifying glass the dock's
+                              // Preferences entry does, and it follows that entry
+                              // whenever it changes. A heart here promised an
+                              // action it never had, and a hamburger named a
+                              // drawer that no longer exists.
+                              <View style={[styles.permAvatar, styles.permGlyphCircle]}>
+                                <SearchIcon color={WHITE} size={CENTER_GLYPH_SIZE} />
                               </View>
                             )}
                             </GlyphScale>
@@ -3187,6 +3283,7 @@ export default function HomePage() {
                             match={preloadingMatch}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
+                            bottomChrome
                             cardHeight={paneHeight}
                             onReady={() => onPreloadReady(preloadingMatch.user_id)}
                           />
@@ -3208,6 +3305,10 @@ export default function HomePage() {
                             match={displayedMatch}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
+                            // The dock is a flow sibling right under page1's box,
+                            // so this card never reaches the screen edge and the
+                            // band below belongs to the strip, not to it.
+                            bottomChrome
                             cardHeight={paneHeight}
                             // While waiting on a sent invitation the inviter sees
                             // only the distance, never the last-seen time.
@@ -3222,21 +3323,25 @@ export default function HomePage() {
                             onReport={() => openReport(displayedMatch.user_id)}
                             onCircleTap={() => circles.open(displayedMatch.user_id, displayedMatch.is_male)}
                             chromeInset={topInset}
+                            // The clock for whichever status card is below —
+                            // riding the name/age chip, out of the scroll. On a
+                            // card that is OVER the same tile carries the X back
+                            // to that card's message instead (user directive
+                            // 2026-07-31); the two are never both set.
+                            countdown={page1Countdown}
+                            endedBack={page1Ended ? page1Back : undefined}
                             topBlock={
                               displayedCardMode === 'waiting' && inviteExpiresAt ? (
                                 <InviteTimerCard
                                   targetIsMale={matchIsMale}
                                   userIsMale={isMale}
-                                  expiresAt={waitingExpiresAt}
                                   onCancel={() => { tap(); setCancelConfirmOpen(true) }}
-                                  onLapsed={handleInviteLapsed}
                                 />
-                              ) : isEndedState && page1MessageTitle ? (
+                              ) : page1Ended ? (
                                 <EventMessageCard
                                   title={page1MessageTitle}
                                   description={page1MessageDesc}
-                                  frozen={page1ExpiredInvite}
-                                  onContinue={() => runAction('app/clear1', 'ended-stop')}
+                                  onContinue={page1Back}
                                   busy={busy && pendingKey === 'ended-stop'}
                                 />
                               ) : undefined
@@ -3246,13 +3351,92 @@ export default function HomePage() {
                       </RisingCard>
                     )}
                   </PullPane>
+
+                  {/* THE OTHER GAME CARD, IN THE SAME BOX AS THE FIRST (user
+                      directive 2026-07-30). Both people the game puts in front of
+                      me are a profile card on HOME: the one I am watching (page1,
+                      above) and the one who invited me (page2, here). So the
+                      second rises exactly where the first does — inside page1,
+                      clipped at the dock's top edge — instead of taking the whole
+                      screen. It used to be an overlay out in the shell, which is
+                      why the same card read as two different surfaces depending on
+                      which board it came from, and why the dock went away under one
+                      of them but not the other. The dock is home's furniture: a
+                      profile the game hands me is content ON home, not a surface I
+                      opened over it, so it never covers the strip.
+
+                      DERIVED from `relations`, so it takes priority over whoever
+                      the user is currently watching: while it is up the page1 card
+                      is behind it, and it leaves only when the invitation resolves.
+
+                      A PENDING INVITATION IS ANSWERED, NOT PUT AWAY (user
+                      directive 2026-07-30) — so while one is up this card has
+                      neither of the two ways out a surface normally has:
+                        chromeless    no close X. Nothing to "close": leaving is an
+                                      ANSWER, and the status card already states
+                                      both in words (Skip / Open chat). An X beside
+                                      them was a second, unlabelled Skip.
+                        swipeToClose  off, so the card does not move under the
+                                      finger at all. It used to drag and spring
+                                      back into the decline confirm (commit
+                                      'confirm'), which made the app's one dismiss
+                                      gesture a third route to the same decision —
+                                      on the ONE card the user is being asked a
+                                      question by. Do not restore either.
+                      The DEAD card (missed/fail) keeps the swipe: it asks nothing,
+                      so riding it off IS its Continue button (commit 'dismiss',
+                      the default → onClose → app/free2). */}
+                  <OverlaySheet
+                    open={inviteOverlayOpen}
+                    activation="scrollPan"
+                    swipeToClose={!page2PendingInvite}
+                    onClose={closeInviteOverlay}
+                    isTop={!chatOpen && !profileSheetOpen && !communitiesSheetOpen}
+                    chromeless
+                    zIndex={OVERLAY.z.invite}
+                    cardStyle={styles.overlayCardBare}
+                  >
+                    {inviteCardMatch ? (
+                      <MatchCard
+                        key={`invite-${inviteCardMatch.user_id}`}
+                        match={inviteCardMatch}
+                        actions={[]}
+                        onReport={() => openReport(inviteCardMatch.user_id)}
+                        onCircleTap={() => circles.open(inviteCardMatch.user_id, inviteCardMatch.is_male)}
+                        viewerLocationType={resolveLocationType(profile)}
+                        bottomInset={0}
+                        // Rendered inside page1's box like the card above, so the
+                        // dock is under this one too.
+                        bottomChrome
+                        // The same height page1's own card is laid out against, so
+                        // the two cards' photos are one size and neither can be
+                        // measured against a box the other never had.
+                        cardHeight={paneHeight}
+                        chromeInset={topInset}
+                        onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
+                        countdown={page2Countdown}
+                        endedBack={page2Ended ? page2Back : undefined}
+                        topBlock={page2PendingInvite
+                          ? replyingInviteCard
+                          : page2Ended ? (
+                            <EventMessageCard
+                              title={page2MessageTitle}
+                              description={page2MessageDesc}
+                              onContinue={page2Back}
+                              busy={busy && pendingKey === 'free2'}
+                            />
+                          ) : undefined}
+                      />
+                    ) : null}
+                  </OverlaySheet>
                 </View>
 
                 {/* THE DOCK. Under page1, in the flow, so it is the one thing on
                     this screen a match card is never laid over — see the note on
-                    `page1` above. Full-screen overlays (menu, chat, invite,
-                    profile, Circles) still rise over it; those are surfaces the
-                    user opened, not the page itself. */}
+                    `page1` above, and note that BOTH game cards are laid out in
+                    that box now (the page2 invite included). The surfaces the user
+                    OPENS — chat, the profile preview, Circles — still rise over
+                    it; those are not the page. */}
                 <HomeDock items={dockItems} bottom={dockBottom} />
 
                 {/* Invite prompt popup — raised by the hero heart in the
@@ -3312,15 +3496,28 @@ export default function HomePage() {
                   onClose={() => setBuildProfileOpen(false)}
                 />
 
+                {/* The browse allowance's door, raised by the centre circle once
+                    two faces have been spent. Same popup as the three others;
+                    its title is the line already standing in the pane behind it,
+                    so pressing the circle reads as that sentence opening. */}
+                <BuildProfileGate
+                  visible={browseGateOpen}
+                  title={t('home.browseGateTitle')}
+                  description={genderize(t('home.browseGateDesc'), isMale)}
+                  onClose={() => setBrowseGateOpen(false)}
+                />
+
                 {/* The Communities members-only gate, raised by the dock's faded
                     circles key and by the routed entries above (push tap /
                     redeemed invite link). Same popup as the two other shut
                     doors, only the sentence differs: the one button is the build
-                    flow, so what says what is missing is also what fixes it. */}
+                    flow, so what says what is missing is also what fixes it.
+                    The sentence ends in an imperative addressed to the user, so
+                    it is genderized like the invite door's title above. */}
                 <BuildProfileGate
                   visible={commGateOpen}
                   title={t('communities.gateTitle')}
-                  description={t('communities.gateDesc')}
+                  description={genderize(t('communities.gateDesc'), isMale)}
                   onClose={() => setCommGateOpen(false)}
                 />
 
@@ -3333,7 +3530,6 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
                   onConfirm={runCancel}
                   busy={busy}
-                  draggable
                 />
 
                 <ConfirmDialog
@@ -3345,7 +3541,6 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setRefuseConfirmOpen(false) }}
                   onConfirm={() => runAction('app/decline', 'refuse-confirm', () => setRefuseConfirmOpen(false))}
                   busy={busy}
-                  draggable
                 />
 
                 {/* The permission ConfirmDialog popup was removed: the
@@ -3356,31 +3551,39 @@ export default function HomePage() {
 
                 {/* Chat-state actions menu (opened from the "End" chip pinned
                     beside the name/age heading on the home card, 2026-07-26 —
-                    it used to live in the chat sheet header). Exactly two
-                    full-width buttons: leaving is the action
-                    the user came here for, so it is the solid primary; blocking
-                    is the drastic, rarely-wanted one and recedes to the muted
-                    secondary. Report is a card-level affordance, not here.
-                    The gutter and the air above and below the pair are the
-                    popup's own, like every other sheet in the app. */}
+                    it used to live in the chat sheet header). The app's one
+                    popup foot (SheetActionPair, 2026-07-31): leaving is what the
+                    user came here for, so it is the purple and it ENDS the row;
+                    blocking is the drastic, rarely-wanted one, so it is a bare
+                    mark on no ground at all, passed on the way past. It was two
+                    full-width tiles stacked with the purple LEADING and the
+                    drastic one receding into a muted secondary — but a tile is a
+                    tile, and the thing you must never press by accident was
+                    still painted as something to press (the same correction the
+                    account popup's delete got). `flush`: this popup is nothing
+                    but the row, so there is nothing above it to stand clear of.
+                    Report is a card-level affordance, not here. */}
                 <BottomSheet
                   visible={chatMenuOpen}
                   onDismiss={() => setChatMenuOpen(false)}
                   onClosed={handleChatMenuClosed}
                 >
-                  <SheetActions flush>
-                    <Button
-                      label={t('chat.leave')}
-                      iconStart={<SignOutIcon color={WHITE} />}
-                      onPress={() => { tap(); chatMenuIntentRef.current = 'leave'; setChatMenuOpen(false) }}
-                    />
-                    <Button
-                      label={t('chat.block')}
-                      variant="secondary"
-                      iconStart={<BlockIcon color={INK_SUBTLE} />}
-                      onPress={() => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) }}
-                    />
-                  </SheetActions>
+                  <SheetActionPair
+                    flush
+                    options={[{
+                      key: 'block',
+                      label: t('chat.block'),
+                      icon: <BlockIcon color={INK} size={ICON.xxl} />,
+                      onPress: () => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) },
+                    }]}
+                    action={
+                      <Button
+                        label={t('chat.leave')}
+                        iconStart={<SignOutIcon color={WHITE} />}
+                        onPress={() => { tap(); chatMenuIntentRef.current = 'leave'; setChatMenuOpen(false) }}
+                      />
+                    }
+                  />
                 </BottomSheet>
 
                 <ConfirmDialog
@@ -3392,7 +3595,6 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setChatConfirmAction(null) }}
                   onConfirm={() => runAction('app/leave', 'leave', () => setChatConfirmAction(null))}
                   busy={busy && pendingKey === 'leave'}
-                  draggable
                 />
                 <ConfirmDialog
                   visible={chatConfirmAction === 'block'}
@@ -3403,7 +3605,6 @@ export default function HomePage() {
                   onCancel={() => { if (!busy) setChatConfirmAction(null) }}
                   onConfirm={() => runAction('app/block', 'block', () => setChatConfirmAction(null))}
                   busy={busy && pendingKey === 'block'}
-                  draggable
                 />
                 {/* One shared report confirm for every match-card surface
                     (page1 + page2). The reported user id is whatever card's
@@ -3437,7 +3638,6 @@ export default function HomePage() {
                     })
                   }}
                   busy={busy && pendingKey === 'report'}
-                  draggable
                 />
 
                 {/* Everything we share, opened by tapping a card's circle chip.
@@ -3472,51 +3672,11 @@ export default function HomePage() {
         {/* ── Overlays, painted low → high ────────────────────────────────
             Each is an OverlaySheet: rises from the bottom, closes on a
             swipe down (the same gesture as page1's pull-to-skip) or its X.
-            The invite is first so the chat and menu can cover it. */}
-
-        {/* Incoming invitation / dead-invite card. DERIVED from `relations`,
-            so it takes priority over whoever the user is currently watching:
-            while it is up the page1 card is behind it, and it leaves only
-            when the invitation resolves. commit='confirm' because a swipe
-            here is a decline REQUEST — the card springs back and the confirm
-            dialog decides. floatingHeader: the body is a full-bleed photo, so
-            the X floats over it rather than sitting on a bar. */}
-        <OverlaySheet
-          open={inviteOverlayOpen}
-          activation="scrollPan"
-          commit={page2PendingInvite ? 'confirm' : 'dismiss'}
-          onClose={closeInviteOverlay}
-          isTop={!chatOpen && !profileSheetOpen && !communitiesSheetOpen}
-          floatingHeader
-          zIndex={OVERLAY.z.invite}
-          cardStyle={styles.overlayCardBare}
-          closeAccessibilityLabel={t('home.a11y.closeInvite')}
-        >
-          {inviteCardMatch ? (
-            <MatchCard
-              key={`invite-${inviteCardMatch.user_id}`}
-              match={inviteCardMatch}
-              actions={[]}
-              onReport={() => openReport(inviteCardMatch.user_id)}
-              onCircleTap={() => circles.open(inviteCardMatch.user_id, inviteCardMatch.is_male)}
-              viewerLocationType={resolveLocationType(profile)}
-              bottomInset={0}
-              chromeInset={topInset}
-              onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
-              topBlock={page2PendingInvite
-                ? replyingInviteCard
-                : page2MessageTitle ? (
-                  <EventMessageCard
-                    title={page2MessageTitle}
-                    description={page2MessageDesc}
-                    frozen={page2ExpiredInvite}
-                    onContinue={() => runAction('app/free2', 'free2')}
-                    busy={busy && pendingKey === 'free2'}
-                  />
-                ) : undefined}
-            />
-          ) : null}
-        </OverlaySheet>
+            These are the surfaces the user OPENS, which is why they are out
+            here and take the whole screen. The page2 invite card is NOT one
+            of them any more — it is a profile the GAME hands the user, so it
+            rises inside page1 with the page1 card (user directive
+            2026-07-30); see the OverlaySheet in the page1 box above. */}
 
         {/* Chat. dragFrom='header' is REQUIRED: the message list is an
             inverted FlatList, so "scroll is at the top" is meaningless and
@@ -3544,12 +3704,16 @@ export default function HomePage() {
           isTop={!profileSheetOpen && !communitiesSheetOpen}
           keepMounted
           zIndex={OVERLAY.z.chat}
-          // No title bar: just a floating close X (white round button, purple
-          // glyph — same chrome as the home hamburger) over the message list.
-          // The partner's name already rides every bubble; the "End Chat" chip
-          // lives on the home card behind this sheet (2026-07-26).
+          // No title bar and, since 2026-07-31, NO CLOSE X either (user
+          // directive): the partner's name already rides every bubble and the
+          // "End Chat" chip lives on the home card behind this sheet
+          // (2026-07-26), so the button over the messages said nothing the
+          // conversation did not already say. The header ROW stays — with
+          // `dragFrom="header"` it is this sheet's drag band, and dragging that
+          // strip is how a chat scrolled to the middle of its history has always
+          // been put away.
           floatingHeader
-          closeAccessibilityLabel={t('chat.a11y.close')}
+          showClose={false}
         >
           {(sheetBody) => (
           <ChatPage
@@ -3581,27 +3745,28 @@ export default function HomePage() {
 
         {/* Profile preview, opened from the dock's first entry — swiping it down
             returns to home.
-            floatingHeader: PreviewFieldPage takes an `onBack` but renders no
-            control for it, so the sheet supplies the X itself. The body is a
-            full-bleed photo card, so the X floats over it. */}
+            CHROMELESS: NO close X (user directive 2026-07-31, the same day every
+            Circles page lost its own). The body is a full-bleed card of my own
+            photos, and the one mark over it — the heading tile's plus — is
+            something to DO, not a way out; a dismiss floating beside it made the
+            corner read as two unrelated marks. The swipe is how it leaves, as it
+            already was for anyone who had ever put it away by dragging. */}
         <OverlaySheet
           open={profileSheetOpen}
           // Its body is a full-bleed MatchCard that owns a PullContext (via
           // PreviewFieldPage), exactly like the invite sheet — so it takes the
           // same 'scrollPan' activation. The default 'sheet' mode uses a
           // manualActivation Pan that consumes the raw touch stream and swallows
-          // taps on the floating close X (that was the "close button doesn't
+          // the taps on the card's own controls (that was the "the button doesn't
           // work" bug).
           activation="scrollPan"
           onClose={closeProfileSheet}
-          floatingHeader
+          chromeless
           zIndex={OVERLAY.z.subPage}
           cardStyle={styles.overlayCardBare}
-          closeAccessibilityLabel={t('home.a11y.closeProfile')}
         >
           {ctx => (
             <PreviewFieldPage
-              onBack={closeProfileSheet}
               clipBottom
               {...ctx}
             />
@@ -3618,7 +3783,6 @@ export default function HomePage() {
           onClose={closeCommunities}
           chromeless
           zIndex={OVERLAY.z.subPage}
-          closeAccessibilityLabel={t('communities.title')}
         >
           {ctx => (
             <CommunitiesPage
@@ -3626,18 +3790,6 @@ export default function HomePage() {
               onRegisterBack={fn => { communitiesBackRef.current = fn }}
               target={communitiesTarget}
               onTargetConsumed={() => setCommunitiesTarget(null)}
-              // Tapping myself in a group roster opens MY profile — the same
-              // editable preview the dock's profile key opens. It lives in
-              // SettingsSurfaces, so home (which owns both) hands it in.
-              renderSelfProfile={selfCtx => (
-                <PreviewFieldPage
-                  onBack={selfCtx.onBack}
-                  dismissGestureRef={selfCtx.dismissGestureRef}
-                  onScrollAtTop={selfCtx.onScrollAtTop}
-                  headerBottomShared={selfCtx.headerBottomShared}
-                  pullEngaged={selfCtx.pullEngaged}
-                />
-              )}
               {...ctx}
             />
           )}
@@ -3832,7 +3984,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  permSlidersButton: {
+  // The filled centre circle behind a GLYPH (rather than behind a face): the
+  // notice circle with no avatar, and the no-candidate state's search mark. Named
+  // for that role, not for whichever glyph is standing in it today.
+  permGlyphCircle: {
     backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',

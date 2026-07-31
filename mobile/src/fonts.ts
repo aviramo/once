@@ -47,6 +47,12 @@ export const TEXT_START: TextStyle = {
 // Applied once, in AppText's TextInput wrapper, and ONLY when the call site
 // stated no alignment of its own: a centred code field, a centred bio and an
 // LTR-pinned value all keep saying what they want and still win.
+//
+// A LABEL never takes this. A `Text` that has to undo an inherited `textAlign`
+// says `'auto'` — the natural edge — because a physical one written into a Text
+// style did not survive at all in the RTL build (see `titleStart` in
+// OverlaySheet.tsx, 2026-07-31). Only a field, whose placeholder is drawn from
+// its own string, needs the edge stated outright.
 export const INPUT_START: TextStyle = {
   textAlign: isRTL ? 'right' : 'left',
 }
@@ -167,17 +173,39 @@ export const FONT_LINE_RATIO = FONT_ASCENT + FONT_DESCENT
 // immune to that: it only ever needs the font size, which IS knowable.
 //
 // Script, not locale-as-decoration: Hebrew ink stops 0.114 em lower than Latin
-// ink does, so the same glyph needs a bigger nudge beside a Hebrew label. The
-// UI renders one language at a time, so the app's own direction picks it.
-const INK_RISE = (FONT_ASCENT - FONT_DESCENT) / 2 - (isRTL ? HEBREW_HEIGHT : CAP_HEIGHT) / 2
+// ink does, so the same glyph needs a bigger nudge beside a Hebrew label.
+//
+// AND IT IS THE LABEL'S SCRIPT, NOT THE APP'S (user report 2026-07-31). The
+// app's own direction used to pick it, on "the UI renders one language at a
+// time" — but a label is not always UI language: a person's NAME is user data,
+// and the match card's heading chip paints "Inbal, 51" in a Hebrew build. That
+// line carries no Hebrew ink at all, so the Hebrew constant measured something
+// that was not on the screen and the report shield beside it sat 1.3dp below the
+// name's own centre (measured on a font_scale 2.0 device: the glyph's ink centre
+// landed 4.5px under the cap-ink centre of "Inbal, 51", where a glyph beside a
+// genuinely Hebrew label on the same screen was exact to the pixel).
+//
+// So a caller that HAS the label hands it over and the line answers for itself:
+// any Hebrew letter in it and the line is Hebrew, otherwise it is Latin — digits
+// alone never make a Hebrew line Latin (they reach cap height, but "לפני 3 ימים"
+// is still a Hebrew line and reads from its letters). A caller with no label to
+// give — a field carrying text that does not exist yet — keeps the app's own
+// direction as the fallback it always was.
+// (Escaped, not the literal block: a raw range in source is two characters
+// nobody can see, and this one decides where every glyph in the app sits.)
+const HEBREW_LETTER = /[\u0590-\u05FF]/
+
+const inkRise = (label?: string): number =>
+  (FONT_ASCENT - FONT_DESCENT) / 2 -
+  ((label == null ? isRTL : HEBREW_LETTER.test(label)) ? HEBREW_HEIGHT : CAP_HEIGHT) / 2
 
 // Nudge a glyph down by this much to sit on a label's ink rather than on its
 // line box. Takes the UNSCALED font size and applies the OS font scale itself
 // (same ceiling the labelled text is capped at), and returns a FLOAT: it feeds
 // a transform, and rounding it to whole dp is what used to collapse two
 // different font scales onto the same 3dp nudge.
-export const inkOffset = (fontSize: number, cap: number = FONT_SCALE): number =>
-  fontSize * Math.min(PixelRatio.getFontScale(), cap) * INK_RISE
+export const inkOffset = (fontSize: number, cap: number = FONT_SCALE, label?: string): number =>
+  fontSize * Math.min(PixelRatio.getFontScale(), cap) * inkRise(label)
 
 // fontWeight → the real weighted face to render it with. The app asks for
 // exactly two: 400 (the default) and 500 (WEIGHT.medium, the single emphasis

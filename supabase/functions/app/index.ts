@@ -8,6 +8,7 @@ import {
   PushToken,
   PUSH_BODY,
   PUSH_TITLE,
+  pickGendered,
 } from "../global.ts";
 
 const searchable = ["is_for_male", "is_for_female", "age_from", "age_to", "range"];
@@ -93,23 +94,28 @@ function availabilityState(u: unknown): string {
   return rel?.availability?.state ?? "available";
 }
 
-// Is this user's profile BUILT — at least one photo AND a non-empty bio? This
-// is the single completion marker the whole feature turns on: onboarding saves
-// the bio last (mobile selectProfileBuilt reads the same field), photos and bio
-// are committed together, and a browse-only user (account created, profile not
-// built) has zero images. Gates the SEND actions (requiresProfile) and the
-// self-seed in /app/start below, so a not-yet-built user can look but is never
-// seen, seeded a viewer, or allowed to invite. others() already drops a
-// zero-image user from every match pool, so this is the symmetric half.
+// How many photos make a profile. The single completion marker the whole
+// feature turns on, and since 2026-07-31 (user directive) it is the WHOLE of
+// it: MIN_PROFILE_IMAGES photos and nothing else. The bio used to be half the
+// test — onboarding saved it last, so it doubled as "the flow ran to the end" —
+// which made the one field nobody has to fill in the thing that decided whether
+// the account worked at all, and it disagreed with itself the moment the
+// preview's inline editor let a built profile clear its bio back to null.
+//
+// Stated in three places and they must agree: here, mobile's
+// selectProfileBuilt, and the only_available image filter inside others().
+const MIN_PROFILE_IMAGES = 2;
+
+// Is this user's profile BUILT? Gates the SEND actions (requiresProfile) and
+// the self-seed in /app/start below, so a not-yet-built user can look but is
+// never seen, seeded a viewer, or allowed to invite. others() drops the same
+// rows from every match pool, so this is the symmetric half.
 // Takes any user-SHAPED object, not only a User: the profile action has to ask
 // this of the row an RPC just handed back (a plain json row) to know whether the
 // save is the one that crossed the gate.
 function profileComplete(u: { data?: unknown } | null | undefined): boolean {
-  const data = u?.data as { images?: unknown[]; bio?: unknown } | null | undefined;
-  const imgs = data?.images;
-  const bio = data?.bio;
-  return Array.isArray(imgs) && imgs.length >= 1
-    && typeof bio === "string" && bio.trim() !== "";
+  const imgs = (u?.data as { images?: unknown[] } | null | undefined)?.images;
+  return Array.isArray(imgs) && imgs.length >= MIN_PROFILE_IMAGES;
 }
 
 // Does this user hold a clock of their OWN that has already run out — an
@@ -172,15 +178,6 @@ function recordPushPresence(user: User, body: Record<string, unknown>) {
   if (perm) next.perm = perm;
   if (freshToken || perm === "granted") next.dead = false;
   user.relations.push = next;
-}
-
-function pickGendered(table: Record<string, Record<string, string>>, code: string, lang: string, actorIsMale: boolean | null): string | undefined {
-  const dict = table[lang] ?? table.he;
-  if (actorIsMale !== null) {
-    const variant = dict[`${code}_${actorIsMale ? "m" : "f"}`];
-    if (variant) return variant;
-  }
-  return dict[code];
 }
 
 async function firePush(
@@ -1155,7 +1152,9 @@ Deno.serve(async (req) => {
         if (Object.keys(payload).length === 0) return log.error(key, "empty_payload", 400);
         // Read the gate BEFORE the save: the auto-visible below fires on the
         // TRANSITION into a built profile and on nothing else, so a built user
-        // who hid on purpose and later edits his bio stays hidden.
+        // who hid on purpose and later edits his profile stays hidden. The save
+        // that crosses the gate is the IMAGES one now (the bio is optional), so
+        // it is onboarding's photo flush that lights the user up.
         const wasBuilt = profileComplete(user);
         // PERSIST FIRST, then save. This is the one action whose RPC writes the
         // same COLUMN the persist does (`data`), and persist writes the whole
@@ -1205,7 +1204,7 @@ Deno.serve(async (req) => {
         }
         // FINISHING THE PROFILE IS WHAT MAKES YOU VISIBLE (user directive
         // 2026-07-30). Up to this save the user was unseeable by construction --
-        // others() drops a photo-less row from every pool and the seed below is
+        // others() drops an under-photographed row from every pool and the seed below is
         // gated on the same profileComplete -- and the app says so, on the one
         // control that states it (the preferences popup's visibility row, shut
         // for exactly this reason). So the round trip that closes that gap must

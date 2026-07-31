@@ -31,6 +31,11 @@ export const STORAGE = {
    *  mounts) from disk instead of waiting out the `users` round trip. Wiped on
    *  sign-out. See stores/userStore.ts. */
   profilePrefix: 'profile_',
+  /** The people a profile-less account has already watched — its browse
+   *  allowance (see lib/browseGate.ts). Ids, not a count: page1 keeps its
+   *  occupant across a relaunch, so the same card read again must not spend a
+   *  second view. Cleared the moment the profile is built. */
+  browseWatched: 'browse_watched',
   /** The user_id the caches on this disk belong to. Most of them are keyed by
    *  what they HOLD (`my_groups`, `roster_<groupId>`, `chat_<otherId>`) and not
    *  by whose device state they are, so the wipe cannot hang off an auth event

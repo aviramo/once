@@ -256,6 +256,31 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
   },
 };
 
+/** Pull a push line out of one of the two tables above, in the ACTOR's gender.
+ *
+ *  Every gendered line in this catalog is about the person the push is ABOUT
+ *  (who joined, who asked, who left), never about the reader — the reader's own
+ *  half of each sentence is written genderless on purpose. Lives here rather
+ *  than in one edge function because BOTH senders need it: app/index.ts for the
+ *  game's lifecycle pushes and ext/index.ts for friends, referrals and groups.
+ *  ext used to look the bare code up and so sent every one of its gendered
+ *  bodies in the masculine ("ביקש להצטרף") whatever the actor's sex.
+ *  A null sex (or a code with no variants) falls back to the base key, which is
+ *  the masculine form — the same default the app's own tg() takes. */
+export function pickGendered(
+  table: Record<string, Record<string, string>>,
+  code: string,
+  lang: string,
+  actorIsMale: boolean | null,
+): string | undefined {
+  const dict = table[lang] ?? table.he;
+  if (actorIsMale !== null) {
+    const variant = dict[`${code}_${actorIsMale ? "m" : "f"}`];
+    if (variant) return variant;
+  }
+  return dict[code];
+}
+
 // Operator alerting. A join-to-group request is emailed here (fire-and-forget
 // from the join_request endpoint) so the admin knows to add the user to a
 // group — the user is otherwise gated and stuck until then. ADMIN_USER_URL is

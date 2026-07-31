@@ -43,7 +43,6 @@ export function BuildProfileGate({ visible, title, description, onClose, onConfi
         else router.push('/onboarding')
       }}
       onCancel={onClose}
-      draggable
     />
   )
 }

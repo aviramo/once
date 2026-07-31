@@ -32,26 +32,31 @@ export default {
   'ob.female': 'Female',
   'ob.nicknameStep': "What's your name?",
   'ob.next': 'Continue',
-  'ob.close': 'Close',
 
   // Onboarding step 2
   'ob.birthdate': 'Date of Birth',
+  // Captions over the three date boxes: the DD/MM/YYYY hint inside a box goes
+  // away the moment a digit is typed, so what each box holds is said in words
+  // above it and stays said.
+  'ob.dateDay': 'Day',
+  'ob.dateMonth': 'Month',
+  'ob.dateYear': 'Year',
   'ob.minAge': 'Minimum age to register is 18',
   'ob.createAccount': 'Create account',
   'ob.createAccount_m': 'Create account',
   'ob.createAccount_f': 'Create account',
   'ob.birthConfirmTitle': 'Confirm your date of birth',
   'ob.birthConfirm': 'Your birthday is {date} and you are {age} years old',
-  'ob.birthConfirmFix': 'Fix',
 
   // Onboarding photo
   'photo.sub': 'Add 2-6 photos',
   'photo.uploadFailed': 'Photo upload failed. You cannot continue without a photo, please try again',
 
-  // Onboarding bio
-  'bio.placeholder': 'A sentence, a feeling, or a moment that represents you...',
+  // Onboarding bio. No character minimum and no required bio (user directive
+  // 2026-07-31): a built profile is two photos and nothing else, so the
+  // 'bio.min' string is deleted.
+  'bio.placeholder': 'This is the place to talk about yourself and what you are looking for',
   'bio.submit': 'Finish',
-  'bio.min': 'Minimum 20 characters',
   'bio.update': 'Update',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
@@ -100,8 +105,6 @@ export default {
   'settings.profile': 'Edit your profile',
   'settings.buildProfile': 'Build your profile',
   'settings.account': 'Account',
-  'settings.visibilityVisible': 'Visible',
-  'settings.visibilityHidden': 'Hidden',
   // The same state as a full sentence, for the preferences popup's leading ROW
   // (user directive 2026-07-30): a row is read as a line of text where the
   // photo's chip is read as a badge, so it says who it is about. No {m|f}
@@ -113,12 +116,16 @@ export default {
   // hidden sentence like anyone else, and this is what the tap answers with. The
   // title and the button are the app's one build-profile gate (BuildProfileGate),
   // so only the blocked door is named here.
-  'settings.visibilityGateDesc': 'For people to see you, you need a profile with photos and a short bio. It only takes a minute',
-  // The watcher count is not a string any more: it rides the visibility chip's
-  // trailing pill as the BARE NUMBER (user directive 2026-07-30) — the tile
-  // floats on a photo and its own label already says what is being counted, so
-  // "1 is watching you" was a sentence where a digit does the whole job. The
-  // hide confirm below still spells it out, where there is room for a sentence.
+  'settings.visibilityGateDesc': 'For people to see you, you need a profile with at least two photos. It only takes a minute',
+  // The watcher count as a SENTENCE, for the pill beside that row (user
+  // directive 2026-07-31, restoring what the bare number replaced the day
+  // before): a row is read as a line of text, so the count finishes the line the
+  // label started, in the same first person it is written in. What stays a bare
+  // number is the DOCK's preferences key — a mark standing beside a 24dp glyph
+  // has no room for a sentence, and the row it opens is where the sentence is.
+  // Singular is its own string, as it is in Hebrew, where the verb inflects.
+  'settings.watchersOne': 'Someone is watching me',
+  'settings.watchersMany': '{count} people are watching me',
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
@@ -133,9 +140,12 @@ export default {
 
   // Circles: the menu row + the full hub sheet and its sub-screens.
   'communities.menuRow': 'Circles',
-  'communities.title': 'Circles',
+  'communities.title': 'My circles',
   'communities.myFriends': 'My friends',
   'communities.myFriendsSub': 'People you personally know',
+  // The one WORD, for the button on the hub's friends row: the row already
+  // says what it is about, so the button only says what it does.
+  'communities.invite': 'Invite',
   'communities.create': 'Create a group',
   'communities.find': 'Find or join a group',
   // Group kinds: ONE axis, three stops (2026-07-27). Replaces the old
@@ -159,9 +169,11 @@ export default {
   // Menu row with nothing in it yet: the row still says what it is for, in the
   // one line the counts would have used.
   'communities.rowEmpty': 'Join groups and friends',
-  // Circles stay locked until the profile is built: photos and a bio
-  'communities.gateTitle': 'Circles open once your profile is built',
-  'communities.gateDesc': 'Circles connect you to people through groups and friends, and everyone there sees your profile. You need a profile with photos and a short bio first',
+  // Circles stay locked until the profile is built: two photos. The
+  // Hebrew sentence carries a {m|f} marker on its imperative and is resolved by
+  // genderize(); English has no gendered form, so it passes through unchanged.
+  'communities.gateTitle': 'People through circles',
+  'communities.gateDesc': 'Circles connect people who share the same interests. To get started, build a profile with at least two photos',
   'communities.managedBy': 'Managed by {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared group in one list.
@@ -171,20 +183,29 @@ export default {
   // keys at all (see he.ts).
   'communities.friendOfM': 'Friend of {name}',
   'communities.friendOfF': 'Friend of {name}',
-  // One list, one empty line: the hub no longer splits managed from joined.
-  'communities.emptyGroups': "You haven't created or joined a group yet",
-  // ...and what belonging is WORTH, under it (user directive 2026-07-30): an
-  // empty page that only names what is missing never says why to fill it. Both
-  // facts are literally what the server does (20260730150000): a fellow member
-  // of a shared group and a friend OF a friend each carry the x3 relevance
-  // factor in `others()`, symmetric, so it is true in both directions, and the
-  // card names the circle. My own friends are NOT in that sentence: they are
-  // excluded from the game outright.
-  'communities.emptyGroupsWhy': 'Someone you share a friend or a group with reaches you first, and the card shows what connects you',
-  'communities.loadError': 'Could not load, try again',
+  // (No "you have no groups yet" line any more: a hub with no groups IS the
+  // start page — the picture, what this is for, the two ways in — with the
+  // friends row over it. See HubStart.)
+
+  // The page before there is anything on it: no friends, nobody waiting, no
+  // group of any kind (user directive 2026-07-30). It is not the list's empty
+  // line — it is the whole screen, so it says what Circles IS and then offers
+  // the only two ways to start one. See HubStart / CirclesArt.
+  'communities.startTitle': 'Your circle starts here',
+  'communities.startDesc': 'Every friend you add can connect you to their single friends too. Groups help you meet people who share your interests',
+  // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
+  // one of the two whose label does not say what it is worth. "Search groups"
+  // needs no line, and a second one turned the two ways forward into a
+  // paragraph.
+  'communities.startFind': 'Search groups',
+  // The friends page before there is a single friend on it: the same drawing
+  // and the same heading as the hub's, one step in — that page offers the two
+  // ways to start a circle, this one owns the first of them, so all it has to
+  // say is what a friend joining actually opens.
+  'communities.friendsStartDesc': 'Invite friends, and when they join, new people from their circles open up to you',
 
   // My friends
-  'communities.inviteFriend': 'Invite a friend',
+  'communities.inviteFriend': 'Invite friends',
   // Caption under the invite button: connecting as friends pays both sides a
   // credit (server credits it on every new friend link, see friend_link_credits).
   'communities.inviteReward': 'For every friend who connects, you both get an extra credit',
@@ -192,7 +213,6 @@ export default {
   'communities.friendsCount': '{count} friends',
   'communities.accept': 'Accept',
   'communities.decline': 'Decline',
-  'communities.remove': 'Remove',
   'communities.noFriends': "You don't have friends here yet",
   // What a friend is FOR (user directive 2026-07-30): not the friend himself,
   // who needs no introduction and is excluded from the game outright as of
@@ -209,11 +229,8 @@ export default {
 
   // Link an existing friend
   'communities.linkTitle': 'Link a friend',
-  'communities.searchPeople': 'Search by name',
   'communities.request': 'Request',
   'communities.requested': 'Sent',
-  'communities.alreadyFriend': 'Friend',
-  'communities.searchHint': 'Type a name to search',
   'communities.noResults': 'No results',
   'communities.linkNote': 'They get a request. Once accepted, you are linked both ways',
 
@@ -255,16 +272,19 @@ export default {
   'communities.deleteTitle': 'Delete {name}?',
   'communities.deleteDesc': 'The group and all its memberships are removed. This cannot be undone',
   'communities.deleteConfirm': 'Delete',
-  'communities.removeMemberTitle': 'Remove {name}?',
-  'communities.removeMemberDesc': 'They can join again with the invite link',
+  // No confirm for taking a member out (user directive 2026-07-31): the tap
+  // removes. `removeMemberTitle` / `removeMemberDesc` / `remove` are deleted with
+  // that popup — the description WAS the reason it needed none ("they can join
+  // again with the invite link").
   'communities.makePublic': 'Make public',
   'communities.makePrivate': 'Make private',
   'communities.approvalEnable': 'Require approval to join',
   'communities.approvalDisable': 'Stop requiring approval',
+  // The queue's one name, on the roster row that unfolds it. Its page-title
+  // twin (`requestsNav`) and its empty line (`noRequests`) went with the page
+  // itself on 2026-07-31: the queue is a drawer inside the roster now, and a
+  // drawer with nothing in it is not drawn at all.
   'communities.requestsSectionJoin': 'Join requests',
-  'communities.requestsNav': 'Join requests',
-  'communities.noRequests': 'No one is waiting right now',
-  'communities.joinRequestFor': 'Joining {name}',
   'communities.approve': 'Approve',
   'communities.approveAll': 'Approve everyone',
   'communities.approveAllTitle': 'Approve every request?',
@@ -293,6 +313,17 @@ export default {
   // Find or join
   'communities.findTitle': 'Join a group',
   'communities.findSearch': 'Search a group',
+  // Searching the roster of a group you manage: the mark on that page's bar,
+  // the field's own placeholder, and the mark that ends the search. It looks
+  // over BOTH lists at once, the people waiting and the people already in.
+  'communities.searchPeople': 'Search by name',
+  'communities.searchClose': 'Close search',
+  // The line about the PERSON, standing over a group's name on their page: who
+  // they are and when they turned up here. Genderless in both languages, so a
+  // row with no profile on it still reads (see memberSince / waitingSince), and
+  // the name leads because everything else in that block is the group's.
+  'communities.inGroupSince': '{name} in the group since {date}',
+  'communities.waitingSince': '{name} waiting since {date}',
   'communities.orCode': 'or with an invite code',
   'communities.join': 'Join',
   'communities.joined': 'Joined',
@@ -344,7 +375,6 @@ export default {
   'settings.ageRange': 'Ages',
   'settings.ageFrom': 'From',
   'settings.ageTo': 'To',
-  'settings.save': 'Save',
   'settings.add': 'Add',
   'settings.range': 'Up to',
   // Distance-field LABEL when range is unlimited (value column left empty).
@@ -363,18 +393,15 @@ export default {
   'settings.locationFromHome': 'From home',
   'settings.locationFromWork': 'From work',
   'settings.locationFromDevice': 'From my current location',
-  'settings.locationDeviceDesc': "Use the device's location",
   'settings.locationCustomDesc': 'Pick an address',
   'settings.locationAddressPrompt': 'Type an address or city name',
   'settings.locationSearch': 'Search',
-  'settings.locationSearching': 'Searching...',
   'settings.locationNoResults': 'No address found. Try a different query',
   'settings.locationFetchingDevice': 'Getting device location...',
   'settings.locationDeviceFailedTitle': "Couldn't get location",
   'settings.locationDeviceFailedDesc': 'Allow location access in device settings and try again',
   'settings.locationPermissionTitle': 'Location permission',
   'settings.locationPermissionDesc': 'Allow location access to use the device location',
-  'settings.locationOpenSettings': 'Open settings',
   'settings.locationOk': 'OK',
   'settings.locationCancel': 'Cancel',
   'settings.locationServicesOffTitle': 'Location services off',
@@ -384,13 +411,15 @@ export default {
   'settings.duplicatePhotoTitle': 'Duplicate photo',
   'settings.duplicatePhotoBody': 'The same photo cannot be uploaded twice. Duplicate photos were removed',
   'settings.photoEditMoveUp': 'Move up',
+  'settings.photoEditReplace': 'Replace photo',
   'settings.photoEditMoveDown': 'Move down',
-  'settings.photoEditReplace': 'Replace',
   'settings.photoEditDelete': 'Delete',
-  'settings.photoMinTwo': 'At least 2 photos required',
-  // Add-chips on the own-profile card, under the fact chips.
-  'settings.addPhoto': 'Add a photo',
+  // The two rows of the popup the own-profile card's heading plus opens.
+  // Each row is the THING, not the verb: the plus already said "add".
+  'settings.addPhoto': 'Photo',
   'settings.addFamily': 'Family & kids',
+  // What that plus says to a screen reader: the mark itself names nothing.
+  'settings.a11y.addToProfile': 'Add to your profile',
   'family.title': 'Family & kids',
   'family.optional': 'optional',
   'family.hasKidsQuestion': 'Do you have kids?',
@@ -410,7 +439,6 @@ export default {
   'family.scheduleWeek1LabelEmphasis': 'with me',
   'family.scheduleWeek1LabelSuffix': ' (repeats)',
   'family.scheduleWeek1Hint': "These days are kept private and never shown to other users. We only use them to surface the matches most relevant to you",
-  'family.scheduleHint': 'Mark the days your kids are with you',
   'family.scheduleAdd': 'Add days',
   'family.scheduleRemove': 'Remove',
   'family.weekLabel': 'Week {n}',
@@ -418,7 +446,6 @@ export default {
   'family.removeWeek': 'Remove week',
   'family.agesAdd': 'Add ages',
   'family.agesRemove': 'Remove ages',
-  'family.countPlaceholder': 'Pick a number',
   'family.agePlaceholder': 'Select age',
   'family.kidLabel': 'Kid #{n}',
   'family.ageUnder1': 'Less than a year',
@@ -473,16 +500,19 @@ export default {
   // one sentence and one action button. The dead 3/10/50 packs and the
   // paragraph above them are gone.
   'credits.buy.title': 'More credits',
-  // The popup's sentence. It states the two ways credits arrive, refill first:
-  // one a day, at the hour it lands ({time} is a bare "HH:MM" from
-  // formatGrantTime), then the invite the button offers. Deliberately NOT the
-  // friends page's caption (communities.inviteReward) that used to be reused
-  // here (user directive 2026-07-28): this popup is where someone comes when
-  // the wallet is empty, so it has to answer "when do I get one anyway", which
-  // that caption never said. The no-hour variant covers a wallet the server
-  // hasn't stamped a next-refill on yet.
-  'credits.buy.desc': 'Every day at {time} a new credit is added to you (if you have none). And in addition, for every friend who joins through you, you both get another credit',
-  'credits.buy.descNoTime': 'Every day a new credit is added to you (if you have none). And in addition, for every friend who joins through you, you both get another credit',
+  // The popup's sentence. It states the two ways credits arrive, THE INVITE
+  // FIRST (user directive 2026-07-31): that is the one the button under it
+  // offers and the only one the user can act on. The daily refill follows as
+  // the fallback it is, with its condition up front instead of in a trailing
+  // parenthesis ({time} is a bare "HH:MM" from formatGrantTime). Deliberately
+  // NOT the friends page's caption (communities.inviteReward) that used to be
+  // reused here (user directive 2026-07-28): this popup is where someone comes
+  // when the wallet is empty, so it has to answer "when do I get one anyway",
+  // which that caption never said. genderize() is a no-op here (no {m|f}
+  // marker). The no-hour variant covers a wallet the server hasn't stamped a
+  // next-refill on yet.
+  'credits.buy.desc': 'For every friend who joins through you, you both get another credit. If you have no credits, a new one is added every day at {time}',
+  'credits.buy.descNoTime': 'For every friend who joins through you, you both get another credit. If you have no credits, a new one is added every day',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.
@@ -498,10 +528,6 @@ export default {
   'settings.genderM': 'For men',
   'settings.genderF': 'For women',
   'settings.genderBoth': 'For everyone',
-  'settings.kidsLabel': 'Planning for kids?',
-  'settings.kidsYes': 'Yes',
-  'settings.kidsNo': 'No',
-  'settings.kidsNa': 'Not relevant',
 
   // Match
   // THE relative-time set, and the only one: the old standalone `match.*Ago`
@@ -524,15 +550,6 @@ export default {
   'home.locationAccessRequired': 'Location access required to see the distance',
   'home.noInternetTitle': 'No internet connection',
   'home.noInternetDesc': 'Once needs an internet connection to work. Please check your Wi-Fi or mobile data and try again',
-  'home.noInternetButton': 'Try again',
-  // ViewersStatusCard (page2) — 5 states
-  // In-card trigger that opens the broadcast confirm popup. Reads as a
-  // mode-switch (parallel to the go-visible label), NOT as the action verb;
-  // the confirm popup's button (home.broadcastConfirmButton) keeps the
-  // "broadcast me" wording.
-  'home.premiumPopup.add': 'Show me to people',
-  'home.premiumPopup.hide': 'Hide my profile',
-  'home.premiumPopup.reveal': 'Show my profile',
   // English is non-gendered (single form); tg picks the same string for either is_male.
   'settings.hideConfirmTitle': 'Hide your profile?',
   'settings.hideConfirmDesc': 'All your watchers will be removed and notified',
@@ -541,7 +558,6 @@ export default {
   'settings.hideConfirmButton': 'Hide',
 
   // Home — match teaser
-  'home.tapForMore': 'Back to the game',
   // Ready-to-find headline pool. One line is picked at random each time the
   // home pane (re)enters the ready state (see home.tsx headlineText). Stored
   // as a newline-joined block, one sentence per source line; consumed via
@@ -663,7 +679,6 @@ Next may surprise`,
   'home.joinGate.requestText': 'Access by approval, tap to request to join',
   'home.joinGate.waitingText': 'Request sent, waiting for approval',
   'home.startNow': 'Start now',
-  'home.readyToContinue': 'Ready to continue?',
   'home.endedBack': 'Back to game',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).
@@ -717,9 +732,6 @@ Next may surprise`,
   'home.locked.page1.delete.desc': 'She left the app or isn\'t available right now. You can move on',
   'home.locked.page1.delete.desc_m': 'He left the app or isn\'t available right now. You can move on',
   'home.locked.page1.delete.desc_f': 'She left the app or isn\'t available right now. You can move on',
-
-  // Home — watcher
-  'home.notifOff': 'Not receiving notifications',
 
   // Home — subscription toggle button
 
@@ -789,17 +801,20 @@ Next may surprise`,
   'home.waitingTimerDesc_mf': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time',
   'home.waitingTimerDesc_fm': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time',
   'home.waitingTimerDesc_ff': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time',
-  'home.waitingFirstInLine': 'You\'re first in line',
-  'home.waitingFirstInLineSubtext': 'We\'ll let you know if she responds',
-  'home.waitingFirstInLineSubtext_m': 'We\'ll let you know if he responds',
-  'home.waitingFirstInLineSubtext_f': 'We\'ll let you know if she responds',
   // The invite door's own sentence for the app's one build-profile gate. Its
   // button is `settings.buildProfile`, which is what every one of those doors
   // says: there was a second key here reading "Build my profile", so the same
   // popup asked for the same thing in two voices depending on which door it came
   // through.
   'home.buildProfileTitle': 'Build your profile first',
-  'home.buildProfileDesc': 'To send an invitation you need a profile with photos and a short bio. It only takes a minute',
+  'home.buildProfileDesc': 'To send an invitation you need a profile with at least two photos. It only takes a minute',
+  // The browse allowance's door (lib/browseGate.ts): an account with no profile
+  // watches two people and then the centre circle stops being the play button
+  // and becomes this. Same popup as the invite door above, so only the sentence
+  // changes — and the TITLE is also the pane's own headline, the way every
+  // centre notice states its reason in that slot.
+  'home.browseGateTitle': 'To keep going you need a profile',
+  'home.browseGateDesc': 'Create a profile with at least two photos, and you can carry on meeting people',
   'home.cancelWaitingTitle': 'Cancel invitation?',
   'home.cancelWaitingBtn': 'Cancel invitation',
   'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting',
@@ -811,9 +826,6 @@ Next may surprise`,
   'home.refuseReplyTitle': 'Decline invitation?',
   'home.refuseReplyDesc': 'The invitation will be closed, and the other person will be notified',
   'home.refuseReplyConfirm': 'Decline invitation',
-  'home.watchingAccept': 'Focus',
-  'home.watchingAccept_m': 'Focus on him',
-  'home.watchingAccept_f': 'Focus on her',
   'home.watchingReject': 'Skip',
   // Shown in the rotating-headline slot for the duration of the first-time
   // swipe-down tutorial, instead of that card's random skip line: while the
@@ -822,10 +834,7 @@ Next may surprise`,
   // Incoming-invite card (page2). English varies only by the inviter (he/she);
   // "you" is gender-neutral. Title: tg(key, inviterMale). Desc: tgg(key,
   // receiverMale, inviterMale) — _mm/_fm read he, _mf/_ff read she. Receiver
-  // gender is irrelevant in English. replyingTimerDesc is unused dead code.
-  'home.replyingTimerDesc': 'He invited you to chat. You have 10 minutes to reply',
-  'home.replyingTimerDesc_m': 'He invited you to chat. You have 10 minutes to reply',
-  'home.replyingTimerDesc_f': 'She invited you to chat. You have 10 minutes to reply',
+  // gender is irrelevant in English.
   'home.replyingTitle': 'He invited you to chat',
   'home.replyingTitle_m': 'He invited you to chat',
   'home.replyingTitle_f': 'She invited you to chat',
@@ -851,7 +860,8 @@ Next may surprise`,
   'chat.blockConfirm': 'Block',
   'chat.endChat': 'End Chat',
   'chat.leave': 'Leave',
-  'chat.a11y.close': 'Close chat',
+  // (The chat sheet's own close label went with its X on 2026-07-31 — the sheet
+  // is put away by dragging its top strip. The lightbox below keeps one.)
   'chat.a11y.closeImage': 'Close image',
   'chat.report': 'Report',
   'chat.reportTitle': 'Report user',
@@ -886,13 +896,7 @@ Next may surprise`,
   'chat.msgActions.copy': 'Copy text',
 
   // Gender-aware: user gender (English has no grammatical gender, base key used as fallback)
-  'home.tapForMore_m': 'Back to the game',
-  'home.tapForMore_f': 'Back to the game',
   'home.locationUnavailableTitle': 'Location unavailable',
-  'home.locationUnavailableDesc': 'We couldn\'t determine your location. Try moving to a spot with better reception and tap Broadcast Location',
-  'home.locationUnavailableButton': 'Broadcast Location',
-  // Broadcast countdown, now shown as a line in the viewers info card
-  // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   // The four entries in the strip at the foot of home (HomeDock). ONE WORD each:
   // the caption names the glyph over it in a quarter of the screen's width, so
   // anything longer wraps to two lines on every phone. Circles takes the one
@@ -903,17 +907,17 @@ Next may surprise`,
   'home.dock.profile': 'Profile',
   'home.dock.preferences': 'Preferences',
   'home.dock.more': 'More',
-  // Accessibility labels for controls with no visible text: a sheet's floating
-  // close X. The menu button's two labels went with the button (2026-07-30), and
-  // the dock's entries are labelled by their own captions, so nothing is unlabelled.
-  'home.a11y.closeInvite': 'Close invitation',
-  'home.a11y.closeProfile': 'Close profile',
+  // Accessibility labels for controls with no visible text. The menu button's two
+  // labels went with the button (2026-07-30), the invite's with its X (same day:
+  // the card answers with a named button, not an X), and the profile sheet's and
+  // Circles' with theirs (2026-07-31: those surfaces leave by the swipe). The
+  // dock's entries are labelled by their own captions.
+  // The X on the heading tile of a card that is over: it takes the reader to the
+  // message at the top of that card, where the way back to the game is.
+  'home.a11y.endedMessage': 'Go to the message',
   'home.locatingDesc': 'Scanning for people around you',
   'home.loadingProfile': 'Loading profile data',
   'home.noOneNearbyTitle': 'No one nearby right now',
-  'home.noOneNearbyDesc': 'We couldn\'t find anyone nearby right now. Try again soon, or change your search preferences',
-  'settings.kidsLabel_m': 'Planning for kids?',
-  'settings.kidsLabel_f': 'Planning for kids?',
   'settings.deleteConfirmDesc_m': 'All data, photos, and conversations will be permanently deleted. Active invitations, chats, and connections will be cancelled. This action cannot be undone',
   'settings.deleteConfirmDesc_f': 'All data, photos, and conversations will be permanently deleted. Active invitations, chats, and connections will be cancelled. This action cannot be undone',
   'settings.signOut_m': 'Sign Out from App',
@@ -926,8 +930,4 @@ Next may surprise`,
   'chat.inputPlaceholder_f': 'Write a message...',
   'photo.sub_m': 'Add 2-6 photos',
   'photo.sub_f': 'Add 2-6 photos',
-
-  // Gender-aware: watcher/subject gender
-  'home.notifOff_m': 'Not receiving notifications',
-  'home.notifOff_f': 'Not receiving notifications',
 }

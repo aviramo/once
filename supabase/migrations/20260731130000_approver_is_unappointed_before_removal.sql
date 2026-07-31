@@ -1,0 +1,45 @@
+-- AN APPROVER IS NOT THROWN OUT OF THE GROUP, HE IS UNAPPOINTED FIRST
+-- (user directive 2026-07-31).
+--
+-- Removal acts on a PLAIN member, whoever is asking — the owner included. The
+-- approver tag is a standing the owner gave him, so removing him while he still
+-- wears it is two decisions taken by one tap, and only the second was asked
+-- for: cancel the appointment (app_set_manager, owner only) and the ordinary
+-- removal is available immediately after.
+--
+-- This drops the owner's exemption from 20260728200000_manager_removes_plain_members
+-- (`v_target_manager AND NOT v_is_owner`), leaving one line for both roles, and
+-- with it the only case in the app where a member's page carried three actions
+-- (unappoint / hand over / remove). It is a permission TIGHTENING, which cannot
+-- be staged Expand -> Migrate -> Contract and has to bite the moment it
+-- deploys; the cross-version window is recorded in BACKWARD_COMPAT.md.
+--
+-- The rest of the function is unchanged from the live body.
+
+CREATE OR REPLACE FUNCTION public.app_remove_member(me_id uuid, p_group_id uuid, p_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'extensions'
+AS $function$
+DECLARE
+  v_owner uuid;
+  v_is_owner boolean;
+  v_is_manager boolean;
+BEGIN
+  SELECT owner_id INTO v_owner FROM public.groups WHERE id = p_group_id;
+  v_is_owner := (v_owner = me_id);
+  v_is_manager := v_is_owner OR EXISTS(SELECT 1 FROM public.group_managers WHERE group_id = p_group_id AND user_id = me_id);
+  IF NOT v_is_manager THEN RETURN jsonb_build_object('error', 'not_manager'); END IF;
+  -- Untouchable by anyone, including himself: removing the owner would leave the
+  -- group ownerless with no way back. He transfers it or deletes it.
+  IF p_user_id = v_owner THEN RETURN jsonb_build_object('error', 'cant_remove_owner'); END IF;
+  -- Untouchable while the appointment stands, for the owner too: unappoint him
+  -- first (app_set_manager), then remove the plain member that is left.
+  IF EXISTS(SELECT 1 FROM public.group_managers WHERE group_id = p_group_id AND user_id = p_user_id)
+    THEN RETURN jsonb_build_object('error', 'cant_remove_manager'); END IF;
+  DELETE FROM public.user_groups WHERE group_id = p_group_id AND user_id = p_user_id;
+  UPDATE public.users
+     SET relations = jsonb_set(relations, '{availability}', public.user_availability(user_id, location))
+   WHERE user_id = p_user_id;
+  RETURN public.app_group_members(me_id, p_group_id);
+END; $function$;

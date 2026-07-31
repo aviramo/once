@@ -16,9 +16,23 @@ import { CloseIcon, CheckIcon } from './icons'
 // removed at the user's request (2026-07-21) — do not reintroduce it, here or
 // in any other popup.
 //
+// It is the app's ORDINARY popup and wears every part of one: the drag handle,
+// the swipe-down and the backdrop tap are the sheet's own defaults and this
+// file no longer overrides them. They used to be opt-in behind a `draggable`
+// prop that all fifteen call sites passed and one — onboarding's birthdate
+// confirmation — did not, so the app's single most standard surface came up
+// without the handle every other popup wears and could not be put away by the
+// gesture every other popup answers to (user report 2026-07-31: "why is it
+// different? why is there no standard?"). A prop everybody passes is not a
+// choice; a dialog that cannot be dismissed by hand is not one either.
+//
+// Which is why there is no CANCEL BUTTON in the app: the dismiss IS the cancel,
+// so the one thing to press is the thing being asked for. `cancelLabel` renders
+// one for a caller that genuinely needs the answer named, and nothing uses it.
+//
 // Informational variant: omit both `confirmLabel` and `cancelLabel` and the
 // button row is dropped entirely — the sheet becomes a notice the user
-// dismisses by swiping down / tapping the backdrop (pass `draggable`).
+// dismisses by swiping down / tapping the backdrop.
 export function ConfirmDialog({
   visible,
   title,
@@ -35,7 +49,6 @@ export function ConfirmDialog({
   cancelFlex,
   confirmFlex,
   confirmDisabled,
-  draggable,
 }: {
   visible: boolean
   title: string
@@ -69,7 +82,6 @@ export function ConfirmDialog({
    * its credit cost — the popup stays open and informative (the cost badge
    * still shows) but the action can't be taken. */
   confirmDisabled?: boolean
-  draggable?: boolean
 }) {
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
   useEffect(() => { if (!busy) setPressed(null) }, [busy])
@@ -86,8 +98,8 @@ export function ConfirmDialog({
       visible={visible}
       onDismiss={dismiss}
       disableBackdropDismiss={busy}
-      swipeToDismiss={!!draggable}
-      dragHandle={!!draggable}
+      // The handle and the swipe are BottomSheet's own defaults — see the note
+      // at the top of this file. Nothing here overrides them.
       // No frame and no keyboard lift of its own. The gutter, the air above the
       // title and the air under the buttons are the sheet's, one set of values
       // for every popup in the app (BottomSheet.tsx), and the sheet stands itself

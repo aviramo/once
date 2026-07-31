@@ -21,8 +21,10 @@ import { WHITE } from '../colors'
 //
 // Its sentence is ITS OWN (`credits.buy.desc`, user directive 2026-07-28), not
 // the friends page's invite caption it used to borrow: this is where someone
-// lands with an empty wallet, so it answers the daily refill first (one credit,
-// at the hour it arrives) and only then offers the invite. Inviting is the only
+// lands with an empty wallet, so it has to answer both how credits are EARNED
+// and when one arrives anyway. It leads with the invite (user directive
+// 2026-07-31) — the button under it — and states the daily refill after, as
+// the fallback for a wallet that stays empty. Inviting is the only
 // way to earn beyond that pool, and the button shares the friend-invite link
 // (/f/) the sentence describes: opened with the app installed it links the pair
 // as mutual friends, and the server pays both sides a credit for the link.
@@ -54,11 +56,17 @@ export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
   return (
     <ConfirmDialog
       visible={visible}
-      draggable
       title={t(outOfCredits ? 'credits.buy.emptyTitle' : 'credits.buy.title')}
-      description={grantTime
-        ? t('credits.buy.desc').replace('{time}', grantTime)
-        : t('credits.buy.descNoTime')}
+      // genderize for the same reason as the button below: the Hebrew sentence
+      // addresses the user directly, so its verb carries an inline
+      // {תקבל|תקבלי} marker. {time} has no pipe, so the two substitutions
+      // cannot collide and their order does not matter.
+      description={genderize(
+        grantTime
+          ? t('credits.buy.desc').replace('{time}', grantTime)
+          : t('credits.buy.descNoTime'),
+        profile?.is_male,
+      )}
       // genderize, NOT tg: the Hebrew label carries an inline {הזמן|הזמיני}
       // marker, and tg only ever looks up whole-string _m/_f key variants — it
       // found none, fell back to the raw string, and the marker rendered

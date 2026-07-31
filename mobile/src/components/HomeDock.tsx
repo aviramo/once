@@ -1,9 +1,10 @@
-import { Fragment, type ReactNode } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { type ReactNode } from 'react'
+import { StyleSheet } from 'react-native'
 import { Text } from './AppText'
 import { NotifyDot } from './RoundButton'
-import { XS, SM, MD, TEXT, WEIGHT, NOTIFY_DOT_SIZE, DOCK_SHADOW, DISABLED_OPACITY } from '../tokens'
-import { INK, LINE, PAGE } from '../colors'
+import { OptionStrip, type StripOption } from './OptionStrip'
+import { MD, TEXT, WEIGHT, DOCK_SHADOW } from '../tokens'
+import { INK, PAGE } from '../colors'
 
 // ── The dock — home's strip of four ────────────────────────────────────────
 //
@@ -13,24 +14,28 @@ import { INK, LINE, PAGE } from '../colors'
 // are that menu, on the page: profile, circles, preferences, settings.
 //
 // IT IS A STRIP, NOT A ROW OF BUTTONS (user directive 2026-07-30, replacing the
-// arched keys it opened as). A plain band of glyphs with a thin vertical rule
-// between each option, and nothing else: no tile, no arch, no circle, no fill of
-// its own, no rounding — its top edge is STRAIGHT, and it runs to the very
-// bottom of the screen. Everything that made the keys read as objects standing
-// on the page was exactly what had to go; what is left is the page with four
-// marks along its bottom.
+// arched keys it opened as) — and it is THE strip, `OptionStrip`, which the bar
+// under a profile card shares since 2026-07-31. A plain band of glyphs with a
+// thin vertical rule between each option and nothing else: no tile, no arch, no
+// circle, no fill of its own, no rounding. Everything that made the keys read as
+// objects standing on the page was exactly what had to go; what is left is the
+// page with four marks along its bottom. The option itself — the glyph, the word
+// under it, the rule, the marker slot, the fades — lives in that component; what
+// stays here is what the dock is standing ON, and what its four keys say.
 //
 // Its ground IS the page's (`PAGE`), which is the point rather than an omission:
-// the strip must not read as a separate surface laid over home. The only
-// hairlines here are the ones BETWEEN the four options — there is NO rule along
-// its top, and there must never be one. What stands between the strip and the
-// page is a SHADOW (user directive 2026-07-30): the band HOVERS over the page
-// rather than being fenced from it, so the eye reads a foreground the same
-// colour as its background without a line having to say so. `DOCK_SHADOW` in
-// tokens.ts — a deeper, heavier stop than the bottom sheet's, and deliberately
-// so: a sheet is its own colour and needs only an edge, while this band's colour
-// IS the page's, so the shadow is doing the whole job on its own.
-// The glyphs and their words are `INK`, the app's one purple.
+// the strip must not read as a separate surface laid over home. (It was tried
+// white on 2026-07-30 and put back the same day — a white band under a
+// page-tinted screen is a second surface, which is exactly what this is not.)
+//
+// There is NO rule along its top, and there must never be one. What stands
+// between the strip and the page is a SHADOW (user directive 2026-07-30): the
+// band HOVERS over the page rather than being fenced from it, so the eye reads a
+// foreground the same colour as its background without a line having to say so.
+// `DOCK_SHADOW` in tokens.ts — a deeper, heavier stop than the bottom sheet's,
+// and deliberately so: a sheet is its own colour and needs only an edge, while
+// this band's colour IS the page's, so the shadow is doing the whole job on its
+// own. The glyphs and their words are `INK`, the app's one purple.
 //
 // It is a FLOW SIBLING BELOW page1, never a layer over it (see home.tsx): the
 // match card is laid out in the space above this strip and clipped at its top
@@ -52,6 +57,25 @@ export type DockItem = {
    *  behind Circles). THE app's one notification dot, from its one
    *  implementation — see NotifyDot. */
   badge?: boolean
+  /** A live QUANTITY behind this entry, in the dot's own place (user directive
+   *  2026-07-30): the requests waiting in Circles, the people watching me, the
+   *  credits I hold. Where a dot says "there is something here", the number says
+   *  how much of it — so an entry whose surface opens on a quantity states that
+   *  quantity on the key itself.
+   *
+   *  A NUMBER AND NOTHING ELSE (user directive 2026-07-30): no tile, no fill, no
+   *  shadow, the same purple as the glyph it stands beside. It began as the app's
+   *  `Chip` — the very tile each of these numbers wears on the ROW its popup
+   *  opens — and a tile in this corner reads as a second object stuck to a mark
+   *  that is already only 24dp wide. Bare ink is the whole statement, exactly as
+   *  the chat composer's controls are glyphs and nothing else.
+   *
+   *  It is a number, not a node, because the dock owns how a quantity looks here
+   *  and three call sites must not each decide. `undefined` = nothing to say (a
+   *  zero watcher count is not a fact worth painting); the credits key passes 0,
+   *  which IS a fact. Never both this and `badge` on one entry — they occupy the
+   *  same place, and the number is the fuller statement. */
+  count?: number
   /** This entry is not available to this user YET (Circles before the profile is
    *  built). The glyph AND its word fade together — one `opacity` on the whole
    *  key rather than a muted colour per part, so the two can never fade by
@@ -59,13 +83,9 @@ export type DockItem = {
    *
    *  It stays PRESSABLE on purpose: a dead key teaches nothing, so the tap must
    *  still land on whatever explains the closed door (the members-only popup,
-   *  which offers the way out of it). Never `disabled` — see DISABLED_OPACITY. */
+   *  which offers the way out of it). See OptionStrip's `dimmed`. */
   dimmed?: boolean
 }
-
-// How far a key fades under the finger. Named because it is now MULTIPLIED with
-// the shut-door fade rather than just written into one style (see itemDimmedPressed).
-const PRESS_OPACITY = 0.55
 
 export function HomeDock({ items, bottom }: {
   items: DockItem[]
@@ -75,94 +95,45 @@ export function HomeDock({ items, bottom }: {
    *  very bottom edge, and only the glyphs are held clear of the navigation bar. */
   bottom: number
 }) {
-  return (
-    <View style={[styles.strip, { paddingBottom: bottom }]}>
-      {items.map((item, i) => (
-        <Fragment key={item.key}>
-          {/* Between the options and nowhere else: no rule at either end of the
-              strip, and none along its top. */}
-          {i > 0 ? <View style={styles.divider} /> : null}
-          <Pressable
-            onPress={item.onPress}
-            accessibilityRole="button"
-            accessibilityLabel={item.label}
-            // A dimmed key is still pressed, so the two fades COMPOUND rather
-            // than override: with a plain [dimmed, pressed] array the press
-            // style simply wins and a faded key gets BRIGHTER under the finger.
-            style={({ pressed }) => [
-              styles.item,
-              item.dimmed && styles.itemDimmed,
-              pressed && (item.dimmed ? styles.itemDimmedPressed : styles.itemPressed),
-            ]}
-          >
-            {/* The dot rides the GLYPH: the strip has no tile to pin a marker to,
-                so the marker sits where a badge sits on an app icon, straddling
-                the glyph's own top-END. Its size is the app's one dot size; only
-                this offset is local, and it is geometry rather than a token (the
-                same rule the round buttons' arc inset is stated under). */}
-            <View style={styles.glyph}>
-              {item.icon}
-              {item.badge ? <NotifyDot style={styles.dot} /> : null}
-            </View>
-            <Text style={styles.label}>{item.label}</Text>
-          </Pressable>
-        </Fragment>
-      ))}
-    </View>
-  )
+  const options: StripOption[] = items.map(({ key, label, icon, onPress, dimmed, count, badge }) => ({
+    key, label, icon, onPress, dimmed,
+    // What this key has to say, if anything — a quantity outranks the dot,
+    // saying everything it says and how many besides. Chosen here so the strip's
+    // one marker slot holds ONE mark and the placement is stated in one place.
+    marker: count != null ? <Text style={styles.count}>{count}</Text>
+      : badge ? <NotifyDot style={styles.markerDot} />
+        : null,
+  }))
+  return <OptionStrip options={options} style={[styles.strip, { paddingBottom: bottom }]} />
 }
 
 const styles = StyleSheet.create({
-  // The band. `alignItems:'stretch'` is what lets the dividers run the full
-  // height of the content beside them without anyone measuring it. No radius and
-  // no border: its top edge is a straight line, and what makes it visible is the
-  // lift under it rather than a rule on it.
+  // What the band IS, over and above being a strip of options: the page's own
+  // colour, a lift instead of a top rule, and the content held clear of the
+  // screen's edges. No radius and no border — its top edge is a straight line.
   strip: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
     backgroundColor: PAGE,
     paddingTop: MD,
+    // The band still runs edge to edge — this insets its CONTENT, and it is the
+    // outer markers' lane: a marker stands past its glyph on the side facing the
+    // screen edge, and while these were TILES the last key's came out a hair off
+    // the screen (Hebrew at a large font scale, 2026-07-30). Bare numbers need
+    // far less of it than a chip did, but the air reads well on its own and the
+    // widest count still has somewhere to go.
+    paddingHorizontal: MD,
     boxShadow: DOCK_SHADOW,
   },
-  // One option. Equal share of the strip, so four of them divide it evenly and
-  // the rules between them land on quarters.
-  item: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: XS,
-    paddingVertical: SM,
-    paddingHorizontal: XS,
-  },
-  // The app's one press feedback for a control with no tile to tint: the same
-  // fade a RoundButton uses, since there is no surface here to flash.
-  itemPressed: { opacity: PRESS_OPACITY },
-  // Not available to this user yet — THE app's one shut-door fade, on the whole
-  // key so the glyph and its word fade as one object.
-  itemDimmed: { opacity: DISABLED_OPACITY },
-  // Both at once, multiplied: a shut door the finger is on is still a shut door,
-  // and it must not brighten under the touch that opens its explanation.
-  itemDimmedPressed: { opacity: DISABLED_OPACITY * PRESS_OPACITY },
-  // THE hairline, the app's one (`LINE`) — thin enough to separate the options
-  // without drawing a grid over the foot of the page.
-  divider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: LINE,
-  },
-  glyph: { alignItems: 'center', justifyContent: 'center' },
-  dot: {
-    position: 'absolute',
-    top: -NOTIFY_DOT_SIZE / 2,
-    end: -NOTIFY_DOT_SIZE / 2,
-  },
-  // One word, under the glyph. The rank BELOW the body: the caption names the
-  // glyph over it, it does not compete with the headline the page is built
-  // around. Centred, and free to wrap — the strip grows, the word is never cut.
-  label: {
+  // The dot goes through the marker slot like the number does, so it is IN the
+  // flow of the slot's inner box — its own component pins it absolutely (it is a
+  // badge on a round button everywhere else) and here that would collapse the box
+  // that places it. This is the only line of the dot's placement that lives
+  // outside OptionStrip, which states the rest once, for both marks.
+  markerDot: { position: 'relative' },
+  // The quantity itself: ink and nothing else, at the caption's size and weight
+  // so the key's two pieces of text are one family, in the glyph's own purple.
+  count: {
     fontSize: TEXT.sm,
     fontWeight: WEIGHT.medium,
     color: INK,
-    textAlign: 'center',
   },
 })

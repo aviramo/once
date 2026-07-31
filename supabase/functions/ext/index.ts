@@ -1,7 +1,7 @@
 import Log from "../log.ts";
 import Tools from "../tools.ts";
 import User from "../user.ts";
-import { PushToken, PUSH_BODY, PUSH_TITLE } from "../global.ts";
+import { PushToken, PUSH_BODY, PUSH_TITLE, pickGendered } from "../global.ts";
 
 async function firePush(
   log: Log,
@@ -10,12 +10,14 @@ async function firePush(
   actor_id?: string,
   extra?: { group_id?: string; group_name?: string; count?: number },
 ) {
-  type PushRow = { user_id: string; name: string | null; data?: { push_token?: unknown; lang?: string } };
+  // `is_male` is the ACTOR's, and it is read for one thing: the Hebrew bodies
+  // that talk about them ("הצטרף/הצטרפה דרך ההזמנה שלך", "ביקש/ביקשה להצטרף").
+  type PushRow = { user_id: string; name: string | null; is_male: boolean | null; data?: { push_token?: unknown; lang?: string } };
   const ids = actor_id ? [target_user_id, actor_id] : [target_user_id];
   const data = await Tools.invoke(
     log,
     `push_lookup:${code}`,
-    Tools.supabase.from("users").select("user_id, name, data").in("user_id", ids),
+    Tools.supabase.from("users").select("user_id, name, is_male, data").in("user_id", ids),
   );
   if (!data || !data[0]) return;
   const rows = data as PushRow[];
@@ -35,8 +37,9 @@ async function firePush(
   // Sweep pushes about a GROUP live in PUSH_TITLE with the rest of the group
   // lifecycle (that is where {group} bodies are kept); everything else this
   // function sends is a PUSH_BODY code.
-  const template = (PUSH_TITLE[lang] ?? PUSH_TITLE.he)[code]
-    ?? (PUSH_BODY[lang] ?? PUSH_BODY.he)[code]
+  const actorIsMale = actorRow?.is_male ?? null;
+  const template = pickGendered(PUSH_TITLE, code, lang, actorIsMale)
+    ?? pickGendered(PUSH_BODY, code, lang, actorIsMale)
     ?? "Once";
   const bodyText = template
     .replace("{group}", extra?.group_name ?? "")

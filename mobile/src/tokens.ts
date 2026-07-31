@@ -421,7 +421,35 @@ export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
 //
 // There is no rule along the strip's top and there must never be one — this
 // gradient is what stands in its place.
-export const DOCK_SHADOW = '0px -8px 20px 0px rgba(0,0,0,0.13)'
+//
+// Softened once more on 2026-07-30 (0.13 → 0.10, 20 → 18 blur): with the keys
+// now carrying lifted white chips of their own, the band no longer has to prove
+// on its own that it is a foreground, and the lighter stop keeps the page above
+// it clean. Anything heavier starts painting the grey band described above.
+export const DOCK_SHADOW = '0px -8px 18px 0px rgba(0,0,0,0.10)'
+
+// ── The lift of a surface that came from below ─────────────────────────────
+// The upward shadow on the TOP edge of every full-screen surface that rises
+// over another one: a Communities page pushed over the hub, chat, the profile
+// preview, the invitation, home's match card. It is applied in exactly ONE
+// place — RisingCard, which IS "the surface that rises" — so every page in the
+// app says "I am a layer above the one you were on" identically, and no call
+// site declares a lift of its own.
+//
+// The edge is only ever ON SCREEN while the surface is arriving, or while a
+// finger is dragging it back down: at rest each of these covers the whole
+// screen and its top edge is off it. That is precisely what this is for (user
+// directive 2026-07-31) — the entrance was unreadable, worst of all in
+// Communities, where a page and the page under it are the same PAGE tint and
+// nothing at all marked the seam.
+//
+// A SEPARATE and stronger stop than SHEET_SHADOW above, for the same reason
+// DOCK_SHADOW is: a popup floats on a dimmed backdrop, which already does half
+// the work of saying it is on top, and these surfaces have no scrim under them
+// at all. The drop stays SHORT and the blur tight on purpose — what has to read
+// is an EDGE, not a band; see DOCK_SHADOW for what a wide dark spread does to a
+// purple-and-white page.
+export const RISE_SHADOW = '0px -5px 16px 0px rgba(0,0,0,0.20)'
 
 // The air a popup leaves above itself once it has grown as tall as it is
 // allowed to. A sheet rises from the bottom, so an over-long body used to push
@@ -530,6 +558,12 @@ export const OVERLAY = {
   chromeInset: MD,
   // Paint order. (There is no `menu` step any more — the drawer is deleted,
   // 2026-07-30. Do not renumber the rest: the gaps are deliberate room.)
+  //
+  // `invite` no longer competes with the other two: the page2 card is laid out
+  // INSIDE page1 now (user directive 2026-07-30 — both cards the game hands the
+  // user are profiles on home, so neither covers the dock), so this step orders
+  // it above the page1 card and nothing else. `chat` and `subPage` are the
+  // surfaces the user opens, out in the shell, and they still cover everything.
   z: {
     invite: 10,
     chat: 20,
@@ -558,6 +592,18 @@ export const HOME_ART = {
   widthRatio: 0.76,
   // Faint. Present when you look for it, quiet when you don't.
   opacity: 0.3,
+} as const
+
+// ── Circles art ────────────────────────────────────────────────────────────
+// The drawing that OPENS the empty Circles page (CirclesArt.tsx). Same frame
+// and same hand as home's, but it carries no `opacity`: home's is page TEXTURE
+// under the one big action, this one is the first thing the page says, so it is
+// drawn at full strength.
+
+export const CIRCLES_ART = {
+  // A step under home's, because a title, a description and two labelled
+  // actions stand under it and all of them have to fit a small screen.
+  widthRatio: 0.72,
 } as const
 
 

@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, StyleSheet, Animated, Keyboard, TextInput as RNTextInput, PanResponder, BackHandler, Dimensions } from 'react-native'
+// Named hooks only, deliberately: the pager below runs on RN's own `Animated`,
+// which is imported under that very name.
+import { useSharedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated'
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../src/hooks/useBottomInset'
@@ -10,16 +13,18 @@ import { useAuthStore } from '../src/stores/authStore'
 import { useUserStore } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
-import { BIO_MIN, BIO_MAX, normalizeBio } from '../src/lib/bio'
-import { t, tg, lang } from '../src/i18n'
+import { BIO_MAX, normalizeBio } from '../src/lib/bio'
+import { MIN_PHOTOS } from '../src/lib/photos'
+import { t, tg, genderize, lang } from '../src/i18n'
 import { Button } from '../src/components/Button'
-import { RoundButton } from '../src/components/RoundButton'
-import { CloseIcon, UserPlusIcon, CheckIcon } from '../src/components/icons'
-import { PhotoEditor, PhotoEditorRef, MIN_PHOTOS } from '../src/components/PhotoEditor'
+import { UserPlusIcon, CheckIcon } from '../src/components/icons'
+import { PullPane, usePullBehavior } from '../src/components/PullPane'
+import { RisingCard } from '../src/components/RisingCard'
+import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
-import { PAGE, PHOTO_CHROME, INK, INK_HINT, INK_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
+import { PAGE, INK, INK_HINT, INK_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
 import { FIELD_SKIN } from '../src/field'
-import { SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, ROUND_BUTTON_SIZE_SM, OVERLAY, ICON, bottomGap, BOTTOM_AIR } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, bottomGap, BOTTOM_AIR } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 
@@ -144,11 +149,30 @@ export default function OnboardingPage() {
   const insets = useSafeAreaInsets()
   const bottomInset = useBottomInset()
 
-  const initialStep =
-    profile?.name && profile?.birth_date && !profile.bio
-      ? ((profile.images?.length ?? 0) >= 2 ? 5 : 4)
+  // WHERE A RE-ENTRY RESUMES. An account that exists with fewer than
+  // MIN_PHOTOS photos is an unfinished profile, and the photo step is the one
+  // thing standing between it and finished (user directive 2026-07-31: two
+  // photos ARE the definition, the bio is optional) — so there is one resume
+  // point now, not two. It used to also land on the bio step for a profile that
+  // had its photos but no bio, back when an empty bio was what "unfinished"
+  // meant; such a profile is simply built, and the dock's profile key opens the
+  // preview for it rather than routing here at all.
+  const initialStep: number =
+    profile?.name && profile?.birth_date && (profile.images?.length ?? 0) < MIN_PHOTOS
+      ? 4
       : 1
   const [step, setStep] = useState(initialStep)
+  // DID THIS SCREEN ARRIVE OVER ANOTHER PAGE? An account that already exists at
+  // MOUNT means one thing only: home pushed us here (the dock's profile key,
+  // which routes to onboarding while the profile is unfinished) — a user with an
+  // account always boots to /home, so this can never be a cold-start first
+  // paint. That is the one entry that is a layer arriving over a page, so it is
+  // the one that rises. The linear signup (steps 1-3, entered by a route REPLACE
+  // off /login) is simply the screen the app is on and does not.
+  //
+  // Frozen at mount deliberately: `initialStep` is recomputed from the profile
+  // on every render and moves as the flow saves photos and bio under it.
+  const openedOverHome = useRef(initialStep >= 4).current
   const [renderedSteps, setRenderedSteps] = useState(() => new Set([initialStep]))
   const [isMale, setIsMale] = useState<boolean | null>(profile?.is_male ?? null)
   const [name, setName] = useState(profile?.name ?? '')
@@ -186,12 +210,78 @@ export default function OnboardingPage() {
 
   const canGoBack = (s: number) => s === 2 || s === 3 || s === 5
   const goBack = () => setStep(s => canGoBack(s) ? s - 1 : s)
+  // WHERE A DOWN-DRAG TAKES THE WHOLE SCREEN INSTEAD OF ONE STEP. The gesture
+  // means one thing throughout — BACK — and this is the step where there is no
+  // step behind: 4 is the first of the two build-profile steps, and it is
+  // reached either from home (the dock's profile key) or straight off the
+  // account being created, neither of which is a step to return to. Exactly
+  // what hardware back already does here, so the two can never disagree: on 5
+  // both go back to the photos, on 4 both leave for home.
+  const canLeave = (s: number) => s === 4
   const overlayY = useRef(new Animated.Value(initialStep === 5 ? 0 : initialPagerH)).current
 
+  // THE WAY OUT IS THE APP'S ONE DISMISS GESTURE (user directive 2026-07-31),
+  // in place of the close X that stood in the top-START corner of steps 4 and
+  // 5. This screen is a surface the user OPENED over home, so it leaves the way
+  // every other one does — the swipe, and hardware back through it — and a
+  // button repeating that said what the gesture already says. Same machinery as
+  // every sheet (PullPane + usePullBehavior); nothing here is hand-rolled.
+  //
+  // 'sheet' arbitration, like every page-shaped surface in the app: there is no
+  // scroll on these steps, so the pan is free to take any downward drag, and it
+  // leaves the photo tiles' own taps (and PhotoEditor's long-press reorder)
+  // alone.
+  //
+  // A PAGE LEAVES BY RIDING OFF, AND ONLY THEN STOPS EXISTING. The commit does
+  // not navigate: it flags `leaving`, and the reaction below routes home once
+  // the surface has actually reached the bottom edge — a `router.replace` fired
+  // from the commit would cut the ride-off mid-flight and jump-cut to home.
+  // BOTH facts are read inside the prepare, and the LAST of the two to arrive is
+  // what fires it: `onCommit` is a runOnJS out of the gesture's onEnd, so on a
+  // busy JS thread the flag can land after pullY has already stopped at
+  // screenSpan, and a prepare watching pullY alone would never fire again —
+  // leaving the screen parked off-screen and unreachable. Same rule, same
+  // reason, as the Communities page stack (see CLAUDE.md).
+  const leaving = useSharedValue(false)
+  const pull = usePullBehavior({
+    activation: 'sheet',
+    enabled: canLeave(step),
+    onCommit: useCallback(() => { leaving.value = true }, [leaving]),
+  })
+  const { pullY, screenSpan } = pull
+  // POP, don't replace: home is already drawn under this screen and already
+  // painted, so popping lands on the very page the ride-off just revealed. A
+  // `replace` would mount a SECOND home on top of that one — the card, the dock
+  // and the art all rebuilding over an identical page that was already there.
+  // The replace is kept for the one entry that has nothing to pop back to: the
+  // linear signup, which arrives here by a replace off /login.
+  const leaveForHome = useCallback(() => {
+    if (router.canGoBack()) router.back()
+    else router.replace('/home')
+  }, [router])
+  useAnimatedReaction(
+    () => leaving.value && pullY.value >= screenSpan,
+    (gone, was) => {
+      if (gone && !was) { leaving.value = false; runOnJS(leaveForHome)() }
+    },
+    [screenSpan, leaveForHome],
+  )
+
+  // How the screen leaves when the finger is not the one taking it off: it rides
+  // off exactly as a finger would (`commit` is the gesture's own onEnd, fired by
+  // hand), so hardware back and the swipe are one motion and not two. Read
+  // through a ref because this listener is registered once, with [] deps, while
+  // `commit` changes identity as the pull is enabled and disabled per step.
+  const commitRef = useRef(pull.commit)
+  commitRef.current = pull.commit
   useEffect(() => {
     const onBack = () => {
       if (canGoBack(stepRef.current)) {
         goBack()
+        return true
+      }
+      if (canLeave(stepRef.current)) {
+        commitRef.current()
         return true
       }
       return false
@@ -316,15 +406,19 @@ export default function OnboardingPage() {
     if (!user) router.replace('/login')
   }, [user])
 
+  // The same resume decision as initialStep, for a profile that landed AFTER
+  // mount (the fetch resolving under a cold start). Same condition, so the two
+  // can never send the user to different steps.
   const seededFromProfileRef = useRef(initialStep !== 1)
   useEffect(() => {
     if (seededFromProfileRef.current) return
-    if (!profile?.name || !profile?.birth_date || profile.bio) return
+    if (!profile?.name || !profile?.birth_date) return
+    if ((profile.images?.length ?? 0) >= MIN_PHOTOS) return
     seededFromProfileRef.current = true
     setIsMale(profile.is_male ?? null)
     setName(profile.name ?? '')
     setBio(profile.bio ?? '')
-    setStep((profile.images?.length ?? 0) >= 2 ? 5 : 4)
+    setStep(4)
   }, [profile])
 
   useEffect(() => {
@@ -359,13 +453,15 @@ export default function OnboardingPage() {
     return a
   })()
   const dateValid = age !== null && age >= 18 && age <= 120
-  const bioValid = bio.trim().length >= BIO_MIN
+  // Step 5 asks for nothing (user directive 2026-07-31): the bio is optional,
+  // so Finish is live from the moment the step opens and an empty field is a
+  // valid answer. The photos on step 4 are the last thing onboarding requires.
   const canContinue =
     step === 1 ? isMale !== null :
     step === 2 ? nameValid :
     step === 3 ? dateValid && !submitting :
     step === 4 ? totalPhotoCount >= MIN_PHOTOS :
-    step === 5 ? bioValid && !bioSubmitting :
+    step === 5 ? !bioSubmitting :
     false
 
   const submitAccount = async () => {
@@ -410,17 +506,23 @@ export default function OnboardingPage() {
   // its own (PhotoEditor reports the count via onTotalCountChange), so the user
   // simply re-picks and continues.
   const failToPhotoStep = () => {
-    setPhotoError(t('photo.uploadFailed'))
+    setPhotoError(genderize(t('photo.uploadFailed'), isMale))
     setStep(4)
     bioSubmittingRef.current = false
     setBioSubmitting(false)
   }
 
-  // Final onboarding submit, fired from step 5. Awaits the photo flush, saves
-  // the bio, and finally flips the local userStore.bio — which is what
-  // `_layout.tsx` watches to redirect to /home. Holding bio in local state
-  // until here keeps onboarding self-contained: if anything in here fails, the
-  // user is still on /onboarding because the persisted profile has no bio.
+  // Final onboarding submit, fired from step 5. Awaits the photo flush and
+  // saves the bio if there is one.
+  //
+  // THE PHOTOS ARE THE PROFILE (user directive 2026-07-31), so the flush is the
+  // whole of what this has to get right: the bio may be empty and finishing
+  // with an empty one is a valid answer, while a profile that lands here with
+  // fewer than MIN_PHOTOS photos is not built at all — which is why both
+  // failure branches below bounce back to step 4 rather than letting the user
+  // out. It used to be the other way round: the bio was saved last and WAS the
+  // marker, so this guard existed to stop a photo-less profile being made
+  // permanent by it.
   const finishOnboarding = async () => {
     if (bioSubmittingRef.current) return
     bioSubmittingRef.current = true
@@ -436,22 +538,25 @@ export default function OnboardingPage() {
         }
         flushPromiseRef.current = null
       }
-      // Second guard: the flush can also resolve into an EMPTY images list (the
-      // parent unmount safety net already ran and dropped every file, a stale
-      // deferred set, etc.). Never save the bio without at least one photo --
-      // bio is the only thing _layout.tsx gates the /home redirect on, so
-      // saving it here is exactly what makes a photo-less profile permanent.
-      if ((useUserStore.getState().profile?.images?.length ?? 0) < 1) {
+      // Second guard: the flush can also resolve into a SHORT images list (the
+      // parent unmount safety net already ran and dropped files, a stale
+      // deferred set, etc.). Never leave step 5 under MIN_PHOTOS — that count
+      // is the whole definition of a built profile, so a user let out here
+      // would land on home with the profile dot still lit and no idea why.
+      if ((useUserStore.getState().profile?.images?.length ?? 0) < MIN_PHOTOS) {
         failToPhotoStep()
         return
       }
+      // The bio is optional, so an empty field is saved as an empty bio rather
+      // than skipped: the user may have opened this step to CLEAR a bio they
+      // had, and a save that silently does nothing would leave the old text.
       const bioValue = normalizeBio(bio)
       await invoke('app/profile', { bio: bioValue })
-      useUserStore.getState().update({ bio: bioValue })
-      // Profile is now built (bio saved last, photos already flushed). The
-      // routing guard no longer reacts to this, so navigate home explicitly.
-      // Works for both entry paths: the linear first-time flow AND a later
-      // visit opened from the menu's purple build-profile CTA.
+      useUserStore.getState().update({ bio: bioValue.length === 0 ? null : bioValue })
+      // Profile is now built (the photos are flushed). The routing guard no
+      // longer reacts to this, so navigate home explicitly. Works for both
+      // entry paths: the linear first-time flow AND a later visit opened from
+      // the dock's profile key.
       router.replace('/home')
     } catch {
       bioSubmittingRef.current = false
@@ -530,6 +635,9 @@ export default function OnboardingPage() {
     if (s === 3) {
       const unitValue: Record<DateUnit, string> = { dd, mm, yyyy }
       const unitPlaceholder: Record<DateUnit, string> = { dd: 'DD', mm: 'MM', yyyy: 'YYYY' }
+      const unitCaption: Record<DateUnit, string> = {
+        dd: t('ob.dateDay'), mm: t('ob.dateMonth'), yyyy: t('ob.dateYear'),
+      }
       const showMinAge = dateComplete && age !== null && age < 18
       return (
         <View style={styles.page}>
@@ -545,6 +653,7 @@ export default function OnboardingPage() {
                   i > 0 && styles.dateSegmentGap,
                 ]}
               >
+                <Text style={styles.dateCaption}>{unitCaption[unit]}</Text>
                 <View style={[styles.fieldShell, styles.dateBox]}>
                   <TextInput
                     ref={unitRefs[unit]}
@@ -592,7 +701,7 @@ export default function OnboardingPage() {
     }
 
     if (s === 4) return (
-      <View style={[styles.page, styles.withClose]}>
+      <View style={styles.page}>
         <Text style={styles.title}>{tg('photo.sub', isMale === true)}</Text>
 
         <View style={styles.photoWrap} pointerEvents="box-none">
@@ -626,7 +735,7 @@ export default function OnboardingPage() {
       // the layout differed by device and still squeezed the field on the
       // screens in between.
       return (
-        <View style={[styles.pageStretched, styles.withClose]}>
+        <View style={styles.pageStretched}>
 
           <View style={[styles.fieldShell, styles.bioField, { flex: 1, minHeight: 0 }]}>
             <TextInput
@@ -637,10 +746,10 @@ export default function OnboardingPage() {
               maxLength={BIO_MAX}
               multiline
               textAlignVertical="top"
-              // The min-chars note is a second line of the placeholder rather
-              // than its own element. Composed from the two existing strings,
-              // both of which the MatchCard bio editor still uses separately.
-              placeholder={`${t('bio.placeholder')}\n${t('bio.min')}`}
+              // One line, and it is an invitation rather than a requirement:
+              // the bio is optional now, so there is no minimum to announce
+              // under it (the 'bio.min' second line is deleted).
+              placeholder={genderize(t('bio.placeholder'), isMale)}
               placeholderTextColor={INK_HINT}
               cursorColor={INK}
               selectionColor={SELECTION}
@@ -652,7 +761,7 @@ export default function OnboardingPage() {
             <Button
               label={t('bio.submit')}
               onPress={onContinue}
-              disabled={!bioValid}
+              disabled={bioSubmitting}
               loading={bioSubmitting}
               iconStart={<CheckIcon color={WHITE} />}
               variant="primary"
@@ -668,6 +777,35 @@ export default function OnboardingPage() {
 
   return (
     <View style={styles.rootWrap}>
+    {/* THE PAGE UNDER THIS ONE IS HOME, AND IT GOES ON BEING DRAWN. That is the
+        screen's PRESENTATION, and it is declared in the navigator (_layout.tsx)
+        rather than here: `presentation` is read when the native screen is
+        CREATED, so an in-route <Stack.Screen> — which is a setOptions on a screen
+        that already exists — is silently ignored (measured on the emulator,
+        2026-07-31: the drag still revealed an empty page).
+
+        Nothing shows through at rest: the card below covers the screen and is
+        opaque. What the transparency is for is the moment the card is moving. */}
+    {/* THE SCREEN IS A LAYER, AND IT WEARS THE EDGE THAT SAYS SO. Everything
+        below rides in the app's one rising surface — RisingCard, which is where
+        RISE_SHADOW is declared and the only place it may be — so this page marks
+        its arrival with exactly the mark a Communities page, a chat and the
+        match card do. It matters here for the same reason it matters there: this
+        page and the page under it are the same PAGE tint, so without that edge
+        nothing at all says a surface came over another one. Only the top edge is
+        ever on screen (at rest the card covers the screen), which is the moment
+        the shadow exists for: while it arrives, and while a finger drags it back
+        down.
+
+        NO exit animation — a screen dragged off has already ridden off under the
+        finger, and animating an unmount a gesture just held is the Fabric mount
+        race RisingCard warns about. */}
+    <PullPane
+      gesture={pull.gesture}
+      pullY={pull.pullY}
+      style={StyleSheet.absoluteFill}
+    >
+    <RisingCard style={styles.layerCard} animateEnter={openedOverHome} animateExit={false}>
     {/* Top edge only. It used to take the bottom one too — the ONE surface in the
         app still letting the device's band be its bottom air — so every step's CTA
         ended 34 above the screen edge on an iPhone and 16–24 on an Android, plus
@@ -731,7 +869,10 @@ export default function OnboardingPage() {
         )}
         confirmLabel={tg('ob.createAccount', isMale === true)}
         confirmIconStart={<UserPlusIcon color={WHITE} />}
-        cancelLabel={t('ob.birthConfirmFix')}
+        // ONE button, like every other popup in the app: the date is right
+        // there on the page behind, so putting the popup away (swipe down /
+        // backdrop) IS the fix, and a button repeating that said the same thing
+        // twice. `onCancel` is that dismiss.
         // The popup closes on the tap; the spinner lives on the Create-account
         // button underneath, so the in-flight state is shown in one place
         // rather than freezing the sheet open on top of it.
@@ -739,24 +880,8 @@ export default function OnboardingPage() {
         onCancel={() => setBirthConfirmOpen(false)}
       />
     </SafeAreaView>
-    {/* Build-profile steps (photos / bio) are reached only from home, on demand
-        via the menu's build-profile CTA, so an account always exists here. A
-        close X (top-START, where every dismiss lives) bails back to home
-        without finishing. Deliberately NOT shown on the mandatory account
-        steps 1-3. */}
-    {step >= 4 && (
-      <View style={[styles.closeWrap, { top: insets.top + OVERLAY.chromeGap }]} pointerEvents="box-none">
-        <RoundButton
-          size={ROUND_BUTTON_SIZE_SM}
-          bg={PHOTO_CHROME}
-          shadow={false}
-          onPress={() => { tap(); router.replace('/home') }}
-          accessibilityLabel={t('ob.close')}
-        >
-          <CloseIcon color={INK} size={ICON.round} />
-        </RoundButton>
-      </View>
-    )}
+    </RisingCard>
+    </PullPane>
     </View>
   )
 }
@@ -764,20 +889,22 @@ export default function OnboardingPage() {
 // ── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  rootWrap: { flex: 1, backgroundColor: PAGE },
+  // NO background: what the card rides off over is HOME, still drawn under this
+  // screen (see the Stack.Screen presentation above). A tint here would be a
+  // page painted over the page this is a layer on.
+  rootWrap: { flex: 1 },
   root: { flex: 1, backgroundColor: PAGE },
-  // Close X for the build-profile steps: same gutter as every sheet's close
-  // (OVERLAY.chromeInset from the START edge); `top` is set inline off the
-  // safe-area inset so it lines up with the sheet chrome.
-  closeWrap: { position: 'absolute', start: OVERLAY.chromeInset },
+  // The rising layer: opaque, so the page it covers never shows through. Its
+  // lift is deliberately NOT stated here — it is RisingCard's own RISE_SHADOW,
+  // the one every surface that rises wears. Same card the Communities stack
+  // pushes over its hub.
+  layerCard: { flex: 1, backgroundColor: PAGE },
 
   pagerWrap: { flex: 1, overflow: 'hidden' },
+  // The build-profile steps used to add a `withClose` on top of this, clearing
+  // the close X that stood in the top-START gutter. There is no X, so every step
+  // opens on the page's own headroom again.
   page: { flex: 1, paddingHorizontal: LG, paddingTop: XL },
-  // The build-profile steps (4 photos, 5 bio) carry a close X in the top-START
-  // gutter; without extra headroom the title/field tucks under it. Clear the
-  // whole chrome circle (gap + small round button) plus a section gap so the
-  // content opens comfortably below the X.
-  withClose: { paddingTop: OVERLAY.chromeGap + ROUND_BUTTON_SIZE_SM + LG },
   // The bio step's page. Its LG top padding is deliberately tighter than
   // `page`'s XL: those steps open on a title, this one opens straight onto the
   // field, which needs no headroom above it.
@@ -861,6 +988,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dateSegment: { flex: 1, alignItems: 'center' },
+  // What the box holds, said in words: the DD/MM/YYYY hint inside a box is gone
+  // the moment a digit lands in it, so the caption over it is the one thing that
+  // keeps saying which box is which while the date is being typed. Footnote rank
+  // (TEXT.sm / INK_HINT) so the digits stay the line being read.
+  dateCaption: {
+    marginBottom: XS,
+    fontSize: TEXT.sm,
+    color: INK_HINT,
+  },
   dateSegmentYear: { flex: 1.6 },
   dateSegmentGap: { marginLeft: SM },
   dateBox: {

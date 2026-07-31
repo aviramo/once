@@ -14,7 +14,7 @@ import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, with
 import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
-import { t, tg, lang as appLang } from '../src/i18n'
+import { t, tg, genderize, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
 import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM, TAP_SLOP } from '../src/tokens'
 import { inkOffset } from '../src/fonts'
@@ -1845,7 +1845,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               <Path d="M12 9v4M12 17h.01" />
               <Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </Svg>
-            <Text style={styles.retryLabel}>{t('chat.retry')}</Text>
+            <Text style={styles.retryLabel}>{genderize(t('chat.retry'), isMale)}</Text>
           </Pressable>
         )}
       </View>
@@ -1900,11 +1900,11 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         />
         </PullContext.Provider>
         {/* The dots are page chrome, not a message: they float on the sheet's
-            own header line, immediately inside the close X, and never enter
-            the list. Nothing they do can move a bubble (user directive
-            2026-07-27). Geometry mirrors SheetHeader — the X sits at
-            chromeInset from the START edge, chromeGap below the safe-area top,
-            and the row's own gap separates the two. */}
+            own header line and never enter the list, so nothing they do can
+            move a bubble (user directive 2026-07-27). Geometry mirrors
+            SheetHeader — the page gutter from the START edge, chromeGap below
+            the safe-area top — and that line carries nothing else now that the
+            close X is gone (2026-07-31). */}
         <View
           pointerEvents="none"
           style={[styles.typingFloat, { top: insets.top + OVERLAY.chromeGap }]}
@@ -1957,7 +1957,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 }}
                 style={({ pressed }) => [styles.attachConfirmSend, pressed && styles.attachConfirmSendPressed]}
               >
-                <Text style={styles.attachConfirmSendLabel}>{t('chat.confirmSend.send')}</Text>
+                <Text style={styles.attachConfirmSendLabel}>{genderize(t('chat.confirmSend.send'), isMale)}</Text>
               </Pressable>
               <Pressable
                 onPress={() => { tap(); setAttachConfirm(null) }}
@@ -3348,7 +3348,7 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
             <View style={lbStyles.body}>
               <ReAnimated.Image source={{ uri }} style={[lbStyles.image, imageStyle]} resizeMode="contain" />
             </View>
-            {/* Same floating X as every sheet, at top-START, over the photo. */}
+            {/* Same floating X as every sheet, at top-END, over the photo. */}
             <SheetHeader
               floating
               topInset={topInset}
@@ -3495,13 +3495,15 @@ const styles = StyleSheet.create({
   bubbleTextRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SM },
   textBubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: XS, marginEnd: -SM },
 
-  // Floating chrome on the sheet's header line: START edge + the close X's
-  // width + the header row's own gap puts it immediately inside that button.
-  // Never in the list, so it cannot move a single bubble (user directive
-  // 2026-07-27).
+  // Floating chrome on the sheet's header line, at the page gutter — the line
+  // is its own now. It used to be pushed in by a button's width and the row's
+  // gap, from when the close X stood at the START of that row; the X crossed to
+  // the END in 2026-07-30 and left the pill hanging 44dp inside an empty edge,
+  // then went altogether 2026-07-31. Never in the list, so it cannot move a
+  // single bubble (user directive 2026-07-27).
   typingFloat: {
     position: 'absolute',
-    start: OVERLAY.chromeInset + ROUND_BUTTON_SIZE_SM + SM,
+    start: OVERLAY.chromeInset,
     alignItems: 'flex-start',
   },
   // Not a bubble — chrome standing beside the close X, so it takes that

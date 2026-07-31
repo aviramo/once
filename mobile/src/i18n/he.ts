@@ -32,10 +32,15 @@ export default {
   'ob.female': 'אישה',
   'ob.nicknameStep': 'איך קוראים לך?',
   'ob.next': 'המשך',
-  'ob.close': 'סגירה',
 
   // Onboarding step 2
   'ob.birthdate': 'תאריך לידה',
+  // Captions over the three date boxes: the DD/MM/YYYY hint inside a box goes
+  // away the moment a digit is typed, so what each box holds is said in words
+  // above it and stays said.
+  'ob.dateDay': 'יום',
+  'ob.dateMonth': 'חודש',
+  'ob.dateYear': 'שנה',
   'ob.minAge': 'גיל מינימלי להרשמה הוא 18',
   'ob.createAccount': 'צור חשבון',
   'ob.createAccount_m': 'צור חשבון',
@@ -44,16 +49,18 @@ export default {
   'ob.birthConfirm': 'יום ההולדת שלך הוא {date} ואת/ה בן/בת {age}',
   'ob.birthConfirm_m': 'יום ההולדת שלך הוא {date} ואתה בן {age}',
   'ob.birthConfirm_f': 'יום ההולדת שלך הוא {date} ואת בת {age}',
-  'ob.birthConfirmFix': 'תיקון',
 
   // Onboarding photo
   'photo.sub': 'הוסף 2-6 תמונות',
-  'photo.uploadFailed': 'העלאת התמונות נכשלה. בלי תמונה אי אפשר להמשיך, נסה שוב',
+  // הפועל פונה אל המשתמש, והמין שלו כבר ידוע בשלב הזה של האונבורדינג (הוא נבחר
+  // במסך הראשון), ולכן {m|f} ב-genderize.
+  'photo.uploadFailed': 'העלאת התמונות נכשלה. בלי תמונה אי אפשר להמשיך, {נסה|נסי} שוב',
 
-  // Onboarding bio
-  'bio.placeholder': 'משפט, תחושה או רגע שמספרים עליך...',
+  // Onboarding bio. אין מינימום תווים ואין ביו חובה (הוראת משתמש 31.7.2026):
+  // פרופיל בנוי הוא שתי תמונות וזהו, ולכן המחרוזת 'bio.min' נמחקה. הפועל פונה
+  // אל המשתמש והמין שלו ידוע (נבחר במסך הראשון של האונבורדינג), ולכן genderize.
+  'bio.placeholder': 'זה המקום לספר על עצמך ועל מה ש{אתה מחפש|את מחפשת}',
   'bio.submit': 'סיום',
-  'bio.min': 'מינימום 20 תווים',
   'bio.update': 'עדכון',
 
   // Home — distance chip text. <ab> = viewer+subject anchor (d=device,
@@ -102,8 +109,6 @@ export default {
   'settings.profile': 'עריכת הפרופיל',
   'settings.buildProfile': 'בניית הפרופיל',
   'settings.account': 'חשבון',
-  'settings.visibilityVisible': 'גלוי',
-  'settings.visibilityHidden': 'מוסתר',
   // The same state as a full sentence, for the preferences popup's leading ROW
   // (user directive 2026-07-30). A row is read as a line of text where the
   // photo's chip is read as a badge, so it says who it is about; the {m|f}
@@ -114,11 +119,16 @@ export default {
   // hidden sentence like anyone else, and this is what the tap answers with. The
   // title and the button are the app's one build-profile gate (BuildProfileGate),
   // so only the blocked door is named here.
-  'settings.visibilityGateDesc': 'כדי שיראו אותך צריך פרופיל עם תמונות ותיאור קצר. זה לוקח דקה',
-  // The watcher count is not a string any more: it rides the visibility chip's
-  // trailing pill as the BARE NUMBER (user directive 2026-07-30) — the tile
-  // floats on a photo and its own label already says what is being counted. The
-  // hide confirm below still spells it out, where there is room for a sentence.
+  'settings.visibilityGateDesc': 'כדי שיראו אותך צריך פרופיל עם שתי תמונות לפחות. זה לוקח דקה',
+  // The watcher count as a SENTENCE, for the pill beside that row (user
+  // directive 2026-07-31, restoring what the bare number replaced the day
+  // before): a row is read as a line of text, so the count finishes the line the
+  // label started, in the same first person it is written in. What stays a bare
+  // number is the DOCK's preferences key — a mark standing beside a 24dp glyph
+  // has no room for a sentence, and the row it opens is where the sentence is.
+  // Singular is its own string: Hebrew inflects the verb for a single watcher.
+  'settings.watchersOne': 'מישהו אחד צופה בי',
+  'settings.watchersMany': '{count} צופים בי',
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
@@ -133,9 +143,12 @@ export default {
 
   // Circles: the menu row + the full hub sheet and its sub-screens.
   'communities.menuRow': 'מעגלים',
-  'communities.title': 'מעגלים',
+  'communities.title': 'המעגלים שלי',
   'communities.myFriends': 'החברים שלי',
-  'communities.myFriendsSub': 'אנשים שאתה מכיר אישית',
+  'communities.myFriendsSub': 'אנשים ש{אתה מכיר|את מכירה} אישית',
+  // The one WORD, for the button on the hub's friends row: the row already
+  // says what it is about, so the button only says what it does.
+  'communities.invite': 'הזמנה',
   'communities.create': 'יצירת קבוצה',
   'communities.find': 'חיפוש והצטרפות לקבוצה',
   // Group kinds: ONE axis, three stops (2026-07-27). Replaces the old
@@ -159,9 +172,11 @@ export default {
   // Menu row with nothing in it yet: the row still says what it is for, in the
   // one line the counts would have used.
   'communities.rowEmpty': 'הצטרפות לקבוצות וחברים',
-  // הכניסה למעגלים חסומה עד שהפרופיל נבנה: תמונות ותיאור
-  'communities.gateTitle': 'המעגלים נפתחים אחרי בניית הפרופיל',
-  'communities.gateDesc': 'המעגלים מחברים אותך לאנשים דרך קבוצות וחברים, וכולם רואים שם את הפרופיל שלך. קודם צריך פרופיל עם תמונות ותיאור קצר',
+  // הכניסה למעגלים חסומה עד שהפרופיל נבנה: תמונות ותיאור. המשפט פונה אל
+  // המשתמש בציווי, ולכן הוא ממוגדר במקום ({m|f}, כמו home.buildProfileTitle)
+  // ונפתר ב-genderize מול המין של המשתמש עצמו.
+  'communities.gateTitle': 'אנשים דרך מעגלים',
+  'communities.gateDesc': 'מעגלים מחברים בין אנשים עם תחומי עניין משותפים. כדי להתחיל, צ{ור|רי} פרופיל עם שתי תמונות לפחות',
   'communities.managedBy': 'מנוהלת על ידי {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared group in one list, so it says what the two of you have in common
@@ -171,20 +186,29 @@ export default {
   // the friend named in it, so the pair here is chosen by match.is_male.
   'communities.friendOfM': 'חבר של {name}',
   'communities.friendOfF': 'חברה של {name}',
-  // One list, one empty line: the hub no longer splits managed from joined.
-  'communities.emptyGroups': 'עוד לא יצרת קבוצה ולא הצטרפת לאף אחת',
-  // ...and what belonging is WORTH, under it (user directive 2026-07-30): an
-  // empty page that only names what is missing never says why to fill it. Both
-  // facts are literally what the server does (20260730150000): a fellow member
-  // of a shared group and a friend OF a friend each carry the x3 relevance
-  // factor in `others()`, symmetric, so it is true in both directions, and the
-  // card names the circle. My own friends are NOT in that sentence: they are
-  // excluded from the game outright.
-  'communities.emptyGroupsWhy': 'מי שיש לכם איתו חבר משותף או קבוצה משותפת מגיע אליכם ראשון, והכרטיס מראה מה מחבר ביניכם',
-  'communities.loadError': 'טעינה נכשלה, נסה שוב',
+  // (No "you have no groups yet" line any more: a hub with no groups IS the
+  // start page — the picture, what this is for, the two ways in — with the
+  // friends row over it. See HubStart.)
+
+  // The page before there is anything on it: no friends, nobody waiting, no
+  // group of any kind (user directive 2026-07-30). It is not the list's empty
+  // line — it is the whole screen, so it says what Circles IS and then offers
+  // the only two ways to start one. See HubStart / CirclesArt.
+  'communities.startTitle': 'המעגל שלך מתחיל כאן',
+  'communities.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך גם לחברים הפנויים שלו. קבוצות עוזרות לך להכיר אנשים עם תחומי עניין משותפים',
+  // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
+  // one of the two whose label does not say what it is worth. "Search groups"
+  // needs no line, and a second one turned the two ways forward into a
+  // paragraph.
+  'communities.startFind': 'חיפוש קבוצות',
+  // The friends page before there is a single friend on it: the same drawing
+  // and the same heading as the hub's, one step in — that page offers the two
+  // ways to start a circle, this one owns the first of them, so all it has to
+  // say is what a friend joining actually opens.
+  'communities.friendsStartDesc': '{הזמן|הזמיני} חברים, וכשהם יצטרפו ייפתחו בפניך אנשים חדשים מהמעגלים שלהם',
 
   // My friends
-  'communities.inviteFriend': 'הזמנת חבר',
+  'communities.inviteFriend': 'הזמנת חברים',
   // Caption under the invite button: connecting as friends pays both sides a
   // credit (server credits it on every new friend link, see friend_link_credits).
   'communities.inviteReward': 'על כל חבר שמתחבר, שניכם מקבלים קרדיט נוסף',
@@ -192,7 +216,6 @@ export default {
   'communities.friendsCount': '{count} חברים',
   'communities.accept': 'אישור',
   'communities.decline': 'דחייה',
-  'communities.remove': 'הסרה',
   'communities.noFriends': 'עוד אין לך חברים כאן',
   // What a friend is FOR (user directive 2026-07-30): not the friend himself,
   // who needs no introduction and is excluded from the game outright as of
@@ -209,11 +232,8 @@ export default {
 
   // Link an existing friend
   'communities.linkTitle': 'שיוך חבר',
-  'communities.searchPeople': 'חיפוש לפי שם',
   'communities.request': 'בקשה',
   'communities.requested': 'נשלח',
-  'communities.alreadyFriend': 'חבר',
-  'communities.searchHint': 'הקלד שם כדי לחפש',
   'communities.noResults': 'אין תוצאות',
   'communities.linkNote': 'הצד השני יקבל בקשה. אחרי אישור אתם מחוברים בשני הכיוונים',
 
@@ -249,22 +269,25 @@ export default {
   // והחברים בקבוצה לא נפגשים במשחק. צ'קבוקס בהגדרות הקבוצה, מתחת לסוג הקבוצה,
   // וההסבר הוא שורת המשנה שלו.
   'communities.hiddenToggle': 'להסתיר אותי מחברי הקבוצה',
-  'communities.hiddenSub': 'החברים בקבוצה לא יראו אותך במשחק ואתה לא תראה אותם. ההרשאות שלך בקבוצה נשארות בדיוק כמו קודם',
+  'communities.hiddenSub': 'החברים בקבוצה לא יראו אותך במשחק ו{אתה לא תראה|את לא תראי} אותם. ההרשאות שלך בקבוצה נשארות בדיוק כמו קודם',
   'communities.hiddenShort': 'לא משחק',
   'communities.deleteGroup': 'מחיקת הקבוצה',
   'communities.deleteTitle': 'למחוק את {name}?',
   'communities.deleteDesc': 'הקבוצה וכל החברויות בה יימחקו. אי אפשר לבטל',
   'communities.deleteConfirm': 'מחיקה',
-  'communities.removeMemberTitle': 'להסיר את {name}?',
-  'communities.removeMemberDesc': 'אפשר להצטרף שוב עם קישור ההזמנה',
+  // No confirm for taking a member out (user directive 2026-07-31): the tap
+  // removes. `removeMemberTitle` / `removeMemberDesc` / `remove` are deleted with
+  // that popup — the description WAS the reason it needed none ("they can join
+  // again with the invite link").
   'communities.makePublic': 'הפיכה לציבורית',
   'communities.makePrivate': 'הפיכה לפרטית',
   'communities.approvalEnable': 'דרישת אישור להצטרפות',
   'communities.approvalDisable': 'ביטול דרישת האישור',
+  // The queue's one name, on the roster row that unfolds it. Its page-title
+  // twin (`requestsNav`) and its empty line (`noRequests`) went with the page
+  // itself on 2026-07-31: the queue is a drawer inside the roster now, and a
+  // drawer with nothing in it is not drawn at all.
   'communities.requestsSectionJoin': 'בקשות הצטרפות',
-  'communities.requestsNav': 'בקשות הצטרפות',
-  'communities.noRequests': 'אין בקשות שממתינות',
-  'communities.joinRequestFor': 'הצטרפות לקבוצה {name}',
   'communities.approve': 'אישור',
   'communities.approveAll': 'אישור כולם',
   'communities.approveAllTitle': 'לאשר את כל הבקשות?',
@@ -275,7 +298,10 @@ export default {
   // directive 2026-07-30, replacing "manager" everywhere a user reads it). An
   // OPEN group has no such role at all, because nothing there waits on an
   // answer, so the appointment is offered on approved/private groups only.
-  'communities.manager': 'מאשר',
+  // The chip names a PERSON's role, so it inflects with whoever it is stuck to:
+  // my own sex on the hub row (the group I approve for), the member's on a
+  // roster row. Both call sites genderize with their own subject.
+  'communities.manager': '{מאשר|מאשרת}',
   'communities.makeManager': 'מינוי כמאשר',
   'communities.removeManager': 'ביטול המינוי',
   'communities.removeFromGroup': 'הסרה מהקבוצה',
@@ -293,9 +319,24 @@ export default {
   // Find or join
   'communities.findTitle': 'הצטרפות לקבוצה',
   'communities.findSearch': 'חיפוש קבוצה',
+  // Searching the roster of a group you manage: the mark on that page's bar,
+  // the field's own placeholder, and the mark that ends the search. It looks
+  // over BOTH lists at once, the people waiting and the people already in.
+  'communities.searchPeople': 'חיפוש לפי שם',
+  'communities.searchClose': 'סגירת החיפוש',
+  // The line about the PERSON, standing over a group's name on their page: who
+  // they are and when they turned up here. Genderless in both languages, so a
+  // row with no profile on it still reads (see memberSince / waitingSince), and
+  // the name leads because everything else in that block is the group's.
+  'communities.inGroupSince': '{name} בקבוצה מאז {date}',
+  // "בתור מאז", not "ממתין מאז": the sentence must stay genderless for real (a
+  // row cached with no profile carries no is_male to inflect with), and the
+  // participle was the one word in the pair that was not.
+  'communities.waitingSince': '{name} בתור מאז {date}',
   'communities.orCode': 'או בקוד הזמנה',
   'communities.join': 'הצטרפות',
-  'communities.joined': 'חבר',
+  // The chip says what I AM to this group, so it takes my own sex.
+  'communities.joined': '{חבר|חברה}',
   'communities.requestJoin': 'בקשת הצטרפות',
   'communities.pending': 'ממתין לאישור',
   // A strip's chip, where the meta line already says the size: ONE word in the
@@ -345,7 +386,6 @@ export default {
   'settings.ageRange': 'בגילאים',
   'settings.ageFrom': 'מגיל',
   'settings.ageTo': 'עד גיל',
-  'settings.save': 'שמור',
   'settings.add': 'הוספה',
   'settings.range': 'עד',
   // Distance-field LABEL when range is unlimited (then the value column is
@@ -365,34 +405,33 @@ export default {
   'settings.locationFromHome': 'מהבית',
   'settings.locationFromWork': 'מהמשרד',
   'settings.locationFromDevice': 'מהמיקום הנוכחי שלי',
-  'settings.locationDeviceDesc': 'משתמש במיקום המכשיר',
   'settings.locationCustomDesc': 'כתובת לפי בחירה',
-  'settings.locationAddressPrompt': 'הקלד כתובת או שם של עיר',
+  'settings.locationAddressPrompt': '{הקלד|הקלידי} כתובת או שם של עיר',
   'settings.locationSearch': 'חיפוש',
-  'settings.locationSearching': 'מחפש...',
-  'settings.locationNoResults': 'לא נמצאה כתובת כזאת. נסה ניסוח אחר',
+  'settings.locationNoResults': 'לא נמצאה כתובת כזאת. {נסה|נסי} ניסוח אחר',
   'settings.locationFetchingDevice': 'מקבל מיקום מהמכשיר...',
   'settings.locationDeviceFailedTitle': 'לא הצלחנו לקבל מיקום',
   'settings.locationDeviceFailedDesc': 'לאפשר גישה למיקום בהגדרות המכשיר ולנסות שוב',
   'settings.locationPermissionTitle': 'הרשאת מיקום',
   'settings.locationPermissionDesc': 'כדי להשתמש במיקום המכשיר יש לאפשר גישה למיקום',
-  'settings.locationOpenSettings': 'פתח הגדרות',
   'settings.locationOk': 'אישור',
   'settings.locationCancel': 'ביטול',
   'settings.locationServicesOffTitle': 'שירותי המיקום כבויים',
   'settings.locationServicesOffDesc': 'יש להפעיל את שירותי המיקום במכשיר ולנסות שוב',
   'settings.locationLockedTitle': 'אי אפשר לשנות מיקום עכשיו',
-  'settings.locationLockedDesc': 'כדי לשנות מיקום, צריך לצאת קודם מהצפייה או מההזמנה הפעילה. אחרי שתסיים את האינטראקציה הנוכחית, תוכל לעדכן את המיקום',
+  'settings.locationLockedDesc': 'כדי לשנות מיקום, צריך לצאת קודם מהצפייה או מההזמנה הפעילה. אחרי {שתסיים|שתסיימי} את האינטראקציה הנוכחית, {תוכל|תוכלי} לעדכן את המיקום',
   'settings.duplicatePhotoTitle': 'תמונה כפולה',
   'settings.duplicatePhotoBody': 'לא ניתן להעלות את אותה תמונה פעמיים. תמונות כפולות הוסרו',
   'settings.photoEditMoveUp': 'הזזה למעלה',
+  'settings.photoEditReplace': 'החלפת תמונה',
   'settings.photoEditMoveDown': 'הזזה למטה',
-  'settings.photoEditReplace': 'החלפה',
   'settings.photoEditDelete': 'מחיקה',
-  'settings.photoMinTwo': 'נדרשות לפחות 2 תמונות',
-  // Add-chips on the own-profile card, under the fact chips.
-  'settings.addPhoto': 'הוספת תמונה',
+  // The two rows of the popup the own-profile card's heading plus opens.
+  // Each row is the THING, not the verb: the plus already said "add".
+  'settings.addPhoto': 'תמונה',
   'settings.addFamily': 'משפחה וילדים',
+  // What that plus says to a screen reader: the mark itself names nothing.
+  'settings.a11y.addToProfile': 'הוספה לפרופיל',
   'family.title': 'משפחה וילדים',
   'family.optional': 'אופציונאלי',
   'family.hasKidsQuestion': 'יש לך ילדים?',
@@ -415,7 +454,6 @@ export default {
   'family.scheduleWeek1LabelSuffix': ' (יש חזרתיות)',
   'family.scheduleWeek1Hint_m': 'הימים שבהם אתה עם הילדים נשמרים אצלנו ולא מוצגים לאף משתמש. אנחנו משתמשים בהם כדי להציג לך את ההתאמות הרלוונטיות ביותר',
   'family.scheduleWeek1Hint_f': 'הימים שבהם את עם הילדים נשמרים אצלנו ולא מוצגים לאף משתמש. אנחנו משתמשים בהם כדי להציג לך את ההתאמות הרלוונטיות ביותר',
-  'family.scheduleHint': 'סמן את הימים שאתה עם הילדים',
   'family.scheduleAdd': 'הוספת ימים',
   'family.scheduleRemove': 'הסרה',
   'family.weekLabel': 'שבוע {n}',
@@ -423,7 +461,6 @@ export default {
   'family.removeWeek': 'הסרת שבוע',
   'family.agesAdd': 'הוספת גילאים',
   'family.agesRemove': 'הסרת גילאים',
-  'family.countPlaceholder': 'בחר מספר',
   'family.agePlaceholder': 'בחירת גיל',
   'family.kidLabel': 'ילד {n}',
   'family.ageUnder1': 'פחות משנה',
@@ -477,16 +514,21 @@ export default {
   // one sentence and one action button. The dead 3/10/50 packs and the
   // paragraph above them are gone.
   'credits.buy.title': 'עוד קרדיטים',
-  // The popup's sentence. It states the two ways credits arrive, refill first:
-  // one a day, at the hour it lands ({time} is a bare "HH:MM" from
-  // formatGrantTime), then the invite the button offers. Deliberately NOT the
-  // friends page's caption (communities.inviteReward) that used to be reused
-  // here (user directive 2026-07-28): this popup is where someone comes when
-  // the wallet is empty, so it has to answer "when do I get one anyway", which
-  // that caption never said. The no-hour variant covers a wallet the server
-  // hasn't stamped a next-refill on yet.
-  'credits.buy.desc': 'בכל יום בשעה {time} מתווסף לך קרדיט חדש (אם אין). ובנוסף, על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף',
-  'credits.buy.descNoTime': 'בכל יום מתווסף לך קרדיט חדש (אם אין). ובנוסף, על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף',
+  // The popup's sentence. It states the two ways credits arrive, THE INVITE
+  // FIRST (user directive 2026-07-31): that is the one the button under it
+  // offers and the only one the user can act on, so the sentence and the action
+  // read as one thing. The daily refill follows as the fallback it actually is,
+  // and states its own condition up front ("if you have no credits") rather
+  // than in a parenthesis at the end ({time} is a bare "HH:MM" from
+  // formatGrantTime). Deliberately NOT the friends page's caption
+  // (communities.inviteReward) that used to be reused here (user directive
+  // 2026-07-28): this popup is where someone comes when the wallet is empty, so
+  // it has to answer "when do I get one anyway", which that caption never said.
+  // The verb addressing the user is gendered by the inline {male|female}
+  // marker, so the call site must genderize(). The no-hour variant covers a
+  // wallet the server hasn't stamped a next-refill on yet.
+  'credits.buy.desc': 'על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף. אם אין לך קרדיטים, בכל יום בשעה {time} {תקבל|תקבלי} קרדיט חדש',
+  'credits.buy.descNoTime': 'על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף. אם אין לך קרדיטים, בכל יום {תקבל|תקבלי} קרדיט חדש',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.
@@ -497,18 +539,16 @@ export default {
   // would print the marker as-is. The friend stays ungendered ("חבר" covers
   // any friend you'd invite).
   'credits.invite.title': '{הזמן|הזמיני} חבר',
-  // Text that rides along with the link in the OS share sheet.
-  'credits.invite.shareText': 'הצטרף אליי ל Once',
+  // Text that rides along with the link in the OS share sheet. Plural, like the
+  // group's own share message: the READER is whoever the link is sent to, and
+  // their sex is the one thing this sentence can never know.
+  'credits.invite.shareText': 'הצטרפו אליי ל Once',
   'settings.miles': 'מייל',
   // Gendered by the user's own sex via genderize() ({male|female} marker).
   'settings.preferredGender': '{פנוי|פנויה}',
   'settings.genderM': 'לגברים',
   'settings.genderF': 'לנשים',
   'settings.genderBoth': 'לכולם',
-  'settings.kidsLabel': 'מתכנן/ת ילדים?',
-  'settings.kidsYes': 'כן',
-  'settings.kidsNo': 'לא',
-  'settings.kidsNa': 'לא רלוונטי',
 
   // Match
   // Relative time, genderless and without the "מחובר" prefix: the suffix of the
@@ -533,17 +573,6 @@ export default {
   'home.locationAccessRequired': 'נדרשת גישה למיקום כדי לראות את המרחק',
   'home.noInternetTitle': 'אין חיבור לאינטרנט',
   'home.noInternetDesc': 'Once זקוקה לחיבור אינטרנט כדי לפעול. יש לבדוק את הוויי-פיי או את חבילת הגלישה ולנסות שוב',
-  'home.noInternetButton': 'נסה שוב',
-  'home.noInternetButton_m': 'נסה שוב',
-  'home.noInternetButton_f': 'נסי שוב',
-  // ViewersStatusCard (page2) — 5 states × gender
-  // In-card trigger that opens the broadcast confirm popup. Reads as a
-  // mode-switch (parallel to the go-visible label), NOT as the action verb;
-  // the confirm popup's button (home.broadcastConfirmButton) keeps the
-  // "broadcast me" wording.
-  'home.premiumPopup.add': 'הצג אותי לאנשים',
-  'home.premiumPopup.hide': 'הסתר את הפרופיל',
-  'home.premiumPopup.reveal': 'הצג את הפרופיל',
   // Gendered (אתה / את). Picked via tg(_m/_f) against the caller's is_male.
   'settings.hideConfirmTitle': 'להסתיר את הפרופיל?',
   'settings.hideConfirmDesc': 'כל הצופים בך יוסרו ויקבלו על כך התראה',
@@ -552,7 +581,6 @@ export default {
   'settings.hideConfirmButton': 'הסתרה',
 
   // Home — match teaser
-  'home.tapForMore': 'בחזרה למשחק',
   // Ready-to-find headline pool. One line is picked at random each time the
   // home pane (re)enters the ready state (see home.tsx headlineText). Stored
   // as a newline-joined block, one sentence per source line; consumed via
@@ -774,9 +802,6 @@ export default {
   'home.joinGate.requestText': 'הגישה באישור, בקשו להצטרף',
   'home.joinGate.waitingText': 'הבקשה נשלחה, ממתינים לאישור',
   'home.startNow': 'להתחיל עכשיו',
-  'home.readyToContinue': 'מוכן להמשיך?',
-  'home.readyToContinue_m': 'מוכן להמשיך?',
-  'home.readyToContinue_f': 'מוכנה להמשיך?',
   'home.endedBack': 'חזרה למשחק',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).
@@ -834,9 +859,6 @@ export default {
   'home.locked.page1.delete.desc': 'היא יצאה מהאפליקציה או לא זמינה כרגע. אפשר להמשיך הלאה',
   'home.locked.page1.delete.desc_m': 'הוא יצא מהאפליקציה או לא זמין כרגע. אפשר להמשיך הלאה',
   'home.locked.page1.delete.desc_f': 'היא יצאה מהאפליקציה או לא זמינה כרגע. אפשר להמשיך הלאה',
-
-  // Home — watcher
-  'home.notifOff': 'לא מקבל/ת התראות',
 
   // Home — subscription toggle button
 
@@ -913,16 +935,20 @@ export default {
   'home.waitingTimerDesc_mf': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן',
   'home.waitingTimerDesc_fm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן',
   'home.waitingTimerDesc_ff': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן',
-  'home.waitingFirstInLine': 'הראשון/ה בתור',
-  'home.waitingFirstInLineSubtext': 'נעדכן אותך כשתהיה תשובה',
-  'home.waitingFirstInLineSubtext_m': 'נעדכן אותך כשהוא יענה',
-  'home.waitingFirstInLineSubtext_f': 'נעדכן אותך כשהיא תענה',
   // The invite door's own sentence for the app's one build-profile gate. Its
   // button is `settings.buildProfile`, which is what every one of those doors
   // says: there was a second key here with the identical Hebrew word, and the
   // two drifted in English alone.
   'home.buildProfileTitle': 'בנ{ה|י} קודם פרופיל',
-  'home.buildProfileDesc': 'כדי לשלוח הזמנה צריך פרופיל עם תמונות ותיאור קצר. זה לוקח דקה',
+  'home.buildProfileDesc': 'כדי לשלוח הזמנה צריך פרופיל עם שתי תמונות לפחות. זה לוקח דקה',
+  // The browse allowance's door (lib/browseGate.ts): an account with no profile
+  // watches two people and then the centre circle stops being the play button
+  // and becomes this. Same popup as the invite door above, so only the sentence
+  // changes — and the TITLE is also the pane's own headline, the way every
+  // centre notice states its reason in that slot. The description is addressed
+  // to the user in the imperative, so it is genderized in place ({m|f}).
+  'home.browseGateTitle': 'כדי להמשיך צריך פרופיל',
+  'home.browseGateDesc': 'צ{ור|רי} פרופיל עם שתי תמונות לפחות, ו{תוכל|תוכלי} להמשיך להכיר אנשים',
   'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
   'home.cancelWaitingBtn': 'ביטול הזמנה',
   'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין',
@@ -936,9 +962,6 @@ export default {
   'home.refuseReplyDesc_m': 'ההזמנה תיסגר, והצד השני יקבל עדכון',
   'home.refuseReplyDesc_f': 'ההזמנה תיסגר, והצד השני יקבל עדכון',
   'home.refuseReplyConfirm': 'לדחות את ההזמנה',
-  'home.watchingAccept': 'להתמקד',
-  'home.watchingAccept_m': 'להתמקד בו',
-  'home.watchingAccept_f': 'להתמקד בה',
   'home.watchingReject': 'דילוג',
   // Shown in the rotating-headline slot for the duration of the first-time
   // swipe-down tutorial, instead of that card's random skip line: while the
@@ -947,11 +970,7 @@ export default {
   // Incoming-invite card (page2). Title via tg(key, inviterMale) — only the
   // inviter's gender (הוא/היא + הזמין/הזמינה). Desc via tgg(key, receiverMale,
   // inviterMale) → suffix _<receiver><inviter>: receiver drives תחליטי/תחליט
-  // + ואת לא מקבלת/ואתה לא מקבל, inviter drives הוא/היא מחכה. replyingTimerDesc
-  // is unused dead code (no caller) kept only for parity; receiver-gendered.
-  'home.replyingTimerDesc': 'הוא הזמין אותך לצ׳אט. יש לך 10 דקות לענות',
-  'home.replyingTimerDesc_m': 'הוא הזמין אותך לצ׳אט. יש לך 10 דקות לענות',
-  'home.replyingTimerDesc_f': 'הוא הזמין אותך לצ׳אט. יש לך 10 דקות לענות',
+  // + ואת לא מקבלת/ואתה לא מקבל, inviter drives הוא/היא מחכה.
   'home.replyingTitle': 'הוא הזמין אותך לצ׳אט',
   'home.replyingTitle_m': 'הוא הזמין אותך לצ׳אט',
   'home.replyingTitle_f': 'היא הזמינה אותך לצ׳אט',
@@ -977,7 +996,8 @@ export default {
   'chat.blockConfirm': 'חסימה',
   'chat.endChat': 'סיום צ\'אט',
   'chat.leave': 'עזיבה',
-  'chat.a11y.close': 'סגירת הצ\'אט',
+  // (The chat sheet's own close label went with its X on 2026-07-31 — the sheet
+  // is put away by dragging its top strip. The lightbox below keeps one.)
   'chat.a11y.closeImage': 'סגירת התמונה',
   'chat.report': 'דיווח',
   'chat.reportTitle': 'דיווח על המשתמש',
@@ -993,13 +1013,13 @@ export default {
   'chat.confirmSend.schedule': 'שליחת לוח הזמנים עם הילדים',
   'chat.confirmSend.schedule_m': 'שליחת לוח הזמנים עם הילדים',
   'chat.confirmSend.schedule_f': 'שליחת לוח הזמנים עם הילדים',
-  'chat.confirmSend.send': 'שלח',
+  'chat.confirmSend.send': '{שלח|שלחי}',
   'chat.locationLabel': 'מיקום',
   'chat.locationOpen': 'הקש לפתיחה במפות',
   'chat.scheduleTitle': 'הימים שאני פנוי (ללא ילדים)',
   'chat.scheduleTitle_m': 'הימים שאני פנוי (ללא ילדים)',
   'chat.scheduleTitle_f': 'הימים שאני פנויה (ללא ילדים)',
-  'chat.retry': 'שלח שנית',
+  'chat.retry': '{שלח|שלחי} שנית',
   'chat.reply.image': 'תמונה',
   'chat.reply.audio': 'הודעה קולית',
   'chat.reply.location': 'מיקום',
@@ -1012,14 +1032,7 @@ export default {
   'chat.msgActions.copy': 'העתקת הטקסט',
 
   // Gender-aware: user gender
-  'home.tapForMore_m': 'בחזרה למשחק',
-  'home.tapForMore_f': 'בחזרה למשחק',
   'home.locationUnavailableTitle': 'מיקום לא זמין',
-  'home.locationUnavailableDesc': 'לא הצלחנו לאתר את המיקום שלך. נסה לעבור למקום עם קליטה טובה יותר ולחץ על שדר מיקום',
-  'home.locationUnavailableButton_m': 'שדר מיקום',
-  'home.locationUnavailableButton_f': 'שדרי מיקום',
-  // Broadcast countdown, now shown as a line in the viewers info card
-  // description (was the toggle's broadcast-segment timer). {time} = MM:SS.
   // The four entries in the strip at the foot of home (HomeDock). ONE WORD each:
   // the caption names the glyph over it in a quarter of the screen's width, so
   // anything longer wraps to two lines on every phone. Circles takes the one
@@ -1030,19 +1043,17 @@ export default {
   'home.dock.profile': 'פרופיל',
   'home.dock.preferences': 'העדפות',
   'home.dock.more': 'עוד',
-  // Accessibility labels for controls with no visible text: a sheet's floating
-  // close X. The menu button's two labels went with the button (2026-07-30), and
-  // the dock's entries are labelled by their own captions, so nothing is unlabelled.
-  'home.a11y.closeInvite': 'סגירת ההזמנה',
-  'home.a11y.closeProfile': 'סגירת הפרופיל',
+  // Accessibility labels for controls with no visible text. The menu button's two
+  // labels went with the button (2026-07-30), the invite's with its X (same day:
+  // the card answers with a named button, not an X), and the profile sheet's and
+  // Circles' with theirs (2026-07-31: those surfaces leave by the swipe). The
+  // dock's entries are labelled by their own captions.
+  // The X on the heading tile of a card that is over: it takes the reader to the
+  // message at the top of that card, where the way back to the game is.
+  'home.a11y.endedMessage': 'מעבר להודעה',
   'home.locatingDesc': 'סורק אנשים בסביבתך',
   'home.loadingProfile': 'טוען נתוני פרופיל',
   'home.noOneNearbyTitle': 'אין כרגע אנשים בסביבה',
-  'home.noOneNearbyDesc': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
-  'home.noOneNearbyDesc_m': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
-  'home.noOneNearbyDesc_f': 'לא מצאנו כרגע מישהו בסביבה שלך. אפשר לנסות שוב עוד מעט, או לשנות את העדפות החיפוש',
-  'settings.kidsLabel_m': 'מתכנן ילדים?',
-  'settings.kidsLabel_f': 'מתכננת ילדים?',
   'settings.deleteConfirmDesc_m': 'כל המידע, התמונות והשיחות יימחקו לצמיתות. הזמנות פעילות, שיחות וצפיות יבוטלו. לא ניתן לבטל פעולה זו',
   'settings.deleteConfirmDesc_f': 'כל המידע, התמונות והשיחות יימחקו לצמיתות. הזמנות פעילות, שיחות וצפיות יבוטלו. לא ניתן לבטל פעולה זו',
   'settings.signOut_m': 'התנתקות מהאפליקציה',
@@ -1055,8 +1066,4 @@ export default {
   'chat.inputPlaceholder_f': 'כתבי הודעה...',
   'photo.sub_m': 'הוסף 2-6 תמונות',
   'photo.sub_f': 'הוסיפי 2-6 תמונות',
-
-  // Gender-aware: watcher/subject gender
-  'home.notifOff_m': 'לא מקבל התראות',
-  'home.notifOff_f': 'לא מקבלת התראות',
 }
