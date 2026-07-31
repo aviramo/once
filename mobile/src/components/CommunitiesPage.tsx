@@ -1302,7 +1302,6 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
       <ConfirmDialog
         visible={confirm}
         title={group ? t('settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
-        description={t('settings.groupsLeaveDesc')}
         confirmLabel={t('settings.groupsLeaveConfirm')}
         confirmIconStart={<SignOutIcon color={WHITE} />}
         busy={busy}
@@ -2746,7 +2745,6 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
       <ConfirmDialog
         visible={confirmLeave}
         title={t('settings.groupsLeaveTitle').replace('{name}', group.name)}
-        description={t('settings.groupsLeaveDesc')}
         confirmLabel={t('settings.groupsLeaveConfirm')}
         confirmIconStart={<SignOutIcon color={WHITE} />}
         busy={busy === 'leave'}

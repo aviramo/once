@@ -623,3 +623,33 @@ export const PULSE = {
   phaseMs: 900,
   timeoutMs: 2200,
 } as const
+
+// ── A number that CHANGED ──────────────────────────────────────────────────
+// The dock's counts (HomeDock.tsx) sit in a corner the eye is not on, and they
+// change while the user is looking at something else entirely: a request
+// arrives, a watcher appears, a credit is spent. Swapping one digit for another
+// says none of that. So a count that CHANGES BLINKS — three times, over two
+// seconds (user directive 2026-07-31).
+//
+// It is a BLINK and not the attention PULSE above, which is why it does not
+// reuse that block: the pulse is a continuous heartbeat and must never fully
+// vanish (a dot that disappears reads as broken), while this is a one-shot on a
+// mark that is already only a couple of digits wide, and what has to be caught
+// out of the corner of the eye is the digit going away and coming back.
+//
+// The directive fixes the whole gesture and its count; the phase is what falls
+// out of them, so it is derived HERE rather than at the one call site — a
+// retune of the total must not leave a stale phase behind it.
+const COUNT_BLINK_TIMES = 3
+const COUNT_BLINK_TOTAL_MS = 2_000
+
+export const COUNT_BLINK = {
+  /** How many times the digit goes away and comes back. */
+  times: COUNT_BLINK_TIMES,
+  /** The whole gesture, start to finish. */
+  totalMs: COUNT_BLINK_TOTAL_MS,
+  /** One direction of one blink — a blink is two of these, hence the ×2. */
+  phaseMs: COUNT_BLINK_TOTAL_MS / (COUNT_BLINK_TIMES * 2),
+  /** All the way down: see above. */
+  opacity: 0,
+} as const

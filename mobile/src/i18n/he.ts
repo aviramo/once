@@ -138,7 +138,6 @@ export default {
   // in Circles now, and the sheet itself is deleted. Circles' own leave popup
   // reads these three.
   'settings.groupsLeaveTitle': 'לעזוב את {name}?',
-  'settings.groupsLeaveDesc': 'אפשר להצטרף שוב בהמשך בעזרת קוד הקבוצה',
   'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
 
   // Circles: the menu row + the full hub sheet and its sub-screens.
@@ -195,7 +194,7 @@ export default {
   // line — it is the whole screen, so it says what Circles IS and then offers
   // the only two ways to start one. See HubStart / CirclesArt.
   'communities.startTitle': 'המעגל שלך מתחיל כאן',
-  'communities.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך גם לחברים הפנויים שלו. קבוצות עוזרות לך להכיר אנשים עם תחומי עניין משותפים',
+  'communities.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך לחברים הפנויים שלו. קבוצות עוזרות לך להכיר אנשים עם תחומי עניין משותפים',
   // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
   // one of the two whose label does not say what it is worth. "Search groups"
   // needs no line, and a second one turned the two ways forward into a
@@ -1048,9 +1047,10 @@ export default {
   // the card answers with a named button, not an X), and the profile sheet's and
   // Circles' with theirs (2026-07-31: those surfaces leave by the swipe). The
   // dock's entries are labelled by their own captions.
-  // The X on the heading tile of a card that is over: it takes the reader to the
-  // message at the top of that card, where the way back to the game is.
-  'home.a11y.endedMessage': 'מעבר להודעה',
+  // Both marks the heading tile can carry that go UP to the card's own message,
+  // where the buttons that answer it are: the clock of a live invitation, and the
+  // X of a card that is over. One journey, so one label.
+  'home.a11y.cardMessage': 'מעבר להודעה',
   'home.locatingDesc': 'סורק אנשים בסביבתך',
   'home.loadingProfile': 'טוען נתוני פרופיל',
   'home.noOneNearbyTitle': 'אין כרגע אנשים בסביבה',

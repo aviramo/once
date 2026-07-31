@@ -22,7 +22,7 @@ import { RoundButton } from './RoundButton'
 import { SheetTitle } from './BottomSheet'
 import { OptionStrip, type StripOption } from './OptionStrip'
 import { EditableText } from './EditableText'
-import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, SCROLL_AT_TOP_PX, SHEET_GAP, DOCK_SHADOW, chromeTop, lh, bottomGap } from '../tokens'
+import { SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, ROUND_BUTTON_SIZE_SM, SCROLL_AT_TOP_PX, SHEET_GAP, DOCK_SHADOW, TAP_SLOP, chromeTop, lh, bottomGap } from '../tokens'
 import { PAGE, PHOTO_CHROME, INK, SURFACE, WHITE, INK_DIM, INK_SUBTLE, LIFT_SHADOW } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -87,10 +87,27 @@ export type CardCountdown = {
 // reel and paints a profile — none of that may be re-rendered once a second — so
 // the interval lives down here, below the Chip, and reaches it as a render slot
 // (Chip's renderAfterRule) rather than as a string the card would recompute.
-function InviteCountdown({ countdown, color }: { countdown: CardCountdown; color: string }) {
+//
+// THE CLOCK IS ALSO THE WAY BACK TO WHAT IT IS COUNTING (user directive
+// 2026-07-31): the number is pinned out of the scroll, so a reader who has
+// scrolled into the profile still sees it — and the card that explains it, with
+// its buttons, is at the top. A tap takes them there. It is the same journey the
+// ended card's X makes, so both marks in this tile say the same thing to a
+// screen reader (`home.a11y.cardMessage`). Its own press target rather than the
+// chip's: a tap on the tile itself must stay inert (see the heading chip below).
+function InviteCountdown({ countdown, color, onPress }: { countdown: CardCountdown; color: string; onPress: () => void }) {
   const { expiresAt, onLapsed } = countdown
   const secsLeft = useSecsLeft(expiresAt ?? null, onLapsed)
-  return <Text style={[styles.countdown, { color }]}>{formatClock(secsLeft)}</Text>
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={TAP_SLOP}
+      accessibilityRole="button"
+      accessibilityLabel={t('home.a11y.cardMessage')}
+    >
+      <Text style={[styles.countdown, { color }]}>{formatClock(secsLeft)}</Text>
+    </Pressable>
+  )
 }
 
 function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: () => void }> }) {
@@ -435,7 +452,18 @@ type MatchCardProps = {
 /** Imperative handle exposed to parents that need to drive the card's
  * internal scroll (e.g. the skip-hint dialog scrolling back to the top so
  * the user can perform the swipe-down-to-skip gesture). */
-export type MatchCardHandle = { scrollToTop: () => void }
+export type MatchCardHandle = {
+  scrollToTop: () => void
+  /** HARDWARE BACK GOES TO THE MESSAGE FIRST (user directive 2026-07-31). A card
+   *  whose profile is standing under a status card — the states with something
+   *  to READ at the top and buttons to answer it with — takes back up to that
+   *  message instead of doing its usual thing, exactly as the tile's clock and
+   *  its X do. Once the message is on screen, back is back again. The card
+   *  answers for itself because it is the one that knows both facts (is there a
+   *  block above the profile, and is the reader below it); it returns whether it
+   *  consumed the press, so a host cannot ask the two questions differently. */
+  backToTop: () => boolean
+}
 
 export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function MatchCard({
   match,
@@ -878,14 +906,26 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   const keyboardOpenRef = useRef(false)
   keyboardOpenRef.current = keyboardOpen
 
-  // Back to the top of the card, animated. TWO things ask for it and they ask
+  // Back to the top of the card, animated. FOUR things ask for it and they ask
   // for the same one: a parent driving the inner scroll (the skip-hint's "got
-  // it" returns the user to where the swipe-down-to-skip gesture is armed), and
-  // the heading tile's own X on a card that is over (`ended`).
+  // it" returns the user to where the swipe-down-to-skip gesture is armed), the
+  // heading tile's own X on a card that is over (`ended`), the clock in that
+  // same tile, and the device's back button (`backToTop`). Everything on this
+  // card that says "go up to the message" is this one scroll.
   const scrollToTop = useCallback(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: true })
   }, [])
-  useImperativeHandle(ref, () => ({ scrollToTop }), [scrollToTop])
+  // "Is the message in front of the reader?" — asked by all three marks that go
+  // back to it (the clock, the X, hardware back), so it is stated once, read live
+  // off `scrollYRef` with the same arrival slack every other at-top question in
+  // the app uses.
+  const atTop = useCallback(() => scrollYRef.current <= SCROLL_AT_TOP_PX, [])
+  const backToTop = useCallback(() => {
+    if (!hasTopBlock || atTop()) return false
+    scrollToTop()
+    return true
+  }, [hasTopBlock, atTop, scrollToTop])
+  useImperativeHandle(ref, () => ({ scrollToTop, backToTop }), [scrollToTop, backToTop])
   // THE HEADING TILE'S PURPLE EDGE, one block with three tenants. Chat puts
   // "End chat" here and your own card puts the plus; a card that is OVER puts
   // an X, and that one wins — the candidate is no longer relevant, so an action
@@ -904,14 +944,13 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
   // it scrolls back to the message that explains the ending. Already at the top,
   // that message is on screen with its button under it, so a second X would be a
   // scroll to where we already are — it does what the button does instead (user
-  // directive 2026-07-31). Read live off `scrollYRef`, with the same arrival
-  // slack every other at-top question in the app uses.
+  // directive 2026-07-31). `atTop()` is the one place that question is asked.
   const chipEndAction: ChipEndAction | undefined = endedBack
     ? {
         renderIcon: c => <CloseIcon color={c} size={ICON.round} />,
-        a11yLabel: t('home.a11y.endedMessage'),
+        a11yLabel: t('home.a11y.cardMessage'),
         onPress: () => {
-          if (scrollYRef.current <= SCROLL_AT_TOP_PX) endedBack()
+          if (atTop()) endedBack()
           else scrollToTop()
         },
       }
@@ -1462,7 +1501,10 @@ export const MatchCard = forwardRef<MatchCardHandle, MatchCardProps>(function Ma
               // tile for a day — but the name is what the tile is FOR, and a
               // clock standing in front of it pushed the person's name out of
               // the corner the card is read from.
-              renderAfterRule={countdown ? c => <InviteCountdown countdown={countdown} color={c} /> : undefined}
+              // A tap on the clock goes to the card it is counting down (user
+              // directive 2026-07-31) — the same destination the X carries, so
+              // it is the card's own scroll and no host wires it.
+              renderAfterRule={countdown ? c => <InviteCountdown countdown={countdown} color={c} onPress={scrollToTop} /> : undefined}
               // The report flag rides INSIDE the heading chip (user directive
               // 2026-07-29), replacing the round button that used to sit at the
               // bottom-START of the last photo: reporting is a footnote to "who

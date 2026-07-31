@@ -1,9 +1,10 @@
-import { type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { StyleSheet } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated'
 import { Text } from './AppText'
 import { NotifyDot } from './RoundButton'
 import { OptionStrip, type StripOption } from './OptionStrip'
-import { MD, TEXT, WEIGHT, DOCK_SHADOW } from '../tokens'
+import { MD, TEXT, WEIGHT, DOCK_SHADOW, COUNT_BLINK } from '../tokens'
 import { INK, PAGE } from '../colors'
 
 // ── The dock — home's strip of four ────────────────────────────────────────
@@ -74,7 +75,9 @@ export type DockItem = {
    *  and three call sites must not each decide. `undefined` = nothing to say (a
    *  zero watcher count is not a fact worth painting); the credits key passes 0,
    *  which IS a fact. Never both this and `badge` on one entry — they occupy the
-   *  same place, and the number is the fuller statement. */
+   *  same place, and the number is the fuller statement.
+   *
+   *  A CHANGE IN IT BLINKS (user directive 2026-07-31) — see DockMarker. */
   count?: number
   /** This entry is not available to this user YET (Circles before the profile is
    *  built). The glyph AND its word fade together — one `opacity` on the whole
@@ -97,14 +100,68 @@ export function HomeDock({ items, bottom }: {
 }) {
   const options: StripOption[] = items.map(({ key, label, icon, onPress, dimmed, count, badge }) => ({
     key, label, icon, onPress, dimmed,
-    // What this key has to say, if anything — a quantity outranks the dot,
-    // saying everything it says and how many besides. Chosen here so the strip's
-    // one marker slot holds ONE mark and the placement is stated in one place.
-    marker: count != null ? <Text style={styles.count}>{count}</Text>
-      : badge ? <NotifyDot style={styles.markerDot} />
-        : null,
+    // What this key has to say, if anything. One component rather than the
+    // ternary that used to stand here, because WHICH mark it is can change while
+    // the dock is up (a request arrives behind a key that was clean) and the
+    // number has to know it changed — see DockMarker.
+    marker: <DockMarker count={count} badge={badge} />,
   }))
   return <OptionStrip options={options} style={[styles.strip, { paddingBottom: bottom }]} />
+}
+
+// ── What one key has to say ────────────────────────────────────────────────
+//
+// A quantity outranks the dot, saying everything the dot says and how many
+// besides; with neither, the key says nothing and this paints nothing. It is
+// ONE component so the strip's one marker slot holds ONE mark, and so that the
+// slot's placement is stated in exactly one place (OptionStrip).
+//
+// A NUMBER THAT CHANGED BLINKS (user directive 2026-07-31): three times over two
+// seconds, on COUNT_BLINK. These counts change while the user is looking at the
+// card in the middle of the screen — a request arrives, a watcher appears, a
+// credit is spent — and one digit quietly becoming another in a corner is a
+// change nobody is there to see. The blink is the key saying it just changed,
+// without taking the screen to do it (the same principle as the dot: the app
+// marks, it does not interrupt).
+//
+// It is mounted for every key, count or no count, and that is what makes the
+// FIRST number blink too: a count arriving where there was none (0 → 1 requests)
+// is the change that matters most, and it would be a plain mount — nothing to
+// compare against — if this component came and went with the digit. What must
+// never blink is the dock simply appearing with numbers already on it, so the
+// first value each marker ever sees is recorded and not announced.
+function DockMarker({ count, badge }: { count?: number; badge?: boolean }) {
+  const blink = useSharedValue(1)
+  const seen = useRef(count)
+  useEffect(() => {
+    // `undefined` is a value like any other here, which is what makes a count
+    // ARRIVING a change (0 → 1 requests) rather than a mount; only a number can
+    // blink, so a count going away does nothing but get recorded.
+    const changed = count != null && count !== seen.current
+    // Recorded either way, absence included: a number coming back after the key
+    // had nothing to say is a count ARRIVING, and it blinks like any other.
+    seen.current = count
+    if (!changed) return
+    // One blink is away AND back, stated as a sequence rather than as a reversed
+    // repeat of a single timing: the way back names its own destination, so a
+    // change landing mid-blink (this assignment cancels the one running, which is
+    // what it should do) dips from wherever the digit currently is and still ends
+    // at full strength. A reversed repeat would end wherever it was interrupted.
+    blink.value = withRepeat(
+      withSequence(
+        withTiming(COUNT_BLINK.opacity, { duration: COUNT_BLINK.phaseMs }),
+        withTiming(1, { duration: COUNT_BLINK.phaseMs }),
+      ),
+      COUNT_BLINK.times,
+      false,
+    )
+  }, [count])
+  // On the WRAPPER, not on the text: the digit is laid out by the marker slot
+  // and only its paint changes, so nothing about the blink can move it.
+  const blinkStyle = useAnimatedStyle(() => ({ opacity: blink.value }))
+  if (count != null) return <Animated.View style={blinkStyle}><Text style={styles.count}>{count}</Text></Animated.View>
+  if (badge) return <NotifyDot style={styles.markerDot} />
+  return null
 }
 
 const styles = StyleSheet.create({

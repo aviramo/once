@@ -48,7 +48,7 @@ import { FIXED_BOX_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
 import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, GlyphScale, CloseIcon, BackIcon, UserIcon, UserPlusIcon, ShieldIcon, GroupsIcon, SearchIcon, CreditIcon } from '../src/components/icons'
-import type { CardAction, CardCountdown } from '../src/components/MatchCard'
+import type { CardAction, CardCountdown, MatchCardHandle } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
 
@@ -1277,12 +1277,23 @@ export default function HomePage() {
 
   // Android hardware back. Priority, top of the stack downward:
   //   1. the topmost stacked overlay (profile sheet → Circles → chat) pops
-  //   2. the derived invite overlay: pending declines (through its confirm),
+  //   2. the card in front of the user, when its own message is scrolled off the
+  //      top: back goes to the message before it does anything else (user
+  //      directive 2026-07-31 — see MatchCardHandle.backToTop). The card is the
+  //      one that decides, so there is no second statement here of what "has a
+  //      message" or "is at the top" means.
+  //   3. the derived invite overlay: pending declines (through its confirm),
   //      dead is swallowed so back can't leave a card the server still owns
-  //   3. nothing left → false, i.e. leave the app
-  // Assigned during render (below) because step 2 needs values declared after
+  //   4. nothing left → false, i.e. leave the app
+  // Assigned during render (below) because steps 2-3 need values declared after
   // this effect; the effect itself must stay mounted once.
   const inviteBackRef = useRef<(() => boolean) | null>(null)
+  const cardBackRef = useRef<(() => boolean) | null>(null)
+  // The two game cards, so back can reach whichever of them is in front of the
+  // user. Both boards render the same card in the same box, so both answer the
+  // same way; which one is being read is the only thing home decides (below).
+  const page1CardRef = useRef<MatchCardHandle>(null)
+  const page2CardRef = useRef<MatchCardHandle>(null)
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       const stack = overlaysRef.current
@@ -1294,6 +1305,7 @@ export default function HomePage() {
         else closeTopOverlay()
         return true
       }
+      if (cardBackRef.current?.()) return true
       return inviteBackRef.current?.() ?? false
     })
     return () => sub.remove()
@@ -3052,6 +3064,13 @@ export default function HomePage() {
     if (page2PendingInvite) { openRefuseConfirm(); return true }
     return true
   }
+  // Back button, step 2 — and it runs BEFORE the branch above, so an invitation
+  // whose profile has been scrolled into is put back in front of its own Skip /
+  // Open chat buttons rather than raising the decline confirm from under them.
+  // Only the card the user is actually reading is asked: the page2 invitation
+  // paints over the page1 card, so while it is up it is the one in front.
+  cardBackRef.current = () =>
+    (inviteOverlayOpen ? page2CardRef.current : page1CardRef.current)?.backToTop() ?? false
 
   // The Communities awareness nudge that used to live here — a watched-profile
   // counter that threw the hub + a popup over the card after the third face —
@@ -3302,6 +3321,7 @@ export default function HomePage() {
                       >
                         <View style={styles.matchPhoto}>
                           <MatchCard
+                            ref={page1CardRef}
                             match={displayedMatch}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
@@ -3398,6 +3418,7 @@ export default function HomePage() {
                   >
                     {inviteCardMatch ? (
                       <MatchCard
+                        ref={page2CardRef}
                         key={`invite-${inviteCardMatch.user_id}`}
                         match={inviteCardMatch}
                         actions={[]}

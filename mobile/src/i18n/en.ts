@@ -135,7 +135,6 @@ export default {
   // in Circles now, and the sheet itself is deleted. Circles' own leave popup
   // reads these three.
   'settings.groupsLeaveTitle': 'Leave {name}?',
-  'settings.groupsLeaveDesc': 'You can join again later with the group code',
   'settings.groupsLeaveConfirm': 'Leave group',
 
   // Circles: the menu row + the full hub sheet and its sub-screens.
@@ -912,9 +911,10 @@ Next may surprise`,
   // the card answers with a named button, not an X), and the profile sheet's and
   // Circles' with theirs (2026-07-31: those surfaces leave by the swipe). The
   // dock's entries are labelled by their own captions.
-  // The X on the heading tile of a card that is over: it takes the reader to the
-  // message at the top of that card, where the way back to the game is.
-  'home.a11y.endedMessage': 'Go to the message',
+  // Both marks the heading tile can carry that go UP to the card's own message,
+  // where the buttons that answer it are: the clock of a live invitation, and the
+  // X of a card that is over. One journey, so one label.
+  'home.a11y.cardMessage': 'Go to the message',
   'home.locatingDesc': 'Scanning for people around you',
   'home.loadingProfile': 'Loading profile data',
   'home.noOneNearbyTitle': 'No one nearby right now',

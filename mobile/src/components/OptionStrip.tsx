@@ -62,7 +62,11 @@ export type StripOption = {
   onPress: () => void
   /** A mark standing beside the glyph — the dock's notification dot or its live
    *  count. Placed here so the two hosts can never place one differently; WHAT it
-   *  is belongs to the host. */
+   *  is belongs to the host — including a host that hands over one component and
+   *  lets it decide (the dock's `DockMarker`, which must stay mounted through a
+   *  count appearing so it can tell that arrival from a mount). The anchor it
+   *  hangs in is a zero-size absolute box, so one that paints nothing costs
+   *  nothing and moves nothing. */
   marker?: ReactNode
   /** This option is in flight: a spinner stands in its glyph's own place, the
    *  same "say it where the mark is" the photo rows give a slow picker. A busy
