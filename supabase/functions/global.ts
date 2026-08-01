@@ -114,6 +114,16 @@ export type Credits = {
   // invitation dies without a chat (expiry / decline / the target matching
   // someone else); a MATCH and a self-cancel both consume it (2026-07-29), so
   // a chat costs one credit on each side.
+  //
+  // The deposit is also SPENDABLE, on one thing: accepting an invitation
+  // (2026-07-31). balance + extra pay first, and only where they cannot does
+  // app_approve take the accept out of `held` — and then it stays spent, since
+  // the invitation the deposit was holding ends with that accept (the person I
+  // had invited lands on the same 'cancel' card app_cancel gives him). With a
+  // daily pool of 1 the deposit IS the whole wallet of anyone still waiting on
+  // an invitation of his own, so without this the app held a user's only credit
+  // and refused him the invitation that arrived while it did. When the wallet
+  // pays instead, that same ending refunds the deposit like any other death.
   held?: number;
   granted_on?: string | null;
   next_grant_at?: string | null;
