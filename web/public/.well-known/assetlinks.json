@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.aviramo.once",
+      "sha256_cert_fingerprints": [
+        "1A:B2:69:69:8C:05:57:B1:F7:F5:D9:32:D2:9B:A2:08:28:8A:0E:F9:52:4A:A2:BF:C1:AA:57:D0:5F:AA:3B:57"
+      ]
+    }
+  }
+]

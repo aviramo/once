@@ -39,6 +39,17 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            { "scheme": "https", "host": "once-lake.vercel.app", "pathPrefix": "/g/" },
+            { "scheme": "https", "host": "once-lake.vercel.app", "pathPrefix": "/f/" }
+          ]
+        }
       ]
     },
     "plugins": [

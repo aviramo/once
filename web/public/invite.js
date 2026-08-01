@@ -13,22 +13,29 @@
   'use strict';
 
   var DOWNLOAD = '/download';
+  var SCHEME = 'once';
+  /* Same package as store.js's Play link. Duplicated for the same reason that
+     one is: these are static assets served straight from /public and cannot
+     import a shared constant. */
+  var PACKAGE = 'com.aviramo.once';
   /* How long to wait for the app to take the link before deciding it isn't
      installed. Long enough for the OS hand-off, short enough that a visitor
-     without the app isn't left staring at this page. */
+     without the app isn't left staring at this page. Only the browsers that
+     understand nothing but the bare scheme ever wait it out — an Android
+     browser is told where to go instead (see `handoff` below). */
   var HANDOFF_MS = 1200;
 
   var SHAPES = [
     {
       re: /^\/g\/(\d{6})\/?$/,
-      scheme: 'once://g/',
+      host: 'g',
       /* Group tokens are digits only; a 6-digit "ref" would be indistinguishable
          from a referral code, so the group invite gets its own param. */
       query: function (v) { return 'grp=' + v; }
     },
     {
       re: /^\/f\/([A-Za-z0-9]{4,16})\/?$/,
-      scheme: 'once://f/',
+      host: 'f',
       upper: true,
       /* Same code as the credit referral, plus the friend flag — a fresh install
          both attributes the invite and links the pair. */
@@ -50,6 +57,25 @@
   var button = document.getElementById('fallback');
   if (button) button.href = download;
 
+  /* Where to send the browser. Android gets an `intent://` URI rather than the
+     bare `once://` one: it names the package, so the BROWSER resolves the whole
+     question itself — installed, it opens the app; not installed, it goes
+     straight to `browser_fallback_url`, with no wait and no guessing on our
+     part. The bare scheme can say neither, because a browser with nothing to
+     catch it simply does nothing at all, which is the only reason the timer
+     below exists. Everyone else (iOS, desktop) still gets the plain scheme. */
+  var appUrl = SCHEME + '://' + shape.host + '/' + value;
+  function handoff() {
+    if (!/android/i.test(navigator.userAgent || '')) return appUrl;
+    return 'intent://' + shape.host + '/' + value + '#Intent' +
+      ';scheme=' + SCHEME +
+      ';package=' + PACKAGE +
+      /* Absolute: the browser hands this to a fresh navigation of its own, so a
+         site-relative path has nothing to resolve against. */
+      ';S.browser_fallback_url=' + encodeURIComponent(location.origin + download) +
+      ';end';
+  }
+
   /* The app taking over hides this page, which is the signal that the hand-off
      worked. `pagehide` covers it on every browser that fires it, and the
      visibility check covers the ones that keep the page alive in the background
@@ -60,5 +86,5 @@
   }, HANDOFF_MS);
   w.addEventListener('pagehide', function () { clearTimeout(timer); });
 
-  location.href = shape.scheme + value;
+  location.href = handoff();
 })(window);
