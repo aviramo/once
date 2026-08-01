@@ -223,21 +223,25 @@ export const PUSH_BODY: Record<string, Record<string, string>> = {
     'friend_link_m': 'הצטרף אליך כחבר ב-Once',
     'friend_link_f': 'הצטרפה אליך כחברה ב-Once',
     'friend_link': 'הצטרף אליך כחבר ב-Once',
-    // Group join-approval. {group} is interpolated with the group name in
+    // Circle join-approval. {group} is interpolated with the circle name in
     // firePush. group_join is gendered on the requester (the actor); the push
-    // payload carries group_id so tapping deep-links to that group.
-    'group_join_m': 'ביקש להצטרף לקבוצה {group}',
-    'group_join_f': 'ביקשה להצטרף לקבוצה {group}',
-    'group_join': 'ביקש להצטרף לקבוצה {group}',
-    'group_approved': 'בקשתך להצטרף לקבוצה {group} אושרה',
+    // payload carries group_id so tapping deep-links to that circle.
+    // THE WORD A USER READS IS "מעגל" (user directive 2026-08-01) — the codes,
+    // the payload keys and the {group} placeholder are identifiers and stay as
+    // they are; only these sentences moved, and with them the gender of every
+    // word agreeing with the noun (עברה → עבר).
+    'group_join_m': 'ביקש להצטרף למעגל {group}',
+    'group_join_f': 'ביקשה להצטרף למעגל {group}',
+    'group_join': 'ביקש להצטרף למעגל {group}',
+    'group_approved': 'בקשתך להצטרף למעגל {group} אושרה',
     // Nudge from the cron sweep: a queue nobody answered for two days. No
     // actor, so the push title falls back to the app name.
-    'group_pending': '{count} בקשות הצטרפות מחכות לתשובה בקבוצה {group}',
+    'group_pending': '{count} בקשות הצטרפות מחכות לתשובה במעגל {group}',
     // Ownership succession: the owner deleted their account and app_delete_cleanup
-    // handed the group to its most senior manager, else its most senior member.
+    // handed the circle to its most senior manager, else its most senior member.
     // The actor is already gone by the time the push fires, so the title falls
     // back to the app name.
-    'group_owner': 'הקבוצה {group} עברה לניהול שלך',
+    'group_owner': 'המעגל {group} עבר לניהול שלך',
   },
   en: {
     'invite-in': 'Chat invitation',

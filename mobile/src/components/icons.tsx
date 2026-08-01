@@ -61,6 +61,22 @@ export function BackIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   )
 }
 
+// THE DISCLOSURE MARK: `BackIcon` reflected. A chevron pointing at the reading
+// END — "there is more behind this, and pressing it goes there" — as against the
+// back arrow above, which points at the edge it returns to. Mirrors with the
+// language for the same reason that one does: both are read as a DIRECTION, and
+// a direction that does not follow the text points the wrong way in half the
+// app. Its one call site is the mark beside the match card's clock, which opens
+// what that card has to say (user directive 2026-08-01, replacing an up-chevron:
+// what this says is "go here", not "expand").
+export function ChevronEndIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
+    </Glyph>
+  )
+}
+
 export function ChevronUpIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.thick} strokeLinecap="round" strokeLinejoin="round">
@@ -475,10 +491,21 @@ export function UserMinusIcon({ color = INK, size = ICON.md }: IconProps = {}) {
 //
 // The pair runs DIAGONALLY, and that is load-bearing: side by side on one
 // horizontal line, two overlapping rings read as an infinity sign, not as two
-// circles. Geometry: r 6, centres (9.03,9.03)/(14.97,14.97) — 8.4 apart, i.e.
-// 30% of a diameter of overlap, ink spanning 3..21 on both axes. That span is
-// what puts it at the same OPTICAL size as the rest of the settings list; the
-// first cut, at r 5.2, measured the smallest ink box in the whole column.
+// circles.
+//
+// THE TWO RINGS ARE NOT THE SAME SIZE (user directive 2026-08-01): the leading
+// one is r 6.7 and the one it passes through r 5.3, so the mark is asymmetric
+// on both of its axes rather than a shape that reads the same however it is
+// turned. Two identical rings on a diagonal are a rotationally symmetric
+// figure, which is what made the diagonal itself hard to see; unequal rings
+// give the pair a near one and a far one and the diagonal reads at a glance.
+// Geometry: centres (9.73,9.73)/(15.67,15.67) — 8.4 apart, exactly as the
+// equal pair was, and the radii still SUM to 12, so the overlap is unchanged
+// (30% of the old diameter) and the ink still spans 3..21 on both axes. That
+// span is what puts it at the same OPTICAL size as the rest of the settings
+// list; the first cut, at r 5.2, measured the smallest ink box in the whole
+// column. Only the split between the two rings moved — keep the sum and the
+// centre distance if either radius is ever retuned.
 // It MIRRORS under RTL (user directive 2026-07-30), in the one place it is
 // drawn, so every surface it appears on flips together: the dock, the Circles
 // emblem, the create-group button, and both "you two are already connected"
@@ -492,23 +519,35 @@ export function GroupsIcon({ color = INK, size = ICON.md }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
       <G transform={isRTL ? 'translate(24, 0) scale(-1, 1)' : undefined}>
-        <Path d="M 6.63 14.53 A 6 6 0 1 1 11.32 14.58" />
-        <Path d="M 17.37 9.47 A 6 6 0 1 1 12.68 9.42" />
+        <Path d="M 7.43 16.02 A 6.7 6.7 0 1 1 13.27 15.42" />
+        <Path d="M 18.62 11.27 A 5.3 5.3 0 1 1 14.02 10.63" />
       </G>
     </Glyph>
   )
 }
 
 
-// Plain single-stroke camera. Also the glyph on the own-profile card's
-// "add a photo" chip, at the chips' shared ICON.sm baseline — the old filled
-// sticker pair (AddPhotoIcon / FamilyKidsIcon) went with the round buttons
-// those chips replaced.
+// Plain single-stroke camera: the photo menu's "add a photo" row, and home's
+// centre circle once the browse allowance is spent — the one place in the app
+// where a glyph is painted at CENTER_GLYPH_SIZE (78dp, i.e. a 24-unit path
+// blown up 3.25×).
+//
+// THE LENS MUST CLEAR THE BODY'S OWN LINES, AND IT IS THE STROKE THAT DECIDES
+// IT (user report 2026-08-01: "there is a problem with the camera's bottom
+// line"). At icon sizes an r=3.6 lens inside a body whose floor sat at y=19
+// looked merely tight; the two strokes are 2 units WIDE, so their edges met at
+// 18.1 against 18.0 — the lens and the floor were one shape, and blown up to
+// 78dp that overlap is 3px of the bottom line eaten by the circle. The body is
+// a unit taller now (7.5..19.5), the lens a step smaller (r=3) and centred in
+// it, which leaves a full unit of air above and below the circle: the gap is
+// stated in the same units as the strokes it separates, so it survives every
+// size this glyph is drawn at. The corner radius (2) is the stroke's own width
+// for the same reason — a radius under it rounds nothing and reads as a lump.
 export function CameraIcon({ color = INK, size = ICON.lg }: IconProps = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 8h3l1.6-2.2h8.8L18 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
-      <Circle cx="12" cy="13.5" r="3.6" />
+      <Path d="M3 9.5a2 2 0 0 1 2-2h2.5L9 4.5h6l1.5 3H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <Circle cx="12" cy="13.5" r="3" />
     </Glyph>
   )
 }

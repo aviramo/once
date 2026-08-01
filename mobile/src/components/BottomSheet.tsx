@@ -636,9 +636,11 @@ export function SheetDesc({ children, style }: { children: ReactNode; style?: St
 // `row` lays two buttons side by side (a cancel/confirm pair); without it they
 // stack full-width.
 //
-// `flush` is for the action sheets that are NOTHING BUT buttons (the chat menu's
-// leave/block pair): there is nothing above them to stand clear of, so the
-// popup's own top air is the only gap and this adds none.
+// `flush` is for the action sheets that are NOTHING BUT buttons (chat's message
+// actions — reply/copy): there is nothing above them to stand clear of, so the
+// popup's own top air is the only gap and this adds none. The chat's leave/block
+// pair was the other one until 2026-08-02, when it absorbed the confirm that
+// used to stand behind it and grew a title and a sentence of its own.
 export function SheetActions({ children, row, flush, style }: {
   children: ReactNode
   row?: boolean
@@ -652,17 +654,16 @@ export function SheetActions({ children, row, flush, style }: {
   )
 }
 
-// WHAT I MAY DO, BESIDE WHAT I AM BEING OFFERED — one row at the foot of a popup
-// (user directive 2026-07-31). Two popups end this way, the group's and the
-// account's, so the shape is stated once here rather than assembled at each:
+// WHAT I MAY DO, BESIDE WHAT I AM BEING OFFERED — the foot of a popup (user
+// directive 2026-07-31). Three popups end this way — the group's, the account's
+// and chat's leave/block — so the shape is stated once here rather than assembled
+// at each:
 //
-//   [ ⎋ leave ]  [ ⇧ share invite link ]      [ 🗑 delete ]  [ ⎋ sign out ]
+//   [ 🗑 delete ]  [ ⎋ sign out ]
 //
 // The QUIET options lead — bare marks on no ground at all (`OptionStrip`), things
 // I may do, passed on the way past — and the ONE action the popup is asking for
-// ENDS the row, in the app's purple, under the thumb. They were stacked, a strip
-// over a full-width button, which spent two bands of the popup's foot on a pair
-// where one side is a single small word under a glyph.
+// ENDS the block, in the app's purple, under the thumb.
 //
 // THE PAIR IS ONE SHAPE, and only the fill tells the two apart: the action is
 // handed `stack` (the mark over the word, in the strip's own mark size, gap and
@@ -670,24 +671,43 @@ export function SheetActions({ children, row, flush, style }: {
 // beside a label next to a glyph above one reads as two unrelated controls that
 // happen to share a row.
 //
+// `stacked` is the other arrangement, and it is the group popup's (user directive
+// 2026-08-02): the strip is the WHOLE row, its options dividing it evenly, and
+// the purple runs the full width UNDER it with its mark beside the label like any
+// other button in the app.
+//
+//   [ 🌐 more details │ ⎋ leave ]
+//   [      ⇧ share invite link      ]
+//
+// One row cannot hold both — a strip of two hugging its own words beside a purple
+// tile leaves each side a third of the popup — and a group is the one popup here
+// whose options are more than one. Which arrangement a popup wears is the call
+// site's to state, and nothing else about the foot is: the gap above it, the case
+// where one side is missing and the case where neither is are this component's.
+//
 // Either side may be absent, and then the other one is the full width by itself
 // and no row forms: a private group with nothing to share, an account popup is
 // always both. With neither there is no block at all — an empty one would leave
 // the actions' own XL of dead white above the popup's edge.
-export function SheetActionPair({ options, action, flush }: {
+export function SheetActionPair({ options, action, stacked, flush }: {
   /** The things I MAY do, as `OptionStrip` data. */
   options?: StripOption[]
   /** The one thing the popup is OFFERING: a `<Button>`, whose props are the call
    *  site's to state — except `stack`, which is this row's business and is
    *  injected, exactly as `Button` injects the size of the glyph it is handed. */
   action?: ReactNode
-  /** `SheetActions`' own: for the popup that is NOTHING BUT this row (chat's
-   *  leave/block), where there is nothing above it to stand clear of and the
-   *  popup's top air is the only gap. */
+  /** The strip over the action instead of beside it, each of them the full width
+   *  (see above). The action is then an ORDINARY button and is handed nothing. */
+  stacked?: boolean
+  /** `SheetActions`' own: for a popup that is NOTHING BUT this row, where there
+   *  is nothing above it to stand clear of and the popup's top air is the only
+   *  gap. Chat's leave/block pair was the one, and since 2026-08-02 it carries
+   *  the title and sentence of the confirm it absorbed, so no host passes this
+   *  today — every popup that ends on the pair says something first. */
   flush?: boolean
 }) {
   const opts = options ?? []
-  const beside = opts.length > 0 && !!action
+  const beside = opts.length > 0 && !!action && !stacked
   if (!opts.length && !action) return null
   return (
     <SheetActions row={beside} flush={flush}>

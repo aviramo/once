@@ -4,8 +4,9 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, w
 import { Text } from './AppText'
 import { NotifyDot } from './RoundButton'
 import { OptionStrip, type StripOption } from './OptionStrip'
+import { inkOffset, FONT_SCALE } from '../fonts'
 import { MD, TEXT, WEIGHT, DOCK_SHADOW, COUNT_BLINK } from '../tokens'
-import { INK, PAGE } from '../colors'
+import { INK, INK_SUBTLE, PAGE } from '../colors'
 
 // ── The dock — home's strip of four ────────────────────────────────────────
 //
@@ -79,6 +80,24 @@ export type DockItem = {
    *
    *  A CHANGE IN IT BLINKS (user directive 2026-07-31) — see DockMarker. */
   count?: number
+  /** A SECOND quantity of the same kind, at the glyph's other top corner (user
+   *  directive 2026-08-01): the credits standing in a DEPOSIT — one that left
+   *  the wallet when I sent an invitation and is still ours until that
+   *  invitation resolves — beside the balance the key already states. It is
+   *  money the user has, and since 2026-07-31 money he can spend (a deposit pays
+   *  for an accept), so a wallet that showed only the balance was
+   *  under-reporting itself to the one person it belongs to.
+   *
+   *  A BARE NUMBER, FAINTER THAN THE BALANCE (user directive 2026-08-01: "some
+   *  transparency, so it doesn't look like the credits; and drop the plus, just
+   *  a number"). It opened as a "+1" — the sign saying "on top of the other
+   *  number" — and a sign is a second thing to read on a mark two digits wide.
+   *  What separates the two is STRENGTH: the balance is what I can spend and it
+   *  is full `INK`; the deposit is spoken for, and it says so by standing back.
+   *  Everything else stays the count's: the same size, the same slot geometry
+   *  mirrored, the same blink when it changes. `undefined` = no deposit; a
+   *  deposit of zero is not a deposit. */
+  held?: number
   /** This entry is not available to this user YET (Circles before the profile is
    *  built). The glyph AND its word fade together — one `opacity` on the whole
    *  key rather than a muted colour per part, so the two can never fade by
@@ -98,13 +117,20 @@ export function HomeDock({ items, bottom }: {
    *  very bottom edge, and only the glyphs are held clear of the navigation bar. */
   bottom: number
 }) {
-  const options: StripOption[] = items.map(({ key, label, icon, onPress, dimmed, count, badge }) => ({
+  const options: StripOption[] = items.map(({ key, label, icon, onPress, dimmed, count, held, badge }) => ({
     key, label, icon, onPress, dimmed,
     // What this key has to say, if anything. One component rather than the
     // ternary that used to stand here, because WHICH mark it is can change while
     // the dock is up (a request arrives behind a key that was clean) and the
     // number has to know it changed — see DockMarker.
     marker: <DockMarker count={count} badge={badge} />,
+    // The deposit, at the mirrored corner: the SAME component, so the two halves
+    // of the wallet are the same mark down to the blink, and neither can be
+    // changed without the other. Passed even when there is nothing to say, for
+    // the reason the marker above always is — a deposit APPEARING is the change
+    // most worth marking, and a component that mounts with it has nothing to
+    // compare against.
+    markerStart: <DockMarker count={held} muted />,
   }))
   return <OptionStrip options={options} style={[styles.strip, { paddingBottom: bottom }]} />
 }
@@ -113,8 +139,11 @@ export function HomeDock({ items, bottom }: {
 //
 // A quantity outranks the dot, saying everything the dot says and how many
 // besides; with neither, the key says nothing and this paints nothing. It is
-// ONE component so the strip's one marker slot holds ONE mark, and so that the
-// slot's placement is stated in exactly one place (OptionStrip).
+// ONE component so a marker slot holds ONE mark, and so that the slot's
+// placement is stated in exactly one place (OptionStrip) — including the second,
+// mirrored corner the credits key uses for its deposit: the same component
+// again, which is what makes the pair one wallet said twice rather than two
+// numbers that happen to share a glyph.
 //
 // A NUMBER THAT CHANGED BLINKS (user directive 2026-07-31): three times over two
 // seconds, on COUNT_BLINK. These counts change while the user is looking at the
@@ -130,7 +159,17 @@ export function HomeDock({ items, bottom }: {
 // compare against — if this component came and went with the digit. What must
 // never blink is the dock simply appearing with numbers already on it, so the
 // first value each marker ever sees is recorded and not announced.
-function DockMarker({ count, badge }: { count?: number; badge?: boolean }) {
+function DockMarker({ count, badge, muted }: {
+  count?: number
+  badge?: boolean
+  /** Paint the number a step back from the key's own ink: the deposit half of
+   *  the wallet, which is an amount the user HAS but has already committed. Two
+   *  bare numbers on one glyph need something telling them apart, and strength
+   *  is the one difference that needs no character to say it — `INK_SUBTLE`, the
+   *  ramp's own "secondary label" step. Not `INK_HINT`: at 0.48 it lands on the
+   *  app's shut-door fade (DISABLED_OPACITY 0.45), and nothing here is shut. */
+  muted?: boolean
+}) {
   const blink = useSharedValue(1)
   const seen = useRef(count)
   useEffect(() => {
@@ -159,7 +198,31 @@ function DockMarker({ count, badge }: { count?: number; badge?: boolean }) {
   // On the WRAPPER, not on the text: the digit is laid out by the marker slot
   // and only its paint changes, so nothing about the blink can move it.
   const blinkStyle = useAnimatedStyle(() => ({ opacity: blink.value }))
-  if (count != null) return <Animated.View style={blinkStyle}><Text style={styles.count}>{count}</Text></Animated.View>
+  // The fade is on the COLOUR, never on this wrapper's opacity: the blink owns
+  // that, and a second opacity would either be overwritten by it or have to be
+  // multiplied into every frame of it.
+  //
+  // A NUMBER AND A DOT MUST LAND ON THE SAME POINT, AND ONLY ONE OF THEM IS ITS
+  // OWN BOX. The slot centres whatever it is given on the glyph's top corner —
+  // exact for the dot, whose disc IS its box, and half a dp off for a digit,
+  // whose line box reserves 1.068 em above the baseline against 0.292 below it
+  // and therefore carries its ink lower than its centre. That difference is the
+  // app's one `inkOffset`, so the digit is lifted by it and the two marks
+  // coincide by construction rather than nearly. A TRANSFORM and not a margin:
+  // the box must stay exactly where the slot put it, or the correction moves the
+  // very centring it is correcting. The blink only ever writes `opacity`, so
+  // this survives underneath it.
+  //
+  // The digits are handed over as the LABEL, which is what tells `inkOffset` the
+  // line is a Latin-height one: a mark of bare digits reaches CAP height, and
+  // left to guess from the app's direction it would measure a Hebrew letter body
+  // (0.600 em against 0.714) and lift the digit by two and a half times what it
+  // owes — worse than not correcting at all.
+  if (count != null) return (
+    <Animated.View style={[{ transform: [{ translateY: -inkOffset(TEXT.sm, FONT_SCALE, String(count)) }] }, blinkStyle]}>
+      <Text style={[styles.count, muted && styles.countMuted]}>{count}</Text>
+    </Animated.View>
+  )
   if (badge) return <NotifyDot style={styles.markerDot} />
   return null
 }
@@ -193,4 +256,8 @@ const styles = StyleSheet.create({
     fontWeight: WEIGHT.medium,
     color: INK,
   },
+  // The deposit's own step back. ONLY the colour changes — same size, same
+  // weight, same slot — so the pair reads as one wallet at two strengths rather
+  // than as two different kinds of mark.
+  countMuted: { color: INK_SUBTLE },
 })

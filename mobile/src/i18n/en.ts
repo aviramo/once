@@ -102,8 +102,12 @@ export default {
   // Location
 
   // Settings
-  'settings.profile': 'Edit your profile',
-  'settings.buildProfile': 'Build your profile',
+  // THE TASK IS TWO PHOTOS, SO THE BUTTON SAYS PHOTOS (user directive
+  // 2026-08-01). It read "Build your profile" on all three of the app's shut
+  // doors, which sounds like a form to fill in; what is actually being asked
+  // for is two pictures. The KEY keeps its name (a build-profile gate is still
+  // what this is, in code).
+  'settings.buildProfile': 'Choose photos',
   'settings.account': 'Account',
   // The same state as a full sentence, for the preferences popup's leading ROW
   // (user directive 2026-07-30): a row is read as a line of text where the
@@ -115,8 +119,11 @@ export default {
   // Why the row is shut for a user who has not built a profile: he reads the
   // hidden sentence like anyone else, and this is what the tap answers with. The
   // title and the button are the app's one build-profile gate (BuildProfileGate),
-  // so only the blocked door is named here.
-  'settings.visibilityGateDesc': 'For people to see you, you need a profile with at least two photos. It only takes a minute',
+  // so only the blocked door is named here. It names the PHOTOS rather than "a
+  // profile with at least two photos" (user directive 2026-08-01) — same
+  // sentence, without the word that made two pictures sound like a project, and
+  // without counting them (see home.buildProfileTitle).
+  'settings.visibilityGateDesc': 'For people to see you, your photos are required',
   // The watcher count as a SENTENCE, for the pill beside that row (user
   // directive 2026-07-31, restoring what the bare number replaced the day
   // before): a row is read as a line of text, so the count finishes the line the
@@ -124,20 +131,32 @@ export default {
   // number is the DOCK's preferences key — a mark standing beside a 24dp glyph
   // has no room for a sentence, and the row it opens is where the sentence is.
   // Singular is its own string, as it is in Hebrew, where the verb inflects.
+  // And ZERO is its own string too — see the note in he.ts.
+  'settings.watchersNone': 'No one is watching me',
   'settings.watchersOne': 'Someone is watching me',
   'settings.watchersMany': '{count} people are watching me',
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
   'settings.credits': 'Credits',
+  // The DEPOSIT, on a second pill beside that number — see the note in he.ts.
+  'settings.creditsHeld': '{count} on hold',
   // Leaving a group. The only strings left from the menu's old groups sheet:
   // joining by code, the membership list and the row that opened them all live
   // in Circles now, and the sheet itself is deleted. Circles' own leave popup
   // reads these three.
   'settings.groupsLeaveTitle': 'Leave {name}?',
-  'settings.groupsLeaveConfirm': 'Leave group',
+  'settings.groupsLeaveConfirm': 'Leave circle',
 
-  // Circles: the menu row + the full hub sheet and its sub-screens.
+  // Circles: the dock key + the full hub sheet and its sub-screens.
+  // THE PRODUCT WORD IS "circle" WHEREVER A USER READS IT (user directive
+  // 2026-08-01). "Group" is gone from the copy in both languages: the site had
+  // said circles for weeks and the app was the last surface saying both, with
+  // the hub titled "My circles" over a page of groups. `group` survives as an
+  // IDENTIFIER only — the groups/user_groups tables, the group_* push codes, the
+  // /g/ invite link, the component props — so a key still named `newGroup` /
+  // `removeFromGroup` is correct and only its VALUE moved. See he.ts for the
+  // Hebrew half, where the noun also changed gender.
   'communities.menuRow': 'Circles',
   'communities.title': 'My circles',
   'communities.myFriends': 'My friends',
@@ -145,63 +164,72 @@ export default {
   // The one WORD, for the button on the hub's friends row: the row already
   // says what it is about, so the button only says what it does.
   'communities.invite': 'Invite',
-  'communities.create': 'Create a group',
-  'communities.find': 'Find or join a group',
-  // Group kinds: ONE axis, three stops (2026-07-27). Replaces the old
+  'communities.create': 'Create a circle',
+  'communities.find': 'Find or join a circle',
+  // Circle kinds: ONE axis, three stops (2026-07-27). Replaces the old
   // public/private + approval-on/off pair everywhere it was shown.
-  'communities.kindLabel': 'Group type',
-  'communities.kindOpen': 'Open group',
+  // TWO of the three name the JOINING rather than the circle (user directive
+  // 2026-08-01): "Approved circle" reads as a circle that has been approved by
+  // somebody, and its Hebrew twin reads as a HAPPY one. So the axis is stated as
+  // the thing it decides, who may come in; private stays a fact about the circle
+  // itself, that being the one stop where its own visibility changes.
+  'communities.kindLabel': 'Circle type',
+  'communities.kindOpen': 'Open to join',
   'communities.kindOpenSub': 'Appears in search, and joining is instant',
-  'communities.kindApproved': 'Approved group',
+  'communities.kindApproved': 'Approval required',
   'communities.kindApprovedSub': 'Appears in search, and every join request needs approval',
-  'communities.kindPrivate': 'Private group',
+  'communities.kindPrivate': 'Private circle',
   'communities.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs approval',
   'communities.membersCount': '{count} members',
   'communities.oneMember': '1 member',
-  // Row meta segments, laid out by MetaLine. One string per fact, so the menu
-  // row and the hub rows count the same things in the same words.
-  'communities.groupsCount': '{count} groups',
-  'communities.oneGroup': '1 group',
+  // Row meta segments, laid out by MetaLine. One string per fact, so every list
+  // counting the same thing counts it in the same words. (`groupsCount` /
+  // `oneGroup` and the `groupLabel` helper that read them are deleted with the
+  // dock's old menu row, 2026-08-01: nothing has counted circles since that row
+  // went, and `rowEmpty` — the row's own empty line — goes with them.)
   'communities.oneFriend': '1 friend',
   'communities.requestsCount': '{count} requests',
   'communities.oneRequest': '1 request',
-  // Menu row with nothing in it yet: the row still says what it is for, in the
-  // one line the counts would have used.
-  'communities.rowEmpty': 'Join groups and friends',
-  // Circles stay locked until the profile is built: two photos. The
-  // Hebrew sentence carries a {m|f} marker on its imperative and is resolved by
-  // genderize(); English has no gendered form, so it passes through unchanged.
+  // Circles stay locked until the two photos exist. The sentence names the
+  // PHOTOS rather than "a profile" (user directive 2026-08-01), which also takes
+  // the imperative out of the Hebrew, so neither language carries a {m|f} marker
+  // here any more and no host genderizes it.
   'communities.gateTitle': 'People through circles',
-  'communities.gateDesc': 'Circles connect people who share the same interests. To get started, build a profile with at least two photos',
+  'communities.gateDesc': 'Circles connect people who share the same interests. To join, your photos are required',
   'communities.managedBy': 'Managed by {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
-  // shared group in one list.
+  // shared circle in one list.
   'communities.sharedTitle': 'What we share',
   // The chip itself. English inflects for neither the friend nor the card's
   // subject, so the pair is the same string twice; Hebrew is why there are two
   // keys at all (see he.ts).
   'communities.friendOfM': 'Friend of {name}',
   'communities.friendOfF': 'Friend of {name}',
-  // (No "you have no groups yet" line any more: a hub with no groups IS the
-  // start page — the picture, what this is for, the two ways in — with the
+  // (No "you have no circles yet" line any more: a hub with nothing in it IS
+  // the start page — the picture, what this is for, the two ways in — with the
   // friends row over it. See HubStart.)
 
   // The page before there is anything on it: no friends, nobody waiting, no
-  // group of any kind (user directive 2026-07-30). It is not the list's empty
+  // circle of any kind (user directive 2026-07-30). It is not the list's empty
   // line — it is the whole screen, so it says what Circles IS and then offers
   // the only two ways to start one. See HubStart / CirclesArt.
-  'communities.startTitle': 'Your circle starts here',
-  'communities.startDesc': 'Every friend you add can connect you to their single friends too. Groups help you meet people who share your interests',
+  // NOTHING HERE SAYS "circle" IN THE ABSTRACT any more (user directive
+  // 2026-08-01). Once a circle is a THING in the app, "your circle" stops
+  // reading as somebody's social circle and starts reading as an object on this
+  // very screen. So the title COUNTS them, and the sentence about what a friend
+  // brings names the PEOPLE.
+  'communities.startTitle': 'Your circles start here',
+  'communities.startDesc': 'Every friend you add can connect you to their single friends too, and a shared circle opens people with the same interests',
   // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
-  // one of the two whose label does not say what it is worth. "Search groups"
+  // one of the two whose label does not say what it is worth. "Search circles"
   // needs no line, and a second one turned the two ways forward into a
   // paragraph.
-  'communities.startFind': 'Search groups',
+  'communities.startFind': 'Search circles',
   // The friends page before there is a single friend on it: the same drawing
   // and the same heading as the hub's, one step in — that page offers the two
   // ways to start a circle, this one owns the first of them, so all it has to
   // say is what a friend joining actually opens.
-  'communities.friendsStartDesc': 'Invite friends, and when they join, new people from their circles open up to you',
+  'communities.friendsStartDesc': 'Invite friends, and when they join, new people they know open up to you',
 
   // My friends
   'communities.inviteFriend': 'Invite friends',
@@ -221,7 +249,7 @@ export default {
   // absent, and an empty page has to say what the user GETS. (Was
   // `friendsHint`, which no surface rendered and which still offered the
   // people-search flow removed 2026-07-26.)
-  'communities.friendsWhy': 'Every friend opens up their circle to you: people you have not met, who reach you first with a friend in common',
+  'communities.friendsWhy': 'Every friend opens up their people to you: the ones you have not met, who reach you first with a friend in common',
   'communities.unfriendTitle': 'Remove {name} from friends?',
   'communities.unfriendDesc': 'You can link again later',
   'communities.unfriendConfirm': 'Remove',
@@ -233,17 +261,17 @@ export default {
   'communities.noResults': 'No results',
   'communities.linkNote': 'They get a request. Once accepted, you are linked both ways',
 
-  // Create a group
-  'communities.newGroup': 'New group',
+  // Create a circle
+  'communities.newGroup': 'New circle',
   'communities.name': 'Name',
-  'communities.namePlaceholder': 'Group name',
-  'communities.createAction': 'Create group',
-  'communities.nameError': 'Please use a shorter name',
+  'communities.namePlaceholder': 'Circle name',
+  'communities.createAction': 'Create circle',
+  'communities.nameError': 'A shorter name is required',
   'communities.description': 'Description',
-  'communities.descriptionPlaceholder': 'What the group is about',
+  'communities.descriptionPlaceholder': 'What the circle is about',
   'communities.descUpdate': 'Update',
-  // The "more details" link: managers set it in the group settings, and anyone
-  // looking at the group gets one tappable line under the description.
+  // The "more details" link: managers set it in the circle settings, and anyone
+  // looking at the circle gets one tappable line under the description.
   'communities.link': 'Link to more details',
   'communities.linkPlaceholder': 'Paste a link here',
   // The server decides whether an address is usable (it also completes a bare
@@ -254,31 +282,29 @@ export default {
   'communities.saveFailed': 'Not saved, try again',
   'communities.moreDetails': 'More details',
 
-  // A group you manage
+  // A circle you manage
   'communities.shareInvite': 'Share invite link',
-  'communities.settings': 'Group settings',
-  // The settings header's one non-editing control: opens the group's own popup
+  'communities.settings': 'Circle settings',
+  // The settings header's one non-editing control: opens the circle's own popup
   // exactly as everyone else meets it.
   'communities.preview': 'Preview',
-  // Manage without playing. The caller's OWN membership flag inside one group
-  // they run: while it is on, they and that group's members never meet in the
-  // game. A checkbox in Group settings, under the group's kind, with the
+  // Manage without playing. The caller's OWN membership flag inside one circle
+  // they run: while it is on, they and that circle's members never meet in the
+  // game. A checkbox in Circle settings, under the circle's kind, with the
   // sentence that explains it as its own sub-line.
-  'communities.hiddenToggle': 'Hide me from the group members',
-  'communities.hiddenSub': 'The people in this group will not see you in the game, and you will not see them. Your rights in the group stay exactly as before',
+  'communities.hiddenToggle': 'Hide me from the circle members',
+  'communities.hiddenSub': 'The people in this circle will not see you in the game, and you will not see them. Your rights in the circle stay exactly as before',
   'communities.hiddenShort': 'Not playing',
-  'communities.deleteGroup': 'Delete group',
+  'communities.deleteGroup': 'Delete circle',
   'communities.deleteTitle': 'Delete {name}?',
-  'communities.deleteDesc': 'The group and all its memberships are removed. This cannot be undone',
+  'communities.deleteDesc': 'The circle and all its memberships are removed. This cannot be undone',
   'communities.deleteConfirm': 'Delete',
   // No confirm for taking a member out (user directive 2026-07-31): the tap
   // removes. `removeMemberTitle` / `removeMemberDesc` / `remove` are deleted with
   // that popup — the description WAS the reason it needed none ("they can join
-  // again with the invite link").
-  'communities.makePublic': 'Make public',
-  'communities.makePrivate': 'Make private',
-  'communities.approvalEnable': 'Require approval to join',
-  'communities.approvalDisable': 'Stop requiring approval',
+  // again with the invite link"). `makePublic` / `makePrivate` / `approvalEnable`
+  // / `approvalDisable` are deleted too (2026-08-01): they are the two-axis pair
+  // the kind picker replaced on 2026-07-27 and nothing has rendered them since.
   // The queue's one name, on the roster row that unfolds it. Its page-title
   // twin (`requestsNav`) and its empty line (`noRequests`) went with the page
   // itself on 2026-07-31: the queue is a drawer inside the roster now, and a
@@ -292,36 +318,37 @@ export default {
   'communities.owner': 'Owner',
   // The role is named for the one thing it does: answer join requests (user
   // directive 2026-07-30, replacing "manager" everywhere a user reads it). An
-  // OPEN group has no such role at all, because nothing there waits on an
-  // answer, so the appointment is offered on approved/private groups only.
+  // OPEN circle has no such role at all, because nothing there waits on an
+  // answer, so the appointment is offered on approval-required/private circles
+  // only.
   'communities.manager': 'Approver',
   'communities.makeManager': 'Make approver',
   'communities.removeManager': 'Remove approver',
-  'communities.removeFromGroup': 'Remove from group',
+  'communities.removeFromGroup': 'Remove from circle',
   'communities.transferOwner': 'Transfer ownership',
-  'communities.transferOwnerTitle': 'Hand {name} the group?',
-  'communities.transferOwnerDesc': 'The group becomes {name}\'s, and you stay on as an approver. This cannot be undone',
-  // An open group has no approvers, so the outgoing owner keeps nothing: he is
+  'communities.transferOwnerTitle': 'Hand {name} the circle?',
+  'communities.transferOwnerDesc': 'The circle becomes {name}\'s, and you stay on as an approver. This cannot be undone',
+  // An open circle has no approvers, so the outgoing owner keeps nothing: he is
   // a plain member of it from that moment.
-  'communities.transferOwnerDescOpen': 'The group becomes {name}\'s, and you keep no rights in it. This cannot be undone',
+  'communities.transferOwnerDescOpen': 'The circle becomes {name}\'s, and you keep no rights in it. This cannot be undone',
 
-  // A group you are in
-  'communities.leave': 'Leave group',
+  // A circle you are in
+  'communities.leave': 'Leave circle',
   'communities.memberNote': 'Members rank higher for you',
 
   // Find or join
-  'communities.findTitle': 'Join a group',
-  'communities.findSearch': 'Search a group',
-  // Searching the roster of a group you manage: the mark on that page's bar,
+  'communities.findTitle': 'Join a circle',
+  'communities.findSearch': 'Search a circle',
+  // Searching the roster of a circle you manage: the mark on that page's bar,
   // the field's own placeholder, and the mark that ends the search. It looks
   // over BOTH lists at once, the people waiting and the people already in.
   'communities.searchPeople': 'Search by name',
   'communities.searchClose': 'Close search',
-  // The line about the PERSON, standing over a group's name on their page: who
+  // The line about the PERSON, standing over a circle's name on their page: who
   // they are and when they turned up here. Genderless in both languages, so a
   // row with no profile on it still reads (see memberSince / waitingSince), and
-  // the name leads because everything else in that block is the group's.
-  'communities.inGroupSince': '{name} in the group since {date}',
+  // the name leads because everything else in that block is the circle's.
+  'communities.inGroupSince': '{name} in the circle since {date}',
   'communities.waitingSince': '{name} waiting since {date}',
   'communities.orCode': 'or with an invite code',
   'communities.join': 'Join',
@@ -330,18 +357,24 @@ export default {
   'communities.pending': 'Pending approval',
   // A strip's chip, where the meta line already says the size: ONE word in the
   // corner the role chip sits in, not the sentence the popup's button says.
-  // Where I stand with a group, on the hub and in search alike.
+  // Where I stand with a circle, on the hub and in search alike.
   'communities.pendingTag': 'Pending',
   'communities.declinedTag': 'Declined',
   'communities.declined': 'Request declined',
   'communities.declinedTitle': 'Your request to {name} was declined',
   'communities.declinedDesc': "Your request was not approved. You can clear this notice, and ask again in a month",
   'communities.declinedConfirm': 'Clear',
-  // The pending group's own popup: what the state is, and the button that ends
-  // it (the same popup a group you are in opens, with cancel instead of leave).
-  'communities.pendingNote': 'Your request is waiting for the group to approve it',
+  // The pending circle's own popup: what the state is, and the button that ends
+  // it (the same popup a circle you are in opens, with cancel instead of leave).
+  // The sentence names no approver (user directive 2026-08-01): "waiting for the
+  // circle to approve it" makes the circle the thing that decides, which a group
+  // could pass for and a circle cannot. What is waiting is the approval.
+  'communities.pendingNote': 'Your request is waiting for approval',
   'communities.cancelJoin': 'Cancel request',
-  'communities.shareMessage': 'Join {name}\n{link}',
+  // Goes out to WhatsApp, i.e. to people who have never opened the app (user
+  // directive 2026-08-01): it names the circle and the app, and leaves the term
+  // inside.
+  'communities.shareMessage': 'Join {name} on the Once app\n{link}',
   // Support: row in the account card. Opens the device mail composer at the
   // support inbox, with this subject prefilled.
   'settings.support': 'Support',
@@ -350,7 +383,6 @@ export default {
   // device browser, in the language the app is running in.
   'settings.site': 'Website',
   'settings.preview': 'Preview',
-  'settings.myProfile': 'Profile',
   'settings.photo': 'My Photos',
   'settings.photoHint': 'Long press and drag to reorder',
   'settings.aboutMe': 'About Me',
@@ -413,12 +445,14 @@ export default {
   'settings.photoEditReplace': 'Replace photo',
   'settings.photoEditMoveDown': 'Move down',
   'settings.photoEditDelete': 'Delete',
-  // The two rows of the popup the own-profile card's heading plus opens.
-  // Each row is the THING, not the verb: the plus already said "add".
-  'settings.addPhoto': 'Photo',
-  'settings.addFamily': 'Family & kids',
-  // What that plus says to a screen reader: the mark itself names nothing.
-  'settings.a11y.addToProfile': 'Add to your profile',
+  // See the notes on these two in he.ts — the photo row stands in the photo's
+  // own menu and reads as a verb; the family chip stands in the fact set's own
+  // place and NAMES the missing fact instead.
+  'settings.addPhoto': 'Add a photo',
+  'settings.addFamily': 'Where you stand on kids',
+  // The one row of the first-open photo tutorial: the photo menu itself, saying
+  // what opens it.
+  'settings.photoMenuHint': 'Tap a photo for more actions',
   'family.title': 'Family & kids',
   'family.optional': 'optional',
   'family.hasKidsQuestion': 'Do you have kids?',
@@ -678,6 +712,8 @@ Next may surprise`,
   'home.joinGate.requestText': 'Access by approval, tap to request to join',
   'home.joinGate.waitingText': 'Request sent, waiting for approval',
   'home.startNow': 'Start now',
+  // Where the clock was, once it has run out — see the note in he.ts.
+  'home.cardEnded': 'Ended',
   'home.endedBack': 'Back to game',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).
@@ -800,20 +836,28 @@ Next may surprise`,
   'home.waitingTimerDesc_mf': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time',
   'home.waitingTimerDesc_fm': 'Meanwhile, he won\'t receive other invitations. Your credit only comes back to you if he declines or doesn\'t respond in time',
   'home.waitingTimerDesc_ff': 'Meanwhile, she won\'t receive other invitations. Your credit only comes back to you if she declines or doesn\'t respond in time',
-  // The invite door's own sentence for the app's one build-profile gate. Its
-  // button is `settings.buildProfile`, which is what every one of those doors
-  // says: there was a second key here reading "Build my profile", so the same
-  // popup asked for the same thing in two voices depending on which door it came
-  // through.
-  'home.buildProfileTitle': 'Build your profile first',
-  'home.buildProfileDesc': 'To send an invitation you need a profile with at least two photos. It only takes a minute',
-  // The browse allowance's door (lib/browseGate.ts): an account with no profile
-  // watches two people and then the centre circle stops being the play button
-  // and becomes this. Same popup as the invite door above, so only the sentence
-  // changes — and the TITLE is also the pane's own headline, the way every
-  // centre notice states its reason in that slot.
-  'home.browseGateTitle': 'To keep going you need a profile',
-  'home.browseGateDesc': 'Create a profile with at least two photos, and you can carry on meeting people',
+  // The TITLE of the app's one build-profile gate, shared by two of its three
+  // doors (the invite prompt and the preferences' visibility row), and the
+  // invite door's own sentence under it. Its button is `settings.buildProfile`,
+  // which is what every one of those doors says: there was a second key here
+  // reading "Build my profile", so the same popup asked for the same thing in
+  // two voices depending on which door it came through.
+  // BOTH NAME THE PHOTOS, NOT "A PROFILE" (user directive 2026-08-01), and they
+  // do not COUNT them either: "two" is a requirement to satisfy where "photos"
+  // is a thing to go and do, and the photo step states the number itself
+  // (`photo.sub`) the moment the user is standing in front of it.
+  'home.buildProfileTitle': 'Your photos are required',
+  'home.buildProfileDesc': 'To send an invitation, your photos are required',
+  // The browse allowance (lib/browseGate.ts): an account with no profile watches
+  // two people and then the centre circle stops being the play button and says
+  // this — the pane's own headline, the way every centre notice states its
+  // reason in that slot. It is the WHOLE of what that gate says: the circle goes
+  // straight to the photo step now, so there is no popup and no sentence under a
+  // title any more (the `home.browseGateDesc` that was here is deleted). It
+  // names the PHOTOS rather than "a profile" (user directive 2026-08-01) — that
+  // is the whole of what is missing, and it is what the camera in the circle
+  // under it opens.
+  'home.browseGateTitle': 'To keep going, profile photos are required',
   'home.cancelWaitingTitle': 'Cancel invitation?',
   'home.cancelWaitingBtn': 'Cancel invitation',
   'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting',
@@ -837,26 +881,24 @@ Next may surprise`,
   'home.replyingTitle': 'He invited you to chat',
   'home.replyingTitle_m': 'He invited you to chat',
   'home.replyingTitle_f': 'She invited you to chat',
-  'home.replyingDesc': 'Meanwhile, he can\'t send other invitations. All the focus is just on you',
-  'home.replyingDesc_mm': 'Meanwhile, he can\'t send other invitations. All the focus is just on you',
-  'home.replyingDesc_mf': 'Meanwhile, she can\'t send other invitations. All the focus is just on you',
-  'home.replyingDesc_fm': 'Meanwhile, he can\'t send other invitations. All the focus is just on you',
-  'home.replyingDesc_ff': 'Meanwhile, she can\'t send other invitations. All the focus is just on you',
-  'home.replyingAccept': 'Open chat',
+  // See the note in he.ts — what approving DOES and what it COSTS, said once.
+  'home.replyingDesc': 'Approving opens a chat between you, and costs one credit',
+  'home.replyingAccept': 'Approve invitation',
   'home.replyingReject': 'Decline',
   'home.chatHeader': 'One on one',
+  // The one popup ending a chat: its title, its sentence and its two answers,
+  // which are chat.leave (the purple) and chat.block. There is no separate
+  // confirm behind either of them any more (user directive 2026-08-02), so the
+  // confirm labels that named the same two actions a second time — and the
+  // block's own title and paragraph — are deleted.
   'home.leaveTitle': 'End chat',
   'home.leaveDesc': 'The chat will be closed permanently and cannot be restored. The other side will be notified',
-  'home.leaveConfirm': 'End',
   'chat.empty': 'No messages yet',
   'chat.inputPlaceholder': 'Write a message...',
   'chat.today': 'Today',
   'chat.yesterday': 'Yesterday',
   'chat.dayBeforeYesterday': 'Day before yesterday',
   'chat.block': 'Block',
-  'chat.blockTitle': 'Block user',
-  'chat.blockDesc': 'This user will be blocked and won\'t be able to contact you again. This action cannot be undone',
-  'chat.blockConfirm': 'Block',
   'chat.endChat': 'End Chat',
   'chat.leave': 'Leave',
   // (The chat sheet's own close label went with its X on 2026-07-31 — the sheet

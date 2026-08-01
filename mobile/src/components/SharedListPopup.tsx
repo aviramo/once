@@ -16,7 +16,7 @@
 // renders the skeleton.
 // Composes the shared BottomSheet (never a raw Modal) and the shared Avatar
 // primitive, so a person here looks identical to one in the Communities sheet.
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { Strip } from './Strip'
 import { BottomSheet, SheetTitle } from './BottomSheet'
@@ -110,8 +110,18 @@ export function SharedListPopup({
 // so no roster is stacked under it. Whatever a row opens only COVERS this list,
 // group and person alike, so closing it comes back here rather than to the bare
 // card (user directive 2026-07-30) — see `covered` on useSharedCircles.
+//
+// ONE CIRCLE IS NOT A LIST (user directive 2026-08-02): when the pair shares
+// exactly one circle the chip goes STRAIGHT to that circle's own surface — the
+// group popup, or the person's page — and this list is never raised at all. A
+// popup titled "what we share" over a single row is a door in front of a door,
+// and the row under it says nothing the chip that opened it had not already
+// said. Which surface it is, is decided by the fetched lists (they are the
+// truth); the chip's own `sole` count only decides whether the SKELETON goes up
+// while they are out, so a single circle never flashes a list on its way to the
+// surface it was always going to open.
 export function SharedCirclesPopup({
-  visible, groups, friends, subjectIsMale, onSelectFriend, onDismiss,
+  visible, groups, friends, subjectIsMale, sole, onSelectFriend, onDismiss,
 }: {
   visible: boolean
   /** null while loading — either list still out makes the popup a skeleton, so
@@ -122,6 +132,11 @@ export function SharedCirclesPopup({
    *  / "חבר של אסף"): the row is a sentence about the person whose card this
    *  is, not about the friend it names. */
   subjectIsMale?: boolean | null
+  /** The chip counted exactly one circle, so there is nothing to list and
+   *  nothing is raised until the lists say WHICH surface to open. A hint, not
+   *  the decision: a card is a snapshot, so a chip that turns out to have been
+   *  wrong simply lands on the list a beat later. */
+  sole?: boolean
   onSelectFriend: (friend: FriendItem) => void
   onDismiss: () => void
 }) {
@@ -130,9 +145,29 @@ export function SharedCirclesPopup({
   // reads it — same rule, same number, so a row can never contradict the chip.
   const myFriends = useMyFriendCount()
   const items = groups && friends ? orderSharedCircles(groups, friends, myFriends) : null
+  const only = items?.length === 1 ? items[0] : null
+  // The one circle being a PERSON: their page is the app's root-window overlay,
+  // not a popup, so the host opens it and this popup ENDS — unlike a row's tap,
+  // which only covers a list the user will want back. There is no list here to
+  // come back to.
+  const onlyFriend = only?.kind === 'friend' ? only.friend : null
+  useEffect(() => {
+    if (!visible || !onlyFriend) return
+    onSelectFriend(onlyFriend)
+    onDismiss()
+  }, [visible, onlyFriend])
+  // The one circle being a GROUP: its popup IS the answer to the chip, so it
+  // stands alone in this component's place rather than nested inside a list
+  // that is not being shown. (The nested instance below is the other case — a
+  // group a ROW opened, which must leave the list lit under it.)
+  if (only?.kind === 'group') {
+    return <GroupSheet group={visible ? only.group : null} status="joined" onClose={onDismiss} />
+  }
   return (
     <SharedListPopup
-      visible={visible}
+      // Nothing is raised for a single circle: while the lists are out the
+      // chip's own count answers, and once they land the count of rows does.
+      visible={visible && (items ? items.length !== 1 : !sole)}
       title={t('communities.sharedTitle')}
       skeletonLines={2}
       rows={items?.map(item => item.kind === 'group' ? {
@@ -194,16 +229,21 @@ export function useSharedCircles(covered?: boolean) {
   const [visible, setVisible] = useState(false)
   const [groups, setGroups] = useState<SharedGroup[] | null>(null)
   const [friends, setFriends] = useState<FriendItem[] | null>(null)
+  // What the chip counted when it was tapped: exactly one circle means there is
+  // no list coming, so the skeleton stays down and the round trip lands on that
+  // circle's own surface (user directive 2026-08-02, see SharedCirclesPopup).
+  const [sole, setSole] = useState(false)
   // Whose card the popup was opened from, for the wording of a friend row
   // ("חברה של אסף"): the row states how THIS person is connected to the friend
   // it names, so it inflects with the card subject, exactly as the chip does.
   const [subjectIsMale, setSubjectIsMale] = useState<boolean | null | undefined>(undefined)
   const close = useCallback(() => setVisible(false), [])
-  const open = useCallback((userId: string, isMale?: boolean | null) => {
+  const open = useCallback((userId: string, isMale?: boolean | null, circles?: number) => {
     tap()
     setGroups(null)
     setFriends(null)
     setSubjectIsMale(isMale)
+    setSole(circles === 1)
     setVisible(true)
     sharedGroups(userId).then(setGroups).catch(() => setGroups([]))
     sharedFriends(userId).then(setFriends).catch(() => setFriends([]))
@@ -211,7 +251,7 @@ export function useSharedCircles(covered?: boolean) {
   // No `close` for a host to call: the only thing that ends this popup is the
   // user dismissing it (onDismiss), because opening a page from a row merely
   // covers it — see `covered`.
-  return { open, props: { visible: visible && !covered, groups, friends, subjectIsMale, onDismiss: close } }
+  return { open, props: { visible: visible && !covered, groups, friends, subjectIsMale, sole, onDismiss: close } }
 }
 
 // The rows carry no styles of their own any more: the strip owns its geometry

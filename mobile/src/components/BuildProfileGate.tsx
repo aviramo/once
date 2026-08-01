@@ -1,7 +1,7 @@
 import React from 'react'
 import { useRouter } from 'expo-router'
 import { ConfirmDialog } from './ConfirmDialog'
-import { UserPlusIcon } from './icons'
+import { CameraIcon } from './icons'
 import { WHITE } from '../colors'
 import { t } from '../i18n'
 
@@ -14,6 +14,13 @@ import { t } from '../i18n'
  *  slot, the one button, its glyph and where that button goes are the popup's
  *  own and are stated here once. The button is always the fix, never an
  *  acknowledgement: a popup that says what is missing is also what completes it.
+ *
+ *  AND WHAT IS MISSING IS PHOTOS (user directive 2026-08-01). The button said
+ *  "build your profile" — a form to fill in, for a job that is two pictures —
+ *  and it says `settings.buildProfile` = "בחירת תמונות" / "Choose photos" now,
+ *  over a `CameraIcon`: the same mark home's centre circle wears for the same
+ *  errand. Only the KEY still says profile, the way `group` still names a
+ *  מעגל in code.
  *
  *  `onConfirm` exists for the one caller that cannot navigate on the spot: the
  *  visibility row lives INSIDE a popup, and pushing a route under an open Modal
@@ -36,7 +43,7 @@ export function BuildProfileGate({ visible, title, description, onClose, onConfi
       title={title}
       description={description}
       confirmLabel={t('settings.buildProfile')}
-      confirmIconStart={<UserPlusIcon color={WHITE} />}
+      confirmIconStart={<CameraIcon color={WHITE} />}
       onConfirm={() => {
         onClose()
         if (onConfirm) onConfirm()

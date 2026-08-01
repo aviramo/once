@@ -7,8 +7,10 @@ import { STORAGE } from '../keys'
 //
 // A user who has not finished onboarding may watch BROWSE_ALLOWANCE people and
 // no more: the next candidate does not rise at all, and home's one action
-// surface stops being the play button and becomes the build-profile gate (see
-// home.tsx's centerNotice). It is the same fact the dock's profile key already
+// surface stops being the play button and becomes the way to the photo step —
+// a camera in the circle, and a tap goes straight there with no popup in
+// between (see home.tsx's centerNotice). It is the same fact the dock's profile
+// key already
 // wears a dot for, said at the point where it starts costing the user something
 // — he has seen what the game is, and the next face is behind a profile.
 //

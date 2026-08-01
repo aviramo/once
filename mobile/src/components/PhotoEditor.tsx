@@ -170,7 +170,7 @@ export interface PhotoEditorRef {
 }
 
 function PhotoCell({
-  uri, localUri, hash, onRemove, onReplace, onLoaded, canRemove, dragging, highlighted, replacing, onLayout,
+  uri, localUri, hash, onRemove, onReplace, onLoaded, canRemove, dragging, highlighted, onLayout,
 }: {
   uri: string
   localUri?: string
@@ -181,14 +181,13 @@ function PhotoCell({
   canRemove: boolean
   dragging?: boolean
   highlighted?: boolean
-  replacing?: boolean
   onLayout?: (e: any) => void
 }) {
   return (
     <Pressable
       style={photoStyles.cell}
       onLayout={onLayout}
-      onPress={onReplace && !replacing ? () => { tap(); onReplace() } : undefined}
+      onPress={onReplace ? () => { tap(); onReplace() } : undefined}
     >
       <ExpoImage
         source={uri}
@@ -200,12 +199,6 @@ function PhotoCell({
         onLoad={() => onLoaded?.()}
       />
       {(dragging || highlighted) && <View pointerEvents="none" style={photoStyles.dropTarget} />}
-      {replacing && (
-        <View pointerEvents="none" style={photoStyles.replacingOverlay}>
-          {/* Dark ink: the scrim underneath is the opaque white PHOTO_CHROME. */}
-          <ActivityIndicator size="large" color={INK} />
-        </View>
-      )}
       {canRemove && (
         <Pressable style={photoStyles.remove} onPress={() => { tap(); onRemove() }}>
           <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth={3} strokeLinecap="round">
@@ -220,7 +213,7 @@ function PhotoCell({
 
 // Draggable photo grid — drag to reorder, X to remove.
 function PhotoGrid({
-  photos, urlFor, hashFor, onRemove, onReplace, onLoaded, onReorder, canRemove, uploads, replacingFilename,
+  photos, urlFor, hashFor, onRemove, onReplace, onLoaded, onReorder, canRemove, uploads,
   additionalChildren, onDragStateChange,
 }: {
   photos: string[]
@@ -232,7 +225,6 @@ function PhotoGrid({
   onReorder: (from: number, to: number) => void
   canRemove: boolean
   uploads: { id: string; uri: string; filename?: string }[]
-  replacingFilename?: string | null
   additionalChildren?: React.ReactNode
   onDragStateChange?: (dragging: boolean) => void
 }) {
@@ -333,7 +325,6 @@ function PhotoGrid({
             canRemove={canRemove}
             dragging={dragIdx === i}
             highlighted={hoverIdx === i}
-            replacing={replacingFilename === filename}
             onLayout={(e) => { layouts.current[i] = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height } }}
           />
         )
@@ -403,14 +394,12 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   // upload cell has disappeared, so re-picking the same asset still dedupes.
   const sigByFilename = useRef<Map<string, string>>(new Map())
   const [duplicateDialog, setDuplicateDialog] = useState(false)
-  // Which empty add-slot is waiting for the OS image picker to appear.
-  // launchImageLibraryAsync has a noticeable cold-start delay; show a spinner
-  // in the tapped "+" slot until the native picker is up (promise resolves).
-  const [pickingAddIdx, setPickingAddIdx] = useState<number | null>(null)
-  // Filename of the photo currently being replaced (picker open). Drives a
-  // spinner overlay on the cell so the user sees what's loading instead of
-  // a blank tap while the picker cold-starts.
-  const [replacingFilename, setReplacingFilename] = useState<string | null>(null)
+  // A picker is on its way up. NOTHING IS DRAWN FOR THIS (user directive
+  // 2026-08-01): a spinner says the app is working on the photo, and opening
+  // the OS gallery is not that — the surface that answers the tap is the
+  // picker itself. A spinner belongs to the upload alone, which is why this is
+  // a REF: the guard refuses a second picker without costing a render.
+  const pickerOpen = useRef(false)
 
   // Warm up the image picker on mount: getMediaLibraryPermissionsAsync()
   // initializes the native bridge so the first launchImageLibraryAsync after
@@ -508,15 +497,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
     return processAndUploadPhoto(asset.uri, user.id, token)
   }
 
-  const pickPhoto = async (addIdx: number) => {
-    if (!user || photos.length >= MAX_PHOTOS) return
+  const pickPhoto = async () => {
+    if (!user || photos.length >= MAX_PHOTOS || pickerOpen.current) return
     const maxPick = MAX_PHOTOS - photos.length
-    setPickingAddIdx(addIdx)
+    pickerOpen.current = true
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: maxPick,
-    }).finally(() => setPickingAddIdx(null))
+    }).finally(() => { pickerOpen.current = false })
     if (result.canceled || !result.assets?.length) return
 
     const sigs = await Promise.all(result.assets.map(async a => {
@@ -632,15 +621,15 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
   }
 
   const replacePhoto = async (oldFilename: string) => {
-    if (!user || replacingFilename) return
+    if (!user || pickerOpen.current) return
     const idx = storeImages.findIndex(e => e.normal === oldFilename)
     if (idx < 0) return
 
-    setReplacingFilename(oldFilename)
+    pickerOpen.current = true
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    }).finally(() => setReplacingFilename(null))
+    }).finally(() => { pickerOpen.current = false })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
 
@@ -718,7 +707,6 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
         onReorder={reorderPhotos}
         canRemove={photos.length > 2}
         uploads={uploads}
-        replacingFilename={replacingFilename}
         onDragStateChange={onDragStateChange}
         additionalChildren={
           (() => {
@@ -731,15 +719,11 @@ export const PhotoEditor = forwardRef<PhotoEditorRef, {
               <Pressable
                 key={`add-${i}`}
                 style={[photoStyles.cell, photoStyles.add]}
-                onPress={() => { if (pickingAddIdx !== null) return; tap(); pickPhoto(i) }}
+                onPress={() => { tap(); pickPhoto() }}
               >
-                {pickingAddIdx === i ? (
-                  <ActivityIndicator size="small" color={INK} />
-                ) : (
-                  <Svg pointerEvents="none" width={ICON.xxl} height={ICON.xxl} viewBox="0 0 24 24" fill="none" stroke={INK_HINT} strokeWidth={STROKE.thin} strokeLinecap="round">
-                    <Path d="M12 5v14M5 12h14" />
-                  </Svg>
-                )}
+                <Svg pointerEvents="none" width={ICON.xxl} height={ICON.xxl} viewBox="0 0 24 24" fill="none" stroke={INK_HINT} strokeWidth={STROKE.thin} strokeLinecap="round">
+                  <Path d="M12 5v14M5 12h14" />
+                </Svg>
               </Pressable>
             ))
           })()
@@ -806,19 +790,5 @@ const photoStyles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: WHITE_MID,
     borderRadius: RADIUS,
-  },
-  replacingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: PHOTO_CHROME,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  spinnerBadge: {
-    position: 'absolute',
-    top: '50%', start: '50%',
-    width: 36, height: 36, marginStart: -18, marginTop: -18,
-    borderRadius: RADIUS,
-    backgroundColor: PHOTO_CHROME,
-    alignItems: 'center', justifyContent: 'center',
   },
 })

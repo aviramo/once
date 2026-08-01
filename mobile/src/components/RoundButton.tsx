@@ -38,6 +38,13 @@ export type RoundButtonProps = {
    *  something here for you" (unread messages on the card's chat action,
    *  someone waiting on an answer on home's menu button). */
   badge?: boolean
+  /** THE SAME CORNER, ANOTHER MARK (user directive 2026-08-01). One slot on this
+   *  button's arc, whatever is standing in it: the dot above says there is
+   *  something here, and this says what pressing it SPENDS — the credit gem on
+   *  the incoming invitation's accept. Placed by the same 45° geometry, so two
+   *  buttons' marks can never sit at two different points; a host that passes
+   *  one instead of `badge` is choosing what the corner says, not where it is. */
+  marker?: ReactNode
   children: ReactNode
   style?: StyleProp<ViewStyle>
 }
@@ -56,6 +63,7 @@ export function RoundButton({
   hitSlop = 12,
   accessibilityLabel,
   badge = false,
+  marker,
   children,
   style,
 }: RoundButtonProps) {
@@ -66,6 +74,12 @@ export function RoundButton({
   // the arc with more of it outside. Nothing clips it (no ancestor of a round
   // button hides overflow at that scale).
   const dotInset = (size / 2) * (1 - Math.SQRT1_2) - NOTIFY_DOT_SIZE / 2
+  // THE POINT ITSELF, for a marker whose size this button does not know: the 45°
+  // point on the arc, with no half-size term because what is pinned to it is a
+  // zero-size ANCHOR rather than a box (see styles.marker). Anything standing in
+  // the slot is then centred on the same point the dot's centre lands on,
+  // whatever its size — one geometry, two marks.
+  const markerPoint = (size / 2) * (1 - Math.SQRT1_2)
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
@@ -98,7 +112,19 @@ export function RoundButton({
       <GlyphScale cap={FIXED_BOX_SCALE}>
         <View pointerEvents="none" style={styles.inner}>{children}</View>
       </GlyphScale>
-      {badge ? <NotifyDot style={{ top: dotInset, end: dotInset }} /> : null}
+      {marker
+        ? (
+          <View pointerEvents="none" style={[styles.marker, { top: markerPoint, end: markerPoint }]}>
+            {/* OUT OF FLOW, and that is the whole trick: an in-flow child of a
+                zero-size box is measured against zero — clamped, or laid out one
+                character per line. Yoga measures an ABSOLUTE child with no width
+                and no opposing insets at its natural size instead, and still
+                places it by the parent's own align/justify. The same anchor the
+                dock's markers stand in (OptionStrip). */}
+            <View style={styles.markerFree}>{marker}</View>
+          </View>
+        )
+        : badge ? <NotifyDot style={{ top: dotInset, end: dotInset }} /> : null}
     </Pressable>
   )
 }
@@ -127,6 +153,18 @@ const styles = StyleSheet.create({
   // Solid INK disc in a WHITE ring — the ring is what keeps it off the white
   // button under it and off any photo behind it. Only its offsets are
   // per-button (they follow the diameter's arc); the disc itself is fixed.
+  // A mark in the badge's own corner: a POINT, not a box — zero on both axes, at
+  // the 45° point of the arc, with its content centred on it both ways. Sizing
+  // this to the dot and letting a bigger mark overflow is what put the credit
+  // capsule visibly off its own circle (user, 2026-08-01).
+  marker: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerFree: { position: 'absolute' },
   badge: {
     position: 'absolute',
     width: NOTIFY_DOT_SIZE,

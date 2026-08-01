@@ -56,6 +56,12 @@ export const SEEN_FLAGS = {
    *  "your circles decide who you see" onboarding, replacing the forced nudge
    *  that used to raise the hub over the card after three watched profiles. */
   circlesSeen: 'circles_seen',
+  /** The user has been shown, once, that the photos on his own profile carry
+   *  actions: the first time the preview opens, the photo menu itself pops with
+   *  a single row saying to tap a photo (user directive 2026-08-01). It is about
+   *  EDITING YOUR OWN PROFILE and nothing else — a photo on someone else's card
+   *  has no menu — so it is spent by that page and no other. */
+  photoMenuSeen: 'photo_menu_seen',
 } as const
 
 // ── Per-conversation chat storage ─────────────────────────────────────────

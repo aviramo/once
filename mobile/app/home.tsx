@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { View, StyleSheet, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, type DimensionValue } from 'react-native'
+import { View, StyleSheet, ActivityIndicator, BackHandler, Keyboard, AppState, Dimensions, Pressable, Platform, type DimensionValue } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, withRepeat, withSequence, withDelay, cancelAnimation, Easing, runOnJS, LinearTransition } from 'react-native-reanimated'
 import { Text } from '../src/components/AppText'
 const AnimatedText = Animated.createAnimatedComponent(Text)
@@ -23,7 +23,7 @@ import { useBottomInset } from '../src/hooks/useBottomInset'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BuildProfileGate } from '../src/components/BuildProfileGate'
 import { useBrowseAllowance } from '../src/lib/browseGate'
-import { BottomSheet, SheetActionPair, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
+import { BottomSheet, SheetTitle, SheetDesc, SheetActionPair, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedCirclesPopup, useSharedCircles } from '../src/components/SharedListPopup'
 import { flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type CommunitiesTarget } from '../src/lib/communities'
@@ -32,7 +32,7 @@ import { OverlaySheet } from '../src/components/OverlaySheet'
 import { HomeArt } from '../src/components/HomeArt'
 import { HomeDock, type DockItem } from '../src/components/HomeDock'
 import { CreditCost } from '../src/components/CreditCost'
-import { CREDIT_COST, creditTotal } from '../src/lib/credits'
+import { CREDIT_COST, creditTotal, creditHeld, creditsForApprove } from '../src/lib/credits'
 import { clearChatCache } from '../src/lib/chatCache'
 import { claimInstallReferral } from '../src/lib/referral'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
@@ -47,8 +47,8 @@ import { useChatHasUnread } from '../src/hooks/useChatHasUnread'
 import { FIXED_BOX_SCALE } from '../src/fonts'
 import { SEEN_FLAGS } from '../src/keys'
 import { hasSeenFlag, markSeenFlag } from '../src/lib/seenFlags'
-import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, GlyphScale, CloseIcon, BackIcon, UserIcon, UserPlusIcon, ShieldIcon, GroupsIcon, SearchIcon, CreditIcon } from '../src/components/icons'
-import type { CardAction, CardCountdown, MatchCardHandle } from '../src/components/MatchCard'
+import { PauseIcon, HeartIcon, ChatIcon, MapPinIcon, BellIcon, WifiOffIcon, SignOutIcon, BlockIcon, InboxIcon, GlyphScale, CloseIcon, UserIcon, CameraIcon, ShieldIcon, GroupsIcon, SearchIcon, CreditIcon } from '../src/components/icons'
+import type { CardAction, CardCountdown } from '../src/components/MatchCard'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 
 
@@ -529,70 +529,62 @@ function StatusCardText({ title, description }: { title: string; description: st
   )
 }
 
-// Page1 "you sent an invitation" card. Heading-led body (StatusCardText) + a
-// plain full-width cancel button. The countdown it is named for is no longer
-// drawn here — it rides the card's name/age chip (CardCountdown in
-// MatchCard.tsx), which is also where the lapse now fires from, so this card
-// takes neither `expiresAt` nor `onLapsed`.
-function InviteTimerCard({ targetIsMale, userIsMale, onCancel, busy }: { targetIsMale?: boolean | null; userIsMale?: boolean | null; onCancel: () => void; busy?: boolean }) {
-  const title = tg('home.waitingTimerTitle', targetIsMale ?? null)
-  const description = tgg('home.waitingTimerDesc', userIsMale ?? null, targetIsMale ?? null)
+// (`InviteTimerCard` and `EventMessageCard` stood here until 2026-08-01: the two
+// status cards that were rendered at the TOP of the match card's scroll, each a
+// title, a paragraph and one full-width button. Both are deleted. Their title is
+// the line in the card's own strip, their button is the chip at the end of it,
+// and their paragraphs are gone — for every one of those states the paragraph
+// restated the title and then said in words what the chip now says as a verb
+// ("אפשר להמשיך הלאה" → "המשך"). What is left of the scaffold below —
+// `StatusCardText`, `statusCardStyles`, `statusButtonStyles` — belongs to
+// `ReplyingInviteCard`, which survives for its POPUP use: the page1 send-invite
+// prompt, which is a surface the app raises and not a state on a card.)
 
+// ── The card's message, as a popup ────────────────────────────────────────
+// (user directive 2026-08-01.) What `InviteTimerCard` and `EventMessageCard`
+// used to paint at the TOP of the match card's scroll: a heading, its sentence,
+// and the ONE thing to do about it. It is a popup body now — raised by the
+// chevron beside the clock on the card's heading chip — because the message was
+// never wrong, only its place was: at the top of a scroll it left the screen the
+// moment the reader went down to the face.
+function CardMessage({ title, description, label, icon, busy, onPress }: {
+  title: string
+  description: string
+  label: string
+  /** The mark on the button, when the button HAS one. "Back to the game" never
+   *  does (user directive 2026-08-01): it is not an operation on anything, it is
+   *  the way out of a card that is finished with, and a mark beside those three
+   *  words only asks the reader what it means. */
+  icon?: React.ReactNode
+  busy?: boolean
+  onPress: () => void
+}) {
   return (
-    <View style={statusCardStyles.container}>
+    <View style={[statusCardStyles.container, statusCardStyles.containerInPopup]}>
       <StatusCardText title={title} description={description} />
       <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
-        <Button
-          label={t('home.cancelWaitingBtn')}
-          variant="primary"
-          onPress={onCancel}
-          iconStart={<CloseIcon color={WHITE} />}
-          loading={busy}
-        />
-      </Animated.View>
-    </View>
-  )
-}
-
-// ── EventMessageCard ─────────────────────────────────────────────────────────
-// Top-of-card info component for terminal locked-message states (page1 after
-// a terminal event, page2 dead invite). Same scaffold as InviteTimerCard —
-// heading-led body (StatusCardText) + a single full-width "back to game"
-// button. It carries no clock: a card that is over has no deadline left on it,
-// and what stands in the name/age chip while this card is the topBlock is the X
-// that scrolls back UP to it (MatchCard's `ended`).
-function EventMessageCard({ title, description, onContinue, busy }: { title: string; description: string; onContinue: () => void; busy?: boolean }) {
-  return (
-    <View style={statusCardStyles.container}>
-      <StatusCardText title={title} description={description} />
-      <Animated.View layout={STATUS_LAYOUT} style={statusButtonStyles.stack}>
-        <Button
-          label={t('home.endedBack')}
-          variant="primary"
-          onPress={onContinue}
-          iconStart={<BackIcon color={WHITE} />}
-          loading={busy}
-        />
+        <Button label={label} variant="primary" onPress={onPress} iconStart={icon} loading={busy} />
       </Animated.View>
     </View>
   )
 }
 
 // ── ReplyingInviteCard ───────────────────────────────────────────────────
-// The shared invitation card for BOTH sides of an invite:
-//   - page2 "you received an invitation" (topBlock) — the original use.
-//   - page1 "send her an invite?" (invite popup) — the send prompt raised by
-//     the hero heart in the watching state. It is the same info component:
-//     same StatusCard scaffold + spacings, no standalone heading (the title
-//     rides as a bold lead-in at the start of the body via StatusCardText),
-//     ghost decline + primary accept. The accept CTA carries the CreditCost
-//     badge (gem × N) both ways so the two sides of an invitation read as
-//     mirror actions and surface what they spend.
-// The popup use (`inPopup`) also hands the card's BOTTOM to the sheet: a
-// BottomSheet ends every popup on the one standard gap, so the scaffold's own
-// paddingBottom would stack a second LG under the buttons. The card's old
-// `footerInset` prop — a hand-rolled `Math.max(inset, LG)` for exactly this —
-// is gone with it.
+// THE SEND-INVITE PROMPT, and only that since 2026-08-01: the popup the hero
+// heart raises in the watching state, asking whether to invite the person on the
+// card. Title, one paragraph, and an accept CTA carrying the CreditCost badge
+// (gem × N) so what the press spends is legible at the moment of pressing.
+//
+// It used to be BOTH sides of an invitation — the incoming one was this same
+// card standing at the top of the page2 profile, with a ghost decline beside the
+// accept — and that side is now two chips in the card's own strip, so the
+// `declineLabel` / `onDecline` pair went with it. What is left is a popup, which
+// is what this shape is for: a surface the app RAISES to ask something, as
+// against a state a card is simply IN.
+//
+// `inPopup` hands the card's BOTTOM to the sheet: a BottomSheet ends every popup
+// on the one standard gap, so the scaffold's own paddingBottom would stack a
+// second LG under the button.
 function ReplyingInviteCard({
   title,
   description,
@@ -634,10 +626,10 @@ function ReplyingInviteCard({
   onUnaffordable?: () => void
   busy?: boolean
   acceptLoading?: boolean
-  /** Set by the page1 invite POPUP use. Drops the scaffold's PAGE ground so the
-   * popup's own white shows through (user directive 2026-07-28: every popup is
-   * white). The page2 topBlock use leaves it off and keeps the tint, because
-   * there the card sits straight on a photo. */
+  /** Drops the scaffold's PAGE ground so the popup's own white shows through
+   * (user directive 2026-07-28: every popup is white). The one call site passes
+   * it — the tinted form was the incoming-invitation card, which sat straight on
+   * a photo and is now the strip's second row. */
   inPopup?: boolean
 }) {
   const unaffordable = affordable === false
@@ -667,21 +659,21 @@ function ReplyingInviteCard({
             </View>
           )}
           <View style={statusButtonStyles.btnAccept}>
-            {/* The invite pair keeps tone="positive" for intent, but since the
-                app unified onto one purple (2026-07-25) it resolves to the same
+            {/* The invite keeps tone="positive" for intent, but since the app
+                unified onto one purple (2026-07-25) it resolves to the same
                 purple as every other button — no separate action hue anymore. */}
             <Button
               variant="primary"
               tone="positive"
               label={acceptLabel}
-              iconStart={<CreditCost cost={costCredits} color={WHITE} bg={WHITE_SOFT} />}
+              iconStart={costCredits > 0 ? <CreditCost color={WHITE} bg={WHITE_SOFT} /> : undefined}
               onPress={handleAccept}
               disabled={acceptDisabled}
               loading={acceptLoading}
-              // Keep the in-flight lockout silent (no gray flicker) exactly
-              // as before; the legacy "can't afford and no fallback" path
-              // still shows the faded look. With a fallback we never hit
-              // the unaffordable-disabled branch.
+              // Keep the in-flight lockout silent (no gray flicker) exactly as
+              // before; the legacy "can't afford and no fallback" path still
+              // shows the faded look. With a fallback we never hit the
+              // unaffordable-disabled branch.
               silentDisabled={!unaffordable && !acceptLoading}
             />
           </View>
@@ -691,23 +683,20 @@ function ReplyingInviteCard({
   )
 }
 
-// Shared button-stack + in-button timer styles. Used by every StatusCard
-// variant (InviteTimerCard, EventMessageCard, ReplyingInviteCard). Kept in one
-// place so the call sites stay visually identical — the same bar, the same
-// small time text, the same horizontal insets.
+// The invite prompt's button block. It served three cards until 2026-08-01 and
+// serves one now; what it still states is the popup's own rhythm.
 const statusButtonStyles = StyleSheet.create({
   // The same block of actions a popup ends on (SheetActions in BottomSheet.tsx):
   // the widest gap in the surface stands between what was just said and what the
-  // user can do about it. Declared here rather than composed because these three
-  // cards animate their stack (`layout={STATUS_LAYOUT}`) — the VALUE is the
-  // shared one.
+  // user can do about it. Declared here rather than composed because the card
+  // animates its stack (`layout={STATUS_LAYOUT}`) — the VALUE is the shared one.
   stack: {
     marginTop: SHEET_GAP.actions,
     gap: SM,
   },
-  // Two-button row inside the StatusCard scaffold (ReplyingInviteCard:
-  // decline secondary + accept primary). The gap above the row comes from the
-  // enclosing `stack`, so the row itself is layout-only.
+  // Two-button row inside the scaffold (the incoming invitation: decline
+  // secondary + accept primary). The gap above the row comes from the enclosing
+  // `stack`, so the row itself is layout-only.
   // declineCell:acceptCell = 1:2 keeps the accept CTA visually dominant.
   btnRow: {
     flexDirection: 'row',
@@ -774,12 +763,11 @@ export default function HomePage() {
   // …AND HE MAY WATCH TWO PEOPLE BEFORE THAT (user directive 2026-07-31). The
   // browse allowance (lib/browseGate.ts) counts the faces this account has been
   // shown while it has no profile; once it is SPENT the third candidate does not
-  // rise at all and home's one action surface becomes the build-profile gate.
+  // rise at all and home's one action surface becomes the way to the photos.
   // Three places read it and nothing else does: the play button (there is none),
   // the centre notice (which becomes the gate), and the two paths a fresh
   // candidate could arrive by — the skip's commit and the promote effect.
   const browse = useBrowseAllowance(profileBuilt)
-  const [browseGateOpen, setBrowseGateOpen] = useState(false)
   // Read from the pull's commit, which must not change identity because a face
   // was counted — assigned during render, like overlaysRef.
   const browseSpentRef = useRef(false)
@@ -1200,6 +1188,12 @@ export default function HomePage() {
   // balance first, but the user can spend any heart they have. The
   // balance/extra split is displayed in settings, not here.
   const starsBalance = creditTotal(profile)
+  // The other half of the wallet: the credit standing in a deposit against an
+  // invitation of my own. It rides the dock's credits key as a "+N" beside the
+  // balance (user directive 2026-08-01), and it is what an ACCEPT may be paid
+  // out of when the balance cannot cover it — see creditsForApprove.
+  const heldCredits = creditHeld(profile)
+  const approveFunds = creditsForApprove(profile)
   const [prefsPopupOpen, setPrefsPopupOpen] = useState(false)
   const [appSettingsPopupOpen, setAppSettingsPopupOpen] = useState(false)
   const dockItems = useMemo<DockItem[]>(() => [
@@ -1269,31 +1263,32 @@ export default function HomePage() {
       // the number says how much is in it — always shown, exactly as the credits
       // row shows it, zero included.
       count: starsBalance,
+      // And the deposit beside it, at the glyph's other top corner, as a "+N"
+      // (user directive 2026-08-01). It is the same wallet: a credit that has
+      // left the balance but not the user, so the balance alone reads as less
+      // money than he has — most sharply at the one moment it matters, a user
+      // whose only credit is riding an invitation he is waiting on. No deposit,
+      // nothing painted; a "+0" is not a fact.
+      held: heldCredits > 0 ? heldCredits : undefined,
       onPress: () => { tap(); setAppSettingsPopupOpen(true) },
     },
-  ], [openProfileSheet, routeToCommunities, pendingCount, profileBuilt, circlesSeen, router, watcherCount, invisibleReason, starsBalance])
+  ], [openProfileSheet, routeToCommunities, pendingCount, profileBuilt, circlesSeen, router, watcherCount, invisibleReason, starsBalance, heldCredits])
 
 
 
   // Android hardware back. Priority, top of the stack downward:
   //   1. the topmost stacked overlay (profile sheet → Circles → chat) pops
-  //   2. the card in front of the user, when its own message is scrolled off the
-  //      top: back goes to the message before it does anything else (user
-  //      directive 2026-07-31 — see MatchCardHandle.backToTop). The card is the
-  //      one that decides, so there is no second statement here of what "has a
-  //      message" or "is at the top" means.
-  //   3. the derived invite overlay: pending declines (through its confirm),
+  //   2. the derived invite overlay: pending declines (through its confirm),
   //      dead is swallowed so back can't leave a card the server still owns
-  //   4. nothing left → false, i.e. leave the app
-  // Assigned during render (below) because steps 2-3 need values declared after
+  //   3. nothing left → false, i.e. leave the app
+  // A step used to stand between 1 and 2 — the card in front of the user took
+  // back UP to its own message when that message had been scrolled off the top
+  // of the profile. There is no message up there any more (2026-08-01): what it
+  // said is a line in the card's strip, which never leaves the screen, so there
+  // is nothing for back to return to and back is simply back.
+  // Assigned during render (below) because step 2 needs values declared after
   // this effect; the effect itself must stay mounted once.
   const inviteBackRef = useRef<(() => boolean) | null>(null)
-  const cardBackRef = useRef<(() => boolean) | null>(null)
-  // The two game cards, so back can reach whichever of them is in front of the
-  // user. Both boards render the same card in the same box, so both answer the
-  // same way; which one is being read is the only thing home decides (below).
-  const page1CardRef = useRef<MatchCardHandle>(null)
-  const page2CardRef = useRef<MatchCardHandle>(null)
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       const stack = overlaysRef.current
@@ -1305,7 +1300,6 @@ export default function HomePage() {
         else closeTopOverlay()
         return true
       }
-      if (cardBackRef.current?.()) return true
       return inviteBackRef.current?.() ?? false
     })
     return () => sub.remove()
@@ -2156,10 +2150,33 @@ export default function HomePage() {
       }
     })
   }, [busy, ignoreLoading])
+  // ── WHAT A PULL DOES, PER STATE ────────────────────────────────────────────
+  // (user directive 2026-08-01.) The card is draggable in EVERY state it is on
+  // screen in, not only while watching — a surface the app puts in front of you
+  // is put away the same way wherever it came from. What differs is what the
+  // release does, and it splits in two:
+  //
+  //  · The states that ASK first — waiting on an invitation I sent, and a chat —
+  //    raise their popup and the card springs home ('snapBack'). Both of those
+  //    are decisions with a consequence for somebody else, and both already have
+  //    a named dialog behind a chip in the strip; the drag is a second way to
+  //    the same question, never a silent answer to it.
+  //  · The states that simply END — watching (skip) and a card that is already
+  //    over (continue) — ride off ('slideOff') and fire, with no popup at all:
+  //    there is nothing to confirm about moving on.
+  //
+  // The handler is reached through a ref assigned during render, because half of
+  // what it calls is declared further down this component; the ref keeps the
+  // gesture's `onCommit` identity stable, so nothing rebuilds the pan per render.
+  const endedForPull = state === 'missed' || state === 'fail'
+  const pullAsks = state === 'waiting' || state === 'chat'
+  const pullCommitRef = useRef<() => void>(() => {})
+  const onPullCommit = useCallback(() => { pullCommitRef.current() }, [])
   const page1Pull = usePullBehavior({
     activation: 'scrollPan',
-    enabled: state === 'watching',
-    onCommit: runIgnore,
+    enabled: state === 'watching' || pullAsks || endedForPull,
+    onCommit: onPullCommit,
+    commit: pullAsks ? 'snapBack' : 'slideOff',
     tutorial: {
       // Once-ever, and only on a settled watching card with no overlay
       // eating the surface the demo animates on.
@@ -2480,6 +2497,15 @@ export default function HomePage() {
   // is open, replacing the visibility toggle. Destructive actions route
   // through a ConfirmDialog first.
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  // Which board's message is up, if any — see "what the heading chip's mark
+  // opens". One piece of state for both cards: only ever one of them is the card
+  // in front of the user.
+  const [messageOpen, setMessageOpen] = useState<'page1' | 'page2' | 'approve' | null>(null)
+  // What the message popup should do once it is out of the way. A popup that
+  // raises ANOTHER popup has to chain through `onClosed` — iOS silently refuses
+  // to present a second Modal while the first is still up — and this is the same
+  // ref-and-chain the invite prompt already uses for its two follow-ups.
+  const messageIntentRef = useRef<null | 'cancel' | 'buy'>(null)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
   // Out-of-hearts auto-hide flow: the settings visibility row surfaces a "buy
   // extra hearts" prompt instead of "go visible" when balance + extra is 0
@@ -2490,26 +2516,19 @@ export default function HomePage() {
   // by the effect next to headlineText. Lazy init so the first appearance is
   // already random rather than always the first sentence.
   const [readyHeadlineIdx, setReadyHeadlineIdx] = useState(() => pickHeadline(-1, READY_HEADLINES.length))
-  // Chat-state actions menu (opens from the MatchCard X button in chat
-  // state). Exactly two destructive options: end chat (leave) and block.
-  // Report is NOT here any more — it moved to a dedicated flag button on
-  // every match card (see reportTargetId / MatchCard.onReport below) so a
-  // user can report an inappropriate photo/bio before ever entering chat.
+  // Ending the chat: ONE popup, and it is the whole question (user directive
+  // 2026-08-02). A title, the sentence saying what ending a chat does, and the
+  // two answers — leaving, and leaving with a block — each of which FIRES on the
+  // tap. It was a bare row of those same two buttons where each one raised a
+  // SECOND popup asking the same thing again, so pressing "End chat" showed the
+  // words "End chat" twice and had to be answered twice. Nothing chains through
+  // `onClosed` any more either: the intent ref that existed only to hand a Modal
+  // over to another Modal is gone with both ConfirmDialogs.
+  // Report is NOT here — it moved to a dedicated flag button on every match
+  // card (see reportTargetId / MatchCard.onReport below) so a user can report
+  // an inappropriate photo/bio before ever entering chat.
   const [chatMenuOpen, setChatMenuOpen] = useState(false)
-  const [chatConfirmAction, setChatConfirmAction] = useState<'block' | 'leave' | null>(null)
-  // Both rows of that menu open ANOTHER Modal (the leave / block
-  // ConfirmDialog). Flipping the confirm on in the same tick as closing the
-  // menu races two Modals on the same parent stack: the confirm silently never
-  // presents, and because its `visible` stayed true the menu could not be
-  // reopened either (reported 2026-07-27). Stash the intent and fire it from
-  // BottomSheet.onClosed, after the menu's Modal has fully unmounted — the
-  // same chaining the invite popup and the settings sheet already use.
-  const chatMenuIntentRef = useRef<'block' | 'leave' | null>(null)
-  const handleChatMenuClosed = useCallback(() => {
-    const intent = chatMenuIntentRef.current
-    chatMenuIntentRef.current = null
-    if (intent) setChatConfirmAction(intent)
-  }, [])
+  const closeChatMenu = useCallback(() => setChatMenuOpen(false), [])
   // User id to report, set by the flag button on ANY match card (page1
   // watching/waiting/chat/ended + page2 pending/dead-invite). One shared
   // report confirm is driven off this — the surface is detected server-side,
@@ -2557,11 +2576,16 @@ export default function HomePage() {
   const invitedPage1 = profile?.relations?.page1 as { expires_at?: string; invited_at?: string; extended?: boolean; message?: string } | undefined
   const inviteExpiresAt = invitedPage1?.expires_at
 
-  // Title/description for terminal locked-message cards. Keyed by the raw v3
-  // server `message` (page1.message / page2.message), not the legacy `event`
-  // shim — keeps the lookup orthogonal to userStore's missed/fail synthesis.
+  // The LINE a terminal card's strip states, keyed by the raw v3 server
+  // `message` (page1.message / page2.message), not the legacy `event` shim —
+  // which keeps the lookup orthogonal to userStore's missed/fail synthesis.
   // page1 texts vary by the other user's gender (he/she); page2 texts vary by
   // both (other user's verb + user's "available/answered" adjective).
+  //
+  // The TITLE and nothing else (user directive 2026-08-01): each of these states
+  // had a paragraph under it as well, and each paragraph restated its title and
+  // then said in words what the chip beside the line now says as a verb. The
+  // `.desc` half of this key set is deleted.
   const page1Message = isEndedState ? invitedPage1?.message : undefined
   const page1MessageTitle = page1Message ? tg(`home.locked.page1.${page1Message}.title` as never, matchIsMale) : ''
   const page1MessageDesc = page1Message ? tg(`home.locked.page1.${page1Message}.desc` as never, matchIsMale) : ''
@@ -2747,30 +2771,21 @@ export default function HomePage() {
     invoke('app/focus', { notif_perm: notifPerm }).catch(() => {})
   }, [notifPerm])
 
-  // Page2 pending-invite card — sits at the TOP of the page2 MatchCard
-  // (topBlock), mirroring how InviteTimerCard sits on the page1 sent-invite
-  // card. StatusCard scaffold, no standalone heading (the title rides as a
-  // bold lead-in inside the body via StatusCardText), accept CTA + decline
-  // secondary inside the card. Its clock is on the card's name/age chip, not in
-  // here (see page2Countdown below). The decline button opens the same
-  // refuse-confirm dialog as the swipe-down gesture on the sheet.
-  const replyingInviteCard = page2PendingInvite ? (
-    <ReplyingInviteCard
-      title={tg('home.replyingTitle', page2PendingInvite.is_male)}
-      description={tgg('home.replyingDesc', isMale, page2PendingInvite.is_male)}
-      acceptLabel={t('home.replyingAccept')}
-      declineLabel={t('home.watchingReject')}
-      costCredits={CREDIT_COST.approve}
-      affordable={starsBalance >= CREDIT_COST.approve}
-      onAccept={() => runAction('app/approve', 'replying-accept')}
-      onDecline={openRefuseConfirm}
-      // Same as the invite card: unaffordable accept opens the buy-extra
-      // popup instead of dimming the button.
-      onUnaffordable={() => { tap(); setBuyExtraOpen(true) }}
-      busy={busy}
-      acceptLoading={busy && pendingKey === 'replying-accept'}
-    />
-  ) : null
+  // THE INCOMING INVITATION, IN THE CARD'S OWN STRIP (user directive
+  // 2026-08-01). It was a status card at the top of the page2 card — a title, a
+  // paragraph and two buttons — and it is one line and two chips now: the quiet
+  // answer first and the purple one last, which is the app's rule wherever two
+  // actions stand together. The cost badge stays ON the accept chip, which is
+  // the reason a strip's chips are a size up (CHIP_HEIGHT_MD): what this press
+  // spends must be legible at the moment of pressing.
+  //
+  // Being unaffordable does not dim it — the press routes to the buy popup
+  // instead, exactly as the card's button did. The DEPOSIT counts here and
+  // nowhere else (see creditsForApprove): the server pays an accept out of it
+  // when the wallet cannot, so measuring against balance + extra alone sent the
+  // one user this was written for — someone waiting on an invitation of his own,
+  // with his only credit riding it — to a buy popup instead of to the chat.
+  // (built below, beside page1's, where the ended-state predicates are)
 
   // Hero-photo overlay button on the page1 MatchCard:
   //   - watching → heart only. Tapping it now opens the invite popup
@@ -2932,14 +2947,21 @@ export default function HomePage() {
         // NOT take the card away (see blockingNotice, which is deliberately not
         // told about it): the person on screen is one of the two he is allowed
         // to be watching, and the gate stands where the NEXT one would rise.
-        // The circle wears the mark of what it opens — the build-profile
-        // popup's own glyph, exactly as the no-candidate circle wears the
-        // search popup's.
+        // THE CIRCLE IS THE DOOR ITSELF, NOT A POPUP IN FRONT OF ONE (user
+        // directive 2026-08-01). A tap goes straight to the photo step — the
+        // same jump the dock's profile key makes for an unfinished account, so
+        // the resume is onboarding's own `initialStep` and nothing here can
+        // disagree with it. It used to raise the app's BuildProfileGate popup,
+        // whose one button did exactly this: a surface saying "you need a
+        // profile" over a pane whose headline already says it, with a button
+        // for the only thing there is to do. What is actually missing is
+        // PHOTOS, so the mark is the app's own CameraIcon rather than the
+        // build-a-profile glyph — the circle wears what it opens.
         : browse.spent
           ? {
               text: t('home.browseGateTitle'),
-              icon: <UserPlusIcon color={WHITE} size={CENTER_GLYPH_SIZE} />,
-              onPress: () => { tap(); setBrowseGateOpen(true) },
+              icon: <CameraIcon color={WHITE} size={CENTER_GLYPH_SIZE} />,
+              onPress: () => { tap(); router.push('/onboarding') },
             }
           : null
 
@@ -2958,26 +2980,14 @@ export default function HomePage() {
   // incoming (someone invited this user) → ReplyingInviteCard.
   //
   // AND A CARD THAT IS OVER CARRIES NO CLOCK AT ALL (user directive
-  // 2026-07-31). An invitation that ended used to hold the chip's clock at a
-  // frozen 00:00, so that "this is over" was said by the same number that had
-  // been counting; it says it with an X now — the same purple block, in the
-  // same place — because a stopped clock states a number that cannot change any
-  // more, and because the states with no deadline of their own (a chat the
-  // other side ended, a declined invitation) had nothing standing there at all.
-  // One mark for every ending, and it is the way back: `endedBack` on the card
-  // scrolls the profile up to the EventMessageCard, or — when the card is
-  // already at the top, so that message and its button are in front of the user
-  // — simply IS that button. Which is why it is handed the very handler the
-  // button carries rather than a flag beside it: one statement of what "back to
-  // the game" means on this board, read by both. The two predicates below are
-  // what BOTH the topBlock branch and that prop read, so the mark and the card
-  // under it can never disagree about whether this person is finished with.
+  // 2026-07-31): a deadline that has passed is not a number any more. What that
+  // card says is said by the strip's LINE, which is the state's own title.
   const waitingExpiresAt = displayedCardMode === 'waiting' ? inviteExpiresAt ?? null : null
   const page1Ended = isEndedState && !!page1MessageTitle
   const page2Ended = !page2PendingInvite && !!page2MessageTitle
   const page1Back = () => runAction('app/clear1', 'ended-stop')
   const page2Back = () => runAction('app/free2', 'free2')
-  // The lapse fires from the clock, so it travels with it: the moment the chip's
+  // The lapse fires from the clock, so it travels with it: the moment the strip's
   // countdown hits zero it asks the server to settle the invitation.
   const page1Countdown: CardCountdown | undefined =
     displayedCardMode === 'waiting' && inviteExpiresAt
@@ -2987,6 +2997,53 @@ export default function HomePage() {
     page2PendingInvite
       ? { expiresAt: page2PendingInvite.expires_at, onLapsed: handleInviteLapsed }
       : undefined
+
+  // ── WHAT THE HEADING CHIP'S MARK OPENS ─────────────────────────────────────
+  // (user directive 2026-08-01.) The three status CARDS this app used to render
+  // at the top of a profile's scroll are a POPUP now, raised by the chevron
+  // beside the clock: the state's own title, its paragraph and its buttons, in
+  // the surface the app already uses for everything it has to say. What made the
+  // old arrangement wrong was never the words — it was that scrolling to the face
+  // carried them off the screen, and that the strip which replaced them turned
+  // the one surface meant to be a FACE into a board of furniture.
+  //
+  // `messageOpen` is which board's message is up, and the popup reads its
+  // content from the same predicates the chip's clock does, so the mark and what
+  // it opens can never disagree.
+  const page1HasMessage = (displayedCardMode === 'waiting' && !!inviteExpiresAt) || page1Ended
+  const page2HasMessage = !!page2PendingInvite || page2Ended
+  const openPage1Message = useCallback(() => { tap(); setMessageOpen('page1') }, [])
+  const openPage2Message = useCallback(() => { tap(); setMessageOpen('page2') }, [])
+  // The round chat button's own popup. Same card, ONE answer: the user reached
+  // for the chat, so this surface is the approval and nothing else (user
+  // directive 2026-08-01, "certainly no skip button"). Refusing is what the
+  // heading chip's message opens, and what the drag and hardware back ask.
+  const openApprove = useCallback(() => { tap(); setMessageOpen('approve') }, [])
+  // Chat is the state with no deadline and something to press: its word takes
+  // the clock's own place on the chip (user directive 2026-08-01). Ending the
+  // conversation has lived with whom it ends since 2026-07-26; only where on the
+  // card has moved.
+  const page1Trailing = displayedCardMode === 'chat'
+    ? { label: t('chat.endChat'), onPress: () => { tap(); setChatMenuOpen(true) } }
+    : undefined
+
+  // AN INVITATION THAT ARRIVED IS ANSWERED THE WAY ONE IS SENT (user directive
+  // 2026-08-01): the page2 card wears the watching card's layout — one round
+  // action floating over the photo, raising a popup that states what the press
+  // does and what it costs. The mark is the CHAT glyph, because a heart says
+  // "this person" and what accepting actually gives is the conversation; it
+  // carries NO credit gem, exactly as the heart on the sending side does not.
+  // What the credit costs is the POPUP's to say, in words, which is where a
+  // sender reads it too.
+  //
+  // It raises the very popup the heading chip's chevron does, so the two routes
+  // ask one question. (For an hour that day the button accepted outright, with a
+  // gem on its arc and a spinner in its glyph while the server had it; the same
+  // day it was put back, because the two sides of an invitation must not be two
+  // different flows.)
+  const page2CardActions: CardAction[] = page2PendingInvite
+    ? [{ key: 'accept', icon: <ChatIcon color={INK} size={ICON.huge} />, onPress: openApprove }]
+    : []
 
   // Single headline text for the home pane — swaps value based on state.
   // Rendered through the same SkipHintLabel used during pull-to-skip, so
@@ -3064,13 +3121,21 @@ export default function HomePage() {
     if (page2PendingInvite) { openRefuseConfirm(); return true }
     return true
   }
-  // Back button, step 2 — and it runs BEFORE the branch above, so an invitation
-  // whose profile has been scrolled into is put back in front of its own Skip /
-  // Open chat buttons rather than raising the decline confirm from under them.
-  // Only the card the user is actually reading is asked: the page2 invitation
-  // paints over the page1 card, so while it is up it is the one in front.
-  cardBackRef.current = () =>
-    (inviteOverlayOpen ? page2CardRef.current : page1CardRef.current)?.backToTop() ?? false
+  // (A step used to run BEFORE the branch above, taking back up to the card's
+  // own message when the profile had been scrolled into. The message is in the
+  // strip now and never off screen, so an invitation's Skip / Open are always in
+  // front of the reader and back goes straight to the decline confirm.)
+
+  // What a committed pull on the page1 card does — the handler behind
+  // `onPullCommit`, assigned during render because most of what it calls is
+  // declared below the hook. It is deliberately the SAME function each state's
+  // chip in the strip carries: the drag and the word are two ways to one
+  // decision, and they cannot come apart.
+  pullCommitRef.current =
+    displayedCardMode === 'waiting' ? () => { tap(); setCancelConfirmOpen(true) }
+    : displayedCardMode === 'chat' ? () => { tap(); setChatMenuOpen(true) }
+    : page1Ended ? page1Back
+    : runIgnore
 
   // The Communities awareness nudge that used to live here — a watched-profile
   // counter that threw the hub + a popup over the card after the third face —
@@ -3321,51 +3386,28 @@ export default function HomePage() {
                       >
                         <View style={styles.matchPhoto}>
                           <MatchCard
-                            ref={page1CardRef}
                             match={displayedMatch}
                             viewerLocationType={resolveLocationType(profile)}
                             bottomInset={0}
                             // The dock is a flow sibling right under page1's box,
                             // so this card never reaches the screen edge and the
-                            // band below belongs to the strip, not to it.
+                            // band below belongs to the dock, not to it.
                             bottomChrome
                             cardHeight={paneHeight}
                             // While waiting on a sent invitation the inviter sees
                             // only the distance, never the last-seen time.
                             hideTime={displayedCardMode === 'waiting'}
                             actions={page1CardActions}
-                            // Chat state: the "End chat" control rides beside the
-                            // name/age heading (moved off the chat sheet header,
-                            // 2026-07-26). Opens the same leave/block sheet.
-                            headingAction={state === 'chat'
-                              ? { label: t('chat.endChat'), onPress: () => { tap(); setChatMenuOpen(true) } }
-                              : undefined}
                             onReport={() => openReport(displayedMatch.user_id)}
-                            onCircleTap={() => circles.open(displayedMatch.user_id, displayedMatch.is_male)}
+                            onCircleTap={n => circles.open(displayedMatch.user_id, displayedMatch.is_male, n)}
                             chromeInset={topInset}
-                            // The clock for whichever status card is below —
-                            // riding the name/age chip, out of the scroll. On a
-                            // card that is OVER the same tile carries the X back
-                            // to that card's message instead (user directive
-                            // 2026-07-31); the two are never both set.
+                            // The heading chip's trailing block: the clock, the
+                            // mark that opens this state's message, and in chat
+                            // the word that ends it.
                             countdown={page1Countdown}
-                            endedBack={page1Ended ? page1Back : undefined}
-                            topBlock={
-                              displayedCardMode === 'waiting' && inviteExpiresAt ? (
-                                <InviteTimerCard
-                                  targetIsMale={matchIsMale}
-                                  userIsMale={isMale}
-                                  onCancel={() => { tap(); setCancelConfirmOpen(true) }}
-                                />
-                              ) : page1Ended ? (
-                                <EventMessageCard
-                                  title={page1MessageTitle}
-                                  description={page1MessageDesc}
-                                  onContinue={page1Back}
-                                  busy={busy && pendingKey === 'ended-stop'}
-                                />
-                              ) : undefined
-                            }
+                            onMessage={page1HasMessage ? openPage1Message : undefined}
+                            trailingLabel={page1Ended ? t('home.cardEnded') : undefined}
+                            trailingAction={page1Trailing}
                           />
                         </View>
                       </RisingCard>
@@ -3409,7 +3451,16 @@ export default function HomePage() {
                   <OverlaySheet
                     open={inviteOverlayOpen}
                     activation="scrollPan"
-                    swipeToClose={!page2PendingInvite}
+                    // A PENDING INVITATION IS DRAGGED, AND THE DRAG ASKS (user
+                    // directive 2026-08-01): the card moves under the finger like
+                    // every other surface in the app, and a committed pull
+                    // springs it home and raises the decline confirm — a named,
+                    // cancellable question, which is exactly what `onClose`
+                    // already does for this card. It is never a silent Skip,
+                    // which is what the no-swipe rule of 2026-07-30 was actually
+                    // protecting against. The DEAD card asks nothing, so riding
+                    // it off IS its Continue.
+                    commit={page2PendingInvite ? 'confirm' : 'dismiss'}
                     onClose={closeInviteOverlay}
                     isTop={!chatOpen && !profileSheetOpen && !communitiesSheetOpen}
                     chromeless
@@ -3418,12 +3469,11 @@ export default function HomePage() {
                   >
                     {inviteCardMatch ? (
                       <MatchCard
-                        ref={page2CardRef}
                         key={`invite-${inviteCardMatch.user_id}`}
                         match={inviteCardMatch}
-                        actions={[]}
+                        actions={page2CardActions}
                         onReport={() => openReport(inviteCardMatch.user_id)}
-                        onCircleTap={() => circles.open(inviteCardMatch.user_id, inviteCardMatch.is_male)}
+                        onCircleTap={n => circles.open(inviteCardMatch.user_id, inviteCardMatch.is_male, n)}
                         viewerLocationType={resolveLocationType(profile)}
                         bottomInset={0}
                         // Rendered inside page1's box like the card above, so the
@@ -3433,20 +3483,11 @@ export default function HomePage() {
                         // the two cards' photos are one size and neither can be
                         // measured against a box the other never had.
                         cardHeight={paneHeight}
-                        chromeInset={topInset}
                         onReady={page2Discovery ? () => setPage2Discovery(false) : undefined}
+                        chromeInset={topInset}
                         countdown={page2Countdown}
-                        endedBack={page2Ended ? page2Back : undefined}
-                        topBlock={page2PendingInvite
-                          ? replyingInviteCard
-                          : page2Ended ? (
-                            <EventMessageCard
-                              title={page2MessageTitle}
-                              description={page2MessageDesc}
-                              onContinue={page2Back}
-                              busy={busy && pendingKey === 'free2'}
-                            />
-                          ) : undefined}
+                        onMessage={page2HasMessage ? openPage2Message : undefined}
+                        trailingLabel={page2Ended ? t('home.cardEnded') : undefined}
                       />
                     ) : null}
                   </OverlaySheet>
@@ -3459,6 +3500,95 @@ export default function HomePage() {
                     OPENS — chat, the profile preview, Circles — still rise over
                     it; those are not the page. */}
                 <HomeDock items={dockItems} bottom={dockBottom} />
+
+                {/* THE CARD'S MESSAGE (user directive 2026-08-01), raised by the
+                    chevron beside the clock on the heading chip. It is the
+                    status CARD this app used to render at the top of the
+                    profile's scroll, moved into the surface the app already uses
+                    for everything it has to say: the same title, the same
+                    paragraph, the same buttons.
+
+                    The incoming invitation is `ReplyingInviteCard`, which is
+                    that shape already and carries the accept's credit badge, so
+                    what a press SPENDS is legible at the moment of pressing. The
+                    other three are a title, a sentence and one button.
+
+                    Every follow-up that opens ANOTHER Modal runs from
+                    `onClosed`: the cancel confirm and the buy-extra picker are
+                    both popups, and iOS refuses to present a second one while
+                    the first is still up. */}
+                <BottomSheet
+                  visible={messageOpen !== null}
+                  onDismiss={() => setMessageOpen(null)}
+                  disableBackdropDismiss={busy}
+                  onClosed={() => {
+                    const intent = messageIntentRef.current
+                    messageIntentRef.current = null
+                    if (intent === 'cancel') setCancelConfirmOpen(true)
+                    else if (intent === 'buy') { tap(); setBuyExtraOpen(true) }
+                  }}
+                >
+                  {(messageOpen === 'page2' || messageOpen === 'approve') && page2PendingInvite ? (
+                    <ReplyingInviteCard
+                      title={tg('home.replyingTitle', page2PendingInvite.is_male)}
+                      // Not gendered any more: the sentence says what approving
+                      // DOES and what it COSTS, and neither half is about either
+                      // person.
+                      description={t('home.replyingDesc')}
+                      acceptLabel={t('home.replyingAccept')}
+                      // THE ROUND BUTTON'S ROUTE OFFERS ONE ANSWER ONLY (user
+                      // directive 2026-08-01): the user reached for the chat, so
+                      // that popup is the approval and what it costs — not a
+                      // question with two sides, and "certainly no skip button".
+                      // The heading chip's route is the card's MESSAGE and keeps
+                      // the decline, which is also what the drag and hardware
+                      // back raise.
+                      declineLabel={messageOpen === 'page2' ? t('home.watchingReject') : undefined}
+                      costCredits={CREDIT_COST.approve}
+                      // The DEPOSIT counts here and nowhere else (see
+                      // creditsForApprove): the server pays an accept out of it
+                      // when the wallet cannot, so a card that measured this
+                      // button against balance + extra alone sent the one user it
+                      // was written for — someone waiting on an invitation of his
+                      // own, with his only credit riding it — to a buy popup
+                      // instead of to the chat.
+                      affordable={approveFunds >= CREDIT_COST.approve}
+                      onAccept={() => runAction('app/approve', 'replying-accept')}
+                      onDecline={messageOpen === 'page2' ? () => { setMessageOpen(null); openRefuseConfirm() } : undefined}
+                      onUnaffordable={() => { messageIntentRef.current = 'buy'; setMessageOpen(null) }}
+                      busy={busy}
+                      acceptLoading={busy && pendingKey === 'replying-accept'}
+                      inPopup
+                    />
+                  ) : messageOpen === 'page1' && displayedCardMode === 'waiting' ? (
+                    <CardMessage
+                      title={tg('home.waitingTimerTitle', matchIsMale)}
+                      description={tgg('home.waitingTimerDesc', isMale, matchIsMale)}
+                      label={t('home.cancelWaitingBtn')}
+                      icon={<CloseIcon color={WHITE} />}
+                      // Cancelling forfeits the held credit, so it keeps its own
+                      // named question — the popup states what is happening, the
+                      // confirm asks whether to end it.
+                      onPress={() => { messageIntentRef.current = 'cancel'; setMessageOpen(null) }}
+                    />
+                  ) : messageOpen === 'page1' ? (
+                    <CardMessage
+                      title={page1MessageTitle}
+                      description={page1MessageDesc}
+                      label={t('home.endedBack')}
+                      busy={busy && pendingKey === 'ended-stop'}
+                      onPress={() => { setMessageOpen(null); page1Back() }}
+                    />
+                  ) : messageOpen === 'page2' ? (
+                    <CardMessage
+                      title={page2MessageTitle}
+                      description={page2MessageDesc}
+                      label={t('home.endedBack')}
+                      busy={busy && pendingKey === 'free2'}
+                      onPress={() => { setMessageOpen(null); page2Back() }}
+                    />
+                  ) : null}
+                </BottomSheet>
 
                 {/* Invite prompt popup — raised by the hero heart in the
                     watching state (moved off the MatchCard footer 2026-07-25).
@@ -3510,35 +3640,31 @@ export default function HomePage() {
                   />
                 </BottomSheet>
 
+                {/* Neither line is genderized any more: since both name the
+                    PHOTOS instead of telling the user to go and build something
+                    (2026-08-01), neither is in the imperative and neither
+                    carries a {m|f} marker. */}
                 <BuildProfileGate
                   visible={buildProfileOpen}
-                  title={genderize(t('home.buildProfileTitle'), isMale)}
+                  title={t('home.buildProfileTitle')}
                   description={t('home.buildProfileDesc')}
                   onClose={() => setBuildProfileOpen(false)}
                 />
 
-                {/* The browse allowance's door, raised by the centre circle once
-                    two faces have been spent. Same popup as the three others;
-                    its title is the line already standing in the pane behind it,
-                    so pressing the circle reads as that sentence opening. */}
-                <BuildProfileGate
-                  visible={browseGateOpen}
-                  title={t('home.browseGateTitle')}
-                  description={genderize(t('home.browseGateDesc'), isMale)}
-                  onClose={() => setBrowseGateOpen(false)}
-                />
+                {/* The browse allowance has NO popup (user directive
+                    2026-08-01): the centre circle goes straight to the photo
+                    step. See centerNotice. */}
 
                 {/* The Communities members-only gate, raised by the dock's faded
                     circles key and by the routed entries above (push tap /
                     redeemed invite link). Same popup as the two other shut
-                    doors, only the sentence differs: the one button is the build
+                    doors, only the sentence differs: the one button is the photo
                     flow, so what says what is missing is also what fixes it.
-                    The sentence ends in an imperative addressed to the user, so
-                    it is genderized like the invite door's title above. */}
+                    Not genderized either, for the reason above. */}
                 <BuildProfileGate
                   visible={commGateOpen}
                   title={t('communities.gateTitle')}
-                  description={genderize(t('communities.gateDesc'), isMale)}
+                  description={t('communities.gateDesc')}
                   onClose={() => setCommGateOpen(false)}
                 />
 
@@ -3570,63 +3696,55 @@ export default function HomePage() {
                     icon-as-action-button), and is mirrored on page2. See
                     `centerNotice` and `noticeOverridesCard`. */}
 
-                {/* Chat-state actions menu (opened from the "End" chip pinned
-                    beside the name/age heading on the home card, 2026-07-26 —
-                    it used to live in the chat sheet header). The app's one
-                    popup foot (SheetActionPair, 2026-07-31): leaving is what the
-                    user came here for, so it is the purple and it ENDS the row;
-                    blocking is the drastic, rarely-wanted one, so it is a bare
-                    mark on no ground at all, passed on the way past. It was two
-                    full-width tiles stacked with the purple LEADING and the
-                    drastic one receding into a muted secondary — but a tile is a
-                    tile, and the thing you must never press by accident was
-                    still painted as something to press (the same correction the
-                    account popup's delete got). `flush`: this popup is nothing
-                    but the row, so there is nothing above it to stand clear of.
-                    Report is a card-level affordance, not here. */}
+                {/* Ending the chat — opened by "End chat" on the card's heading
+                    chip (2026-07-26; it used to live in the chat sheet header).
+                    ONE popup, saying what it is and what ending a chat does, and
+                    the two answers ACT (user directive 2026-08-02): each of these
+                    used to hand over to a ConfirmDialog that asked the identical
+                    question a second time, and a popup raised by a named action
+                    has nothing further to ask — what it owes the user is what the
+                    action DOES, which is what the title and the sentence are for.
+                    So this is the ordinary popup now (title + desc + the app's
+                    popup foot), not the `flush` row of nothing but buttons.
+                    SheetActionPair, 2026-07-31: leaving is what the user came for,
+                    so it is the purple and it ENDS the row; blocking is the
+                    drastic, rarely-wanted one, so it is a bare mark on no ground
+                    at all, passed on the way past. Report is a card-level
+                    affordance, not here. */}
                 <BottomSheet
                   visible={chatMenuOpen}
-                  onDismiss={() => setChatMenuOpen(false)}
-                  onClosed={handleChatMenuClosed}
+                  onDismiss={() => { if (!busy) closeChatMenu() }}
+                  disableBackdropDismiss={busy}
                 >
+                  <SheetTitle>{t('home.leaveTitle')}</SheetTitle>
+                  <SheetDesc>{t('home.leaveDesc')}</SheetDesc>
                   <SheetActionPair
-                    flush
                     options={[{
                       key: 'block',
                       label: t('chat.block'),
                       icon: <BlockIcon color={INK} size={ICON.xxl} />,
-                      onPress: () => { tap(); chatMenuIntentRef.current = 'block'; setChatMenuOpen(false) },
+                      // In flight: a spinner in the glyph's own place, which is
+                      // the strip's way of saying it everywhere. The LOCKOUT
+                      // while the other answer is running is runAction's own
+                      // `busy` guard and nothing else — `disabled` here would
+                      // fade this option for the frames the leave takes, and a
+                      // sibling greying out is a flicker, not information (the
+                      // same reason the button beside it takes silentDisabled).
+                      busy: busy && pendingKey === 'block',
+                      onPress: () => runAction('app/block', 'block', closeChatMenu),
                     }]}
                     action={
                       <Button
                         label={t('chat.leave')}
                         iconStart={<SignOutIcon color={WHITE} />}
-                        onPress={() => { tap(); chatMenuIntentRef.current = 'leave'; setChatMenuOpen(false) }}
+                        loading={busy && pendingKey === 'leave'}
+                        disabled={busy}
+                        silentDisabled={pendingKey !== 'leave'}
+                        onPress={() => runAction('app/leave', 'leave', closeChatMenu)}
                       />
                     }
                   />
                 </BottomSheet>
-
-                <ConfirmDialog
-                  visible={chatConfirmAction === 'leave'}
-                  title={t('home.leaveTitle')}
-                  description={t('home.leaveDesc')}
-                  confirmLabel={t('home.leaveConfirm')}
-                  confirmIconStart={<SignOutIcon color={WHITE} />}
-                  onCancel={() => { if (!busy) setChatConfirmAction(null) }}
-                  onConfirm={() => runAction('app/leave', 'leave', () => setChatConfirmAction(null))}
-                  busy={busy && pendingKey === 'leave'}
-                />
-                <ConfirmDialog
-                  visible={chatConfirmAction === 'block'}
-                  title={t('chat.blockTitle')}
-                  description={t('chat.blockDesc')}
-                  confirmLabel={t('chat.blockConfirm')}
-                  confirmIconStart={<BlockIcon color={WHITE} />}
-                  onCancel={() => { if (!busy) setChatConfirmAction(null) }}
-                  onConfirm={() => runAction('app/block', 'block', () => setChatConfirmAction(null))}
-                  busy={busy && pendingKey === 'block'}
-                />
                 {/* One shared report confirm for every match-card surface
                     (page1 + page2). The reported user id is whatever card's
                     flag was tapped; the server detects the relation surface

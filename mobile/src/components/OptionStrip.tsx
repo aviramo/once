@@ -47,8 +47,8 @@ export const STRIP_LABEL: TextStyle = {
 // the strip is standing ON, which only the host knows (the dock is the page's own
 // colour under a shadow; the bar is a popup's white), so they arrive as `style`.
 // The one other thing a host knows is whether the strip is the whole row: the
-// group popup stands its single quiet option beside a purple invitation, which
-// is what `hug` is for.
+// account popup and chat's leave/block stand their single quiet option beside a
+// purple action, which is what `hug` is for.
 
 export type StripOption = {
   /** Stable identity for the option — never rendered. */
@@ -68,6 +68,14 @@ export type StripOption = {
    *  hangs in is a zero-size absolute box, so one that paints nothing costs
    *  nothing and moves nothing. */
   marker?: ReactNode
+  /** THE SAME SLOT, MIRRORED: the glyph's other top corner, for a second mark of
+   *  the same kind standing against the first (the dock's credit deposit beside
+   *  its balance, user directive 2026-08-01 — "let there be symmetry with the
+   *  regular credits number"). It is one geometry stated once and reflected, so
+   *  the pair straddles the glyph evenly and neither mark reads as the odd one;
+   *  a corner with nothing to say paints nothing, exactly as this one does when
+   *  no host passes it. */
+  markerStart?: ReactNode
   /** This option is in flight: a spinner stands in its glyph's own place, the
    *  same "say it where the mark is" the photo rows give a slow picker. A busy
    *  option is never faded — it is the one that is working. */
@@ -95,12 +103,13 @@ const MARKER_NUDGE = XS / 2
 export function OptionStrip({ options, hug, style }: {
   options: StripOption[]
   /** THE STRIP IS NOT THE WHOLE ROW: each option takes the room its own glyph
-   *  and word need instead of an equal share. For the one host that stands the
-   *  strip BESIDE something else — the group popup's single quiet option next to
-   *  the purple invitation — where an even split would give one small word half
-   *  the row and wrap the action being offered onto two lines. Both full-width
-   *  hosts leave it off: there, the equal share IS the layout (two options divide
-   *  the strip in half, four land the rules on the quarters). */
+   *  and word need instead of an equal share. For the hosts that stand the strip
+   *  BESIDE something else — the account popup's delete and chat's block, each
+   *  next to the purple action — where an even split would give one small word
+   *  half the row and wrap the action being offered onto two lines. Every
+   *  full-width host leaves it off, the group popup's own foot included: there,
+   *  the equal share IS the layout (two options divide the strip in half, four
+   *  land the rules on the quarters). */
   hug?: boolean
   /** The host's ground, lift and outer padding — see the note above. */
   style?: StyleProp<ViewStyle>
@@ -132,7 +141,7 @@ export function OptionStrip({ options, hug, style }: {
                 pressed && (faded ? styles.itemFadedPressed : styles.itemPressed),
               ]}
             >
-              {/* ONE marker slot, whatever the mark is (user directive
+              {/* ONE marker slot per corner, whatever the mark is (user directive
                   2026-07-30: a dot and a number must sit identically over their
                   glyphs). The rule: the marker stands off the glyph's box on the
                   END side, pulled back toward it by MARKER_NUDGE, its box centred
@@ -155,12 +164,22 @@ export function OptionStrip({ options, hug, style }: {
                   this painted. Yoga measures an ABSOLUTE child with no width and
                   no opposing insets at its natural size instead (nothing to
                   constrain it), and still places it by the parent's own
-                  align/justify. */}
+                  align/justify.
+
+                  The START corner is that rule reflected and nothing else: the
+                  anchor moves to the other side, the ink's END edge takes the
+                  corner instead of its start, and the nudge back toward the
+                  glyph closes the gap from the other direction. */}
               <View style={styles.glyph}>
                 {o.busy ? <ActivityIndicator color={INK} /> : o.icon}
                 {o.marker ? (
-                  <View style={styles.markerAnchor}>
-                    <View style={styles.markerFree}>{o.marker}</View>
+                  <View style={[styles.markerAnchor, styles.markerAnchorEnd]}>
+                    <View style={[styles.markerFree, styles.markerFreeEnd]}>{o.marker}</View>
+                  </View>
+                ) : null}
+                {o.markerStart ? (
+                  <View style={[styles.markerAnchor, styles.markerAnchorStart]}>
+                    <View style={[styles.markerFree, styles.markerFreeStart]}>{o.markerStart}</View>
                   </View>
                 ) : null}
               </View>
@@ -218,26 +237,32 @@ const styles = StyleSheet.create({
   // for a working option's mark cannot shift the word under it. A caller passing
   // a bigger glyph simply grows the box.
   glyph: { minHeight: STRIP_GLYPH, alignItems: 'center', justifyContent: 'center' },
-  // The number's anchor: a point, not a box. Zero on both axes at the glyph's
-  // top-END corner. Nothing here clips (neither host has an overflow of its own,
-  // and both hold more air above the glyph than half a line of this size), which
-  // is the same thing the dot beside it already relies on.
+  // The number's anchor: a point, not a box. Zero on both axes, at one of the
+  // glyph's top corners. Nothing here clips (neither host has an overflow of its
+  // own, and both hold more air above the glyph than half a line of this size),
+  // which is the same thing the dot beside it already relies on. Along the
+  // glyph's top edge it is CENTRED, i.e. the mark straddles that edge — the one
+  // thing both corners share and the reason a pair of them reads as one line.
   markerAnchor: {
     position: 'absolute',
     top: 0,
-    end: 0,
     width: 0,
     height: 0,
-    // Across: the ink's START edge on the corner, so it stands beside the glyph
-    // rather than over it. Along: centred on the glyph's top edge.
-    alignItems: 'flex-start',
     justifyContent: 'center',
   },
+  // The two corners, and the whole difference between them: which side the point
+  // sits on, and which of the mark's edges is pinned to it. `flex-start` puts the
+  // ink's START edge on the END corner so it grows outward; `flex-end` is that
+  // sentence with both words swapped. Logical, so both mirror with the language.
+  markerAnchorEnd: { end: 0, alignItems: 'flex-start' },
+  markerAnchorStart: { start: 0, alignItems: 'flex-end' },
   // Out of the anchor's flow, so nothing constrains the measurement (see the
   // render). No insets on purpose: with none given, the anchor's own alignment
   // decides where it lands — and the one margin is the nudge back toward the
-  // glyph, logical so it closes the same gap in either reading direction.
-  markerFree: { position: 'absolute', marginStart: -MARKER_NUDGE },
+  // glyph, on whichever side of the mark faces it.
+  markerFree: { position: 'absolute' },
+  markerFreeEnd: { marginStart: -MARKER_NUDGE },
+  markerFreeStart: { marginEnd: -MARKER_NUDGE },
   // One word, under the glyph. The rank BELOW the body: the caption names the
   // glyph over it, it does not compete with whatever the surface is built around.
   // Centred, and free to wrap — the strip grows, the word is never cut.

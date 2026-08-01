@@ -20,6 +20,8 @@ import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from './PhotoEditor'
 import { MIN_PHOTOS, MAX_PHOTOS } from '../lib/photos'
 import { TapMenu, TAP_MENU_ICON, type TapPoint } from './TapMenu'
+import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
+import { SEEN_FLAGS } from '../keys'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../lib/family'
@@ -27,8 +29,8 @@ import { XS, SM, MD, LG, RADIUS, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SHEET_GAP
 import { GlyphSlot } from './GlyphSlot'
 import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../colors'
 import { OUTLINE_SKIN } from '../field'
-import { SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon, PlusIcon } from './icons'
-import { creditTotal } from '../lib/credits'
+import { SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon } from './icons'
+import { creditTotal, creditHeld } from '../lib/credits'
 import { hideProfileConfirm } from './visibilityConfirms'
 import { BuyExtraPopup } from './BuyExtraPopup'
 import { BottomSheet, SheetActionPair, SheetTitle } from './BottomSheet'
@@ -37,7 +39,7 @@ import { StripBody } from './Strip'
 import { MetaLine } from './MetaLine'
 import type { MetaPart } from '../lib/meta'
 import { supportMailUrl, brandSiteUrl } from '../lib/links'
-import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, KidsIcon as KidsGlyph } from './Chip'
+import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from './Chip'
 import { units, M_PER_MI } from '../lib/units'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../lib/location'
 
@@ -344,8 +346,16 @@ function useVisibility() {
 // glyph has no room for a sentence, and this row is the sentence it points at.
 // One definition, in the app's own `xLabel(n)` shape, with the singular as its
 // own string because Hebrew inflects the verb for a single watcher.
+//
+// It answers for ZERO too (user directive 2026-08-01), so the pill stands beside
+// a visible row at every count and the row is never a state with no value: an
+// empty trailing lane read as the count having failed to load, when what it meant
+// was "nobody" — the one answer a visible user opens this row to check. A hidden
+// row still carries nothing, because there the count is not zero, it is moot.
 const watcherLabel = (n: number) =>
-  n === 1 ? t('settings.watchersOne') : t('settings.watchersMany').replace('{count}', String(n))
+  n === 0 ? t('settings.watchersNone')
+    : n === 1 ? t('settings.watchersOne')
+      : t('settings.watchersMany').replace('{count}', String(n))
 
 // The same control as a MENU ROW — the first field of the preferences popup
 // (user directive 2026-07-30). It states the whole thing as a sentence about the
@@ -385,7 +395,7 @@ function VisibilityRow({ onBuildProfile }: {
         icon={reason ? <EyeOffIcon color={INK} size={ICON.md} /> : <EyeOpenIcon color={INK} size={ICON.md} />}
         labelColor={INK}
         locked={unbuilt}
-        trailing={!reason && vis.watcherCount > 0 ? <Chip small text={watcherLabel(vis.watcherCount)} /> : undefined}
+        trailing={!reason ? <Chip small text={watcherLabel(vis.watcherCount)} /> : undefined}
         trailingBeside
         // No haptic here for either branch: the row's tap responder fires one.
         onPress={() => { if (unbuilt) { setGateOpen(true); return } vis.toggle() }}
@@ -395,7 +405,10 @@ function VisibilityRow({ onBuildProfile }: {
           may overlap (BottomSheet.tsx) — the list stays lit underneath. */}
       <BuildProfileGate
         visible={gateOpen}
-        title={genderize(t('home.buildProfileTitle'), profile.is_male)}
+        // Neither line is genderized any more: both name the PHOTOS instead of
+        // telling the user to go and build something (2026-08-01), so neither is
+        // in the imperative and neither carries a {m|f} marker.
+        title={t('home.buildProfileTitle')}
         description={t('settings.visibilityGateDesc')}
         onClose={() => setGateOpen(false)}
         onConfirm={onBuildProfile}
@@ -1884,65 +1897,13 @@ const familyStyles = StyleSheet.create({
 // a move at either end of the list, and the delete at the two-photo floor, are
 // simply absent (see TapMenu — only what applies is listed).
 
-// ── What the profile's plus opens ──────────────────────────────────────────
-// (user directive 2026-07-31.) The two things that can still be ADDED to your
-// own profile — a photo, the family & kids entry — raised by the plus on the
-// card's heading tile, in place of the permanent bar of buttons that stood under
-// the card until now.
-//
-// It is the PREFERENCES list verbatim: `SelectFieldRow`s in the same grouped
-// card, each a glyph and one sentence, over the same edge-to-edge frame
-// (`selectListStyles.card`, the one frame override a popup body may make). An
-// add is a settings row like any other, so nothing here states a design of its
-// own — and no title: the two rows say what they are, and a heading over two
-// lines of text would be a third.
-//
-// An add that no longer applies renders nothing, and with neither left the card
-// carries no plus at all, so this can never open empty.
-function ProfileAddPopup({
-  visible, photoEnabled, familyEnabled, picking, onDismiss, onClosed, onAddPhoto, onAddFamily,
-}: {
-  visible: boolean
-  photoEnabled: boolean
-  familyEnabled: boolean
-  /** True while the OS image picker is coming up — see the row's spinner. */
-  picking: boolean
-  onDismiss: () => void
-  onClosed: () => void
-  onAddPhoto: () => void
-  onAddFamily: () => void
-}) {
-  return (
-    <BottomSheet visible={visible} onDismiss={onDismiss} onClosed={onClosed} contentStyle={selectListStyles.card}>
-      <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
-        {photoEnabled ? (
-          <SelectFieldRow
-            grouped
-            label={t('settings.addPhoto')}
-            // The picker's cold start is slow enough to need saying so, and the
-            // row's own glyph is where it is said — the same spinner-in-place-of
-            // -the-glyph the photo menu's Replace row gives. The row is shut
-            // while it runs (a second tap would launch a second picker) and the
-            // popup closes itself the moment the picker is up.
-            icon={picking ? <ActivityIndicator color={INK} /> : <CameraIcon color={INK} size={ICON.md} />}
-            locked={picking}
-            labelColor={INK}
-            onPress={onAddPhoto}
-          />
-        ) : null}
-        {familyEnabled ? (
-          <SelectFieldRow
-            grouped
-            label={t('settings.addFamily')}
-            icon={<KidsGlyph color={INK} size={ICON.md} />}
-            labelColor={INK}
-            onPress={onAddFamily}
-          />
-        ) : null}
-      </View>
-    </BottomSheet>
-  )
-}
+// (`ProfileAddPopup` stood here until 2026-08-01: a popup listing the two things
+// that could still be ADDED to your own profile, raised by a plus on the card's
+// heading tile. Both the plus and the popup are deleted, because each of its two
+// rows now lives where the thing it adds actually IS — a photo is a row of the
+// PHOTO's own menu, and family & kids is an empty chip standing in the fact set's
+// own place on the first photo. With nothing left for it to list, it was a door
+// in front of two doors.)
 
 // Full-screen pane showing the user's profile card preview: the sheet the dock's
 // profile key raises, and the page a roster row that is ME opens inside Circles.
@@ -1974,31 +1935,47 @@ export function PreviewFieldPage({
   const [photoMenu, setPhotoMenu] = useState<{ index: number; at: TapPoint } | null>(null)
   const photoMenuIndex = photoMenu?.index ?? null
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
-  // What the heading chip's plus opens (see ProfileAddPopup).
-  const [addPopupVisible, setAddPopupVisible] = useState(false)
-  // The family sheet is a SIBLING Modal of the add popup, and iOS silently
-  // refuses to present a second sheet while the first is still up — so the add
-  // row closes its own popup and the family one is raised from `onClosed`, the
-  // same chaining the account popup and the preferences gate do. A ref: nothing
-  // about this page re-renders for it.
-  const goFamily = useRef(false)
+  // ── THE FIRST-OPEN PHOTO TUTORIAL (user directive 2026-08-01) ─────────────
+  // The photos on your own profile carry a menu of edits and nothing on screen
+  // says so. So the first time this page opens, that very menu pops with ONE row
+  // in it, saying to tap a photo — the thing being taught demonstrated by
+  // itself, rather than described by a surface of a different kind. It is put
+  // away by tapping either the row or a photo, and from then on the ordinary
+  // menu is what a photo opens.
+  //
+  // It is not the exception to "nothing takes the screen away from the user to
+  // teach him something" so much as the reading of it: `TapMenu` raises no
+  // scrim, dims nothing, and goes away on any touch at all — it is a label
+  // standing on the photo for as long as the user looks at it.
+  const [tutorialAt, setTutorialAt] = useState<TapPoint | null>(null)
+  useEffect(() => {
+    let live = true
+    hasSeenFlag(SEEN_FLAGS.photoMenuSeen).then(seen => {
+      if (!live || seen) return
+      // Anchored at the middle of the window, because there is no finger to
+      // anchor to — this menu is the only one in the app that was not opened by
+      // a touch. TapMenu keeps itself inside the page gutter and both safe
+      // areas from there, exactly as it does for a real one.
+      const { width, height } = Dimensions.get('window')
+      setTutorialAt({ x: width / 2, y: height / 2 })
+    })
+    return () => { live = false }
+  }, [])
+  const endTutorial = useCallback(() => {
+    setTutorialAt(null)
+    markSeenFlag(SEEN_FLAGS.photoMenuSeen)
+  }, [])
   // Serializes the background family writes (see handleSaveFamily).
   const familySaveChain = useRef<Promise<void>>(Promise.resolve())
   const [bioSaving, setBioSaving] = useState(false)
-  // True while the OS image picker is launching. launchImageLibraryAsync has a
-  // cold-start delay (especially the very first time it loads the native
-  // bridge). Drive a spinner in whichever UI initiated the pick so the user
-  // gets immediate visual feedback while the picker dialog comes up.
-  const [photoPicking, setPhotoPicking] = useState(false)
-  // The same, for the photo menu's Replace row: it keeps the menu OPEN with a
-  // spinner in that row's own glyph while the picker comes up, so the user sees
-  // what is loading instead of a blank screen between the tap and the picker.
-  // (The row was deleted for an afternoon on 2026-07-31, on "replacing is
-  // deleting and adding, and both are one tap away". The user put it back the
-  // same day — it had been there all along and worked — so this flow is the one
-  // that stood here: its own picker, its own optimistic swap into the SLOT, and
-  // its own restore-on-failure, none of which delete-then-add can give.)
-  const [photoReplacing, setPhotoReplacing] = useState(false)
+  // A picker is on its way up. NOTHING IS DRAWN FOR IT (user directive
+  // 2026-08-01): a spinner says the app is working on the photo, and opening
+  // the OS gallery is not that — the picker is its own answer to the tap, and
+  // the menu that raised it goes away on the tap like every other row of it.
+  // A spinner is for the upload alone. So this is a REF, not state: it refuses
+  // a second picker (a photo re-tapped while the first is still coming up)
+  // without costing a render.
+  const pickerOpen = useRef(false)
 
   // Warm up the image picker on mount: getMediaLibraryPermissionsAsync()
   // initializes the native bridge so the first launchImageLibraryAsync after
@@ -2125,20 +2102,16 @@ export function PreviewFieldPage({
   // in the background. persistImages() awaits the in-flight upload before
   // invoking app/profile.
   const handleAddPhoto = async () => {
-    if (!user || !profile || photoPicking) return
-    setPhotoPicking(true)
+    if (!user || !profile || pickerOpen.current) return
+    // The row has been answered, so the menu goes — the picker is what stands
+    // in front of the user now, and a menu left open behind it with a spinner
+    // in it was the app saying it was busy when it was not.
+    setPhotoMenu(null)
+    pickerOpen.current = true
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    }).finally(() => {
-      // The picker is up (or was cancelled), so the popup that raised it has
-      // nothing left to say. It stays open until this point on purpose: the
-      // picker's cold start is slow enough to need saying so, and the row's own
-      // spinner is where it is said — exactly what the photo menu's Replace row
-      // does.
-      setPhotoPicking(false)
-      setAddPopupVisible(false)
-    })
+    }).finally(() => { pickerOpen.current = false })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
 
@@ -2178,18 +2151,15 @@ export function PreviewFieldPage({
   // card reads top to bottom, so replacing is not deleting and adding: it is the
   // one edit that leaves every other photo where it is.
   const handleReplace = async () => {
-    if (photoMenuIndex == null || !user || !profile?.images || photoReplacing) return
+    if (photoMenuIndex == null || !user || !profile?.images || pickerOpen.current) return
     const targetIndex = photoMenuIndex
-    setPhotoReplacing(true)
+    // Same as the add row above: the menu is answered and goes.
+    setPhotoMenu(null)
+    pickerOpen.current = true
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    }).finally(() => {
-      // The picker is up (or was cancelled), so the menu that raised it has
-      // nothing left to say — same as the add popup above.
-      setPhotoReplacing(false)
-      setPhotoMenu(null)
-    })
+    }).finally(() => { pickerOpen.current = false })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
 
@@ -2309,12 +2279,6 @@ export function PreviewFieldPage({
       .catch(e => { console.error('Save family error:', e) })
   }
 
-  // AN ADD IS A THING YOU DO ABOUT THIS PROFILE, SO IT LIVES ON THE PROFILE'S
-  // OWN HEADING (user directive 2026-07-31). With nothing left to add — six
-  // photos and a family entry already filled in — there is no plus at all,
-  // exactly as the bar used to render nothing.
-  const canAdd = photoAddEnabled || familyAddEnabled
-
   return (
     <View style={[styles.root, dismissGestureRef ? null : { paddingTop: insets.top }]}>
       {previewData ? (
@@ -2323,82 +2287,56 @@ export function PreviewFieldPage({
             <MatchCard
               match={previewData}
               // Puts the pinned name/age chip on the same line as the sheet's
-              // floating close X (which stands at the opposite, END corner). Only
-              // when the sheet owns the top inset — standalone, the root has
-              // already padded the card down past it.
+              // own floating chrome. Only when the sheet owns the top inset —
+              // standalone, the root has already padded the card down past it.
               chromeInset={dismissGestureRef ? insets.top : 0}
               bottomInset={0}
               isForKids={profile?.family?.isForKids ?? null}
               self
-              // THE PLUS, in the very block the chat card's "End chat" stands
-              // in: the heading tile names the person and carries the one thing
-              // you can do about them, and on your own card that thing is adding
-              // to it. A mark and not a word — what is behind it is a list of
-              // two named options, and a label on the block would only say the
-              // first line of that list twice.
-              //
-              // ICON.xxl because the block is exactly a small chrome circle tall
-              // (CHIP_HEIGHT is ROUND_BUTTON_SIZE_SM), so this is a glyph
-              // centred in a chrome tile — one step UP from the ICON.round such
-              // a circle carries, since a plus paints only the middle of its box
-              // and would otherwise read as the smaller mark (the composer's own
-              // optical half-step, for the same glyph).
-              headingAction={canAdd ? {
-                renderIcon: c => <PlusIcon color={c} size={ICON.xxl} />,
-                a11yLabel: t('settings.a11y.addToProfile'),
-                onPress: () => { tap(); setAddPopupVisible(true) },
-              } : undefined}
               onPhotoTap={(imageIndex, at) => {
                 if (imageIndex < 0) return
+                // The tutorial is put away by a tap on a photo as much as by one
+                // on its own row, and that tap does nothing else: it was showing
+                // where to press, so the press that answers it is spent on the
+                // lesson.
+                if (tutorialAt) { endTutorial(); return }
                 tap()
                 setPhotoMenu({ index: imageIndex, at })
               }}
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
               bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
-              // No round button on your own card: there is nobody to invite,
-              // and the one thing you can do about this profile is the plus on
-              // its heading.
+              // No round button on your own card: there is nobody to invite.
               actions={[]}
             />
           </PullContext.Provider>
         </View>
       ) : null}
-      {/* The two adds, in the popup the plus opens (user directive 2026-07-31).
-          They used to be a permanent BAR of buttons under the card — a block of
-          chrome standing on the screen at all times to state two things that are
-          done once each, and which pushed the photo up off the bottom of the
-          page for as long as either was still available. The card fills the
-          screen again and the adds are a list you ASK for. */}
-      <ProfileAddPopup
-        visible={addPopupVisible}
-        photoEnabled={photoAddEnabled}
-        familyEnabled={familyAddEnabled}
-        picking={photoPicking}
-        onDismiss={() => { if (!photoPicking) setAddPopupVisible(false) }}
-        onClosed={() => { if (goFamily.current) { goFamily.current = false; setFamilyPopupVisible(true) } }}
-        onAddPhoto={handleAddPhoto}
-        onAddFamily={() => { goFamily.current = true; setAddPopupVisible(false) }}
-      />
-      {/* WHAT CAN BE DONE TO THIS PHOTO, TOP-DOWN: move up, replace, delete,
-          move down (user directive 2026-07-31). One white tile with the app's
-          hairline between its rows — the very object the card's fact set is —
-          and each row a glyph and the words for it. ONLY WHAT APPLIES IS LISTED:
-          a move at either end of the list, and a delete at the two-photo floor,
-          are not doors being held shut, they are things that do not exist for
-          this photo, so nothing stands in for them.
+      {/* WHAT CAN BE DONE TO THIS PHOTO, TOP-DOWN: move up, replace, ADD, delete,
+          move down (user directive 2026-07-31, with the add placed 2026-08-01).
+          One white tile with the app's hairline between its rows — the very
+          object the card's fact set is — and each row a glyph and the words for
+          it. ONLY WHAT APPLIES IS LISTED: a move at either end of the list, a
+          delete at the two-photo floor and an add at the six-photo ceiling are
+          not doors being held shut, they are things that do not exist here, so
+          nothing stands in for them.
           REPLACE IS ALWAYS ONE OF THEM (user directive 2026-07-31, putting back
           what that morning's simplification had dropped): every photo can be
           swapped, and swapping is the one edit that keeps the ORDER — which is
           what the card reads top to bottom — so it is not the delete and the add
           standing either side of it. It sits directly under "move up", where the
           old popup put it.
+          ADDING A PHOTO IS HERE TOO (user directive 2026-08-01), directly under
+          replace. It is the one row that is not ABOUT the photo under the finger
+          — but a photo is where the user's attention already is when he wants
+          another one, and this menu is the whole of what the app has to say about
+          photos now that the profile's plus is gone.
           The delete is deliberately not a warning colour: these are one set of
           choices about one photo, and a red row among them would read as an alarm
           rather than as a sibling of the others. Deleting a photo is undone by
           adding one; the caution rides the haptic instead of the ink. */}
       <TapMenu
         at={photoMenu?.at ?? null}
-        onDismiss={() => { if (!photoReplacing) setPhotoMenu(null) }}
+        onDismiss={() => setPhotoMenu(null)}
         actions={[
           ...(canMoveUp ? [{
             key: 'up',
@@ -2409,16 +2347,15 @@ export function PreviewFieldPage({
           {
             key: 'replace',
             label: t('settings.photoEditReplace'),
-            // The picker's cold start is slow enough to need saying so, and the
-            // row's own glyph is where it is said — the same spinner-in-place-of
-            // -the-mark the add-photo row gives. The menu stays up until the
-            // picker is, and a second tap while it runs is refused by the
-            // handler rather than launching a second picker.
-            renderIcon: (c: string) => photoReplacing
-              ? <ActivityIndicator color={c} />
-              : <PhotoReplaceIcon color={c} size={TAP_MENU_ICON} />,
+            renderIcon: (c: string) => <PhotoReplaceIcon color={c} size={TAP_MENU_ICON} />,
             onPress: () => { tap(); handleReplace() },
           },
+          ...(photoAddEnabled ? [{
+            key: 'add',
+            label: t('settings.addPhoto'),
+            renderIcon: (c: string) => <CameraIcon color={c} size={TAP_MENU_ICON} />,
+            onPress: () => { tap(); handleAddPhoto() },
+          }] : []),
           ...(canDelete ? [{
             key: 'delete',
             label: t('settings.photoEditDelete'),
@@ -2432,6 +2369,19 @@ export function PreviewFieldPage({
             onPress: () => { tap(); handleMoveDown() },
           }] : []),
         ]}
+      />
+      {/* The lesson, in the shape of the thing being taught: the same menu, one
+          row, saying where to press. Either the row or a photo puts it away
+          (see onPhotoTap above), and it never comes back. */}
+      <TapMenu
+        at={tutorialAt}
+        onDismiss={endTutorial}
+        actions={[{
+          key: 'hint',
+          label: t('settings.photoMenuHint'),
+          renderIcon: (c: string) => <CameraIcon color={c} size={TAP_MENU_ICON} />,
+          onPress: endTutorial,
+        }]}
       />
       <FamilyKidsPopup
         visible={familyPopupVisible}
@@ -2449,6 +2399,13 @@ export function PreviewFieldPage({
 // ── Inner Sub-Page Renderer ────────────────────────────────────────────────
 // Used by ProfileSectionPage and AppSectionPage to render a second-level
 // ── App Inline Content ─────────────────────────────────────────────────────
+
+// What the DEPOSIT says on the credits row (user directive 2026-08-01), in the
+// same `xLabel(n)` shape as the watcher pill above and for the same reason: the
+// dock's key can only afford a bare "+1" beside a 24dp glyph, and this row is
+// the line of text that mark points at, so here the pill names what it counts.
+// One string, no singular of its own — neither language inflects on this one.
+const heldLabel = (n: number) => t('settings.creditsHeld').replace('{count}', String(n))
 
 function AppInlineContent() {
   const router = useRouter()
@@ -2505,6 +2462,12 @@ function AppInlineContent() {
   // the split between the two pools is the buy picker's business, which the row
   // opens anyway.
   const heartsTotal = creditTotal(profile)
+  // The other half of it: the credit standing in a deposit against an
+  // invitation of my own. It is money the user has — and, since 2026-07-31,
+  // money he can spend on an accept — so the row that IS his wallet may not
+  // leave it out; home's credits key has said it since 2026-08-01 and the two
+  // must say the same thing. No deposit, no second pill.
+  const heldCredits = creditHeld(profile)
 
   return (
     <>
@@ -2525,7 +2488,20 @@ function AppInlineContent() {
           // waiting-requests chips keep the edge, because what they count is
           // not what their row is named for.
           label={t('settings.credits')}
-          trailing={<Chip small text={String(heartsTotal)} />}
+          // TWO PILLS, NOT A SUM: the balance finishes the word "credits" beside
+          // it, and the deposit stands after it saying what it is. They are the
+          // same `Chip small` fabric in the same lane (`selectRowTrailing` is
+          // already the row that holds them, at the app's own gap), so the pair
+          // reads as one wallet in two parts — the row's long-form of the "1 +1"
+          // on home's dock key. Adding them into one number would hide the fact
+          // that half the wallet is spoken for; a second ROW would make a
+          // passing state look like a place to go.
+          trailing={(
+            <>
+              <Chip small text={String(heartsTotal)} />
+              {heldCredits > 0 ? <Chip small text={heldLabel(heldCredits)} /> : null}
+            </>
+          )}
           trailingBeside
           onPress={onOpenBuyExtra}
           icon={<CreditIcon color={INK} size={ICON.md} />}

@@ -2,7 +2,7 @@ import { Circle } from 'react-native-svg'
 import { INK, INK_MUTED } from '../colors'
 import {
   ART_TILT, ArtCanvas, AvatarArt, Heart, ProfileCardArt, Spark,
-  artFrame, artMarks, artSize, avatarMarks, cardMarks, discMarks,
+  artFrame, artMarks, artSize, at, avatarMarks, cardMarks, discMarks,
 } from './ArtKit'
 import { CIRCLES_ART } from '../tokens'
 
@@ -52,12 +52,6 @@ const FRAME = artFrame(
   FRAME_PAD,
 )
 const SIZE = artSize(CIRCLES_ART.widthRatio)
-
-/** A point on the way from one object to another: the trails are stated as
- *  fractions of the run between the two things they connect, so moving either
- *  end carries its own drift with it. */
-const at = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) =>
-  ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
 
 export function CirclesArt() {
   return (

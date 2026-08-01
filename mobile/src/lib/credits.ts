@@ -78,11 +78,18 @@ export type CreditsWallet = {
   balance: number
   /** Purchased pool. 0..N. */
   extra: number
-  /** Reserved against a live waiting invite (server-side accounting). Not
-   * displayed; the spend already left balance / extra when the invite was
-   * sent. The server also tracks `held_extra` (how much of the hold came out
-   * of the purchased pool, so a refund returns it there rather than dropping
-   * it against a full daily pool) — server-only, never sent as a UI signal. */
+  /** The DEPOSIT: reserved against a live waiting invite. It left balance /
+   * extra when the invite was sent and stays with us until that invitation
+   * resolves — refunded when it dies without a chat, kept when it ends in one.
+   *
+   * DISPLAYED since 2026-08-01, as the "+N" beside the balance on home's dock:
+   * it is the user's money, and since 2026-07-31 money he can spend (a deposit
+   * pays for an accept — see creditsForApprove), so a wallet that showed only
+   * balance + extra was under-reporting itself to the person it belongs to.
+   *
+   * The server also tracks `held_extra` (how much of the hold came out of the
+   * purchased pool, so a refund returns it there rather than dropping it
+   * against a full daily pool) — server-only, never sent as a UI signal. */
   held?: number
   granted_on?: string | null
   /** ISO instant of the next 20:00 Asia/Jerusalem grant. Server-computed so
@@ -123,11 +130,31 @@ export function creditExtra(profile: WithCredits): number {
   return n > 0 ? n : 0
 }
 
+/** The deposit standing against an invitation of my own (0 when the wallet is
+ *  missing, or on a snapshot that predates the field). */
+export function creditHeld(profile: WithCredits): number {
+  const n = readCredits(profile)?.held
+  return typeof n === 'number' && n > 0 ? n : 0
+}
+
 /** Total spendable = balance + extra. This is what every affordability
  *  check should use — costs deduct balance first, but the user can spend
  *  as long as the total covers the cost. */
 export function creditTotal(profile: WithCredits): number {
   return creditBalance(profile) + creditExtra(profile)
+}
+
+/** What can pay for an ACCEPT, and only an accept: the wallet plus the deposit
+ *  (user directive 2026-07-31, `app_approve`). With a daily pool of one credit
+ *  the deposit IS the whole wallet of anyone still waiting on an invitation of
+ *  his own, so charging the accept against balance + extra alone refused the
+ *  invitation that arrived while he waited — to a user who had already paid and
+ *  whose money we were holding. The server spends balance and extra first and
+ *  reaches for the deposit only where they cannot cover it; this mirrors that
+ *  sum so the button and the server agree on what is affordable. Sending a NEW
+ *  invitation still costs `creditTotal` — a deposit cannot fund a second one. */
+export function creditsForApprove(profile: WithCredits): number {
+  return creditTotal(profile) + creditHeld(profile)
 }
 
 // Buying used to be gated twice — allowed only while the wallet was EMPTY

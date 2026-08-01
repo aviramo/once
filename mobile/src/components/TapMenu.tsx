@@ -38,7 +38,10 @@ import { MD, SM, ICON, bottomGap } from '../tokens'
 // THE SAFETY MARGIN IS THE PAGE'S OWN: the tile is centred on the finger's column
 // and stood clear of the finger itself, then pushed back inside the page gutter
 // and both safe areas, so a photo tapped at the edge of the screen still opens its
-// menu fully on-screen.
+// menu fully on-screen — and it is never WIDER than that band either, so a row
+// carrying a whole sentence wraps inside the tile instead of running off the edge
+// of the screen (the first-open photo tutorial, Hebrew at a large font scale,
+// 2026-08-01).
 
 /** How far the tile stands off the finger, so the thumb that opened the menu is
  *  not resting on the row it opened. */
@@ -135,16 +138,32 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
   const pop = useSharedValue(POP_FROM)
   useEffect(() => { if (box) pop.value = withTiming(1) }, [box, pop])
-  // ZOOM ONLY — no opacity (user directive 2026-07-31).
-  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }))
 
   const w = box?.w ?? 0
   const h = box?.h ?? 0
-  // Centred on the finger's column, then pushed back inside the margin.
-  // `Math.max` on each upper bound so a tile bigger than the room it has still
-  // starts at the margin rather than being dragged off the START/TOP edge by a
-  // clamp that has gone negative.
-  const left = Math.min(Math.max(at.x - w / 2, MD), Math.max(MD, bounds.screenW - MD - w))
+  // The widest the tile may ever be: the band between the page's own gutters. A
+  // row is a line of TEXT, so without this the tile is as wide as its longest
+  // label wants to be and simply hangs off the screen — which is what the
+  // one-row tutorial did, its sentence clipped at both ends.
+  const maxWidth = bounds.screenW - MD * 2
+  // Centred on the finger's column, then pushed back inside the margin. Both
+  // bounds are now well-formed by construction: the tile cannot be wider than
+  // the band, so its END margin is never past its START one.
+  const left = Math.min(Math.max(at.x - w / 2, MD), bounds.screenW - MD - w)
+  // THE HORIZONTAL PLACEMENT IS A TRANSFORM, NOT A LAYOUT `left`, and that is
+  // what makes the cap above measurable. Yoga hands an absolutely positioned box
+  // `parentWidth - left` to lay itself out in, so a `left` that is computed FROM
+  // the measured width feeds back into the width: the tile wrapped at one place,
+  // moved, re-wrapped wider, moved again, converging over several renders — with
+  // the zoom already running. Pinned at 0 the available width is the same on
+  // every pass (the cap), so the tile is measured once and then simply moved.
+  //
+  // ZOOM ONLY — no opacity (user directive 2026-07-31). The origin stays the
+  // finger: at any scale the local point `at.x - left` lands on `at.x`, because
+  // the translate rides outside the scale.
+  const popStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: left }, { scale: pop.value }],
+  }))
   // ABOVE the finger by default: the thing being acted on is under it, and a list
   // laid over the photo just chosen hides the answer to "which one". Below only
   // when there is no room above.
@@ -162,7 +181,7 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
       }}
       style={[
         styles.anchor,
-        { top, left },
+        { top, maxWidth },
         // The origin IS the finger, expressed in the tile's own coordinates — so
         // it grows out of the point that was touched even where the margin has
         // pushed it away from there (a photo tapped at the screen's edge), rather
@@ -199,9 +218,11 @@ const styles = StyleSheet.create({
   window: { flex: 1, direction: 'ltr' },
   // The tile hugs its widest row, so the anchor hugs the tile: it exists only to
   // hold the absolute position and the zoom, and its `alignItems` keeps a stack
-  // that is narrower than nothing from stretching.
+  // that is narrower than nothing from stretching. `left: 0` is fixed and the
+  // real x is a translate — see the placement note above.
   anchor: {
     position: 'absolute',
+    left: 0,
     alignItems: 'flex-start',
   },
   // See the tile above: every row is as wide as the tile, so every row answers a

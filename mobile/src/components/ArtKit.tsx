@@ -1,15 +1,12 @@
-import { useState } from 'react'
-import { Dimensions, View } from 'react-native'
+import { Dimensions } from 'react-native'
 import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg'
-import { MD } from '../tokens'
-import { INK, INK_MUTED, INK_PALE, WHITE } from '../colors'
-import { isRTL } from '../i18n'
+import { INK, INK_MUTED, INK_PALE, WHITE, WHITE_MID } from '../colors'
 
 // ── ArtKit — the app's ONE drawing vocabulary ──────────────────────────────
 //
-// The illustrations (HomeArt, CirclesArt) are drawn from the same small set of
-// objects — the frame, the profile card, the round photo, the heart — so that
-// two of them standing one under the other read as one hand, not two. Anything
+// The illustrations (HomeArt, CirclesArt, ChatArt) are drawn from the same small
+// set of objects — the frame, the profile card, the round photo, the heart, the
+// message — so that any two of them read as one hand, not two. Anything
 // a second drawing would otherwise re-type belongs here; a composition file
 // then holds nothing but WHERE its pieces stand.
 //
@@ -46,6 +43,21 @@ export const discMarks = (x: number, y: number, r: number): ArtMarks =>
 
 export const boxMarks = (x: number, y: number, w: number, h: number): ArtMarks =>
   ({ left: x - w / 2, top: y - h / 2, right: x + w / 2, bottom: y + h / 2 })
+
+/** The box an object of this size occupies once it LEANS — its own width and
+ *  height projected through the tilt, so a frame built from it counts the
+ *  corners the lean pushed out. */
+const leanMarks = (x: number, y: number, w: number, h: number, tilt: number): ArtMarks => {
+  const c = Math.abs(Math.cos((tilt * Math.PI) / 180))
+  const s = Math.abs(Math.sin((tilt * Math.PI) / 180))
+  return boxMarks(x, y, w * c + h * s, w * s + h * c)
+}
+
+/** A point on the way from one object to another: a trail is stated as
+ *  fractions of the run between the two things it connects, so moving either
+ *  end carries its own drift with it. */
+export const at = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) =>
+  ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
 
 /** The viewBox for a drawing: its own ink grown by ONE margin on all four
  *  sides, then grown again on the SHORT axis alone until the box is
@@ -122,72 +134,10 @@ export const Spark = ({ x, y, r, fill = INK }: { x: number; y: number; r: number
   <Circle cx={x} cy={y} r={r} fill={fill} />
 )
 
-// ── The friends nobody has asked yet ───────────────────────────────────────
-// The drawing that fills the end of the hub's FRIENDS row (user directive
-// 2026-07-31), in place of the Invite button that stood there for an hour: a
-// button in a list of circles read as a second control competing with the row
-// itself, and what the row wants to say is not "press me" but "there are people
-// out here you have not asked yet".
-//
-// So: a run of faces marching off the END of the row, each fainter than the one
-// before, the last of them nearly gone. Same hand as every other drawing in the
-// app — AvatarArt, the app's one person — and no new colour: the fade IS the
-// sentence, and it is what lets this sit inside a row without shouting.
-//
-// IT FILLS THE LANE IT IS GIVEN (user directive 2026-07-31), so the count of
-// faces is not a number typed here: the box is measured and the run is laid out
-// across it, which keeps the drawing flush to the row's gutter on every screen
-// width and at every font scale. Sized in dp like the arrow below rather than
-// through `artFrame`: this is a mark filling a lane, not a picture on a page.
-const INVITE_FACE = { r: 50, gap: 62, y: 62 }
-// How far the run fades across the lane: the first face is nearly solid and the
-// last is a ghost, whatever the lane's width turned out to hold.
-const INVITE_FADE = { from: 0.85, to: 0.08 }
-
-// What the lane is, before anything has been measured: the row's inner width
-// less the gap, halved — the text column and this art are both `flex:1`, so
-// that IS the split, and the formula is exact rather than a guess. It exists
-// because a drawing that waits for its own onLayout paints one frame LATE, and
-// the user sees it arrive after the page it is part of (reported 2026-07-31).
-// The measurement below still runs and still wins; it just has nothing left to
-// correct on an ordinary screen.
-//   MD × 5 = the page's gutter twice, the row's twice, and the row's one gap.
-const inviteLaneWidth = Math.max(0, (screenW - MD * 5) / 2)
-
-export function InviteFriendsArt({ height }: { height: number }) {
-  const [width, setWidth] = useState(inviteLaneWidth)
-  // The drawing's own units: one face's outer edge to the box's end.
-  const outer = INVITE_FACE.r * (1 + AVATAR_RIM + AVATAR_BORDER)
-  const h = INVITE_FACE.y + outer
-  const w = width > 0 ? (width / height) * h : 0
-  // As many faces as the lane holds, the last one ending ON the gutter.
-  const count = w > 0 ? Math.max(1, Math.ceil((w - INVITE_FACE.r - outer) / INVITE_FACE.gap) + 1) : 0
-  return (
-    // THE RUN GOES WITH THE READING, so the strongest face is the one nearest
-    // the words and the ghosts trail off the row's end. An SVG does not mirror
-    // itself, so the whole box is flipped under RTL — the faces are symmetric,
-    // and the only thing the flip reverses is the direction of the fade.
-    <View
-      style={[{ flex: 1, height }, isRTL && { transform: [{ scaleX: -1 }] }]}
-      onLayout={e => setWidth(e.nativeEvent.layout.width)}
-    >
-      {count > 0 ? (
-        <Svg pointerEvents="none" width={width} height={height} viewBox={`0 0 ${w} ${h}`}>
-          {Array.from({ length: count }, (_, i) => (
-            <G key={i} opacity={INVITE_FADE.from + (INVITE_FADE.to - INVITE_FADE.from) * (count === 1 ? 0 : i / (count - 1))}>
-              <AvatarArt
-                x={INVITE_FACE.r + INVITE_FACE.gap * i}
-                y={INVITE_FACE.y}
-                r={INVITE_FACE.r}
-                id={`inviteFace${i}`}
-              />
-            </G>
-          ))}
-        </Svg>
-      ) : null}
-    </View>
-  )
-}
+// (The run of faces that filled the end of the hub's FRIENDS row lived here
+// from 2026-07-31 to 2026-08-02. That lane is the INVITE BUTTON again — see
+// CommunitiesPage's friends strip — so the drawing is deleted rather than left
+// exported with nowhere to stand.)
 
 // ── The pointer ────────────────────────────────────────────────────────────
 // An arrow, and nothing but an arrow: it points at the one button under it on a
@@ -240,13 +190,8 @@ const LINE_X = CARD.x + 22
 const LINE_H = 12
 
 /** What the card occupies once its pale border and its lean are counted. */
-export const cardMarks = (x: number, y: number, scale = 1, tilt = 0): ArtMarks => {
-  const w = (CARD.w + CARD_BORDER * 2) * scale
-  const h = (CARD.h + CARD_BORDER * 2) * scale
-  const c = Math.abs(Math.cos((tilt * Math.PI) / 180))
-  const s = Math.abs(Math.sin((tilt * Math.PI) / 180))
-  return boxMarks(x, y, w * c + h * s, w * s + h * c)
-}
+export const cardMarks = (x: number, y: number, scale = 1, tilt = 0): ArtMarks =>
+  leanMarks(x, y, (CARD.w + CARD_BORDER * 2) * scale, (CARD.h + CARD_BORDER * 2) * scale, tilt)
 
 export function ProfileCardArt({ x = CARD_CX, y = CARD_CY, scale = 1, tilt = 0, id }: {
   x?: number
@@ -320,6 +265,65 @@ export function AvatarArt({ x, y, r, id }: { x: number; y: number; r: number; id
           fill={INK}
         />
       </G>
+    </G>
+  )
+}
+
+// ── A message ──────────────────────────────────────────────────────────────
+// What one person SAYS to another, drawn as the app's own outgoing bubble: the
+// solid INK fill and the white lines inside it are `bubbleMine` /
+// `bubbleTextMine` from chat.tsx, so the thing in the picture is the thing the
+// user is about to send. Two lines rather than the card's three — a first
+// message is short — and the second is the fainter white, the same way the
+// card's own lines step down.
+//
+// The one squared corner is the bubble's ANCHOR: the side its sender sits on,
+// exactly as a last-in-group bubble squares the corner nearest its own edge of
+// the chat. It is at the bottom-LEFT of the drawing's own box because a
+// composition stands the sender to the left of it and the message travels away
+// to the right. That is geometry inside a picture, not a reading direction, so
+// it does not mirror — no composition here does.
+//
+// Drawn once at its canonical size and placed by CENTRE, like the card above.
+const BUBBLE = { w: 268, h: 152, r: 40, tail: 13 }
+const BUBBLE_PAD = 34
+const BUBBLE_LINE = { h: 14, lead: 24, long: 176, short: 118 }
+
+/** What a message occupies once its lean is counted. */
+export const messageMarks = (x: number, y: number, scale = 1, tilt = 0): ArtMarks =>
+  leanMarks(x, y, BUBBLE.w * scale, BUBBLE.h * scale, tilt)
+
+export function MessageArt({ x, y, scale = 1, tilt = 0 }: {
+  x: number
+  y: number
+  scale?: number
+  tilt?: number
+}) {
+  const { w, h, r, tail } = BUBBLE
+  const lineTop = (h - (BUBBLE_LINE.h * 2 + BUBBLE_LINE.lead)) / 2
+  return (
+    <G transform={`translate(${x},${y}) scale(${scale}) rotate(${tilt}) translate(${-w / 2},${-h / 2})`}>
+      <Path
+        d={`M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h}`
+          + ` H ${tail} A ${tail} ${tail} 0 0 1 0 ${h - tail} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`}
+        fill={INK}
+      />
+      <Rect
+        x={BUBBLE_PAD}
+        y={lineTop}
+        width={BUBBLE_LINE.long}
+        height={BUBBLE_LINE.h}
+        rx={BUBBLE_LINE.h / 2}
+        fill={WHITE}
+      />
+      <Rect
+        x={BUBBLE_PAD}
+        y={lineTop + BUBBLE_LINE.h + BUBBLE_LINE.lead}
+        width={BUBBLE_LINE.short}
+        height={BUBBLE_LINE.h}
+        rx={BUBBLE_LINE.h / 2}
+        fill={WHITE_MID}
+      />
     </G>
   )
 }

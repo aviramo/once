@@ -106,8 +106,13 @@ export default {
   // Location
 
   // Settings
-  'settings.profile': 'עריכת הפרופיל',
-  'settings.buildProfile': 'בניית הפרופיל',
+  // THE TASK IS TWO PHOTOS, SO THE BUTTON SAYS PHOTOS (user directive
+  // 2026-08-01). It read 'בניית הפרופיל' on all three of the app's shut doors,
+  // which sounds like a form to fill in; what is actually being asked for is two
+  // pictures, and the number is what says how short the job is. The KEY keeps
+  // its name (a build-profile gate is still what this is, in code), exactly as
+  // `group` survives as an identifier for a מעגל.
+  'settings.buildProfile': 'בחירת תמונות',
   'settings.account': 'חשבון',
   // The same state as a full sentence, for the preferences popup's leading ROW
   // (user directive 2026-07-30). A row is read as a line of text where the
@@ -118,8 +123,11 @@ export default {
   // Why the row is shut for a user who has not built a profile: he reads the
   // hidden sentence like anyone else, and this is what the tap answers with. The
   // title and the button are the app's one build-profile gate (BuildProfileGate),
-  // so only the blocked door is named here.
-  'settings.visibilityGateDesc': 'כדי שיראו אותך צריך פרופיל עם שתי תמונות לפחות. זה לוקח דקה',
+  // so only the blocked door is named here. It names the PHOTOS rather than "a
+  // profile with at least two photos" (user directive 2026-08-01) — same
+  // sentence, without the word that made two pictures sound like a project, and
+  // without counting them (see home.buildProfileTitle).
+  'settings.visibilityGateDesc': 'כדי שיראו אותך נדרשות תמונות שלך',
   // The watcher count as a SENTENCE, for the pill beside that row (user
   // directive 2026-07-31, restoring what the bare number replaced the day
   // before): a row is read as a line of text, so the count finishes the line the
@@ -127,20 +135,42 @@ export default {
   // number is the DOCK's preferences key — a mark standing beside a 24dp glyph
   // has no room for a sentence, and the row it opens is where the sentence is.
   // Singular is its own string: Hebrew inflects the verb for a single watcher.
+  // And ZERO is its own string too (user directive 2026-08-01): the pill stands
+  // beside a visible row at every count, so "nobody" is said in words rather
+  // than by an empty lane, which read as a count that had failed to load.
+  'settings.watchersNone': 'אף אחד לא צופה בי',
   'settings.watchersOne': 'מישהו אחד צופה בי',
   'settings.watchersMany': '{count} צופים בי',
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
   'settings.credits': 'קרדיטים',
+  // The DEPOSIT, on a second pill beside that number (user directive
+  // 2026-08-01): a credit that left the wallet when I sent an invitation and
+  // comes back if the invitation dies without a chat. The dock's key says it as
+  // a bare "+1" because a mark beside a 24dp glyph has no room for a word; here
+  // there is a line of text, so the pill names itself — the same rule the
+  // watcher pill above follows. No inflection either way, so one string.
+  'settings.creditsHeld': '{count} בפיקדון',
   // Leaving a group. The only strings left from the menu's old groups sheet:
   // joining by code, the membership list and the row that opened them all live
   // in Circles now, and the sheet itself is deleted. Circles' own leave popup
   // reads these three.
   'settings.groupsLeaveTitle': 'לעזוב את {name}?',
-  'settings.groupsLeaveConfirm': 'עזיבת הקבוצה',
+  'settings.groupsLeaveConfirm': 'עזיבת המעגל',
 
-  // Circles: the menu row + the full hub sheet and its sub-screens.
+  // Circles: the dock key + the full hub sheet and its sub-screens.
+  // THE PRODUCT WORD IS "מעגל" / "circle" WHEREVER A USER READS IT (user
+  // directive 2026-08-01). "קבוצה" is gone from the copy in both languages: the
+  // site had said מעגלים for weeks and the app was the last surface saying both,
+  // with the hub titled "המעגלים שלי" over a page of קבוצות. `group` survives as
+  // an IDENTIFIER only — the groups/user_groups tables, the group_* push codes,
+  // the /g/ invite link, the component props — so a key still named `newGroup` /
+  // `removeFromGroup` is correct and only its VALUE moved.
+  // מעגל is masculine where קבוצה was feminine, so every adjective, verb and
+  // pronoun agreeing with it turned with the noun: מנוהלת→מנוהל, מופיעה→מופיע,
+  // תעבור→יעבור, בה→בו. Those are the strings that do not carry the word at all
+  // and would otherwise have been missed.
   'communities.menuRow': 'מעגלים',
   'communities.title': 'המעגלים שלי',
   'communities.myFriends': 'החברים שלי',
@@ -148,35 +178,39 @@ export default {
   // The one WORD, for the button on the hub's friends row: the row already
   // says what it is about, so the button only says what it does.
   'communities.invite': 'הזמנה',
-  'communities.create': 'יצירת קבוצה',
-  'communities.find': 'חיפוש והצטרפות לקבוצה',
-  // Group kinds: ONE axis, three stops (2026-07-27). Replaces the old
+  'communities.create': 'יצירת מעגל',
+  'communities.find': 'חיפוש והצטרפות למעגל',
+  // Circle kinds: ONE axis, three stops (2026-07-27). Replaces the old
   // public/private + approval-on/off pair everywhere it was shown.
-  'communities.kindLabel': 'סוג הקבוצה',
-  'communities.kindOpen': 'קבוצה פתוחה',
-  'communities.kindOpenSub': 'מופיעה בחיפוש וההצטרפות אוטומטית',
-  'communities.kindApproved': 'קבוצה מאושרת',
-  'communities.kindApprovedSub': 'מופיעה בחיפוש וכל בקשת הצטרפות דורשת אישור',
-  'communities.kindPrivate': 'קבוצה פרטית',
-  'communities.kindPrivateSub': 'לא מופיעה בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור',
+  // TWO of the three name the JOINING rather than the circle (user directive
+  // 2026-08-01): "מעגל מאושר" reads first as a HAPPY circle, מאושר being the
+  // everyday word for it — which the feminine "קבוצה מאושרת" got away with and
+  // the masculine does not. So the axis is stated as the thing it decides, who
+  // may come in; private stays a fact about the circle itself, because that is
+  // the one stop where the circle's own visibility is what changes.
+  'communities.kindLabel': 'סוג המעגל',
+  'communities.kindOpen': 'הצטרפות פתוחה',
+  'communities.kindOpenSub': 'מופיע בחיפוש וההצטרפות אוטומטית',
+  'communities.kindApproved': 'הצטרפות באישור',
+  'communities.kindApprovedSub': 'מופיע בחיפוש וכל בקשת הצטרפות דורשת אישור',
+  'communities.kindPrivate': 'מעגל פרטי',
+  'communities.kindPrivateSub': 'לא מופיע בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור',
   'communities.membersCount': '{count} חברים',
   'communities.oneMember': 'חבר אחד',
-  // Row meta segments, laid out by MetaLine. One string per fact, so the menu
-  // row and the hub rows count the same things in the same words.
-  'communities.groupsCount': '{count} קבוצות',
-  'communities.oneGroup': 'קבוצה אחת',
+  // Row meta segments, laid out by MetaLine. One string per fact, so every list
+  // counting the same thing counts it in the same words. (`groupsCount` /
+  // `oneGroup` and the `groupLabel` helper that read them are deleted with the
+  // dock's old menu row, 2026-08-01: nothing has counted circles since that row
+  // went, and `rowEmpty` — the row's own empty line — goes with them.)
   'communities.oneFriend': 'חבר אחד',
   'communities.requestsCount': '{count} בקשות',
   'communities.oneRequest': 'בקשה אחת',
-  // Menu row with nothing in it yet: the row still says what it is for, in the
-  // one line the counts would have used.
-  'communities.rowEmpty': 'הצטרפות לקבוצות וחברים',
-  // הכניסה למעגלים חסומה עד שהפרופיל נבנה: תמונות ותיאור. המשפט פונה אל
-  // המשתמש בציווי, ולכן הוא ממוגדר במקום ({m|f}, כמו home.buildProfileTitle)
-  // ונפתר ב-genderize מול המין של המשתמש עצמו.
+  // הכניסה למעגלים חסומה עד ששתי התמונות קיימות. המשפט מדבר על התמונות ולא על
+  // "פרופיל" (הנחיית משתמש 1.8.2026), וכיוון שהוא כבר לא בציווי הוא גם חסר
+  // מגדר: אין בו {m|f} ואין צורך ב-genderize בצד הקורא.
   'communities.gateTitle': 'אנשים דרך מעגלים',
-  'communities.gateDesc': 'מעגלים מחברים בין אנשים עם תחומי עניין משותפים. כדי להתחיל, צ{ור|רי} פרופיל עם שתי תמונות לפחות',
-  'communities.managedBy': 'מנוהלת על ידי {name}',
+  'communities.gateDesc': 'מעגלים מחברים בין אנשים עם תחומי עניין משותפים. כדי להצטרף נדרשות תמונות שלך',
+  'communities.managedBy': 'מנוהל על ידי {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared group in one list, so it says what the two of you have in common
   // without naming a kind of connection.
@@ -185,26 +219,32 @@ export default {
   // the friend named in it, so the pair here is chosen by match.is_male.
   'communities.friendOfM': 'חבר של {name}',
   'communities.friendOfF': 'חברה של {name}',
-  // (No "you have no groups yet" line any more: a hub with no groups IS the
-  // start page — the picture, what this is for, the two ways in — with the
+  // (No "you have no circles yet" line any more: a hub with nothing in it IS
+  // the start page — the picture, what this is for, the two ways in — with the
   // friends row over it. See HubStart.)
 
   // The page before there is anything on it: no friends, nobody waiting, no
-  // group of any kind (user directive 2026-07-30). It is not the list's empty
+  // circle of any kind (user directive 2026-07-30). It is not the list's empty
   // line — it is the whole screen, so it says what Circles IS and then offers
   // the only two ways to start one. See HubStart / CirclesArt.
-  'communities.startTitle': 'המעגל שלך מתחיל כאן',
-  'communities.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך לחברים הפנויים שלו. קבוצות עוזרות לך להכיר אנשים עם תחומי עניין משותפים',
+  // NOTHING HERE SAYS "מעגל" IN THE ABSTRACT any more (user directive
+  // 2026-08-01). Once a circle is a THING in the app, "המעגל שלך" stops reading
+  // as somebody's social circle and starts reading as an object on this very
+  // screen — worst of all in this pair, where the title said it the one way and
+  // the line under it the other. So the title COUNTS them, and the sentence
+  // about what a friend brings names the PEOPLE.
+  'communities.startTitle': 'כאן מתחילים המעגלים שלך',
+  'communities.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך לחברים הפנויים שלו, ומעגל משותף פותח אנשים עם תחומי עניין דומים',
   // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
-  // one of the two whose label does not say what it is worth. "Search groups"
+  // one of the two whose label does not say what it is worth. "חיפוש מעגלים"
   // needs no line, and a second one turned the two ways forward into a
   // paragraph.
-  'communities.startFind': 'חיפוש קבוצות',
+  'communities.startFind': 'חיפוש מעגלים',
   // The friends page before there is a single friend on it: the same drawing
   // and the same heading as the hub's, one step in — that page offers the two
   // ways to start a circle, this one owns the first of them, so all it has to
   // say is what a friend joining actually opens.
-  'communities.friendsStartDesc': '{הזמן|הזמיני} חברים, וכשהם יצטרפו ייפתחו בפניך אנשים חדשים מהמעגלים שלהם',
+  'communities.friendsStartDesc': '{הזמן|הזמיני} חברים, וכשהם יצטרפו ייפתחו בפניך אנשים חדשים שהם מכירים',
 
   // My friends
   'communities.inviteFriend': 'הזמנת חברים',
@@ -224,7 +264,7 @@ export default {
   // absent, and an empty page has to say what the user GETS. (Was
   // `friendsHint`, which no surface rendered and which still offered the
   // people-search flow removed 2026-07-26.)
-  'communities.friendsWhy': 'כל חבר פותח לכם את המעגל שלו: אנשים שעוד לא הכרתם, שמגיעים אליכם ראשונים עם חבר משותף',
+  'communities.friendsWhy': 'כל חבר פותח לכם את האנשים שלו: כאלה שעוד לא הכרתם, שמגיעים אליכם ראשונים עם חבר משותף',
   'communities.unfriendTitle': 'להסיר את {name} מהחברים?',
   'communities.unfriendDesc': 'אפשר לשייך שוב בהמשך',
   'communities.unfriendConfirm': 'הסרה',
@@ -236,17 +276,17 @@ export default {
   'communities.noResults': 'אין תוצאות',
   'communities.linkNote': 'הצד השני יקבל בקשה. אחרי אישור אתם מחוברים בשני הכיוונים',
 
-  // Create a group
-  'communities.newGroup': 'קבוצה חדשה',
+  // Create a circle
+  'communities.newGroup': 'מעגל חדש',
   'communities.name': 'שם',
-  'communities.namePlaceholder': 'שם הקבוצה',
-  'communities.createAction': 'יצירת הקבוצה',
-  'communities.nameError': 'צריך שם קצר יותר',
+  'communities.namePlaceholder': 'שם המעגל',
+  'communities.createAction': 'יצירת המעגל',
+  'communities.nameError': 'נדרש שם קצר יותר',
   'communities.description': 'תיאור',
-  'communities.descriptionPlaceholder': 'על מה הקבוצה',
+  'communities.descriptionPlaceholder': 'על מה המעגל',
   'communities.descUpdate': 'עדכון',
-  // קישור לפרטים נוספים: המנהלים מזינים אותו בהגדרות הקבוצה, וכל מי שרואה את
-  // הקבוצה מקבל שורה אחת לחיצה מתחת לתיאור.
+  // קישור לפרטים נוספים: המנהלים מזינים אותו בהגדרות המעגל, וכל מי שרואה את
+  // המעגל מקבל שורה אחת לחיצה מתחת לתיאור.
   'communities.link': 'קישור לפרטים נוספים',
   // הפועל מדבר אל המשתמש עצמו, ולכן הוא ממוגדר במקום (genderize) ולא נכתב
   // בשתי הצורות.
@@ -258,30 +298,29 @@ export default {
   'communities.saveFailed': 'לא נשמר, נסו שוב',
   'communities.moreDetails': 'לפרטים נוספים',
 
-  // A group you manage
+  // A circle you manage
   'communities.shareInvite': 'שיתוף קישור הזמנה',
-  'communities.settings': 'הגדרות הקבוצה',
-  // תצוגה מקדימה: הכפתור בכותרת של הגדרות הקבוצה, שפותח את הפופאפ של הקבוצה
+  'communities.settings': 'הגדרות המעגל',
+  // תצוגה מקדימה: הכפתור בכותרת של הגדרות המעגל, שפותח את הפופאפ של המעגל
   // בדיוק כפי שכל אחד אחר רואה אותו.
   'communities.preview': 'תצוגה מקדימה',
-  // ניהול בלי לשחק. דגל על החברות שלי בקבוצה אחת שאני מנהל: כשהוא דלוק, אני
-  // והחברים בקבוצה לא נפגשים במשחק. צ'קבוקס בהגדרות הקבוצה, מתחת לסוג הקבוצה,
+  // ניהול בלי לשחק. דגל על החברות שלי במעגל אחד שאני מנהל: כשהוא דלוק, אני
+  // והחברים במעגל לא נפגשים במשחק. צ'קבוקס בהגדרות המעגל, מתחת לסוג המעגל,
   // וההסבר הוא שורת המשנה שלו.
-  'communities.hiddenToggle': 'להסתיר אותי מחברי הקבוצה',
-  'communities.hiddenSub': 'החברים בקבוצה לא יראו אותך במשחק ו{אתה לא תראה|את לא תראי} אותם. ההרשאות שלך בקבוצה נשארות בדיוק כמו קודם',
+  'communities.hiddenToggle': 'להסתיר אותי מחברי המעגל',
+  'communities.hiddenSub': 'החברים במעגל לא יראו אותך במשחק ו{אתה לא תראה|את לא תראי} אותם. ההרשאות שלך במעגל נשארות בדיוק כמו קודם',
   'communities.hiddenShort': 'לא משחק',
-  'communities.deleteGroup': 'מחיקת הקבוצה',
+  'communities.deleteGroup': 'מחיקת המעגל',
   'communities.deleteTitle': 'למחוק את {name}?',
-  'communities.deleteDesc': 'הקבוצה וכל החברויות בה יימחקו. אי אפשר לבטל',
+  'communities.deleteDesc': 'המעגל וכל החברויות בו יימחקו. אי אפשר לבטל',
   'communities.deleteConfirm': 'מחיקה',
   // No confirm for taking a member out (user directive 2026-07-31): the tap
   // removes. `removeMemberTitle` / `removeMemberDesc` / `remove` are deleted with
   // that popup — the description WAS the reason it needed none ("they can join
-  // again with the invite link").
-  'communities.makePublic': 'הפיכה לציבורית',
-  'communities.makePrivate': 'הפיכה לפרטית',
-  'communities.approvalEnable': 'דרישת אישור להצטרפות',
-  'communities.approvalDisable': 'ביטול דרישת האישור',
+  // again with the invite link"). `makePublic` / `makePrivate` / `approvalEnable`
+  // / `approvalDisable` are deleted too (2026-08-01): they are the two-axis pair
+  // the kind picker replaced on 2026-07-27, nothing has rendered them since, and
+  // "הפיכה לציבורית" had no masculine form worth writing.
   // The queue's one name, on the roster row that unfolds it. Its page-title
   // twin (`requestsNav`) and its empty line (`noRequests`) went with the page
   // itself on 2026-07-31: the queue is a drawer inside the roster now, and a
@@ -290,7 +329,7 @@ export default {
   'communities.approve': 'אישור',
   'communities.approveAll': 'אישור כולם',
   'communities.approveAllTitle': 'לאשר את כל הבקשות?',
-  'communities.approveAllDesc': 'כל מי שממתין בתור יצורף לקבוצה {name}, ויקבל על כך התראה',
+  'communities.approveAllDesc': 'כל מי שממתין בתור יצורף למעגל {name}, ויקבל על כך התראה',
   'communities.declineJoin': 'דחייה',
   'communities.owner': 'בעלים',
   // The role is named for the one thing it does: answer join requests (user
@@ -303,31 +342,31 @@ export default {
   'communities.manager': '{מאשר|מאשרת}',
   'communities.makeManager': 'מינוי כמאשר',
   'communities.removeManager': 'ביטול המינוי',
-  'communities.removeFromGroup': 'הסרה מהקבוצה',
+  'communities.removeFromGroup': 'הסרה מהמעגל',
   'communities.transferOwner': 'העברת בעלות',
   'communities.transferOwnerTitle': 'להעביר את הבעלות ל{name}?',
-  'communities.transferOwnerDesc': 'הקבוצה תעבור לבעלות של {name}, ואצלך יישארו הרשאות אישור בלבד. אי אפשר לבטל',
-  // An open group has no approvers, so the outgoing owner keeps nothing: he is
+  'communities.transferOwnerDesc': 'המעגל יעבור לבעלות של {name}, ואצלך יישארו הרשאות אישור בלבד. אי אפשר לבטל',
+  // An open circle has no approvers, so the outgoing owner keeps nothing: he is
   // a plain member of it from that moment.
-  'communities.transferOwnerDescOpen': 'הקבוצה תעבור לבעלות של {name}, ואצלך לא יישארו הרשאות בקבוצה. אי אפשר לבטל',
+  'communities.transferOwnerDescOpen': 'המעגל יעבור לבעלות של {name}, ואצלך לא יישארו הרשאות במעגל. אי אפשר לבטל',
 
-  // A group you are in
-  'communities.leave': 'עזיבת הקבוצה',
-  'communities.memberNote': 'חברי הקבוצה מופיעים אצלך בעדיפות גבוהה',
+  // A circle you are in
+  'communities.leave': 'עזיבת המעגל',
+  'communities.memberNote': 'חברי המעגל מופיעים אצלך בעדיפות גבוהה',
 
   // Find or join
-  'communities.findTitle': 'הצטרפות לקבוצה',
-  'communities.findSearch': 'חיפוש קבוצה',
-  // Searching the roster of a group you manage: the mark on that page's bar,
+  'communities.findTitle': 'הצטרפות למעגל',
+  'communities.findSearch': 'חיפוש מעגל',
+  // Searching the roster of a circle you manage: the mark on that page's bar,
   // the field's own placeholder, and the mark that ends the search. It looks
   // over BOTH lists at once, the people waiting and the people already in.
   'communities.searchPeople': 'חיפוש לפי שם',
   'communities.searchClose': 'סגירת החיפוש',
-  // The line about the PERSON, standing over a group's name on their page: who
+  // The line about the PERSON, standing over a circle's name on their page: who
   // they are and when they turned up here. Genderless in both languages, so a
   // row with no profile on it still reads (see memberSince / waitingSince), and
-  // the name leads because everything else in that block is the group's.
-  'communities.inGroupSince': '{name} בקבוצה מאז {date}',
+  // the name leads because everything else in that block is the circle's.
+  'communities.inGroupSince': '{name} במעגל מאז {date}',
   // "בתור מאז", not "ממתין מאז": the sentence must stay genderless for real (a
   // row cached with no profile carries no is_male to inflect with), and the
   // participle was the one word in the pair that was not.
@@ -347,11 +386,19 @@ export default {
   'communities.declinedTitle': 'הבקשה ל{name} נדחתה',
   'communities.declinedDesc': 'הבקשה שלכם לא אושרה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש',
   'communities.declinedConfirm': 'הסרת ההודעה',
-  // The pending group's own popup: what the state is, and the button that ends
-  // it (the same popup a group you are in opens, with cancel instead of leave).
-  'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור של הקבוצה',
+  // The pending circle's own popup: what the state is, and the button that ends
+  // it (the same popup a circle you are in opens, with cancel instead of leave).
+  // The sentence names no approver (user directive 2026-08-01): "לאישור של
+  // המעגל" makes the circle the thing that decides, which a קבוצה could pass for
+  // and a מעגל cannot, and naming the managers instead says more than the person
+  // waiting needs. What is waiting is the approval, full stop.
+  'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור',
   'communities.cancelJoin': 'ביטול הבקשה',
-  'communities.shareMessage': 'הצטרפו לקבוצה {name}\n{link}',
+  // Goes out to WhatsApp, i.e. to people who have never opened the app (user
+  // directive 2026-08-01): "הצטרפו למעגל X" reads as a cult to someone with no
+  // idea what a circle is here, so the message names the circle and the app and
+  // leaves the term inside.
+  'communities.shareMessage': 'הצטרפו אל {name} באפליקציית Once\n{link}',
 
   // Support: row in the account card. Opens the device mail composer at the
   // support inbox, with this subject prefilled.
@@ -361,7 +408,6 @@ export default {
   // device browser, in the language the app is running in.
   'settings.site': 'אתר',
   'settings.preview': 'תצוגה מקדימה',
-  'settings.myProfile': 'פרופיל',
   'settings.photo': 'התמונות שלי',
   'settings.photoHint': 'לחיצה ארוכה וגרירה לשינוי סדר',
   'settings.aboutMe': 'קצת עלי',
@@ -418,19 +464,27 @@ export default {
   'settings.locationServicesOffTitle': 'שירותי המיקום כבויים',
   'settings.locationServicesOffDesc': 'יש להפעיל את שירותי המיקום במכשיר ולנסות שוב',
   'settings.locationLockedTitle': 'אי אפשר לשנות מיקום עכשיו',
-  'settings.locationLockedDesc': 'כדי לשנות מיקום, צריך לצאת קודם מהצפייה או מההזמנה הפעילה. אחרי {שתסיים|שתסיימי} את האינטראקציה הנוכחית, {תוכל|תוכלי} לעדכן את המיקום',
+  'settings.locationLockedDesc': 'כדי לשנות מיקום, נדרש לצאת קודם מהצפייה או מההזמנה הפעילה. אחרי {שתסיים|שתסיימי} את האינטראקציה הנוכחית, {תוכל|תוכלי} לעדכן את המיקום',
   'settings.duplicatePhotoTitle': 'תמונה כפולה',
   'settings.duplicatePhotoBody': 'לא ניתן להעלות את אותה תמונה פעמיים. תמונות כפולות הוסרו',
   'settings.photoEditMoveUp': 'הזזה למעלה',
   'settings.photoEditReplace': 'החלפת תמונה',
   'settings.photoEditMoveDown': 'הזזה למטה',
   'settings.photoEditDelete': 'מחיקה',
-  // The two rows of the popup the own-profile card's heading plus opens.
-  // Each row is the THING, not the verb: the plus already said "add".
-  'settings.addPhoto': 'תמונה',
-  'settings.addFamily': 'משפחה וילדים',
-  // What that plus says to a screen reader: the mark itself names nothing.
-  'settings.a11y.addToProfile': 'הוספה לפרופיל',
+  // Each now stands where the thing it adds actually is: the photo in the
+  // PHOTO's own menu, the family entry as the empty chip in the fact set's
+  // place on the first photo (user directive 2026-08-01). The photo row is a
+  // VERB — there is no longer a plus above it saying "add".
+  'settings.addPhoto': 'הוספת תמונה',
+  // The empty fact chip is NOT a verb: it names the FACT that is missing
+  // (user directive 2026-08-02), the way a placeholder names the field it
+  // stands in. "הוספת משפחה וילדים" described the act of filling a form; what
+  // the reader of this card wants to know is where I stand on kids, which is
+  // what the filled chip says too ("יש לי 2 ילדים ולא רוצה עוד").
+  'settings.addFamily': 'התייחסות לילדים',
+  // The one row of the first-open photo tutorial: the photo menu itself, saying
+  // what opens it.
+  'settings.photoMenuHint': 'לפעולות נוספות על תמונות יש ללחוץ על התמונה',
   'family.title': 'משפחה וילדים',
   'family.optional': 'אופציונאלי',
   'family.hasKidsQuestion': 'יש לך ילדים?',
@@ -801,6 +855,10 @@ export default {
   'home.joinGate.requestText': 'הגישה באישור, בקשו להצטרף',
   'home.joinGate.waitingText': 'הבקשה נשלחה, ממתינים לאישור',
   'home.startNow': 'להתחיל עכשיו',
+  // WHERE THE CLOCK WAS, once it has run out (user directive 2026-08-01). A card
+  // that is over has no deadline left, and an empty slot beside the name read as
+  // a clock that had failed rather than one that had finished.
+  'home.cardEnded': 'הסתיים',
   'home.endedBack': 'חזרה למשחק',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).
@@ -934,20 +992,29 @@ export default {
   'home.waitingTimerDesc_mf': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן',
   'home.waitingTimerDesc_fm': 'ובזמן הזה, הוא לא יקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם הוא ידחה או לא יענה בזמן',
   'home.waitingTimerDesc_ff': 'ובזמן הזה, היא לא תקבל הזמנות אחרות. הקרדיט שלך יחזור אליך רק אם היא תדחה או לא תענה בזמן',
-  // The invite door's own sentence for the app's one build-profile gate. Its
-  // button is `settings.buildProfile`, which is what every one of those doors
-  // says: there was a second key here with the identical Hebrew word, and the
-  // two drifted in English alone.
-  'home.buildProfileTitle': 'בנ{ה|י} קודם פרופיל',
-  'home.buildProfileDesc': 'כדי לשלוח הזמנה צריך פרופיל עם שתי תמונות לפחות. זה לוקח דקה',
-  // The browse allowance's door (lib/browseGate.ts): an account with no profile
-  // watches two people and then the centre circle stops being the play button
-  // and becomes this. Same popup as the invite door above, so only the sentence
-  // changes — and the TITLE is also the pane's own headline, the way every
-  // centre notice states its reason in that slot. The description is addressed
-  // to the user in the imperative, so it is genderized in place ({m|f}).
-  'home.browseGateTitle': 'כדי להמשיך צריך פרופיל',
-  'home.browseGateDesc': 'צ{ור|רי} פרופיל עם שתי תמונות לפחות, ו{תוכל|תוכלי} להמשיך להכיר אנשים',
+  // The TITLE of the app's one build-profile gate, shared by two of its three
+  // doors (the invite prompt and the preferences' visibility row), and the
+  // invite door's own sentence under it. Its button is `settings.buildProfile`,
+  // which is what every one of those doors says: there was a second key here
+  // with the identical Hebrew word, and the two drifted in English alone.
+  // BOTH NAME THE PHOTOS, NOT "A PROFILE" (user directive 2026-08-01), and they
+  // do not COUNT them either: "two" is a requirement to satisfy where "photos"
+  // is a thing to go and do, and the photo step says the number itself
+  // (`photo.sub`, "הוסף 2-6 תמונות") the moment the user is standing in front of
+  // it. Naming the photos also takes the imperative out of the title, so it is
+  // genderless and neither host genderizes it.
+  'home.buildProfileTitle': 'נדרשות תמונות שלך',
+  'home.buildProfileDesc': 'כדי לשלוח הזמנה נדרשות תמונות שלך',
+  // The browse allowance (lib/browseGate.ts): an account with no profile watches
+  // two people and then the centre circle stops being the play button and says
+  // this — the pane's own headline, the way every centre notice states its
+  // reason in that slot. It is the WHOLE of what that gate says: the circle goes
+  // straight to the photo step now, so there is no popup and no sentence under a
+  // title any more (the `home.browseGateDesc` that was here is deleted). It
+  // names the PHOTOS rather than "a profile" (user directive 2026-08-01) — that
+  // is the whole of what is missing, and it is what the camera in the circle
+  // under it opens.
+  'home.browseGateTitle': 'כדי להמשיך נדרשות תמונות פרופיל',
   'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
   'home.cancelWaitingBtn': 'ביטול הזמנה',
   'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין',
@@ -973,26 +1040,32 @@ export default {
   'home.replyingTitle': 'הוא הזמין אותך לצ׳אט',
   'home.replyingTitle_m': 'הוא הזמין אותך לצ׳אט',
   'home.replyingTitle_f': 'היא הזמינה אותך לצ׳אט',
-  'home.replyingDesc': 'ובזמן הזה, הוא לא יכול לשלוח הזמנות נוספות. כל הפוקוס רק עלייך',
-  'home.replyingDesc_mm': 'ובזמן הזה, הוא לא יכול לשלוח הזמנות נוספות. כל הפוקוס רק עליך',
-  'home.replyingDesc_mf': 'ובזמן הזה, היא לא יכולה לשלוח הזמנות נוספות. כל הפוקוס רק עליך',
-  'home.replyingDesc_fm': 'ובזמן הזה, הוא לא יכול לשלוח הזמנות נוספות. כל הפוקוס רק עלייך',
-  'home.replyingDesc_ff': 'ובזמן הזה, היא לא יכולה לשלוח הזמנות נוספות. כל הפוקוס רק עלייך',
-  'home.replyingAccept': 'פתיחת צ׳אט',
+  // The popup that ANSWERS an arriving invitation (user directive 2026-08-01). It
+  // speaks the send prompt's language — the fact, one sentence about what the
+  // press does, and the purple button carrying the credit gem — but it does not
+  // ASK whether to approve: the user opened it by reaching for the chat, so what
+  // it owes him is what approving DOES and what it COSTS, said once. It replaced
+  // a sentence about the other side being locked to him, which is true and is
+  // not what he is deciding.
+  //
+  // No gendered variants: nothing in it refers to either person.
+  'home.replyingDesc': 'אישור ההזמנה פותח ביניכם צ׳אט, ועולה קרדיט אחד',
+  'home.replyingAccept': 'אישור הזמנה',
   'home.replyingReject': 'לדלג',
   'home.chatHeader': 'אתם אחד על אחד',
+  // The one popup ending a chat: its title, its sentence and its two answers,
+  // which are chat.leave (the purple) and chat.block. There is no separate
+  // confirm behind either of them any more (user directive 2026-08-02), so the
+  // confirm labels that named the same two actions a second time — and the
+  // block's own title and paragraph — are deleted.
   'home.leaveTitle': 'סיום צ\'אט',
   'home.leaveDesc': 'הצ\'אט ייסגר לצמיתות ולא ניתן יהיה לשחזר אותו. הצד השני יקבל התראה',
-  'home.leaveConfirm': 'סיום',
   'chat.empty': 'עוד אין הודעות',
   'chat.inputPlaceholder': 'כתוב הודעה...',
   'chat.today': 'היום',
   'chat.yesterday': 'אתמול',
   'chat.dayBeforeYesterday': 'שלשום',
   'chat.block': 'חסימה',
-  'chat.blockTitle': 'חסימת משתמש',
-  'chat.blockDesc': 'המשתמש ייחסם ולא יוכל ליצור איתך קשר שוב. לא ניתן לבטל פעולה זו',
-  'chat.blockConfirm': 'חסימה',
   'chat.endChat': 'סיום צ\'אט',
   'chat.leave': 'עזיבה',
   // (The chat sheet's own close label went with its X on 2026-07-31 — the sheet

@@ -29,7 +29,7 @@ import { RoundButton } from './RoundButton'
 import { Spinner } from './Spinner'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BottomSheet, SheetScroll, SheetActionPair, SHEET_DESC } from './BottomSheet'
-import { Glyph, GroupsIcon, TrashIcon, RankIcon, KeyIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon, SearchIcon, CreditIcon } from './icons'
+import { Glyph, GroupsIcon, TrashIcon, RankIcon, KeyIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon, SearchIcon, CreditIcon, GlobeIcon } from './icons'
 import { GlyphSlot } from './GlyphSlot'
 import { ToggleRow } from './Switch'
 import { tap, tapWarning } from '../lib/haptics'
@@ -37,13 +37,13 @@ import { t, genderize } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
 
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
-import { Avatar, AvatarDisc, GroupHead, SkeletonRows, SyncBar, AVATAR } from './CommunityBits'
+import { Avatar, AvatarDisc, GroupHead, SkeletonRows, SyncBar } from './CommunityBits'
 import { Chip } from './Chip'
 import { Strip, STRIP_GUTTER } from './Strip'
 import { MatchCard, ProfileActionBar, profileActionBarShows } from './MatchCard'
 import { type StripOption } from './OptionStrip'
 import { CirclesArt } from './CirclesArt'
-import { ArrowDownArt, InviteFriendsArt } from './ArtKit'
+import { ArrowDownArt } from './ArtKit'
 // Cyclic with this module by design (SharedListPopup opens the group popup that
 // lives here): both sides touch the other only at render time, and every export
 // involved is a hoisted function declaration, so neither can see a half-built
@@ -954,15 +954,35 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
       first
       style={rosterRowStyle(0, last)}
       onPress={openFriends}
-      // NOT A BUTTON, A PICTURE (user directive 2026-07-31): a filled button in
-      // a list of circles read as a second control competing with the row it
-      // stands in, and this row does not need pressing twice — it already goes
-      // where the invitation lives. What it wanted to say is that there are
-      // people out there not asked yet, so the lane after the name is a run of
-      // faces fading off the row's end (InviteFriendsArt). It fills the lane and
-      // nothing more: the row's own gutter is the air around it, and the art is
-      // untouchable, so the whole row is still one tap.
-      trailing={<InviteFriendsArt height={AVATAR} />}
+      // THE LANE IS THE INVITATION ITSELF (user directive 2026-08-02, turning
+      // the run of fading faces that stood here since 2026-07-31 — and with it
+      // that day's "not a button, a picture"). Inviting somebody is the one
+      // thing this page is FOR, and it was two taps away behind a row whose own
+      // job is to open the list; a drawing saying "there are people you have not
+      // asked yet" states the reason and then makes the reader go and find the
+      // control. So the row answers in place, which is exactly what a strip's
+      // `trailing` lane is: the button shares the invite link, the REST of the
+      // row still opens the friends page, and the two never fight for the tap —
+      // `Button` claims the responder on its own box, so the row's Pressable
+      // never sees it.
+      //
+      // It is the friends page's own invite button (same share glyph, same
+      // action), one size down and saying ONE WORD (`communities.invite`, user
+      // directive 2026-08-02): the row it stands in has already said who this is
+      // about, so the button only has to say what pressing it does — where the
+      // page's own button, standing under a roster with nothing beside it, names
+      // the whole thing. `alignSelf` is the one thing overridden — a button
+      // stretches to its row by default, and this one hugs the line it rides.
+      trailing={(
+        <Button
+          label={t('communities.invite')}
+          variant="primary"
+          size="md"
+          iconStart={<ShareGlyph color={WHITE} />}
+          style={s.friendsInviteBtn}
+          onPress={() => { tap(); if (profile) shareFriendInvite(profile) }}
+        />
+      )}
     />
   )
 
@@ -1083,25 +1103,15 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
 // are two ordinary buttons.)
 
 // ONE way out to a group's own page, from either place in the popup that offers
-// it (user directive 2026-07-29): the "more details" line and the group's HEAD
-// above the description are the same tap. The server is what guarantees the
-// value is an http(s) URL, so opening it here needs no parsing of its own; a
-// group with no link has no tap anywhere.
+// it (user directive 2026-07-29): the "more details" option in the foot and the
+// group's HEAD above the description are the same tap. The server is what
+// guarantees the value is an http(s) URL, so opening it here needs no parsing of
+// its own; a group with no link has no tap anywhere.
 const openGroupLink = (url?: string | null) => {
   if (!url) return
   tap()
   Linking.openURL(url).catch(() => {})
 }
-
-// A group's optional "more details" link, as one tappable line at the foot of
-// the popup's reading, under the standing note. It shows the words, never the
-// raw URL, and renders nothing for a group with no link.
-const GroupLink = ({ url }: { url?: string | null }) =>
-  url ? (
-    <Text style={s.sheetLink} accessibilityRole="link" onPress={() => openGroupLink(url)}>
-      {t('communities.moreDetails')}
-    </Text>
-  ) : null
 
 // ── The group popup ────────────────────────────────────────────────────────
 // THE popup a group opens into, from EVERY surface that lists one (user
@@ -1171,6 +1181,22 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   // app's hairline between, and no fill behind any of them. None of these is what
   // the popup is FOR, so none of them is painted as an invitation to press; the
   // one action that IS an invitation keeps its purple (see the actions block).
+  //
+  // WHERE THE GROUP SAYS MORE ABOUT ITSELF IS ONE OF THEM (user directive
+  // 2026-08-02): it LEADS the strip, keeping the place in the reading it had as
+  // an underlined line of its own under the standing note. It is the same kind of
+  // thing as the option beside it — something I MAY do, on the way past what the
+  // popup is offering — so it is painted the same way, and the popup's foot is
+  // one band of marks instead of a line of text over a row of them. The mark is
+  // the GLOBE, which is the app's own mark for "a page on the web, opened in the
+  // browser" (the settings list's site row is the other one that leaves).
+  const details: StripOption[] = group?.link ? [{
+    key: 'details',
+    label: t('communities.moreDetails'),
+    icon: <GlobeIcon color={INK} size={ICON.xxl} />,
+    onPress: () => openGroupLink(group.link),
+  }] : []
+
   const quietActions: StripOption[] =
     status === 'joined' ? [{
       key: 'leave',
@@ -1207,10 +1233,11 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   // Only a MEMBER hands the link on: an invite from someone who has not been let
   // in yet is not theirs to give.
   //
-  // Standing beside the quiet option it wears that option's shape — the mark over
-  // the word — but nothing here says so: `SheetActionPair` hands it `stack`, so
-  // the row that puts the two side by side is the one thing that knows they are
-  // side by side.
+  // It is an ORDINARY button here (user directive 2026-08-02): the full width of
+  // the popup, under the strip rather than beside it, with its mark beside its
+  // label the way every other button in the app carries one. The mark-over-word
+  // shape is for a purple standing IN a row of options, and this one no longer
+  // does — see `stacked` in SheetActionPair.
   const invitation =
     status === 'joined' && group?.is_public && group?.invite_code ? (
       <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
@@ -1265,12 +1292,11 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
             </View>
           </SheetScroll>
           {/* What this group is to me right now, in a sentence. A group I have
-              not asked to join yet says nothing: the button below says it.
-              IT STANDS ABOVE THE "more details" LINE (user directive
-              2026-07-31, reversing the pair): this note finishes what the group
-              just said about itself, and the link is the one thing in the popup
-              that LEAVES the app, so it sits last of the reading, directly over
-              the actions. */}
+              not asked to join yet says nothing: the button below says it. It is
+              the last of the popup's reading, standing directly over the foot —
+              it finishes what the group just said about itself, and what comes
+              after it is no longer writing at all but the marks the foot is made
+              of ("more details" left this block on 2026-08-02). */}
           {status !== 'none' ? (
             <Text style={s.note}>
               {t(status === 'joined' ? 'communities.memberNote'
@@ -1278,17 +1304,19 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
                 : 'communities.declinedDesc')}
             </Text>
           ) : null}
-          <GroupLink url={group?.link} />
         </View>
         {/* The popup's actions, in the app's one action block: what I may do
-            beside what I am being offered (SheetActionPair, which owns the row,
-            the widest gap in any popup above it, and the case where only one of
-            the two exists). They used to be the last children of the body's
-            SM-gap column, which put a group's buttons 8 under its note while
-            every other popup's stood 40 clear; and until 2026-07-31 they were a
-            strip stacked over a full-width button. A group I am nothing to and
-            cannot ask to join has neither, and gets no block at all. */}
-        <SheetActionPair options={quietActions} action={invitation} />
+            beside what I am being offered (SheetActionPair, which owns the gap,
+            the arrangement and the case where only one of the two exists). They
+            used to be the last children of the body's SM-gap column, which put a
+            group's buttons 8 under its note while every other popup's stood 40
+            clear. `stacked` (user directive 2026-08-02): this is the one popup
+            whose options are more than one — where the group says more about
+            itself, and the one thing my standing lets me do — so the strip takes
+            the whole row and divides it between them, and the purple runs the
+            full width under it. A group I am nothing to and cannot ask to join
+            has neither, and gets no block at all. */}
+        <SheetActionPair options={[...details, ...quietActions]} action={invitation} stacked />
       {/* Leaving is the only action here that asks twice: it drops a membership
           that getting back may not be mine to decide.
           It stands INSIDE this popup's own window, so the group stays lit under
@@ -2316,12 +2344,11 @@ function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFrie
   return (
     <View style={s.profileFill}>
       {profile ? (
-        // chromeInset lines the card's name/age chip up with the floating back
-        // control, exactly as the own-profile preview does. bottomChrome is the
-        // same question the bar below answers for itself, asked once: with a bar
-        // the card stops above it and its on-photo set ends at the card's own
-        // gutter; with none the card fills the screen and clears the navigation
-        // bar itself (it reads useBottomInset internally).
+        // chromeInset lines the card's name/age chip up with the page's own
+        // floating chrome. bottomChrome is the same question the bar below
+        // answers for itself, asked once: with a bar the card stops above it and
+        // its on-photo set ends at the card's own gutter; with none the card
+        // fills the screen and clears the navigation bar itself.
         <MatchCard
           match={profile}
           actions={[]}
@@ -2330,7 +2357,7 @@ function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFrie
           chromeInset={insets.top}
           hideProximity
           self={self}
-          onCircleTap={() => circles.open(profile.user_id, profile.is_male)}
+          onCircleTap={n => circles.open(profile.user_id, profile.is_male, n)}
         />
       ) : (
         <View style={[s.content, s.profileBare]}>
@@ -2987,11 +3014,13 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
   const [declined, setDeclined] = useState<Record<string, boolean>>({})
   const [preview, setPreview] = useState<PublicGroup | null>(null)  // group-details popup
   const seq = useRef(0)
-  // Asking to join is the end of the search (user directive 2026-07-28): the
-  // popup goes, and the page goes with it. Set when the tap queued a REQUEST,
-  // read once the popup has actually unmounted — the page must not start
-  // sliding off under a Modal that is still on screen, since a Modal is its own
-  // window and would not ride down with it.
+  // Answering the popup is the end of the search (user directive 2026-07-28 for
+  // a request, 2026-08-01 for a join): the popup goes, and the page goes with
+  // it. Set when the tap JOINED or queued a request — never when the popup was
+  // simply put away, which leaves the search exactly where it was — and read
+  // once the popup has actually unmounted: the page must not start sliding off
+  // under a Modal that is still on screen, since a Modal is its own window and
+  // would not ride down with it.
   const doneAfterPreview = useRef(false)
   const onPreviewClosed = useCallback(() => {
     if (!doneAfterPreview.current) return
@@ -3055,16 +3084,23 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
     tap()
     // Optimistically show the terminal state the server will land on: an
     // approval-gated group becomes a pending REQUEST, an open one joins.
-    if (g.requires_approval) {
-      setRequested(m => ({ ...m, [g.id]: true }))
-      // Leave on the tap, not on the answer: the wait is the whole outcome, and
-      // it is the hub that carries it (the pending row lands there off the same
-      // refresh). The rare reconcile below can no longer repaint a row that is
-      // gone, and it does not have to — a request that turns out to have been
-      // DECLINED shows up on the hub as a declined row, from the same summary.
-      doneAfterPreview.current = true
-      setPreview(null)
-    } else setJoined(m => ({ ...m, [g.id]: true }))
+    if (g.requires_approval) setRequested(m => ({ ...m, [g.id]: true }))
+    else setJoined(m => ({ ...m, [g.id]: true }))
+    // THE POPUP GOES ON THE TAP, WHICHEVER OF THE TWO IT WAS, AND THE PAGE GOES
+    // WITH IT (user directive 2026-08-01, carrying the request's own rule of
+    // 2026-07-28 over to the join, which used to leave both standing). A join
+    // and a request are one act — I found a circle and I am in it, or waiting to
+    // be — so they may not end differently; and a popup left open after a join
+    // turns into its own opposite the moment it repaints, the surface that
+    // offered to let me in now offering to share it and to LEAVE, which reads as
+    // the app answering the tap with the way to undo it.
+    // Leaving on the tap rather than on the answer is deliberate: where I now
+    // stand is the HUB's to say, and it says it off the same summary refresh —
+    // a member row, a pending one, or a declined one for the rare case the
+    // server turns the request down (which is why the reconcile below no longer
+    // having a row to repaint costs nothing, and does not have to).
+    doneAfterPreview.current = true
+    setPreview(null)
     // A public group is joinable by anyone who found it in search; joining
     // reuses the redeem path under the hood (no manual code needed).
     if (!g.invite_code) return
@@ -3327,12 +3363,11 @@ const s = StyleSheet.create({
   // its own (1.5× against the app's 1.4×). The gap above it is the head's `gap`,
   // so it adds none: two would stack.
   sheetDesc: { ...SHEET_DESC, marginTop: 0 },
-  // The "more details" line: underlined because it is the one word in a popup
-  // that leaves the app (same treatment the sign-in screen gives
-  // terms/privacy), and set at the TITLE's size (user directive 2026-07-28) —
-  // it is the popup's one tap into the group's own page, so it may not read as
-  // small print beside the standing note it now follows.
-  sheetLink: { fontSize: TEXT.lg, color: INK, textAlign: 'center', textDecorationLine: 'underline' },
+  // (The "more details" line is gone, 2026-08-02: it was an underlined line of
+  // text at the popup's title size, standing alone between the note and the
+  // actions. It is an option in the foot's strip now — see `details` in
+  // GroupSheet — so the popup ends on one band of marks rather than on a line of
+  // writing that was really a control.)
   // Group-description editor card (hosts the shared EditableText). The input is
   // a plain readable block; the footer mirrors the bio editor's hint+Update.
   descCard: { backgroundColor: SURFACE, borderRadius: RADIUS, padding: MD, gap: SM },
@@ -3370,6 +3405,12 @@ const s = StyleSheet.create({
   // The friends page's invite block: the reward line and the button it explains,
   // held together under the roster so the two never drift apart.
   friendsInvite: { gap: SM },
+  // The same button, standing in the hub row's trailing lane: it hugs the line
+  // it rides instead of stretching to the row's height (Button's own default),
+  // and it gives before the name does if a large font scale runs the row out of
+  // width — a name that wraps still reads, a label that has nowhere to go does
+  // not (its own `adjustsFontSizeToFit` takes the last of it).
+  friendsInviteBtn: { alignSelf: 'center', flexShrink: 1 },
   // The "hide me here" checkbox, in the settings card: one step taller than a
   // bare toggle row, because it carries the sentence that explains it.
   hiddenRow: { paddingVertical: MD },

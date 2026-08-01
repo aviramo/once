@@ -1,62 +1,60 @@
 import { View, StyleSheet } from 'react-native'
-import { Text } from './AppText'
 import { CreditIcon } from './icons'
-import { XS, SM, TEXT, WEIGHT, RADII, ICON } from '../tokens'
+import { XS, RADII, ICON } from '../tokens'
+import { LIFT_SHADOW } from '../colors'
 
-// The credits-cost badge shown INSIDE an action button in place of its icon:
-// a rounded capsule holding the credits glyph and the number of credits the
-// action spends. One component so the invite / approve / broadcast buttons
-// all render the cost identically. The gem (not a heart) is what makes the
-// badge legible on the invite button, whose own glyph IS a heart.
+// ── "THIS SPENDS A CREDIT" ─────────────────────────────────────────────────
+// The mark that rides INSIDE an action, in place of its icon: the credits glyph,
+// and nothing else.
 //
-// The capsule INVERTS its host button: on the gold action buttons it is a
-// solid BORDEAUX capsule carrying GOLD content, so the badge reads as its own
-// object rather than dissolving into the fill (a faint tint of the label
-// colour was invisible on gold). The caller passes both, so a badge on some
-// future dark button can invert the other way.
+// IT CARRIES NO NUMBER (user directive 2026-08-01). Every action in the app that
+// spends anything spends exactly ONE — inviting, accepting, broadcasting — so
+// the digit was the same character on every button in the app, and a quantity
+// that never varies is not a quantity, it is decoration. (`CREDIT_COST` still
+// states the amounts, because the SERVER charges them and the wallet has to
+// agree; what is gone is painting them here.) The one action with a cost of 0 —
+// cancelling, which forfeits the credit already held rather than charging a new
+// one — simply renders no badge at all, which is what its call site decides.
 //
-// No "×" — the user wants just the heart glyph and the amount (the
-// multiplication sign was removed).
+// The capsule INVERTS its host, so the mark reads as its own object on a filled
+// button: the caller passes both colours.
 export function CreditCost({
-  cost,
   color,
   bg,
+  lifted = false,
 }: {
-  cost: number
-  /** Glyph + text color. Match the host button's label color. */
+  /** Glyph colour. Match the host's label colour. */
   color: string
-  /** Capsule fill. A faint tint of `color` reads as a chip on the button. */
+  /** Capsule fill — a faint tint of `color`, so the badge reads as a chip on the
+   *  button. */
   bg: string
+  /** IT IS FLOATING, so it casts what everything floating in this app casts
+   *  (user directive 2026-08-01): `LIFT_SHADOW`, the same lift the round button
+   *  it rides and every on-photo chip carry, so the two discs read as one fabric
+   *  off the image. Only for the badge that stands ON a photo — the one INSIDE a
+   *  filled button is not lifted off anything and stays flat. */
+  lifted?: boolean
 }) {
   return (
-    <View style={[styles.pill, { backgroundColor: bg }]}>
+    <View style={[styles.pill, lifted && styles.lift, { backgroundColor: bg }]}>
       <CreditIcon color={color} size={ICON.sm} />
-      <Text
-        style={[styles.text, { color }]}
-        numberOfLines={1}
-      >
-        {/* Just the amount — the "×" was removed at the user's request. */}
-        {`${cost}`}
-      </Text>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  // A CIRCLE, not a capsule: what stands in it is one glyph and nothing else
+  // since the number went (user directive 2026-08-01), and equal air on both
+  // axes is what makes a lone mark read as centred in its own ground. The wide
+  // box left over from the glyph+number days put the gem visibly off-centre on
+  // the invitation's accept button.
   pill: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: XS,
-    paddingHorizontal: SM,
-    paddingVertical: XS,
+    padding: XS,
     borderRadius: RADII.pill,
   },
-  text: {
-    fontSize: TEXT.md,
-    fontWeight: WEIGHT.medium,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    fontVariant: ['tabular-nums'],
-  },
+  // The app's ONE soft lift, spread from `colors.ts` and never re-typed — see
+  // `lifted`.
+  lift: LIFT_SHADOW,
 })

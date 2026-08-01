@@ -8,7 +8,7 @@ import { GlyphSlot, LineProbe } from './GlyphSlot'
 import { FONT_SCALE } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
 import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
-import { PHOTO_CHROME, PAGE, INK, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW, LINE } from '../colors'
+import { PHOTO_CHROME, PAGE, INK, INK_DIM, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW, LINE } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 
 // Shared pill chip used across cards (watcher list + match card). A soft
@@ -46,6 +46,13 @@ const TONES = {
   solid:    { fg: WHITE,  bg: INK },
   // INK on an INK wash: the positive tone is the one purple, laid soft.
   positive: { fg: INK, bg: INK_WASH },
+  // A FACT THAT IS NOT THERE YET, said in the ink an empty field says it in
+  // (user directive 2026-08-01): the tile is the ordinary one, and only its ink
+  // steps back to `INK_DIM` — the very colour `EditableText` gives a
+  // placeholder, so the empty family chip and the empty bio beside it are one
+  // statement in one voice. The glyph fades with the words: what is faint is the
+  // whole invitation, not half of it.
+  placeholder: { fg: INK_DIM, bg: PAGE },
 } as const
 
 type ChipTone = keyof typeof TONES
@@ -322,6 +329,15 @@ function useUnglue(text: string | undefined) {
 // label grows by whole line boxes exactly as before.
 export const CHIP_HEIGHT = ROUND_BUTTON_SIZE_SM
 
+// (A MEDIUM tile stood here for an hour on 2026-08-01 — the midpoint of
+// CHIP_HEIGHT and BUTTON_MIN_HEIGHT — for the action at the end of the card
+// strip's second row, which had to be big enough to read as something to press
+// and to carry the invitation's credit cost. The action moved up to row 1 the
+// same day, beside the clock, where it is the `small` tile like every other chip
+// that annotates a line rather than standing on a card. There is no size between
+// a chip and a button again, and nothing should reintroduce one without a call
+// site.)
+
 /** THE gutter of a chip: the air between the tile's edge and what it carries.
  *  Stated once because it is now read on BOTH axes — see CHIP_BLOCK_PAD. */
 export const CHIP_GUTTER = MD
@@ -360,8 +376,8 @@ export const CHIP_BLOCK_SEAM_PAD = CHIP_BLOCK_PAD / 2
  *  is where a first frame overwhelmingly is, so nothing visibly settles. An
  *  outlined chip pays for its rule out of the same box, so its outer rectangle
  *  matches the filled chips beside it. */
-function chipPad(lineBox: number | null, outlined: boolean): number {
-  const pad = Math.max(0, (CHIP_HEIGHT - (lineBox ?? lh(TEXT.md))) / 2)
+function chipPad(lineBox: number | null, outlined: boolean, height: number): number {
+  const pad = Math.max(0, (height - (lineBox ?? lh(TEXT.md))) / 2)
   return Math.max(0, pad - (outlined ? STROKE.thin : 0))
 }
 
@@ -373,17 +389,17 @@ function chipPad(lineBox: number | null, outlined: boolean): number {
  *  tile on the card could not drift from the chips beside it. Those chips are
  *  blocks now, so the bio is one too and takes CHIP_BLOCK_PAD — the same
  *  guarantee, from the other constant.) */
-export function useChipPadding(outlined = false) {
+export function useChipPadding(outlined = false, height = CHIP_HEIGHT) {
   const [lineBox, setLineBox] = useState<number | null>(null)
   // Only a measurement that CHANGES the padding is worth a render. At font
   // scale 1 the probe confirms exactly what the token arithmetic already said,
   // so the ordinary device pays nothing at all for this.
   const onHeight = useCallback(
-    (h: number) => setLineBox(cur => (chipPad(cur, outlined) === chipPad(h, outlined) ? cur : h)),
-    [outlined],
+    (h: number) => setLineBox(cur => (chipPad(cur, outlined, height) === chipPad(h, outlined, height) ? cur : h)),
+    [outlined, height],
   )
   return {
-    style: { paddingVertical: chipPad(lineBox, outlined) },
+    style: { paddingVertical: chipPad(lineBox, outlined, height) },
     probe: <LineProbe size={TEXT.md} cap={FONT_SCALE} style={styles.chipProbe} onHeight={onHeight} />,
   }
 }
@@ -598,13 +614,12 @@ export function Chip({
   // row (a block, not a pill; see CHIP_BLOCK_PAD).
   //
   // (A `markOnly` variant lived here for an afternoon — a tile carrying a glyph
-  // and NO label, for the photo menu's actions when they were four bare marks.
-  // It had to opt out of BOTH the padding above and the glyph-beside-text slot
-  // below, since neither means anything without a line of text to be beside. The
-  // menu says its rows in words now, so nothing in the app is an icon-only chip.
-  // If one is ever wanted again, note that the label branch below renders its
-  // `Text` unconditionally: a chip with no label still lays out an EMPTY one, and
-  // the row's `gap` for it, which pushes the mark half a gap off centre.)
+  // and NO label, for the card strip's refusal when it was an X. Nothing in the
+  // app is an icon-only chip again. If one is ever wanted, note that it has to
+  // opt out of BOTH the glyph-beside-text slot below — there is no line to stand
+  // beside — and the label `Text`, which renders unconditionally: a chip with no
+  // label still lays out an EMPTY one, and the row's `gap` for it, which pushes
+  // the mark half a gap off centre.)
   const pad = useChipPadding(outlined)
   const derivedPad = !small && !stacked
   return (
@@ -867,8 +882,18 @@ export function KidsIcon({ color, size = ICON.sm }: { color: string; size?: numb
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={8} cy={7} r={3} stroke={color} strokeWidth={2} />
       <Path d="M2 21v-2a6 6 0 0 1 12 0v2" stroke={color} strokeWidth={2} strokeLinecap="round" />
-      <Circle cx={17} cy={10} r={2.2} stroke={color} strokeWidth={2} />
-      <Path d="M13 21v-1a4 4 0 0 1 8 0v1" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      {/* A PARENT AND A CHILD, NOT TWO PEOPLE (user directive 2026-08-02). The
+          two figures stood at 78% of each other's height, which reads as two
+          adults side by side; the child is ~55% now, so its head lands at the
+          parent's hip — stature, not head size, is what says which of them is
+          the child. The head is deliberately NOT scaled that far (2.0 against
+          the parent's 3.0): children ARE big-headed, and at ICON.sm the glyph
+          paints 12dp, where a head shrunk in proportion closes into a dot. For
+          the same reason its stroke is a hair lighter — the ring has to stay
+          open at 0.5dp per unit. Both figures still stand on one ground line
+          (y=21), which is what keeps the height difference readable. */}
+      <Circle cx={17.5} cy={12.9} r={2} stroke={color} strokeWidth={1.6} />
+      <Path d="M14.5 21v-0.5a3 3 0 0 1 6 0v0.5" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
     </Glyph>
   )
 }

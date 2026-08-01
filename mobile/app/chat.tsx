@@ -16,7 +16,7 @@ import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, genderize, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
-import { XS, SM, MD, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM, TAP_SLOP } from '../src/tokens'
+import { XS, SM, MD, LG, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM, TAP_SLOP } from '../src/tokens'
 import { inkOffset } from '../src/fonts'
 import { FIELD_SKIN } from '../src/field'
 import { INK, SURFACE, SURFACE_SUNK, PAGE, INK_MUTED, INK_PALE, INK_WASH, LINE, WHITE, INK_SUBTLE, INK_DIM, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW, SHADOW_BLACK } from '../src/colors'
@@ -26,6 +26,7 @@ import { copyToClipboard } from '../src/lib/clipboard'
 import { PullPane, usePullBehavior, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
 import { SheetHeader, type OverlaySheetBody } from '../src/components/OverlaySheet'
+import { ChatArt } from '../src/components/ChatArt'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import { StatusBarBand } from '../src/components/StatusBarBand'
 import { useBottomInset } from '../src/hooks/useBottomInset'
@@ -378,10 +379,11 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [attachVisible, setAttachVisible] = useState(false)
   const [attachConfirm, setAttachConfirm] = useState<'location' | 'schedule' | null>(null)
   const [inputWrapWidth, setInputWrapWidth] = useState(0)
-  // True while the OS image picker is loading. Keeps the attach menu's image
-  // tile visibly "picking" so the user gets immediate feedback during the
-  // launchImageLibraryAsync cold-start window instead of a blank screen.
-  const [pickingImage, setPickingImage] = useState(false)
+  // A picker is on its way up. NOTHING IS DRAWN FOR IT (user directive
+  // 2026-08-01): the picker is its own answer to the tap, and a spinner is for
+  // the photo going to the server — which is what the pending bubble already
+  // says. A ref, so the guard against a second picker costs no render.
+  const pickerOpen = useRef(false)
 
   // Warm up the image picker once on chat mount: a no-op permission read
   // initializes the native bridge so the first launchImageLibraryAsync after
@@ -1277,15 +1279,16 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   }, [])
 
   const handlePickImage = useCallback(async () => {
-    if (pickingImage) return
-    setPickingImage(true)
+    if (pickerOpen.current) return
+    // The tap is answered by the picker, so the strip that raised it closes on
+    // the tap like every other choice in it. Nothing is drawn for the picker's
+    // own cold start: the bubble's spinner is for the upload.
+    setAttachMenuOpen(false)
+    pickerOpen.current = true
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-    }).finally(() => {
-      setPickingImage(false)
-      setAttachMenuOpen(false)
-    })
+    }).finally(() => { pickerOpen.current = false })
     if (result.canceled || !result.assets?.[0]) return
     const asset = result.assets[0]
     // Resize to max 1200px, JPEG 0.75
@@ -1330,7 +1333,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           ? { ...m, _pending: false, _failed: true } : m
       ))
     }
-  }, [userId, otherId, pickingImage, takeReply])
+  }, [userId, otherId, takeReply])
 
   const handleRetryImage = useCallback(async (failedMsg: Message) => {
     const key = failedMsg.image_key
@@ -1896,7 +1899,22 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
               <ActivityIndicator size="small" color={INK_MUTED} />
             </View>
           ) : null}
-          ListEmptyComponent={<Text style={styles.emptyLabel}>{t('chat.empty')}</Text>}
+          // ── A chat with nothing in it yet ──
+          // The picture LEADS and the line states the fact under it, the same
+          // order the empty Circles page reads in: a conversation nobody has
+          // started is not a list that failed to load, so what the page shows
+          // is the moment it is waiting for (see ChatArt).
+          //
+          // The wrapper has to be the element itself: an inverted list composes
+          // its own flip onto whatever it is handed as the empty component
+          // (`_renderEmptyComponent`), so the drawing would come out upside
+          // down inside anything that swallowed that style.
+          ListEmptyComponent={(
+            <View style={styles.empty}>
+              <ChatArt />
+              <Text style={styles.emptyLabel}>{t('chat.empty')}</Text>
+            </View>
+          )}
         />
         </PullContext.Provider>
         {/* The dots are page chrome, not a message: they float on the sheet's
@@ -2029,18 +2047,13 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                     <View style={styles.attachBarItems}>
                       <Pressable
                         onPress={handlePickImage}
-                        disabled={pickingImage}
                         accessibilityLabel={t('chat.attachMenu.image')}
                         style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
                       >
-                        {pickingImage ? (
-                          <ActivityIndicator size="small" color={WHITE} />
-                        ) : (
-                          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                            <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
-                            <Circle cx={12} cy={14} r={3.5} />
-                          </Svg>
-                        )}
+                        <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                          <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
+                          <Circle cx={12} cy={14} r={3.5} />
+                        </Svg>
                       </Pressable>
                       <View style={styles.attachBarDivider} />
                       <Pressable
@@ -3399,8 +3412,14 @@ const styles = StyleSheet.create({
   messagesArea: { flex: 1 },
   messages: { flex: 1 },
   messagesContent: { padding: SM, flexGrow: 1 },
+  // Centred in whatever height the list has left, so the block sits in the
+  // middle of the page with the keyboard down and in the middle of the shorter
+  // page with it up — the page shrinks, and nothing here knows that it did.
+  empty: { marginTop: 'auto', marginBottom: 'auto', alignItems: 'center' },
+  // The gap the drawing and the line under it stand at everywhere in the app
+  // (the empty Circles page's picture and its heading).
   emptyLabel: {
-    marginTop: 'auto', marginBottom: 'auto', textAlign: 'center',
+    marginTop: LG, textAlign: 'center',
     color: INK_MUTED, fontSize: TEXT.md, letterSpacing: 0.4,
   },
 

@@ -57,11 +57,12 @@ export type OverlaySheetProps = {
   onClose: () => void
   /** 'dismiss' (default): a committed swipe rides the sheet off-screen and it
    *  closes. 'confirm': the sheet stays put and onClose is a request.
-   *  'confirm' currently has NO call site — the invite was its only one, and on
-   *  2026-07-30 a pending invitation stopped being swipeable at all
-   *  (swipeToClose below), which is the stronger form of the same idea. Like the
-   *  'x' axis, the machinery underneath it (PullPane's 'snapBack') is still
-   *  wired end to end; retire the two together, in a change of their own. */
+   *  The pending INVITATION is its one call site, and it is back (user directive
+   *  2026-08-01): the card is dragged like every other surface in the app and a
+   *  committed pull raises the decline confirm — a named, cancellable question,
+   *  never the silent Skip that the no-swipe rule of 2026-07-30 was protecting
+   *  against. (That rule turned the drag off entirely; `swipeToClose` below is
+   *  what did it, and nothing passes false any more.) */
   commit?: 'dismiss' | 'confirm'
   /** False turns the dismiss drag OFF: the surface does not move under the
    *  finger at all. For a sheet the user did not open and may not simply put

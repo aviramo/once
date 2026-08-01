@@ -606,6 +606,20 @@ export const CIRCLES_ART = {
   widthRatio: 0.72,
 } as const
 
+// ── Chat art ───────────────────────────────────────────────────────────────
+// The drawing on a chat that has nothing in it yet (ChatArt.tsx). Full strength
+// like the Circles one: it is the whole of what that page has to say until the
+// first message lands.
+
+export const CHAT_ART = {
+  // The Circles page's own share. Only one line stands under this one, but the
+  // surface it stands in is the shorter of the two — the message list gives up
+  // the keyboard's height the moment the composer is touched — so the two
+  // drawings come out the same size, which is what two pages that open with a
+  // picture should be.
+  widthRatio: 0.72,
+} as const
+
 
 // ── Attention pulse ────────────────────────────────────────────────────────
 // What is left of the TAB block after the TabStrip was deleted on 2026-07-19.

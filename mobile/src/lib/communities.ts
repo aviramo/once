@@ -40,9 +40,9 @@ export type GroupMember = { user_id: string; name: string | null; image: MemberI
 // listed on four different surfaces — their one ORDER (`groupFacts`).
 
 // The count wordings every meta line is built from — one definition each, so a
-// number reads the same in the menu row, the hub row and the popup. Each takes
-// the singular form at 1 (Hebrew has no "1 קבוצות").
-const count = (key: 'communities.membersCount' | 'communities.groupsCount' | 'communities.friendsCount' | 'communities.requestsCount', n: number) =>
+// number reads the same in the hub row and in the popup. Each takes the singular
+// form at 1 (Hebrew has no "1 מעגלים").
+const count = (key: 'communities.membersCount' | 'communities.friendsCount' | 'communities.requestsCount', n: number) =>
   t(key).replace('{count}', String(n))
 // ── When this person turned up in this circle ──────────────────────────────
 // The line under a group's name on a person's page (user directive 2026-07-31):
@@ -99,7 +99,6 @@ export const waitingSince = (iso: string | null | undefined, name?: string | nul
   onDate('communities.waitingSince', iso, name)
 
 export const memberLabel = (n: number) => (n === 1 ? t('communities.oneMember') : count('communities.membersCount', n))
-export const groupLabel = (n: number) => (n === 1 ? t('communities.oneGroup') : count('communities.groupsCount', n))
 export const friendLabel = (n: number) => (n === 1 ? t('communities.oneFriend') : count('communities.friendsCount', n))
 export const requestLabel = (n: number) => (n === 1 ? t('communities.oneRequest') : count('communities.requestsCount', n))
 
@@ -150,7 +149,11 @@ export const friendOfLabel = (name: string, subjectIsMale?: boolean | null) =>
 const friendsCircleFirst = (myFriends: number, groupMembers: number) => myFriends < groupMembers
 
 /** What the card's circle chip says: the named circle, plus how many OTHER
- *  circles we share. Null when we share none.
+ *  circles we share, and `count` — how many rows the popup behind it will have
+ *  (the named one plus the extras). The chip is the only thing that knows that
+ *  number before the lists are fetched, which is what lets a card sharing ONE
+ *  circle open that circle's own surface instead of a list of one (user
+ *  directive 2026-08-02; see SharedCirclesPopup). Null when we share none.
  *
  *  THE "+N" COUNTS WHAT THE POPUP LISTS (user directive 2026-07-30): a shared
  *  group is one, and so is EVERY mutual friend — the popup gives each of them a
@@ -164,7 +167,7 @@ const friendsCircleFirst = (myFriends: number, groupMembers: number) => myFriend
 export function sharedCircle(
   m: Pick<Profile, 'group_name' | 'group_extra' | 'group_members' | 'friend_name' | 'friend_extra' | 'is_male'>,
   myFriends: number,
-): { label: string; extra?: number } | null {
+): { label: string; count: number; extra?: number } | null {
   const groups = m.group_name ? 1 + (m.group_extra ?? 0) : 0
   const friends = m.friend_name ? 1 + (m.friend_extra ?? 0) : 0
   const total = groups + friends
@@ -175,6 +178,7 @@ export function sharedCircle(
     && (groups === 0 || (m.group_members != null && friendsCircleFirst(myFriends, m.group_members)))
   return {
     label: nameFriend ? friendOfLabel(m.friend_name!, m.is_male) : m.group_name!,
+    count: total,
     extra: total - 1 || undefined,
   }
 }
