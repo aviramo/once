@@ -18,7 +18,7 @@ export const SINGLE_WEIGHT = false
 // against I18nManager.forceRTL. The bundle has no Hebrew localization, so
 // natural resolved to LEFT and every un-aligned label in an RTL layout was
 // pushed to the row's END edge: the settings rows' labels sat far from the icon
-// that names them, the communities rows' titles and section headings hugged the
+// that names them, the Circles rows' titles and section headings hugged the
 // wrong edge, and a Hebrew sentence's trailing punctuation bidi-flipped to the
 // wrong side. Setting baseWritingDirection is what makes "natural" mean "the
 // direction this app reads in" (RCTTextAttributes.effectiveParagraphStyle).
@@ -62,7 +62,7 @@ export const INPUT_START: TextStyle = {
 // ONE number for the whole app (user directive 2026-07-30), where this used to
 // be a three-class ramp — ui 1.0 / heading 1.15 / body 1.3 — whose classes
 // silently redesigned the app at a bumped font scale:
-//   - the same SHEET_TITLE rendered 26dp on the communities sheet header (body,
+//   - the same SHEET_TITLE rendered 26dp on the Circles sheet header (body,
 //     inherited from AppText) and 23dp on home's status card (heading, passed by
 //     hand), so two headings of the identical declared rank came out different
 //     sizes on a large-font device;

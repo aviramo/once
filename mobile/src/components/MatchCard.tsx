@@ -14,10 +14,10 @@ import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
 import { BIO_MAX } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import { buildFamilySegments } from './FamilyCard'
-import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
+import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, CHIP_BLOCK_PAD_V, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
 import { HeartIcon, ShieldIcon, GroupsIcon, ChevronEndIcon } from './icons'
 import type { TapPoint } from './TapMenu'
-import { sharedCircle, useMyFriendCount } from '../lib/communities'
+import { sharedCircle, useMyFriendCount } from '../lib/circles'
 import { RoundButton } from './RoundButton'
 import { SheetTitle } from './BottomSheet'
 import { OptionStrip, type StripOption } from './OptionStrip'
@@ -398,7 +398,7 @@ type MatchCardProps = {
   bottomInset?: number
   hideTime?: boolean
   /** Drops the proximity chip (distance + last-seen) entirely. Used by the
-   * communities profile page: a group member or a friend is opened from a
+   * Circles profile page: a group member or a friend is opened from a
    * list you already belong to, and neither where they are nor when they were
    * last around is part of what that context reveals (user directive
    * 2026-07-29). `hideTime` only mutes the time half; this drops the chip. */
@@ -549,8 +549,9 @@ export function MatchCard({
 }: MatchCardProps) {
   // (The bio's padding box used to be pulled from `useChipPadding` here, so the
   // oversized tile could not drift from the pill chips beside it. Those chips are
-  // BLOCKS now and the bio is one too, so its box is the flat CHIP_BLOCK_PAD —
-  // stated in `photoBioCard` below, still from the chip's own constant.)
+  // BLOCKS now and the bio is one too, so its box is the block's — the gutter
+  // sideways, CHIP_BLOCK_PAD_V above and below — stated in `photoBioCard` below,
+  // still from the chip's own constants.)
   //
   // The chip's trailing block, and whether it is on screen — it stays mounted
   // through its own slide back into the name (see useTrailing).
@@ -1149,7 +1150,7 @@ export function MatchCard({
                     (user directive 2026-07-29) — a shared group and a mutual
                     friend answer the same question, so "my friends" is ranked
                     among the groups as a group and the SMALLEST circle is the one
-                    named (the rule lives in lib/communities.ts → sharedCircle).
+                    named (the rule lives in lib/circles.ts → sharedCircle).
                     "+N" counts the other circles; tapping lists them all. It
                     wears the circles feature's own interlaced-rings mark, and is
                     interactive via a native RNGH tap (not the Chip's Pressable)
@@ -1386,7 +1387,7 @@ export function MatchCard({
 
 // ── The bar under a profile card ───────────────────────────────────────────
 // THE block that stands under a full-screen profile card and carries what can be
-// done ABOUT the person on it: the decisions on a communities person page
+// done ABOUT the person on it: the decisions on a Circles person page
 // (approve / make approver / remove). One component, so a control under a face is
 // placed and spaced the same wherever the card is rendered.
 //
@@ -1649,19 +1650,21 @@ const styles = StyleSheet.create({
   // 2026-07-30): the same RADIUS, the same gutter, the same padding box as the
   // chips beside it and the same LIFT_SHADOW every on-photo tile casts.
   //
-  // That box is CHIP_BLOCK_PAD — the chip's gutter on all four sides (user
-  // directive 2026-07-31). The tile is a PARAGRAPH in a wide white block, and so
-  // are the fact rows stacked above it now, so both take the air the gutter
-  // states rather than whatever a round chrome button has left over once a line
-  // of label is in it. It is still the chips' own constant and not a re-typed
-  // `MD`: the two tiles must move together, which is the whole reason the bio
-  // stopped declaring its own padding in the first place.
+  // That box is the BLOCK's: the chip's gutter sideways (CHIP_BLOCK_PAD) and one
+  // step in above and below (CHIP_BLOCK_PAD_V, user directive 2026-08-02). The
+  // tile is a PARAGRAPH in a wide white block, and so are the fact rows stacked
+  // above it, so both take the air a block states rather than whatever a round
+  // chrome button has left over once a line of label is in it. They are still the
+  // chips' own constants and not a re-typed `MD`/`SM`: the two tiles must move
+  // together, which is the whole reason the bio stopped declaring its own padding
+  // in the first place.
   photoBioCard: {
     position: 'absolute',
     start: MD,
     backgroundColor: PHOTO_CHROME,
     borderRadius: RADIUS,
-    padding: CHIP_BLOCK_PAD,
+    paddingHorizontal: CHIP_BLOCK_PAD,
+    paddingVertical: CHIP_BLOCK_PAD_V,
     ...LIFT_SHADOW,
     // Same corner the fact column collapses into (user directive 2026-07-29):
     // the bio used to zoom around its own centre, which on a tile this wide read

@@ -32,7 +32,7 @@ import { clearCachedGroups } from '../src/lib/groupsCache'
 import { clearRosterCaches } from '../src/lib/rosterCache'
 import { clearAllChatCaches } from '../src/lib/chatCache'
 import { clearBrowseAllowance } from '../src/lib/browseGate'
-import { stashInviteUrl } from '../src/lib/communities'
+import { stashInviteUrl } from '../src/lib/circles'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { STORAGE } from '../src/keys'
 import { DEFAULT_FAMILY, FONT_SCALE, TEXT_START } from '../src/fonts'
@@ -280,7 +280,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   //    onAuthStateChange above and routes the user past /login.
   //  · Group / friend invites (`once://g/<TOKEN>`, `once://f/<CODE>`):
   //    stashInviteUrl parks the code and redeems it as soon as there is a
-  //    session (see the deep-link invite section in lib/communities).
+  //    session (see the deep-link invite section in lib/circles).
   useEffect(() => {
     let cancelled = false
     Linking.getInitialURL().then(url => {
@@ -400,7 +400,7 @@ export default function RootLayout() {
         // Re-fetch the profile on every foreground: fetch is authoritative and
         // carries the full server `relations` (invoke responses strip it), so
         // this keeps denormalized fields like relations.communities — and the
-        // settings "Communities" summary that reads them — current without the
+        // settings "Circles" summary that reads them — current without the
         // user having to relaunch.
         const uid = useAuthStore.getState().user?.id
         if (uid) useUserStore.getState().fetch(uid)

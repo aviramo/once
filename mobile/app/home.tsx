@@ -10,7 +10,7 @@ import { invoke, markStartupComplete, onAuthRecovered, publicImageUrl, API_TIMEO
 import { tap } from '../src/lib/haptics'
 import { nameFromTitle } from '../src/lib/profileTitle'
 import { matchImageUrls } from '../src/lib/profileImages'
-import { useUserStore, resolveLocationType, selectProfileBuilt, selectWatcherCount, selectInvisibleReason, type Profile, type Page2Invite } from '../src/stores/userStore'
+import { useUserStore, resolveLocationType, selectProfileBuilt, selectWatching, type Profile, type Page2Invite } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
 import { getNotifPermission, requestNotifPermission, ensurePushToken, addNotificationTapListener, getInitialNotificationType, getInitialNotificationGroupId, getInitialNotificationActorId, clearInitialNotification, openNotifSettings, dismissAllNotifications, type NotifPermission } from '../src/lib/notifications'
 import { getLocPermission, requestLocPermission, getLocation, getLastKnownLocation, watchLocation, enableLocationServices, openLocationSettings, openLocPermSettings, type LocPermission } from '../src/lib/location'
@@ -26,7 +26,7 @@ import { useBrowseAllowance } from '../src/lib/browseGate'
 import { BottomSheet, SheetTitle, SheetDesc, SheetActionPair, SHEET_TITLE, SHEET_DESC } from '../src/components/BottomSheet'
 import { MatchCard } from '../src/components/MatchCard'
 import { SharedCirclesPopup, useSharedCircles } from '../src/components/SharedListPopup'
-import { flushPendingInvite, watchInvites, communitiesSummary, pendingApprovals, type CommunitiesTarget } from '../src/lib/communities'
+import { flushPendingInvite, watchInvites, circlesSummary, pendingApprovals, type CirclesTarget } from '../src/lib/circles'
 import { RisingCard } from '../src/components/RisingCard'
 import { OverlaySheet } from '../src/components/OverlaySheet'
 import { HomeArt } from '../src/components/HomeArt'
@@ -38,7 +38,7 @@ import { claimInstallReferral } from '../src/lib/referral'
 import { BuyExtraPopup } from '../src/components/BuyExtraPopup'
 import { PullPane, usePullBehavior } from '../src/components/PullPane'
 import { PreviewFieldPage, PreferencesPopup, AppSettingsPopup } from '../src/components/SettingsSurfaces'
-import { CommunitiesPage } from '../src/components/CommunitiesPage'
+import { CirclesPage } from '../src/components/CirclesPage'
 import ChatPage from './chat'
 import { Image } from 'expo-image'
 import { localPhotoUriCache } from '../src/components/PhotoEditor'
@@ -594,6 +594,7 @@ function ReplyingInviteCard({
   affordable = true,
   onAccept,
   onDecline,
+  declineLoading,
   onUnaffordable,
   busy,
   acceptLoading,
@@ -617,9 +618,15 @@ function ReplyingInviteCard({
    * to the legacy faded-disabled look + silent no-op. */
   affordable?: boolean
   onAccept: () => void
-  /** Fired by the decline CTA. Omitted together with `declineLabel` on the
-   * page1 send-prompt, which has no Skip button. */
+  /** Fired by the decline CTA, and it FIRES THE ACTION (user directive
+   * 2026-08-02) — nothing behind this button asks the same question again. */
   onDecline?: () => void
+  /** The decline's own wait. It is NOT `loading`: that swaps a spinner into the
+   * start-icon slot, and this button carries no mark, so a press would grow one
+   * and shove the label across the button (user directive 2026-08-02, "the
+   * loading effect with no spinner", "with no icon"). What it takes instead is
+   * the plain disabled fade — the app's other wait, the one with nothing in it. */
+  declineLoading?: boolean
   /** Tapped when the user is unaffordable. Routes to the buy-extra popup
    * so the user has a one-tap recovery path. When unset, the button silently
    * dims and does nothing on press. */
@@ -654,7 +661,11 @@ function ReplyingInviteCard({
                 label={declineLabel}
                 onPress={onDecline}
                 disabled={busy}
-                silentDisabled
+                // Silent while somebody ELSE's action is out (the accept beside
+                // it) so no button greys out for a decision it is not carrying;
+                // the fade appears only on the one that was pressed. Never
+                // `loading` here — see `declineLoading`.
+                silentDisabled={!declineLoading}
               />
             </View>
           )}
@@ -795,7 +806,7 @@ export default function HomePage() {
   // There is no 'menu' any more (user directive 2026-07-30): the drawer, the
   // page it carried and the button that opened it are all deleted, and what it
   // held is home's dock plus the two popups the dock raises.
-  type Overlay = 'chat' | 'profile' | 'communities'
+  type Overlay = 'chat' | 'profile' | 'circles'
   const [overlays, setOverlays] = useState<Overlay[]>([])
   // Assigned during render, NOT in an effect: the BackHandler is registered
   // once with [] deps and reads this ref, so it must never lag a render.
@@ -805,7 +816,7 @@ export default function HomePage() {
   const profileSheetOpen = overlays.includes('profile')
   // Circles hub. Its own internal view stack is popped first by hardware-back
   // via the ref below.
-  const communitiesSheetOpen = overlays.includes('communities')
+  const circlesSheetOpen = overlays.includes('circles')
 
   const openOverlay = useCallback((kind: Overlay) => {
     tap()
@@ -844,8 +855,8 @@ export default function HomePage() {
   // page owns (user directive 2026-07-27): a join request opens the requester's
   // profile with approve/decline, a new friend opens their page in My Friends.
   // The 48h queue nudge opens the queue. Everything else keeps its old landing.
-  const communitiesTargetFor = useCallback(
-    (type: string, groupId?: string | null, actorId?: string | null): CommunitiesTarget | null => {
+  const circlesTargetFor = useCallback(
+    (type: string, groupId?: string | null, actorId?: string | null): CirclesTarget | null => {
       if (type === 'group_join' && groupId && actorId) return { kind: 'request', groupId, userId: actorId }
       if (type === 'group_pending' && groupId) return { kind: 'queue', groupId }
       if (GROUP_CODES.has(type) && groupId) return { kind: 'group', groupId }
@@ -860,15 +871,15 @@ export default function HomePage() {
   // The launch notification is read DURING RENDER, its ids included: the effect
   // below clears it, and effects run in declaration order, so reading the ids
   // later resolved to nothing and a targeted deep-link opened the bare hub.
-  type InitialNotif = { overlay: Overlay; target: CommunitiesTarget | null }
+  type InitialNotif = { overlay: Overlay; target: CirclesTarget | null }
   const initialNotif = useMemo<InitialNotif | null>(() => {
     const type = getInitialNotificationType()
     if (!type) return null
     if (CHAT_CODES.has(type)) return { overlay: 'chat', target: null }
     if (GROUP_CODES.has(type) || FRIEND_CODES.has(type)) {
       return {
-        overlay: 'communities',
-        target: communitiesTargetFor(type, getInitialNotificationGroupId(), getInitialNotificationActorId()),
+        overlay: 'circles',
+        target: circlesTargetFor(type, getInitialNotificationGroupId(), getInitialNotificationActorId()),
       }
     }
     return null
@@ -877,7 +888,7 @@ export default function HomePage() {
     if (initialNotif !== null) clearInitialNotification()
   }, [])
   // First-render only: routing for the notification that LAUNCHED the app — a
-  // chat/match push opens the chat, a group/friend deep-link opens Communities
+  // chat/match push opens the chat, a group/friend deep-link opens Circles
   // on its target. An active chat on its own does NOT open the sheet any more
   // (user directive 2026-07-28, reverses the 2026-07-19 decision): this effect
   // runs on every home MOUNT, not only a cold start, so returning from
@@ -888,9 +899,9 @@ export default function HomePage() {
   useEffect(() => {
     if (initialNotif?.overlay === 'chat') {
       setOverlays(['chat'])
-    } else if (initialNotif?.overlay === 'communities') {
-      if (initialNotif.target) setCommunitiesTarget(initialNotif.target)
-      setOverlays(['communities'])
+    } else if (initialNotif?.overlay === 'circles') {
+      if (initialNotif.target) setCirclesTarget(initialNotif.target)
+      setOverlays(['circles'])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -911,11 +922,11 @@ export default function HomePage() {
   // A COUNT, not a boolean (user directive 2026-07-30): people waiting is a
   // QUANTITY, and the dock says a quantity with a chip rather than a dot — see
   // the dock block below.
-  const pendingCount = pendingApprovals(communitiesSummary(profile))
+  const pendingCount = pendingApprovals(circlesSummary(profile))
   // ── "You haven't met your circles yet" ──────────────────────────────────
   // A brand-new user meets the app as a stream of faces and has no way to learn
   // that WHO he is shown depends on his circles. The app used to say that by
-  // FORCE: after the third profile he watched, the Communities hub was thrown
+  // FORCE: after the third profile he watched, the Circles hub was thrown
   // over the card he was looking at with a popup explaining itself. That is
   // deleted (user directive 2026-07-30) — nothing takes the screen away from a
   // user to teach him something. The DOCK says it instead, in the app's own
@@ -940,14 +951,14 @@ export default function HomePage() {
   //
   // **`profileBuilt` is part of the condition, not decoration.** Not every route
   // in runs the gate: the cold-start notification effect sets the overlay stack
-  // DIRECTLY (`setOverlays(['communities'])`), and on a cold start `profile` is
+  // DIRECTLY (`setOverlays(['circles'])`), and on a cold start `profile` is
   // still null when it does, so the hub is briefly "open" before the guard effect
   // below sees the loaded profile, closes it and raises the members-only popup.
   // Marking on `circlesOpen` alone therefore burned the flag for a user who never
   // saw the page — and, being persisted, it burned it forever: he finished his
   // profile and the dot never came. Requiring entitlement here makes the flag mean
   // exactly what its name says, "has been INSIDE Circles", on every route in.
-  const circlesOpen = overlays.includes('communities')
+  const circlesOpen = overlays.includes('circles')
   useEffect(() => {
     if (!circlesOpen || !profileBuilt) return
     setCirclesSeen(true)
@@ -969,24 +980,24 @@ export default function HomePage() {
   // closing it returns to the menu rather than all the way home.
   const openProfileSheet = useCallback(() => openOverlay('profile'), [openOverlay])
   const closeProfileSheet = useCallback(() => closeOverlay('profile'), [closeOverlay])
-  const openCommunities = useCallback(() => openOverlay('communities'), [openOverlay])
-  const closeCommunities = useCallback(() => closeOverlay('communities'), [closeOverlay])
-  // Where a notification tap (or a redeemed invite link) wants the Communities
+  const openCircles = useCallback(() => openOverlay('circles'), [openOverlay])
+  const closeCircles = useCallback(() => closeOverlay('circles'), [closeOverlay])
+  // Where a notification tap (or a redeemed invite link) wants the Circles
   // sheet to land: a person's page, a queue, a group, or the friends list. The
   // sheet seeds its whole page stack from it and then calls onTargetConsumed.
-  const [communitiesTarget, setCommunitiesTarget] = useState<CommunitiesTarget | null>(null)
+  const [circlesTarget, setCirclesTarget] = useState<CirclesTarget | null>(null)
   // Cleared on the open→closed TRANSITION only. Not "whenever it is closed":
   // the effects that route a cold-start push set the target and open the sheet
   // in the same pass, so this one still sees `closed` on mount and would wipe
   // the target it was launched with.
-  const communitiesWasOpen = useRef(false)
+  const circlesWasOpen = useRef(false)
   useEffect(() => {
-    if (communitiesWasOpen.current && !communitiesSheetOpen) setCommunitiesTarget(null)
-    communitiesWasOpen.current = communitiesSheetOpen
-  }, [communitiesSheetOpen])
+    if (circlesWasOpen.current && !circlesSheetOpen) setCirclesTarget(null)
+    circlesWasOpen.current = circlesSheetOpen
+  }, [circlesSheetOpen])
   // The hub owns an internal view stack; hardware-back pops that first and only
   // asks the shell to close the sheet once it is back at its hub (returns false).
-  const communitiesBackRef = useRef<() => boolean>(() => false)
+  const circlesBackRef = useRef<() => boolean>(() => false)
 
   // chatAvailable: state is 'chat'
   const chatAvailable = profile?.state === 'chat'
@@ -1048,7 +1059,7 @@ export default function HomePage() {
   // `overlaysGated` depends on isPermMode, which is derived much further down.
   const openOverlayRef = useRef(openOverlay)
   openOverlayRef.current = openOverlay
-  // Communities are members-only, exactly as on the menu row that opens the hub:
+  // Circles are members-only, exactly as on the menu row that opens the hub:
   // a browse-only account (profile not built) may not enter, because every
   // surface in there shows the user to other people. The rule has to hold on the
   // ROUTED entries too — a new user who installed through a friend's invite link
@@ -1059,32 +1070,32 @@ export default function HomePage() {
   const [commGateOpen, setCommGateOpen] = useState(false)
   const profileRef = useRef(profile)
   profileRef.current = profile
-  const routeToCommunities = useCallback(() => {
+  const routeToCircles = useCallback(() => {
     // The refused branch taps too. The dock's keys carry no haptic of their own
     // (their openers fire it), and the faded Circles key reaches ONLY this
     // branch — without it, the one key in the strip that is dimmed would also be
     // the only one that feels dead under the finger, which reads as broken
     // rather than as closed.
     if (profileRef.current && !selectProfileBuilt(profileRef.current)) { tap(); setCommGateOpen(true); return }
-    openOverlayRef.current('communities')
+    openOverlayRef.current('circles')
   }, [])
   useEffect(() => {
-    if (!profile || profileBuilt || !overlays.includes('communities')) return
-    closeCommunities()
+    if (!profile || profileBuilt || !overlays.includes('circles')) return
+    closeCircles()
     setCommGateOpen(true)
-  }, [profile, profileBuilt, overlays, closeCommunities])
+  }, [profile, profileBuilt, overlays, closeCircles])
   const overlaysGatedRef = useRef(false)
   useEffect(() => {
     return addNotificationTapListener((type, groupId, actorId) => {
       if (GROUP_CODES.has(type)) {
         // Every group code deep-links to the group it names; the menu family is
-        // never gated, so Communities is always reachable.
-        const t = communitiesTargetFor(type, groupId, actorId)
-        if (t) setCommunitiesTarget(t)
-        routeToCommunities()
+        // never gated, so Circles is always reachable.
+        const t = circlesTargetFor(type, groupId, actorId)
+        if (t) setCirclesTarget(t)
+        routeToCircles()
       } else if (FRIEND_CODES.has(type)) {
-        setCommunitiesTarget(communitiesTargetFor(type, groupId, actorId) ?? { kind: 'friends' })
-        routeToCommunities()
+        setCirclesTarget(circlesTargetFor(type, groupId, actorId) ?? { kind: 'friends' })
+        routeToCircles()
       } else if (CHAT_CODES.has(type)) {
         if (!overlaysGatedRef.current) openOverlayRef.current('chat')
       } else if (!PAGE2_CODES.has(type)) {
@@ -1096,18 +1107,27 @@ export default function HomePage() {
 
   // ── Invite deep links ───────────────────────────────────────────────────
   // A tapped group/friend invite link is parked by the root URL listener and
-  // redeemed as soon as a session exists (lib/communities). Home is the first
+  // redeemed as soon as a session exists (lib/circles). Home is the first
   // screen that only exists for a signed-in user, so it flushes anything still
-  // parked (a link opened before sign-in) and shows the outcome: the Communities
+  // parked (a link opened before sign-in) and shows the outcome: the Circles
   // hub for a joined group, its friends list for a new friend, so the tap
   // visibly did something instead of just landing on home. Watching covers both
   // orders — a cold start redeems before this mount (the outcome is held for the
   // watcher), an in-session tap long after it. The menu family is never gated,
   // so this is always reachable.
+  //
+  // A GROUP LINK LANDS ON THE CIRCLE IT NAMED (user directive 2026-08-02): the
+  // hub with that circle's own popup over it, in whatever standing the redeem
+  // just gave — a member, or a request waiting on an answer. The hub alone was
+  // the app answering a link to ONE circle with the list of every circle I am
+  // in. The group rides in on the outcome (the redeem returns it), so there is
+  // nothing to look up; an outcome without one — an older server — still lands
+  // on the hub exactly as before.
   useEffect(() => {
     const stop = watchInvites(outcome => {
-      if (outcome.kind === 'friend') setCommunitiesTarget({ kind: 'friends' })
-      routeToCommunities()
+      if (outcome.kind === 'friend') setCirclesTarget({ kind: 'friends' })
+      else if (outcome.group && outcome.standing) setCirclesTarget({ kind: 'arrival', group: outcome.group, standing: outcome.standing })
+      routeToCircles()
     })
     void flushPendingInvite()
     return stop
@@ -1121,7 +1141,7 @@ export default function HomePage() {
   // ── The dock: home's four entries ───────────────────────────────────────
   // Everything the menu page held, stated on the page itself (user directive
   // 2026-07-30) — profile, circles, preferences, more, in that order. Two of them
-  // are SURFACES the app already had (the profile preview and the Communities
+  // are SURFACES the app already had (the profile preview and the Circles
   // hub, both stacked sheets), and the other two are the menu's two CARDS of
   // settings rows, lifted into popups verbatim (see PreferencesPopup /
   // AppSettingsPopup in src/components/SettingsSurfaces.tsx). Nothing is
@@ -1151,14 +1171,14 @@ export default function HomePage() {
   //      point at a door the gate will refuse; the dot this user needs is the
   //      one on the PROFILE entry, which is the door that unlocks this one. The
   //      key stays pressable and taps into the members-only popup
-  //      (`routeToCommunities` → `commGateOpen`), which explains the closed door
+  //      (`routeToCircles` → `commGateOpen`), which explains the closed door
   //      and offers onboarding.
   //   2. profile built, never opened Circles → full strength, WITH the dot. Not
   //      counted, not delayed: it is there from the moment the profile exists.
   //   3. opened once → clean, until a real queue lights it again (`pendingCount`,
   //      as the purple chip).
   //
-  // `routeToCommunities` is the one place the members-only rule is enforced,
+  // `routeToCircles` is the one place the members-only rule is enforced,
   // shared with the push and invite-link routers, so the fade is only ever a
   // picture of a decision made there — never a second copy of it.
   //
@@ -1178,12 +1198,13 @@ export default function HomePage() {
   // simply gone. See `HomeDock`'s `count`.
   //
   // Each still follows the rule of the row it leads to, including when it is
-  // absent: the watcher count only while I am actually visible AND someone is
-  // there (a hidden or unbuilt user is watched by nobody, and 0 watchers is not
-  // a fact worth painting), the credits count always, because a wallet always
-  // has an amount — zero included, which is the number that matters most.
-  const watcherCount = selectWatcherCount(profile)
-  const invisibleReason = selectInvisibleReason(profile)
+  // absent: the watcher count only while somebody is actually there (0 is not a
+  // fact worth painting), the credits count always, because a wallet always has
+  // an amount — zero included, which is the number that matters most.
+  // The same answer the row behind this key states in words (selectWatching),
+  // said the short way: one quantity, never two derivations of it. A pending
+  // invitation reads 1 here for the same reason it reads her name there.
+  const watcherCount = selectWatching(profile).count
   // Affordability: total spendable = balance + extra. Charging deducts
   // balance first, but the user can spend any heart they have. The
   // balance/extra split is displayed in settings, not here.
@@ -1221,9 +1242,9 @@ export default function HomePage() {
     },
     {
       key: 'circles',
-      label: t('communities.menuRow'),
+      label: t('circles.menuRow'),
       icon: <GroupsIcon color={INK} size={ICON.xxl} />,
-      onPress: routeToCommunities,
+      onPress: routeToCircles,
       // BOTH reasons hang off entitlement, not just the first-visit one: an
       // unbuilt account can still be sent a friend request, and a marker over a
       // faded key would point at a door the gate refuses — the one thing this
@@ -1248,7 +1269,12 @@ export default function HomePage() {
       icon: <SearchIcon color={INK} size={ICON.xxl} />,
       // The live watcher count, under the same condition the visibility row
       // inside this popup states it by, so the two are one statement of one fact.
-      count: !invisibleReason && watcherCount > 0 ? watcherCount : undefined,
+      // The reason is no longer part of that condition (user directive
+      // 2026-08-02): a match locks page2 and the row reads hidden, but my card
+      // is on my partner's screen and the row now says so by name, so a key that
+      // went blank there would be contradicting the row it opens. A hidden user
+      // with nobody on his card counts 0 and paints nothing, exactly as before.
+      count: watcherCount > 0 ? watcherCount : undefined,
       onPress: () => { tap(); setPrefsPopupOpen(true) },
     },
     {
@@ -1272,7 +1298,7 @@ export default function HomePage() {
       held: heldCredits > 0 ? heldCredits : undefined,
       onPress: () => { tap(); setAppSettingsPopupOpen(true) },
     },
-  ], [openProfileSheet, routeToCommunities, pendingCount, profileBuilt, circlesSeen, router, watcherCount, invisibleReason, starsBalance, heldCredits])
+  ], [openProfileSheet, routeToCircles, pendingCount, profileBuilt, circlesSeen, router, watcherCount, starsBalance, heldCredits])
 
 
 
@@ -1296,7 +1322,7 @@ export default function HomePage() {
         const top = stack[stack.length - 1]
         // The hub pops its own internal view first; only when it's back at the
         // hub (ref returns false) do we close the whole sheet.
-        if (top === 'communities' && communitiesBackRef.current()) { /* handled internally */ }
+        if (top === 'circles' && circlesBackRef.current()) { /* handled internally */ }
         else closeTopOverlay()
         return true
       }
@@ -2493,10 +2519,15 @@ export default function HomePage() {
     state === 'watching' || state === 'waiting' || state === 'chat' ||
     isEndedState
   // ── Match-state actions ────────────────────────────────────────────────
-  // The pinned bottom slot swaps in per-state buttons when the match card
-  // is open, replacing the visibility toggle. Destructive actions route
-  // through a ConfirmDialog first.
-  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  // CANCELLING AN INVITATION IS ASKED ONCE (user directive 2026-08-02, the same
+  // rule chat's leave/block popup was turned to that day). The waiting card's
+  // own message IS the question: it names the state, says what the invitation is
+  // costing while it stands, and offers the one thing there is to do about it —
+  // so "Cancel invitation" FIRES on the tap. It used to close and chain to a
+  // `ConfirmDialog` that repeated the same words ("Cancel invitation" →
+  // *Cancel invitation?*), i.e. the one decision the user had already taken was
+  // put to him twice, through two Modals. The drag lands on that same message
+  // (see pullCommitRef), so both routes ask once and ask it in the same place.
   // Which board's message is up, if any — see "what the heading chip's mark
   // opens". One piece of state for both cards: only ever one of them is the card
   // in front of the user.
@@ -2504,8 +2535,9 @@ export default function HomePage() {
   // What the message popup should do once it is out of the way. A popup that
   // raises ANOTHER popup has to chain through `onClosed` — iOS silently refuses
   // to present a second Modal while the first is still up — and this is the same
-  // ref-and-chain the invite prompt already uses for its two follow-ups.
-  const messageIntentRef = useRef<null | 'cancel' | 'buy'>(null)
+  // ref-and-chain the invite prompt already uses for its two follow-ups. One
+  // intent left: the cancel confirm it also handed over to is deleted.
+  const messageIntentRef = useRef<null | 'buy'>(null)
   const [refuseConfirmOpen, setRefuseConfirmOpen] = useState(false)
   // Out-of-hearts auto-hide flow: the settings visibility row surfaces a "buy
   // extra hearts" prompt instead of "go visible" when balance + extra is 0
@@ -2547,15 +2579,15 @@ export default function HomePage() {
   // match card, and it holds EVERYTHING the pair shares — every mutual friend
   // and every shared group in one list (user directive 2026-07-29). The chip is
   // wired the same way wherever a card is rendered, so the fetching and the
-  // popup's own state live in the one hook the Communities sheet uses too
+  // popup's own state live in the one hook the Circles sheet uses too
   // (components/SharedListPopup.tsx → useSharedCircles).
   //
-  // A tapped person opens the Communities sheet OVER this popup, so the sheet
+  // A tapped person opens the Circles sheet OVER this popup, so the sheet
   // being open is exactly "the popup is covered": it hides under that page and
   // comes back the moment the sheet closes, by whatever route it closed (user
   // directive 2026-07-30). It used to close outright, which cost the user the
   // chip again to get back to a list they had only stepped away from.
-  const circles = useSharedCircles(communitiesSheetOpen)
+  const circles = useSharedCircles(circlesSheetOpen)
 
   const runAction = (
     endpoint: string,
@@ -2686,8 +2718,10 @@ export default function HomePage() {
     if (busy) return
     tap()
     setBusy(true)
-    setPendingKey('cancel-confirm')
-    setCancelConfirmOpen(false)
+    setPendingKey('cancel-invite')
+    // Closes the message popup that raised it — by the chip's mark or by the
+    // drag, which are the two ways to this one surface.
+    setMessageOpen(null)
     setDisplayedMatch(null)
     invoke('app/cancel', {})
       .then(() => {
@@ -2702,8 +2736,12 @@ export default function HomePage() {
   }, [busy])
 
   // ── Declining a pending invitation ───────────────────────────────────────
-  // The ONE route: the status card's own Skip button, through this confirm
-  // (decline is irreversible). Nothing else on the screen reaches it.
+  // TWO routes reach this confirm, and they are the two that PUT THE CARD AWAY
+  // without answering it: the drag (commit='confirm') and hardware back. Both
+  // need the question named, because neither of them said "decline" — that is
+  // the whole reason a card the app is asking about may be dragged at all.
+  // The card's own message states the question itself and its button FIRES
+  // (user directive 2026-08-02), so the one NAMED route no longer comes here.
   const openRefuseConfirm = useCallback(() => {
     tap()
     setRefuseConfirmOpen(true)
@@ -3012,6 +3050,16 @@ export default function HomePage() {
   // it opens can never disagree.
   const page1HasMessage = (displayedCardMode === 'waiting' && !!inviteExpiresAt) || page1Ended
   const page2HasMessage = !!page2PendingInvite || page2Ended
+  // THE INVITATION BEING DECLINED OUTLIVES ITS OWN ROW, for exactly as long as
+  // the request is out. Its button fires the decline and the popup stays up
+  // carrying the wait — but page2 is Realtime-owned, so the pending invite can
+  // clear before `app/decline` resolves, and the surface under the finger would
+  // repaint as the dead card's message, or as nothing at all. The request
+  // LANDING is what closes this popup; until then it goes on saying what it
+  // said. Read only while that one request is in flight, so nothing else on the
+  // screen can see a card the server has finished with.
+  const decliningInviteRef = useRef<typeof page2PendingInvite>(null)
+  const messageInvite = page2PendingInvite ?? (pendingKey === 'replying-decline' ? decliningInviteRef.current : null)
   const openPage1Message = useCallback(() => { tap(); setMessageOpen('page1') }, [])
   const openPage2Message = useCallback(() => { tap(); setMessageOpen('page2') }, [])
   // The round chat button's own popup. Same card, ONE answer: the user reached
@@ -3128,16 +3176,19 @@ export default function HomePage() {
 
   // What a committed pull on the page1 card does — the handler behind
   // `onPullCommit`, assigned during render because most of what it calls is
-  // declared below the hook. It is deliberately the SAME function each state's
-  // chip in the strip carries: the drag and the word are two ways to one
-  // decision, and they cannot come apart.
+  // declared below the hook. It is deliberately the SAME thing the heading
+  // chip's own mark opens: the drag and the mark are two ways to one decision,
+  // and they cannot come apart. So a waiting card's pull springs home and raises
+  // the card's MESSAGE — the state's title, what the invitation is costing while
+  // it stands, and the one thing to do about it — instead of a confirm dialog of
+  // its own, which was a second surface asking what that message already asks.
   pullCommitRef.current =
-    displayedCardMode === 'waiting' ? () => { tap(); setCancelConfirmOpen(true) }
+    displayedCardMode === 'waiting' ? openPage1Message
     : displayedCardMode === 'chat' ? () => { tap(); setChatMenuOpen(true) }
     : page1Ended ? page1Back
     : runIgnore
 
-  // The Communities awareness nudge that used to live here — a watched-profile
+  // The Circles awareness nudge that used to live here — a watched-profile
   // counter that threw the hub + a popup over the card after the third face —
   // is DELETED (user directive 2026-07-30). Nothing takes the screen away from
   // the user to teach him something; the dock's Circles entry wears a dot until
@@ -3462,7 +3513,7 @@ export default function HomePage() {
                     // it off IS its Continue.
                     commit={page2PendingInvite ? 'confirm' : 'dismiss'}
                     onClose={closeInviteOverlay}
-                    isTop={!chatOpen && !profileSheetOpen && !communitiesSheetOpen}
+                    isTop={!chatOpen && !profileSheetOpen && !circlesSheetOpen}
                     chromeless
                     zIndex={OVERLAY.z.invite}
                     cardStyle={styles.overlayCardBare}
@@ -3502,21 +3553,25 @@ export default function HomePage() {
                 <HomeDock items={dockItems} bottom={dockBottom} />
 
                 {/* THE CARD'S MESSAGE (user directive 2026-08-01), raised by the
-                    chevron beside the clock on the heading chip. It is the
-                    status CARD this app used to render at the top of the
-                    profile's scroll, moved into the surface the app already uses
-                    for everything it has to say: the same title, the same
-                    paragraph, the same buttons.
+                    chevron beside the clock on the heading chip — and, on a
+                    waiting card, by the drag. It is the status CARD this app
+                    used to render at the top of the profile's scroll, moved into
+                    the surface the app already uses for everything it has to
+                    say: the same title, the same paragraph, the same buttons.
+
+                    AND IT ASKS ONCE (user directive 2026-08-02): every button in
+                    here FIRES. None of them hands the decision on to a confirm
+                    dialog that would name the same action a second time.
 
                     The incoming invitation is `ReplyingInviteCard`, which is
                     that shape already and carries the accept's credit badge, so
                     what a press SPENDS is legible at the moment of pressing. The
                     other three are a title, a sentence and one button.
 
-                    Every follow-up that opens ANOTHER Modal runs from
-                    `onClosed`: the cancel confirm and the buy-extra picker are
-                    both popups, and iOS refuses to present a second one while
-                    the first is still up. */}
+                    What still chains through `onClosed` is the one follow-up that
+                    is not an answer to this popup's question: the buy-extra
+                    picker, which is another Modal, and iOS refuses to present a
+                    second one while the first is still up. */}
                 <BottomSheet
                   visible={messageOpen !== null}
                   onDismiss={() => setMessageOpen(null)}
@@ -3524,13 +3579,12 @@ export default function HomePage() {
                   onClosed={() => {
                     const intent = messageIntentRef.current
                     messageIntentRef.current = null
-                    if (intent === 'cancel') setCancelConfirmOpen(true)
-                    else if (intent === 'buy') { tap(); setBuyExtraOpen(true) }
+                    if (intent === 'buy') { tap(); setBuyExtraOpen(true) }
                   }}
                 >
-                  {(messageOpen === 'page2' || messageOpen === 'approve') && page2PendingInvite ? (
+                  {(messageOpen === 'page2' || messageOpen === 'approve') && messageInvite ? (
                     <ReplyingInviteCard
-                      title={tg('home.replyingTitle', page2PendingInvite.is_male)}
+                      title={tg('home.replyingTitle', messageInvite.is_male)}
                       // Not gendered any more: the sentence says what approving
                       // DOES and what it COSTS, and neither half is about either
                       // person.
@@ -3543,7 +3597,12 @@ export default function HomePage() {
                       // The heading chip's route is the card's MESSAGE and keeps
                       // the decline, which is also what the drag and hardware
                       // back raise.
-                      declineLabel={messageOpen === 'page2' ? t('home.watchingReject') : undefined}
+                      //
+                      // It says DECLINE, not "skip" (user directive 2026-08-02):
+                      // a card the user is merely watching is passed over, an
+                      // invitation someone sent is refused, and this popup is
+                      // only ever the second one.
+                      declineLabel={messageOpen === 'page2' ? t('home.replyingReject') : undefined}
                       costCredits={CREDIT_COST.approve}
                       // The DEPOSIT counts here and nowhere else (see
                       // creditsForApprove): the server pays an accept out of it
@@ -3554,7 +3613,23 @@ export default function HomePage() {
                       // instead of to the chat.
                       affordable={approveFunds >= CREDIT_COST.approve}
                       onAccept={() => runAction('app/approve', 'replying-accept')}
-                      onDecline={messageOpen === 'page2' ? () => { setMessageOpen(null); openRefuseConfirm() } : undefined}
+                      // AND IT FIRES (user directive 2026-08-02, the same rule
+                      // that turned the waiting card's Cancel): this popup is
+                      // already the whole question — who invited me, what
+                      // approving does and what it costs — so the button beside
+                      // the approval is the other answer, not a door to a confirm
+                      // naming the decline a second time. That confirm stays for
+                      // the two routes that PUT THE CARD AWAY rather than
+                      // answering it: the drag and hardware back.
+                      //
+                      // The popup is closed by the request LANDING, not by the
+                      // tap, so the wait is legible where the decision was taken
+                      // (see `messageInvite` for what holds the card up meanwhile).
+                      onDecline={messageOpen === 'page2' ? () => {
+                        decliningInviteRef.current = page2PendingInvite
+                        runAction('app/decline', 'replying-decline', () => setMessageOpen(null))
+                      } : undefined}
+                      declineLoading={busy && pendingKey === 'replying-decline'}
                       onUnaffordable={() => { messageIntentRef.current = 'buy'; setMessageOpen(null) }}
                       busy={busy}
                       acceptLoading={busy && pendingKey === 'replying-accept'}
@@ -3566,10 +3641,14 @@ export default function HomePage() {
                       description={tgg('home.waitingTimerDesc', isMale, matchIsMale)}
                       label={t('home.cancelWaitingBtn')}
                       icon={<CloseIcon color={WHITE} />}
-                      // Cancelling forfeits the held credit, so it keeps its own
-                      // named question — the popup states what is happening, the
-                      // confirm asks whether to end it.
-                      onPress={() => { messageIntentRef.current = 'cancel'; setMessageOpen(null) }}
+                      // FIRES ON THE TAP (user directive 2026-08-02). This popup
+                      // is the question — it says what the invitation is doing
+                      // and what cancelling forfeits — so the button is the
+                      // answer, not a door to a second popup repeating the same
+                      // three words. Putting this one away is the other answer,
+                      // which is why it never needed a cancel button either.
+                      busy={busy && pendingKey === 'cancel-invite'}
+                      onPress={runCancel}
                     />
                   ) : messageOpen === 'page1' ? (
                     <CardMessage
@@ -3655,7 +3734,7 @@ export default function HomePage() {
                     2026-08-01): the centre circle goes straight to the photo
                     step. See centerNotice. */}
 
-                {/* The Communities members-only gate, raised by the dock's faded
+                {/* The Circles members-only gate, raised by the dock's faded
                     circles key and by the routed entries above (push tap /
                     redeemed invite link). Same popup as the two other shut
                     doors, only the sentence differs: the one button is the photo
@@ -3663,21 +3742,14 @@ export default function HomePage() {
                     Not genderized either, for the reason above. */}
                 <BuildProfileGate
                   visible={commGateOpen}
-                  title={t('communities.gateTitle')}
-                  description={t('communities.gateDesc')}
+                  title={t('circles.gateTitle')}
+                  description={t('circles.gateDesc')}
                   onClose={() => setCommGateOpen(false)}
                 />
 
-                <ConfirmDialog
-                  visible={cancelConfirmOpen}
-                  title={t('home.cancelWaitingTitle')}
-                  description={tgg('home.cancelWaitingDesc', isMale, matchIsMale)}
-                  confirmLabel={t('home.cancelWaitingConfirm')}
-                  confirmIconStart={<CloseIcon color={WHITE} />}
-                  onCancel={() => { if (!busy) setCancelConfirmOpen(false) }}
-                  onConfirm={runCancel}
-                  busy={busy}
-                />
+                {/* (The cancel-invitation ConfirmDialog stood here and is
+                    deleted, 2026-08-02: the waiting card's message already
+                    states the question and its button is the answer.) */}
 
                 <ConfirmDialog
                   visible={refuseConfirmOpen}
@@ -3793,8 +3865,8 @@ export default function HomePage() {
                 <SharedCirclesPopup
                   {...circles.props}
                   onSelectFriend={f => {
-                    setCommunitiesTarget({ kind: 'person', friend: f })
-                    openCommunities()
+                    setCirclesTarget({ kind: 'person', friend: f })
+                    openCircles()
                   }}
                 />
 
@@ -3840,7 +3912,7 @@ export default function HomePage() {
           open={chatOpen}
           onClose={() => closeOverlay('chat')}
           dragFrom="header"
-          isTop={!profileSheetOpen && !communitiesSheetOpen}
+          isTop={!profileSheetOpen && !circlesSheetOpen}
           keepMounted
           zIndex={OVERLAY.z.chat}
           // No title bar and, since 2026-07-31, NO CLOSE X either (user
@@ -3857,7 +3929,7 @@ export default function HomePage() {
           {(sheetBody) => (
           <ChatPage
             key={profile?.relations?.match?.user_id ?? 'no-match'}
-            isActive={chatOpen && !profileSheetOpen && !communitiesSheetOpen}
+            isActive={chatOpen && !profileSheetOpen && !circlesSheetOpen}
             onUnreadChange={setChatUnread}
             onOnlineChange={setPartnerOnline}
             // No top inset at all: the message list starts at the very top edge
@@ -3912,23 +3984,23 @@ export default function HomePage() {
           )}
         </OverlaySheet>
 
-        {/* Communities hub, stacked ON TOP of the menu it was opened from —
+        {/* Circles hub, stacked ON TOP of the menu it was opened from —
             swiping down closes it back to the menu. It owns an internal view
             stack (hub -> friends / a group / create / find); the header shows a
             back arrow while there's somewhere to go, and hardware-back pops that
-            internal stack via communitiesBackRef before the sheet closes. */}
+            internal stack via circlesBackRef before the sheet closes. */}
         <OverlaySheet
-          open={communitiesSheetOpen}
-          onClose={closeCommunities}
+          open={circlesSheetOpen}
+          onClose={closeCircles}
           chromeless
           zIndex={OVERLAY.z.subPage}
         >
           {ctx => (
-            <CommunitiesPage
-              onClose={closeCommunities}
-              onRegisterBack={fn => { communitiesBackRef.current = fn }}
-              target={communitiesTarget}
-              onTargetConsumed={() => setCommunitiesTarget(null)}
+            <CirclesPage
+              onClose={closeCircles}
+              onRegisterBack={fn => { circlesBackRef.current = fn }}
+              target={circlesTarget}
+              onTargetConsumed={() => setCirclesTarget(null)}
               {...ctx}
             />
           )}

@@ -3,7 +3,7 @@ import { View, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'rea
 import { Text } from './AppText'
 import { Chip } from './Chip'
 import { MetaLine } from './MetaLine'
-import { AVATAR } from './CommunityBits'
+import { AVATAR } from './CircleBits'
 import { tap } from '../lib/haptics'
 import type { MetaPart } from '../lib/meta'
 import { XS, SM, MD, TEXT } from '../tokens'
@@ -13,7 +13,7 @@ import { INK, LINE, INK_WASH } from '../colors'
 // title, and the facts about it on the app's one fact line under that title —
 // with a chip riding the last of those lines and, rarely, a lane after them for
 // a row that answers in place. It repeats on every surface, so it exists once:
-// the Communities hub, a group's roster, the waiting queue, my friends, the
+// the Circles hub, a group's roster, the waiting queue, my friends, the
 // group search, the shared-groups/shared-friends popups, and the main menu's own
 // rows (settings.tsx composes StripBody inside its pressable, keeping its press
 // fade and its card grouping — see below). A variant is a PROP, never a second
@@ -34,7 +34,7 @@ import { INK, LINE, INK_WASH } from '../colors'
 /** How far in from the card's edge a strip holds its contents — the app's page
  *  gutter, MD. Exported because a bare glyph in the `trailing` lane has to be
  *  measured against it to line up with the chrome above the list (see
- *  CommunitiesPage's ROW_GLYPH_INSET): a mark's own box is not the tile a
+ *  CirclesPage's ROW_GLYPH_INSET): a mark's own box is not the tile a
  *  chrome control wears, so the two cannot simply share this edge. */
 export const STRIP_GUTTER = MD
 

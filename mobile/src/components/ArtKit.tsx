@@ -136,7 +136,7 @@ export const Spark = ({ x, y, r, fill = INK }: { x: number; y: number; r: number
 
 // (The run of faces that filled the end of the hub's FRIENDS row lived here
 // from 2026-07-31 to 2026-08-02. That lane is the INVITE BUTTON again — see
-// CommunitiesPage's friends strip — so the drawing is deleted rather than left
+// CirclesPage's friends strip — so the drawing is deleted rather than left
 // exported with nowhere to stand.)
 
 // ── The pointer ────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { requireOptionalNativeModule } from 'expo-modules-core'
 
 import { invoke } from './api'
 import { referralUrl, friendInviteUrl } from './links'
-import { linkFriendByCode, redeemInvite } from './communities'
+import { linkFriendByCode, redeemInvite } from './circles'
 import { STORAGE } from '../keys'
 import { t } from '../i18n'
 

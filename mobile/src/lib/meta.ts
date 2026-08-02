@@ -5,7 +5,7 @@
 // "2 חברים · מנוהלת על ידי אופיר". Every surface that lists facts this way
 // renders components/MetaLine.tsx, so there is one separator in the app. The
 // ORDER of the facts is the caller's — for a group it comes from ONE composer,
-// lib/communities.ts' `groupFacts`, so every list states them the same way.
+// lib/circles.ts' `groupFacts`, so every list states them the same way.
 //
 // THE RULE (user directive 2026-07-28, absolute): a separator dot never sits at
 // the START or the END of a line. A dot with nothing after it separates nothing.

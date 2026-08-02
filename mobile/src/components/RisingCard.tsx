@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   // THE EDGE THAT SAYS THIS CAME FROM BELOW (user directive 2026-07-31). Every
   // surface that rises over another one wears it, and it is declared HERE and
   // nowhere else — this component is "the surface that rises", so a sheet, a
-  // Communities page pushed over the hub, the invitation and home's match card
+  // Circles page pushed over the hub, the invitation and home's match card
   // all mark their arrival with the same one shadow, and no call site can state
   // a lift of its own or forget to. (OverlaySheet used to hand-roll the same
   // idea as shadowOffset/shadowOpacity/elevation on its card; it was the only

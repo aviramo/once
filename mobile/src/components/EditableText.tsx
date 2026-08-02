@@ -1,7 +1,7 @@
 // ── EditableText ────────────────────────────────────────────────────────────
 //
 // One inline text editor shared by the profile bio (MatchCard's on-photo /
-// fallback bubble) and the group description (CommunitiesPage). The field is a
+// fallback bubble) and the group description (CirclesPage). The field is a
 // multiline TextInput styled by the caller to look byte-identical to the
 // read-only text it replaces; tapping drops the caret natively. While focused,
 // a footer bar carries an explicit Update button — the ONLY save path — plus the

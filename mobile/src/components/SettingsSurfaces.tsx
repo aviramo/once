@@ -8,9 +8,9 @@ import { getLocales } from 'expo-localization'
 import * as ImagePicker from 'expo-image-picker'
 import { invoke } from '../lib/api'
 import { tap, tapWarning } from '../lib/haptics'
-import { useUserStore, resolveLocationType, selectIsHidden, selectInvisibleReason, selectWatcherCount, type LocationType } from '../stores/userStore'
+import { useUserStore, resolveLocationType, selectIsHidden, selectInvisibleReason, selectWatching, type LocationType, type Watching } from '../stores/userStore'
 import { useAuthStore } from '../stores/authStore'
-import { t, tg, lang, genderize, lowerFirst } from '../i18n'
+import { t, tg, lang, genderize, lowerFirst, pinDirection } from '../i18n'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BuildProfileGate } from './BuildProfileGate'
 import { ToggleRow } from './Switch'
@@ -190,7 +190,7 @@ function SelectFieldRow({
         //    right beside its words with `trailingBeside`. It is never centred
         //    against the whole row: centred it read as a control floating beside
         //    the button rather than as a fact stated by its line.
-        //  • A subtitle stating several facts (the communities counts) is laid
+        //  • A subtitle stating several facts (the Circles counts) is laid
         //    out by MetaLine, so it wraps when the column is narrow, drops its
         //    separator at the break, and never paints its scripts out of order.
         //  • The subtitle aligns with the LABEL TEXT, not under the leading
@@ -307,17 +307,19 @@ function useVisibility() {
     run('app/free2')
   }, [isHidden, run])
 
-  // Watcher count drives two surfaces: the count beside the state, and the
-  // concrete ripple in the hide confirm. deriveCompat only fills the array while
-  // page2 is free, so a hidden user reads 0 without a separate guard.
-  const watcherCount = selectWatcherCount(profile)
-  const confirm = hideProfileConfirm(watcherCount)
+  // Who is watching drives two surfaces, and they ask different questions of
+  // the same selector: the sentence beside the state says who has my card
+  // (`count`, names included), the hide confirm promises who gets removed and
+  // pushed, which is only ever the page2 array (`kickedOnHide`) — a chat partner
+  // is on my card and is not in it.
+  const watching = selectWatching(profile)
+  const confirm = hideProfileConfirm(watching.kickedOnHide)
 
   return {
     // No `isHidden` out of here: what the row PAINTS is selectInvisibleReason,
     // which knows the second reason this hook does not (an unbuilt profile), and
     // two answers to "am I hidden" on one row is one too many.
-    watcherCount,
+    watching,
     toggle,
     /** The confirm that gates going hidden. Rendered by whichever surface owns
      *  the control — it is the same dialog either way. The glyph is ICON.md, the
@@ -352,10 +354,36 @@ function useVisibility() {
 // empty trailing lane read as the count having failed to load, when what it meant
 // was "nobody" — the one answer a visible user opens this row to check. A hidden
 // row still carries nothing, because there the count is not zero, it is moot.
-const watcherLabel = (n: number) =>
-  n === 0 ? t('settings.watchersNone')
-    : n === 1 ? t('settings.watchersOne')
-      : t('settings.watchersMany').replace('{count}', String(n))
+//
+// AND THE WATCHERS WHOSE SCREEN MY CARD IS ON ARE SAID BY NAME (user directive
+// 2026-08-02): the person I invited, the person who invited me, the person I
+// matched with. WHICH of them may be named is selectWatching's rule, not this
+// label's — all that happens here is that a name, where there is one, is said
+// instead of counted. "רק" leads whenever the named ARE all of them, so the
+// first word of the sentence is the one that says whether anybody is left over.
+// A name is user data inside a sentence the app wrote, so the result is pinned
+// to the UI's reading direction (pinDirection) after the substitutions, never by
+// a style prop — a Latin name at the head of a Hebrew line turns the whole line
+// around.
+const watcherLabel = (w: Watching) => {
+  if (w.names.length === 0) {
+    return w.count === 0 ? t('settings.watchersNone')
+      : w.count === 1 ? t('settings.watchersOne')
+        : t('settings.watchersMany').replace('{count}', String(w.count))
+  }
+  // Two names means an invitation each way, and that state has no anonymous
+  // watchers left to add (see selectWatching), so the pair is always complete.
+  if (w.names.length > 1) {
+    return pinDirection(t('settings.watchersNamedPair')
+      .replace('{a}', w.names[0]).replace('{b}', w.names[1]))
+  }
+  return pinDirection(
+    w.others === 0 ? t('settings.watchersNamed').replace('{name}', w.names[0])
+      : w.others === 1 ? t('settings.watchersNamedOther').replace('{name}', w.names[0])
+        : t('settings.watchersNamedMore')
+          .replace('{name}', w.names[0]).replace('{count}', String(w.others)),
+  )
+}
 
 // The same control as a MENU ROW — the first field of the preferences popup
 // (user directive 2026-07-30). It states the whole thing as a sentence about the
@@ -395,7 +423,15 @@ function VisibilityRow({ onBuildProfile }: {
         icon={reason ? <EyeOffIcon color={INK} size={ICON.md} /> : <EyeOpenIcon color={INK} size={ICON.md} />}
         labelColor={INK}
         locked={unbuilt}
-        trailing={!reason ? <Chip small text={watcherLabel(vis.watcherCount)} /> : undefined}
+        // A hidden row carries no COUNT — there the number is not zero, it is
+        // moot — but a NAME is never moot: a match locks page2, so the row reads
+        // hidden while my card is on my partner's screen, and "רק מאיה צופה בי"
+        // is the one thing worth saying there (user directive 2026-08-02). Out
+        // of the pool and in front of exactly one person are two facts, not a
+        // contradiction.
+        trailing={!reason || vis.watching.count > 0
+          ? <Chip small text={watcherLabel(vis.watching)} />
+          : undefined}
         trailingBeside
         // No haptic here for either branch: the row's tap responder fires one.
         onPress={() => { if (unbuilt) { setGateOpen(true); return } vis.toggle() }}
@@ -2474,7 +2510,7 @@ function AppInlineContent() {
       <View style={[styles.accountLinksCard, { marginBottom: 0 }]}>
         {/* Credits, then Account. Tapping credits opens the buy picker
             straight away. (Visibility moved to the menu's top group, beside
-            Communities.) */}
+            Circles.) */}
         <SelectFieldRow
           grouped
           // The label is the bare word and the whole wallet rides its own line

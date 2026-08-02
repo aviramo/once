@@ -135,6 +135,12 @@ export default {
   'settings.watchersNone': 'No one is watching me',
   'settings.watchersOne': 'Someone is watching me',
   'settings.watchersMany': '{count} people are watching me',
+  // The watchers the app may NAME, and the "Only" that says the list is
+  // complete — see the note in he.ts and selectWatching.
+  'settings.watchersNamed': 'Only {name} is watching me',
+  'settings.watchersNamedPair': 'Only {a} and {b} are watching me',
+  'settings.watchersNamedOther': '{name} and someone else are watching me',
+  'settings.watchersNamedMore': '{name} and {count} others are watching me',
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
@@ -157,15 +163,15 @@ export default {
   // /g/ invite link, the component props — so a key still named `newGroup` /
   // `removeFromGroup` is correct and only its VALUE moved. See he.ts for the
   // Hebrew half, where the noun also changed gender.
-  'communities.menuRow': 'Circles',
-  'communities.title': 'My circles',
-  'communities.myFriends': 'My friends',
-  'communities.myFriendsSub': 'People you personally know',
+  'circles.menuRow': 'Circles',
+  'circles.title': 'My circles',
+  'circles.myFriends': 'My friends',
+  'circles.myFriendsSub': 'People you personally know',
   // The one WORD, for the button on the hub's friends row: the row already
   // says what it is about, so the button only says what it does.
-  'communities.invite': 'Invite',
-  'communities.create': 'Create a circle',
-  'communities.find': 'Find or join a circle',
+  'circles.invite': 'Invite',
+  'circles.create': 'Create a circle',
+  'circles.find': 'Find or join a circle',
   // Circle kinds: ONE axis, three stops (2026-07-27). Replaces the old
   // public/private + approval-on/off pair everywhere it was shown.
   // TWO of the three name the JOINING rather than the circle (user directive
@@ -173,38 +179,38 @@ export default {
   // somebody, and its Hebrew twin reads as a HAPPY one. So the axis is stated as
   // the thing it decides, who may come in; private stays a fact about the circle
   // itself, that being the one stop where its own visibility changes.
-  'communities.kindLabel': 'Circle type',
-  'communities.kindOpen': 'Open to join',
-  'communities.kindOpenSub': 'Appears in search, and joining is instant',
-  'communities.kindApproved': 'Approval required',
-  'communities.kindApprovedSub': 'Appears in search, and every join request needs approval',
-  'communities.kindPrivate': 'Private circle',
-  'communities.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs approval',
-  'communities.membersCount': '{count} members',
-  'communities.oneMember': '1 member',
+  'circles.kindLabel': 'Circle type',
+  'circles.kindOpen': 'Open to join',
+  'circles.kindOpenSub': 'Appears in search, and joining is instant',
+  'circles.kindApproved': 'Approval required',
+  'circles.kindApprovedSub': 'Appears in search, and every join request needs approval',
+  'circles.kindPrivate': 'Private circle',
+  'circles.kindPrivateSub': 'Never appears in search, you get in by link only, and every join needs approval',
+  'circles.membersCount': '{count} members',
+  'circles.oneMember': '1 member',
   // Row meta segments, laid out by MetaLine. One string per fact, so every list
   // counting the same thing counts it in the same words. (`groupsCount` /
   // `oneGroup` and the `groupLabel` helper that read them are deleted with the
   // dock's old menu row, 2026-08-01: nothing has counted circles since that row
   // went, and `rowEmpty` — the row's own empty line — goes with them.)
-  'communities.oneFriend': '1 friend',
-  'communities.requestsCount': '{count} requests',
-  'communities.oneRequest': '1 request',
+  'circles.oneFriend': '1 friend',
+  'circles.requestsCount': '{count} requests',
+  'circles.oneRequest': '1 request',
   // Circles stay locked until the two photos exist. The sentence names the
   // PHOTOS rather than "a profile" (user directive 2026-08-01), which also takes
   // the imperative out of the Hebrew, so neither language carries a {m|f} marker
   // here any more and no host genderizes it.
-  'communities.gateTitle': 'People through circles',
-  'communities.gateDesc': 'Circles connect people who share the same interests. To join, your photos are required',
-  'communities.managedBy': 'Managed by {name}',
+  'circles.gateTitle': 'People through circles',
+  'circles.gateDesc': 'Circles connect people who share the same interests. To join, your photos are required',
+  'circles.managedBy': 'Managed by {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared circle in one list.
-  'communities.sharedTitle': 'What we share',
+  'circles.sharedTitle': 'What we share',
   // The chip itself. English inflects for neither the friend nor the card's
   // subject, so the pair is the same string twice; Hebrew is why there are two
   // keys at all (see he.ts).
-  'communities.friendOfM': 'Friend of {name}',
-  'communities.friendOfF': 'Friend of {name}',
+  'circles.friendOfM': 'Friend of {name}',
+  'circles.friendOfF': 'Friend of {name}',
   // (No "you have no circles yet" line any more: a hub with nothing in it IS
   // the start page — the picture, what this is for, the two ways in — with the
   // friends row over it. See HubStart.)
@@ -218,29 +224,29 @@ export default {
   // reading as somebody's social circle and starts reading as an object on this
   // very screen. So the title COUNTS them, and the sentence about what a friend
   // brings names the PEOPLE.
-  'communities.startTitle': 'Your circles start here',
-  'communities.startDesc': 'Every friend you add can connect you to their single friends too, and a shared circle opens people with the same interests',
+  'circles.startTitle': 'Your circles start here',
+  'circles.startDesc': 'Every friend you add can connect you to their single friends too, and a shared circle opens people with the same interests',
   // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
   // one of the two whose label does not say what it is worth. "Search circles"
   // needs no line, and a second one turned the two ways forward into a
   // paragraph.
-  'communities.startFind': 'Search circles',
+  'circles.startFind': 'Search circles',
   // The friends page before there is a single friend on it: the same drawing
   // and the same heading as the hub's, one step in — that page offers the two
   // ways to start a circle, this one owns the first of them, so all it has to
   // say is what a friend joining actually opens.
-  'communities.friendsStartDesc': 'Invite friends, and when they join, new people they know open up to you',
+  'circles.friendsStartDesc': 'Invite friends, and when they join, new people they know open up to you',
 
   // My friends
-  'communities.inviteFriend': 'Invite friends',
+  'circles.inviteFriend': 'Invite friends',
   // Caption under the invite button: connecting as friends pays both sides a
   // credit (server credits it on every new friend link, see friend_link_credits).
-  'communities.inviteReward': 'For every friend who connects, you both get an extra credit',
-  'communities.linkFriend': 'Link an existing friend',
-  'communities.friendsCount': '{count} friends',
-  'communities.accept': 'Accept',
-  'communities.decline': 'Decline',
-  'communities.noFriends': "You don't have friends here yet",
+  'circles.inviteReward': 'For every friend who connects, you both get an extra credit',
+  'circles.linkFriend': 'Link an existing friend',
+  'circles.friendsCount': '{count} friends',
+  'circles.accept': 'Accept',
+  'circles.decline': 'Decline',
+  'circles.noFriends': "You don't have friends here yet",
   // What a friend is FOR (user directive 2026-07-30): not the friend himself,
   // who needs no introduction and is excluded from the game outright as of
   // 20260730150000, but the people one hop past him, who carry both the x3 and
@@ -249,56 +255,61 @@ export default {
   // absent, and an empty page has to say what the user GETS. (Was
   // `friendsHint`, which no surface rendered and which still offered the
   // people-search flow removed 2026-07-26.)
-  'communities.friendsWhy': 'Every friend opens up their people to you: the ones you have not met, who reach you first with a friend in common',
-  'communities.unfriendTitle': 'Remove {name} from friends?',
-  'communities.unfriendDesc': 'You can link again later',
-  'communities.unfriendConfirm': 'Remove',
+  'circles.friendsWhy': 'Every friend opens up their people to you: the ones you have not met, who reach you first with a friend in common',
+  'circles.unfriendTitle': 'Remove {name} from friends?',
+  'circles.unfriendDesc': 'You can link again later',
+  'circles.unfriendConfirm': 'Remove',
 
   // Link an existing friend
-  'communities.linkTitle': 'Link a friend',
-  'communities.request': 'Request',
-  'communities.requested': 'Sent',
-  'communities.noResults': 'No results',
-  'communities.linkNote': 'They get a request. Once accepted, you are linked both ways',
+  'circles.linkTitle': 'Link a friend',
+  'circles.request': 'Request',
+  'circles.requested': 'Sent',
+  'circles.noResults': 'No results',
+  'circles.linkNote': 'They get a request. Once accepted, you are linked both ways',
 
   // Create a circle
-  'communities.newGroup': 'New circle',
-  'communities.name': 'Name',
-  'communities.namePlaceholder': 'Circle name',
-  'communities.createAction': 'Create circle',
-  'communities.nameError': 'A shorter name is required',
-  'communities.description': 'Description',
-  'communities.descriptionPlaceholder': 'What the circle is about',
-  'communities.descUpdate': 'Update',
+  'circles.newGroup': 'New circle',
+  'circles.name': 'Name',
+  'circles.namePlaceholder': 'Circle name',
+  'circles.createAction': 'Create circle',
+  'circles.nameError': 'A shorter name is required',
+  'circles.description': 'Description',
+  'circles.descriptionPlaceholder': 'What the circle is about',
+  'circles.descUpdate': 'Update',
   // The "more details" link: managers set it in the circle settings, and anyone
   // looking at the circle gets one tappable line under the description.
-  'communities.link': 'Link to more details',
-  'communities.linkPlaceholder': 'Paste a link here',
+  'circles.link': 'Link to more details',
+  'circles.linkPlaceholder': 'Paste a link here',
   // The server decides whether an address is usable (it also completes a bare
   // host with https://), so this lights up under the field when it refused —
   // with the refused text still in the field to be corrected.
-  'communities.linkInvalid': 'That link is not valid',
+  'circles.linkInvalid': 'That link is not valid',
   // A save refused for any other reason (name, description).
-  'communities.saveFailed': 'Not saved, try again',
-  'communities.moreDetails': 'More details',
+  'circles.saveFailed': 'Not saved, try again',
+  'circles.moreDetails': 'More details',
 
   // A circle you manage
-  'communities.shareInvite': 'Share invite link',
-  'communities.settings': 'Circle settings',
-  // The settings header's one non-editing control: opens the circle's own popup
-  // exactly as everyone else meets it.
-  'communities.preview': 'Preview',
+  'circles.shareInvite': 'Share invite link',
+  // The word under the mark when sharing the link stands at the foot of the
+  // circle's page beside another option: one word under a glyph, like every
+  // option on a strip. The full sentence stays on the button that runs the width
+  // of the popup, where nothing stands beside it.
+  'circles.share': 'Share',
+  'circles.settings': 'Circle settings',
+  // The foot of the circle's page: opens the circle's own popup exactly as
+  // everyone else meets it.
+  'circles.preview': 'Preview',
   // Manage without playing. The caller's OWN membership flag inside one circle
   // they run: while it is on, they and that circle's members never meet in the
   // game. A checkbox in Circle settings, under the circle's kind, with the
   // sentence that explains it as its own sub-line.
-  'communities.hiddenToggle': 'Hide me from the circle members',
-  'communities.hiddenSub': 'The people in this circle will not see you in the game, and you will not see them. Your rights in the circle stay exactly as before',
-  'communities.hiddenShort': 'Not playing',
-  'communities.deleteGroup': 'Delete circle',
-  'communities.deleteTitle': 'Delete {name}?',
-  'communities.deleteDesc': 'The circle and all its memberships are removed. This cannot be undone',
-  'communities.deleteConfirm': 'Delete',
+  'circles.hiddenToggle': 'Hide me from the circle members',
+  'circles.hiddenSub': 'The people in this circle will not see you in the game, and you will not see them. Your rights in the circle stay exactly as before',
+  'circles.hiddenShort': 'Not playing',
+  'circles.deleteGroup': 'Delete circle',
+  'circles.deleteTitle': 'Delete {name}?',
+  'circles.deleteDesc': 'The circle and all its memberships are removed. This cannot be undone',
+  'circles.deleteConfirm': 'Delete',
   // No confirm for taking a member out (user directive 2026-07-31): the tap
   // removes. `removeMemberTitle` / `removeMemberDesc` / `remove` are deleted with
   // that popup — the description WAS the reason it needed none ("they can join
@@ -309,72 +320,72 @@ export default {
   // twin (`requestsNav`) and its empty line (`noRequests`) went with the page
   // itself on 2026-07-31: the queue is a drawer inside the roster now, and a
   // drawer with nothing in it is not drawn at all.
-  'communities.requestsSectionJoin': 'Join requests',
-  'communities.approve': 'Approve',
-  'communities.approveAll': 'Approve everyone',
-  'communities.approveAllTitle': 'Approve every request?',
-  'communities.approveAllDesc': 'Everyone waiting in the queue joins {name}, and each of them is notified',
-  'communities.declineJoin': 'Decline',
-  'communities.owner': 'Owner',
+  'circles.requestsSectionJoin': 'Join requests',
+  'circles.approve': 'Approve',
+  'circles.approveAll': 'Approve everyone',
+  'circles.approveAllTitle': 'Approve every request?',
+  'circles.approveAllDesc': 'Everyone waiting in the queue joins {name}, and each of them is notified',
+  'circles.declineJoin': 'Decline',
+  'circles.owner': 'Owner',
   // The role is named for the one thing it does: answer join requests (user
   // directive 2026-07-30, replacing "manager" everywhere a user reads it). An
   // OPEN circle has no such role at all, because nothing there waits on an
   // answer, so the appointment is offered on approval-required/private circles
   // only.
-  'communities.manager': 'Approver',
-  'communities.makeManager': 'Make approver',
-  'communities.removeManager': 'Remove approver',
-  'communities.removeFromGroup': 'Remove from circle',
-  'communities.transferOwner': 'Transfer ownership',
-  'communities.transferOwnerTitle': 'Hand {name} the circle?',
-  'communities.transferOwnerDesc': 'The circle becomes {name}\'s, and you stay on as an approver. This cannot be undone',
+  'circles.manager': 'Approver',
+  'circles.makeManager': 'Make approver',
+  'circles.removeManager': 'Remove approver',
+  'circles.removeFromGroup': 'Remove from circle',
+  'circles.transferOwner': 'Transfer ownership',
+  'circles.transferOwnerTitle': 'Hand {name} the circle?',
+  'circles.transferOwnerDesc': 'The circle becomes {name}\'s, and you stay on as an approver. This cannot be undone',
   // An open circle has no approvers, so the outgoing owner keeps nothing: he is
   // a plain member of it from that moment.
-  'communities.transferOwnerDescOpen': 'The circle becomes {name}\'s, and you keep no rights in it. This cannot be undone',
+  'circles.transferOwnerDescOpen': 'The circle becomes {name}\'s, and you keep no rights in it. This cannot be undone',
 
   // A circle you are in
-  'communities.leave': 'Leave circle',
-  'communities.memberNote': 'Members rank higher for you',
+  'circles.leave': 'Leave circle',
+  'circles.memberNote': 'Members rank higher for you',
 
   // Find or join
-  'communities.findTitle': 'Join a circle',
-  'communities.findSearch': 'Search a circle',
+  'circles.findTitle': 'Join a circle',
+  'circles.findSearch': 'Search a circle',
   // Searching the roster of a circle you manage: the mark on that page's bar,
   // the field's own placeholder, and the mark that ends the search. It looks
   // over BOTH lists at once, the people waiting and the people already in.
-  'communities.searchPeople': 'Search by name',
-  'communities.searchClose': 'Close search',
+  'circles.searchPeople': 'Search by name',
+  'circles.searchClose': 'Close search',
   // The line about the PERSON, standing over a circle's name on their page: who
   // they are and when they turned up here. Genderless in both languages, so a
   // row with no profile on it still reads (see memberSince / waitingSince), and
   // the name leads because everything else in that block is the circle's.
-  'communities.inGroupSince': '{name} in the circle since {date}',
-  'communities.waitingSince': '{name} waiting since {date}',
-  'communities.orCode': 'or with an invite code',
-  'communities.join': 'Join',
-  'communities.joined': 'Joined',
-  'communities.requestJoin': 'Request to join',
-  'communities.pending': 'Pending approval',
+  'circles.inGroupSince': '{name} in the circle since {date}',
+  'circles.waitingSince': '{name} waiting since {date}',
+  'circles.orCode': 'or with an invite code',
+  'circles.join': 'Join',
+  'circles.joined': 'Joined',
+  'circles.requestJoin': 'Request to join',
+  'circles.pending': 'Pending approval',
   // A strip's chip, where the meta line already says the size: ONE word in the
   // corner the role chip sits in, not the sentence the popup's button says.
   // Where I stand with a circle, on the hub and in search alike.
-  'communities.pendingTag': 'Pending',
-  'communities.declinedTag': 'Declined',
-  'communities.declined': 'Request declined',
-  'communities.declinedTitle': 'Your request to {name} was declined',
-  'communities.declinedDesc': "Your request was not approved. You can clear this notice, and ask again in a month",
-  'communities.declinedConfirm': 'Clear',
+  'circles.pendingTag': 'Pending',
+  'circles.declinedTag': 'Declined',
+  'circles.declined': 'Request declined',
+  'circles.declinedTitle': 'Your request to {name} was declined',
+  'circles.declinedDesc': "Your request was not approved. You can clear this notice, and ask again in a month",
+  'circles.declinedConfirm': 'Clear',
   // The pending circle's own popup: what the state is, and the button that ends
   // it (the same popup a circle you are in opens, with cancel instead of leave).
   // The sentence names no approver (user directive 2026-08-01): "waiting for the
   // circle to approve it" makes the circle the thing that decides, which a group
   // could pass for and a circle cannot. What is waiting is the approval.
-  'communities.pendingNote': 'Your request is waiting for approval',
-  'communities.cancelJoin': 'Cancel request',
+  'circles.pendingNote': 'Your request is waiting for approval',
+  'circles.cancelJoin': 'Cancel request',
   // Goes out to WhatsApp, i.e. to people who have never opened the app (user
   // directive 2026-08-01): it names the circle and the app, and leaves the term
   // inside.
-  'communities.shareMessage': 'Join {name} on the Once app\n{link}',
+  'circles.shareMessage': 'Join {name} on the Once app\n{link}',
   // Support: row in the account card. Opens the device mail composer at the
   // support inbox, with this subject prefilled.
   'settings.support': 'Support',
@@ -538,7 +549,7 @@ export default {
   // offers and the only one the user can act on. The daily refill follows as
   // the fallback it is, with its condition up front instead of in a trailing
   // parenthesis ({time} is a bare "HH:MM" from formatGrantTime). Deliberately
-  // NOT the friends page's caption (communities.inviteReward) that used to be
+  // NOT the friends page's caption (circles.inviteReward) that used to be
   // reused here (user directive 2026-07-28): this popup is where someone comes
   // when the wallet is empty, so it has to answer "when do I get one anyway",
   // which that caption never said. genderize() is a no-op here (no {m|f}
@@ -858,18 +869,12 @@ Next may surprise`,
   // is the whole of what is missing, and it is what the camera in the circle
   // under it opens.
   'home.browseGateTitle': 'To keep going, profile photos are required',
-  'home.cancelWaitingTitle': 'Cancel invitation?',
+  // See the note in he.ts: the message popup asks, this button answers, and the
+  // confirm dialog that named the same action a second time is deleted.
   'home.cancelWaitingBtn': 'Cancel invitation',
-  'home.cancelWaitingDesc': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting',
-  'home.cancelWaitingDesc_mm': 'Your invitation will be canceled now. He\'ll be available to others again, and you can keep inviting',
-  'home.cancelWaitingDesc_mf': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting',
-  'home.cancelWaitingDesc_fm': 'Your invitation will be canceled now. He\'ll be available to others again, and you can keep inviting',
-  'home.cancelWaitingDesc_ff': 'Your invitation will be canceled now. She\'ll be available to others again, and you can keep inviting',
-  'home.cancelWaitingConfirm': 'Cancel invitation',
   'home.refuseReplyTitle': 'Decline invitation?',
   'home.refuseReplyDesc': 'The invitation will be closed, and the other person will be notified',
   'home.refuseReplyConfirm': 'Decline invitation',
-  'home.watchingReject': 'Skip',
   // Shown in the rotating-headline slot for the duration of the first-time
   // swipe-down tutorial, instead of that card's random skip line: while the
   // card peeks down and reveals the slot, the text names the gesture.
@@ -884,6 +889,8 @@ Next may surprise`,
   // See the note in he.ts — what approving DOES and what it COSTS, said once.
   'home.replyingDesc': 'Approving opens a chat between you, and costs one credit',
   'home.replyingAccept': 'Approve invitation',
+  // See he.ts: this button fires the decline itself, and it replaces the
+  // `home.watchingReject` ("Skip") that named the same button.
   'home.replyingReject': 'Decline',
   'home.chatHeader': 'One on one',
   // The one popup ending a chat: its title, its sentence and its two answers,
@@ -941,7 +948,7 @@ Next may surprise`,
   // The four entries in the strip at the foot of home (HomeDock). ONE WORD each:
   // the caption names the glyph over it in a quarter of the screen's width, so
   // anything longer wraps to two lines on every phone. Circles takes the one
-  // Circles string the whole app shares (communities.menuRow). The last one is
+  // Circles string the whole app shares (circles.menuRow). The last one is
   // "More" rather than "Settings" (user directive 2026-07-30) — what it opens is
   // the wallet, the account, support and the site, which is everything else
   // rather than a preferences screen.

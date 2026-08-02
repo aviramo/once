@@ -1,9 +1,9 @@
-// Shared community primitives — the member/owner Avatar and the list skeleton —
-// used by the Communities sheet AND the group chip's shared-groups popup.
+// Shared circle primitives — the member/owner Avatar and the list skeleton —
+// used by the Circles sheet AND the group chip's shared-groups popup.
 // Extracted here so both surfaces render the exact same avatar and loading
 // placeholder (DRY: one definition, two call sites). The count wording
 // (memberLabel and friends) is plain text with no JSX, so it lives beside the
-// rest of the communities text helpers in lib/communities.ts.
+// rest of the circles text helpers in lib/circles.ts.
 import { useEffect, useState } from 'react'
 import { I18nManager, Image, View, StyleSheet } from 'react-native'
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
@@ -13,7 +13,7 @@ import { Glyph } from './icons'
 import { MetaLine } from './MetaLine'
 import { SheetTitle } from './BottomSheet'
 import { publicImageUrl } from '../lib/api'
-import { groupFacts, type MemberImage } from '../lib/communities'
+import { groupFacts, type MemberImage } from '../lib/circles'
 import { XS, SM, MD, TEXT, WEIGHT, PULSE, SKELETON, SYNC, SHEET_GAP, lh } from '../tokens'
 import { INK, INK_DIM, INK_MUTED, WHITE, LINE, SURFACE_SUNK } from '../colors'
 
@@ -224,7 +224,7 @@ export function SyncBar({ visible }: { visible: boolean }) {
 // menu row used to miss it, back when it was a component of its own here).
 
 const sk = StyleSheet.create({
-  // Mirrors CommunitiesPage's `Strip` — same gutters, same hairline, same
+  // Mirrors CirclesPage's `Strip` — same gutters, same hairline, same
   // avatar lane, same paddings, so a bar sits exactly where its name will and
   // the list does not change height when the real rows land on it.
   row: { flexDirection: 'row', alignItems: 'center', gap: MD, paddingHorizontal: MD, paddingVertical: SM, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },

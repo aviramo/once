@@ -430,7 +430,7 @@ export const DOCK_SHADOW = '0px -8px 18px 0px rgba(0,0,0,0.10)'
 
 // ── The lift of a surface that came from below ─────────────────────────────
 // The upward shadow on the TOP edge of every full-screen surface that rises
-// over another one: a Communities page pushed over the hub, chat, the profile
+// over another one: a Circles page pushed over the hub, chat, the profile
 // preview, the invitation, home's match card. It is applied in exactly ONE
 // place — RisingCard, which IS "the surface that rises" — so every page in the
 // app says "I am a layer above the one you were on" identically, and no call
@@ -440,7 +440,7 @@ export const DOCK_SHADOW = '0px -8px 18px 0px rgba(0,0,0,0.10)'
 // finger is dragging it back down: at rest each of these covers the whole
 // screen and its top edge is off it. That is precisely what this is for (user
 // directive 2026-07-31) — the entrance was unreadable, worst of all in
-// Communities, where a page and the page under it are the same PAGE tint and
+// Circles, where a page and the page under it are the same PAGE tint and
 // nothing at all marked the seam.
 //
 // A SEPARATE and stronger stop than SHEET_SHADOW above, for the same reason
@@ -498,7 +498,7 @@ export const SCROLL_FADE = 36
 
 // ── Loading skeleton ───────────────────────────────────────────────────────
 // Geometry of the placeholder rows that stand in for a list while it loads
-// (SkeletonRows in CommunityBits.tsx). A skeleton row keeps the real row's
+// (SkeletonRows in CircleBits.tsx). A skeleton row keeps the real row's
 // shape with the avatar and text swapped for pale purple bars, so the card holds the
 // size it is about to have instead of collapsing around a spinner. It breathes
 // on the app's one PULSE — no second rhythm, no shimmer sweep.

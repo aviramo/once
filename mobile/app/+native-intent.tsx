@@ -1,4 +1,4 @@
-import { parseGroupInviteToken, parseFriendInviteCode } from '../src/lib/communities'
+import { parseGroupInviteToken, parseFriendInviteCode } from '../src/lib/circles'
 
 // Expo Router's door for inbound deep links: every URL the OS hands the app
 // passes through here before the router does anything with it, both the

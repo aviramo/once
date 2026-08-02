@@ -24,7 +24,7 @@ export const STORAGE = {
   friends: 'my_friends_roster',
   /** An invite link opened before there was a session to redeem it with. It
    *  waits here — through sign-up, onboarding, and an app kill in the middle of
-   *  either — until the first flush that finds a session. See communities.ts. */
+   *  either — until the first flush that finds a session. See circles.ts. */
   pendingInvite: 'pending_invite',
   /** PREFIX, not a key: one entry per user_id, the last server snapshot of the
    *  signed-in user's OWN row. Read on boot so /home paints (and the chat sheet
@@ -51,7 +51,7 @@ export const SEEN_FLAGS = {
   homeDemo: 'home_demo',
   /** Page2 pull-to-decline first-run demo choreography. */
   page2Demo: 'page2_demo',
-  /** The user has opened the Communities hub at least once. Until he has, home's
+  /** The user has opened the Circles hub at least once. Until he has, home's
    *  dock wears the notification dot on its Circles entry — the app's whole
    *  "your circles decide who you see" onboarding, replacing the forced nudge
    *  that used to raise the hub over the card after three watched profiles. */

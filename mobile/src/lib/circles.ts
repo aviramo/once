@@ -1,9 +1,9 @@
-// Communities & Friends — typed client for the phase-1 endpoints (server
+// Circles & Friends — typed client for the phase-1 endpoints (server
 // shipped 2026-07-25). Every call funnels through `invoke`, which already
 // applies the returned user row to the store and hands back the full payload;
 // these helpers just pull the sidecar field the screen needs. The 6-digit
 // invite code + the base `Group` type stay in groups.ts (shared with the
-// onboarding step); this module is the richer communities surface.
+// onboarding step); this module is the richer circles surface.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { invoke } from './api'
 import { supabase } from './supabase'
@@ -21,7 +21,7 @@ import { useUserStore, type Profile } from '../stores/userStore'
 export type MemberImage = { hash?: string; normal?: string } | null
 
 // `profile` is the full profile card payload, so tapping a person anywhere in
-// the communities sheet opens the same card the app shows for a match (server
+// the Circles sheet opens the same card the app shows for a match (server
 // 2026-07-27). Always without a distance. Optional: a row cached by an older
 // build predates it.
 // `joined_at` is when this person came into the group (user_groups.created_at,
@@ -42,7 +42,7 @@ export type GroupMember = { user_id: string; name: string | null; image: MemberI
 // The count wordings every meta line is built from — one definition each, so a
 // number reads the same in the hub row and in the popup. Each takes the singular
 // form at 1 (Hebrew has no "1 מעגלים").
-const count = (key: 'communities.membersCount' | 'communities.friendsCount' | 'communities.requestsCount', n: number) =>
+const count = (key: 'circles.membersCount' | 'circles.friendsCount' | 'circles.requestsCount', n: number) =>
   t(key).replace('{count}', String(n))
 // ── When this person turned up in this circle ──────────────────────────────
 // The line under a group's name on a person's page (user directive 2026-07-31):
@@ -72,7 +72,7 @@ const joinDateFormatter = new Intl.DateTimeFormat(
 // circle. A row cached with no name still reads: the placeholder empties and the
 // old subjectless sentence is what is left.
 const onDate = (
-  key: 'communities.inGroupSince' | 'communities.waitingSince',
+  key: 'circles.inGroupSince' | 'circles.waitingSince',
   iso: string | null | undefined,
   name: string | null | undefined,
 ): string | null => {
@@ -93,14 +93,14 @@ const onDate = (
 
 /** "Ofir in the group since 20.6.2026" — a member's own line. */
 export const memberSince = (iso: string | null | undefined, name?: string | null) =>
-  onDate('communities.inGroupSince', iso, name)
+  onDate('circles.inGroupSince', iso, name)
 /** "Ofir waiting since 20.6.2026" — the same line for someone still at the door. */
 export const waitingSince = (iso: string | null | undefined, name?: string | null) =>
-  onDate('communities.waitingSince', iso, name)
+  onDate('circles.waitingSince', iso, name)
 
-export const memberLabel = (n: number) => (n === 1 ? t('communities.oneMember') : count('communities.membersCount', n))
-export const friendLabel = (n: number) => (n === 1 ? t('communities.oneFriend') : count('communities.friendsCount', n))
-export const requestLabel = (n: number) => (n === 1 ? t('communities.oneRequest') : count('communities.requestsCount', n))
+export const memberLabel = (n: number) => (n === 1 ? t('circles.oneMember') : count('circles.membersCount', n))
+export const friendLabel = (n: number) => (n === 1 ? t('circles.oneFriend') : count('circles.friendsCount', n))
+export const requestLabel = (n: number) => (n === 1 ? t('circles.oneRequest') : count('circles.requestsCount', n))
 
 // A GROUP's facts, in the app's ONE order (user directive 2026-07-29): HOW BIG
 // IT IS always leads, and every other fact about the group follows it. The size
@@ -117,7 +117,7 @@ export const groupFacts = (
   ...rest: MetaPart[]
 ): MetaPart[] => [
   members != null ? memberLabel(members) : null,
-  ownerName ? t('communities.managedBy').replace('{name}', ownerName) : null,
+  ownerName ? t('circles.managedBy').replace('{name}', ownerName) : null,
   ...rest,
 ]
 
@@ -126,7 +126,7 @@ export const groupFacts = (
 // friend's — the sentence is about the person whose card this is ("she is a
 // friend of Asaf"), so it inflects with `match.is_male`.
 export const friendOfLabel = (name: string, subjectIsMale?: boolean | null) =>
-  t(subjectIsMale === false ? 'communities.friendOfF' : 'communities.friendOfM')
+  t(subjectIsMale === false ? 'circles.friendOfF' : 'circles.friendOfM')
     .replace('{name}', name)
 
 // ── One circle chip: how the two of us are already connected ───────────────
@@ -241,9 +241,9 @@ export const groupKindFlags = (kind: GroupKind): { is_public: boolean; requires_
 // group: while it is on, the group's members and I never meet each other in the
 // game (the server drops the pair from both candidate pools and the group stops
 // counting as a shared group between us). It is what lets someone run a
-// community without playing inside it. Optional: a row cached by an older build
+// circle without playing inside it. Optional: a row cached by an older build
 // predates it.
-export type OwnedGroup = { id: string; name: string; invite_code: string; is_public: boolean; members: number; is_owner?: boolean; requires_approval?: boolean; description?: string | null; link?: string | null; pending?: number; hidden?: boolean }
+export type OwnedGroup = { id: string; name: string; invite_code: string; is_public: boolean; members: number; is_owner?: boolean; requires_approval?: boolean; description?: string | null; link?: string | null; pending?: number; hidden?: boolean; roster_rev?: number }
 export type CreatedGroup = OwnedGroup & { owner: boolean }
 // One pending join request on a group the caller owns/manages. `profile` is the
 // requester's full profile card payload (server 2026-07-27): letting someone
@@ -260,7 +260,7 @@ export type Person = { user_id: string; name: string | null; image: MemberImage;
 // subject both belong to. `owner` is null for admin-owned groups.
 export type SharedGroupOwner = { user_id: string; name: string | null; image: MemberImage }
 // is_public / invite_code (public only) / description let a tapped row open the
-// same group popup (GroupSheet) as the Communities hub.
+// same group popup (GroupSheet) as the Circles hub.
 export type SharedGroup = { id: string; name: string; members: number; owner: SharedGroupOwner | null; is_public?: boolean; invite_code?: string | null; description?: string | null; link?: string | null }
 export type FriendItem = { user_id: string; name: string | null; image: MemberImage; profile?: Profile | null }
 export type FriendRequestItem = { id: string; user_id: string; name: string | null; image: MemberImage }
@@ -277,7 +277,7 @@ export type MyFriends = { friends: FriendItem[]; requests: FriendRequestItem[] }
 // SharedGroupOwner object shared_groups embeds, so GroupSheet reads one
 // field whichever surface opened it. null for an admin-owned group; undefined
 // on a summary written before the server carried it (server 2026-07-28).
-export type JoinedGroup = { id: string; name: string; is_public?: boolean; members?: number; invite_code?: string | null; description?: string | null; link?: string | null; owner?: SharedGroupOwner | null }
+export type JoinedGroup = { id: string; name: string; is_public?: boolean; members?: number; invite_code?: string | null; description?: string | null; link?: string | null; owner?: SharedGroupOwner | null; roster_rev?: number }
 
 // ── The one group the popup is about ───────────────────────────────────────
 // THE shape GroupSheet reads, whichever list opened it (user directive
@@ -296,6 +296,27 @@ export type GroupBrief = {
   invite_code?: string | null
   /** Decides the wording of the join action for a group I am not in yet. */
   requires_approval?: boolean
+  /** I OWN THIS CIRCLE — so the popup refuses me the one thing an owner may not
+   *  do, leave it (he hands the key over first; see GroupSheet's `iOwnIt`). Same
+   *  field name `OwnedGroup` already carries, so a managed row spreads straight
+   *  into a brief and states it for free. The other hosts leave it undefined and
+   *  the popup falls back to matching the owner it draws against my own id —
+   *  which is the same answer wherever the owner is known, and this flag is what
+   *  covers the moment before a roster has arrived to say who that is. */
+  is_owner?: boolean
+  /** THE ROSTER'S OWN REVISION (server 2026-08-02). One counter on the circle,
+   *  bumped by every change to who stands in it and what they are to it: a
+   *  join, a leave, a removal, an appointment, an unappointment, a handover.
+   *  It rides in the summary, which rides on the user row Realtime already
+   *  delivers, so a device standing on a roster is told to re-read it the
+   *  moment somebody else changes it.
+   *
+   *  It exists because the other facts here cannot say it: a member COUNT is
+   *  unchanged by a role change, and the `owner` is unchanged by everything
+   *  except a handover. Undefined on a summary written before the server
+   *  carried it — and then a roster behaves as it always did, correcting
+   *  itself on the next open. */
+  roster_rev?: number
 }
 
 export const groupBrief = (g: PublicGroup): GroupBrief => ({
@@ -317,7 +338,7 @@ export const groupBrief = (g: PublicGroup): GroupBrief => ({
 // can render identically — only the meta line + tap action differ.
 export type PendingGroup = JoinedGroup
 
-export type CommunitiesSummary = {
+export type CirclesSummary = {
   managed: OwnedGroup[]
   joined: JoinedGroup[]
   pending: PendingGroup[]
@@ -330,13 +351,23 @@ export type CommunitiesSummary = {
   requests: number
 }
 
-type WithCommunities = { relations?: unknown } | null | undefined
+type WithCircles = { relations?: unknown } | null | undefined
 
 /** Read the denormalized summary off a user/profile. null when the server
- *  hasn't populated it yet (old payload) — callers fall back to the endpoints. */
-export function communitiesSummary(profile: WithCommunities): CommunitiesSummary | null {
+ *  hasn't populated it yet (old payload) — callers fall back to the endpoints.
+ *
+ *  `communities` IS THE WIRE KEY AND IT DOES NOT MOVE (2026-08-02). The app's
+ *  own word for this became `circles` everywhere a developer reads it — the
+ *  module, the page, the types, the i18n keys — and this one string stayed,
+ *  for the same reason `group` still names a מעגל in the schema: it is the
+ *  name of a field the PUBLISHED build reads out of `users.relations`, written
+ *  by the DB's own trigger, and renaming it would empty the hub, the dock's
+ *  counts and its dots on every device until it updated. Nobody sees it.
+ *  Renaming it would be an Expand → Migrate → Contract staged over weeks in
+ *  exchange for nothing. */
+export function circlesSummary(profile: WithCircles): CirclesSummary | null {
   const relations = profile?.relations as { communities?: unknown } | null | undefined
-  const c = relations?.communities as Partial<CommunitiesSummary> | undefined
+  const c = relations?.communities as Partial<CirclesSummary> | undefined
   if (!c || typeof c !== 'object') return null
   return {
     managed: Array.isArray(c.managed) ? c.managed : [],
@@ -352,7 +383,7 @@ export function communitiesSummary(profile: WithCommunities): CommunitiesSummary
  *  join requests on every group I manage. The menu row states this as a count
  *  so a decision someone else is waiting on is visible without opening the hub;
  *  inside the hub the same numbers are split back onto their own rows. */
-export function pendingApprovals(c: CommunitiesSummary | null): number {
+export function pendingApprovals(c: CirclesSummary | null): number {
   if (!c) return 0
   return c.requests + c.managed.reduce((n, g) => n + (g.pending ?? 0), 0)
 }
@@ -362,9 +393,9 @@ export function pendingApprovals(c: CommunitiesSummary | null): number {
  *  off the denormalized summary, so a card can size the circle without a query;
  *  a number, so the selector only re-renders the card when it changes. */
 export const useMyFriendCount = (): number =>
-  useUserStore(s => communitiesSummary(s.profile)?.friends ?? 0)
+  useUserStore(s => circlesSummary(s.profile)?.friends ?? 0)
 
-// ── Communities (reuse the existing groups/user_groups machinery server-side) ──
+// ── Circles (reuse the existing groups/user_groups machinery server-side) ──
 
 // Only the name is required; description and link are both optional, and the
 // link is normalized/validated by the same server rule the settings editor uses.
@@ -448,8 +479,17 @@ export const searchGroups = (q: string, offset = 0, limit = LIST_PAGE_SIZE): Pro
 // request a manager already turned down ('declined', server 2026-07-27 — the
 // link no longer silently re-queues someone who was refused).
 export type JoinStatus = 'joined' | 'pending' | 'already' | 'declined'
-export const redeemInvite = (code: string): Promise<{ groups?: Group[]; join_status?: JoinStatus }> =>
-  invoke<{ groups?: Group[]; join_status?: JoinStatus }>('app/redeem_invite', { code })
+/** Where a redeemed invite leaves me, as the group popup states a standing.
+ *  'already' is a membership I had before the tap, which is the same standing
+ *  as one it just created — the popup says what I AM, not what changed. */
+export type GroupStanding = 'joined' | 'pending' | 'declined'
+export const groupStanding = (s: JoinStatus): GroupStanding => (s === 'already' ? 'joined' : s)
+// `group` (server 2026-08-02) is the circle the code named, described the way
+// the popup reads one — so a tapped invite link can open that circle's popup on
+// the first frame instead of waiting for the summary. Optional: an older server
+// answers without it, and then the link just lands on the hub as it always did.
+export const redeemInvite = (code: string): Promise<{ groups?: Group[]; join_status?: JoinStatus; group?: GroupBrief }> =>
+  invoke<{ groups?: Group[]; join_status?: JoinStatus; group?: GroupBrief }>('app/redeem_invite', { code })
 
 // Every group the caller belongs to (owned + joined). "Groups you're in" =
 // this minus the owned list. Reuses the existing legacy endpoint.
@@ -537,15 +577,26 @@ export function parseFriendInviteCode(url: string): string | null {
 // Redeeming needs a session, so a link opened before sign-in stays parked and is
 // flushed by home, the first screen that only exists for a signed-in user.
 //
-// The outcome goes to whoever is watching — home opens the Communities sheet on
-// it, so the tap visibly did something. An outcome nobody was there to see is
+// The outcome goes to whoever is watching — home opens the Circles sheet on
+// it, and for a GROUP link that circle's own popup over the hub, so the tap
+// lands on the thing it was a link to. An outcome nobody was there to see is
 // HELD, not dropped: on a cold start the redeem finishes long before home
 // mounts, and watching from a mount picks it up either way.
 
 /** Which kind of invite was redeemed — all a screen needs to decide where to
- *  land the user. A group join is shown by the hub either way: it lists a
- *  freshly joined group and a still-pending request as their own rows. */
-export type InviteOutcome = { kind: 'group' | 'friend' }
+ *  land the user.
+ *
+ *  A GROUP LINK CARRIES THE CIRCLE IT LED TO (user directive 2026-08-02): the
+ *  hub opens that circle's own popup over itself, so following a link to one
+ *  circle lands ON it instead of on the list of everything I am in. The group is
+ *  carried WHOLE — the redeem returns it (see redeemInvite) — because the
+ *  denormalized summary the hub paints from arrives over Realtime a beat later,
+ *  and a popup cannot open on a group that is not there yet. Both fields are
+ *  optional so an outcome from a server that predates them still lands the user
+ *  on the hub. */
+export type InviteOutcome =
+  | { kind: 'group'; group?: GroupBrief; standing?: GroupStanding }
+  | { kind: 'friend' }
 
 // ── Where a notification tap lands ─────────────────────────────────────────
 // A push about a PERSON opens that person's page, with the buttons that page
@@ -557,8 +608,8 @@ export type InviteOutcome = { kind: 'group' | 'friend' }
 //
 // The one target with NO path under it is `person`: it does not come from a
 // notification at all but from a tap on a name in a card's shared-circles
-// popup, and the page that led there is the popup, not a Communities page.
-export type CommunitiesTarget =
+// popup, and the page that led there is the popup, not a Circles page.
+export type CirclesTarget =
   /** group_approved: the group I was just let into. */
   | { kind: 'group'; groupId: string }
   /** group_join: the person waiting at this group's door. */
@@ -569,6 +620,22 @@ export type CommunitiesTarget =
   | { kind: 'friend'; userId: string }
   /** Any other friend-lifecycle push: the list itself. */
   | { kind: 'friends' }
+  /** A GROUP LINK JUST REDEEMED (user directive 2026-08-02): the hub, with that
+   *  circle's own popup over it. It is not the `group` target above — that one
+   *  is a push about a group I am already in and lands on the page my standing
+   *  gives me (a manager's group page, a member's popup); this is the answer to
+   *  a link I tapped, so it is always the popup, whatever I am to the circle and
+   *  whether I am IN it or waiting at its door.
+   *
+   *  The group is carried whole, like `person` and for the same reason: the
+   *  redeem returns it, so the popup paints with no lookup and no wait for the
+   *  summary. `standing` is what the redeem said I am now.
+   *
+   *  It is the popup ITSELF, unchanged (user directive 2026-08-02): the same
+   *  head, the same note and the same options a row on the hub opens it with —
+   *  leaving, taking the request back, sharing the link. Where the open came
+   *  from decides WHICH surface, never what is on it. */
+  | { kind: 'arrival'; group: GroupBrief; standing: GroupStanding }
   /** ONE person and nothing else (user directive 2026-07-29): their page opens
    *  as the whole sheet, with no My-Friends roster under it to walk back
    *  through — the tap came from a card, not from the friends list. The person
@@ -652,10 +719,17 @@ async function redeemPendingInvite(): Promise<void> {
     // invoke reads a 401 as a dead session and signs the user out.
     const { data } = await supabase.auth.getSession()
     if (!data.session) return
-    if (invite.kind === 'group') await redeemInvite(invite.code)
-    else await linkFriendByCode(invite.code)
+    if (invite.kind === 'group') {
+      // The circle and the standing ride back with the redeem, so the outcome
+      // says which popup to open as well as which surface to land on.
+      const r = await redeemInvite(invite.code)
+      parkInvite(null)
+      deliverOutcome({ kind: 'group', group: r.group, standing: r.join_status && groupStanding(r.join_status) })
+      return
+    }
+    await linkFriendByCode(invite.code)
     parkInvite(null)
-    deliverOutcome({ kind: invite.kind })
+    deliverOutcome({ kind: 'friend' })
   } catch {
     // Left parked: a transient failure retries on the next flush, and a code
     // that is simply invalid never redeems (no user-facing error — the link was

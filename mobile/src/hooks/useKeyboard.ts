@@ -31,7 +31,7 @@ export { KeyboardProvider } from 'react-native-keyboard-controller'
 //   2. `components/BottomSheet.tsx` — a RN `Modal` is a separate window and
 //      does NOT inherit the root's shrink, so the popup lifts itself.
 //
-// Everything else — the chat composer, the communities search, the bio editor,
+// Everything else — the chat composer, the Circles search, the bio editor,
 // every popup body — simply sits at the bottom of a page that got shorter.
 //
 // Why `react-native-keyboard-controller` and not RN's `Keyboard` events or

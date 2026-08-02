@@ -241,7 +241,7 @@ export default function OnboardingPage() {
   // busy JS thread the flag can land after pullY has already stopped at
   // screenSpan, and a prepare watching pullY alone would never fire again —
   // leaving the screen parked off-screen and unreachable. Same rule, same
-  // reason, as the Communities page stack (see CLAUDE.md).
+  // reason, as the Circles page stack (see CLAUDE.md).
   const leaving = useSharedValue(false)
   const pull = usePullBehavior({
     activation: 'sheet',
@@ -789,7 +789,7 @@ export default function OnboardingPage() {
     {/* THE SCREEN IS A LAYER, AND IT WEARS THE EDGE THAT SAYS SO. Everything
         below rides in the app's one rising surface — RisingCard, which is where
         RISE_SHADOW is declared and the only place it may be — so this page marks
-        its arrival with exactly the mark a Communities page, a chat and the
+        its arrival with exactly the mark a Circles page, a chat and the
         match card do. It matters here for the same reason it matters there: this
         page and the page under it are the same PAGE tint, so without that edge
         nothing at all says a surface came over another one. Only the top edge is
@@ -896,7 +896,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: PAGE },
   // The rising layer: opaque, so the page it covers never shows through. Its
   // lift is deliberately NOT stated here — it is RisingCard's own RISE_SHADOW,
-  // the one every surface that rises wears. Same card the Communities stack
+  // the one every surface that rises wears. Same card the Circles stack
   // pushes over its hub.
   layerCard: { flex: 1, backgroundColor: PAGE },
 

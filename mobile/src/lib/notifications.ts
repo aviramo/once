@@ -103,7 +103,7 @@ export function dismissAllNotifications() {
  * last response and hands it to whoever asks afterwards, so a mid-session tap
  * stayed on file and the next reader — getInitialNotificationType(), which any
  * home REMOUNT calls (returning from onboarding, a routing-guard re-route) —
- * replayed it as a launch notification and raised the chat / Communities sheet
+ * replayed it as a launch notification and raised the chat / Circles sheet
  * with nothing touched. Clearing here covers every consumer at once; the
  * cold-start path is unaffected, since the launch response is read during
  * render, before this listener is ever subscribed.

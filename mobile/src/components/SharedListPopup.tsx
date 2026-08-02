@@ -1,12 +1,12 @@
 // "What we already share", opened by tapping a profile card's on-photo circle
 // chip — wherever that card is: home's match card, and the person page inside
-// the Communities sheet (user directive 2026-07-30, a profile is a profile).
+// the Circles sheet (user directive 2026-07-30, a profile is a profile).
 // ONE popup for every kind of connection (user directive 2026-07-29): the people
 // we are both friends with AND the groups we are both in, in one list.
 // It used to be two popups behind two chips, which asked the user to know in
 // advance which kind of connection they were looking for.
 //
-// The order is the chip's own (lib/communities.ts → orderSharedCircles): the
+// The order is the chip's own (lib/circles.ts → orderSharedCircles): the
 // groups smallest first, with MY FRIENDS slotted in at its size, so row 1 is
 // always the circle the chip named. Read-only rows, no actions on them.
 //
@@ -15,16 +15,16 @@
 // in parallel with the sheet's slide-in instead of only after it mounts. `null`
 // renders the skeleton.
 // Composes the shared BottomSheet (never a raw Modal) and the shared Avatar
-// primitive, so a person here looks identical to one in the Communities sheet.
+// primitive, so a person here looks identical to one in the Circles sheet.
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { Strip } from './Strip'
 import { BottomSheet, SheetTitle } from './BottomSheet'
-import { Avatar, SkeletonRows } from './CommunityBits'
+import { Avatar, SkeletonRows } from './CircleBits'
 import { GroupsIcon } from './icons'
-import { GroupSheet } from './CommunitiesPage'
+import { GroupSheet } from './CirclesPage'
 import { tap } from '../lib/haptics'
-import { groupFacts, friendOfLabel, orderSharedCircles, sharedGroups, sharedFriends, useMyFriendCount, type SharedGroup, type FriendItem } from '../lib/communities'
+import { groupFacts, friendOfLabel, orderSharedCircles, sharedGroups, sharedFriends, useMyFriendCount, type SharedGroup, type FriendItem } from '../lib/circles'
 import type { MetaPart } from '../lib/meta'
 import { t } from '../i18n'
 import { RADIUS, SHEET_GAP } from '../tokens'
@@ -69,7 +69,7 @@ export function SharedListPopup({
             <SkeletonRows rows={2} lines={skeletonLines} />
           ) : rows.map((r, i) => (
             // The app's ONE row (components/Strip.tsx), the same one the
-            // Communities hub and the menu are built from (user directive
+            // Circles hub and the menu are built from (user directive
             // 2026-07-29) — this popup used to keep a near-identical row of its
             // own. Every fact about the row therefore states itself on the app's
             // one fact line: a stack of meta lines made a two-fact group as tall
@@ -94,7 +94,7 @@ export function SharedListPopup({
 // ── Everything we share ────────────────────────────────────────────────────
 // A group row states who manages it and how many members on one meta line, and
 // opens the app's one group popup (share link / leave) — the same surface the
-// Communities hub and the group search open, in the `joined` state, since a
+// Circles hub and the group search open, in the `joined` state, since a
 // group listed here is one we are both IN. THE LIST STAYS EXACTLY WHERE IT IS
 // while that stands over it (user directive 2026-07-30): the group popup is
 // nested inside this one's window (see `children` above), so it rises over the
@@ -168,7 +168,7 @@ export function SharedCirclesPopup({
       // Nothing is raised for a single circle: while the lists are out the
       // chip's own count answers, and once they land the count of rows does.
       visible={visible && (items ? items.length !== 1 : !sole)}
-      title={t('communities.sharedTitle')}
+      title={t('circles.sharedTitle')}
       skeletonLines={2}
       rows={items?.map(item => item.kind === 'group' ? {
         key: item.group.id,
@@ -201,10 +201,10 @@ export function SharedCirclesPopup({
 
 // ── Opening it ─────────────────────────────────────────────────────────────
 // THE way a card's circle chip is wired, wherever that card is rendered (home's
-// match card, and the profile page inside the Communities sheet): one hook so
+// match card, and the profile page inside the Circles sheet): one hook so
 // the two surfaces cannot fetch, order or word the same popup differently. It
 // owns everything except what a friend row opens — that is the one thing the
-// two hosts genuinely answer differently (home stacks the Communities sheet on
+// two hosts genuinely answer differently (home stacks the Circles sheet on
 // that person, the sheet just pushes the page).
 //
 // Both lists are fetched HERE the instant the chip is tapped (not inside the

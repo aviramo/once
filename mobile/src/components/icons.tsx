@@ -206,7 +206,7 @@ export function PlusIcon({ color = INK, size = ICON.xxl }: IconProps = {}) {
 // negative transform, so the stroke caps and the Glyph's font-scale sizing are
 // untouched by it.
 //
-// AND IT IS THE APP'S ONLY MAGNIFIER (user directive 2026-07-31): the Communities
+// AND IT IS THE APP'S ONLY MAGNIFIER (user directive 2026-07-31): the Circles
 // sheet drew a `SearchGlyph` of its own — the hub's find, a group roster's
 // people-search, the field's own leading mark and the empty hub's "find a group"
 // button — so four glasses in the app pointed the Latin way while the dock's

@@ -21,9 +21,9 @@ export const API_TIMEOUT_MS = 15_000
 // (app/index.ts's `rpcGroups` + `rpcExtra`, and find/ignore's `lookahead`).
 // They are the ENDPOINT'S ANSWER — a roster, a queue, a page of search results
 // — not columns of the user, and they must never reach the profile: merging
-// them made every communities read mint a fresh profile object carrying the
+// them made every Circles read mint a fresh profile object carrying the
 // list it had just fetched, which re-renders every consumer of the store (home
-// and its match card, the menu, the whole communities stack) and rewrites the
+// and its match card, the menu, the whole Circles stack) and rewrites the
 // profile to disk. Stripped here, in the one place that already knows this
 // response shape. A key added to the sidecar later and not listed here costs an
 // extra render, nothing worse.

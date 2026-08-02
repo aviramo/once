@@ -1,6 +1,6 @@
 import { createPersistedMap, createPersistedValue, isArrayOf } from './persistedCache'
 import { STORAGE } from '../keys'
-import type { GroupMember, JoinRequestItem, MyFriends } from './communities'
+import type { GroupMember, JoinRequestItem, MyFriends } from './circles'
 
 // Last known member lists, so opening a group you have opened before paints
 // its roster immediately and the server's answer only corrects it. The counts

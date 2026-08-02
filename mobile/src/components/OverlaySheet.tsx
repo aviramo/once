@@ -295,7 +295,7 @@ export function OverlaySheet({
 // knows what counts as "dragging the header" (a drag started here always pulls,
 // even when the body's scroll is not at the top). The X moved END on 2026-07-30
 // — see the render — and became DROPPABLE on 2026-07-31, for a surface whose
-// every page leaves by the same swipe (the Communities stack).
+// every page leaves by the same swipe (the Circles stack).
 
 // (`sheetHeaderHeight` stood here — the room a floating header occupies, which
 // only the menu page needed, to bleed its profile photo up behind the X. It went
@@ -347,7 +347,7 @@ export function SheetHeader({
   titleTrailing?: ReactNode
   trailing?: ReactNode
   /** Takes the title's place and the whole span it would have had: for a page
-   *  whose heading IS a control (the communities search field). With this set
+   *  whose heading IS a control (the Circles search field). With this set
    *  the end column is dropped unless there is a real `trailing` — the spacer
    *  only ever existed to centre a title, and nothing is being centred. */
   center?: ReactNode
@@ -355,7 +355,7 @@ export function SheetHeader({
    *  the row's true centre, held there by two matched side columns. 'start'
    *  hands it the START of the row and lets it read from the edge reading
    *  begins at, with everything the page can DO following at the far end (the
-   *  Communities stack, user directive 2026-07-31) — the same order the match
+   *  Circles stack, user directive 2026-07-31) — the same order the match
    *  card's heading tile takes. Nothing is centred then, so the side-column
    *  matching below is skipped and each column is exactly as wide as what it
    *  carries. */
@@ -373,7 +373,7 @@ export function SheetHeader({
   barBg?: string
   topInset: number
   /** Omitted = NO dismiss control at all, for a surface where every page leaves
-   *  by the swipe it already has (every Communities page, user directive
+   *  by the swipe it already has (every Circles page, user directive
    *  2026-07-31). The row is then whatever the page says plus whatever it can
    *  do, and nothing else. */
   onClose?: () => void
@@ -382,7 +382,7 @@ export function SheetHeader({
    *  the drawer that slides off toward that edge. */
   closeIcon?: 'close' | 'back'
   closeAccessibilityLabel?: string
-  /** Max title lines before ellipsizing. Default 1; the communities sheet passes
+  /** Max title lines before ellipsizing. Default 1; the Circles sheet passes
    *  2 so a long group name wraps instead of truncating. */
   titleLines?: number
 }) {

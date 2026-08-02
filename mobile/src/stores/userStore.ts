@@ -32,7 +32,7 @@ export interface Profile {
    * 'work'. Drives the distance chip icon (pin/home/work). Absent on
    * snapshots from a pre-typed build — use resolveLocationType(). */
   location_type?: LocationType | null
-  // ── The circles we share (see lib/communities.ts → sharedCircle) ─────────
+  // ── The circles we share (see lib/circles.ts → sharedCircle) ─────────
   // The card carries ONE chip for all of these: the smallest circle we share,
   // where "my friends" is a circle like any group. The server states the sizes,
   // the client applies the rule. Slim viewer-list entries strip all of them.
@@ -445,12 +445,71 @@ export function selectInvisibleReason(profile: UserProfile | null | undefined): 
   return selectIsHidden(profile) ? 'hidden' : null
 }
 
-/** How many people are currently watching this user. Reads the synthesized
- * `watchers` array, which deriveCompat only populates while page2 is `free` —
- * in any other page2 state there is no viewer list, so 0 is the honest answer
- * rather than a stale count. */
-export function selectWatcherCount(profile: UserProfile | null | undefined): number {
-  return profile?.relations?.watchers?.length ?? 0
+/** Who has my card in front of them right now: how many, and which of them the
+ *  app may say by name. One definition for both surfaces that state it (the
+ *  dock's preferences key and the sentence on the row that key opens), because
+ *  those two may never disagree about the same fact.
+ *
+ *  I NAME THE PEOPLE WHOSE SCREEN MY CARD IS ON, AND COUNT EVERYONE ELSE (user
+ *  directive 2026-08-02). Three states put my card on somebody's screen, and in
+ *  every one of them the app has already shown me theirs:
+ *    • page1 `waiting` — I invited her, so my card is her pending page2.
+ *    • page1 `chat` — we matched, so my card is her page1.
+ *    • page2 `pending` — she invited me, so her page1 is parked on my card,
+ *      waiting for my answer.
+ *  A watcher who is merely BROWSING me stays anonymous, and that is not a
+ *  softer rule but the same one: watching her does not put my card in front of
+ *  her, so there is nothing of hers to name. Naming here therefore reveals
+ *  nothing about anyone's behaviour — only where my own card has got to, which
+ *  is a fact about what I or she already did. (Page1 `watching` is the state
+ *  this is easiest to get wrong in: I can see her, she cannot see me.)
+ *
+ *  The anonymous count reads the synthesized `watchers` array, which
+ *  deriveCompat only populates while page2 is `free` — in any other page2 state
+ *  there is no viewer list, so 0 is honest rather than stale. That is also why
+ *  a pending invitation can never carry extras: the server replaced the array
+ *  with the invitation itself, app_invite kicked everyone else off my card
+ *  (_kick_page1_at → 'kick-invitee') and no new watcher can be seeded behind
+ *  her (others() only picks a page2 that is `free`), so the true count there is
+ *  exactly one and she is it. The row used to say "nobody is watching me" with
+ *  her card, her name and her photograph on the same screen.
+ *
+ *  A name that also appears in the array is counted once (mutual watching,
+ *  which app_invite deliberately leaves standing in my own page2, and the stale
+ *  entry the mutual-match branch leaves behind). */
+export type Watching = {
+  /** How many people have my card in front of them: named + anonymous. */
+  count: number
+  /** The ones the app may name, in reading order: whoever is waiting on my
+   *  answer first, then whoever I am waiting on or talking to. */
+  names: string[]
+  /** How many of `count` are anonymous — always 0 once `names` holds two, see
+   *  above. */
+  others: number
+  /** How many would actually be REMOVED if I hid right now, which is a
+   *  different question and has a different answer: app_lock2 walks the page2
+   *  array and nothing else, so a named person is in this number only when she
+   *  is also watching me of her own accord, and a chat partner never is. The
+   *  hide confirm states this one — "your N watchers will be removed and
+   *  notified" is a promise about who gets the push. */
+  kickedOnHide: number
+}
+export function selectWatching(profile: UserProfile | null | undefined): Watching {
+  const relations = profile?.relations
+  const names: string[] = []
+  const named: string[] = []
+  const page2 = relations?.page2
+  if (relations?.page2State === 'pending' && page2 && !Array.isArray(page2)) {
+    const inviter = page2 as Page2Invite
+    if (inviter.name) { names.push(inviter.name); named.push(inviter.user_id) }
+  }
+  const page1 = relations?.page1
+  if ((page1?.state === 'waiting' || page1?.state === 'chat') && page1.profile?.name) {
+    names.push(page1.profile.name); named.push(page1.profile.user_id)
+  }
+  const watchers = relations?.watchers ?? []
+  const others = watchers.filter(w => !named.includes(w.user_id)).length
+  return { count: names.length + others, names, others, kickedOnHide: watchers.length }
 }
 
 /** Retry budget for the boot profile read. Only transient failures are
@@ -625,8 +684,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const next = merged as unknown as UserProfile
     // Nothing on screen changed → keep the SAME object. The store hands every
     // consumer identity, so publishing a fresh profile here re-renders the
-    // whole app — home and its match card, the menu, the communities stack —
-    // and rewrites the profile to disk. The communities pages fire several
+    // whole app — home and its match card, the menu, the Circles stack —
+    // and rewrites the profile to disk. The Circles pages fire several
     // reads per page and each one is answered THREE times over (the HTTP
     // response, the Realtime echo of the last_seen write, and the snapshot
     // refresh that follows it) for a row that did not actually change. That

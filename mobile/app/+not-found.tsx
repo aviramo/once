@@ -9,7 +9,7 @@ import { Redirect } from 'expo-router'
 //
 // Bouncing to the boot route is the whole screen: index.tsx sends the user to
 // login / onboarding / home, and the parked invite is redeemed on the way (home
-// flushes it and opens the Communities sheet on the result).
+// flushes it and opens the Circles sheet on the result).
 export default function NotFound() {
   return <Redirect href="/" />
 }

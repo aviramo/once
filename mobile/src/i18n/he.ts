@@ -141,6 +141,23 @@ export default {
   'settings.watchersNone': 'אף אחד לא צופה בי',
   'settings.watchersOne': 'מישהו אחד צופה בי',
   'settings.watchersMany': '{count} צופים בי',
+  // And the watchers the app is allowed to NAME (user directive 2026-08-02):
+  // the ones whose screen my card is on, because one of us put it there — an
+  // invitation I sent, an invitation I was sent, a chat. See selectWatching;
+  // whoever is only browsing me is counted above and never named.
+  //
+  // "רק" IS WHAT SAYS THE LIST IS COMPLETE (user directive 2026-08-02): it leads
+  // exactly when there is nobody left over to count, so "רק מאיה צופה בי" and
+  // "מאיה ועוד 2 צופים בי" are the same sentence answering two different facts,
+  // and the word doing the work is the first one read. "צופה" is genderless, so
+  // one name needs no inflection; two subjects take the plural either way.
+  'settings.watchersNamed': 'רק {name} צופה בי',
+  'settings.watchersNamedPair': 'רק {a} ו{b} צופים בי',
+  // The extras stay anonymous, so the singular says "somebody" rather than a
+  // number: Hebrew would need the extra's gender to write "ועוד אחת/אחד", and
+  // the whole point of that tail is that we are not saying who they are.
+  'settings.watchersNamedOther': '{name} ועוד מישהו צופים בי',
+  'settings.watchersNamedMore': '{name} ועוד {count} צופים בי',
   // The credits row states the whole wallet as one number on its END edge
   // (user directive 2026-07-28), so there is no pool caption to translate: the
   // daily/extra split lives in the buy picker the row opens.
@@ -171,15 +188,15 @@ export default {
   // pronoun agreeing with it turned with the noun: מנוהלת→מנוהל, מופיעה→מופיע,
   // תעבור→יעבור, בה→בו. Those are the strings that do not carry the word at all
   // and would otherwise have been missed.
-  'communities.menuRow': 'מעגלים',
-  'communities.title': 'המעגלים שלי',
-  'communities.myFriends': 'החברים שלי',
-  'communities.myFriendsSub': 'אנשים ש{אתה מכיר|את מכירה} אישית',
+  'circles.menuRow': 'מעגלים',
+  'circles.title': 'המעגלים שלי',
+  'circles.myFriends': 'החברים שלי',
+  'circles.myFriendsSub': 'אנשים ש{אתה מכיר|את מכירה} אישית',
   // The one WORD, for the button on the hub's friends row: the row already
   // says what it is about, so the button only says what it does.
-  'communities.invite': 'הזמנה',
-  'communities.create': 'יצירת מעגל',
-  'communities.find': 'חיפוש והצטרפות למעגל',
+  'circles.invite': 'הזמנה',
+  'circles.create': 'יצירת מעגל',
+  'circles.find': 'חיפוש והצטרפות למעגל',
   // Circle kinds: ONE axis, three stops (2026-07-27). Replaces the old
   // public/private + approval-on/off pair everywhere it was shown.
   // TWO of the three name the JOINING rather than the circle (user directive
@@ -188,37 +205,37 @@ export default {
   // the masculine does not. So the axis is stated as the thing it decides, who
   // may come in; private stays a fact about the circle itself, because that is
   // the one stop where the circle's own visibility is what changes.
-  'communities.kindLabel': 'סוג המעגל',
-  'communities.kindOpen': 'הצטרפות פתוחה',
-  'communities.kindOpenSub': 'מופיע בחיפוש וההצטרפות אוטומטית',
-  'communities.kindApproved': 'הצטרפות באישור',
-  'communities.kindApprovedSub': 'מופיע בחיפוש וכל בקשת הצטרפות דורשת אישור',
-  'communities.kindPrivate': 'מעגל פרטי',
-  'communities.kindPrivateSub': 'לא מופיע בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור',
-  'communities.membersCount': '{count} חברים',
-  'communities.oneMember': 'חבר אחד',
+  'circles.kindLabel': 'סוג המעגל',
+  'circles.kindOpen': 'הצטרפות פתוחה',
+  'circles.kindOpenSub': 'מופיע בחיפוש וההצטרפות אוטומטית',
+  'circles.kindApproved': 'הצטרפות באישור',
+  'circles.kindApprovedSub': 'מופיע בחיפוש וכל בקשת הצטרפות דורשת אישור',
+  'circles.kindPrivate': 'מעגל פרטי',
+  'circles.kindPrivateSub': 'לא מופיע בחיפוש, נכנסים רק דרך קישור, וכל הצטרפות דורשת אישור',
+  'circles.membersCount': '{count} חברים',
+  'circles.oneMember': 'חבר אחד',
   // Row meta segments, laid out by MetaLine. One string per fact, so every list
   // counting the same thing counts it in the same words. (`groupsCount` /
   // `oneGroup` and the `groupLabel` helper that read them are deleted with the
   // dock's old menu row, 2026-08-01: nothing has counted circles since that row
   // went, and `rowEmpty` — the row's own empty line — goes with them.)
-  'communities.oneFriend': 'חבר אחד',
-  'communities.requestsCount': '{count} בקשות',
-  'communities.oneRequest': 'בקשה אחת',
+  'circles.oneFriend': 'חבר אחד',
+  'circles.requestsCount': '{count} בקשות',
+  'circles.oneRequest': 'בקשה אחת',
   // הכניסה למעגלים חסומה עד ששתי התמונות קיימות. המשפט מדבר על התמונות ולא על
   // "פרופיל" (הנחיית משתמש 1.8.2026), וכיוון שהוא כבר לא בציווי הוא גם חסר
   // מגדר: אין בו {m|f} ואין צורך ב-genderize בצד הקורא.
-  'communities.gateTitle': 'אנשים דרך מעגלים',
-  'communities.gateDesc': 'מעגלים מחברים בין אנשים עם תחומי עניין משותפים. כדי להצטרף נדרשות תמונות שלך',
-  'communities.managedBy': 'מנוהל על ידי {name}',
+  'circles.gateTitle': 'אנשים דרך מעגלים',
+  'circles.gateDesc': 'מעגלים מחברים בין אנשים עם תחומי עניין משותפים. כדי להצטרף נדרשות תמונות שלך',
+  'circles.managedBy': 'מנוהל על ידי {name}',
   // The one popup behind the card's circle chip: every mutual friend and every
   // shared group in one list, so it says what the two of you have in common
   // without naming a kind of connection.
-  'communities.sharedTitle': 'מה משותף לנו',
+  'circles.sharedTitle': 'מה משותף לנו',
   // The chip itself. Inflects for the CARD SUBJECT ("היא חברה של אסף"), not for
   // the friend named in it, so the pair here is chosen by match.is_male.
-  'communities.friendOfM': 'חבר של {name}',
-  'communities.friendOfF': 'חברה של {name}',
+  'circles.friendOfM': 'חבר של {name}',
+  'circles.friendOfF': 'חברה של {name}',
   // (No "you have no circles yet" line any more: a hub with nothing in it IS
   // the start page — the picture, what this is for, the two ways in — with the
   // friends row over it. See HubStart.)
@@ -233,29 +250,29 @@ export default {
   // screen — worst of all in this pair, where the title said it the one way and
   // the line under it the other. So the title COUNTS them, and the sentence
   // about what a friend brings names the PEOPLE.
-  'communities.startTitle': 'כאן מתחילים המעגלים שלך',
-  'communities.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך לחברים הפנויים שלו, ומעגל משותף פותח אנשים עם תחומי עניין דומים',
+  'circles.startTitle': 'כאן מתחילים המעגלים שלך',
+  'circles.startDesc': 'כל חבר {שתוסיף|שתוסיפי} יכול לחבר אותך לחברים הפנויים שלו, ומעגל משותף פותח אנשים עם תחומי עניין דומים',
   // Over the PRIMARY button only (user directive 2026-07-30): inviting is the
   // one of the two whose label does not say what it is worth. "חיפוש מעגלים"
   // needs no line, and a second one turned the two ways forward into a
   // paragraph.
-  'communities.startFind': 'חיפוש מעגלים',
+  'circles.startFind': 'חיפוש מעגלים',
   // The friends page before there is a single friend on it: the same drawing
   // and the same heading as the hub's, one step in — that page offers the two
   // ways to start a circle, this one owns the first of them, so all it has to
   // say is what a friend joining actually opens.
-  'communities.friendsStartDesc': '{הזמן|הזמיני} חברים, וכשהם יצטרפו ייפתחו בפניך אנשים חדשים שהם מכירים',
+  'circles.friendsStartDesc': '{הזמן|הזמיני} חברים, וכשהם יצטרפו ייפתחו בפניך אנשים חדשים שהם מכירים',
 
   // My friends
-  'communities.inviteFriend': 'הזמנת חברים',
+  'circles.inviteFriend': 'הזמנת חברים',
   // Caption under the invite button: connecting as friends pays both sides a
   // credit (server credits it on every new friend link, see friend_link_credits).
-  'communities.inviteReward': 'על כל חבר שמתחבר, שניכם מקבלים קרדיט נוסף',
-  'communities.linkFriend': 'שיוך חבר קיים',
-  'communities.friendsCount': '{count} חברים',
-  'communities.accept': 'אישור',
-  'communities.decline': 'דחייה',
-  'communities.noFriends': 'עוד אין לך חברים כאן',
+  'circles.inviteReward': 'על כל חבר שמתחבר, שניכם מקבלים קרדיט נוסף',
+  'circles.linkFriend': 'שיוך חבר קיים',
+  'circles.friendsCount': '{count} חברים',
+  'circles.accept': 'אישור',
+  'circles.decline': 'דחייה',
+  'circles.noFriends': 'עוד אין לך חברים כאן',
   // What a friend is FOR (user directive 2026-07-30): not the friend himself,
   // who needs no introduction and is excluded from the game outright as of
   // 20260730150000, but the people one hop past him, who carry both the x3 and
@@ -264,56 +281,60 @@ export default {
   // absent, and an empty page has to say what the user GETS. (Was
   // `friendsHint`, which no surface rendered and which still offered the
   // people-search flow removed 2026-07-26.)
-  'communities.friendsWhy': 'כל חבר פותח לכם את האנשים שלו: כאלה שעוד לא הכרתם, שמגיעים אליכם ראשונים עם חבר משותף',
-  'communities.unfriendTitle': 'להסיר את {name} מהחברים?',
-  'communities.unfriendDesc': 'אפשר לשייך שוב בהמשך',
-  'communities.unfriendConfirm': 'הסרה',
+  'circles.friendsWhy': 'כל חבר פותח לכם את האנשים שלו: כאלה שעוד לא הכרתם, שמגיעים אליכם ראשונים עם חבר משותף',
+  'circles.unfriendTitle': 'להסיר את {name} מהחברים?',
+  'circles.unfriendDesc': 'אפשר לשייך שוב בהמשך',
+  'circles.unfriendConfirm': 'הסרה',
 
   // Link an existing friend
-  'communities.linkTitle': 'שיוך חבר',
-  'communities.request': 'בקשה',
-  'communities.requested': 'נשלח',
-  'communities.noResults': 'אין תוצאות',
-  'communities.linkNote': 'הצד השני יקבל בקשה. אחרי אישור אתם מחוברים בשני הכיוונים',
+  'circles.linkTitle': 'שיוך חבר',
+  'circles.request': 'בקשה',
+  'circles.requested': 'נשלח',
+  'circles.noResults': 'אין תוצאות',
+  'circles.linkNote': 'הצד השני יקבל בקשה. אחרי אישור אתם מחוברים בשני הכיוונים',
 
   // Create a circle
-  'communities.newGroup': 'מעגל חדש',
-  'communities.name': 'שם',
-  'communities.namePlaceholder': 'שם המעגל',
-  'communities.createAction': 'יצירת המעגל',
-  'communities.nameError': 'נדרש שם קצר יותר',
-  'communities.description': 'תיאור',
-  'communities.descriptionPlaceholder': 'על מה המעגל',
-  'communities.descUpdate': 'עדכון',
+  'circles.newGroup': 'מעגל חדש',
+  'circles.name': 'שם',
+  'circles.namePlaceholder': 'שם המעגל',
+  'circles.createAction': 'יצירת המעגל',
+  'circles.nameError': 'נדרש שם קצר יותר',
+  'circles.description': 'תיאור',
+  'circles.descriptionPlaceholder': 'על מה המעגל',
+  'circles.descUpdate': 'עדכון',
   // קישור לפרטים נוספים: המנהלים מזינים אותו בהגדרות המעגל, וכל מי שרואה את
   // המעגל מקבל שורה אחת לחיצה מתחת לתיאור.
-  'communities.link': 'קישור לפרטים נוספים',
+  'circles.link': 'קישור לפרטים נוספים',
   // הפועל מדבר אל המשתמש עצמו, ולכן הוא ממוגדר במקום (genderize) ולא נכתב
   // בשתי הצורות.
-  'communities.linkPlaceholder': '{הדבק|הדביקי} לכאן קישור',
+  'circles.linkPlaceholder': '{הדבק|הדביקי} לכאן קישור',
   // השרת הוא זה שמחליט אם הכתובת תקינה (הוא גם משלים https:// לכתובת חשופה),
   // ולכן ההודעה הזו נדלקת מתחת לשדה כשהוא סירב, והטקסט שנדחה נשאר בשדה לתיקון.
-  'communities.linkInvalid': 'הקישור לא תקין',
+  'circles.linkInvalid': 'הקישור לא תקין',
   // סירוב כללי של שמירה (שם, תיאור): לא נשמר, אפשר לנסות שוב.
-  'communities.saveFailed': 'לא נשמר, נסו שוב',
-  'communities.moreDetails': 'לפרטים נוספים',
+  'circles.saveFailed': 'לא נשמר, נסו שוב',
+  'circles.moreDetails': 'לפרטים נוספים',
 
   // A circle you manage
-  'communities.shareInvite': 'שיתוף קישור הזמנה',
-  'communities.settings': 'הגדרות המעגל',
-  // תצוגה מקדימה: הכפתור בכותרת של הגדרות המעגל, שפותח את הפופאפ של המעגל
-  // בדיוק כפי שכל אחד אחר רואה אותו.
-  'communities.preview': 'תצוגה מקדימה',
+  'circles.shareInvite': 'שיתוף קישור הזמנה',
+  // המילה שמתחת לסמל, כששיתוף הקישור עומד ברגל של דף המעגל ליד אפשרות אחרת:
+  // מילה אחת מתחת לסמל, כמו בכל אפשרות ברצועה. המשפט המלא נשאר על הכפתור
+  // שרץ לרוחב הפופאפ, ששם אין לידו כלום.
+  'circles.share': 'שיתוף',
+  'circles.settings': 'הגדרות המעגל',
+  // צפייה: האפשרות ברגל דף המעגל, שפותחת את הפופאפ של המעגל בדיוק כפי שכל
+  // אחד אחר רואה אותו.
+  'circles.preview': 'צפייה',
   // ניהול בלי לשחק. דגל על החברות שלי במעגל אחד שאני מנהל: כשהוא דלוק, אני
   // והחברים במעגל לא נפגשים במשחק. צ'קבוקס בהגדרות המעגל, מתחת לסוג המעגל,
   // וההסבר הוא שורת המשנה שלו.
-  'communities.hiddenToggle': 'להסתיר אותי מחברי המעגל',
-  'communities.hiddenSub': 'החברים במעגל לא יראו אותך במשחק ו{אתה לא תראה|את לא תראי} אותם. ההרשאות שלך במעגל נשארות בדיוק כמו קודם',
-  'communities.hiddenShort': 'לא משחק',
-  'communities.deleteGroup': 'מחיקת המעגל',
-  'communities.deleteTitle': 'למחוק את {name}?',
-  'communities.deleteDesc': 'המעגל וכל החברויות בו יימחקו. אי אפשר לבטל',
-  'communities.deleteConfirm': 'מחיקה',
+  'circles.hiddenToggle': 'להסתיר אותי מחברי המעגל',
+  'circles.hiddenSub': 'החברים במעגל לא יראו אותך במשחק ו{אתה לא תראה|את לא תראי} אותם. ההרשאות שלך במעגל נשארות בדיוק כמו קודם',
+  'circles.hiddenShort': 'לא משחק',
+  'circles.deleteGroup': 'מחיקת המעגל',
+  'circles.deleteTitle': 'למחוק את {name}?',
+  'circles.deleteDesc': 'המעגל וכל החברויות בו יימחקו. אי אפשר לבטל',
+  'circles.deleteConfirm': 'מחיקה',
   // No confirm for taking a member out (user directive 2026-07-31): the tap
   // removes. `removeMemberTitle` / `removeMemberDesc` / `remove` are deleted with
   // that popup — the description WAS the reason it needed none ("they can join
@@ -325,13 +346,13 @@ export default {
   // twin (`requestsNav`) and its empty line (`noRequests`) went with the page
   // itself on 2026-07-31: the queue is a drawer inside the roster now, and a
   // drawer with nothing in it is not drawn at all.
-  'communities.requestsSectionJoin': 'בקשות הצטרפות',
-  'communities.approve': 'אישור',
-  'communities.approveAll': 'אישור כולם',
-  'communities.approveAllTitle': 'לאשר את כל הבקשות?',
-  'communities.approveAllDesc': 'כל מי שממתין בתור יצורף למעגל {name}, ויקבל על כך התראה',
-  'communities.declineJoin': 'דחייה',
-  'communities.owner': 'בעלים',
+  'circles.requestsSectionJoin': 'בקשות הצטרפות',
+  'circles.approve': 'אישור',
+  'circles.approveAll': 'אישור כולם',
+  'circles.approveAllTitle': 'לאשר את כל הבקשות?',
+  'circles.approveAllDesc': 'כל מי שממתין בתור יצורף למעגל {name}, ויקבל על כך התראה',
+  'circles.declineJoin': 'דחייה',
+  'circles.owner': 'בעלים',
   // The role is named for the one thing it does: answer join requests (user
   // directive 2026-07-30, replacing "manager" everywhere a user reads it). An
   // OPEN group has no such role at all, because nothing there waits on an
@@ -339,66 +360,68 @@ export default {
   // The chip names a PERSON's role, so it inflects with whoever it is stuck to:
   // my own sex on the hub row (the group I approve for), the member's on a
   // roster row. Both call sites genderize with their own subject.
-  'communities.manager': '{מאשר|מאשרת}',
-  'communities.makeManager': 'מינוי כמאשר',
-  'communities.removeManager': 'ביטול המינוי',
-  'communities.removeFromGroup': 'הסרה מהמעגל',
-  'communities.transferOwner': 'העברת בעלות',
-  'communities.transferOwnerTitle': 'להעביר את הבעלות ל{name}?',
-  'communities.transferOwnerDesc': 'המעגל יעבור לבעלות של {name}, ואצלך יישארו הרשאות אישור בלבד. אי אפשר לבטל',
+  'circles.manager': '{מאשר|מאשרת}',
+  // The appointment names the same role, so it inflects with the same person the
+  // chip does: the MEMBER whose page it stands on, not the manager pressing it.
+  'circles.makeManager': 'מינוי כ{מאשר|מאשרת}',
+  'circles.removeManager': 'ביטול המינוי',
+  'circles.removeFromGroup': 'הסרה מהמעגל',
+  'circles.transferOwner': 'העברת בעלות',
+  'circles.transferOwnerTitle': 'להעביר את הבעלות ל{name}?',
+  'circles.transferOwnerDesc': 'המעגל יעבור לבעלות של {name}, ואצלך יישארו הרשאות אישור בלבד. אי אפשר לבטל',
   // An open circle has no approvers, so the outgoing owner keeps nothing: he is
   // a plain member of it from that moment.
-  'communities.transferOwnerDescOpen': 'המעגל יעבור לבעלות של {name}, ואצלך לא יישארו הרשאות במעגל. אי אפשר לבטל',
+  'circles.transferOwnerDescOpen': 'המעגל יעבור לבעלות של {name}, ואצלך לא יישארו הרשאות במעגל. אי אפשר לבטל',
 
   // A circle you are in
-  'communities.leave': 'עזיבת המעגל',
-  'communities.memberNote': 'חברי המעגל מופיעים אצלך בעדיפות גבוהה',
+  'circles.leave': 'עזיבת המעגל',
+  'circles.memberNote': 'חברי המעגל מופיעים אצלך בעדיפות גבוהה',
 
   // Find or join
-  'communities.findTitle': 'הצטרפות למעגל',
-  'communities.findSearch': 'חיפוש מעגל',
+  'circles.findTitle': 'הצטרפות למעגל',
+  'circles.findSearch': 'חיפוש מעגל',
   // Searching the roster of a circle you manage: the mark on that page's bar,
   // the field's own placeholder, and the mark that ends the search. It looks
   // over BOTH lists at once, the people waiting and the people already in.
-  'communities.searchPeople': 'חיפוש לפי שם',
-  'communities.searchClose': 'סגירת החיפוש',
+  'circles.searchPeople': 'חיפוש לפי שם',
+  'circles.searchClose': 'סגירת החיפוש',
   // The line about the PERSON, standing over a circle's name on their page: who
   // they are and when they turned up here. Genderless in both languages, so a
   // row with no profile on it still reads (see memberSince / waitingSince), and
   // the name leads because everything else in that block is the circle's.
-  'communities.inGroupSince': '{name} במעגל מאז {date}',
+  'circles.inGroupSince': '{name} במעגל מאז {date}',
   // "בתור מאז", not "ממתין מאז": the sentence must stay genderless for real (a
   // row cached with no profile carries no is_male to inflect with), and the
   // participle was the one word in the pair that was not.
-  'communities.waitingSince': '{name} בתור מאז {date}',
-  'communities.orCode': 'או בקוד הזמנה',
-  'communities.join': 'הצטרפות',
+  'circles.waitingSince': '{name} בתור מאז {date}',
+  'circles.orCode': 'או בקוד הזמנה',
+  'circles.join': 'הצטרפות',
   // The chip says what I AM to this group, so it takes my own sex.
-  'communities.joined': '{חבר|חברה}',
-  'communities.requestJoin': 'בקשת הצטרפות',
-  'communities.pending': 'ממתין לאישור',
+  'circles.joined': '{חבר|חברה}',
+  'circles.requestJoin': 'בקשת הצטרפות',
+  'circles.pending': 'ממתין לאישור',
   // A strip's chip, where the meta line already says the size: ONE word in the
   // corner the role chip sits in, not the sentence the popup's button says.
   // Where I stand with a group, on the hub and in search alike.
-  'communities.pendingTag': 'בהמתנה',
-  'communities.declinedTag': 'נדחתה',
-  'communities.declined': 'הבקשה נדחתה',
-  'communities.declinedTitle': 'הבקשה ל{name} נדחתה',
-  'communities.declinedDesc': 'הבקשה שלכם לא אושרה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש',
-  'communities.declinedConfirm': 'הסרת ההודעה',
+  'circles.pendingTag': 'בהמתנה',
+  'circles.declinedTag': 'נדחתה',
+  'circles.declined': 'הבקשה נדחתה',
+  'circles.declinedTitle': 'הבקשה ל{name} נדחתה',
+  'circles.declinedDesc': 'הבקשה שלכם לא אושרה. אפשר להסיר את ההודעה, ולנסות שוב בעוד חודש',
+  'circles.declinedConfirm': 'הסרת ההודעה',
   // The pending circle's own popup: what the state is, and the button that ends
   // it (the same popup a circle you are in opens, with cancel instead of leave).
   // The sentence names no approver (user directive 2026-08-01): "לאישור של
   // המעגל" makes the circle the thing that decides, which a קבוצה could pass for
   // and a מעגל cannot, and naming the managers instead says more than the person
   // waiting needs. What is waiting is the approval, full stop.
-  'communities.pendingNote': 'הבקשה שלכם ממתינה לאישור',
-  'communities.cancelJoin': 'ביטול הבקשה',
+  'circles.pendingNote': 'הבקשה שלכם ממתינה לאישור',
+  'circles.cancelJoin': 'ביטול הבקשה',
   // Goes out to WhatsApp, i.e. to people who have never opened the app (user
   // directive 2026-08-01): "הצטרפו למעגל X" reads as a cult to someone with no
   // idea what a circle is here, so the message names the circle and the app and
   // leaves the term inside.
-  'communities.shareMessage': 'הצטרפו אל {name} באפליקציית Once\n{link}',
+  'circles.shareMessage': 'הצטרפו אל {name} באפליקציית Once\n{link}',
 
   // Support: row in the account card. Opens the device mail composer at the
   // support inbox, with this subject prefilled.
@@ -574,7 +597,7 @@ export default {
   // and states its own condition up front ("if you have no credits") rather
   // than in a parenthesis at the end ({time} is a bare "HH:MM" from
   // formatGrantTime). Deliberately NOT the friends page's caption
-  // (communities.inviteReward) that used to be reused here (user directive
+  // (circles.inviteReward) that used to be reused here (user directive
   // 2026-07-28): this popup is where someone comes when the wallet is empty, so
   // it has to answer "when do I get one anyway", which that caption never said.
   // The verb addressing the user is gendered by the inline {male|female}
@@ -1015,20 +1038,17 @@ export default {
   // is the whole of what is missing, and it is what the camera in the circle
   // under it opens.
   'home.browseGateTitle': 'כדי להמשיך נדרשות תמונות פרופיל',
-  'home.cancelWaitingTitle': 'לבטל את ההזמנה?',
+  // The waiting card's message asks the question and this is its answer, which
+  // FIRES (user directive 2026-08-02). Its title, its paragraph and a second
+  // label naming this same action are deleted with the ConfirmDialog that
+  // repeated them: what the cancellation costs is said by `waitingTimerDesc`,
+  // in the popup the button stands in.
   'home.cancelWaitingBtn': 'ביטול הזמנה',
-  'home.cancelWaitingDesc': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין',
-  'home.cancelWaitingDesc_mm': 'ההזמנה תבוטל מיד. הוא יחזור להיות זמין לאחרים, וגם אתה תוכל להמשיך להזמין',
-  'home.cancelWaitingDesc_mf': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם אתה תוכל להמשיך להזמין',
-  'home.cancelWaitingDesc_fm': 'ההזמנה תבוטל מיד. הוא יחזור להיות זמין לאחרים, וגם את תוכלי להמשיך להזמין',
-  'home.cancelWaitingDesc_ff': 'ההזמנה תבוטל מיד. היא תחזור להיות זמינה לאחרים, וגם את תוכלי להמשיך להזמין',
-  'home.cancelWaitingConfirm': 'לבטל הזמנה',
   'home.refuseReplyTitle': 'לדחות את ההזמנה?',
   'home.refuseReplyDesc': 'ההזמנה תיסגר, והצד השני יקבל עדכון',
   'home.refuseReplyDesc_m': 'ההזמנה תיסגר, והצד השני יקבל עדכון',
   'home.refuseReplyDesc_f': 'ההזמנה תיסגר, והצד השני יקבל עדכון',
   'home.refuseReplyConfirm': 'לדחות את ההזמנה',
-  'home.watchingReject': 'דילוג',
   // Shown in the rotating-headline slot for the duration of the first-time
   // swipe-down tutorial, instead of that card's random skip line: while the
   // card peeks down and reveals the slot, the text names the gesture.
@@ -1051,7 +1071,14 @@ export default {
   // No gendered variants: nothing in it refers to either person.
   'home.replyingDesc': 'אישור ההזמנה פותח ביניכם צ׳אט, ועולה קרדיט אחד',
   'home.replyingAccept': 'אישור הזמנה',
-  'home.replyingReject': 'לדלג',
+  // The card's message is where an invitation is refused, and this button FIRES
+  // that (user directive 2026-08-02) — it is the act, not a door to the confirm
+  // above, which the drag and hardware back still raise because those two put
+  // the card away rather than answering it. It says דחייה and not דילוג (user
+  // directive 2026-08-02): a watched card is skipped, an invitation that
+  // arrived is declined. It is also the key `home.watchingReject` used to be,
+  // which is deleted — the two named one button.
+  'home.replyingReject': 'דחייה',
   'home.chatHeader': 'אתם אחד על אחד',
   // The one popup ending a chat: its title, its sentence and its two answers,
   // which are chat.leave (the purple) and chat.block. There is no separate
@@ -1108,7 +1135,7 @@ export default {
   // The four entries in the strip at the foot of home (HomeDock). ONE WORD each:
   // the caption names the glyph over it in a quarter of the screen's width, so
   // anything longer wraps to two lines on every phone. Circles takes the one
-  // Circles string the whole app shares (communities.menuRow). The last one is
+  // Circles string the whole app shares (circles.menuRow). The last one is
   // "More" rather than "Settings" (user directive 2026-07-30) — what it opens is
   // the wallet, the account, support and the site, which is everything else
   // rather than a preferences screen.

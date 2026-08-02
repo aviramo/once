@@ -1,7 +1,7 @@
-// ── CommunitiesPage ────────────────────────────────────────────────────────
+// ── CirclesPage ────────────────────────────────────────────────────────
 //
-// The body of the Communities OverlaySheet (opened from the menu's
-// "Communities" row). It is ONE sheet with an internal view stack — a hub that
+// The body of the Circles OverlaySheet (opened from the menu's
+// "Circles" row). It is ONE sheet with an internal view stack — a hub that
 // drills into: my friends, link-a-friend, a group you manage, a group you're
 // in, create, and find/join. Swiping down (PullPane) is the ONLY way out of
 // every page, the hub included: at the hub it takes the sheet, and above it, it
@@ -10,12 +10,12 @@
 // does not need a control saying so on each of them, and dropping it hands the
 // row's start to the page's own NAME (see the header below).
 //
-// Server: everything speaks to the phase-1 endpoints via src/lib/communities.
-// Communities reuse the existing groups machinery; "my friends" is the derived
+// Server: everything speaks to the phase-1 endpoints via src/lib/circles.
+// Circles reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Share, Keyboard, Linking, FlatList, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
-import { Path, Circle, Line, Rect } from 'react-native-svg'
+import { Path, Circle, Line } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../hooks/useBottomInset'
 import { Text, TextInput } from './AppText'
@@ -37,7 +37,7 @@ import { t, genderize } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
 
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
-import { Avatar, AvatarDisc, GroupHead, SkeletonRows, SyncBar } from './CommunityBits'
+import { Avatar, AvatarDisc, GroupHead, SkeletonRows, SyncBar } from './CircleBits'
 import { Chip } from './Chip'
 import { Strip, STRIP_GUTTER } from './Strip'
 import { MatchCard, ProfileActionBar, profileActionBarShows } from './MatchCard'
@@ -61,14 +61,14 @@ import { serverErrorCode } from '../lib/api'
 import {
   ownedGroups, myGroups, myFriends, groupMembers, removeMember, deleteGroup,
   updateGroup, createGroup, searchGroups, redeemInvite, leaveGroup, setManager, transferOwner,
-  friendRespond, unfriend, communitiesSummary, cancelJoinRequest,
+  friendRespond, unfriend, circlesSummary, cancelJoinRequest,
   groupRequests, respondJoin, approveAllJoins, setGroupHidden,
   groupKind, groupKindFlags, GROUP_KINDS, DEFAULT_GROUP_KIND, type GroupKind,
   groupFacts, friendLabel, requestLabel, groupBrief, memberSince, waitingSince, type GroupBrief,
   type OwnedGroup, type GroupMember, type MyFriends, type PublicGroup, type MemberImage,
-  type FriendItem, type CommunitiesSummary, type JoinedGroup, type PendingGroup,
-  type JoinRequestItem, type CommunitiesTarget,
-} from '../lib/communities'
+  type FriendItem, type CirclesSummary, type JoinedGroup, type PendingGroup,
+  type JoinRequestItem, type CirclesTarget,
+} from '../lib/circles'
 import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, STROKE, ROUND_BUTTON_SIZE_SM, SHEET_GAP, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS } from '../tokens'
 import { PAGE, SURFACE, INK, INK_MUTED, INK_SUBTLE, INK_WASH, WHITE, INK_DIM, NEGATIVE } from '../colors'
 import { FIELD_SKIN } from '../field'
@@ -99,17 +99,10 @@ const GearGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: num
     <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
   </Glyph>
 )
-// The group card, as a mark: the plaque the popup is, with the owner's face and
-// the lines under it. Deliberately NOT an eye — the eye already says "am I
-// playing in this group" one page back (OwnedGroupView), and one surface cannot
-// spend the same glyph on two meanings.
-const PreviewGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: number }) => (
-  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <Rect x="3.5" y="3.5" width="17" height="17" rx="4" />
-    <Circle cx="12" cy="10" r="2.3" />
-    <Line x1="8" y1="16" x2="16" y2="16" />
-  </Glyph>
-)
+// (A plaque glyph stood here for the settings bar's preview — a card with a face
+// and two lines on it, "the popup as a mark". The preview moved to the roster's
+// foot on 2026-08-02 and took the app's own circles mark with it: what it opens
+// is the CIRCLE, so it wears the glyph a circle is drawn with everywhere else.)
 
 // A control on the title bar's trailing corner, at the far end of the row from
 // the page's name. ONE definition for all three (the hub's find + create, the
@@ -165,13 +158,13 @@ type CView =
 
 const titleFor = (v: CView): string => {
   switch (v.k) {
-    case 'hub': return t('communities.title')
-    case 'friends': return t('communities.myFriends')
-    case 'find': return t('communities.findTitle')
-    case 'create': return t('communities.newGroup')
+    case 'hub': return t('circles.title')
+    case 'friends': return t('circles.myFriends')
+    case 'find': return t('circles.findTitle')
+    case 'create': return t('circles.newGroup')
     case 'owned': return v.group.name
-    case 'settings': return t('communities.settings')
-    case 'request': return v.request.name ?? t('communities.requestsSectionJoin')
+    case 'settings': return t('circles.settings')
+    case 'request': return v.request.name ?? t('circles.requestsSectionJoin')
     case 'person': return (v.person.kind === 'member' ? v.person.member.name : v.person.friend.name) ?? ''
   }
 }
@@ -188,7 +181,13 @@ const viewKey = (v: CView): string => {
   }
 }
 
-export function CommunitiesPage({
+/** The hub's group popup, opened for it from outside: which circle, and what I
+ *  am to it. Nothing about WHERE the open came from — a push, or an invite link
+ *  I just followed — travels with it: the popup is the same popup either way
+ *  (user directive 2026-08-02), so there is nothing for it to read. */
+type HubGroupTarget = { group: GroupBrief; status: GroupStatus }
+
+export function CirclesPage({
   onClose, onRegisterBack, target, onTargetConsumed,
   dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged,
 }: OverlaySheetBody & {
@@ -197,7 +196,7 @@ export function CommunitiesPage({
   /** Where a notification tap (or a redeemed invite link) wants to land. The
    *  whole page stack is seeded from it, so Back walks out through the pages
    *  that would have led there by hand. */
-  target?: CommunitiesTarget | null
+  target?: CirclesTarget | null
   onTargetConsumed?: () => void
 }) {
   // One insets object for the whole hub (it is threaded down to every view as a
@@ -215,7 +214,7 @@ export function CommunitiesPage({
   // Seeded synchronously from the target so the sheet's very first frame is the
   // page that was asked for, not the hub with the real destination arriving a
   // beat later. `person` is the one target that is the WHOLE stack: it opens on
-  // that person and there is nothing under it (see CommunitiesTarget).
+  // that person and there is nothing under it (see CirclesTarget).
   const [stack, setStack] = useState<CView[]>(() => (
     target?.kind === 'person' ? [{ k: 'person', person: { kind: 'friend', friend: target.friend } }]
       : target?.kind === 'friends' || target?.kind === 'friend' ? [{ k: 'hub' }, { k: 'friends' }]
@@ -234,10 +233,12 @@ export function CommunitiesPage({
   )), [])
   const pop = useCallback(() => setStack(sk => (sk.length > 1 ? sk.slice(0, -1) : sk)), [])
 
-  // A deep-linked group the caller is only a MEMBER of opens the hub's member
-  // sheet rather than a stack view (that is the whole surface a member gets),
-  // so the resolved group is handed down to the hub.
-  const [joinedTarget, setJoinedTarget] = useState<JoinedGroup | null>(null)
+  // A deep-linked group the caller is only a MEMBER of opens the hub's group
+  // popup rather than a stack view (that is the whole surface a member gets), so
+  // the resolved group is handed down to the hub. A tapped invite link lands
+  // here too, whatever the caller is to the circle (the `arrival` target) — and
+  // on the same popup, with the same options on it.
+  const [groupTarget, setGroupTarget] = useState<HubGroupTarget | null>(null)
 
   // Land where the notification pointed, with the whole path to it under the
   // page it lands on. Everything is resolved against the caller's OWN data
@@ -264,6 +265,15 @@ export function CommunitiesPage({
           return
         }
         if (target.kind === 'friends') { set([{ k: 'hub' }, { k: 'friends' }]); return }
+        // A link I just followed: the circle it named, carried whole, over the
+        // hub — the same popup a row on that hub opens, with the same options on
+        // it. Nothing to resolve: the redeem already answered both questions
+        // this page would have gone looking for (which circle, and what I am to
+        // it), and the summary that would answer them here has not landed yet.
+        if (target.kind === 'arrival') {
+          if (alive) setGroupTarget({ group: target.group, status: target.standing })
+          return
+        }
 
         const owned = (await ownedGroups()).find(x => x.id === target.groupId)
         if (!owned) {
@@ -271,9 +281,9 @@ export function CommunitiesPage({
           // a plain member gets. Prefer the denormalized summary (already on the
           // profile, no round trip); fall back to the endpoint on a miss, since
           // an approval push can land before the profile refresh does.
-          const joined = communitiesSummary(useUserStore.getState().profile)?.joined.find(g => g.id === target.groupId)
+          const joined = circlesSummary(useUserStore.getState().profile)?.joined.find(g => g.id === target.groupId)
             ?? (await myGroups()).find(g => g.id === target.groupId)
-          if (joined && alive) setJoinedTarget(joined)
+          if (joined && alive) setGroupTarget({ group: joined, status: 'joined' })
           return
         }
         if (target.kind === 'group') { set([{ k: 'hub' }, { k: 'owned', group: owned }]); return }
@@ -333,7 +343,7 @@ export function CommunitiesPage({
   // Every page is its OWN surface, stacked (user directive 2026-07-27): a page
   // opened from a page LAYERS over it instead of replacing it, so swiping down
   // takes exactly one page off — the same thing Back does — instead of tearing
-  // the whole Communities sheet away. Only the hub, the bottom layer, closes the
+  // the whole Circles sheet away. Only the hub, the bottom layer, closes the
   // sheet when it is swiped, and that is the sheet's own pull.
   const deep = stack.length > 1
   // The sheet's pan must go quiet while a page rides above it, or the two
@@ -361,7 +371,7 @@ export function CommunitiesPage({
           key={`${i}:${v.k}`}
           view={v}
           isTop={i === stack.length - 1}
-          // The hub rides the SHEET's pull (its swipe closes Communities); every
+          // The hub rides the SHEET's pull (its swipe closes Circles); every
           // page above it owns a pull of its own that pops one level.
           sheetPanRef={i === 0 ? dismissGestureRef : undefined}
           sheetPullEngaged={i === 0 ? pullEngaged : undefined}
@@ -376,8 +386,8 @@ export function CommunitiesPage({
           setStack={setStack}
           applyGroup={applyGroup}
           removeGroupViews={removeGroupViews}
-          joinedTarget={i === 0 ? joinedTarget : null}
-          onInitialJoinedConsumed={() => setJoinedTarget(null)}
+          groupTarget={i === 0 ? groupTarget : null}
+          onGroupTargetConsumed={() => setGroupTarget(null)}
         />
       ))}
     </View>
@@ -386,13 +396,13 @@ export function CommunitiesPage({
 
 // ── One page in the stack ──────────────────────────────────────────────────
 // A full-screen surface with its own header and its own swipe-down. The bottom
-// layer (the hub) is handed the SHEET's pull, so swiping it closes Communities;
+// layer (the hub) is handed the SHEET's pull, so swiping it closes Circles;
 // every layer above owns a pull whose commit POPS one page, which is what makes
 // a swipe do exactly what Back does (user directive 2026-07-27).
 function PageLayer({
   view, isTop, sheetPanRef, sheetPullEngaged, onSheetScrollAtTop, onHeaderMeasured, onBack, registerClose,
   insets, rosterGap, profile, push, setStack, applyGroup, removeGroupViews,
-  joinedTarget, onInitialJoinedConsumed,
+  groupTarget, onGroupTargetConsumed,
 }: {
   view: CView
   isTop: boolean
@@ -412,8 +422,8 @@ function PageLayer({
   setStack: React.Dispatch<React.SetStateAction<CView[]>>
   applyGroup: (g: OwnedGroup) => void
   removeGroupViews: (id: string) => void
-  joinedTarget?: JoinedGroup | null
-  onInitialJoinedConsumed: () => void
+  groupTarget?: HubGroupTarget | null
+  onGroupTargetConsumed: () => void
 }) {
   const isSheetLayer = !!sheetPanRef
   // A profile page is a full-bleed card and NOTHING else: no title bar over it
@@ -476,7 +486,7 @@ function PageLayer({
   // page stays mounted, parked off-screen and invisible, but still the TOP layer:
   // the page under it has `enabled: isTop` false, so its swipe is dead, its
   // `commit()` early-returns, and hardware back (which routes to the top layer's
-  // closePage) hits a `slidOut` that is already true. The whole Communities stack
+  // closePage) hits a `slidOut` that is already true. The whole Circles stack
   // goes unresponsive with nothing on screen to say why. Reproduced on the
   // emulator, 2026-07-31, by popping a member's page and then trying to leave the
   // group page under it.
@@ -533,9 +543,9 @@ function PageLayer({
   const [rosterQuery, setRosterQuery] = useState('')
   const closeRosterSearch = useCallback(() => { setRosterSearch(false); setRosterQuery('') }, [])
   const search = view.k === 'find'
-    ? { value: findQuery, onChange: setFindQuery, placeholder: t('communities.findSearch'), label: t('communities.findTitle') }
+    ? { value: findQuery, onChange: setFindQuery, placeholder: t('circles.findSearch'), label: t('circles.findTitle') }
     : view.k === 'owned' && rosterSearch
-      ? { value: rosterQuery, onChange: setRosterQuery, placeholder: t('communities.searchPeople'), label: t('communities.searchPeople') }
+      ? { value: rosterQuery, onChange: setRosterQuery, placeholder: t('circles.searchPeople'), label: t('circles.searchPeople') }
       : null
   const searchField = search ? (
     <View style={[s.field, s.fieldSlim]}>
@@ -573,13 +583,21 @@ function PageLayer({
       // is one control left, and a heading floating in the middle of a row that
       // begins with nothing read as a caption rather than as the page's name.
       align="start"
-      // ...and it lines up with the ROWS under it, not with the page's margin
-      // (user directive 2026-07-31): the list's text stands a card gutter inside
-      // the page gutter, so the title takes both. Only this side — the marks at
-      // the far end are chrome in the margin and stay where every other one is.
-      // A search field takes none of it: that is a BOX with its own two edges,
-      // not a line of text, so it keeps the page's gutter on both sides.
-      startInset={searchField ? 0 : STRIP_GUTTER}
+      // ...and it lines up with WHAT IS UNDER IT, not with the page's margin
+      // (user directive 2026-07-31). On a LIST page that is a row's text, which
+      // stands a card gutter inside the page gutter, so the title takes both.
+      // Only this side — the marks at the far end are chrome in the margin and
+      // stay where every other one is.
+      //
+      // A FORM page (create, settings) has no rows: what is under the title is a
+      // section label over a white card, and both of those stand on the page's
+      // own gutter, so the title takes nothing extra and the three read on one
+      // line. It took the strip's gutter here too and came out half a gutter
+      // inside its own page (settings, 2026-08-02).
+      //
+      // A search field takes none of it either: that is a BOX with its own two
+      // edges, not a line of text, so it keeps the page's gutter on both sides.
+      startInset={searchField || view.k === 'create' || view.k === 'settings' ? 0 : STRIP_GUTTER}
       // A group's name is shown WHOLE (user directive 2026-07-27): as many
       // lines as its 60 characters need, never an ellipsis. The header grows
       // downward and its first line stays put, so a long name costs nothing but
@@ -588,7 +606,7 @@ function PageLayer({
       titleLines={view.k === 'owned' ? 0 : 1}
       topInset={insets.top}
       // Match the page background (PAGE), not the default white SURFACE,
-      // so the header blends into the Communities page instead of sitting on
+      // so the header blends into the Circles page instead of sitting on
       // a lighter band.
       barBg={PAGE}
       // The trailing corner carries what the page can DO, at the far end of the
@@ -604,10 +622,10 @@ function PageLayer({
         // outward from the page's own name, so the nearer mark is the one that
         // adds to what the page lists and the far one goes looking outside it.
         <View style={s.headerActions}>
-          <HeaderButton label={t('communities.create')} onPress={() => push({ k: 'create' })}>
+          <HeaderButton label={t('circles.create')} onPress={() => push({ k: 'create' })}>
             <PlusGlyph size={ICON.round} />
           </HeaderButton>
-          <HeaderButton label={t('communities.find')} onPress={() => push({ k: 'find' })}>
+          <HeaderButton label={t('circles.find')} onPress={() => push({ k: 'find' })}>
             <SearchIcon size={ICON.round} />
           </HeaderButton>
         </View>
@@ -615,10 +633,10 @@ function PageLayer({
         // Searching is a MODE here, so the corner carries the one mark that ends
         // it while it is on: an X in the place the magnifier stood, which is the
         // mirror of the tap that opened it. (Nothing to do with a sheet's
-        // dismiss — no Communities page has one; this closes a search, and it is
+        // dismiss — no Circles page has one; this closes a search, and it is
         // the only way out of the field.)
         rosterSearch ? (
-          <HeaderButton label={t('communities.searchClose')} onPress={closeRosterSearch}>
+          <HeaderButton label={t('circles.searchClose')} onPress={closeRosterSearch}>
             <CloseIcon size={ICON.round} />
           </HeaderButton>
         ) : (
@@ -628,20 +646,23 @@ function PageLayer({
           // place it stands on the hub, where find is the outermost mark. So the
           // glass is always the last thing on a bar, whichever page you are on.
           <View style={s.headerActions}>
-            <HeaderButton label={t('communities.settings')} onPress={() => push({ k: 'settings', group: view.group })}>
+            <HeaderButton label={t('circles.settings')} onPress={() => push({ k: 'settings', group: view.group })}>
               <GearGlyph size={ICON.round} />
             </HeaderButton>
-            <HeaderButton label={t('communities.searchPeople')} onPress={() => setRosterSearch(true)}>
+            <HeaderButton label={t('circles.searchPeople')} onPress={() => setRosterSearch(true)}>
               <SearchIcon size={ICON.round} />
             </HeaderButton>
           </View>
         )
-      ) : view.k === 'settings' ? (
-        // The settings page's one non-editing control: read the group back as
-        // everyone else meets it. See GroupPreviewControl.
-        <GroupPreviewControl group={view.group} />
       ) : undefined}
-      // NO `onClose`, on any page (user directive 2026-07-31): every Communities
+      // The settings page's corner carries NOTHING (user directive 2026-08-02).
+      // It held a preview — read the group back as everyone else meets it — and
+      // that is not a setting: it is one of the two things to do with a circle
+      // you run, so it stands at the foot of the ROSTER beside handing the link
+      // on (see OwnedGroupView). A page of fields does not also carry a door out
+      // to the finished object in its title bar.
+      //
+      // NO `onClose`, on any page (user directive 2026-07-31): every Circles
       // page leaves by sliding DOWN, the hub included, and a stack where the one
       // gesture is the one way out says so by working, not by wearing a button
       // that repeats it on every page. Hardware back is the same slide (below).
@@ -703,8 +724,8 @@ function PageLayer({
         <HubView
           push={push}
           bottomInset={rosterGap}
-          initialJoined={joinedTarget}
-          onInitialJoinedConsumed={onInitialJoinedConsumed}
+          initialGroup={groupTarget}
+          onInitialGroupConsumed={onGroupTargetConsumed}
         />
       ) : (
         <OwnedGroupView
@@ -717,6 +738,7 @@ function PageLayer({
           // EVERY row opens the same page, my own included (see CView): a roster
           // is the people in this circle, and I am one of them.
           onOpenMember={m => push({ k: 'person', person: { kind: 'member', group: view.group, member: m } })}
+          onLeft={() => removeGroupViews(view.group.id)}
           bottomInset={rosterGap}
           onRosterTop={y => { rosterTop.current = y; syncDragBand() }}
         />
@@ -791,21 +813,22 @@ type HubItem =
   | { k: 'declined'; group: PendingGroup }
   | { k: 'joined'; group: JoinedGroup }
 
-function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: {
+function HubView({ push, bottomInset, initialGroup, onInitialGroupConsumed }: {
   push: (v: CView) => void
   /** Air under the contained list — see ContainedRoster / PageLayer. */
   bottomInset: number
-  /** A deep-linked group the caller is a member of — its member sheet opens as
-   *  soon as the hub is on screen (a group_approved push). */
-  initialJoined?: JoinedGroup | null
-  onInitialJoinedConsumed?: () => void
+  /** A group the hub was opened ON: the one a group_approved push named, or the
+   *  circle an invite link just led to. Its popup opens as soon as the hub is on
+   *  screen, in the standing the caller resolved (see HubGroupTarget). */
+  initialGroup?: HubGroupTarget | null
+  onInitialGroupConsumed?: () => void
 }) {
   // Instant: the summary rides in the user payload (relations.communities),
   // updated live over Realtime. Only when the server hasn't populated it yet
   // (old payload) do we fall back to the three endpoints.
   const profile = useUserStore(st => st.profile)
-  const summary = communitiesSummary(profile)
-  const [fallback, setFallback] = useState<CommunitiesSummary | null>(null)
+  const summary = circlesSummary(profile)
+  const [fallback, setFallback] = useState<CirclesSummary | null>(null)
   useEffect(() => {
     if (summary) return
     let alive = true
@@ -838,17 +861,15 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
   // 2026-07-28) — a membership, a request still waiting, and one that was turned
   // down are the same popup in three states, never three surfaces. So one piece
   // of state: which group, and what I am to it.
-  const [sheet, setSheet] = useState<{ group: JoinedGroup; status: GroupStatus } | null>(
-    initialJoined ? { group: initialJoined, status: 'joined' } : null,
-  )
-  // Open the deep-linked member group's sheet, and let the page forget the
-  // target straight away so popping back to the hub later doesn't reopen it.
+  const [sheet, setSheet] = useState<HubGroupTarget | null>(initialGroup ?? null)
+  // Open the group the hub was pointed at, and let the page forget the target
+  // straight away so popping back to the hub later doesn't reopen it.
   useEffect(() => {
-    if (!initialJoined) return
-    setSheet({ group: initialJoined, status: 'joined' })
-    onInitialJoinedConsumed?.()
+    if (!initialGroup) return
+    setSheet(initialGroup)
+    onInitialGroupConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialJoined])
+  }, [initialGroup])
   // How big it is, like the managed rows. A group's KIND is off the strip (user
   // directive 2026-07-28): it is a rule about getting IN, and I am already in
   // (or waiting), so the row says nothing about it. Undefined for the degraded
@@ -861,7 +882,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
   // an answer are NOT part of that line — they ride the same strong chip a
   // group's queue does (user directive 2026-07-28), so every row on the page
   // says "someone is waiting on you" the one way.
-  const friendsMeta = data ? [friendLabel(data.friends)] : genderize(t('communities.myFriendsSub'), profile?.is_male)
+  const friendsMeta = data ? [friendLabel(data.friends)] : genderize(t('circles.myFriendsSub'), profile?.is_male)
   const friendsWaiting = (data?.requests ?? 0) > 0
 
   // Everything the caller belongs to, in ONE list (user directive 2026-07-28).
@@ -907,7 +928,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
         // state is readable without opening it. What is WAITING is off this line
         // when there is any: it rides the chip instead, and a row never says the
         // same thing twice.
-        const meta = groupFacts(g.members, null, g.hidden && t('communities.hiddenShort'))
+        const meta = groupFacts(g.members, null, g.hidden && t('circles.hiddenShort'))
         return (
           <Strip
             title={g.name}
@@ -917,7 +938,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
             // waiting queue OUTRANKS it (user directive 2026-07-28) — the chip
             // says how many are waiting, in full-strength purple, because the
             // row is a job to do and the role is only a standing fact.
-            tag={waiting ? requestLabel(g.pending!) : (g.is_owner ? t('communities.owner') : genderize(t('communities.manager'), profile?.is_male))}
+            tag={waiting ? requestLabel(g.pending!) : (g.is_owner ? t('circles.owner') : genderize(t('circles.manager'), profile?.is_male))}
             tagStrong={waiting}
             style={style}
             onPress={() => push({ k: 'owned', group: g })}
@@ -930,11 +951,11 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
         // chip in the corner the role chip owns, not by replacing what the row
         // says about the group.
         // An old payload with no count falls back to the sentence.
-        return <Strip title={it.group.name} meta={joinedMeta(it.group) ?? t('communities.pending')} tag={t('communities.pendingTag')} style={style} onPress={() => setSheet({ group: it.group, status: 'pending' })} />
+        return <Strip title={it.group.name} meta={joinedMeta(it.group) ?? t('circles.pending')} tag={t('circles.pendingTag')} style={style} onPress={() => setSheet({ group: it.group, status: 'pending' })} />
       case 'declined':
         // Same shape as the pending row above it: the group's own facts on the
         // meta line, the answer it got in the chip.
-        return <Strip title={it.group.name} meta={joinedMeta(it.group) ?? t('communities.declined')} tag={t('communities.declinedTag')} style={style} onPress={() => setSheet({ group: it.group, status: 'declined' })} />
+        return <Strip title={it.group.name} meta={joinedMeta(it.group) ?? t('circles.declined')} tag={t('circles.declinedTag')} style={style} onPress={() => setSheet({ group: it.group, status: 'declined' })} />
       case 'joined':
         return <Strip title={it.group.name} meta={joinedMeta(it.group)} style={style} onPress={() => setSheet({ group: it.group, status: 'joined' })} />
     }
@@ -947,7 +968,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
   const openFriends = () => push({ k: 'friends' })
   const friendsStrip = (last: boolean) => (
     <Strip
-      title={t('communities.myFriends')}
+      title={t('circles.myFriends')}
       meta={friendsMeta}
       tag={friendsWaiting ? requestLabel(data!.requests) : null}
       tagStrong
@@ -967,7 +988,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
       // never sees it.
       //
       // It is the friends page's own invite button (same share glyph, same
-      // action), one size down and saying ONE WORD (`communities.invite`, user
+      // action), one size down and saying ONE WORD (`circles.invite`, user
       // directive 2026-08-02): the row it stands in has already said who this is
       // about, so the button only has to say what pressing it does — where the
       // page's own button, standing under a roster with nothing beside it, names
@@ -975,7 +996,7 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
       // stretches to its row by default, and this one hugs the line it rides.
       trailing={(
         <Button
-          label={t('communities.invite')}
+          label={t('circles.invite')}
           variant="primary"
           size="md"
           iconStart={<ShareGlyph color={WHITE} />}
@@ -1028,7 +1049,9 @@ function HubView({ push, bottomInset, initialJoined, onInitialJoinedConsumed }: 
       )}
 
       {/* One popup for all three kinds of row: it is told which the group is and
-          offers leave / cancel the request / clear the notice accordingly. */}
+          offers leave / cancel the request / clear the notice accordingly. A
+          circle an invite link just landed me on opens this very popup, with
+          those same options on it. */}
       <GroupSheet group={sheet?.group ?? null} status={sheet?.status} onClose={() => setSheet(null)} />
     </>
   )
@@ -1070,8 +1093,8 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
       {lead ? <View style={s.startLead}>{lead}</View> : null}
       <View style={s.startMain}>
         <View style={s.startArt}><CirclesArt /></View>
-        <Text style={s.startTitle}>{t('communities.startTitle')}</Text>
-        <Text style={s.startDesc}>{genderize(t('communities.startDesc'), profile?.is_male)}</Text>
+        <Text style={s.startTitle}>{t('circles.startTitle')}</Text>
+        <Text style={s.startDesc}>{genderize(t('circles.startDesc'), profile?.is_male)}</Text>
         {/* THE RECOMMENDED WAY LEADS HERE, AND THIS PAGE IS THE ONE EXCEPTION TO
             "the purple ends the block" (user directive 2026-07-31, put back the
             same day it was turned): these are not a popup's two answers, they are
@@ -1079,14 +1102,14 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
             the one we are recommending. */}
         <View style={s.startActions}>
           <Button
-            label={t('communities.inviteFriend')}
+            label={t('circles.inviteFriend')}
             variant="primary"
             size="lg"
             iconStart={<ShareGlyph color={WHITE} />}
             onPress={() => { tap(); if (profile) shareFriendInvite(profile) }}
           />
           <Button
-            label={t('communities.startFind')}
+            label={t('circles.startFind')}
             variant="secondary"
             size="lg"
             iconStart={<SearchIcon color={INK_SUBTLE} />}
@@ -1122,11 +1145,16 @@ const openGroupLink = (url?: string | null) => {
 // that changes with where I stand is the ACTION at the bottom, which is always
 // the one thing that standing lets me do:
 //   joined    → share the invite link (public groups only, whose code is not a
-//               secret) + LEAVE the group
+//               secret) + LEAVE the group — the OWNER excepted, who hands the
+//               key over first and never sees it (`iOwnIt`)
 //   pending   → take the join request back
 //   declined  → clear the notice (the answer itself stands; the endpoint only
 //               marks it seen, so this is not a way around the wait)
 //   none      → join, or ask to be let in
+// It is the SAME popup however it was raised (user directive 2026-08-02): a
+// circle an invite link just landed me on offers exactly what the same circle
+// offers when I pick it off the hub myself. Where it came from is not a state,
+// and nothing here may branch on it.
 // Nothing is ever a dead, disabled chip saying what I already am: the search
 // popup used to end at a greyed-out "Member", which named my standing instead
 // of offering what it allows. Every terminal action lands on the same summary
@@ -1152,10 +1180,27 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   const [busy, setBusy] = useState(false)
   const pending = status === 'pending'
 
+  // THE OWNER CANNOT WALK OUT OF HIS OWN CIRCLE — HE HANDS THE KEY OVER FIRST
+  // (user directive 2026-08-02). `app_leave_group` deletes the membership row and
+  // nothing more, so an owner leaving would strand the circle with an owner who
+  // is not in it; transferring ownership, or deleting the group, are pages of
+  // their own. It is the very rule the roster's own MemberProfileView keeps for
+  // my card, stated here because the popup is the OTHER place leaving is offered
+  // — and it belongs to the popup rather than to any one host, so no surface that
+  // opens a circle I own can offer it (the roster's foot, the hub, an arrival, a
+  // shared-circles row). A MANAGER is not an owner and leaves like anyone else.
+  // Two ways to know it, and either is enough: the brief may SAY so (a managed
+  // row carries `is_owner` and spreads it straight in), or the owner it draws is
+  // me. The flag alone would leave every other host out; the id alone answers
+  // "no" for the moment before a roster has arrived to say who the owner is, and
+  // this is the one question that may not be wrong in that direction.
+  const meId = useUserStore(st => st.profile?.user_id)
+  const iOwnIt = !!group?.is_owner || (!!meId && group?.owner?.user_id === meId)
+
   const share = () => {
     if (!group?.invite_code) return
     tap()
-    Share.share({ message: t('communities.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) })
+    Share.share({ message: t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) })
   }
   // The one terminal action this popup carries, whichever group it is about and
   // whatever I am to it: leaving, taking the request back, or clearing the
@@ -1192,15 +1237,15 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   // browser" (the settings list's site row is the other one that leaves).
   const details: StripOption[] = group?.link ? [{
     key: 'details',
-    label: t('communities.moreDetails'),
+    label: t('circles.moreDetails'),
     icon: <GlobeIcon color={INK} size={ICON.xxl} />,
     onPress: () => openGroupLink(group.link),
   }] : []
 
   const quietActions: StripOption[] =
-    status === 'joined' ? [{
+    status === 'joined' && !iOwnIt ? [{
       key: 'leave',
-      label: t('communities.leave'),
+      label: t('circles.leave'),
       icon: <SignOutIcon color={INK} size={ICON.xxl} />,
       onPress: () => setConfirm(true),
     }]
@@ -1209,7 +1254,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
       // that has not been answered yet destroys nothing, and it can be sent again
       // at any time. Taking a request back is an X, plainly (2026-07-28).
       key: 'cancel',
-      label: t('communities.cancelJoin'),
+      label: t('circles.cancelJoin'),
       icon: <CloseIcon color={INK} size={ICON.xxl} />,
       busy, disabled: busy,
       onPress: quit,
@@ -1218,7 +1263,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
       // No confirm here either: it dismisses a notice, it undoes nothing, and the
       // sentence above it has just said so.
       key: 'dismiss',
-      label: t('communities.declinedConfirm'),
+      label: t('circles.declinedConfirm'),
       icon: <CloseIcon color={INK} size={ICON.xxl} />,
       busy, disabled: busy,
       onPress: quit,
@@ -1240,10 +1285,10 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   // does — see `stacked` in SheetActionPair.
   const invitation =
     status === 'joined' && group?.is_public && group?.invite_code ? (
-      <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
+      <Button label={t('circles.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
     ) : status === 'none' && onJoin ? (
       <Button
-        label={t(group?.requires_approval ? 'communities.requestJoin' : 'communities.join')}
+        label={t(group?.requires_approval ? 'circles.requestJoin' : 'circles.join')}
         variant="primary"
         size="lg"
         onPress={onJoin}
@@ -1282,7 +1327,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               >
                 {/* WHICH GROUP THIS IS, in the app's one block for saying so:
                     the owner's face, the group's facts under it and the name
-                    under them (GroupHead, CommunityBits). A person's page inside
+                    under them (GroupHead, CircleBits). A person's page inside
                     a group wears the very same heading (user directive
                     2026-07-31), which is why it is a component and not three
                     elements written out here. */}
@@ -1299,9 +1344,9 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               of ("more details" left this block on 2026-08-02). */}
           {status !== 'none' ? (
             <Text style={s.note}>
-              {t(status === 'joined' ? 'communities.memberNote'
-                : pending ? 'communities.pendingNote'
-                : 'communities.declinedDesc')}
+              {t(status === 'joined' ? 'circles.memberNote'
+                : pending ? 'circles.pendingNote'
+                : 'circles.declinedDesc')}
             </Text>
           ) : null}
         </View>
@@ -1363,7 +1408,7 @@ function useMyGender() {
 // double form. Lives here once because both the create form and the settings
 // editor render the same field. English has a single form and passes through.
 function useLinkPlaceholder() {
-  return genderize(t('communities.linkPlaceholder'), useMyGender())
+  return genderize(t('circles.linkPlaceholder'), useMyGender())
 }
 
 // ── Group kind ─────────────────────────────────────────────────────────────
@@ -1371,15 +1416,15 @@ function useLinkPlaceholder() {
 // asked about. It is asked about in ONE place now — the chooser, where the
 // group is being set up: a kind is a rule about getting IN, so it is off the
 // strips entirely (user directive 2026-07-28), and what a tap will do is said
-// by the join popup's own button. See groupKind() in lib/communities.
+// by the join popup's own button. See groupKind() in lib/circles.
 const kindTitle = (k: GroupKind) =>
-  k === 'open' ? t('communities.kindOpen')
-  : k === 'approved' ? t('communities.kindApproved')
-  : t('communities.kindPrivate')
+  k === 'open' ? t('circles.kindOpen')
+  : k === 'approved' ? t('circles.kindApproved')
+  : t('circles.kindPrivate')
 const kindSub = (k: GroupKind) =>
-  k === 'open' ? t('communities.kindOpenSub')
-  : k === 'approved' ? t('communities.kindApprovedSub')
-  : t('communities.kindPrivateSub')
+  k === 'open' ? t('circles.kindOpenSub')
+  : k === 'approved' ? t('circles.kindApprovedSub')
+  : t('circles.kindPrivateSub')
 // Pick one of the three. Vertical, because each stop carries the sentence that
 // explains it — the old two side-by-side toggles (searchable? approval?) asked
 // the user to combine two answers into a policy (user directive 2026-07-27).
@@ -1528,7 +1573,7 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
   // denormalized summary on the user row), so the heading and the placeholder
   // are both truthful from the first frame. null only on an old payload.
   const friends = data?.friends ?? null
-  const friendCount = friends?.length ?? communitiesSummary(profile)?.friends ?? null
+  const friendCount = friends?.length ?? circlesSummary(profile)?.friends ?? null
 
   const respond = async (id: string, accept: boolean) => {
     if (busy) return
@@ -1558,7 +1603,7 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
           <View style={[s.rosterRow, requests.length === 0 && s.rosterRowFirst, s.rosterRowLast]}>
             {friends == null && friendCount !== 0
               ? <SkeletonRows rows={friendCount ?? undefined} first={requests.length === 0} />
-              : <Empty text={t('communities.noFriends')} why={t('communities.friendsWhy')} />}
+              : <Empty text={t('circles.noFriends')} why={t('circles.friendsWhy')} />}
           </View>
         )}
         // Incoming friend requests, at the top of the same card the friends are
@@ -1577,10 +1622,10 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
                 trailing={(
                   <>
                     <Pressable style={[s.pillBtn, { backgroundColor: INK }]} onPress={() => respond(r.id, true)} disabled={!!busy}>
-                      <Text style={s.pillBtnInk}>{t('communities.accept')}</Text>
+                      <Text style={s.pillBtnInk}>{t('circles.accept')}</Text>
                     </Pressable>
                     <Pressable style={[s.pillBtn, { backgroundColor: INK_WASH }]} onPress={() => respond(r.id, false)} disabled={!!busy}>
-                      <Text style={[s.pillBtnInk, { color: INK }]}>{t('communities.decline')}</Text>
+                      <Text style={[s.pillBtnInk, { color: INK }]}>{t('circles.decline')}</Text>
                     </Pressable>
                   </>
                 )}
@@ -1616,8 +1661,8 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
           auto-links the pair as mutual friends (no request, no approval).
           People-search + friend requests were removed 2026-07-26. */}
       <View style={[s.friendsInvite, { marginBottom: bottomInset }]}>
-        <Text style={s.note}>{t('communities.inviteReward')}</Text>
-        <Button label={t('communities.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
+        <Text style={s.note}>{t('circles.inviteReward')}</Text>
+        <Button label={t('circles.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
       </View>
     </View>
   )
@@ -1665,8 +1710,8 @@ function FriendsStart() {
   return (
     <PullScrollView style={s.scroll} contentContainerStyle={s.startBody} showsVerticalScrollIndicator={false}>
       <View style={s.startArt}><CirclesArt /></View>
-      <Text style={s.startTitle}>{t('communities.startTitle')}</Text>
-      <Text style={s.startDesc}>{genderize(t('communities.friendsStartDesc'), isMale)}</Text>
+      <Text style={s.startTitle}>{t('circles.startTitle')}</Text>
+      <Text style={s.startDesc}>{genderize(t('circles.friendsStartDesc'), isMale)}</Text>
       <View style={s.startPointer}>
         <InviteRewardMark />
         <ArrowDownArt />
@@ -1710,17 +1755,17 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
 
   return (
     <View style={{ gap: MD }}>
-      <Text style={s.section}>{t('communities.name')}</Text>
+      <Text style={s.section}>{t('circles.name')}</Text>
       <View style={s.field}>
-        <TextInput style={s.fieldInput} value={name} onChangeText={setName} placeholder={t('communities.namePlaceholder')} placeholderTextColor={INK_DIM} autoFocus maxLength={GROUP_NAME_MAX} />
+        <TextInput style={s.fieldInput} value={name} onChangeText={setName} placeholder={t('circles.namePlaceholder')} placeholderTextColor={INK_DIM} autoFocus maxLength={GROUP_NAME_MAX} />
       </View>
-      <Text style={s.section}>{t('communities.description')}</Text>
+      <Text style={s.section}>{t('circles.description')}</Text>
       <View style={s.field}>
-        <TextInput style={[s.fieldInput, s.descInput]} value={description} onChangeText={setDescription} placeholder={t('communities.descriptionPlaceholder')} placeholderTextColor={INK_DIM} multiline maxLength={GROUP_DESCRIPTION_MAX} textAlignVertical="top" />
+        <TextInput style={[s.fieldInput, s.descInput]} value={description} onChangeText={setDescription} placeholder={t('circles.descriptionPlaceholder')} placeholderTextColor={INK_DIM} multiline maxLength={GROUP_DESCRIPTION_MAX} textAlignVertical="top" />
       </View>
       {/* Optional, like the description: the name is the only thing creation
           insists on. Empty simply means a group with no link. */}
-      <Text style={s.section}>{t('communities.link')}</Text>
+      <Text style={s.section}>{t('circles.link')}</Text>
       <View style={s.field}>
         <TextInput
           style={[s.fieldInput, s.linkInput]}
@@ -1734,12 +1779,53 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
           autoCorrect={false}
         />
       </View>
-      {linkError ? <Text style={s.fieldError}>{t('communities.linkInvalid')}</Text> : null}
-      <Text style={s.section}>{t('communities.kindLabel')}</Text>
+      {linkError ? <Text style={s.fieldError}>{t('circles.linkInvalid')}</Text> : null}
+      <Text style={s.section}>{t('circles.kindLabel')}</Text>
       <KindChooser value={kind} onChange={setKind} />
-      <Button label={t('communities.createAction')} variant="primary" size="lg" iconStart={<GroupsIcon color={WHITE} />} loading={busy} disabled={name.trim().length === 0} onPress={create} />
+      <Button label={t('circles.createAction')} variant="primary" size="lg" iconStart={<GroupsIcon color={WHITE} />} loading={busy} disabled={name.trim().length === 0} onPress={create} />
     </View>
   )
+}
+
+// ── The circle as it is RIGHT NOW ──────────────────────────────────────────
+// THE ROSTER IS LIVE (user directive 2026-08-02). A page in this stack is
+// handed its group as a SNAPSHOT taken when the row was tapped, which is right
+// for what a page is ABOUT and wrong for what the circle currently IS: the
+// member count on the head, the queue's size, and — through `roster_rev` — the
+// fact that its people have changed at all.
+//
+// The live copy comes off the denormalized summary on the user row, which is
+// the one thing Realtime already delivers to this device (lib/realtime.ts). The
+// server fans a roster change out to EVERY member of the circle and bumps
+// `roster_rev` with it (migration 20260802160000), so this returns a different
+// object the moment somebody else joins, leaves, is removed, is appointed an
+// approver, is unappointed, or is handed the circle.
+//
+// null on a summary the server has not populated yet (old payload) — every
+// caller falls back to its snapshot, i.e. to exactly the behaviour before this.
+function useLiveGroup(id: string): OwnedGroup | JoinedGroup | null {
+  return useUserStore(st => {
+    const s = circlesSummary(st.profile)
+    if (!s) return null
+    return s.managed.find(g => g.id === id) ?? s.joined.find(g => g.id === id) ?? null
+  })
+}
+
+/** Re-run a page's own load when a live counter MOVES, and never on the first
+ *  value it sees — the mount's load has already answered for that one. The
+ *  counter is a number rather than the object carrying it, so a user row
+ *  arriving with nothing new in it cannot make a page fetch. */
+function useRefetchOn(value: number | undefined, load: () => void): void {
+  const seen = useRef(value)
+  useEffect(() => {
+    if (value === undefined) return
+    // The summary landed a beat after the page did: that is the value the mount
+    // fetched against, not a change to it.
+    if (seen.current === undefined) { seen.current = value; return }
+    if (value === seen.current) return
+    seen.current = value
+    load()
+  }, [value, load])
 }
 
 // ── A group you manage ─────────────────────────────────────────────────────
@@ -1747,7 +1833,7 @@ function CreateView({ onCreated }: { onCreated: (g: OwnedGroup) => void }) {
 // settings sub-screen, the pending join requests, and the member roster. All
 // the editable config (name / description / public / approval / delete) lives
 // in GroupSettingsView below.
-function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onOpenMember, bottomInset, onRosterTop }: {
+function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onOpenMember, onLeft, bottomInset, onRosterTop }: {
   group: OwnedGroup
   /** The queue drawer starts UNFOLDED: a notification about the queue lands
    *  here, and it must land on the people it is about (see CView). */
@@ -1767,6 +1853,10 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
    *  yourself: a row is a person, not an action menu. What can be done about
    *  them is decided on their page. */
   onOpenMember: (m: GroupMember) => void
+  /** I left the circle, from the preview popup at the page's foot: drop the
+   *  whole group off the page stack, this roster with it. Only an APPROVER ever
+   *  fires it — the owner is refused the option (see GroupSheet's `iOwnIt`). */
+  onLeft: () => void
   /** Safe-area padding for the roster's scroll content — the page fills the
    *  sheet, so the bottom inset belongs to the ONE scrolling region. */
   bottomInset: number
@@ -1804,6 +1894,19 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
       .catch(() => { if (!rosters.get(group.id)) setFetched([]) })
   }, [group.id, applyMembers, track])
   useEffect(load, [load])
+  // ...and again whenever somebody else changes who stands in this circle,
+  // while the page is open (user directive 2026-08-02). The signal is the
+  // revision on the live summary — see useLiveGroup — and it covers a change of
+  // ROLE too, which nothing else here can see: an appointment leaves the member
+  // count and the owner exactly as they were. The page re-reads through its own
+  // `load`, so the fresh list goes into the cache and reaches the member page
+  // stacked above this one by the same route every other write here does.
+  const live = useLiveGroup(group.id)
+  // A circle I run is `managed` in the summary, which is the only shape that
+  // states its queue; `joined` never reaches this page (it is not a roster I am
+  // allowed to read at all — app_group_members answers `not_manager`).
+  const livePending = live && 'pending' in live ? live.pending : undefined
+  useRefetchOn(live?.roster_rev, load)
   // Pending join requests (only meaningful while approval is on, but harmless
   // to fetch either way — the server returns [] when there are none). Cached on
   // the same terms as the roster, so the waiting faces are there on the first
@@ -1839,6 +1942,12 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
       .catch(() => { if (!joinRequests.get(group.id)) setFetchedRequests([]) })
   }, [group.id, applyRequests, track])
   useEffect(loadRequests, [loadRequests])
+  // The queue is live on the same terms, off the count the summary has always
+  // carried: another manager answering someone, or a new person arriving at the
+  // door, lands on this page without it being re-opened. `answered` still
+  // filters the result, so a row this device has already decided cannot come
+  // back on a list built before that answer landed.
+  useRefetchOn(livePending, loadRequests)
 
   // WHAT THE PAGE IS SHOWING once a name is being looked for: the SAME question
   // asked of both lists, through the app's one matcher (fuzzyRank, which the
@@ -1865,7 +1974,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
   // contents.
   const requestCount = query
     ? shownRequests?.length ?? 0
-    : requests?.length ?? group.pending ?? 0
+    : requests?.length ?? livePending ?? group.pending ?? 0
 
   // Is the queue unfolded. A page-level state, so it survives a requester's
   // profile being stacked over this page and answered up there: the manager
@@ -1910,13 +2019,37 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
     }
   }, [group.id, applyRequests, applyMembers, load])
 
-  const share = () => { tap(); Share.share({ message: t('communities.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) }) }
+  const share = () => { tap(); Share.share({ message: t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) }) }
+
+  // Reading the group back as everyone else meets it — the quiet half of the
+  // page's foot. Every field the popup shows is already on this group row, which
+  // the page keeps in step with each save (applyGroup), so the preview repaints
+  // with the edit that was just made. Who RUNS it comes off the cached roster
+  // this page is already holding — the member flagged owner — through the one
+  // hook every group head reads, so the face at the top is the real one whether
+  // I own the group or only manage it (an unread roster simply yields none,
+  // exactly as an admin-owned group does).
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const brief: GroupBrief = { ...group, owner: useGroupHead(group).owner }
+  // THE MARK IS THE APP'S OWN CIRCLES GLYPH (user directive 2026-08-02), the one
+  // the dock's Circles key wears and the one a shared circle is named with on a
+  // profile card. What this opens is the CIRCLE — the object itself, as everyone
+  // else meets it — so it wears the app's mark for a circle rather than a
+  // preview-of-something mark, which says what the surface DOES and not what it
+  // is about. (`PreviewGlyph`, the eye that stood here on the settings bar, has
+  // no call site left and is deleted.)
+  const preview: StripOption = {
+    key: 'preview',
+    label: t('circles.preview'),
+    icon: <GroupsIcon color={INK} size={ICON.xxl} />,
+    onPress: () => { tap(); setPreviewOpen(true) },
+  }
 
   // The role is that MEMBER's, so it inflects with theirs — the other gender
   // axis from the hub row above, where the same chip is about me. A roster row
   // cached with no profile has no sex to read, and falls back to the masculine
   // form genderize defaults to.
-  const roleTag = (m: GroupMember) => m.owner ? t('communities.owner') : m.manager ? genderize(t('communities.manager'), m.profile?.is_male) : null
+  const roleTag = (m: GroupMember) => m.owner ? t('circles.owner') : m.manager ? genderize(t('circles.manager'), m.profile?.is_male) : null
 
   return (
     <View style={s.ownedFill}>
@@ -1945,7 +2078,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
         // so in words. A search that finds nobody in either list is the one time
         // this card is empty on purpose.
         empty={query
-          ? <View style={s.card}><Empty text={t('communities.noResults')} /></View>
+          ? <View style={s.card}><Empty text={t('circles.noResults')} /></View>
           : <View style={s.card}><SkeletonRows rows={group.members} /></View>}
         // The waiting queue is the roster's FIRST row (user directive
         // 2026-07-27): the same Strip the people under it are, so it lines up
@@ -1980,7 +2113,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
               first
               style={rosterRowStyle(0, false)}
               icon={<AvatarDisc text={String(requestCount)} />}
-              title={t('communities.requestsSectionJoin')}
+              title={t('circles.requestsSectionJoin')}
               trailing={<ApproveAllControl group={group} open={drawerOpen} />}
               onPress={() => setQueueOpen(o => !o)}
             />
@@ -2022,7 +2155,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
                       // the same row while its answer is in the air is simply
                       // not a second answer.
                       onPress={() => { if (!answering.includes(r.id)) approve(r.id) }}
-                      accessibilityLabel={t('communities.approve')}
+                      accessibilityLabel={t('circles.approve')}
                     >
                       {answering.includes(r.id)
                         ? <Spinner color={INK} size={ICON.xxl} />
@@ -2051,21 +2184,63 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
         }}
       />
 
-      {/* Handing the group's link on sits UNDER the roster (user directive
-          2026-07-28), not above it: the page is the list of people, and the
-          invite is what you do after reading it. It rides the page's bottom
-          edge, `bottomInset` clear of it, which is the air the roster used to
-          carry. */}
-      {/* NOT WHILE THE PAGE IS SEARCHING (user directive 2026-07-31): a search
-          is the manager looking for one person in this group, and handing the
-          group on is not what he is doing — so the page gives the list that
-          band, and the keyboard standing where the button was does not have to
-          be squeezed past it. */}
+      {/* What you do WITH this circle sits UNDER the roster (user directive
+          2026-07-28), not above it: the page is the list of people, and the rest
+          is what you do after reading it. It rides the page's bottom edge,
+          `bottomInset` clear of it, which is the air the roster used to carry.
+
+          NOT WHILE THE PAGE IS SEARCHING (user directive 2026-07-31): a search
+          is the manager looking for one person in this group, and neither
+          handing the group on nor reading it back is what he is doing — so the
+          page gives the list that band, and the keyboard standing where the
+          block was does not have to be squeezed past it.
+
+          TWO THINGS TO DO WITH A CIRCLE YOU RUN, IN THE APP'S ONE ACTION BLOCK
+          (user directive 2026-08-02): what I MAY do — read the group back as
+          everyone ELSE meets it — beside what the page is OFFERING, which is
+          handing the link on. It is `SheetActionPair`, the same foot the group,
+          account and leave/block popups wear, because it is the same object: a
+          quiet mark passed on the way to the one purple invitation. The pair is
+          one shape and only the fill tells the two apart — the strip's option is
+          a mark over a word, and the button is handed `stack` by the row itself,
+          so neither call site can state a shape of its own.
+          `flush` because the gap above belongs to the PAGE here and not to a
+          popup's rhythm: `ownedFill`'s own MD already stands between the roster
+          and this block, exactly as it did when the button stood here alone. */}
       {search == null ? (
         <View style={{ marginBottom: bottomInset }}>
-          <Button label={t('communities.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
+          <SheetActionPair
+            flush
+            options={[preview]}
+            action={<Button label={t('circles.share')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />}
+          />
         </View>
       ) : null}
+      {/* THE PREVIEW IS THE GROUP'S OWN POPUP (moved off the settings page's
+          title bar, 2026-08-02): a manager edits his circle through fields and a
+          chooser, which say nothing about what those add up to — and what they
+          add up to is the popup a searcher, an invitee and a member all meet the
+          group in.
+
+          IT IS THAT POPUP ENTIRE, WITH MY OWN STANDING ON IT (user directive
+          2026-08-02): `joined`, because I AM in this circle — the roster behind
+          this popup lists me — so the things being in it lets me do stand on it
+          exactly as they do when the same circle is picked off the hub by hand.
+          An APPROVER may therefore leave from here, which is the whole point;
+          the OWNER may not, and that guard belongs to the popup rather than to
+          this call site (see `iOwnIt` in GroupSheet) — he hands the key over
+          first. Opened with `none`, as the settings bar's preview was, the popup
+          read me as a stranger to a circle I help run. */}
+      <GroupSheet
+        group={previewOpen ? brief : null}
+        status="joined"
+        onClose={() => setPreviewOpen(false)}
+        // Leaving takes the WHOLE group off the page stack, this roster
+        // included: it is a list of people I am not standing among any more. The
+        // hub it lands on repaints off the store's own summary, exactly as the
+        // member page's leave does (MemberProfileView.doLeave).
+        onDone={onLeft}
+      />
     </View>
   )
 }
@@ -2139,34 +2314,6 @@ function QueueDrawer({ open, children }: { open: boolean; children: React.ReactN
         <View style={s.queueInner}>{children}</View>
       </View>
     </Animated.View>
-  )
-}
-
-// The settings page's own header control, on the trailing corner opposite the
-// page's name: read the group back as everyone ELSE meets it. A manager edits it
-// through fields and a chooser, which say nothing about what those add up to —
-// and what they add up to is the group POPUP, the one surface a searcher, an
-// invitee and a member all meet the group in. So the preview IS that popup
-// (GroupSheet), with nothing added to it and no action under it: `none` with no
-// `onJoin` renders the card and only the card, which is what a preview has to
-// be. Who runs it comes off the cached roster — the member flagged owner — so
-// the face at the top is the real one whether I own the group or only manage it
-// (an unread roster simply shows none, exactly as an admin-owned group does).
-function GroupPreviewControl({ group }: { group: OwnedGroup }) {
-  const [open, setOpen] = useState(false)
-  // Every field the popup reads is already on the group row, which the settings
-  // page keeps in step with each save (applyGroup), so the preview repaints with
-  // the edit that was just made. Who runs it comes off the roster, through the
-  // one hook every group head reads (useGroupHead).
-  const brief: GroupBrief = { ...group, owner: useGroupHead(group).owner }
-
-  return (
-    <>
-      <HeaderButton label={t('communities.preview')} onPress={() => setOpen(true)}>
-        <PreviewGlyph size={ICON.round} />
-      </HeaderButton>
-      <GroupSheet group={open ? brief : null} status="none" onClose={() => setOpen(false)} />
-    </>
   )
 }
 
@@ -2251,18 +2398,18 @@ function ApproveAllControl({ group, open }: { group: OwnedGroup; open: boolean }
           bg="transparent"
           shadow={false}
           onPress={() => { tap(); setAsk(true) }}
-          accessibilityLabel={t('communities.approveAll')}
+          accessibilityLabel={t('circles.approveAll')}
         >
           <DoubleCheckIcon size={ICON.xxl} />
         </RoundButton>
       </Animated.View>
       <ConfirmDialog
         visible={ask}
-        title={t('communities.approveAllTitle')}
-        description={t('communities.approveAllDesc').replace('{name}', group.name)}
+        title={t('circles.approveAllTitle')}
+        description={t('circles.approveAllDesc').replace('{name}', group.name)}
         // ONE button (no cancelLabel): the popup is dismissed by swiping it
         // down or tapping the backdrop, and the only thing to press approves.
-        confirmLabel={t('communities.approveAll')}
+        confirmLabel={t('circles.approveAll')}
         busy={busy}
         onCancel={() => { if (!busy) setAsk(false) }}
         onConfirm={approveAll}
@@ -2280,15 +2427,21 @@ function ApproveAllControl({ group, open }: { group: OwnedGroup; open: boolean }
 function useGroupHead(group: OwnedGroup) {
   const members = rosters.useValue(group.id)
   const owner = members?.find(m => m.owner)
+  // The count is read LIVE (user directive 2026-08-02), not off the snapshot
+  // this page was pushed with: a member joining or leaving while a person's
+  // page is open changes how big the circle under their card is, and that fact
+  // is delivered to this device the moment it changes (see useLiveGroup). The
+  // snapshot is the fallback for a summary the server has not written yet.
+  const count = useLiveGroup(group.id)?.members ?? group.members
   return useMemo(() => ({
     name: group.name,
-    members: group.members,
+    members: count,
     owner: owner ? { user_id: owner.user_id, name: owner.name, image: owner.image } : null,
-  }), [group.name, group.members, owner])
+  }), [group.name, count, owner])
 }
 
 // ── A person's page ────────────────────────────────────────────────────────
-// THE one profile surface of the communities sheet: the same card the app
+// THE one profile surface of the Circles sheet: the same card the app
 // renders for a match, full-bleed under the floating back control, with the
 // actions about that person pinned under it. A requester, a member and a friend
 // are the same page with different buttons (user directive 2026-07-27) — no
@@ -2433,14 +2586,14 @@ function JoinRequestProfileView({ group, request, onDone, onOpenFriend, isTop, i
       actions={[
         {
           key: 'approve',
-          label: t('communities.approve'),
+          label: t('circles.approve'),
           icon: <CheckIcon color={INK} size={ICON.xxl} />,
           busy: busy === 'accept', disabled: !!busy,
           onPress: () => respond(true),
         },
         {
           key: 'decline',
-          label: t('communities.declineJoin'),
+          label: t('circles.declineJoin'),
           icon: <CloseIcon color={INK} size={ICON.xxl} />,
           busy: busy === 'decline', disabled: !!busy,
           onPress: () => respond(false),
@@ -2517,14 +2670,14 @@ function FriendProfileView({ friend: f, onDone, onOpenFriend, isTop, insets }: {
           with it exactly as a member's page is titled with the group's name. */}
       <ProfilePage
         profile={f.profile} userId={f.user_id} name={f.name} image={f.image} insets={insets}
-        caption={t('communities.myFriends')}
+        caption={t('circles.myFriends')}
         onOpenFriend={onOpenFriend}
         isTop={isTop}
         // The one thing there is to do about a friend, so it takes the strip's
         // whole width and has no rule to stand against.
         actions={[{
           key: 'unfriend',
-          label: t('communities.unfriendConfirm'),
+          label: t('circles.unfriendConfirm'),
           icon: <UserMinusIcon color={INK} size={ICON.xxl} />,
           busy,
           onPress: () => { tap(); setConfirmRemove(true) },
@@ -2532,9 +2685,9 @@ function FriendProfileView({ friend: f, onDone, onOpenFriend, isTop, insets }: {
       />
       <ConfirmDialog
         visible={confirmRemove}
-        title={t('communities.unfriendTitle').replace('{name}', f.name ?? '')}
-        description={t('communities.unfriendDesc')}
-        confirmLabel={t('communities.unfriendConfirm')}
+        title={t('circles.unfriendTitle').replace('{name}', f.name ?? '')}
+        description={t('circles.unfriendDesc')}
+        confirmLabel={t('circles.unfriendConfirm')}
         confirmIconStart={<UserMinusIcon color={WHITE} />}
         busy={busy}
         onCancel={() => setConfirmRemove(false)}
@@ -2715,14 +2868,19 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
         actions={[
           ...(canPromote ? [{
             key: 'manager',
-            label: m.manager ? t('communities.removeManager') : t('communities.makeManager'),
+            // The appointment names THIS member's role, so it inflects with
+            // theirs — the same subject the roster chip beside their name reads
+            // (a row cached with no profile has no sex and falls back to the
+            // masculine, exactly as that chip does). Undoing it names no role at
+            // all ("ביטול המינוי") and needs none.
+            label: m.manager ? t('circles.removeManager') : genderize(t('circles.makeManager'), m.profile?.is_male),
             icon: <RankIcon color={INK} down={!!m.manager} size={ICON.xxl} />,
             busy: busy === 'manager', disabled: !!busy,
             onPress: doSetManager,
           }] : []),
           ...(canTransfer ? [{
             key: 'transfer',
-            label: t('communities.transferOwner'),
+            label: t('circles.transferOwner'),
             icon: <KeyIcon color={INK} size={ICON.xxl} />,
             busy: busy === 'transfer', disabled: !!busy,
             onPress: () => { tap(); setConfirmTransfer(true) },
@@ -2738,7 +2896,7 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
             // in. The strip's own spinner is the feedback, and the warning haptic
             // in `doRemove` is what says a removal happened.
             key: 'remove',
-            label: t('communities.removeFromGroup'),
+            label: t('circles.removeFromGroup'),
             icon: <UserMinusIcon color={INK} size={ICON.xxl} />,
             busy: busy === 'remove', disabled: !!busy,
             onPress: doRemove,
@@ -2750,7 +2908,7 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
             // "remove" beside it: this is MINE to lose, and a closed group may
             // not be mine to get back.
             key: 'leave',
-            label: t('communities.leave'),
+            label: t('circles.leave'),
             icon: <SignOutIcon color={INK} size={ICON.xxl} />,
             busy: busy === 'leave', disabled: !!busy,
             onPress: () => { tap(); setConfirmLeave(true) },
@@ -2759,9 +2917,9 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
       />
       <ConfirmDialog
         visible={confirmTransfer}
-        title={t('communities.transferOwnerTitle').replace('{name}', m.name ?? '')}
-        description={t(openGroup ? 'communities.transferOwnerDescOpen' : 'communities.transferOwnerDesc').replace('{name}', m.name ?? '')}
-        confirmLabel={t('communities.transferOwner')}
+        title={t('circles.transferOwnerTitle').replace('{name}', m.name ?? '')}
+        description={t(openGroup ? 'circles.transferOwnerDescOpen' : 'circles.transferOwnerDesc').replace('{name}', m.name ?? '')}
+        confirmLabel={t('circles.transferOwner')}
         confirmIconStart={<KeyIcon color={WHITE} />}
         busy={busy === 'transfer'}
         onCancel={() => setConfirmTransfer(false)}
@@ -2844,7 +3002,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
   // "example.com/x" comes back with its https://, so the field repaints with
   // the real URL. One the server refuses (any other scheme, or not a host at
   // all) changes nothing — and the refusal is RETHROWN rather than swallowed,
-  // which is what puts communities.linkInvalid under the field with the text
+  // which is what puts circles.linkInvalid under the field with the text
   // still in it. Swallowing it wiped the field and said nothing, which reads as
   // "the app will not save my link" (2026-07-29).
   const saveLink = async (next: string | null) => {
@@ -2864,8 +3022,8 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
       <View style={{ gap: MD }}>
         <View style={s.card}>
           <ToggleRow
-            label={t('communities.hiddenToggle')}
-            sub={genderize(t('communities.hiddenSub'), isMale)}
+            label={t('circles.hiddenToggle')}
+            sub={genderize(t('circles.hiddenSub'), isMale)}
             value={hidden}
             onValueChange={toggleHidden}
             style={s.hiddenRow}
@@ -2877,36 +3035,36 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
 
   return (
     <View style={{ gap: MD }}>
-      <Text style={s.section}>{t('communities.name')}</Text>
+      <Text style={s.section}>{t('circles.name')}</Text>
       <View style={s.descCard}>
         <EditableText
           value={group.name}
           saving={savingName}
           onCommit={saveName}
-          errorLabel={t('communities.saveFailed')}
+          errorLabel={t('circles.saveFailed')}
           min={1}
           max={GROUP_NAME_MAX}
           singleLine
-          placeholder={t('communities.namePlaceholder')}
-          updateLabel={t('communities.descUpdate')}
+          placeholder={t('circles.namePlaceholder')}
+          updateLabel={t('circles.descUpdate')}
           inputStyle={s.nameInput}
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
         />
       </View>
 
-      <Text style={s.section}>{t('communities.description')}</Text>
+      <Text style={s.section}>{t('circles.description')}</Text>
       <View style={s.descCard}>
         <EditableText
           value={group.description ?? ''}
           saving={savingDesc}
           onCommit={saveDescription}
-          errorLabel={t('communities.saveFailed')}
+          errorLabel={t('circles.saveFailed')}
           min={0}
           max={GROUP_DESCRIPTION_MAX}
           allowEmpty
-          placeholder={t('communities.descriptionPlaceholder')}
-          updateLabel={t('communities.descUpdate')}
+          placeholder={t('circles.descriptionPlaceholder')}
+          updateLabel={t('circles.descUpdate')}
           inputStyle={s.descEditorInput}
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
@@ -2916,13 +3074,13 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
       {/* Where the group lives outside the app (a site, a form, a WhatsApp
           invite). Sits under the description because it is the rest of that
           sentence, and above the kind, which is policy rather than blurb. */}
-      <Text style={s.section}>{t('communities.link')}</Text>
+      <Text style={s.section}>{t('circles.link')}</Text>
       <View style={s.descCard}>
         <EditableText
           value={group.link ?? ''}
           saving={savingLink}
           onCommit={saveLink}
-          errorLabel={t('communities.linkInvalid')}
+          errorLabel={t('circles.linkInvalid')}
           min={0}
           max={GROUP_LINK_MAX}
           allowEmpty
@@ -2930,14 +3088,14 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           keyboardType="url"
           autoCapitalize="none"
           placeholder={linkPlaceholder}
-          updateLabel={t('communities.descUpdate')}
+          updateLabel={t('circles.descUpdate')}
           inputStyle={s.linkInput}
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
         />
       </View>
 
-      <Text style={s.section}>{t('communities.kindLabel')}</Text>
+      <Text style={s.section}>{t('circles.kindLabel')}</Text>
       <KindChooser value={kind} onChange={chooseKind} />
 
       {/* Manage without playing, as one checkbox: the members do not meet you
@@ -2946,8 +3104,8 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           sub-line now. */}
       <View style={s.card}>
         <ToggleRow
-          label={t('communities.hiddenToggle')}
-          sub={genderize(t('communities.hiddenSub'), isMale)}
+          label={t('circles.hiddenToggle')}
+          sub={genderize(t('circles.hiddenSub'), isMale)}
           value={hidden}
           onValueChange={toggleHidden}
           style={s.hiddenRow}
@@ -2955,13 +3113,13 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
       </View>
 
       {/* Owner-only page from here up, so the delete needs no gate of its own. */}
-      <Button label={t('communities.deleteGroup')} variant="secondary" size="lg" iconStart={<TrashIcon color={INK} />} onPress={() => setConfirmDelete(true)} />
+      <Button label={t('circles.deleteGroup')} variant="secondary" size="lg" iconStart={<TrashIcon color={INK} />} onPress={() => setConfirmDelete(true)} />
 
       <ConfirmDialog
         visible={confirmDelete}
-        title={t('communities.deleteTitle').replace('{name}', group.name)}
-        description={t('communities.deleteDesc')}
-        confirmLabel={t('communities.deleteConfirm')}
+        title={t('circles.deleteTitle').replace('{name}', group.name)}
+        description={t('circles.deleteDesc')}
+        confirmLabel={t('circles.deleteConfirm')}
         confirmIconStart={<TrashIcon color={WHITE} />}
         busy={deleting}
         onCancel={() => setConfirmDelete(false)}
@@ -3141,9 +3299,9 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
   // The same fact as a chip. Short words: it sits in a corner, not on a line.
   const statusTag = (g: PublicGroup) => {
     const st = myStatus(g)
-    return st === 'joined' ? genderize(t('communities.joined'), isMale)
-      : st === 'pending' ? t('communities.pendingTag')
-      : st === 'declined' ? t('communities.declinedTag')
+    return st === 'joined' ? genderize(t('circles.joined'), isMale)
+      : st === 'pending' ? t('circles.pendingTag')
+      : st === 'declined' ? t('circles.declinedTag')
       : undefined
   }
 
@@ -3168,7 +3326,7 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
                 the lines about it, starting where the words will. */}
             {shown == null
               ? <SkeletonRows rows={3} lines={2} avatar={false} />
-              : <Empty text={t('communities.noResults')} />}
+              : <Empty text={t('circles.noResults')} />}
           </View>
         )}
         // The next page, arriving. Sits inside the card so the rows and the
@@ -3338,7 +3496,11 @@ const s = StyleSheet.create({
   queueInner: { backgroundColor: PAGE, borderRadius: RADIUS, overflow: 'hidden' },
   // THE strip's geometry lives with the strip (components/Strip.tsx) — this
   // surface owns no row style of its own.
-  section: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK_MUTED, marginTop: MD, marginStart: XS },
+  // A label naming the card under it, so it stands on the CARD's own edge — the
+  // page gutter, which is also where the page's title stands on a form page. It
+  // carried a marginStart of XS, a nudge that lined up with nothing and made a
+  // third left edge on a page that should have one (2026-08-02).
+  section: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK_MUTED, marginTop: MD },
   // The header's trailing controls, side by side on the bar's end corner.
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: SM },
   // `flexShrink` is what lets the popup obey the sheet's height cap: the body
@@ -3353,7 +3515,7 @@ const s = StyleSheet.create({
   // the head that does not (a short group's popup is unchanged).
   sheetHead: { gap: SHEET_GAP.desc },
   // (The face, the fact line and the name inside it are `GroupHead` in
-  // CommunityBits — the one block that says WHICH group this is, shared with a
+  // CircleBits — the one block that says WHICH group this is, shared with a
   // person's page inside that group. Nothing about their look lives here any
   // more, including the avatar's own air.)
   //

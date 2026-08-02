@@ -342,32 +342,44 @@ export const CHIP_HEIGHT = ROUND_BUTTON_SIZE_SM
  *  Stated once because it is now read on BOTH axes — see CHIP_BLOCK_PAD. */
 export const CHIP_GUTTER = MD
 
-/** ── A chip that is a BLOCK pays the SAME air on all four sides ─────────────
- *  (user directive 2026-07-31.) The rule above derives a PILL's vertical padding
- *  from the round-button height, which is right for a tile carrying one short
- *  line — but the match card's bottom-START set is not that: the merged fact tile
- *  stacks three sentences, two of which wrap, and the bio tile is a paragraph.
- *  Against their MD gutter the derived 8dp read as text pressed against the top
- *  and bottom edges of a wide white block.
+/** ── A chip that is a BLOCK states its air on each axis ─────────────────────
+ *  The rule above derives a PILL's vertical padding from the round-button
+ *  height, which is right for a tile carrying one short line — but the match
+ *  card's bottom-START set is not that: the merged fact tile stacks three
+ *  sentences, two of which wrap, and the bio tile is a paragraph. So a block
+ *  states its own box: the stacked rows (ChipStack) and the match card's bio
+ *  tile, which imports these rather than re-typing them so the two can never
+ *  drift (the bio sat at a flat `padding: MD` once before, and the whole point
+ *  of `useChipPadding` was to stop it from differing from the chips beside it —
+ *  this is the same guarantee, now that the chips beside it are blocks too).
  *
- *  So a block-shaped chip takes the gutter on the vertical too: the stacked rows
- *  (ChipStack) and the match card's bio tile, which imports this rather than
- *  re-typing it so the two can never drift (the bio sat at a flat `padding: MD`
- *  once before, and the whole point of `useChipPadding` was to stop it from
- *  differing from the chips beside it — this is the same guarantee, now that the
- *  chips beside it are blocks too).
+ *  SIDEWAYS it is the chip's own gutter, so a block indents its text exactly as
+ *  every pill in the app does. On the OUTSIDE of its top and bottom it is one
+ *  step in (user directive 2026-08-02): the block took the gutter on all four
+ *  sides from 2026-07-31, and on the built tile the edge above the first fact and
+ *  below the last read as a band of empty white the facts were floating in — a
+ *  block is WIDE, so the same number that is right beside a line of text is too
+ *  much at the ends of a stack of them.
+ *
+ *  What is NOT touched by that is the air between two facts: the user asked for
+ *  the block's own edges and said so of the SEAMS in the same breath. Those stay
+ *  a full gutter apart (see CHIP_BLOCK_SEAM_PAD, which is why it is still stated
+ *  off CHIP_BLOCK_PAD rather than off this).
  *
  *  A LONE pill is untouched: it is still exactly a round chrome button tall. */
 export const CHIP_BLOCK_PAD = CHIP_GUTTER
+export const CHIP_BLOCK_PAD_V = SM
 
 /** ── A SEAM is half a gutter, because two rows pay it together ──────────────
  *  (user directive 2026-07-31.) The air above the tile's first row and below its
- *  last is the block's own gutter — it stands between the text and the OUTSIDE.
- *  A seam is not that: the rule between two facts has a row's padding on EACH
- *  side of it, so the full gutter twice over opened a band of empty white wider
- *  than the tile's own edges and read as three tiles again, which is the very
- *  thing the merge undid. Each side gives half, so the facts sit a gutter apart
- *  and the tile's four outer edges are untouched. */
+ *  last is the block's own — it stands between the text and the OUTSIDE, and it
+ *  is CHIP_BLOCK_PAD_V. A seam is not that: the rule between two facts has a
+ *  row's padding on EACH side of it, so the full gutter twice over opened a band
+ *  of empty white wider than the tile's own edges and read as three tiles again,
+ *  which is the very thing the merge undid. Each side gives half, so the facts
+ *  sit a gutter apart — unchanged when the tile's outer edges closed in on
+ *  2026-08-02, because how far two facts stand from each other is a different
+ *  question from how close the stack runs to the tile's rim. */
 export const CHIP_BLOCK_SEAM_PAD = CHIP_BLOCK_PAD / 2
 
 /** The chip's vertical padding: what is left of CHIP_HEIGHT once one line of
@@ -430,13 +442,13 @@ function ChipRule({ size }: { size: number }) {
 // (user directive 2026-07-30.) Set by `ChipStack` below: a chip rendered inside
 // one is a ROW of a shared tile rather than a tile of its own, so it drops the
 // two things that made it a separate object — the fill and the lift — and keeps
-// everything that makes it a chip: its glyph slot and its gutter — which it now
-// pays on the vertical as well (CHIP_BLOCK_PAD, in place of the pill's derived
+// everything that makes it a chip: its glyph slot and its gutter — plus the
+// block's own vertical air (CHIP_BLOCK_PAD_V, in place of the pill's derived
 // padding). A context and not a prop, so no call site can put a chip in a stack
 // and forget to say so.
 //
 // It carries WHERE in the tile the row is, because that is what decides each of
-// its two vertical edges: an edge facing the outside pays the block's gutter, an
+// its two vertical edges: an edge facing the outside pays the block's air, an
 // edge facing a seam pays half of it (see CHIP_BLOCK_SEAM_PAD). The stack knows
 // the order of its rows and a row does not, so the answer is stated here rather
 // than inferred anywhere else. `null` = not in a stack at all.
@@ -769,17 +781,18 @@ export function Chip({
 // lift — and it drops it through the context above rather than by a prop at the
 // call site.
 //
-// What it takes ON is the gutter on the VERTICAL too (user directive 2026-07-31,
-// see CHIP_BLOCK_PAD): a stacked row is a wrapping sentence in a wide white
-// block, not a short line in a capsule, so the pill's derived padding — which is
-// whatever a round chrome button has left over — read as text pressed against the
-// block's top and bottom edges. The rows are the one part of the app that pays
-// the same air on all four sides; a lone chip is still exactly a button tall.
+// What it takes ON is the block's own VERTICAL air (see CHIP_BLOCK_PAD_V): a
+// stacked row is a wrapping sentence in a wide white block, not a short line in a
+// capsule, so it neither takes the pill's derived padding — whatever a round
+// chrome button has left over — nor the full gutter it took from 2026-07-31,
+// which left a band of empty white over the first fact and under the last (user
+// directive 2026-08-02). A lone chip is still exactly a button tall.
 //
 // On its OUTER edges, that is (user directive 2026-07-31): the two rows meeting
-// at a seam pay it together, half each, so the facts stand a gutter apart
-// instead of two (see CHIP_BLOCK_SEAM_PAD). The tile's own four edges are
-// unchanged — a row learns which of its edges is which from the context below.
+// at a seam pay a GUTTER together, half each, so the facts stand one gutter apart
+// instead of two (see CHIP_BLOCK_SEAM_PAD) — and that is the one number 2026-08-02
+// deliberately left alone. A row learns which of its edges is which from the
+// context below.
 //
 // alignItems:'flex-start' so every row hugs its own label and the tile hugs the
 // WIDEST of them (a stretch-aligned column would have made every row as wide as
@@ -951,14 +964,17 @@ const styles = StyleSheet.create({
   // instead of standing beside it as an object of its own weight.
   chipSmall: { paddingHorizontal: SM, paddingVertical: XS, gap: XS },
   // A chip that is a BLOCK rather than a pill — a stacked row of the match card's
-  // fact tile. The gutter on all four sides (see CHIP_BLOCK_PAD): these rows are
-  // wrapping sentences in a wide white block, not one short line in a capsule, so
-  // the pill's derived 8dp read as text pressed against the block's edges.
-  chipBlock: { paddingVertical: CHIP_BLOCK_PAD },
-  // …and half of it on an edge that faces a SEAM rather than the outside, since
-  // the row on the other side of that hairline pays the other half (see
-  // CHIP_BLOCK_SEAM_PAD). Two styles and not four, so each edge is decided on its
-  // own and a one-row stack keeps the block's air on both.
+  // fact tile. It states its own air on each axis (see CHIP_BLOCK_PAD_V): the
+  // gutter sideways, one step in on the edges facing OUT, because these rows are
+  // wrapping sentences in a wide white block and the top and bottom of such a
+  // stack sit closer to the tile's rim than a capsule's one line does.
+  chipBlock: { paddingVertical: CHIP_BLOCK_PAD_V },
+  // …and half a GUTTER on an edge that faces a SEAM rather than the outside,
+  // since the row on the other side of that hairline pays the other half (see
+  // CHIP_BLOCK_SEAM_PAD — deliberately not the value above: the distance between
+  // two facts did not change when the tile's outer edges closed in). Two styles
+  // and not four, so each edge is decided on its own and a one-row stack keeps
+  // the block's air on both.
   chipBlockSeamTop: { paddingTop: CHIP_BLOCK_SEAM_PAD },
   chipBlockSeamBottom: { paddingBottom: CHIP_BLOCK_SEAM_PAD },
   // The line-box probe is a measuring stick, not content: absolute so it neither
