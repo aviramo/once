@@ -136,21 +136,21 @@ export async function proxy(request: NextRequest) {
   // SECURITY-DEFINER helper. The query runs only at root and only when the
   // visitor is signed in but not a JWT admin — most marketing-site traffic
   // pays zero DB cost.
+  // Panel access = admin JWT, or >=1 managed group. The union of the two roles
+  // the panel recognises; WHICH surfaces each of them may see is the pages' own
+  // question (requireAdminUser vs requireViewerScope in lib/admin-auth.ts), so
+  // widening it here would be wrong and narrowing it would lock managers out.
+  const panelAccess = async () => {
+    if (!user) return false;
+    const role = (user.app_metadata as { role?: string } | undefined)?.role;
+    if (role === "admin") return true;
+    const admin = createSupabaseAdmin();
+    const { data } = await admin.rpc("is_group_manager", { p_user_id: user.id });
+    return data === true;
+  };
+
   if (pathname === "/") {
-    let hasPanelAccess = false;
-    if (user) {
-      const role = (user.app_metadata as { role?: string } | undefined)?.role;
-      if (role === "admin") {
-        hasPanelAccess = true;
-      } else {
-        const admin = createSupabaseAdmin();
-        const { data } = await admin.rpc("is_group_manager", {
-          p_user_id: user.id,
-        });
-        hasPanelAccess = data === true;
-      }
-    }
-    if (!hasPanelAccess) {
+    if (!(await panelAccess())) {
       const url = request.nextUrl.clone();
       url.pathname = "/index.html";
       return NextResponse.rewrite(url);
@@ -159,10 +159,17 @@ export async function proxy(request: NextRequest) {
 
   // Auth-gate the panel sub-routes. /login is intentionally public so an
   // unauthenticated user can reach it; /auth/* is the OAuth callback path.
+  // A SIGNED-IN STRANGER IS NOT A VIEWER. This asked only whether the visitor was
+  // signed in AT ALL, and leaned on every page and every server action calling
+  // requireAdminUser / requireViewerScope for the real check. They all do — but
+  // that makes the gate a matter of discipline, one forgotten call from being a
+  // hole, so the same predicate the root uses stands in front of the sub-routes
+  // too. A signed-in plain user is sent to /login?next=… exactly as a signed-out
+  // one is, which is where the panel already tells them they are not an admin.
   const isProtected = PROTECTED_PREFIXES.some((p) =>
     pathname === p || pathname.startsWith(p + "/"),
   );
-  if (isProtected && !user) {
+  if (isProtected && !(await panelAccess())) {
     const intended = pathname + request.nextUrl.search;
     const url = request.nextUrl.clone();
     url.pathname = "/login";

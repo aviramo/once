@@ -204,9 +204,34 @@ Deno.serve(async (req) => {
   const log = new Log(`ext/${route}`, body, new User({ user_id: null as unknown as string }));
 
   try {
+    // THE SWEEPS ARE NOT SOMETHING A PHONE MAY ASK FOR. This gate compared the
+    // header against SUPABASE_ANON_KEY, which is not a secret at all: it ships
+    // inside the mobile bundle and is written in plain text in the cron
+    // migrations. Anyone holding it could run /ext/cron, /ext/resync, /ext/purge
+    // and /ext/archive in a loop — DB load, push waves, and an account archive
+    // purged (auth identity and all) ahead of its own clock.
+    //
+    // THE SECRET RIDES ITS OWN HEADER, because `Authorization` is not ours to
+    // spend: the platform gateway verifies that header as a JWT and answers 401
+    // before a request ever reaches this file, which is exactly what the anon
+    // key was quietly satisfying. So Authorization keeps carrying the anon key
+    // for the gateway (a public key doing a public key's job, and the gateway
+    // check is worth keeping) and `x-ext-secret` carries the credential that
+    // actually authorizes the sweep. Verified against the live endpoint: a
+    // random string in Authorization is refused upstream, secret or not.
+    //
+    // EXPAND → MIGRATE → CONTRACT, because the callers are the pg_cron jobs and
+    // they are updated in a separate statement from this deploy: while no
+    // EXT_SECRET is set the endpoint behaves exactly as it did before, and once
+    // it is, a caller with the anon key alone is refused. Contract = delete the
+    // `legacy` term below once every job carries the header (BACKWARD_COMPAT.md).
     const auth = req.headers.get("Authorization") ?? "";
-    const expected = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-    if (!expected || auth !== `Bearer ${expected}`) {
+    const secret = Deno.env.get("EXT_SECRET") ?? "";
+    const legacy = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const ok = secret
+      ? req.headers.get("x-ext-secret") === secret
+      : (!!legacy && auth === `Bearer ${legacy}`);
+    if (!ok) {
       return log.error("auth", "unauthorized", 401);
     }
 

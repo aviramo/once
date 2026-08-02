@@ -1041,7 +1041,12 @@ Deno.serve(async (req) => {
 
       case "chat": {
         const chatBody = body.chat as { text?: unknown; image_key?: unknown; location?: unknown; audio_key?: unknown; audio_bars?: unknown; audio_duration_ms?: unknown; schedule?: unknown; reply_to?: unknown; created_at?: unknown } | undefined;
-        const text = typeof chatBody?.text === "string" && chatBody.text.trim() !== "" ? chatBody.text.trim() : null;
+        // Truncated, never refused: the composer has no cap of its own and the
+        // longest message ever sent is 41 characters, so this is a ceiling on
+        // abuse (the row is broadcast to the partner over Realtime) and not a
+        // limit any conversation can feel.
+        const CHAT_TEXT_MAX = 4000;
+        const text = typeof chatBody?.text === "string" && chatBody.text.trim() !== "" ? chatBody.text.trim().slice(0, CHAT_TEXT_MAX) : null;
         const image_key = typeof chatBody?.image_key === "string" && chatBody.image_key.trim() !== "" ? chatBody.image_key.trim() : null;
         const audio_key = typeof chatBody?.audio_key === "string" && chatBody.audio_key.trim() !== "" ? chatBody.audio_key.trim() : null;
         const audio_bars = Array.isArray(chatBody?.audio_bars)
@@ -1156,12 +1161,51 @@ Deno.serve(async (req) => {
         // kids" preference (formerly the is_for_kids column) lives inside
         // family.isForKids — the client embeds it before sending.
         const payload: Record<string, unknown> = {};
-        if ("images" in body && Array.isArray(body.images)) payload.images = body.images;
-        if ("bio" in body) payload.bio = typeof body.bio === "string" ? body.bio : null;
+        // A PHOTO IS A FILE NAME IN MY OWN FOLDER, AND THE SERVER IS WHAT SAYS SO.
+        // This used to be `payload.images = body.images` — an arbitrary JSON array
+        // straight onto the row, with app_save_profile checking only that it WAS an
+        // array. The client reads a card's photos as `<bucket>/users/<that card's
+        // user_id>/normal/<name>` but passes anything containing "://" through
+        // as-is (matchImageUrls, MatchCard), so a name of "https://…" made every
+        // viewer's device fetch an attacker's server: the viewers' IPs, content
+        // that never passed moderation, and a picture swappable after the fact.
+        // Two of them also satisfy profileComplete, i.e. buy a place in the pool.
+        //
+        // SANITIZED, NOT REJECTED. The published build is the only writer and every
+        // row on it today is {hash, normal} with a bare file name (301 of 301,
+        // measured) — but a 400 here would be an onboarding that cannot finish, and
+        // an unknown future key is not an attack. So an entry keeps the string
+        // fields that are file names and drops the ones that are not; an entry with
+        // no usable `normal` is not a photo and goes. IMAGE_KEY_RE is the whole
+        // guard: no scheme, no slash, no traversal, nothing the URL builder could
+        // read as anything but a leaf under the card owner's own folder.
+        const IMAGE_KEY_RE = /^[A-Za-z0-9._-]{1,128}$/;
+        const IMAGE_MAX = 12; // twice the client's own ceiling of MIN..6
+        const BIO_MAX = 500; // the client caps at 150 (lib/bio.ts); nobody reaches this
+        const JSON_FIELD_MAX = 4000;
+        if ("images" in body && Array.isArray(body.images)) {
+          payload.images = (body.images as unknown[])
+            .slice(0, IMAGE_MAX)
+            .map(entry => {
+              if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+              const clean: Record<string, unknown> = {};
+              for (const [k, v] of Object.entries(entry as Record<string, unknown>)) {
+                if (typeof v !== "string") { clean[k] = v; continue; }
+                if (IMAGE_KEY_RE.test(v)) clean[k] = v;
+              }
+              return typeof clean.normal === "string" ? clean : null;
+            })
+            .filter(Boolean);
+        }
+        if ("bio" in body) payload.bio = typeof body.bio === "string" ? body.bio.slice(0, BIO_MAX) : null;
         if ("family" in body) {
-          payload.family = body.family && typeof body.family === "object" && !Array.isArray(body.family)
+          const fam = body.family && typeof body.family === "object" && !Array.isArray(body.family)
             ? body.family
             : null;
+          // The row is broadcast over Realtime and rides every candidate card, so a
+          // free-form object on it is a payload the whole pool pays for. The real
+          // maximum is 320 bytes; anything past this is not a family.
+          payload.family = fam && JSON.stringify(fam).length <= JSON_FIELD_MAX ? fam : null;
         }
         // Height in CENTIMETRES — one canonical number on the row whatever the
         // client's own units are (see mobile/src/lib/height.ts). Anything that is

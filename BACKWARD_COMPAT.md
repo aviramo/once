@@ -29,6 +29,18 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 
 ## Open entries
 
+### `/ext` still accepts the bare anon key when `EXT_SECRET` is unset
+
+- **Added:** 2026-08-03
+- **Reason:** Security fix. The `/ext` sweeps (`cron`, `resync`, `watch`, `purge`, `archive`) authorized on `SUPABASE_ANON_KEY`, which is not a secret — it ships in the mobile bundle and was in plain text in the cron migrations. They now authorize on an `x-ext-secret` header matched against `EXT_SECRET`. This is the one entry here that is NOT about an old mobile build: the callers are the four pg_cron jobs, and they are updated by a migration that is applied separately from the function deploy, so the fallback is what makes the two orderings safe.
+- **Old shape (kept alive):** in `supabase/functions/ext/index.ts`, when `EXT_SECRET` is unset the gate falls back to `Authorization: Bearer <SUPABASE_ANON_KEY>` — i.e. exactly the old, public-credential behaviour.
+- **New shape (preferred):** `x-ext-secret: <EXT_SECRET>`, with `Authorization` carrying the anon key only to satisfy the platform's JWT gateway (a random string there is refused upstream, before the function runs). Both values are read out of the Vault at fire time (`ext_secret`, `ext_anon_key`), so neither is in git or in `cron.job`.
+- **Safe to remove after:** immediately — the four jobs were migrated on 2026-08-03 and verified returning 200. There is no mobile floor to wait for.
+- **How to remove:**
+  - `supabase/functions/ext/index.ts` — delete the `legacy` const and collapse the gate to `req.headers.get("x-ext-secret") === secret`, plus a hard refusal when `EXT_SECRET` is unset.
+  - No migration and no backfill.
+- **Verify before removing:** `select status_code, count(*) from net._http_response where created > now() - interval '1 day' group by 1` — all 200. Any 401 means a job is still on the old shape.
+
 ### `app/set_tier` endpoint + `credits.tier` reads on the deployed mobile build
 
 - **Added:** 2026-06-01
