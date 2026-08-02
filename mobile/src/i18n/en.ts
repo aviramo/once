@@ -9,8 +9,6 @@ export default {
   // Auth
   'auth.signInGoogle': 'Sign in with Google',
   'auth.signInApple': 'Sign in with Apple',
-  'auth.reviewCodePlaceholder': 'Review code',
-  'auth.reviewSubmit': 'Enter',
   'auth.orDivider': 'or',
   'auth.emailPlaceholder': 'you@example.com',
   'auth.sendLink': 'Send a sign-in link',
@@ -765,8 +763,23 @@ Next may surprise`,
   'home.joinGate.requestText': 'Access by approval, tap to request to join',
   'home.joinGate.waitingText': 'Request sent, waiting for approval',
   'home.startNow': 'Start now',
-  // Where the clock was, once it has run out — see the note in he.ts.
-  'home.cardEnded': 'Ended',
+  // Where the clock was, once it has run out, and which ending it was — see the
+  // note in he.ts. English carries no gendered variants.
+  'home.locked.page1.invite.word': 'Missed',
+  'home.locked.page1.extend.word': 'Missed',
+  'home.locked.page1.approve.word': 'Missed',
+  'home.locked.page1.decline.word': 'Declined',
+  'home.locked.page1.leave.word': 'Left',
+  'home.locked.page1.block.word': 'Left',
+  'home.locked.page1.remove.word': 'Gone',
+  'home.locked.page1.expire.word': 'Ended',
+  'home.locked.page1.logout.word': 'Signed out',
+  'home.locked.page1.delete.word': 'Deleted',
+  'home.locked.page2.cancel.word': 'Cancelled',
+  'home.locked.page2.approve.word': 'Missed',
+  'home.locked.page2.expire.word': 'Ended',
+  'home.locked.page2.logout.word': 'Signed out',
+  'home.locked.page2.delete.word': 'Deleted',
   'home.endedBack': 'Back to game',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).

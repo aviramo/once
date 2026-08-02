@@ -9,8 +9,6 @@ export default {
   // Auth
   'auth.signInGoogle': 'התחברות עם Google',
   'auth.signInApple': 'התחברות עם Apple',
-  'auth.reviewCodePlaceholder': 'קוד ביקורת',
-  'auth.reviewSubmit': 'כניסה',
   'auth.orDivider': 'או',
   'auth.emailPlaceholder': 'you@example.com',
   'auth.sendLink': 'שליחת קישור התחברות',
@@ -925,7 +923,51 @@ export default {
   // WHERE THE CLOCK WAS, once it has run out (user directive 2026-08-01). A card
   // that is over has no deadline left, and an empty slot beside the name read as
   // a clock that had failed rather than one that had finished.
-  'home.cardEnded': 'הסתיים',
+  //
+  // AND IT SAYS WHICH ENDING IT WAS (user directive 2026-08-02). One word, in the
+  // clock's own place, keyed by the same raw server `message` the title behind the
+  // chevron is keyed by, so the slot and the message can never disagree.
+  // `home.cardEnded` said one word ("הסתיים") for all of them and is deleted.
+  // Gendered by the OTHER person (`tg`), since every verb here is theirs.
+  'home.locked.page1.invite.word': 'הוחמצה',
+  'home.locked.page1.invite.word_m': 'הוחמץ',
+  'home.locked.page1.invite.word_f': 'הוחמצה',
+  'home.locked.page1.extend.word': 'הוחמצה',
+  'home.locked.page1.extend.word_m': 'הוחמץ',
+  'home.locked.page1.extend.word_f': 'הוחמצה',
+  'home.locked.page1.approve.word': 'הוחמצה',
+  'home.locked.page1.approve.word_m': 'הוחמץ',
+  'home.locked.page1.approve.word_f': 'הוחמצה',
+  'home.locked.page1.decline.word': 'דחתה',
+  'home.locked.page1.decline.word_m': 'דחה',
+  'home.locked.page1.decline.word_f': 'דחתה',
+  'home.locked.page1.leave.word': 'יצאה',
+  'home.locked.page1.leave.word_m': 'יצא',
+  'home.locked.page1.leave.word_f': 'יצאה',
+  'home.locked.page1.block.word': 'יצאה',
+  'home.locked.page1.block.word_m': 'יצא',
+  'home.locked.page1.block.word_f': 'יצאה',
+  'home.locked.page1.remove.word': 'נעלמה',
+  'home.locked.page1.remove.word_m': 'נעלם',
+  'home.locked.page1.remove.word_f': 'נעלמה',
+  'home.locked.page1.expire.word': 'הסתיים',
+  'home.locked.page1.logout.word': 'התנתקה',
+  'home.locked.page1.logout.word_m': 'התנתק',
+  'home.locked.page1.logout.word_f': 'התנתקה',
+  'home.locked.page1.delete.word': 'נמחקה',
+  'home.locked.page1.delete.word_m': 'נמחק',
+  'home.locked.page1.delete.word_f': 'נמחקה',
+  'home.locked.page2.cancel.word': 'בוטל',
+  'home.locked.page2.approve.word': 'הוחמצה',
+  'home.locked.page2.approve.word_m': 'הוחמץ',
+  'home.locked.page2.approve.word_f': 'הוחמצה',
+  'home.locked.page2.expire.word': 'הסתיים',
+  'home.locked.page2.logout.word': 'התנתקה',
+  'home.locked.page2.logout.word_m': 'התנתק',
+  'home.locked.page2.logout.word_f': 'התנתקה',
+  'home.locked.page2.delete.word': 'נמחקה',
+  'home.locked.page2.delete.word_m': 'נמחק',
+  'home.locked.page2.delete.word_f': 'נמחקה',
   'home.endedBack': 'חזרה למשחק',
 
   // Locked-state cards: page1 (after a terminal event) and page2 (dead invite).

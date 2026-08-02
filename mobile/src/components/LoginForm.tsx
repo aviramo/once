@@ -117,14 +117,20 @@ const ssoBtnStyles = StyleSheet.create({
   label: { ...BUTTON_LABEL, color: INK },
 })
 
-type Provider = 'google' | 'apple' | 'email' | 'review' | null
+// THERE IS NO STORE-REVIEW DOOR (2026-08-03). Typing a fixed address here used
+// to turn the email field into a code gate that signed the caller into a
+// pre-approved review account, bypassing the magic link and the circle
+// membership the whole app is gated on. It was the app's ONE pre-auth path, it
+// held a static code, and the account behind it was signed into exactly once —
+// the day it was built — by nobody but its author: no store listing ever carried
+// the demo credentials, so no reviewer ever used it. A door that serves nobody is
+// only a way in. Do not rebuild this without a store submission that needs it.
+type Provider = 'google' | 'apple' | 'email' | null
 
 export function LoginForm({
   onGoogle,
   onApple,
   onEmail,
-  onReview,
-  reviewEmail,
   showApple,
 }: {
   onGoogle: () => Promise<void>
@@ -132,22 +138,14 @@ export function LoginForm({
   // Returns true if a link was successfully sent (shows confirmation),
   // false on validation failure or send error (stays in input mode).
   onEmail: (email: string) => Promise<boolean>
-  // Store-review sign-in: a fixed email reveals a code field that signs the
-  // reviewer into the pre-approved review account (no magic link).
-  onReview: (code: string) => Promise<void>
-  reviewEmail: string
   showApple: boolean
 }) {
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [loading, setLoading] = useState<Provider>(null)
-  const [reviewCode, setReviewCode] = useState('')
 
   const canSendEmail = EMAIL_RE.test(email.trim())
-  // A real user would never type this address; when present, the email flow
-  // becomes the code-gated review login instead of sending a magic link.
-  const isReviewEmail = email.trim().toLowerCase() === reviewEmail.toLowerCase()
 
   const handleGoogle = async () => {
     if (loading) return
@@ -161,20 +159,6 @@ export function LoginForm({
     setLoading('apple')
     try { await onApple() }
     catch { setLoading(null) }
-  }
-
-  const handleReview = async () => {
-    if (loading) return
-    const code = reviewCode.trim()
-    if (!code) return
-    setLoading('review')
-    try {
-      await onReview(code)
-      // success → auth state change unmounts this screen
-    } catch {
-      setEmailError(t('auth.linkError'))
-      setLoading(null)
-    }
   }
 
   const handleEmail = async () => {
@@ -264,39 +248,19 @@ export function LoginForm({
           onSubmitEditing={handleEmail}
         />
       </View>
-      {isReviewEmail ? (
-        <View style={[styles.inputWrap, { marginTop: SM }]}>
-          <TextInput
-            style={styles.input}
-            value={reviewCode}
-            onChangeText={txt => { setReviewCode(txt); if (emailError) setEmailError(null) }}
-            placeholder={t('auth.reviewCodePlaceholder')}
-            placeholderTextColor={INK_DIM}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!loading}
-            returnKeyType="go"
-            onSubmitEditing={handleReview}
-          />
-        </View>
-      ) : null}
       {emailError ? (
         <Text style={styles.errorText}>{emailError}</Text>
       ) : null}
 
       <View style={{ marginTop: MD }}>
         <Button
-          label={isReviewEmail ? t('auth.reviewSubmit') : t('auth.sendLink')}
-          onPress={isReviewEmail ? handleReview : handleEmail}
+          label={t('auth.sendLink')}
+          onPress={handleEmail}
           variant="primary"
           size="lg"
-          loading={isReviewEmail ? loading === 'review' : loading === 'email'}
-          disabled={
-            isReviewEmail
-              ? (loading !== null && loading !== 'review') || reviewCode.trim() === ''
-              : (loading !== null && loading !== 'email') || !canSendEmail
-          }
-          silentDisabled={!isReviewEmail && loading !== null && loading !== 'email' && canSendEmail}
+          loading={loading === 'email'}
+          disabled={(loading !== null && loading !== 'email') || !canSendEmail}
+          silentDisabled={loading !== null && loading !== 'email' && canSendEmail}
           iconStart={<MailIcon color={WHITE} />}
         />
       </View>
