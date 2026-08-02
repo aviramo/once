@@ -110,17 +110,33 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const segs = segments as readonly string[]
     if (segs.length === 0) return                 // index.tsx handles root
     const current = segs[0]
+    // BOTH BOOT ROUTES OWN THEIR OWN FIRST NAVIGATION, and this guard keeps its
+    // hands off both: index.tsx above (segments empty) and the magic link's
+    // landing route here. /login-callback was a route like any other to this
+    // effect — it is not /login, so an authenticated user standing on it fell
+    // through to the needsAccount branch below and was replaced to /onboarding
+    // with `profile` still null, because the auth event setSession fires is what
+    // STARTS the profile fetch. A user with a full account was handed step 1,
+    // the gender picker, and nothing ever brought him back (there is
+    // deliberately no reactive "account exists → /home" branch; see below).
+    if (current === 'login-callback') return
     const onAuthScreen = current === 'login'
     const onOnboarding = current === 'onboarding'
+
+    // NOTHING IS DECIDED OFF A PROFILE NOBODY HAS ANSWERED FOR YET. Every branch
+    // below that reads `needsAccount` is asking "does this user have an
+    // account", and a null profile is not an answer to that until the fetch (or
+    // the disk hydrate) has landed — an unanswered one reads exactly like a
+    // brand-new signup. Stated ONCE, so no branch can be written without it.
+    if (user && (profileLoading || !profileFetched)) return
 
     let target: string | null = null
 
     if (!user && !onAuthScreen) {
       target = '/login'
     } else if (user && onAuthScreen) {
-      if (profileLoading || !profileFetched) return  // wait for profile fetch to complete
       target = needsAccount ? '/onboarding' : '/home'
-    } else if (user && !profileLoading && needsAccount && !onOnboarding && !onAuthScreen) {
+    } else if (user && needsAccount && !onOnboarding) {
       target = '/onboarding'
     }
     // NOTE: there is deliberately NO reactive "account exists && on onboarding

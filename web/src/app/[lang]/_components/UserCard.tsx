@@ -6,12 +6,13 @@ import { MoreVertical, Check } from "lucide-react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/locales";
 import { relativeTime } from "@/lib/relativeTime";
+import { profileCompleteNarrative, type Relations } from "@/lib/humanize";
 import {
-  page1Narrative,
-  page2Narrative,
-  profileCompleteNarrative,
-  type Relations,
-} from "@/lib/humanize";
+  watchStatusNarrative,
+  watchInvitedTag,
+  watchersLine,
+  type WatchState,
+} from "@/lib/watchStatus";
 import { userImageUrl } from "@/lib/userImage";
 import {
   parseUserLocation,
@@ -24,8 +25,6 @@ import { Avatar, StatusBadge } from "./ui";
 import { UserActionMenu } from "./UserActionMenu";
 import { PageReleaseBadge } from "./PageReleaseBadge";
 
-export type UserGroupBadge = { name: string };
-
 export type UserRow = {
   user_id: string;
   name: string | null;
@@ -35,12 +34,14 @@ export type UserRow = {
   relations: Relations;
   /** Raw PostGIS geography (EWKB hex / EWKT / GeoJSON); decoded for distance. */
   location?: unknown;
-  /** Test-environment flag. Optional so a realtime payload written before the
-   * column existed still merges; absent reads as false. */
+  /** Test-environment flag. Never painted on the card — the whole list is one
+   * environment, stated once in the header — but kept on the row because the
+   * realtime merge carries it and the action menu acts on it. */
   is_test?: boolean | null;
-  /** Joined separately from `users`; preserved across realtime merges since
-   * the postgres_changes payload for `users` never carries it. */
-  groups?: UserGroupBadge[];
+  /** This person's one status, from `admin_watch_states`. Joined server-side
+   * like `groups`, and preserved across realtime merges for the same reason:
+   * a `users` payload cannot carry it. */
+  watch?: WatchState;
 };
 
 type Group = { id: string; name: string };
@@ -58,18 +59,18 @@ type Props = {
   onToggle: () => void;
   /** Groups catalog — passed through to the per-card action menu. */
   groups: Group[];
-  /** Admin viewers see page-state badges, last-seen/distance, and the per-card
-   * action menu. Group managers see only identity + group chips — no activity,
-   * no location, no page state. Default true (admin). */
+  /** Admin viewers see the status badges, last-seen/distance and the per-card
+   * action menu. Group managers see identity only — no activity, no location,
+   * no status. Default true (admin). */
   isAdmin?: boolean;
 };
 
-const groupTag =
-  "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium";
-
 /**
  * One compact, dense user row-card: identity, the single "what are they doing
- * now" status, group tags, and a meta line. In browse mode the card opens the
+ * now" status, and a meta line. The group chips are gone (user, 2026-08-02) —
+ * a card carried up to four of them, they wrapped to a second and third line,
+ * and which circles someone is in is a fact you go to their page for, not one
+ * you scan a list by. In browse mode the card opens the
  * detail page and the ⋯ button opens a small action menu anchored right next
  * to it; in selection mode the whole card is a checkbox.
  */
@@ -86,18 +87,21 @@ export function UserCard({
   isAdmin = true,
 }: Props) {
   const photo = userImageUrl(row.user_id, row.data?.images?.[0]?.normal);
-  // Both boards shown as two badges, always in order: page 1 then page 2 —
-  // the fixed order is what tells them apart, so no per-badge label. Hidden
-  // entirely for non-admin viewers (managers don't see page state).
-  const n1 = page1Narrative(dict, row.relations);
-  const n2 = page2Narrative(dict, row.relations);
-  // The photo gate lives in others(only_available), not in `relations`, so the
-  // two page badges alone would read "free / available for matches" for a
-  // profile the server can never surface. Shown alongside them, not instead.
+  // ONE status: what this person is doing, read off `watch`. It replaced two
+  // badges (page1's state beside page2's) that the reader had to reconcile and
+  // that could contradict each other on live data.
+  const status = watchStatusNarrative(dict.watch, dict, row.watch);
+  // The one thing that does not collapse into that status: an invitation he
+  // RECEIVED. Somebody else's action, still unanswered, and true alongside
+  // whatever he is doing himself.
+  const invited = watchInvitedTag(dict.watch, row.watch);
+  const watching = watchersLine(dict.watch, row.watch);
+  // The photo gate lives in others(only_available), not in the status, so the
+  // status badge alone would read "free, waiting for a match" for a profile
+  // the server can never surface. Shown alongside it, not instead.
   const incomplete = profileCompleteNarrative(dict, row.data);
   const loc = isAdmin && adminLoc ? parseUserLocation(row.location) : null;
   const distKm = loc && adminLoc ? haversineKm(adminLoc, loc) : null;
-  const assignedGroups = row.groups ?? [];
 
   const [menuOpen, setMenuOpen] = useState(false);
   // Tracks whether either page-release badge has its confirm popover open. We
@@ -106,6 +110,12 @@ export function UserCard({
   // popover — same defence the action menu already has via `menuOpen`.
   const [badgePopoverOpen, setBadgePopoverOpen] = useState(false);
   const [dropUp, setDropUp] = useState(false);
+  const releaseDict = {
+    release: dict.actions.release,
+    busy: dict.actions.busy,
+    done: dict.actions.done,
+    fail: dict.actions.fail,
+  };
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -161,10 +171,25 @@ export function UserCard({
       ) : null}
       <Avatar src={photo} name={row.name} size="md" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-1">
+        {/* The status rides the NAME's row, at the opposite end from the name
+            (user, 2026-08-02): one line answers who this is and what they are
+            doing, and the row below is left for the exceptions. Both sides may
+            shrink — a long status truncates rather than pushing the name off,
+            and vice versa. */}
+        <div className="flex items-center gap-1.5">
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight">
             {row.name ?? "—"}
           </h3>
+          {isAdmin ? (
+            <PageReleaseBadge
+              userId={row.user_id}
+              page={1}
+              tone={status.tone}
+              text={status.text}
+              onOpenChange={setBadgePopoverOpen}
+              dict={releaseDict}
+            />
+          ) : null}
           {!selectionMode && isAdmin ? (
             <button
               ref={btnRef}
@@ -177,7 +202,7 @@ export function UserCard({
                 toggleMenu();
               }}
               className={cn(
-                "pointer-events-auto -me-1 -mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+                "pointer-events-auto -me-1 inline-flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors",
                 menuOpen
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -191,60 +216,36 @@ export function UserCard({
           {email ?? dict.noEmail}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
-          {/* Page badges (page1/page2 state) are admin-only. The page badges
-              are interactive: tap to REVEAL a one-tap "release" button right
-              next to the badge (no popup, no confirm text). Click anywhere
-              outside the badge + button to dismiss. */}
-          {/* Test users match only other test users, so the page badges alone
-              would read the same for two users who can never meet. */}
-          {isAdmin && row.is_test ? (
-            <StatusBadge tone="busy">{dict.segStates.test}</StatusBadge>
-          ) : null}
+          {/* What is left on this row is the EXCEPTIONS: a profile the server
+              can never surface, and an invitation somebody sent this person and
+              they have not answered. Both are interactive the same way the
+              status is — tap to reveal a one-tap release beside the badge. */}
           {isAdmin && incomplete ? (
             <StatusBadge tone={incomplete.tone}>{incomplete.text}</StatusBadge>
           ) : null}
-          {isAdmin ? (
-            <>
-              <PageReleaseBadge
-                userId={row.user_id}
-                page={1}
-                tone={n1.tone}
-                text={n1.text}
-                onOpenChange={setBadgePopoverOpen}
-                dict={{
-                  release: dict.actions.release,
-                  busy: dict.actions.busy,
-                  done: dict.actions.done,
-                  fail: dict.actions.fail,
-                }}
-              />
-              <PageReleaseBadge
-                userId={row.user_id}
-                page={2}
-                tone={n2.tone}
-                text={n2.text}
-                onOpenChange={setBadgePopoverOpen}
-                dict={{
-                  release: dict.actions.release,
-                  busy: dict.actions.busy,
-                  done: dict.actions.done,
-                  fail: dict.actions.fail,
-                }}
-              />
-            </>
+          {isAdmin && invited ? (
+            <PageReleaseBadge
+              userId={row.user_id}
+              page={2}
+              tone={invited.tone}
+              text={invited.text}
+              onOpenChange={setBadgePopoverOpen}
+              dict={releaseDict}
+            />
           ) : null}
-          {assignedGroups.map((r) => (
-            <span
-              key={r.name}
-              className={cn(groupTag, "bg-primary/10 text-primary")}
-            >
-              {r.name}
-            </span>
-          ))}
         </div>
         {isAdmin ? (
           <p className="mt-1.5 text-[11px] text-muted-foreground">
             {relativeTime(row.last_seen, locale)}
+            {/* How many are looking at him is a QUANTITY, not a status: it says
+                nothing about what he is doing, so it rides the meta line with
+                the other measurements rather than taking a badge. */}
+            {watching ? (
+              <span className="text-muted-foreground/70">
+                {" · "}
+                {watching}
+              </span>
+            ) : null}
             {distKm != null ? (
               <span className="text-muted-foreground/70">
                 {" · "}

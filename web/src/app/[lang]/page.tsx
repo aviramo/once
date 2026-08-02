@@ -1,20 +1,23 @@
 import { requireViewerScope } from "@/lib/admin-auth";
+import { readAdminEnv, envIsTest } from "@/lib/adminEnv";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell } from "./_components/AdminShell";
 import { Section, CardGrid, Stat } from "./_components/ui";
 import { RealtimeRefresh } from "./_components/RealtimeRefresh";
+import { RangePicker } from "./_components/RangePicker";
+import { parseRange, rangeSince } from "@/lib/range";
 
 /**
  * The admin home screen: a hub that links to every other admin tab plus a
- * real-time product/business KPI snapshot for managers and the board. Every
- * card is a deep link to the **filtered list** that owns the number — the
- * quick-nav tiles to each tab, and every stat to the exact subset
- * (`/users?p1=…|p2=…|role=…|avail=…|seg=…`, `/groups?status=`). All
- * figures come from one RPC
- * (admin_dashboard_metrics), same service-role + SECURITY DEFINER pattern as
- * admin_user_facet_counts.
+ * real-time product/business KPI snapshot for managers and the board. Nothing
+ * on it is pressable: it is a page you read, and the lists that own each
+ * number are one tab away with filters of their own.
+ *
+ * Two RPCs feed it — `admin_dashboard_metrics` for the snapshot figures and
+ * `admin_activity_metrics` for everything the period picker moves — and both
+ * are bounded by the environment the header switch is on.
  */
 
 type Metrics = {
@@ -36,34 +39,52 @@ type Metrics = {
     active_30d: number;
     with_location: number;
   };
-  engagement: {
-    chat: number;
-    waiting: number;
-    watching: number;
-    pending: number;
-    broadcasting: number;
-  };
-  availability: {
-    available: number;
-    unavailable: number;
-    unknown: number;
-    no_notif: number;
-  };
   credits: {
     balance_total: number;
     held_total: number;
     extra_total: number;
     with_extra: number;
   };
-  groups: { total: number };
-  funnel_7d: {
-    signups: number;
-    invites: number;
-    approves: number;
-    messages: number;
-    logouts: number;
-    deletes: number;
-  };
+};
+
+/** Everything that HAPPENED inside the selected window, from
+ * `admin_activity_metrics`. Kept separate from {@link Metrics} because these
+ * are the only figures the period picker moves — the demographics and the
+ * wallet totals are a snapshot of right now, whatever period is chosen. */
+type Activity = {
+  active: number;
+  accounts: number;
+  profiles: number;
+  friendships: number;
+  memberships: number;
+  invites_sent: number;
+  invites_declined: number;
+  invites_cancelled: number;
+  invites_expired: number;
+  chats: number;
+  avg_messages: number;
+  blocks: number;
+  reports: number;
+  logouts: number;
+  deletes: number;
+};
+
+const EMPTY_ACTIVITY: Activity = {
+  active: 0,
+  accounts: 0,
+  profiles: 0,
+  friendships: 0,
+  memberships: 0,
+  invites_sent: 0,
+  invites_declined: 0,
+  invites_cancelled: 0,
+  invites_expired: 0,
+  chats: 0,
+  avg_messages: 0,
+  blocks: 0,
+  reports: 0,
+  logouts: 0,
+  deletes: 0,
 };
 
 const EMPTY: Metrics = {
@@ -79,23 +100,7 @@ const EMPTY: Metrics = {
     active_30d: 0,
     with_location: 0,
   },
-  engagement: { chat: 0, waiting: 0, watching: 0, pending: 0, broadcasting: 0 },
-  availability: {
-    available: 0,
-    unavailable: 0,
-    unknown: 0,
-    no_notif: 0,
-  },
   credits: { balance_total: 0, held_total: 0, extra_total: 0, with_extra: 0 },
-  groups: { total: 0 },
-  funnel_7d: {
-    signups: 0,
-    invites: 0,
-    approves: 0,
-    messages: 0,
-    logouts: 0,
-    deletes: 0,
-  },
 };
 
 /**
@@ -117,20 +122,22 @@ function normalize(raw: unknown): Metrics {
   return out as Metrics;
 }
 
-// Deep-link builders — every tile resolves to a filtered list of exactly the
-// users/roles the number counts.
-const usersUrl = "/users";
-const u = (qs: string) => `/users?${qs}`;
-const groupsUrl = "/groups";
+// NO TILE IS A LINK (user, 2026-08-02). Every stat used to deep-link into the
+// filtered list that owned it, which made a screen you READ into a screen you
+// could fall out of by brushing a number. The lists are one tab away and carry
+// their own filters; this page is a snapshot to look at.
 
 export default async function AdminDashboard({
   params,
+  searchParams,
 }: PageProps<"/[lang]">) {
   const { lang } = await params;
   const locale = (hasLocale(lang) ? lang : defaultLocale) as Locale;
   const dict = await getDictionary(locale);
   const d = dict.admin;
   const t = d.dashboard;
+  const sp = await searchParams;
+  const range = parseRange(typeof sp.range === "string" ? sp.range : null);
 
   // Admins see global metrics; group managers see the same dashboard scoped
   // to the users in groups they manage. Scoping is enforced at the RPC level:
@@ -139,18 +146,29 @@ export default async function AdminDashboard({
   const scope = await requireViewerScope();
   const user = scope.user;
   const scopedUserIds = scope.kind === "manager" ? scope.userIds : null;
+  // Every figure on this screen belongs to the selected environment — the two
+  // matching pools never meet, so one number covering both describes nobody.
+  const env = await readAdminEnv();
 
   const admin = createSupabaseAdmin();
-  const [{ data: metricsData }, meRes] = await Promise.all([
-    admin.rpc("admin_dashboard_metrics", { p_user_ids: scopedUserIds }),
-    admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
-  ]);
+  const [{ data: metricsData }, { data: activityData }, meRes] =
+    await Promise.all([
+      admin.rpc("admin_dashboard_metrics", {
+        p_user_ids: scopedUserIds,
+        p_is_test: envIsTest(env),
+      }),
+      admin.rpc("admin_activity_metrics", {
+        p_since: rangeSince(range),
+        p_is_test: envIsTest(env),
+        p_user_ids: scopedUserIds,
+      }),
+      admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
+    ]);
   const m = normalize(metricsData);
-  // A manager's "groups" count is the groups THEY manage, not the global
-  // total returned by the RPC (which they should not see).
-  if (scope.kind === "manager") {
-    m.groups = { total: scope.groupIds.length };
-  }
+  const a: Activity = {
+    ...EMPTY_ACTIVITY,
+    ...((activityData ?? {}) as Partial<Activity>),
+  };
 
   const nf = new Intl.NumberFormat(locale);
   const fmt = (n: number) => nf.format(n ?? 0);
@@ -185,15 +203,19 @@ export default async function AdminDashboard({
 
       <Section title={t.sections.demographics}>
         <CardGrid min="8.5rem">
+          {/* The whole first, then how it splits — every tile beside it is a
+              share of this one, so it leads. */}
+          <Stat
+            label={t.metrics.total}
+            value={fmt(m.users.total)}
+          />
           <Stat
             label={t.metrics.men}
             value={fmt(m.demographics.men)}
-            href={u("gender=male")}
           />
           <Stat
             label={t.metrics.women}
             value={fmt(m.demographics.women)}
-            href={u("gender=female")}
           />
           <Stat
             label={t.metrics.avgAge}
@@ -202,84 +224,102 @@ export default async function AdminDashboard({
           <Stat
             label={t.metrics.osIos}
             value={fmt(m.demographics.os_ios)}
-            href={u("os=ios")}
           />
           <Stat
             label={t.metrics.osAndroid}
             value={fmt(m.demographics.os_android)}
-            href={u("os=android")}
           />
         </CardGrid>
       </Section>
 
-      <Section title={t.sections.funnel} hint={t.hints.funnel}>
+      {/* Everything that HAPPENED, over the period the picker is on. The tiles
+          read as one story in order: accounts arrive, some of them build a
+          profile, invitations go out and are answered three ways, the ones
+          that land become chats with a depth, and then what went wrong and who
+          left. The old fixed "7-day funnel" and the "live engagement" block
+          were merged into this: the live counts (in a chat / waiting /
+          watching right now) are the users list's own `?state=` filter, which
+          is where you go to act on them, not a number to stare at. */}
+      <Section
+        title={t.sections.activity}
+        hint={t.range.hint[range]}
+        action={<RangePicker range={range} labels={t.range.options} />}
+      >
         <CardGrid min="8.5rem">
+          {/* Who showed up at all. Every tile beside it is something a subset
+              of these people did, so it leads. */}
           <Stat
-            label={t.metrics.fSignups}
-            value={fmt(m.funnel_7d.signups)}
+            label={t.metrics.aActive}
+            value={fmt(a.active)}
             accent="ok"
-            href={u("seg=new_7d")}
           />
           <Stat
-            label={t.metrics.fInvites}
-            value={fmt(m.funnel_7d.invites)}
-            href={u("p1=waiting")}
+            label={t.metrics.aAccounts}
+            value={fmt(a.accounts)}
+            accent="ok"
+          />
+          <Stat label={t.metrics.aProfiles} value={fmt(a.profiles)} accent="ok" />
+          {/* The social graph, before the game: `friend_links` is already one
+              row per pair, so a friendship counts once by construction. A
+              circle join counts per person, which is the question being asked
+              — how many joinings happened, not how many circles grew. */}
+          <Stat
+            label={t.metrics.aFriendships}
+            value={fmt(a.friendships)}
+            accent="ok"
           />
           <Stat
-            label={t.metrics.fApproves}
-            value={fmt(m.funnel_7d.approves)}
-            accent="chat"
-            href={u("p1=chat")}
+            label={t.metrics.aMemberships}
+            value={fmt(a.memberships)}
+            accent="ok"
           />
           <Stat
-            label={t.metrics.fMessages}
-            value={fmt(m.funnel_7d.messages)}
-            accent="chat"
-            href={u("p1=chat")}
+            label={t.metrics.aInvites}
+            value={fmt(a.invites_sent)}
           />
           <Stat
-            label={t.metrics.fLogouts}
-            value={fmt(m.funnel_7d.logouts)}
-          />
-          <Stat
-            label={t.metrics.fDeletes}
-            value={fmt(m.funnel_7d.deletes)}
+            label={t.metrics.aDeclined}
+            value={fmt(a.invites_declined)}
             accent="ended"
           />
-        </CardGrid>
-      </Section>
-
-      <Section title={t.sections.engagement}>
-        <CardGrid min="8.5rem">
           <Stat
-            label={t.metrics.chat}
-            value={fmt(m.engagement.chat)}
+            label={t.metrics.aCancelled}
+            value={fmt(a.invites_cancelled)}
+            accent="ended"
+          />
+          <Stat
+            label={t.metrics.aExpired}
+            value={fmt(a.invites_expired)}
+            accent="ended"
+          />
+          <Stat
+            label={t.metrics.aChats}
+            value={fmt(a.chats)}
             accent="chat"
-            href={u("p1=chat")}
           />
           <Stat
-            label={t.metrics.waiting}
-            value={fmt(m.engagement.waiting)}
-            accent="busy"
-            href={u("p1=waiting")}
+            label={t.metrics.aAvgMessages}
+            value={nf.format(a.avg_messages)}
+            accent="chat"
+          />
+          <Stat label={t.metrics.aBlocks} value={fmt(a.blocks)} accent="ended" />
+          <Stat
+            label={t.metrics.aReports}
+            value={fmt(a.reports)}
+            accent="ended"
+          />
+          {/* The tail of the section is what went wrong or who left, and it
+              reads as one block: blocks, reports, sign-outs and deletions all
+              carry the same accent. */}
+          <Stat
+            label={t.metrics.aLogouts}
+            value={fmt(a.logouts)}
+            accent="ended"
           />
           <Stat
-            label={t.metrics.watching}
-            value={fmt(m.engagement.watching)}
-            accent="busy"
-            href={u("p1=watching")}
-          />
-          <Stat
-            label={t.metrics.pending}
-            value={fmt(m.engagement.pending)}
-            accent="busy"
-            href={u("p2=pending")}
-          />
-          <Stat
-            label={t.metrics.broadcasting}
-            value={fmt(m.engagement.broadcasting)}
-            accent="busy"
-            href={u("seg=broadcasting")}
+            label={t.metrics.aDeletes}
+            value={fmt(a.deletes)}
+            accent="ended"
           />
         </CardGrid>
       </Section>
@@ -288,34 +328,6 @@ export default async function AdminDashboard({
           now ride as info-tone chips on the AdminNav tabs themselves, which
           beats a dedicated dashboard section since the numbers are then one
           glance away from every admin screen, not only this one. */}
-
-      <Section title={t.sections.availability}>
-        <CardGrid min="8.5rem">
-          <Stat
-            label={t.metrics.available}
-            value={fmt(m.availability.available)}
-            accent="ok"
-            href={u("avail=available")}
-          />
-          <Stat
-            label={t.metrics.unavailable}
-            value={fmt(m.availability.unavailable)}
-            accent="ended"
-            href={u("avail=unavailable")}
-          />
-          <Stat
-            label={t.metrics.unknownAvail}
-            value={fmt(m.availability.unknown)}
-            href={u("avail=unknown")}
-          />
-          <Stat
-            label={t.metrics.noNotif}
-            value={fmt(m.availability.no_notif)}
-            accent="ended"
-            href={u("seg=no_notif")}
-          />
-        </CardGrid>
-      </Section>
 
       {/* "Signups" section was removed at the user's request — the 7-day
           signup count already lives in the Funnel section's first tile
@@ -327,40 +339,32 @@ export default async function AdminDashboard({
           the user's request — the recency segs are still reachable from the
           users-list filter dropdown (?seg=online|active_today|active_7d). */}
 
-      <Section title={t.sections.groups}>
-        <CardGrid min="8.5rem">
-          <Stat
-            label={t.metrics.rolesTotal}
-            value={fmt(m.groups.total)}
-            href={groupsUrl}
-          />
-        </CardGrid>
-      </Section>
+      {/* "Availability" (available / unavailable / no-location / no-notif) and
+          "Groups" (one total) were removed at the user's request. Availability
+          is still a users-list filter (?avail=) and the groups total rides the
+          nav tab's own chip, which is one glance away from every screen — a
+          dashboard section for a single number was the weakest tile here. */}
 
       <Section title={t.sections.credits}>
         <CardGrid min="8.5rem">
           <Stat
             label={t.metrics.balanceTotal}
             value={fmt(m.credits.balance_total)}
-            href={usersUrl}
           />
           <Stat
             label={t.metrics.heldTotal}
             value={fmt(m.credits.held_total)}
             accent="busy"
-            href={u("seg=held")}
           />
           <Stat
             label={t.metrics.extraTotal}
             value={fmt(m.credits.extra_total)}
             accent="ok"
-            href={u("seg=extra")}
           />
           <Stat
             label={t.metrics.withExtra}
             value={fmt(m.credits.with_extra)}
             hint={t.hints.extraShare.replace("{pct}", String(extraShare))}
-            href={u("seg=extra")}
           />
         </CardGrid>
       </Section>

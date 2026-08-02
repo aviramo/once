@@ -629,6 +629,10 @@ strong { color: var(--ink); font-weight: 600; }
 .footer-links a { color: var(--ink-2); }
 .footer-links a:hover { color: var(--brand); }
 .footer-links .sep { color: var(--ink-3); }
+/* A separator whose two links ended up on different lines (see syncFooterSeps):
+   it divides nothing there, and a dot at the start or the end of a line is a
+   mark hanging off the words. */
+.footer-links .sep.is-cut { display: none; }
 .footer-copy { margin-top: 14px; font-size: 0.95rem; color: var(--ink-3); }
 
 /* ---------- Sticky mobile CTA ----------

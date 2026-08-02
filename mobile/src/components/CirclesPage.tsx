@@ -69,7 +69,7 @@ import {
   type FriendItem, type CirclesSummary, type JoinedGroup, type PendingGroup,
   type JoinRequestItem, type CirclesTarget,
 } from '../lib/circles'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, STROKE, ROUND_BUTTON_SIZE_SM, SHEET_GAP, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS } from '../tokens'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, STROKE, ROUND_BUTTON_SIZE_SM, SHEET_GAP, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS, DISABLED_OPACITY } from '../tokens'
 import { PAGE, SURFACE, INK, INK_MUTED, INK_SUBTLE, INK_WASH, WHITE, INK_DIM, NEGATIVE } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { fuzzyRank } from '../lib/fuzzy'
@@ -538,13 +538,17 @@ function PageLayer({
   // with the field up and leaves by leaving the page — while the roster's is a
   // MODE the manager turns on, so it needs a way back, which is the mark at the
   // far end of the bar (see `trailing`).
+  // The mode is per PAGE LAYER, which is what this component is: a group's
+  // roster and my friends each hold their own, so an open field can never be
+  // carried from one page to another.
   const [findQuery, setFindQuery] = useState('')
   const [rosterSearch, setRosterSearch] = useState(false)
   const [rosterQuery, setRosterQuery] = useState('')
+  const openRosterSearch = useCallback(() => { setRosterQuery(''); setRosterSearch(true) }, [])
   const closeRosterSearch = useCallback(() => { setRosterSearch(false); setRosterQuery('') }, [])
   const search = view.k === 'find'
     ? { value: findQuery, onChange: setFindQuery, placeholder: t('circles.findSearch'), label: t('circles.findTitle') }
-    : view.k === 'owned' && rosterSearch
+    : rosterSearch
       ? { value: rosterQuery, onChange: setRosterQuery, placeholder: t('circles.searchPeople'), label: t('circles.searchPeople') }
       : null
   const searchField = search ? (
@@ -629,17 +633,25 @@ function PageLayer({
             <SearchIcon size={ICON.round} />
           </HeaderButton>
         </View>
+      ) : rosterSearch ? (
+        // Searching is a MODE on a roster, so the corner carries the one mark
+        // that ends it while it is on: an X in the place the magnifier stood,
+        // which is the mirror of the tap that opened it. It is stated ONCE, for
+        // whichever roster is searching, so the two pages cannot end a search
+        // differently. (Nothing to do with a sheet's dismiss — no Circles page
+        // has one; this closes a search, and it is the only way out of the
+        // field.)
+        <HeaderButton label={t('circles.searchClose')} onPress={closeRosterSearch}>
+          <CloseIcon size={ICON.round} />
+        </HeaderButton>
+      ) : view.k === 'friends' ? (
+        // My friends is a roster like a group's, so it carries the same
+        // magnifier at the same corner — the only mark this page has, since
+        // there is nothing to manage about the circle you are IN.
+        <HeaderButton label={t('circles.searchPeople')} onPress={openRosterSearch}>
+          <SearchIcon size={ICON.round} />
+        </HeaderButton>
       ) : view.k === 'owned' ? (
-        // Searching is a MODE here, so the corner carries the one mark that ends
-        // it while it is on: an X in the place the magnifier stood, which is the
-        // mirror of the tap that opened it. (Nothing to do with a sheet's
-        // dismiss — no Circles page has one; this closes a search, and it is
-        // the only way out of the field.)
-        rosterSearch ? (
-          <HeaderButton label={t('circles.searchClose')} onPress={closeRosterSearch}>
-            <CloseIcon size={ICON.round} />
-          </HeaderButton>
-        ) : (
           // Settings leads, search follows (user directive 2026-07-31): reading
           // outward from the page's own name, the nearer mark is the one about
           // THIS group and the magnifier stands at the far corner — the same
@@ -649,11 +661,10 @@ function PageLayer({
             <HeaderButton label={t('circles.settings')} onPress={() => push({ k: 'settings', group: view.group })}>
               <GearGlyph size={ICON.round} />
             </HeaderButton>
-            <HeaderButton label={t('circles.searchPeople')} onPress={() => setRosterSearch(true)}>
+            <HeaderButton label={t('circles.searchPeople')} onPress={openRosterSearch}>
               <SearchIcon size={ICON.round} />
             </HeaderButton>
           </View>
-        )
       ) : undefined}
       // The settings page's corner carries NOTHING (user directive 2026-08-02).
       // It held a preview — read the group back as everyone else meets it — and
@@ -672,7 +683,19 @@ function PageLayer({
 
   // Everything that ends a page — a committed swipe, the hardware back, an
   // action that finishes with it — leaves through the same slide.
-  useEffect(() => { if (isTop) registerClose?.(closePage) }, [isTop, registerClose, closePage])
+  //
+  // EXCEPT THAT A SEARCH IS A STATE THE PAGE IS IN, AND BACK LEAVES THAT FIRST
+  // (user directive 2026-08-02). The field standing in the page's own title is
+  // the last thing the user opened, so it is the first thing back closes — the
+  // same undo the X in the corner is — and only a page that is not searching
+  // is closed by it. Registered HERE and not in the stack's BackHandler
+  // because only the page knows what it has open; the swipe is untouched
+  // (dragging the surface is putting the SURFACE away, not the mode in it).
+  const backAction = useCallback(() => {
+    if (rosterSearch) { closeRosterSearch(); return }
+    closePage()
+  }, [rosterSearch, closeRosterSearch, closePage])
+  useEffect(() => { if (isTop) registerClose?.(backAction) }, [isTop, registerClose, backAction])
 
   // ONE way into a person's page from anywhere on this layer: the friends
   // roster's rows and the shared-circles popup on a profile card both land on
@@ -717,6 +740,10 @@ function PageLayer({
         <FriendsView
           profile={profile}
           onOpenFriend={openFriend}
+          // Same contract as the group roster's: null while the field is shut,
+          // so the page can tell "searching for nothing yet" from "not
+          // searching".
+          search={rosterSearch ? rosterQuery : null}
           bottomInset={rosterGap}
           onRosterTop={y => { rosterTop.current = y; syncDragBand() }}
         />
@@ -1125,9 +1152,9 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
 // it was a View wrapped around a <Button> and nothing else. The two ways forward
 // are two ordinary buttons.)
 
-// ONE way out to a group's own page, from either place in the popup that offers
-// it (user directive 2026-07-29): the "more details" option in the foot and the
-// group's HEAD above the description are the same tap. The server is what
+// THE one way out to a group's own page, and there is exactly one place that
+// offers it (user directive 2026-08-02): the "more details" option in the
+// popup's foot. Nothing else in the app opens a circle's link. The server is what
 // guarantees the value is an http(s) URL, so opening it here needs no parsing of
 // its own; a group with no link has no tap anywhere.
 const openGroupLink = (url?: string | null) => {
@@ -1227,23 +1254,23 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   // the popup is FOR, so none of them is painted as an invitation to press; the
   // one action that IS an invitation keeps its purple (see the actions block).
   //
-  // WHERE THE GROUP SAYS MORE ABOUT ITSELF IS ONE OF THEM (user directive
-  // 2026-08-02): it LEADS the strip, keeping the place in the reading it had as
-  // an underlined line of its own under the standing note. It is the same kind of
-  // thing as the option beside it — something I MAY do, on the way past what the
-  // popup is offering — so it is painted the same way, and the popup's foot is
-  // one band of marks instead of a line of text over a row of them. The mark is
-  // the GLOBE, which is the app's own mark for "a page on the web, opened in the
-  // browser" (the settings list's site row is the other one that leaves).
-  const details: StripOption[] = group?.link ? [{
-    key: 'details',
-    label: t('circles.moreDetails'),
-    icon: <GlobeIcon color={INK} size={ICON.xxl} />,
-    onPress: () => openGroupLink(group.link),
-  }] : []
-
-  const quietActions: StripOption[] =
-    status === 'joined' && !iOwnIt ? [{
+  // WHERE THE GROUP SAYS MORE ABOUT ITSELF IS ONE OF THEM, AND IT IS THE ONLY
+  // WAY TO IT (user directive 2026-08-02, evening — reversing that same day's
+  // deletion of it). Leaving the door on the HEAD alone left the popup with no
+  // MARK for it at all: a face and a name that happen to be pressable say
+  // nothing about a link behind them, so a circle that had written down where to
+  // read more looked like a circle that had not. It is an option of the foot
+  // again — a globe over one word — and the head is a plain, dead block of
+  // writing: NOTHING in the app opens a circle's link except this option, and it
+  // is drawn only when the circle HAS one.
+  const quietActions: StripOption[] = [
+    ...(group?.link ? [{
+      key: 'link',
+      label: t('circles.moreDetails'),
+      icon: <GlobeIcon color={INK} size={ICON.xxl} />,
+      onPress: () => openGroupLink(group?.link),
+    } as StripOption] : []),
+    ...(status === 'joined' && !iOwnIt ? [{
       key: 'leave',
       label: t('circles.leave'),
       icon: <SignOutIcon color={INK} size={ICON.xxl} />,
@@ -1268,7 +1295,8 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
       busy, disabled: busy,
       onPress: quit,
     }]
-    : []
+    : [] as StripOption[]),
+  ]
 
   // THE ONE ACTION THAT INVITES A TAP KEEPS ITS PURPLE (user directive
   // 2026-07-31, the exception to the strip above): handing the group's link on is
@@ -1308,31 +1336,19 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
               it opens showing the head and the first lines, and the link, the
               standing note and the action below it are ALWAYS on screen. */}
           <SheetScroll>
-            {/* The HEAD is also the tap to the group's own page (user directive
-                2026-07-29): the face, the fact line and the name are one
-                object, so pressing any of them does what the "more details"
-                line under the block does. THE DESCRIPTION IS NOT PART OF THAT
-                TAP (user directive 2026-07-29) — it is a paragraph the reader
-                scrolls and re-reads, and a tap that lands in it must not throw
-                the app out to a browser. It therefore sits OUTSIDE the
-                Pressable, as the block's second child, with the head's own SM
-                rhythm between them. A group with no link keeps a plain, dead
-                head. */}
+            {/* THE HEAD IS NOT A DOOR (user directive 2026-08-02, evening): the
+                whole introduction — the owner's face, the facts, the name and
+                the paragraph under them — is writing to be read, and NOTHING in
+                it opens the circle's link. The one way there is the foot's
+                "more details" option, which is a mark that says so. The head
+                used to be a Pressable around GroupHead (2026-07-29), which made
+                a link the reader could only find by pressing a name.
+                WHICH GROUP THIS IS, in the app's one block for saying so
+                (GroupHead, CircleBits): a person's page inside a group wears
+                the very same heading (user directive 2026-07-31), which is why
+                it is a component and not three elements written out here. */}
             <View style={s.sheetHead}>
-              <Pressable
-                style={s.sheetHead}
-                disabled={!group?.link}
-                accessibilityRole={group?.link ? 'link' : undefined}
-                onPress={() => openGroupLink(group?.link)}
-              >
-                {/* WHICH GROUP THIS IS, in the app's one block for saying so:
-                    the owner's face, the group's facts under it and the name
-                    under them (GroupHead, CircleBits). A person's page inside
-                    a group wears the very same heading (user directive
-                    2026-07-31), which is why it is a component and not three
-                    elements written out here. */}
-                {group ? <GroupHead group={group} /> : null}
-              </Pressable>
+              {group ? <GroupHead group={group} /> : null}
               {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
             </View>
           </SheetScroll>
@@ -1355,13 +1371,17 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
             the arrangement and the case where only one of the two exists). They
             used to be the last children of the body's SM-gap column, which put a
             group's buttons 8 under its note while every other popup's stood 40
-            clear. `stacked` (user directive 2026-08-02): this is the one popup
-            whose options are more than one — where the group says more about
-            itself, and the one thing my standing lets me do — so the strip takes
-            the whole row and divides it between them, and the purple runs the
-            full width under it. A group I am nothing to and cannot ask to join
-            has neither, and gets no block at all. */}
-        <SheetActionPair options={[...details, ...quietActions]} action={invitation} stacked />
+            clear. THIS POPUP IS ALWAYS `stacked` (user directive 2026-08-02,
+            evening): the options divide the row and the purple runs the full
+            width UNDER them, whether there are two of them or one. So "more
+            details" always stands ABOVE the share line and never beside it, and
+            the invitation is always an ORDINARY button — its mark beside its
+            label, at the label's own size — rather than the mark-over-a-small-
+            word shape a purple takes when it stands IN a row of options. What a
+            circle's foot looks like may not change with how many things I happen
+            to be allowed to do. A group I am nothing to and cannot ask to join
+            has neither side, and gets no block at all. */}
+        <SheetActionPair options={quietActions} action={invitation} stacked />
       {/* Leaving is the only action here that asks twice: it drops a membership
           that getting back may not be mine to decide.
           It stands INSIDE this popup's own window, so the group stays lit under
@@ -1544,9 +1564,13 @@ const rosterRowStyle = (index: number, last: boolean) => [
 // sits under it, fixed, where a list of any length can never push it off the
 // screen. Incoming friend requests ride at the TOP of that same box, the way a
 // group's waiting queue does, rather than on a card of their own.
-function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
+function FriendsView({ profile, onOpenFriend, search, bottomInset, onRosterTop }: {
   profile: StoreProfile
   onOpenFriend: (f: FriendItem) => void
+  /** What is being looked for, or null when the page is not searching at all
+   *  (the field is shut). Same contract, and the same matcher, as a group
+   *  roster's — see OwnedGroupView. */
+  search?: string | null
   /** Air under the contained roster — see ContainedRoster / PageLayer. */
   bottomInset: number
   /** See ContainedRoster's `onTopMeasured`. */
@@ -1585,34 +1609,58 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
   // Nobody here and nobody waiting: the card would say "you have no friends"
   // over an empty page, so the page says what friends are FOR instead and
   // points at the one thing to do about it. Known without the round trip
-  // whenever the summary already says zero — see friendCount.
-  const noFriendsYet = requests.length === 0 && (friends ? friends.length === 0 : friendCount === 0)
+  // whenever the summary already says zero — see friendCount. It is asked of
+  // the WHOLE circle and never of what a query left: a search that matches
+  // nobody says so on the list (`noResults`), and answering it with the page
+  // that explains what friends are for would be the app telling someone who
+  // has friends that he has none.
+  const noFriendsYet = search == null
+    && requests.length === 0 && (friends ? friends.length === 0 : friendCount === 0)
+
+  // The same question asked of both lists, through the app's one matcher — see
+  // OwnedGroupView. With nothing typed each list is itself, in the roster's own
+  // order, and the matcher is never called.
+  const query = search ?? ''
+  const shownFriends = useMemo(
+    () => friends && fuzzyRank(friends, query, f => f.name ?? ''),
+    [friends, query],
+  )
+  const shownRequests = useMemo(
+    () => fuzzyRank(requests, query, r => r.name ?? ''),
+    [requests, query],
+  )
 
   return (
     <View style={s.ownedFill}>
       {noFriendsYet ? <FriendsStart /> : (
       <ContainedRoster
-        data={friends}
-        bottomInset={0}
+        data={shownFriends}
+        // The air under the list is the INVITE block's while there is one; with
+        // that block stood down for a search the list takes the gap itself, so
+        // the card never runs flush into the keyboard. Same as OwnedGroupView.
+        bottomInset={search == null ? 0 : bottomInset}
         onTopMeasured={onRosterTop}
         syncing={syncing}
         keyOf={f => f.user_id}
         // Knowing the count up front means a friendless account skips the
-        // placeholder entirely and goes straight to the empty line.
+        // placeholder entirely and goes straight to the empty line. A search
+        // that matches nobody is the one time this card is empty on purpose.
         empty={(
-          <View style={[s.rosterRow, requests.length === 0 && s.rosterRowFirst, s.rosterRowLast]}>
-            {friends == null && friendCount !== 0
-              ? <SkeletonRows rows={friendCount ?? undefined} first={requests.length === 0} />
-              : <Empty text={t('circles.noFriends')} why={t('circles.friendsWhy')} />}
+          <View style={[s.rosterRow, shownRequests.length === 0 && s.rosterRowFirst, s.rosterRowLast]}>
+            {query
+              ? <Empty text={t('circles.noResults')} />
+              : friends == null && friendCount !== 0
+                ? <SkeletonRows rows={friendCount ?? undefined} first={requests.length === 0} />
+                : <Empty text={t('circles.noFriends')} why={t('circles.friendsWhy')} />}
           </View>
         )}
         // Incoming friend requests, at the top of the same card the friends are
         // in — the group page's waiting queue in its friends form. These are the
         // one strips that answer IN PLACE instead of opening something: their
         // two pills ride the trailing lane.
-        header={requests.length ? (
+        header={shownRequests.length ? (
           <>
-            {requests.map((r, i) => (
+            {shownRequests.map((r, i) => (
               <Strip
                 key={r.id}
                 first={i === 0}
@@ -1636,7 +1684,7 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
         row={(f, index, last) => {
           // The request rows, when there are any, own the card's rounded top and
           // the first hairline-free edge, so the people below them stay flat.
-          const first = index === 0 && requests.length === 0
+          const first = index === 0 && shownRequests.length === 0
           return (
             // No button on the row (user directive 2026-07-27): tapping opens
             // the friend's profile, and removing them is decided there.
@@ -1659,11 +1707,18 @@ function FriendsView({ profile, onOpenFriend, bottomInset, onRosterTop }: {
           screen. What each friend is worth sits directly ABOVE the button, as
           the reason to press it. Opening the link with the app installed
           auto-links the pair as mutual friends (no request, no approval).
-          People-search + friend requests were removed 2026-07-26. */}
-      <View style={[s.friendsInvite, { marginBottom: bottomInset }]}>
-        <Text style={s.note}>{t('circles.inviteReward')}</Text>
-        <Button label={t('circles.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
-      </View>
+          People-search + friend requests were removed 2026-07-26.
+
+          NOT WHILE THE PAGE IS SEARCHING (the group roster's own rule,
+          2026-07-31): looking for one person in this circle is not the same job
+          as adding another to it, so the page gives the list that band and the
+          keyboard does not have to be squeezed past it. */}
+      {search == null ? (
+        <View style={[s.friendsInvite, { marginBottom: bottomInset }]}>
+          <Text style={s.note}>{t('circles.inviteReward')}</Text>
+          <Button label={t('circles.inviteFriend')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={() => { tap(); if (profile) shareFriendInvite(profile) }} />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -2114,6 +2169,9 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
               style={rosterRowStyle(0, false)}
               icon={<AvatarDisc text={String(requestCount)} />}
               title={t('circles.requestsSectionJoin')}
+              // The one row on this page that names a SECTION rather than a
+              // person, so it is the one that carries the app's emphasis.
+              titleStrong
               trailing={<ApproveAllControl group={group} open={drawerOpen} />}
               onPress={() => setQueueOpen(o => !o)}
             />
@@ -3075,7 +3133,16 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           invite). Sits under the description because it is the rest of that
           sentence, and above the kind, which is policy rather than blurb. */}
       <Text style={s.section}>{t('circles.link')}</Text>
-      <View style={s.descCard}>
+      {/* What was pasted is not what gets saved — the server completes a bare
+          host and stores its own version — so the one way to know where the
+          line under the description will actually take a reader is to press it.
+          It is a bare MARK beside the field, not a line under it: opening the
+          link is a thing to do WITH the field, so it stands in the field's own
+          row rather than costing a row of its own. It opens the SAVED link
+          (`group.link`), through the very helper the group popup's head uses,
+          and it is there only once there is one. */}
+      <View style={s.linkRow}>
+      <View style={[s.descCard, s.linkCard]}>
         <EditableText
           value={group.link ?? ''}
           saving={savingLink}
@@ -3093,6 +3160,20 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
         />
+      </View>
+        {/* A field with nothing in it has nothing to open, and the mark says so
+            by fading rather than by going away: it is a door that will be there
+            the moment a link is pasted, so it stays on the row in the app's one
+            shut-door fade (DISABLED_OPACITY). */}
+        <Pressable
+          style={[s.linkTest, !group.link && s.linkTestOff]}
+          disabled={!group.link}
+          accessibilityRole="link"
+          accessibilityLabel={t('circles.linkTest')}
+          onPress={() => { tap(); openGroupLink(group.link) }}
+        >
+          <GlobeIcon size={ICON.xxl} />
+        </Pressable>
       </View>
 
       <Text style={s.section}>{t('circles.kindLabel')}</Text>
@@ -3542,6 +3623,12 @@ const s = StyleSheet.create({
   // The link field: one line, and start-aligned like every other field (the
   // base TextInput does that) — a latin URL still renders LTR inside it.
   linkInput: { fontSize: TEXT.md, color: INK, padding: 0, includeFontPadding: false },
+  // The link field and the mark that opens it are one row: the field takes the
+  // width and the glyph stands at its END, centred on the card's own height.
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: MD },
+  linkCard: { flex: 1 },
+  linkTest: { paddingVertical: SM },
+  linkTestOff: { opacity: DISABLED_OPACITY },
   descFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: MD },
   descHint: { fontSize: TEXT.md, color: INK_MUTED },
   // Why a field was refused, under the field it belongs to. Full-strength ink

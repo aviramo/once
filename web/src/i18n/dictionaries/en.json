@@ -47,10 +47,9 @@
     "nav": {
       "dashboard": "Overview",
       "users": "Users",
-      "groups": "Groups",
+      "groups": "Circles",
       "map": "Map",
       "reports": "Reporters",
-      "bugs": "Bugs",
       "site": "Site"
     },
     "reports": {
@@ -88,24 +87,6 @@
         "unknown": "No active link"
       }
     },
-    "bugs": {
-      "title": "Bugs",
-      "subtitle": "Bugs reported by users from inside the app",
-      "none": "No bugs",
-      "when": "When",
-      "unhandled": "Open",
-      "handledTab": "Handled",
-      "markHandled": "Mark handled",
-      "handled": "Handled",
-      "unknownUser": "Unknown user",
-      "searchPlaceholder": "Search by name or email",
-      "sortLabel": "Sort",
-      "sortNewest": "Newest first",
-      "sortOldest": "Oldest first",
-      "attachment": "Attachment",
-      "openAttachment": "Open image",
-      "noText": "(no text)"
-    },
     "dashboard": {
       "title": "Admin overview",
       "subtitle": "A real-time view of product and business health. Every card is clickable and opens the relevant screen",
@@ -114,57 +95,61 @@
       "nav": {
         "usersTitle": "Users",
         "usersDesc": "Search, filter and inspect every user",
-        "rolesTitle": "Groups",
-        "rolesDesc": "Manage groups and availability gating",
+        "rolesTitle": "Circles",
+        "rolesDesc": "Manage circles and availability gating",
         "mapTitle": "Map",
         "mapDesc": "Active users on the map, in real time"
       },
       "sections": {
         "demographics": "Demographics",
-        "signups": "Signups",
-        "engagement": "Live engagement",
-        "availability": "Availability",
         "credits": "Credits economy",
-        "groups": "Groups",
-        "funnel": "7-day funnel"
+        "activity": "Activity"
       },
       "metrics": {
         "total": "Total users",
-        "newToday": "Signed up today",
-        "new7d": "Signed up in 7 days",
-        "new30d": "Signed up in 30 days",
-        "withLocation": "With location",
         "men": "Men",
         "women": "Women",
         "avgAge": "Average age",
         "osIos": "iPhone",
         "osAndroid": "Android",
-        "chat": "In active chat",
-        "waiting": "Waiting for reply",
-        "watching": "Viewing a profile",
-        "pending": "Pending invite",
-        "broadcasting": "Broadcasting",
-        "available": "Available",
-        "unavailable": "Gated (group)",
-        "unknownAvail": "No location yet",
-        "noNotif": "Without notifications",
         "balanceTotal": "Total credit balance",
         "heldTotal": "Held credits",
         "extraTotal": "Total purchased credits",
         "withExtra": "Users with purchased credits",
-        "rolesTotal": "Groups",
-        "fSignups": "Signups",
-        "fInvites": "Invites sent",
-        "fApproves": "Invites approved",
-        "fMessages": "Chat messages",
-        "fLogouts": "Logged out",
-        "fDeletes": "Deleted account"
+        "aActive": "Active users",
+        "aAccounts": "Accounts created",
+        "aProfiles": "Profiles created",
+        "aFriendships": "Friendships",
+        "aMemberships": "Circle joins",
+        "aInvites": "Invitations sent",
+        "aDeclined": "Invitations declined",
+        "aCancelled": "Invitations cancelled",
+        "aExpired": "Invitations expired",
+        "aChats": "Chats",
+        "aAvgMessages": "Avg messages per chat",
+        "aBlocks": "Blocks",
+        "aReports": "Reports",
+        "aLogouts": "Sign-outs",
+        "aDeletes": "Accounts deleted"
       },
       "hints": {
-        "funnel": "Total over the last 7 days",
         "extraShare": "{pct}% of users hold purchased credits"
       },
-      "viewAll": "All users →"
+      "viewAll": "All users →",
+      "range": {
+        "options": {
+          "1d": "24h",
+          "7d": "Week",
+          "30d": "Month",
+          "all": "All"
+        },
+        "hint": {
+          "1d": "Totals for the last 24 hours",
+          "7d": "Totals for the last 7 days",
+          "30d": "Totals for the last 30 days",
+          "all": "Totals since the beginning · invitations and chats are counted from the log, which is pruned, so anything older than its retention is missing"
+        }
+      }
     },
     "map": {
       "title": "Users map",
@@ -186,24 +171,20 @@
     "noResults": "No users found",
     "resultsCount": "Showing {count} users",
     "resetAll": "Reset users",
-    "resetAllConfirm": "Irreversible: for users in the selected groups all chats, logs and restrictions will be deleted and they will be reset (availability recomputed). Continue?",
+    "resetAllConfirm": "Irreversible: for users in the selected circles all chats, logs and restrictions will be deleted and they will be reset (availability recomputed). Continue?",
     "resetAllBusy": "Resetting…",
     "resetAllDone": "Users reset",
     "resetAllFail": "Reset failed. Try again",
-    "resetAllTitle": "Reset users by group",
-    "resetAllHint": "Only users assigned to the groups you tick will be reset",
+    "resetAllTitle": "Reset users by circle",
+    "resetAllHint": "Only users assigned to the circles you tick will be reset",
     "resetSelectAll": "Select all",
     "resetDeselectAll": "Deselect all",
-    "resetNoRoles": "No groups defined",
-    "resetNoneSelected": "Select at least one group",
+    "resetNoRoles": "No circles defined",
+    "resetNoneSelected": "Select at least one circle",
     "resetApply": "Reset",
     "resetCancel": "Cancel",
     "advancedFilters": "Advanced filters",
     "clearFilters": "Clear",
-    "filterP1": "Main page",
-    "filterP2": "Side page",
-    "filterGroup": "Group",
-    "filterGroupNone": "No group",
     "filterAvail": "Availability",
     "filterGender": "Gender",
     "filterOs": "OS",
@@ -228,10 +209,10 @@
       "resetDesc": "Wipe state and history back to a clean slate",
       "delete": "Delete",
       "deleteDesc": "Permanently delete the account, irreversible",
-      "assignGroup": "Assign to group",
-      "assignGroupDesc": "Add the users to a group",
-      "removeGroup": "Remove from group",
-      "removeGroupDesc": "Remove the users from a group",
+      "assignGroup": "Assign to circle",
+      "assignGroupDesc": "Add the users to a circle",
+      "removeGroup": "Remove from circle",
+      "removeGroupDesc": "Remove the users from a circle",
       "releasePage1": "Release page 1",
       "releasePage1Desc": "Reset page 1 only to its default state",
       "releasePage2": "Release page 2",
@@ -250,9 +231,9 @@
       "confirmDelete": "Permanently delete {target}? This cannot be undone",
       "confirmRelease1": "Release page 1 of {target}?",
       "confirmRelease2": "Release page 2 of {target}?",
-      "pickGroup": "Choose a group",
-      "pickGroupRemove": "Choose a group to remove from",
-      "noGroups": "No groups",
+      "pickGroup": "Choose a circle",
+      "pickGroupRemove": "Choose a circle to remove from",
+      "noGroups": "No circles",
       "cancel": "Cancel",
       "confirm": "Confirm",
       "back": "Back",
@@ -273,19 +254,6 @@
     "result": {
       "ok": "Done",
       "fail": "Failed"
-    },
-    "page1States": {
-      "free": "Free",
-      "watching": "Watching",
-      "waiting": "Waiting",
-      "chat": "In chat",
-      "locked": "Locked"
-    },
-    "page2States": {
-      "free": "Free",
-      "pending": "Pending invite",
-      "chat": "In chat",
-      "locked": "Locked"
     },
     "availStates": {
       "available": "Available",
@@ -312,33 +280,12 @@
       "broadcasting": "Broadcasting",
       "held": "Held credits",
       "extra": "Holding purchased credits",
-      "no_notif": "Without notifications",
-      "test": "Test users",
-      "not_test": "Normal users"
+      "no_notif": "Without notifications"
     },
     "narrative": {
-      "page1": {
-        "free": "Free, waiting for a match",
-        "watching": "Viewing {name}'s profile",
-        "watchingNoName": "Viewing a profile",
-        "waiting": "Invited {name} and is waiting for a reply",
-        "waitingNoName": "Sent an invite and is waiting for a reply",
-        "chat": "In a conversation with {name}",
-        "chatNoName": "In an active conversation",
-        "locked": "Not active right now"
-      },
-      "page2": {
-        "free": "Available for matches",
-        "watchers": "{count} people are viewing them now",
-        "pending": "{name} invited them to chat, no reply yet",
-        "pendingNoName": "Got a chat invite, no reply yet",
-        "chat": "In a conversation with {name}",
-        "chatNoName": "In an active conversation",
-        "locked": "Hidden from matches"
-      },
       "gate": {
         "push": "Disabled: notifications off",
-        "group": "Disabled: all their groups are disabled",
+        "group": "Disabled: all their circles are disabled",
         "noPhoto": "Not matchable: no photos",
         "unavailable": "Disabled: unavailable"
       }
@@ -394,7 +341,20 @@
       "notif": "Updated notification permission",
       "set_tier": "Switched plan",
       "buy_extra": "Bought credits",
-      "unknown": "Action"
+      "unknown": "Action",
+      "my_groups": "Loaded their circles",
+      "my_friends": "Loaded their friends",
+      "owned_groups": "Loaded circles they own",
+      "group_requests": "Loaded join requests",
+      "group_members": "Loaded circle members",
+      "search_groups": "Searched circles",
+      "shared_groups": "Checked shared circles",
+      "shared_friends": "Checked mutual friends",
+      "redeem_invite": "Joined a circle by code",
+      "update_group": "Updated a circle",
+      "remove_member": "Removed a member from a circle",
+      "set_manager": "Appointed a circle manager",
+      "respond_join": "Answered a join request"
     },
     "restrictionsMap": {
       "ignore": "Skipped them",
@@ -441,31 +401,22 @@
       "notifUndetermined": "Notifications undetermined"
     },
     "groups": {
-      "title": "Groups",
-      "subtitle": "Disabling a group blocks its members (unless they also belong to another enabled group). Users with no group memberships stay available",
-      "add": "Add group",
-      "namePlaceholder": "Group name",
+      "title": "Circles",
+      "subtitle": "Disabling a circle blocks its members (unless they also belong to another enabled circle). Users with no circle memberships stay available",
+      "add": "Add circle",
+      "namePlaceholder": "Circle name",
       "save": "Save",
       "cancel": "Cancel",
       "rename": "Rename",
       "delete": "Delete",
       "members": "users",
-      "none": "No groups defined",
-      "duplicate": "A group with this name already exists",
-      "searchPlaceholder": "Search groups",
-      "noSearchResults": "No groups found",
-      "selectAll": "Select all",
-      "deselectAll": "Clear",
-      "selectedCount": "{count} selected",
-      "bulkResetButton": "Reset members",
-      "bulkResetConfirm": "Reset every user in the selected groups? Chats, logs and state will be wiped. Irreversible",
-      "bulkResetBusy": "Resetting…",
-      "bulkResetDone": "{count} users reset",
-      "bulkFail": "Action failed",
+      "none": "No circles defined",
+      "duplicate": "A circle with this name already exists",
+      "noSearchResults": "No circles found",
       "detail": {
         "open": "Manage members",
-        "members": "Group members",
-        "noMembers": "No users in this group",
+        "members": "Circle members",
+        "noMembers": "No users in this circle",
         "remove": "Remove",
         "addTitle": "Add users",
         "searchPlaceholder": "Search a user by name",
@@ -474,23 +425,23 @@
         "add": "Add",
         "bulkSelectedCount": "{count} selected",
         "bulkClear": "Clear",
-        "bulkMoveLabel": "Move to group",
-        "bulkMoveChoose": "Pick a target group…",
+        "bulkMoveLabel": "Move to circle",
+        "bulkMoveChoose": "Pick a target circle…",
         "bulkMoveButton": "Move",
         "bulkMoveBusy": "Moving…",
         "bulkMoveDone": "Moved {count} users to {name}",
         "bulkMoveFail": "Move failed",
-        "managerBadge": "Group manager",
+        "managerBadge": "Circle manager",
         "promote": "Make manager",
         "demote": "Revoke manager",
         "dangerSection": "Danger zone",
-        "deleteTitle": "Delete this group",
-        "deleteDesc": "Permanently delete. All members will be detached from the group (their accounts stay). Irreversible",
-        "deleteConfirmTitle": "Delete this group?",
-        "deleteConfirmBody": "The group \"{name}\" will be permanently deleted. {count} members will be detached from it (their accounts stay). This cannot be undone",
+        "deleteTitle": "Delete this circle",
+        "deleteDesc": "Permanently delete. All members will be detached from the circle (their accounts stay). Irreversible",
+        "deleteConfirmTitle": "Delete this circle?",
+        "deleteConfirmBody": "The circle \"{name}\" will be permanently deleted. {count} members will be detached from it (their accounts stay). This cannot be undone",
         "deleteBusy": "Deleting…",
         "inviteCodeTitle": "Invite code",
-        "inviteCodeHint": "Share this code with people you want to add to the group. They enter it during onboarding or from the Groups screen in settings, and join automatically",
+        "inviteCodeHint": "Share this code with people you want to add to the circle. They enter it during onboarding or from the Circles screen in settings, and join automatically",
         "inviteCopy": "Copy",
         "inviteCopied": "Copied",
         "inviteRegenerate": "Regenerate code",
@@ -499,7 +450,14 @@
         "inviteConfirmBody": "The current code will stop working immediately. Anyone who hasn't joined yet will need the new code",
         "inviteConfirmConfirm": "Regenerate",
         "fail": "Action failed"
-      }
+      },
+      "cols": {
+        "owner": "Owner",
+        "approvers": "Approvers",
+        "members": "Members",
+        "empty": "—"
+      },
+      "searchPlaceholder": "Search by name, code, owner, approvers or member count"
     },
     "userDetail": {
       "profile": "Profile",
@@ -513,11 +471,11 @@
       "notif": "Notifications",
       "notifActive": "Active",
       "notifInactive": "Inactive",
-      "groups": "Groups",
-      "groupsHint": "Membership in a disabled group blocks the user (unless they also belong to another enabled group)",
-      "noGroups": "No groups defined in the system",
-      "groupsEmpty": "No groups",
-      "groupsManage": "Manage groups",
+      "groups": "Circles",
+      "groupsHint": "Membership in a disabled circle blocks the user (unless they also belong to another enabled circle)",
+      "noGroups": "No circles defined in the system",
+      "groupsEmpty": "No circles",
+      "groupsManage": "Manage circles",
       "summary": "Current status",
       "currentState": "Current state",
       "interactions": "People they interacted with",
@@ -536,7 +494,7 @@
       "noActivity": "No recorded activity",
       "eventsLog": {
         "title": "Events log",
-        "hint": "Every action the user took or that affected them, newest first. Search by the name or email of a user they interacted with",
+        "hint": "Every event they were part of and every watch they have been in, newest first",
         "feed": {
           "searchPlaceholder": "Search by name or email…",
           "clearSearch": "Clear search",
@@ -545,12 +503,14 @@
           "showMore": "Show more",
           "showLess": "Show less",
           "unknownPartner": "Unknown user",
-          "byActorPrefix": "Initiated by:",
           "page1Tag": "Page 1",
           "page2Tag": "Page 2",
           "locationCleared": "Location cleared",
-          "openInMaps": "Open in Google Maps",
-          "groupedTitle": "{n} events in a row"
+          "groupedTitle": "{n} events in a row",
+          "watchedOut": "Watched",
+          "watchedIn": "Watched by",
+          "onBoard": "On their board",
+          "dismissed": "Dismissed"
         }
       },
       "email": "Email",
@@ -564,8 +524,6 @@
       "female": "Female",
       "location": "Location",
       "watchers": "Currently watching",
-      "page1Profile": "Watching",
-      "page2Profile": "Invited by",
       "messagesLabel": "messages",
       "restrictionsLabel": "restrictions",
       "callsLabel": "server actions",
@@ -598,7 +556,7 @@
       "danger": {
         "section": "Danger zone",
         "resetTitle": "Reset user",
-        "resetDesc": "Wipe this user's chat, history and game state to a clean slate. Their account, profile and groups are kept",
+        "resetDesc": "Wipe this user's chat, history and game state to a clean slate. Their account, profile and circles are kept",
         "resetButton": "Reset user",
         "resetConfirmTitle": "Reset this user?",
         "resetConfirmBody": "{name}'s chat messages, activity log, restrictions and game state will be permanently wiped and reset to a clean slate. Their account and profile stay intact. This cannot be undone",
@@ -608,11 +566,56 @@
         "deleteDesc": "Permanently delete this account and all of its data. This cannot be undone",
         "deleteButton": "Delete user",
         "deleteConfirmTitle": "Delete this user?",
-        "deleteConfirmBody": "{name}'s account will be permanently deleted, along with their profile, chats and group memberships. Anyone currently interacting with them will be released. This cannot be undone",
+        "deleteConfirmBody": "{name}'s account will be permanently deleted, along with their profile, chats and circle memberships. Anyone currently interacting with them will be released. This cannot be undone",
         "deleteBusy": "Deleting…",
         "fail": "Something went wrong. Please try again",
         "cancel": "Cancel"
       }
+    },
+    "env": {
+      "prod": "Production",
+      "test": "Test"
+    },
+    "filterStatus": "Status",
+    "statusStates": {
+      "watching": "Watching",
+      "invited": "Invited, waiting",
+      "chat": "In a chat",
+      "ended": "Ended",
+      "invited_in": "Got an invitation",
+      "free": "Free",
+      "not_seeking": "Not looking"
+    },
+    "watch": {
+      "status": {
+        "free": "Free, waiting for a match",
+        "notSeeking": "Not looking right now",
+        "watching": "Watching {name}",
+        "watchingNoName": "Watching a profile",
+        "invited": "Invited {name}, waiting for an answer",
+        "invitedNoName": "Sent an invitation, waiting for an answer",
+        "chat": "In a chat with {name}",
+        "chatNoName": "In an active chat",
+        "ended": "The connection ended"
+      },
+      "invitedBy": "Invited by {name}",
+      "invitedByNoName": "Received an invitation",
+      "watchersOne": "One person is watching",
+      "watchersMany": "{count} people are watching"
+    },
+    "eventsByOther": {
+      "invite": "Received an invitation",
+      "approve": "Approved their invitation",
+      "decline": "Declined their invitation",
+      "cancel": "Cancelled the invitation to them",
+      "extend": "Extended the invitation to them",
+      "leave": "Ended the chat with them",
+      "remove": "Removed them as a viewer",
+      "block": "Blocked them",
+      "report": "Reported them",
+      "chat": "Messaged them",
+      "find": "Started watching them",
+      "ignore": "Stopped watching them"
     }
   }
 }

@@ -1,4 +1,9 @@
-import { eventLabel, statusResult, type AdminDict } from "@/lib/humanize";
+import {
+  eventLabel,
+  eventLabelByOther,
+  statusResult,
+  type AdminDict,
+} from "@/lib/humanize";
 import type {
   AffectedUser,
   DataChange,
@@ -40,6 +45,94 @@ function isSystemKey(key: string): boolean {
   if (SYSTEM_KEYS.has(key)) return true;
   if (key.startsWith("ext/")) return true;
   return false;
+}
+
+/**
+ * SOMEBODY ELSE'S ACTION BELONGS ON THIS PAGE ONLY IF IT WAS DIRECTED AT THIS
+ * PERSON (user directive 2026-08-02).
+ *
+ * `admin_log_for_user` returns rows where this user's id appears ANYWHERE in
+ * the payload — and the payload carries the actor's whole post-event snapshot,
+ * so as long as A is sitting on B's board, every `start` / `location` /
+ * `focus` heartbeat A makes lands on B's page. Live, one user's feed was
+ * ninety rows and not one of them was something anybody had done TO her: true
+ * rows, correctly matched, all of them somebody else's own business.
+ *
+ * The test is not "does this row mention them" but "was this action aimed at
+ * them", and only these keys are. A heartbeat, a settings edit, a profile
+ * change, a skip of somebody ELSE — all of those belong on the actor's own
+ * page, which is one click away through the "initiated by" chip.
+ */
+/**
+ * THE LOG HAS TWO KINDS OF ROW, AND ONLY ONE OF THEM IS ABOUT A PERSON (user
+ * directive 2026-08-02).
+ *
+ * (1) an action that involves the other user — an invitation, a decline, an
+ *     approval — or one the other user performed. Those name somebody, and the
+ *     row carries their FACE in its strip.
+ * (2) everything else: a heartbeat, a location, a settings or profile edit.
+ *     Those get no portrait, even when the snapshot diff happens to hang a
+ *     counterpart chip on them (a `location` row can name whoever moved on the
+ *     actor's board at that instant, which is not what the row is about).
+ *
+ * This set is what separates them, and it does double duty: it is also the
+ * test for whether SOMEBODY ELSE's row belongs on this page at all. Both
+ * questions are "is this action aimed at a person", asked once.
+ */
+const PERSON_DIRECTED = new Set<string>([
+  // Watching is kind (1) too (user directive 2026-08-02): being handed
+  // somebody's card, and dropping it, are the two ends of a relation between
+  // two people even though neither names a person in the request — the server
+  // picks the counterpart, and the pair is what changed.
+  "find", // was given somebody to watch
+  "ignore", // skipped them, which ends the watch
+  "invite", // sent them an invitation
+  "approve", // accepted theirs
+  "decline", // refused theirs
+  "cancel", // took back the invitation to them
+  "extend", // gave their invitation more time
+  "leave", // ended the chat with them
+  "remove", // dropped them as a viewer
+  "block", // blocked them
+  "report", // reported them
+  "chat", // messaged them
+]);
+
+/**
+ * WHO AN ACTION WAS AIMED AT, read off the RPC's own result.
+ *
+ * The request body does not carry it — the server picks the counterpart from
+ * the actor's board — but the result does, in two places that agree: the board
+ * the action landed on (`data.page1.with`) and everyone it pushed
+ * (`data.notify[].user_id`). Both are taken, because `approve` notifies the
+ * new partner AND whoever was cancelled by the match, and either of them is a
+ * person this action happened to.
+ *
+ * This is what the action's NAME cannot tell you, and the difference is not
+ * academic: live, one user's page carried four of another user's approvals and
+ * only ONE of them was hers — the other three were him approving other people,
+ * on her page because she sat in his snapshot. Same for his invitations: three
+ * in the window, none to her, so "received an invitation" was nowhere to be
+ * seen while three rows said he had invited someone.
+ */
+function targetsOf(rawLog: unknown): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(rawLog)) return out;
+  for (const step of rawLog) {
+    const task = (step as { task?: unknown })?.task;
+    if (typeof task !== "string" || !task.startsWith("rpc:")) continue;
+    const data = (step as { data?: unknown })?.data as
+      | { page1?: { with?: unknown }; notify?: unknown[] }
+      | undefined;
+    if (!data || typeof data !== "object") continue;
+    const on = data.page1?.with;
+    if (typeof on === "string") out.add(on.toLowerCase());
+    for (const n of Array.isArray(data.notify) ? data.notify : []) {
+      const to = (n as { user_id?: unknown })?.user_id;
+      if (typeof to === "string") out.add(to.toLowerCase());
+    }
+  }
+  return out;
 }
 
 type ProfileEntry = { user_id?: string; name?: string };
@@ -354,6 +447,8 @@ export function buildEventCards(
     const actorId = row.user_id ? row.user_id.toLowerCase() : null;
     const byOther = !!actorId && actorId !== selfLower;
     const body = readBody(row.log);
+    // For somebody else's row: did this action actually name THIS person?
+    const aimedHere = byOther && targetsOf(row.log).has(selfLower);
 
     let affected: AffectedUser[] = [];
     if (!byOther) {
@@ -401,12 +496,19 @@ export function buildEventCards(
     return {
       id: row.id,
       at: row.created_at,
-      action: eventLabel(dict, row.key),
+      // Their action, said from this person's side once it is known to be
+      // about them.
+      action: aimedHere
+        ? eventLabelByOther(dict, row.key)
+        : eventLabel(dict, row.key),
       rawKey: row.key,
       ok,
       statusLabel: res.label,
       actorId,
       byOther,
+      // Kind (1): the row is about a person, so its chips carry a face.
+      involvesPartner: PERSON_DIRECTED.has(row.key) || byOther,
+      aimedHere,
       affected,
       location,
       profileChanges,
@@ -422,8 +524,12 @@ export function buildEventCards(
   // chronological order.
   const display = built
     .filter((e) => {
-      if (!e.ok) return true; // failures are always interesting
-      if (e.byOther) return true; // by-other rows are inherently "something happened to you"
+      // Somebody else's row survives only when the action was aimed at THIS
+      // person — the name of the action is not enough, because "he invited
+      // somebody" and "he invited her" are the same key. A failed attempt
+      // still counts: it is something they tried to do to them.
+      if (e.byOther) return e.aimedHere && PERSON_DIRECTED.has(e.rawKey);
+      if (!e.ok) return true; // this user's own failures are always interesting
       if (e.affected.length > 0) return true;
       if (e.location) return true;
       if (e.profileChanges && e.profileChanges.length > 0) return true;
@@ -437,11 +543,20 @@ export function buildEventCards(
 
 /**
  * Collapse a run of consecutive identical events into one card carrying a
- * `count` badge. Two adjacent rows merge only when they are the SAME action
+ * `count` badge. Two adjacent rows merge when they are the SAME action
  * (`rawKey`), same success status, from the SAME actor (`actorId` — so
  * "location by Ayala" never merges with "location by Dan", and a by-other run
- * stays separate from the viewed user's own run), and touch NO counterpart
- * (`affected.length === 0`). This covers both the viewed user's own heartbeat
+ * stays separate from the viewed user's own run), and their counterpart sets
+ * are COMPATIBLE: either identical, or one of them empty.
+ *
+ * That last clause is the whole change (user, 2026-08-02). It used to require
+ * BOTH to be empty, which left two `location` heartbeats a second apart
+ * sitting as two rows because the snapshot diff happened to hang a chip on one
+ * of them and not the other — the same action, at the same moment, drawn
+ * twice. Merging them unions the chips, so nothing is hidden: the surviving
+ * card names every counterpart either row named. What still never merges is
+ * two rows naming DIFFERENT people (two invitations to two users), which is
+ * the case the old rule was really protecting. This covers both the viewed user's own heartbeat
  * families (location / start / focus / my_groups / profile / preference edits)
  * AND the by-other heartbeats that surface in the merged feed because this
  * user sits in the actor's snapshot (Ayala opened the app / moved while
@@ -455,21 +570,41 @@ export function buildEventCards(
  * row of the run (its time + details are shown); `untilAt` records the oldest
  * row's time so the tooltip can show the span.
  */
+/** Two rows may collapse when neither contradicts the other about WHO was
+ * touched: identical sets, or one side saying nothing. */
+function sameCounterparts(a: AffectedUser[], b: AffectedUser[]): boolean {
+  if (a.length === 0 || b.length === 0) return true;
+  if (a.length !== b.length) return false;
+  const ids = new Set(a.map((x) => x.id));
+  return b.every((x) => ids.has(x.id));
+}
+
 function collapseRuns(list: UnifiedEntry[]): UnifiedEntry[] {
   const out: UnifiedEntry[] = [];
   for (const e of list) {
     const last = out[out.length - 1];
     const mergeable =
       !!last &&
+      // A run only ever folds HEARTBEATS. Two approvals, two invitations, two
+      // skips are two things that happened to two people minutes apart, and
+      // a `×2` badge over them hides one of the few rows on this page worth
+      // reading (live: two of one user's approvals collapsed into one row,
+      // and neither of them was even about the person whose page it was).
+      !last.involvesPartner &&
+      !e.involvesPartner &&
       last.rawKey === e.rawKey &&
       last.ok === e.ok &&
       last.byOther === e.byOther &&
       last.actorId === e.actorId &&
-      last.affected.length === 0 &&
-      e.affected.length === 0;
+      sameCounterparts(last.affected, e.affected);
     if (mergeable) {
       last.count = (last.count ?? 1) + 1;
       last.untilAt = e.at; // e is older (DESC), extends the run backward
+      // Union, so a merged card still names everyone either row named. The
+      // kept card is the NEWEST, so its own page tag for a shared id wins.
+      for (const a of e.affected) {
+        if (!last.affected.some((x) => x.id === a.id)) last.affected.push(a);
+      }
       continue;
     }
     out.push({ ...e, count: 1 });

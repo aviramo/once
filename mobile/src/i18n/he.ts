@@ -311,9 +311,14 @@ export default {
   // השרת הוא זה שמחליט אם הכתובת תקינה (הוא גם משלים https:// לכתובת חשופה),
   // ולכן ההודעה הזו נדלקת מתחת לשדה כשהוא סירב, והטקסט שנדחה נשאר בשדה לתיקון.
   'circles.linkInvalid': 'הקישור לא תקין',
+  // שם הסמל שלצד השדה (נקרא רק בקורא המסך): פותח את הקישור השמור בדיוק כמו
+  // שהוא ייפתח למי שיראה את המעגל, כדי שהמנהל יבדוק בעצמו לאן הוא מוביל.
+  'circles.linkTest': 'בדיקת הקישור',
+  // המילה שמתחת לסמל בתחתית חלון המעגל: הדבר היחיד באפליקציה שפותח את הקישור
+  // של המעגל, ונדלק רק כשיש קישור.
+  'circles.moreDetails': 'לפרטים נוספים',
   // סירוב כללי של שמירה (שם, תיאור): לא נשמר, אפשר לנסות שוב.
   'circles.saveFailed': 'לא נשמר, נסו שוב',
-  'circles.moreDetails': 'לפרטים נוספים',
 
   // A circle you manage
   'circles.shareInvite': 'שיתוף קישור הזמנה',
@@ -463,6 +468,10 @@ export default {
   'settings.rangeUnlimited': 'ללא הגבלה',
   'settings.km': 'ק"מ',
   'settings.meter': "מ'",
+  // Height's unit word, beside the distance ones because it is the same
+  // question: what this device measures in. The imperial form (5'8") carries no
+  // word at all, so there is nothing here for it.
+  'settings.cm': 'ס״מ',
   'settings.location': 'מיקום',
   'settings.locationDevice': 'מיקום שלי',
   'settings.locationCustom': 'כתובת מותאמת',
@@ -519,8 +528,6 @@ export default {
   'family.isForKids_f': 'מעוניינת בילדים',
   'family.isForKidsMore_m': 'מעוניין בעוד ילדים',
   'family.isForKidsMore_f': 'מעוניינת בעוד ילדים',
-  'family.isForKidsYes': 'כן',
-  'family.isForKidsNo': 'לא',
   'family.fivePlus': '5+',
   'family.agesQuestion': 'גילאי הילדים',
   'family.scheduleTitle': 'ימים שאני עם הילדים',
@@ -582,6 +589,32 @@ export default {
   'family.summaryWithKidsWeekend_m': 'לא פנוי בסופ״ש הקרוב',
   'family.summaryWithKidsWeekend_f': 'לא פנויה בסופ״ש הקרוב',
   'common.gotIt': 'הבנתי',
+  // THE app's yes and no. Two rows ask a question with a third answer — the one
+  // where neither pill is lit ("hasn't said") — and both take these: the
+  // kids-preference row and the smoking row (see TriOptionRow). They used to be
+  // `family.isForKidsYes/No`, i.e. one question's private copy of the two most
+  // reusable words there are.
+  'common.yes': 'כן',
+  'common.no': 'לא',
+
+  // ── How tall I am, and whether I smoke (user directive 2026-08-02) ──────────
+  // One row of the match card's fact tile, above the kids: two facts about the
+  // same body, divided by the chip's own hairline. Either half may be missing
+  // and the row still draws; with neither there is no row.
+  // The title doubles as the EMPTY row's label on your own card — the invitation
+  // to fill it in states exactly what the popup behind it is called, so it is
+  // one string and not two that have to be kept the same.
+  'traits.title': 'גובה ועישון',
+  'traits.height': 'גובה',
+  'traits.heightNotSet': 'לא צוין',
+  'traits.smoking': 'עישון',
+  // The one pair here that inflects: the card says this ABOUT the person it is
+  // showing, so it follows that person's gender through `tg` — on a stranger's
+  // card and on your own alike.
+  'traits.smokes_m': 'מעשן',
+  'traits.smokes_f': 'מעשנת',
+  'traits.smokesNo_m': 'לא מעשן',
+  'traits.smokesNo_f': 'לא מעשנת',
   // Count phrase with correct singular/plural, built by creditsText() in
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': 'קרדיט אחד',
@@ -590,10 +623,17 @@ export default {
   // one sentence and one action button. The dead 3/10/50 packs and the
   // paragraph above them are gone.
   'credits.buy.title': 'עוד קרדיטים',
-  // The popup's sentence. It states the two ways credits arrive, THE INVITE
+  // The popup's sentence. It states the two ways credits arrive, THE FRIEND
   // FIRST (user directive 2026-07-31): that is the one the button under it
   // offers and the only one the user can act on, so the sentence and the action
-  // read as one thing. The daily refill follows as the fallback it actually is,
+  // read as one thing. What the credit actually pays for is a friend ENTERING
+  // YOUR FRIENDS LIST, by any route (user correction 2026-08-02) — it said
+  // "שמצטרף דרכך", i.e. someone who installed the app off your invite link, and
+  // that is the REFERRAL ledger, a different economy. The trigger is
+  // friend_links_credit (20260726160000_friend_link_credits.sql): every new
+  // friend_links row pays +1 to BOTH sides once per pair, whoever invited whom
+  // and whether or not either of them was ever invited. The daily refill
+  // follows as the fallback it actually is,
   // and states its own condition up front ("if you have no credits") rather
   // than in a parenthesis at the end ({time} is a bare "HH:MM" from
   // formatGrantTime). Deliberately NOT the friends page's caption
@@ -603,8 +643,8 @@ export default {
   // The verb addressing the user is gendered by the inline {male|female}
   // marker, so the call site must genderize(). The no-hour variant covers a
   // wallet the server hasn't stamped a next-refill on yet.
-  'credits.buy.desc': 'על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף. אם אין לך קרדיטים, בכל יום בשעה {time} {תקבל|תקבלי} קרדיט חדש',
-  'credits.buy.descNoTime': 'על כל חבר שמצטרף דרכך, שניכם מקבלים קרדיט נוסף. אם אין לך קרדיטים, בכל יום {תקבל|תקבלי} קרדיט חדש',
+  'credits.buy.desc': 'על כל חבר שנוסף לרשימת החברים שלך, שניכם מקבלים קרדיט נוסף. אם אין לך קרדיטים, בכל יום בשעה {time} {תקבל|תקבלי} קרדיט חדש',
+  'credits.buy.descNoTime': 'על כל חבר שנוסף לרשימת החברים שלך, שניכם מקבלים קרדיט נוסף. אם אין לך קרדיטים, בכל יום {תקבל|תקבלי} קרדיט חדש',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.
@@ -615,6 +655,10 @@ export default {
   // would print the marker as-is. The friend stays ungendered ("חבר" covers
   // any friend you'd invite).
   'credits.invite.title': '{הזמן|הזמיני} חבר',
+  // The small line standing directly above that button (user directive
+  // 2026-08-02): the paragraph above says what a friend is WORTH, this says
+  // what actually pays it out, which is the one thing a sender can get wrong.
+  'credits.invite.note': 'חשוב שילחצו על הקישור אחרי שהורידו את האפליקציה',
   // Text that rides along with the link in the OS share sheet. Plural, like the
   // group's own share message: the READER is whoever the link is sent to, and
   // their sex is the one thing this sentence can never know.
@@ -652,7 +696,7 @@ export default {
   // Gendered (אתה / את). Picked via tg(_m/_f) against the caller's is_male.
   'settings.hideConfirmTitle': 'להסתיר את הפרופיל?',
   'settings.hideConfirmDesc': 'כל הצופים בך יוסרו ויקבלו על כך התראה',
-  'settings.hideConfirmDescOne': 'הצופה שיש לך כרגע יוסר ויקבל על כך התראה',
+  'settings.hideConfirmDescOne': 'מי שצופה בך כרגע יוסר ויקבל על כך התראה',
   'settings.hideConfirmDescMany': '{count} הצופים שיש לך כרגע יוסרו ויקבלו על כך התראה',
   'settings.hideConfirmButton': 'הסתרה',
 
@@ -1112,7 +1156,6 @@ export default {
   'chat.confirmSend.schedule': 'שליחת לוח הזמנים עם הילדים',
   'chat.confirmSend.schedule_m': 'שליחת לוח הזמנים עם הילדים',
   'chat.confirmSend.schedule_f': 'שליחת לוח הזמנים עם הילדים',
-  'chat.confirmSend.send': '{שלח|שלחי}',
   'chat.locationLabel': 'מיקום',
   'chat.locationOpen': 'הקש לפתיחה במפות',
   'chat.scheduleTitle': 'הימים שאני פנוי (ללא ילדים)',
@@ -1139,8 +1182,15 @@ export default {
   // "More" rather than "Settings" (user directive 2026-07-30) — what it opens is
   // the wallet, the account, support and the site, which is everything else
   // rather than a preferences screen.
+  //
+  // English's "Preferences" was the one that broke that rule (see en.ts): eleven
+  // characters with no seam, cut mid-word at a large font scale. Both languages
+  // say SEARCH now (user directive 2026-08-02) — the word the magnifier over it
+  // has been saying since it replaced the sliders — and they say it together,
+  // because the two builds name the same key with the same mark on it. The KEY
+  // still says preferences, for the surface it opens.
   'home.dock.profile': 'פרופיל',
-  'home.dock.preferences': 'העדפות',
+  'home.dock.preferences': 'חיפוש',
   'home.dock.more': 'עוד',
   // Accessibility labels for controls with no visible text. The menu button's two
   // labels went with the button (2026-07-30), the invite's with its X (same day:

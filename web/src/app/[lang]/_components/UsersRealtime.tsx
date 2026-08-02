@@ -97,8 +97,8 @@ export function UsersRealtime({
   useEffect(() => {
     const ids = new Set(initial.map((i) => i.row.user_id));
     // The postgres_changes payload for `users` never carries the separately
-    // joined roles, so re-attach the last-known roles on every merge.
-    const groupsById = new Map(initial.map((i) => [i.row.user_id, i.row.groups]));
+    // joined watch status, so re-attach the last known one on every merge.
+    const watchById = new Map(initial.map((i) => [i.row.user_id, i.row.watch]));
     const supabase = createSupabaseBrowserClient();
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     // A new signup or a deletion changes list membership / counts — re-fetch
@@ -114,13 +114,27 @@ export function UsersRealtime({
         { event: "UPDATE", schema: "public", table: "users" },
         (payload) => {
           const row = payload.new as UserRow;
-          if (row?.user_id && ids.has(row.user_id)) {
-            store.set({
-              ...row,
-              groups:
-                store.get(row.user_id)?.groups ?? groupsById.get(row.user_id),
-            });
-          }
+          if (!row?.user_id || !ids.has(row.user_id)) return;
+          const prev = store.get(row.user_id);
+          store.set({
+            ...row,
+            watch: prev?.watch ?? watchById.get(row.user_id),
+          });
+          // The status is DERIVED (admin_watch_states over the `watch` table),
+          // so a payload carrying the new `relations` cannot recompute it —
+          // only the server can. page1 changing is exactly what moves a watch
+          // row (it is the condition on the users_watch_sync trigger), so that
+          // is the one change worth a re-render of the server component;
+          // last_seen heartbeats, which are most of this traffic, are not.
+          const before = JSON.stringify(
+            (prev as { relations?: { page1?: unknown } } | undefined)?.relations
+              ?.page1 ?? null,
+          );
+          const after = JSON.stringify(
+            (row as unknown as { relations?: { page1?: unknown } }).relations
+              ?.page1 ?? null,
+          );
+          if (prev && before !== after) scheduleRefresh();
         },
       )
       .on(

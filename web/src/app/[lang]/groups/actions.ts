@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { getAdminUser, getViewerScope } from "@/lib/admin-auth";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
-import type { ResetResult } from "../users/actions";
 
 // The middleware rewrites /groups → /[lang]/groups, so this is the
 // route segment to revalidate after a mutation. User-detail revalidation uses
@@ -103,48 +102,6 @@ export async function setUserGroupAssignment(fd: FormData) {
   revalidatePath(GROUP_DETAIL_PATH, "page");
 }
 
-/**
- * Reset every user that belongs to any of the selected groups. Resolves
- * member ids server-side, dedupes (a user in two selected groups is reset
- * once), then loops app_admin_reset_user per id — the per-user RPC the
- * user-detail "danger zone" uses (wipes chat/log/restrictions + relations
- * to a clean slate, recomputes availability + credits). One failure is
- * skipped, never fatal; `users` reports how many actually succeeded.
- */
-export async function resetGroupMembers(
-  groupIds: string[],
-): Promise<ResetResult> {
-  if (!(await getAdminUser())) throw new Error("Unauthorized");
-  const ids = [...new Set((groupIds ?? []).filter(Boolean))];
-  if (ids.length === 0) return { ok: true, users: 0 };
-  const admin = createSupabaseAdmin();
-  const { data, error } = await admin
-    .from("user_groups")
-    .select("user_id")
-    .in("group_id", ids);
-  if (error) return { ok: false };
-  const userIds = [
-    ...new Set(((data ?? []) as { user_id: string }[]).map((r) => r.user_id)),
-  ];
-  let users = 0;
-  for (const uid of userIds) {
-    const { error: rpcError } = await admin.rpc("app_admin_reset_user", {
-      p_user_id: uid,
-    });
-    if (!rpcError) users++;
-  }
-  revalidatePath(GROUPS_PATH, "page");
-  revalidatePath(USER_PATH, "page");
-  return { ok: true, users };
-}
-
-/**
- * Bulk move members from one group to another. `fromGroupId` (optional) bounds
- * the removal so only assignments in that specific group are dropped — if the
- * user holds other groups, those stay. When `fromGroupId` is null we only add
- * to the target (no removal step). One UPSERT for adds + one DELETE for the
- * source removals; both honour the same idempotency the per-user toggle uses.
- */
 export async function moveUsersToGroup(
   userIds: string[],
   targetGroupId: string,

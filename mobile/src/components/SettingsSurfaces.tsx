@@ -39,8 +39,9 @@ import { StripBody } from './Strip'
 import { MetaLine } from './MetaLine'
 import type { MetaPart } from '../lib/meta'
 import { supportMailUrl, brandSiteUrl } from '../lib/links'
-import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph } from './Chip'
+import { Chip, CHIP_HEIGHT, PinIcon as PinGlyph, HomeIcon as HomeGlyph, WorkIcon as WorkGlyph, HeightIcon, SmokeIcon } from './Chip'
 import { units, M_PER_MI } from '../lib/units'
+import { formatHeight, heightOptions, nearestHeightOption } from '../lib/height'
 import { getLocation, getLocPermission, requestLocPermission, openLocPermSettings, openLocationSettings, enableLocationServices } from '../lib/location'
 
 const isRTL = I18nManager.isRTL
@@ -1344,23 +1345,50 @@ function ageLabel(n: number): string {
   return t('family.ageYears').replace('{n}', String(n))
 }
 
+// A ROW'S LABEL WEARS THE MARK ITS FACT WEARS ON THE CARD (user directive
+// 2026-08-02). The height/smoking popup edits two facts that stand on the match
+// card behind it, and each one is read there by its glyph — so the row that sets
+// it leads with the same glyph, and the popup and the card name the same thing
+// the same way. Through `GlyphSlot` like every other mark beside a line of text
+// in the app, at the settings row's own ICON.md; a row that passes none is a
+// plain label, which is what the family sheet's rows are.
+function RowLabel({
+  label, renderIcon,
+}: {
+  label: string
+  renderIcon?: (color: string) => React.ReactNode
+}) {
+  return (
+    <View style={familyStyles.rowLabel}>
+      {renderIcon ? <GlyphSlot label={label}>{renderIcon(INK)}</GlyphSlot> : null}
+      <Text style={[familyStyles.toggleLabel, familyStyles.rowLabelText]}>{label}</Text>
+    </View>
+  )
+}
+
 // Yes / No pills with deselect-to-undecided. Both unselected = null (undecided).
-function FamilyTriOptionRow({
+// Two rows in the app ask a question with exactly that third answer — "do you
+// want (more) kids" and "do you smoke" — so this is one component and its two
+// words are the app's own yes/no, not one question's.
+function TriOptionRow({
   label,
+  renderIcon,
   value,
   onChange,
 }: {
   label: string
+  /** The fact's own mark, when it has one on the card (the smoking row). */
+  renderIcon?: (color: string) => React.ReactNode
   value: boolean | null
   onChange: (v: boolean | null) => void
 }) {
   const options: { v: boolean; key: string }[] = [
-    { v: true, key: 'family.isForKidsYes' },
-    { v: false, key: 'family.isForKidsNo' },
+    { v: true, key: 'common.yes' },
+    { v: false, key: 'common.no' },
   ]
   return (
     <View style={[familyStyles.toggleRow, familyStyles.triOptionRow]}>
-      <Text style={[familyStyles.toggleLabel, familyStyles.triOptionLabel]}>{label}</Text>
+      <RowLabel label={label} renderIcon={renderIcon} />
       <View style={familyStyles.triOptionPills}>
         {options.map(opt => {
           const selected = value === opt.v
@@ -1427,6 +1455,16 @@ const FAMILY_PICKER_MAX_H = 360
 
 // Inline picker triggered from a dropdown row. Stacks above the family sheet
 // using its own Modal, dismisses by tap-outside or selection.
+//
+// A LIST OPENS ON THE ANSWER THAT IS ALREADY GIVEN. The list is taller than the
+// window it is shown through — a height picker is ninety-odd rows — so a list
+// that opened at the top asked the user to hunt for the value he had picked last
+// time, and offered no clue that it was in there at all. It scrolls the ticked
+// row into view on the way up, ONCE per open, off that row's own layout rather
+// than off an assumed row height (the rows grow with the OS font scale, so any
+// number multiplied here would be wrong on exactly the devices that need this
+// most). Nothing is animated: the list has not been seen yet, so there is no
+// movement to show — it simply opens where it should.
 function FamilyValuePopup({
   visible, title, options, selected, onPick, onDismiss,
 }: {
@@ -1437,6 +1475,17 @@ function FamilyValuePopup({
   onPick: (value: number) => void
   onDismiss: () => void
 }) {
+  const listRef = useRef<ScrollView>(null)
+  const settled = useRef(false)
+  useEffect(() => { if (!visible) settled.current = false }, [visible])
+  const revealSelected = useCallback((y: number, h: number) => {
+    if (settled.current) return
+    settled.current = true
+    // A third of the way down the window, not flush at its top: the rows around
+    // the current answer are what the user is choosing between, so the ones
+    // ABOVE it have to be reachable without a scroll in the other direction.
+    listRef.current?.scrollTo({ y: Math.max(0, y - (FAMILY_PICKER_MAX_H - h) / 3), animated: false })
+  }, [])
   return (
     <BottomSheet
       visible={visible}
@@ -1444,13 +1493,14 @@ function FamilyValuePopup({
       contentStyle={familyStyles.valuePopupCard}
     >
       <SheetTitle>{title}</SheetTitle>
-      <ScrollView style={familyStyles.valuePopupList} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={listRef} style={familyStyles.valuePopupList} keyboardShouldPersistTaps="handled">
         {options.map(opt => {
           const isSelected = selected === opt.value
           return (
             <Pressable
               key={opt.value}
               style={familyStyles.valueRow}
+              onLayout={isSelected ? e => revealSelected(e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}
               onPress={() => { tap(); onPick(opt.value) }}
             >
               <Text style={[familyStyles.valueRowLabel, isSelected && familyStyles.valueRowLabelSelected]}>
@@ -1748,7 +1798,7 @@ export function FamilyKidsPopup({
 
               {/* Static bottom area: "Interested in kids" tri-option (yes/no/undecided) + Save button. */}
               <View style={familyStyles.interestedBar}>
-                <FamilyTriOptionRow
+                <TriOptionRow
                   label={tg(hasKids ? 'family.isForKidsMore' : 'family.isForKids', isMale)}
                   value={isForKids}
                   onChange={setIsForKids}
@@ -1765,6 +1815,119 @@ export function FamilyKidsPopup({
         selected={pickerSelected}
         onPick={onPickerPick}
         onDismiss={onPickerDismiss}
+      />
+    </BottomSheet>
+  )
+}
+
+// ── How tall I am, and whether I smoke ─────────────────────────────────────
+// (user directive 2026-08-02.) The two facts the match card states on one row,
+// edited from one popup — because that row is where the user tapped, and a
+// surface that answered half of it would send him back for the other half.
+//
+// Both answers are OPTIONAL and each is optional on its own: a height with no
+// smoking answer, or the other way round, is a perfectly good thing to have
+// said, and the card's row draws whichever halves exist. So the height's list
+// leads with "not stated" and the smoking row is the app's tri-option — yes, no,
+// and neither pill lit, which is the third answer and not a missing one.
+//
+// It saves on DISMISS, like the family sheet beside it: there is no button here
+// to press, because the two rows ARE the form and putting the popup away is
+// what finishes it.
+const HEIGHT_CLEAR = -1
+
+export function HeightSmokingPopup({
+  visible, height, smokes, onDismiss, onSave,
+}: {
+  visible: boolean
+  height: number | null
+  smokes: boolean | null
+  onDismiss: () => void
+  onSave: (height: number | null, smokes: boolean | null) => void
+}) {
+  const [cm, setCm] = useState<number | null>(null)
+  const [smoking, setSmoking] = useState<boolean | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  // Seeded on the closed→open transition only, and read through refs so the
+  // snapshot is always current — the same rule the family sheet keeps, for the
+  // same reason: this profile can update over Realtime mid-edit, and re-seeding
+  // would overwrite what the user is in the middle of choosing.
+  const initialRef = useRef({ height, smokes })
+  initialRef.current = { height, smokes }
+  useEffect(() => {
+    if (!visible) return
+    setCm(initialRef.current.height ?? null)
+    setSmoking(initialRef.current.smokes ?? null)
+    setPickerOpen(false)
+  }, [visible])
+
+  // One step per unit of whatever this phone measures in, tallest first, plus
+  // the "not stated" row at the head — the one answer that is not a height.
+  const heights = useMemo(() => heightOptions(), [])
+  const options = useMemo(
+    () => [{ value: HEIGHT_CLEAR, label: t('traits.heightNotSet') }, ...heights],
+    [heights],
+  )
+  // Which row is ticked: the NEAREST one, never an equality test — the stored
+  // number is centimetres however it was picked, so a height entered on the
+  // other measuring system is not a value this list offers back (see
+  // nearestHeightOption).
+  const selected = cm == null ? HEIGHT_CLEAR : nearestHeightOption(cm, heights)
+
+  const dirty = cm !== (height ?? null) || smoking !== (smokes ?? null)
+  const handleDismiss = () => {
+    if (dirty) onSave(cm, smoking)
+    onDismiss()
+  }
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onDismiss={handleDismiss}
+      contentStyle={familyStyles.sheet}
+    >
+      <SheetTitle>{t('traits.title')}</SheetTitle>
+      <View style={familyStyles.traitsBody}>
+        {/* The value IS the control: the pill carries what is currently said and
+            opens the list that changes it, so the row states an answer rather
+            than pointing at a field somewhere else. Same pill fabric as the
+            yes/no pair under it, so the two rows read as one form. */}
+        <View style={familyStyles.toggleRow}>
+          <RowLabel
+            label={t('traits.height')}
+            renderIcon={c => <HeightIcon color={c} size={ICON.md} />}
+          />
+          <Pressable
+            style={familyStyles.triOptionPill}
+            onPress={() => { tap(); setPickerOpen(true) }}
+          >
+            <Text style={cm != null ? familyStyles.triOptionPillLabel : familyStyles.dropdownPlaceholder}>
+              {cm != null ? formatHeight(cm) : t('traits.heightNotSet')}
+            </Text>
+          </Pressable>
+        </View>
+        <TriOptionRow
+          label={t('traits.smoking')}
+          renderIcon={c => <SmokeIcon color={c} size={ICON.md} />}
+          value={smoking}
+          onChange={setSmoking}
+        />
+      </View>
+
+      {/* Nested inside this popup, not a sibling of it: iOS silently refuses to
+          present a second Modal alongside the first (see BottomSheet's
+          onClosed), and the list belongs to the row that raised it anyway. */}
+      <FamilyValuePopup
+        visible={pickerOpen}
+        title={t('traits.height')}
+        options={options}
+        selected={selected}
+        onPick={value => {
+          setCm(value === HEIGHT_CLEAR ? null : value)
+          setPickerOpen(false)
+        }}
+        onDismiss={() => setPickerOpen(false)}
       />
     </BottomSheet>
   )
@@ -1906,8 +2069,19 @@ const familyStyles = StyleSheet.create({
   // Label + Yes/No pills share one row when there's room; only wrap to two
   // lines when there isn't. marginStart:'auto' on the pills (see below) keeps
   // them on the logical-end side in both the same-row and wrapped cases.
+  // The height/smoking form: two rows under the title, standing the popup's own
+  // between-blocks gap below it. The rows carry their own vertical air, so this
+  // states nothing but where the block starts.
+  traitsBody: { marginTop: SHEET_GAP.block },
   triOptionRow: { flexWrap: 'wrap', rowGap: SM },
-  triOptionLabel: { flexShrink: 1 },
+  // A row's label, with the fact's own mark leading it when it has one. Aligned
+  // flex-start for the same reason a chip's row is: the glyph stands beside line
+  // ONE of a label that wraps, never floating into the middle of the block.
+  rowLabel: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: SM,
+    flexShrink: 1,
+  },
+  rowLabelText: { flexShrink: 1 },
   triOptionPills: { marginStart: 'auto', flexDirection: 'row', gap: SM },
   triOptionPill: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: 999, backgroundColor: PAGE },
   triOptionPillSelected: { backgroundColor: INK },
@@ -1971,6 +2145,7 @@ export function PreviewFieldPage({
   const [photoMenu, setPhotoMenu] = useState<{ index: number; at: TapPoint } | null>(null)
   const photoMenuIndex = photoMenu?.index ?? null
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
+  const [traitsPopupVisible, setTraitsPopupVisible] = useState(false)
   // ── THE FIRST-OPEN PHOTO TUTORIAL (user directive 2026-08-01) ─────────────
   // The photos on your own profile carry a menu of edits and nothing on screen
   // says so. So the first time this page opens, that very menu pops with ONE row
@@ -2077,6 +2252,8 @@ export function PreviewFieldPage({
       images,
       bio: profile.bio ?? '',
       family: profile.family ?? null,
+      height: profile.height ?? null,
+      smokes: profile.smokes ?? null,
       is_male: profile.is_male ?? undefined,
       distance: 0,
       last_seen: new Date().toISOString(),
@@ -2315,6 +2492,20 @@ export function PreviewFieldPage({
       .catch(e => { console.error('Save family error:', e) })
   }
 
+  // Height and smoking, saved exactly the way family is: the store is updated on
+  // this frame so the card behind the closing popup is already right, and the
+  // write goes out behind it on the same chain — a reopen-edit-close while the
+  // previous request is still in flight can then neither race it nor be lost.
+  // Both keys are sent every time, `null` included: null is what CLEARS the
+  // field server-side, and a user who took his height back off the card must not
+  // be left with the old number on the row.
+  const handleSaveTraits = (height: number | null, smokes: boolean | null) => {
+    update({ height, smokes })
+    familySaveChain.current = familySaveChain.current
+      .then(async () => { await invoke('app/profile', { height, smokes }) })
+      .catch(e => { console.error('Save traits error:', e) })
+  }
+
   return (
     <View style={[styles.root, dismissGestureRef ? null : { paddingTop: insets.top }]}>
       {previewData ? (
@@ -2340,6 +2531,7 @@ export function PreviewFieldPage({
                 setPhotoMenu({ index: imageIndex, at })
               }}
               onFamilyTap={() => { tap(); setFamilyPopupVisible(true) }}
+              onTraitsTap={() => { tap(); setTraitsPopupVisible(true) }}
               bioEdit={{ value: bioInitial, saving: bioSaving, onCommit: handleSaveBio }}
               // No round button on your own card: there is nobody to invite.
               actions={[]}
@@ -2427,6 +2619,13 @@ export function PreviewFieldPage({
         isMale={profile?.is_male ?? null}
         onDismiss={() => setFamilyPopupVisible(false)}
         onSave={handleSaveFamily}
+      />
+      <HeightSmokingPopup
+        visible={traitsPopupVisible}
+        height={profile?.height ?? null}
+        smokes={profile?.smokes ?? null}
+        onDismiss={() => setTraitsPopupVisible(false)}
+        onSave={handleSaveTraits}
       />
     </View>
   )
@@ -2806,7 +3005,14 @@ const styles = StyleSheet.create({
   // same object as the group rows it opens (user directive 2026-07-29), so it
   // cannot state its own version of the label's size or the fact line's ink.
   // What stays here is the lane the strip's own trailing control rides in.
-  selectRowTrailing: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
+  // The lane the strip's own trailing control rides in. It GIVES (`flexShrink`),
+  // because what stands in it can be a whole sentence — the visibility row's
+  // watcher line, which names people — and a rigid lane has only one way to pay
+  // for itself: the label beside it, squeezed to nothing (see Strip's lineWrap,
+  // which is what drops this lane to a line of its own first). Once it is down
+  // there alone the shrink is what makes the chip wrap its own words inside the
+  // row instead of running off the edge of it.
+  selectRowTrailing: { flexShrink: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SM },
   selectRowAvatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: WHITE_SOFT,

@@ -18,6 +18,7 @@
 // primitive, so a person here looks identical to one in the Circles sheet.
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { View, StyleSheet } from 'react-native'
+import Animated, { LinearTransition } from 'react-native-reanimated'
 import { Strip } from './Strip'
 import { BottomSheet, SheetTitle } from './BottomSheet'
 import { Avatar, SkeletonRows } from './CircleBits'
@@ -27,7 +28,7 @@ import { tap } from '../lib/haptics'
 import { groupFacts, friendOfLabel, orderSharedCircles, sharedGroups, sharedFriends, useMyFriendCount, type SharedGroup, type FriendItem } from '../lib/circles'
 import type { MetaPart } from '../lib/meta'
 import { t } from '../i18n'
-import { RADIUS, SHEET_GAP } from '../tokens'
+import { MOTION, RADIUS, SHEET_GAP } from '../tokens'
 import { INK, SURFACE } from '../colors'
 
 /** One row: a leading avatar/icon, a title line, and the facts under it — any
@@ -40,6 +41,11 @@ export type SharedRow = {
   meta?: MetaPart[]
   onPress: () => void
 }
+
+/** The app's one resize, at the app's one duration — the same transition a chip
+ *  takes when its label changes (Chip.tsx) and home's status card takes when its
+ *  text does. */
+const LIST_RESIZE = LinearTransition.duration(MOTION.base)
 
 export function SharedListPopup({
   visible, title, rows, skeletonLines = 1, onDismiss, children,
@@ -64,7 +70,17 @@ export function SharedListPopup({
     <BottomSheet visible={visible} onDismiss={onDismiss}>
       <View style={styles.wrap}>
         <SheetTitle>{title}</SheetTitle>
-        <View style={styles.card}>
+        {/* THE PLACEHOLDER BECOMES THE LIST, IT IS NOT REPLACED BY IT (user
+            directive 2026-08-02). Two skeleton rows stand in for a list whose
+            length is not known yet, so the box always has to change height when
+            the lists land — grow for a longer list, shrink for a shorter one —
+            and a box that changes height in one frame reads as the popup
+            jumping under the thumb. The app's one resize (LinearTransition, the
+            same one Chip.tsx and home's status card animate with) takes it
+            there instead. Declared on the CARD, which is the box whose height
+            the rows decide; the sheet around it follows, the layout animation
+            running on the shadow tree. */}
+        <Animated.View layout={LIST_RESIZE} style={styles.card}>
           {rows == null ? (
             <SkeletonRows rows={2} lines={skeletonLines} />
           ) : rows.map((r, i) => (
@@ -84,7 +100,7 @@ export function SharedListPopup({
               onPress={r.onPress}
             />
           ))}
-        </View>
+        </Animated.View>
       </View>
       {children}
     </BottomSheet>

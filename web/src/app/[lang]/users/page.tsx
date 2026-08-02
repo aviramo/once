@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireViewerScope } from "@/lib/admin-auth";
+import { readAdminEnv, envIsTest } from "@/lib/adminEnv";
+import {
+  WATCH_FILTERS,
+  matchesWatchFilter,
+  watchBucket,
+  type WatchFilter,
+  type WatchState,
+} from "@/lib/watchStatus";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell } from "../_components/AdminShell";
@@ -10,8 +18,6 @@ import type { UserRow } from "../_components/UserCard";
 import { UsersRealtime } from "../_components/UsersRealtime";
 import { parseUserLocation, haversineKm } from "@/lib/userLocation";
 
-const P1_VALUES = ["free", "watching", "waiting", "chat", "locked"] as const;
-const P2_VALUES = ["free", "pending", "chat", "locked"] as const;
 const AVAIL_VALUES = ["available", "unavailable", "unknown"] as const;
 const GENDER_VALUES = ["male", "female"] as const;
 const OS_VALUES = ["ios", "android"] as const;
@@ -33,22 +39,21 @@ const SEG_VALUES = [
   "held",
   "extra",
   "no_notif",
-  // The two matching environments (users.is_test). Folded into `seg` rather
-  // than promoted to its own dropdown: SearchControls' URL writer is
-  // hand-written per param, so a top-level filter costs ~8 edits for a
-  // dimension that is never combined with another segment.
-  "test",
-  "not_test",
+  // `test` / `not_test` used to live here. The matching environment is a
+  // PRIMARY selector in the header now — it bounds every query on every screen
+  // — so as an option inside this dropdown it could only ever have equalled
+  // the whole list or nothing.
 ] as const;
 // Sort modes for the users list. `recent` = the server's last_seen order;
 // `distance` / `relevance` re-sort in JS relative to the admin's own location.
 const SORT_VALUES = ["recent", "distance", "relevance"] as const;
+// `relations` is still selected for the availability gate and the credits /
+// push segments. What a person is DOING no longer comes from it: that is one
+// status per user, read off `watch` via admin_watch_states.
 const SELECT =
   "user_id, name, created_at, last_seen, data, relations, location, is_test";
-// Sentinel role-filter value (can't collide with a uuid) = "users with no role".
-const GROUP_NONE = "__none__";
 // No row will ever carry this user_id — used to force an empty result when a
-// computed-id filter (role) resolves to zero candidates.
+// computed-id filter resolves to zero candidates.
 const NO_MATCH_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
@@ -172,10 +177,12 @@ type Filterable<T> = {
 };
 
 type Secondary = {
-  p1: string;
-  p2: string;
-  groupInIds: string[] | null;
-  groupNotInIds: string[] | null;
+  /** The matching environment every screen is bound to. */
+  isTest: boolean;
+  /** User ids whose watch status matches `?state=`, or null for no filter.
+   * The status lives in `watch`, not on the `users` row, so it can only be
+   * applied as a set — resolved once from admin_watch_states. */
+  statusIds: string[] | null;
   avail: string;
   gender: string;
   os: string;
@@ -195,12 +202,11 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
       "user_id",
       f.scopeUserIds.length ? f.scopeUserIds : [NO_MATCH_ID],
     );
-  if (f.p1) q = q.eq("relations->page1->>state", f.p1);
-  if (f.p2) q = q.eq("relations->page2->>state", f.p2);
-  if (f.groupInIds)
-    q = q.in("user_id", f.groupInIds.length ? f.groupInIds : [NO_MATCH_ID]);
-  else if (f.groupNotInIds && f.groupNotInIds.length)
-    q = q.not("user_id", "in", `(${f.groupNotInIds.join(",")})`);
+  // The environment is the first hard bound after the manager scope: the two
+  // matching pools never meet, so a list mixing them describes nobody.
+  q = q.eq("is_test", String(f.isTest));
+  if (f.statusIds)
+    q = q.in("user_id", f.statusIds.length ? f.statusIds : [NO_MATCH_ID]);
 
   if (f.avail === "unknown")
     q = q.is("relations->availability->>state", null);
@@ -263,12 +269,6 @@ function applySecondary<T extends Filterable<T>>(q: T, f: Secondary): T {
           "relations->push->>perm.eq.denied,relations->push->>dead.eq.true",
         );
       break;
-    case "test":
-      q = q.eq("is_test", "true");
-      break;
-    case "not_test":
-      q = q.eq("is_test", "false");
-      break;
   }
   return q;
 }
@@ -285,14 +285,12 @@ export default async function AdminUsers({
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const pick = (raw: unknown, allowed: readonly string[]) =>
     typeof raw === "string" && allowed.includes(raw) ? raw : "";
-  const p1 = pick(sp.p1, P1_VALUES);
-  const p2 = pick(sp.p2, P2_VALUES);
+  const state = pick(sp.state, WATCH_FILTERS) as WatchFilter | "";
   const avail = pick(sp.avail, AVAIL_VALUES);
   const gender = pick(sp.gender, GENDER_VALUES);
   const os = pick(sp.os, OS_VALUES);
   const seg = pick(sp.seg, SEG_VALUES);
   const sort = pick(sp.sort, SORT_VALUES) || "recent";
-  const groupRaw = typeof sp.group === "string" ? sp.group : "";
 
   // Admin sees everyone. Group managers see only the union of members across
   // the groups they manage — every query below is intersected with that set
@@ -300,23 +298,34 @@ export default async function AdminUsers({
   const scope = await requireViewerScope();
   const user = scope.user;
   const isAdmin = scope.kind === "admin";
+  const env = await readAdminEnv();
+  const isTest = envIsTest(env);
 
   const admin = createSupabaseAdmin();
 
-  const [emailMap, meRes, { data: groupCatalogData }, { data: facetsData }] =
-    await Promise.all([
-      loadEmailMap(admin),
-      admin
-        .from("users")
-        .select("name, location")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      admin
-        .from("groups")
-        .select("id, name")
-        .order("created_at", { ascending: true }),
-      admin.rpc("admin_user_facet_counts"),
-    ]);
+  const [
+    emailMap,
+    meRes,
+    { data: groupCatalogData },
+    { data: facetsData },
+    { data: watchData },
+  ] = await Promise.all([
+    loadEmailMap(admin),
+    admin
+      .from("users")
+      .select("name, location")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    admin
+      .from("groups")
+      .select("id, name")
+      .order("created_at", { ascending: true }),
+    admin.rpc("admin_user_facet_counts", { p_is_test: isTest }),
+    admin.rpc("admin_watch_states", {
+      p_is_test: isTest,
+      p_user_ids: scope.kind === "manager" ? scope.userIds : null,
+    }),
+  ]);
   let groupCatalog = (groupCatalogData ?? []) as {
     id: string;
     name: string;
@@ -329,10 +338,6 @@ export default async function AdminUsers({
   }
   type Facets = {
     total?: number;
-    groups_none?: number;
-    p1?: Record<string, number>;
-    p2?: Record<string, number>;
-    groups?: Record<string, number>;
     avail?: Record<string, number>;
     gender?: Record<string, number>;
     os?: Record<string, number>;
@@ -340,35 +345,29 @@ export default async function AdminUsers({
   };
   const facets = (facetsData ?? {}) as Facets;
 
-  // ?group= is "" (any) | a role uuid | GROUP_NONE (users with no role at all).
-  const role =
-    groupRaw === GROUP_NONE
-      ? GROUP_NONE
-      : groupCatalog.some((r) => r.id === groupRaw)
-        ? groupRaw
-        : "";
-  // A specific role restricts to its members (.in); GROUP_NONE excludes anyone
-  // who holds any role (.not in). null = no role filter.
-  let groupInIds: string[] | null = null;
-  let groupNotInIds: string[] | null = null;
-  if (role === GROUP_NONE) {
-    const { data: rl } = await admin.from("user_groups").select("user_id");
-    groupNotInIds = [
-      ...new Set(((rl ?? []) as { user_id: string }[]).map((x) => x.user_id)),
-    ];
-  } else if (role) {
-    const { data: rl } = await admin
-      .from("user_groups")
-      .select("user_id")
-      .eq("group_id", role);
-    groupInIds = ((rl ?? []) as { user_id: string }[]).map((x) => x.user_id);
+  // ONE STATUS PER PERSON, and one call for the whole environment. The same
+  // rows answer three questions the panel used to answer from three places:
+  // what each card says, which users `?state=` keeps, and what each option in
+  // that dropdown counts. Anything derived here instead of in SQL would be a
+  // second copy of the rule in admin_watch_states.
+  const watchStates = (watchData ?? []) as WatchState[];
+  const watchById = new Map(watchStates.map((w) => [w.user_id, w]));
+  const statusCounts = new Map<WatchFilter, number>();
+  for (const w of watchStates) {
+    const b = watchBucket(w);
+    statusCounts.set(b, (statusCounts.get(b) ?? 0) + 1);
+    // `invited_in` is a tag, not a bucket: it is true ALONGSIDE whatever the
+    // person's own status is, so it is counted separately rather than instead.
+    if (w.invited_by)
+      statusCounts.set("invited_in", (statusCounts.get("invited_in") ?? 0) + 1);
   }
+  const statusIds = state
+    ? watchStates.filter((w) => matchesWatchFilter(w, state)).map((w) => w.user_id)
+    : null;
 
   const secondary: Secondary = {
-    p1,
-    p2,
-    groupInIds,
-    groupNotInIds,
+    isTest,
+    statusIds,
     avail,
     gender,
     os,
@@ -411,30 +410,11 @@ export default async function AdminUsers({
     rows = (data ?? []) as UserRow[];
   }
 
-  // At-a-glance role badges on each card. One extra round trip for the shown
-  // page only; joined here (not in SELECT) since `users` realtime payloads
-  // can't carry it — UsersRealtime preserves it across ticks instead.
-  const userIds = rows.map((r) => r.user_id);
-  const { data: roleLinks } = userIds.length
-    ? await admin
-        .from("user_groups")
-        .select("user_id, groups(name)")
-        .in("user_id", userIds)
-    : { data: [] };
-  type RoleLink = {
-    user_id: string;
-    groups: { name: string } | { name: string }[] | null;
-  };
-  const groupsByUser = new Map<string, { name: string }[]>();
-  for (const link of (roleLinks ?? []) as RoleLink[]) {
-    if (!link.groups) continue;
-    const roleObj = Array.isArray(link.groups) ? link.groups[0] : link.groups;
-    if (!roleObj) continue;
-    const arr = groupsByUser.get(link.user_id) ?? [];
-    arr.push(roleObj);
-    groupsByUser.set(link.user_id, arr);
-  }
-  rows = rows.map((r) => ({ ...r, groups: groupsByUser.get(r.user_id) ?? [] }));
+  // The shown page's watch status is the only thing joined onto a row here.
+  // The group chips this block also used to fetch (one extra `user_groups`
+  // round trip per load, plus a preserve-across-realtime dance in
+  // UsersRealtime) were removed with them.
+  rows = rows.map((r) => ({ ...r, watch: watchById.get(r.user_id) }));
 
   // Distance / relevance sorting is relative to the admin's own location (the
   // person operating the panel); the fetched page is re-sorted in JS.
@@ -447,24 +427,11 @@ export default async function AdminUsers({
   // descending (the "any" sentinel stays pinned first inside SearchControls).
   const byCountDesc = <T extends { count: number }>(a: T, b: T) =>
     b.count - a.count;
-  const p1Options = P1_VALUES.map((v) => ({
+  const stateOptions = WATCH_FILTERS.map((v) => ({
     value: v,
-    label: (d.page1States as Record<string, string>)[v],
-    count: facets.p1?.[v] ?? 0,
+    label: (d.statusStates as Record<string, string>)[v],
+    count: statusCounts.get(v) ?? 0,
   })).sort(byCountDesc);
-  const p2Options = P2_VALUES.map((v) => ({
-    value: v,
-    label: (d.page2States as Record<string, string>)[v],
-    count: facets.p2?.[v] ?? 0,
-  })).sort(byCountDesc);
-  const roleOptions = [
-    ...groupCatalog.map((r) => ({
-      value: r.id,
-      label: r.name,
-      count: facets.groups?.[r.id] ?? 0,
-    })),
-    { value: GROUP_NONE, label: d.filterGroupNone, count: facets.groups_none ?? 0 },
-  ].sort(byCountDesc);
   // avail / seg now carry global "(n)" facet counts too (every
   // dropdown + every option shows a count). Unlike p1/p2/groups these keep
   // their declared order — the seg recency buckets (online → 30d) read
@@ -509,9 +476,7 @@ export default async function AdminUsers({
             searchPlaceholder={d.searchNameEmail}
             advancedLabel={d.advancedFilters}
             clearLabel={d.clearFilters}
-            p1Label={d.filterP1}
-            p2Label={d.filterP2}
-            groupLabel={d.filterGroup}
+            stateLabel={d.filterStatus}
             availLabel={d.filterAvail}
             genderLabel={d.filterGender}
             osLabel={d.filterOs}
@@ -520,9 +485,7 @@ export default async function AdminUsers({
             anyCount={facets.total ?? 0}
             sortLabel={d.sortLabel}
             sortOptions={sortOptions}
-            p1States={p1Options}
-            p2States={p2Options}
-            roleOptions={roleOptions}
+            stateOptions={stateOptions}
             availOptions={availOptions}
             genderOptions={genderOptions}
             osOptions={osOptions}

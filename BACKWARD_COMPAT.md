@@ -259,6 +259,20 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 - **How to remove:** drop this entry.
 - **Verify before removing:** check the live mobile version distribution.
 
+### `relations.page1` / `relations.page2` — being replaced by the `watch` table
+
+- **Added:** 2026-08-02 (migrations `watch_table`, `watch_model`, `watch_sync_function`, `the_viewer_list_is_derived`)
+- **Reason:** page1 and page2 are not two views of one relation, they are two independent single-slot mailboxes with nothing making them agree, and they did not: live on the day this landed, all NINE page2 "it ended" messages had no page1 counterpart (one inviter sat in four different people's page2 with his own board empty, one of them naming an account that no longer exists), and a real user's whole profile was filed as a viewer of another real user three weeks after she stopped watching him. `public.watch` is one row per "A is looking at B", with the game's own rule ("you are looking at one person") as a unique index instead of as discipline spread across 34 functions.
+- **Old shape (kept alive):** `users.relations.page1` and `users.relations.page2`, byte-identical to what they have always been. The published app reads them over Realtime and from the RPC response body and is completely unaffected. `page2.profiles[]` is now DERIVED (recomputed from the watchers' own page1 by the `users_watch_sync` trigger) but its shape is unchanged.
+- **New shape (preferred):** `public.watch` (`watcher_id`, `target_id`, `state` ∈ watching/invited/chat/ended, the clocks, per-side slot and clear stamps, last-known profile for a deleted counterpart), plus `users.seeking` and `users.discoverable` — the two ACCOUNT-level facts the boards were smuggling ("may the server seed me somebody", "am I shown to anyone"). `public._watch_pages(user_id)` projects a user's boards from them, proven against every live board: page1 84/84 identical, page2 83/84 with the single difference being the stale viewer it deliberately drops.
+- **Safe to remove after:** the mobile build that reads the watch-shaped relations is the live floor. **This is the user's stated end state: page1/page2 must disappear from the app entirely, including the vocabulary in `CLAUDE.md`.**
+- **How to remove:**
+  - convert the remaining `app_*` writers to write `watch` (staged, one at a time; the sync trigger keeps both coherent meanwhile)
+  - install the projection trigger so `relations.page1/page2` are written only by `_watch_pages`
+  - then: drop both keys from `relations`, drop `users_watch_sync`, `_watch_sync`, `_watch_sync_tg` and `app_refresh_snapshots` (projecting IS refreshing), and delete the ~40 `page1*`/`page2*` derived consts in `mobile/app/home.tsx`, `deriveCompat` + the legacy shapes in `mobile/src/stores/userStore.ts`, and the page1/page2 paragraphs in `CLAUDE.md`
+  - the replacement vocabulary is the one the client already invented: `match` (who is in front of me) and `watchers` (who is looking at me)
+- **Verify before removing:** check the live mobile version distribution in the Play Console.
+
 ## Removed (changelog)
 
 - **`app_cancel` credit precondition (cancel costs 1 heart)** — added 2026-05-22, **reverted 2026-05-31** (migration `restore_invite_credit_hold`). The "cancelling costs 1 heart, inviting is free" model was reverted to the hold/refund/forfeit invite model (cost on send, cancel forfeits). The 2026-05-22 informational entry pointed at a missing client-side affordability gate on the cancel button; both sides of that gate are now obsolete (the precondition is gone, and the new client gates the invite button instead). Old mobile builds that pre-date the disabled-cancel-button shim see the same cosmetic "1" badge they always did — harmless, self-corrects on update.

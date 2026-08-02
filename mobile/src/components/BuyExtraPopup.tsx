@@ -73,6 +73,10 @@ export function BuyExtraPopup({ visible, onDismiss, outOfCredits }: {
       // verbatim.
       confirmLabel={genderize(t('credits.invite.title'), profile?.is_male)}
       confirmIconStart={<UserPlusIcon color={WHITE} />}
+      // The one line the paragraph above doesn't answer: WHEN the credit lands
+      // (user directive 2026-08-02). It stands with the button because it is
+      // about what pressing it leads to, not about the popup.
+      actionNote={t('credits.invite.note')}
       // A profile the server hasn't seeded a code for yet: the action is
       // faded and inert, the popup still explains what it offers.
       confirmDisabled={referralCode(profile) == null}

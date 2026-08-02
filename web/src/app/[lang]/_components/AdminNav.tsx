@@ -6,12 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
   Users,
-  Layers,
   Flag,
-  Bug,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
+import { CirclesIcon } from "./AppIcons";
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { SignOutButton } from "./SignOutButton";
@@ -21,7 +20,7 @@ import { SignOutButton } from "./SignOutButton";
  * two renderings:
  * - sm and up: inline icon+label pills inside the header bar, plus the
  *   account cluster (who's signed in + sign out).
- * - below sm: a fixed bottom tab bar — five thumb-reachable destinations —
+ * - below sm: a fixed bottom tab bar — four thumb-reachable destinations —
  *   while the header keeps only the logo + a compact sign-out. A bottom bar
  *   beats a hamburger for a tool operated one-handed all day: every screen is
  *   one tap, nothing is hidden behind a menu.
@@ -29,7 +28,7 @@ import { SignOutButton } from "./SignOutButton";
  * Adding a tab is a single NAV_ITEMS entry.
  */
 
-type NavKey = "dashboard" | "users" | "groups" | "reports" | "bugs";
+type NavKey = "dashboard" | "users" | "groups" | "reports";
 
 type Labels = Record<NavKey, string> & { signOut: string };
 
@@ -133,12 +132,15 @@ function BottomSignOut({ label }: { label: string }) {
   );
 }
 
-const NAV_ITEMS: { key: NavKey; href: string; icon: LucideIcon }[] = [
+/** Lucide for the generic destinations; the app's own mark where the app has
+ * one, so the panel and the product point at circles with the same drawing. */
+type NavIcon = LucideIcon | ((p: { className?: string }) => React.ReactElement);
+
+const NAV_ITEMS: { key: NavKey; href: string; icon: NavIcon }[] = [
   { key: "dashboard", href: "/", icon: LayoutGrid },
   { key: "users", href: "/users", icon: Users },
-  { key: "groups", href: "/groups", icon: Layers },
+  { key: "groups", href: "/groups", icon: CirclesIcon },
   { key: "reports", href: "/reports", icon: Flag },
-  { key: "bugs", href: "/bugs", icon: Bug },
 ];
 
 export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Props) {

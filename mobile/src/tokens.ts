@@ -310,14 +310,22 @@ export const PAN_FAIL_OFFSET_Y = -8        // upward drag cancels
 // away again. One constant: every place that asks the question must ask it the
 // same way (PullScrollView's scroll sync AND its content-size correction).
 export const SCROLL_AT_TOP_PX = 8
-// Fraction of the screen height a pulled card must travel to commit — the
-// SINGLE uniform commit threshold for every pull surface (page1 skip, page2
-// decline, profile-sheet dismiss). The SAME fraction also normalizes the
-// sheet's open-progress while dragging (so the TabStrip "Once" → "My
-// profile" morph + chip slide track the card 1:1 and land exactly at
-// "Once"/Settings the instant the drag reaches the commit point). One
-// constant so the commit point and every consumer can never drift apart.
+// HOW FAR A PULL MUST TRAVEL DEPENDS ON WHAT LETTING GO *DOES*, and there are
+// exactly two answers (see usePullBehavior's `weight`).
+//
+// A pull that DECIDES something about the person on the card — page1's skip,
+// the invitation's decline — must be half the screen and must ignore speed
+// (user directive: "regardless of swipe speed, only if the finger and the card
+// together passed the half"). It is the one gesture in the app that cannot be
+// taken back, so it is deliberately expensive to make by accident.
 export const PULL_COMMIT_FRACTION = 0.5
+// A pull that merely TAKES A SURFACE AWAY — every overlay sheet, every Circles
+// page, chat — costs a fifth of the screen and honours a flick. Putting a page
+// away is reversible (the thing behind it is still there and re-opening it is
+// one tap), so it must be as cheap as putting a popup away: a `BottomSheet`
+// dismisses at SWIPE_DISMISS_PX (80) and a full-screen page asking for ~420px
+// instead is what made closing a group's settings or a chat feel like work.
+export const PULL_CLOSE_FRACTION = 0.2
 // Spring that settles a pulled card back to rest when released short of the
 // commit threshold (page1 skip / page2 decline). Seeded with the finger's
 // release velocity (see usePullBehavior) so the snap-back CONTINUES the drag's
@@ -393,6 +401,23 @@ export const MOTION = {
 // this slack, which covers Realtime propagation + the card slide-in. Sized far
 // above any legitimate find so it can only fire on a genuine hang.
 export const SEARCH_WATCHDOG_SLACK_MS = 6_000
+
+// The ceiling on holding a profile card back while its photos load (ms). NOT a
+// MOTION value either: a card is painted out of sight and only then allowed to
+// rise (WarmCard), and this is the point past which waiting stops being the
+// kinder answer — a hung fetch must not cost the user the card itself, least of
+// all an invitation with a clock running on it. Far above any real load, so it
+// can only fire on a genuine hang.
+export const WARM_CARD_MAX_MS = 10_000
+
+// How long a photo may be on its way before the card says so (ms). Not a
+// duration either: every image mounts as "loading" — a memory-cache hit
+// included, since the settle is a JS event that lands after the picture is
+// already painted — so a spinner drawn on that flag alone blinks over complete
+// photographs, worst of all on a card that was warmed before it rose. Long
+// enough that a picture already in memory never shows one, short enough that a
+// real wait is never silent.
+export const PHOTO_WAIT_DELAY_MS = 200
 
 // ── Bottom-sheet lift shadow ───────────────────────────────────────────────
 // Soft upward shadow that floats every BottomSheet off the backdrop. A single

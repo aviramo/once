@@ -6,7 +6,7 @@ import { MetaLine } from './MetaLine'
 import { AVATAR } from './CircleBits'
 import { tap } from '../lib/haptics'
 import type { MetaPart } from '../lib/meta'
-import { XS, SM, MD, TEXT } from '../tokens'
+import { XS, SM, MD, TEXT, WEIGHT } from '../tokens'
 import { INK, LINE, INK_WASH } from '../colors'
 
 // THE row of this app (user directive 2026-07-29): a leading glyph or face, a
@@ -56,6 +56,15 @@ export type StripProps = {
   title?: string
   /** Ink for the title, when a surface tints a row (the menu's tinted rows). */
   titleColor?: string
+  /** The row is a HEADING over the rows under it, not one of them — the join
+   *  queue's own row, which is the one strip in the app that names a section
+   *  rather than a person. It takes the app's one emphasis (`WEIGHT.medium`,
+   *  what `Chip bold` puts on a label) and nothing else: the size, the ink and
+   *  the lane are the strip's, so it is still the same row, said louder. This is
+   *  NOT a licence to weight a row's NAME — a title separates from its facts by
+   *  size and colour, never by a second weight (user directive 2026-07-29) — and
+   *  a name is what every other strip in the app carries. */
+  titleStrong?: boolean
   /** The facts about this row, stated on the app's ONE fact line (MetaLine).
    *  Falsy entries drop, so a caller can inline a condition. Never clipped:
    *  what is said about a row wraps with it. */
@@ -95,7 +104,7 @@ export type StripProps = {
 const stripFacts = (meta: StripProps['meta']): string[] =>
   (Array.isArray(meta) ? meta : [meta]).filter(Boolean) as string[]
 
-export function StripBody({ icon, iconLane = 'avatar', title, titleColor, meta, tag, tagStrong, lineEnd, endBeside, trailing }: StripProps) {
+export function StripBody({ icon, iconLane = 'avatar', title, titleColor, titleStrong, meta, tag, tagStrong, lineEnd, endBeside, trailing }: StripProps) {
   const facts = stripFacts(meta)
   // The one chip component, in its small size (`Chip small`): a strip's chip and
   // the menu row's chip are the same tile, so a count that moves between the two
@@ -106,18 +115,28 @@ export function StripBody({ icon, iconLane = 'avatar', title, titleColor, meta, 
   // Only the line the chip rides gives up the full width, and only when asked
   // to: that is the whole of `endBeside`.
   const endLineText = end != null && endBeside ? s.lineTextHug : s.lineText
+  // AND WHEN IT NO LONGER FITS BESIDE THE WORDS, IT DROPS UNDER THEM. `beside`
+  // is where the chip STANDS, not a promise that the two share one line: a
+  // sentence-length chip (the visibility row's "Ayelet and someone else are
+  // watching me") outgrows the column at a large font scale, and with the line
+  // unable to break, the only item that could give was the LABEL — which has
+  // `minWidth: 0`, so it was squeezed to zero width and painted nothing at all,
+  // leaving the pill floating in a band of empty white where the row's own state
+  // should have been (Hebrew_Big, 2026-08-02). The title owns the full width and
+  // is never clipped; what gives is the line, which grows a second row.
+  const endLine = end != null && endBeside ? s.lineWrap : null
   return (
     <>
       {icon ? (iconLane === 'avatar' ? <View style={s.icon}>{icon}</View> : icon) : null}
       <View style={s.text}>
         {title != null ? (
-          <View style={s.line}>
-            <Text style={[s.title, facts.length === 0 ? endLineText : s.lineText, titleColor ? { color: titleColor } : null]}>{title}</Text>
+          <View style={[s.line, facts.length === 0 ? endLine : null]}>
+            <Text style={[s.title, facts.length === 0 ? endLineText : s.lineText, titleStrong ? s.titleStrong : null, titleColor ? { color: titleColor } : null]}>{title}</Text>
             {facts.length === 0 ? end : null}
           </View>
         ) : null}
         {facts.length > 0 ? (
-          <View style={s.line}>
+          <View style={[s.line, endLine]}>
             <MetaLine parts={facts} style={endLineText} />
             {end}
           </View>
@@ -170,6 +189,14 @@ const s = StyleSheet.create({
   // them starts where they stop. Still `flexShrink`, so a long label wraps
   // instead of pushing the chip off the row.
   lineTextHug: { flexShrink: 1, minWidth: 0 },
+  // …and that line may BREAK, which is the other half of the same rule (see the
+  // render). A chip that fits stands beside the words exactly as before — a wrap
+  // costs nothing until something overflows — and one that does not takes a line
+  // of its own directly under them, at the same gap the text column puts between
+  // a title and the facts below it (`s.text`'s own XS): the pill is one more line
+  // this row has to say, so it is spaced like one. `rowGap` alone, so the SM
+  // between the words and a chip riding beside them is untouched.
+  lineWrap: { flexWrap: 'wrap', rowGap: XS },
   // A row's name is a navigation label wherever it appears — a group in the hub,
   // a person in a roster, a field in the menu: same size, same weight, same ink,
   // so the whole navigable surface reads as one voice (user directive
@@ -177,4 +204,6 @@ const s = StyleSheet.create({
   // (MetaLine's own type): title vs meta separates by size and colour, never by
   // a second weight (user directive 2026-07-29).
   title: { flexShrink: 1, fontSize: TEXT.md, color: INK },
+  // …unless the row is a heading rather than a name — see `titleStrong`.
+  titleStrong: { fontWeight: WEIGHT.medium },
 })

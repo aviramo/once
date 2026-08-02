@@ -16,9 +16,7 @@ type Props = {
   searchPlaceholder: string;
   advancedLabel: string;
   clearLabel: string;
-  p1Label: string;
-  p2Label: string;
-  groupLabel: string;
+  stateLabel: string;
   availLabel: string;
   genderLabel: string;
   osLabel: string;
@@ -28,9 +26,7 @@ type Props = {
   anyCount?: number;
   sortLabel: string;
   sortOptions: StateOption[];
-  p1States: StateOption[];
-  p2States: StateOption[];
-  roleOptions: StateOption[];
+  stateOptions: StateOption[];
   availOptions: StateOption[];
   genderOptions: StateOption[];
   osOptions: StateOption[];
@@ -81,9 +77,7 @@ export function SearchControls({
   searchPlaceholder,
   advancedLabel,
   clearLabel,
-  p1Label,
-  p2Label,
-  groupLabel,
+  stateLabel,
   availLabel,
   genderLabel,
   osLabel,
@@ -92,9 +86,7 @@ export function SearchControls({
   anyCount,
   sortLabel,
   sortOptions,
-  p1States,
-  p2States,
-  roleOptions,
+  stateOptions,
   availOptions,
   genderOptions,
   osOptions,
@@ -104,9 +96,7 @@ export function SearchControls({
   const pathname = usePathname();
   const sp = useSearchParams();
   const [q, setQ] = useState(sp.get("q") ?? "");
-  const [p1, setP1] = useState(sp.get("p1") ?? "");
-  const [p2, setP2] = useState(sp.get("p2") ?? "");
-  const [role, setRole] = useState(sp.get("group") ?? "");
+  const [state, setState] = useState(sp.get("state") ?? "");
   const [avail, setAvail] = useState(sp.get("avail") ?? "");
   const [gender, setGender] = useState(sp.get("gender") ?? "");
   const [os, setOs] = useState(sp.get("os") ?? "");
@@ -116,14 +106,15 @@ export function SearchControls({
 
   // One declarative list drives every dropdown + the active-count + clear.
   const filters = [
-    { key: "p1", label: p1Label, value: p1, set: setP1, options: p1States },
-    { key: "p2", label: p2Label, value: p2, set: setP2, options: p2States },
+    // ONE status per person, read off `watch`. This replaced the two board
+    // dropdowns (page1 / page2): they were two halves of a fact the reader had
+    // to reassemble, and on live data they could contradict each other.
     {
-      key: "role",
-      label: groupLabel,
-      value: role,
-      set: setRole,
-      options: roleOptions,
+      key: "state",
+      label: stateLabel,
+      value: state,
+      set: setState,
+      options: stateOptions,
     },
     {
       key: "avail",
@@ -158,15 +149,14 @@ export function SearchControls({
   const activeFilters = filters.reduce((n, f) => n + (f.value ? 1 : 0), 0);
   const [open, setOpen] = useState(activeFilters > 0);
 
-  // One URL owner for q + the eight filters + sort, so no control clobbers
-  // another's param.
+  // One URL owner for q + every filter + sort, so no control clobbers
+  // another's param. The matching environment is deliberately NOT here: it is
+  // a cookie, so it cannot be dropped by a link that forgot to carry it.
   useEffect(() => {
     const handle = setTimeout(() => {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
-      if (p1) params.set("p1", p1);
-      if (p2) params.set("p2", p2);
-      if (role) params.set("group", role);
+      if (state) params.set("state", state);
       if (avail) params.set("avail", avail);
       if (gender) params.set("gender", gender);
       if (os) params.set("os", os);
@@ -178,7 +168,7 @@ export function SearchControls({
       });
     }, 200);
     return () => clearTimeout(handle);
-  }, [q, p1, p2, role, avail, gender, os, seg, sort, pathname, router]);
+  }, [q, state, avail, gender, os, seg, sort, pathname, router]);
 
   return (
     <div className="space-y-2.5">

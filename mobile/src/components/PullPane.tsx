@@ -28,7 +28,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { I18nManager } from 'react-native'
 import {
-  PULL_COMMIT_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY, SCROLL_AT_TOP_PX,
+  PULL_COMMIT_FRACTION, PULL_CLOSE_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY, SCROLL_AT_TOP_PX,
   PULL_TUTORIAL_START_DELAY_MS, PULL_TUTORIAL_HOLD_MS,
 } from '../tokens'
 import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
@@ -407,12 +407,12 @@ export function usePullCtx(
 //                     PullContext so the card's inner scroll locks);
 //       'sheet'     = an overlay sheet (manualActivation + header-vs-scroll
 //                     touch arbitration, no PullContext);
-//   • tracking: 'scrollPan' is 1:1 — the card follows the finger exactly, NO
-//     resistance (user: "the card slides directly with the finger"). The only
-//     accidental-skip guard is the commit gate: RAW finger travel ≥
-//     commitDistance, NO velocity flick — so a fast swipe that didn't pass
-//     half never skips, and a short drag just snaps back. 'sheet' is also 1:1
-//     but KEEPS its flick (an overlay must dismiss freely);
+//   • tracking: BOTH activations are 1:1 — the surface follows the finger
+//     exactly, NO resistance (user: "the card slides directly with the
+//     finger"). What differs is only the commit GATE, and that is the
+//     `weight`'s, not the activation's: a 'decide' pull needs half the screen
+//     and ignores speed, a 'close' pull needs a fifth of it or a flick. See
+//     PullWeight;
 //   • what crossing the commit threshold DOES, via `commit`:
 //       'slideOff' (default) = ride the surface off-screen, then onCommit.
 //                              The surface is going away (skip / close).
@@ -430,6 +430,21 @@ export function usePullCtx(
 // surfaces still get independent instances (see usePullCtx).
 export type PullActivation = 'scrollPan' | 'sheet'
 export type PullCommit = 'slideOff' | 'snapBack'
+/** WHAT LETTING GO DOES, which is the only thing that decides how far the
+ *  finger must travel and whether speed counts.
+ *
+ *  'close'  (default) — the surface goes away and nothing else happens. A fifth
+ *           of the screen, or a flick. Every sheet, every Circles page, chat.
+ *           Putting a page away is reversible, so it costs what putting a
+ *           popup away costs; anything dearer reads as the swipe not working.
+ *  'decide' — the pull answers something about the person on the card (page1's
+ *           skip, the invitation's decline). HALF the screen and NO flick, so
+ *           a fast swipe that did not pass the half never decides anything.
+ *
+ *  Deliberately not derived from `activation` or `commit`: page1's skip is a
+ *  'slideOff' that decides, and a Circles profile page is a 'scrollPan' that
+ *  only closes. Only the call site knows which of the two its pull is. */
+export type PullWeight = 'close' | 'decide'
 export type PullBehavior = {
   gesture: GestureType
   pullY: SharedValue<number>
@@ -467,6 +482,8 @@ export function usePullBehavior(opts: {
   onCommit: () => void
   /** What crossing the threshold does. Defaults to 'slideOff'. */
   commit?: PullCommit
+  /** What letting go MEANS. Defaults to 'close'. See PullWeight. */
+  weight?: PullWeight
   /** Which way the surface is dragged away. Defaults to 'y'. 'x' is only
    *  meaningful with activation 'sheet' (the menu drawer). */
   axis?: PullAxis
@@ -483,12 +500,16 @@ export function usePullBehavior(opts: {
   headerBottom?: SharedValue<number>
   tutorial?: { ready: boolean; seenFlag: string; peek?: SharedValue<number> }
 }): PullBehavior {
-  const { activation, enabled, onCommit, commit: commitMode = 'slideOff', axis = 'y', headerBottom, tutorial } = opts
+  const { activation, enabled, onCommit, commit: commitMode = 'slideOff', weight = 'close', axis = 'y', headerBottom, tutorial } = opts
   const { height: screenH, width: screenW } = Dimensions.get('window')
   // The surface leaves along its own axis, so the travel it must cover to be
   // gone (and the fraction of it that commits) is measured on that axis.
   const screenSpan = axis === 'x' ? screenW : screenH
-  const commitDistance = screenSpan * PULL_COMMIT_FRACTION
+  // The gate is the WEIGHT's, never the activation's: how far a finger must
+  // carry a surface, and whether a flick counts, is a question about what
+  // letting go does — see PullWeight.
+  const deciding = weight === 'decide'
+  const commitDistance = screenSpan * (deciding ? PULL_COMMIT_FRACTION : PULL_CLOSE_FRACTION)
 
   const pullY = useSharedValue(0)
   // Last vertical finger velocity seen during a drag — captured every frame in
@@ -718,7 +739,9 @@ export function usePullBehavior(opts: {
           const travel = (axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY) - pullBase.value
           const speed = axis === 'x' ? e.velocityX * AXIS_X_SIGN : e.velocityY
           const past = travel >= commitDistance
-          const flick = speed > SWIPE_DISMISS_VELOCITY
+          // A flick is the CLOSE weight's alone: a surface thrown away is gone,
+          // a decision may never be made by speed. See PullWeight.
+          const flick = !deciding && speed > SWIPE_DISMISS_VELOCITY
           // Every release CONTINUES the finger: the ride-off eases out from the
           // drag's own speed, and a snap-back is the same velocity-seeded spring
           // page1 uses. A plain `withTiming` eased IN from a dead stop, so the
@@ -779,13 +802,16 @@ export function usePullBehavior(opts: {
       .onEnd(e => {
         'worklet'
         if (scrollOnly.value) return
-        // Commit ONLY when the finger (and thus the 1:1 card) crossed
-        // commitDistance (~half screen). Speed-INDEPENDENT: there is NO
+        // A DECIDING pull commits ONLY when the finger (and thus the 1:1 card)
+        // crossed commitDistance (~half screen), speed-INDEPENDENT: there is NO
         // velocity flick — a fast swipe that didn't pass half never skips
         // (user: "regardless of swipe speed, only if the finger and the
-        // card together passed the half"). Released short of half ⇒ the
-        // card snaps back (onFinalize).
-        if (Math.max(0, e.translationY) >= commitDistance) {
+        // card together passed the half"). A CLOSING one — a profile page, the
+        // preview sheet — is the ordinary swipe-away and honours a flick like
+        // every other surface that only goes away. Released short ⇒ the card
+        // snaps back (onFinalize).
+        const travel = Math.max(0, e.translationY)
+        if (travel >= commitDistance || (!deciding && e.velocityY > SWIPE_DISMISS_VELOCITY)) {
           if (commitMode === 'snapBack') {
             // The card STAYS (the invite decline opens a confirm dialog over
             // it). Fire the request; onFinalize springs the card home because
@@ -820,7 +846,7 @@ export function usePullBehavior(opts: {
         if (engaged.value) { engaged.value = false; runOnJS(setPulling)(false) }
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activation, gestureEnabled, commitMode, axis, commitDistance, screenSpan, screenH, onCommit, headerBottom])
+  }, [activation, gestureEnabled, commitMode, deciding, axis, commitDistance, screenSpan, screenH, onCommit, headerBottom])
 
   return { gesture, pullY, pulling, pullEngaged: engaged, pullCtx, panRef, setScrollAtTop, reset, commit, tutorialPlaying, commitDistance, screenSpan, slidOut }
 }

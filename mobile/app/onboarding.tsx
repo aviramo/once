@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
 import { useAuthStore } from '../src/stores/authStore'
-import { useUserStore } from '../src/stores/userStore'
+import { useUserStore, selectNeedsAccount, selectProfileBuilt } from '../src/stores/userStore'
 import { invoke } from '../src/lib/api'
 import { tap } from '../src/lib/haptics'
 import { BIO_MAX, normalizeBio } from '../src/lib/bio'
@@ -149,18 +149,22 @@ export default function OnboardingPage() {
   const insets = useSafeAreaInsets()
   const bottomInset = useBottomInset()
 
-  // WHERE A RE-ENTRY RESUMES. An account that exists with fewer than
-  // MIN_PHOTOS photos is an unfinished profile, and the photo step is the one
-  // thing standing between it and finished (user directive 2026-07-31: two
-  // photos ARE the definition, the bio is optional) — so there is one resume
-  // point now, not two. It used to also land on the bio step for a profile that
-  // had its photos but no bio, back when an empty bio was what "unfinished"
-  // meant; such a profile is simply built, and the dock's profile key opens the
-  // preview for it rather than routing here at all.
-  const initialStep: number =
-    profile?.name && profile?.birth_date && (profile.images?.length ?? 0) < MIN_PHOTOS
-      ? 4
-      : 1
+  // WHERE A RE-ENTRY RESUMES. Steps 1-3 CREATE THE ACCOUNT, so an account that
+  // already exists never sees them: whatever brought such a user here, the only
+  // thing left to do on this screen is the photos, and step 4 is where they are
+  // (user directive 2026-07-31: MIN_PHOTOS photos ARE the definition of a built
+  // profile, the bio is optional — so there is one resume point, not two. It
+  // used to also land on the bio step for a profile that had its photos but no
+  // bio, back when an empty bio was what "unfinished" meant).
+  //
+  // The question is `selectNeedsAccount`, the same one the routing guard and the
+  // boot routes ask, rather than a photo count of its own: a profile that is
+  // already BUILT used to fall through this test to step 1 and be shown the
+  // gender picker, which is the one thing a user with an account may never be
+  // handed — pressing on through it overwrites his real name, gender and
+  // birthdate. Nothing routes a built profile here, and if anything ever does it
+  // now lands on a photo step it can simply swipe away from.
+  const initialStep: number = selectNeedsAccount(profile) ? 1 : 4
   const [step, setStep] = useState(initialStep)
   // DID THIS SCREEN ARRIVE OVER ANOTHER PAGE? An account that already exists at
   // MOUNT means one thing only: home pushed us here (the dock's profile key,
@@ -406,20 +410,29 @@ export default function OnboardingPage() {
     if (!user) router.replace('/login')
   }, [user])
 
-  // The same resume decision as initialStep, for a profile that landed AFTER
-  // mount (the fetch resolving under a cold start). Same condition, so the two
-  // can never send the user to different steps.
+  // AN ACCOUNT THAT ARRIVES AFTER MOUNT TAKES THE USER OFF STEPS 1-3. The same
+  // resume decision as initialStep, for a profile that lands later — the fetch
+  // resolving under a cold start, or a launch that reached this screen with the
+  // profile question still unanswered. Same condition, so the two can never send
+  // the user to different steps.
+  //
+  // A BUILT profile has nothing to do here at all and leaves for home, which is
+  // the way back out of the gender picker for a user who should never have been
+  // shown it. One shot, held by the same ref the account submit sets: once the
+  // user is working in this flow (or has just created his account through it) a
+  // profile changing underneath — the photos flushing on the way to step 5 makes
+  // it BUILT while he is still writing his bio — may not move him.
   const seededFromProfileRef = useRef(initialStep !== 1)
   useEffect(() => {
     if (seededFromProfileRef.current) return
-    if (!profile?.name || !profile?.birth_date) return
-    if ((profile.images?.length ?? 0) >= MIN_PHOTOS) return
+    if (selectNeedsAccount(profile)) return
     seededFromProfileRef.current = true
-    setIsMale(profile.is_male ?? null)
-    setName(profile.name ?? '')
-    setBio(profile.bio ?? '')
+    if (selectProfileBuilt(profile)) { leaveForHome(); return }
+    setIsMale(profile?.is_male ?? null)
+    setName(profile?.name ?? '')
+    setBio(profile?.bio ?? '')
     setStep(4)
-  }, [profile])
+  }, [profile, leaveForHome])
 
   useEffect(() => {
     if (step === 2) {

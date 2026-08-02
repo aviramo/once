@@ -6,11 +6,16 @@ import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { relativeTime, dateTime } from "@/lib/relativeTime";
 import { userImageUrl } from "@/lib/userImage";
 import {
-  page1Narrative,
-  page2Narrative,
   availabilityNarrative,
   profileCompleteNarrative,
+  outcomeLabel,
 } from "@/lib/humanize";
+import {
+  watchStatusNarrative,
+  watchInvitedTag,
+  watchersLine,
+  type WatchState,
+} from "@/lib/watchStatus";
 import { buildEventCards } from "@/lib/eventCards";
 import { AdminShell } from "../../_components/AdminShell";
 import {
@@ -32,6 +37,7 @@ import { UserPhotos } from "./_components/UserPhotos";
 import {
   UnifiedActivity,
   type UnifiedPartner,
+  type ConnectionItem,
 } from "./_components/UnifiedActivity";
 import { setUserGroupAssignment } from "../../groups/actions";
 import { deleteUser, resetUser, setUserHearts, setUserTest } from "../actions";
@@ -56,17 +62,6 @@ type UserRecord = {
     push_token?: unknown;
   } | null;
   relations: {
-    page1?: {
-      state?: string;
-      message?: string;
-      profile?: { user_id?: string; name?: string };
-    };
-    page2?: {
-      state?: string;
-      message?: string;
-      profile?: { user_id?: string; name?: string };
-      profiles?: Array<{ user_id?: string; name?: string }>;
-    };
     availability?: { state?: string; reason?: string | null } | null;
     push?: { perm?: string; dead?: boolean; token?: boolean } | null;
     credits?: {
@@ -77,6 +72,20 @@ type UserRecord = {
   } | null;
   /** Test-environment flag; see UserTestToggle. */
   is_test: boolean | null;
+};
+
+/** One row of `admin_watch_history`, before this page turns it into words. */
+type WatchHistoryRow = {
+  other_id: string | null;
+  other_name: string | null;
+  direction: "out" | "in";
+  state: "watching" | "invited" | "chat" | "ended";
+  created_at: string;
+  updated_at: string;
+  ended_at: string | null;
+  ended_reason: string | null;
+  on_his_board: boolean;
+  cleared: boolean;
 };
 
 type PartnerMini = {
@@ -126,6 +135,7 @@ export default async function UserDetailPage({
     { data: target },
     { data: authUser },
     logRowsRes,
+    { data: watchHistoryData },
     { data: allRoles },
     { data: myGroupRows },
     { data: storageFiles },
@@ -142,6 +152,12 @@ export default async function UserDetailPage({
     isAdmin
       ? admin.rpc("admin_log_for_user", { p_user_id: userId, p_limit: 300 })
       : Promise.resolve({ data: [] as LogRow[] }),
+    // Every watch this person has been part of. Unlike the status below it
+    // needs no environment: it is one person's own history, and the pair at
+    // the other end of a watch row is always in the same pool anyway.
+    isAdmin
+      ? admin.rpc("admin_watch_history", { p_user_id: userId, p_limit: 100 })
+      : Promise.resolve({ data: [] }),
     admin
       .from("groups")
       .select("id, name")
@@ -189,6 +205,33 @@ export default async function UserDetailPage({
     a.accountChanges,
   );
 
+  // The watch history, humanised HERE rather than in the client component:
+  // an ending's word is the same `outcomes` vocabulary the event rows use, and
+  // one place should own it. A row with no reason is a watch window that
+  // simply lapsed — `_expire_watch_one` locks the board with no message — so
+  // it falls back to the bare state rather than inventing an outcome.
+  const CONN_TONE = {
+    watching: "busy",
+    invited: "busy",
+    chat: "chat",
+    ended: "ended",
+  } as const;
+  const connections: ConnectionItem[] = (
+    (watchHistoryData ?? []) as WatchHistoryRow[]
+  ).map((w) => ({
+    id: `${w.direction}-${w.other_id ?? "gone"}`,
+    at: w.ended_at ?? w.updated_at,
+    otherId: w.other_id,
+    otherName: w.other_name,
+    direction: w.direction,
+    label:
+      (w.state === "ended" ? outcomeLabel(a, w.ended_reason) : null) ??
+      (a.statusStates as Record<string, string>)[w.state],
+    tone: CONN_TONE[w.state],
+    onBoard: w.on_his_board,
+    cleared: w.cleared,
+  }));
+
   // All partner IDs referenced anywhere in the feed → fetch profiles + emails
   // in one batch for the affected-users chips and the search filter. Drop any
   // UUIDs in the payload that don't actually correspond to a user row.
@@ -197,6 +240,9 @@ export default async function UserDetailPage({
     for (const a of e.affected) partnerIdSet.add(a.id);
     if (e.byOther && e.actorId) partnerIdSet.add(e.actorId);
   }
+  // The connections are in the same list and want the same face, so their
+  // counterparts join the one batch rather than getting a lookup of their own.
+  for (const c of connections) if (c.otherId) partnerIdSet.add(c.otherId);
   const partnerIds = [...partnerIdSet];
 
   const { data: partnerProfiles } = partnerIds.length
@@ -223,8 +269,23 @@ export default async function UserDetailPage({
   const photo = userImageUrl(u.user_id, u.data?.images?.[0]?.normal);
   const age = calcAge(u.birth_date);
   const email = authUser?.user?.email ?? null;
-  const n1 = page1Narrative(a, u.relations);
-  const n2 = page2Narrative(a, u.relations);
+  // ONE status, read off `watch` — page1's badge beside page2's is gone: they
+  // were two halves of a fact the reader had to reassemble, and on live data
+  // they contradicted each other. What does NOT fold into it is an invitation
+  // he received: somebody else's action, still unanswered.
+  // Asked with the user's OWN partition, not the header switch's: a deep link
+  // to a test account while the panel sits in production must still say what
+  // that account is doing, and admin_watch_states is environment-bounded.
+  const { data: watchStateData } = isAdmin
+    ? await admin.rpc("admin_watch_states", {
+        p_is_test: u.is_test === true,
+        p_user_ids: [u.user_id],
+      })
+    : { data: [] };
+  const watch = ((watchStateData ?? []) as WatchState[])[0];
+  const status = watchStatusNarrative(a.watch, a, watch);
+  const invited = watchInvitedTag(a.watch, watch);
+  const watching = watchersLine(a.watch, watch);
   const gate = availabilityNarrative(a, u.relations);
   // Second, independent gate: the matchability clause inside
   // others(only_available) requires >= 1 photo. It is not part of `relations`,
@@ -233,6 +294,12 @@ export default async function UserDetailPage({
   const incomplete = profileCompleteNarrative(a, u.data);
   const gender =
     u.is_male === true ? d.male : u.is_male === false ? d.female : "—";
+  const releaseDict = {
+    release: a.actions.release,
+    busy: a.actions.busy,
+    done: a.actions.done,
+    fail: a.actions.fail,
+  };
 
   return (
     <AdminShell dict={a} active="users" backHref="/users">
@@ -299,28 +366,18 @@ export default async function UserDetailPage({
                 <PageReleaseBadge
                   userId={u.user_id}
                   page={1}
-                  tone={n1.tone}
-                  text={n1.text}
-                  dict={{
-                    release: a.actions.release,
-                    busy: a.actions.busy,
-                    done: a.actions.done,
-                    fail: a.actions.fail,
-                  }}
+                  tone={status.tone}
+                  text={status.text}
+                  dict={releaseDict}
                 />
               ) : null}
-              {isAdmin ? (
+              {isAdmin && invited ? (
                 <PageReleaseBadge
                   userId={u.user_id}
                   page={2}
-                  tone={n2.tone}
-                  text={n2.text}
-                  dict={{
-                    release: a.actions.release,
-                    busy: a.actions.busy,
-                    done: a.actions.done,
-                    fail: a.actions.fail,
-                  }}
+                  tone={invited.tone}
+                  text={invited.text}
+                  dict={releaseDict}
                 />
               ) : null}
               {isAdmin ? (
@@ -439,13 +496,22 @@ export default async function UserDetailPage({
         </Card>
       </Section>
 
-      {/* Merged event log — admin only. Group managers do not see user
-          activity history. */}
+      {/* ONE list: every event this person was part of and every watch they
+          have been either end of, in one chronological stream under one
+          search. `watch` rows outlive the relation they describe, so the
+          connections are the history the two boards could never hold — but
+          they are the same story as the events, not a second one.
+          Admin only; group managers do not see user activity. */}
       {isAdmin ? (
-        <Section title={d.eventsLog.title} hint={d.eventsLog.hint}>
+        <Section
+          title={d.eventsLog.title}
+          hint={watching ?? d.eventsLog.hint}
+          count={connections.length + entries.length}
+        >
           <UnifiedActivity
             selfId={u.user_id}
             entries={entries}
+            connections={connections}
             partners={partnerMap}
             dict={d.eventsLog.feed}
             locale={locale}

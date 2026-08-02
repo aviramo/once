@@ -284,9 +284,15 @@ export default {
   // host with https://), so this lights up under the field when it refused —
   // with the refused text still in the field to be corrected.
   'circles.linkInvalid': 'That link is not valid',
+  // The name of the mark beside the field (screen readers only): it opens the
+  // saved link exactly as a reader of the circle would, so a manager can check
+  // for himself where it leads.
+  'circles.linkTest': 'Check the link',
+  // The word under the mark in the circle popup's foot: the ONE thing in the app
+  // that opens a circle's link, and it is there only when there is one.
+  'circles.moreDetails': 'More details',
   // A save refused for any other reason (name, description).
   'circles.saveFailed': 'Not saved, try again',
-  'circles.moreDetails': 'More details',
 
   // A circle you manage
   'circles.shareInvite': 'Share invite link',
@@ -425,6 +431,10 @@ export default {
   'settings.rangeUnlimited': 'Unlimited',
   'settings.km': 'km',
   'settings.meter': 'm',
+  // Height's unit word, beside the distance ones because it is the same
+  // question: what this device measures in. The imperial form (5'8") carries no
+  // word at all, so there is nothing here for it.
+  'settings.cm': 'cm',
   'settings.location': 'Location',
   'settings.locationDevice': 'My location',
   'settings.locationCustom': 'Custom address',
@@ -473,8 +483,6 @@ export default {
   'family.hasKidsNo': 'No kids',
   'family.isForKids': 'Interested in kids',
   'family.isForKidsMore': 'Interested in more kids',
-  'family.isForKidsYes': 'Yes',
-  'family.isForKidsNo': 'No',
   'family.fivePlus': '5+',
   'family.agesQuestion': 'Ages',
   'family.scheduleTitle': 'Days I have my kids',
@@ -536,6 +544,29 @@ export default {
   'family.summaryFreeWeekend': 'free weekend',
   'family.summaryWithKidsWeekend': 'busy weekend',
   'common.gotIt': 'Got it',
+  // THE app's yes and no. Two rows ask a question with a third answer — the one
+  // where neither pill is lit ("hasn't said") — and both take these: the
+  // kids-preference row and the smoking row (see TriOptionRow). They used to be
+  // `family.isForKidsYes/No`, i.e. one question's private copy of the two most
+  // reusable words there are.
+  'common.yes': 'Yes',
+  'common.no': 'No',
+
+  // ── How tall I am, and whether I smoke (user directive 2026-08-02) ──────────
+  // One row of the match card's fact tile, above the kids: two facts about the
+  // same body, divided by the chip's own hairline. Either half may be missing
+  // and the row still draws; with neither there is no row.
+  // The title doubles as the EMPTY row's label on your own card — the invitation
+  // to fill it in states exactly what the popup behind it is called, so it is
+  // one string and not two that have to be kept the same.
+  'traits.title': 'Height & smoking',
+  'traits.height': 'Height',
+  'traits.heightNotSet': 'Not stated',
+  'traits.smoking': 'Smoking',
+  // Gendered in Hebrew (מעשן / מעשנת), which is why they go through `tg`; English
+  // inflects neither, so the base key answers for both.
+  'traits.smokes': 'Smoker',
+  'traits.smokesNo': 'Non-smoker',
   // Count phrase with correct singular/plural, built by creditsText() in
   // lib/credits.ts. Used wherever a credits amount is shown in prose.
   'credits.count.one': '1 credit',
@@ -544,9 +575,16 @@ export default {
   // one sentence and one action button. The dead 3/10/50 packs and the
   // paragraph above them are gone.
   'credits.buy.title': 'More credits',
-  // The popup's sentence. It states the two ways credits arrive, THE INVITE
+  // The popup's sentence. It states the two ways credits arrive, THE FRIEND
   // FIRST (user directive 2026-07-31): that is the one the button under it
-  // offers and the only one the user can act on. The daily refill follows as
+  // offers and the only one the user can act on. What the credit actually pays
+  // for is a friend ENTERING YOUR FRIENDS LIST, by any route (user correction
+  // 2026-08-02) — it said "who joins through you", i.e. someone who installed
+  // the app off your invite link, and that is the REFERRAL ledger, a different
+  // economy. The trigger is friend_links_credit
+  // (20260726160000_friend_link_credits.sql): every new friend_links row pays
+  // +1 to BOTH sides once per pair, whoever invited whom and whether or not
+  // either of them was ever invited. The daily refill follows as
   // the fallback it is, with its condition up front instead of in a trailing
   // parenthesis ({time} is a bare "HH:MM" from formatGrantTime). Deliberately
   // NOT the friends page's caption (circles.inviteReward) that used to be
@@ -555,8 +593,8 @@ export default {
   // which that caption never said. genderize() is a no-op here (no {m|f}
   // marker). The no-hour variant covers a wallet the server hasn't stamped a
   // next-refill on yet.
-  'credits.buy.desc': 'For every friend who joins through you, you both get another credit. If you have no credits, a new one is added every day at {time}',
-  'credits.buy.descNoTime': 'For every friend who joins through you, you both get another credit. If you have no credits, a new one is added every day',
+  'credits.buy.desc': 'For every friend added to your friends list, you both get another credit. If you have no credits, a new one is added every day at {time}',
+  'credits.buy.descNoTime': 'For every friend added to your friends list, you both get another credit. If you have no credits, a new one is added every day',
   // Same sheet, opened at the paywall moment (an invite/accept the user can't
   // afford). There the title names the reason it appeared instead of the thing
   // it offers. Reached from the settings credits row, it keeps the title above.
@@ -564,6 +602,10 @@ export default {
   // The popup's action button: the one active way to earn. genderize() is a
   // no-op on English (no {m|f} marker) — single form.
   'credits.invite.title': 'Invite a friend',
+  // The small line standing directly above that button (user directive
+  // 2026-08-02): the paragraph above says what a friend is WORTH, this says
+  // what actually pays it out, which is the one thing a sender can get wrong.
+  'credits.invite.note': 'They need to open the link after installing the app',
   // Text that rides along with the link in the OS share sheet.
   'credits.invite.shareText': 'Join me on Once',
   'settings.miles': 'mi',
@@ -925,7 +967,6 @@ Next may surprise`,
   'chat.confirmSend.schedule': 'Send your schedule with the kids',
   'chat.confirmSend.schedule_m': 'Send your schedule with the kids',
   'chat.confirmSend.schedule_f': 'Send your schedule with the kids',
-  'chat.confirmSend.send': 'Send',
   'chat.locationLabel': 'Location',
   'chat.locationOpen': 'Tap to open in Maps',
   'chat.scheduleTitle': "Days I'm free (no kids)",
@@ -952,8 +993,18 @@ Next may surprise`,
   // "More" rather than "Settings" (user directive 2026-07-30) — what it opens is
   // the wallet, the account, support and the site, which is everything else
   // rather than a preferences screen.
+  //
+  // "Preferences" was the one that broke that rule — eleven characters with no
+  // seam in them, so a large font scale cut it MID-WORD ("Preferen / ces",
+  // Hebrew_Big 2026-08-02) and the key came out two lines tall beside three that
+  // were not. It is SEARCH now (user directive, same day): the word its own glyph
+  // has said since the magnifier replaced the sliders — what these preferences
+  // decide is WHO the app goes looking for — and one that fits its quarter at
+  // every font scale. The KEY still says preferences, because what it opens is
+  // PreferencesPopup; a key naming the surface and a value naming the door is the
+  // same split `communities.*` keys keep, and it is not a thing to "fix".
   'home.dock.profile': 'Profile',
-  'home.dock.preferences': 'Preferences',
+  'home.dock.preferences': 'Search',
   'home.dock.more': 'More',
   // Accessibility labels for controls with no visible text. The menu button's two
   // labels went with the button (2026-07-30), the invite's with its X (same day:

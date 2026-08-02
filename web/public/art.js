@@ -32,8 +32,12 @@
   })();
   function F(i) { return FACES[i % FACES.length]; }
 
-  /* Phone design space. Every screen below is drawn against it. */
-  var SW = 300, SH = 617;
+  /* Phone design space. Every screen below is drawn against it. `RAD` is the
+     app's one card/chip/button radius at this scale (RADIUS in tokens.ts, on a
+     360dp-wide phone). */
+  var SW = 300, SH = 617, RAD = 10;
+  /* How tall the dock stands. The card is laid out ABOVE it, never under it. */
+  var DOCK_H = 74;
 
   /* ---------- Primitives ---------- */
   var uid = 0;
@@ -85,12 +89,6 @@
   function bar(x, y, wd, ht, fill, o) {
     return rect(x, y, wd, ht || 10, (ht || 10) / 2, fill || INK, ' filter="url(#BLUR)"' + op(o == null ? 0.6 : o));
   }
-  function roundBtn(cx, cy, r, glyph) { return circle(cx, cy, r, SURFACE) + glyph; }
-  function hamburger(cx, cy, wd) {
-    return line('M' + n(cx - wd / 2) + ' ' + n(cy - wd * 0.34) + 'h' + n(wd) +
-      'M' + n(cx - wd / 2) + ' ' + n(cy) + 'h' + n(wd) +
-      'M' + n(cx - wd / 2) + ' ' + n(cy + wd * 0.34) + 'h' + n(wd), INK, n(wd * 0.15));
-  }
   /* The path runs 1.62s tall, so it starts half of that above cy: the glyph is
      centred on (cx, cy) and drops straight into a round button. */
   function shield(cx, cy, s, fill) {
@@ -113,23 +111,32 @@
     return group(circle(cx, cy, r, color) +
       ring(cx, cy, r * 0.64, inner || SURFACE, Math.max(1.4, r * 0.13), ' opacity=".85"'), op(o));
   }
-  function chip(x, y, wd, glyph) {
-    var ht = 30;
-    return rect(x, y, wd, ht, ht / 2, SURFACE) + bar(x + 14, y + 10, wd - 52, 10) +
-      group(glyph, ' transform="translate(' + n(x + wd - 26) + ',' + n(y + 15) + ')"');
+  /* THE card's heading tile: one white pill in the top-START corner carrying the
+     report flag, the name, and - in the states that have one - the hairline and
+     the invitation's clock behind it. Everything that names the person is here,
+     and nothing else is ever in that corner. */
+  function headingChip(x, y, wd, clock) {
+    var ht = 30, cx = x + 13;
+    return rect(x, y, wd + (clock ? 46 : 0), ht, RAD, SURFACE) +
+      group(shield(cx, y + ht / 2, 6, ACCENT)) +
+      bar(x + 22, y + 10, wd - 34, 11, INK, 0.78) +
+      (clock
+        ? rect(x + wd + 2, y + 7, 1, 16, 0, LINE) + bar(x + wd + 11, y + 10, 26, 11, INK, 0.78)
+        : '');
   }
-  /* A text-only chip: the same white tile, one line of copy, no trailing glyph.
-     `bold` reads it a touch heavier - the name/age heading uses it. */
-  function plainChip(x, y, wd, bold) {
-    var ht = 30;
-    return rect(x, y, wd, ht, ht / 2, SURFACE) +
-      bar(x + 14, y + 10, wd - 28, bold ? 11 : 10, INK, bold ? 0.78 : 0.6);
-  }
-  /* The report button: deliberately de-emphasised beside the heart - the small
-     chrome size over the TINTED page purple with a MUTED shield, so it recedes
-     rather than mirroring the heart (user directive 2026-07-26). */
-  function reportBtn(cx, cy, r) {
-    return circle(cx, cy, r, PAGE) + group(shield(cx, cy, r * 0.62, ACCENT), op(0.5));
+  /* ONE TILE, NOT THREE: one set of facts about one person is one object, and the
+     app's hairline stands between the KINDS. Each row is a glyph and a line of
+     copy; the tile hugs them and casts the same lift every white tile over a
+     photo does. */
+  function factTile(x, y, wd, rows) {
+    var pad = 13, rowH = 30, ht = rows.length * rowH + pad * 2 - 8, out = '';
+    for (var i = 0; i < rows.length; i++) {
+      var ry = y + pad + i * rowH;
+      if (i) out += rect(x, ry - 5, wd, 1, 0, LINE);
+      out += group(rows[i][0], ' transform="translate(' + n(x + 14) + ',' + n(ry + 9) + ')"') +
+        bar(x + 26, ry + 4, rows[i][1], 10, INK, 0.62);
+    }
+    return rect(x, y, wd, ht, RAD, SURFACE, ' filter="url(#SHADOW)"') + out;
   }
   function pinGlyph(s) {
     return line('M0 ' + n(-s) + 'c' + n(s * 0.6) + ' 0 ' + n(s) + ' ' + n(s * 0.44) + ' ' + n(s) + ' ' + n(s) +
@@ -142,93 +149,174 @@
       line('M' + n(-s * 0.72) + ' ' + n(s * 0.7) + 'c0 ' + n(-s * 0.5) + ' ' + n(s * 0.32) + ' ' + n(-s * 0.78) + ' ' + n(s * 0.72) + ' ' + n(-s * 0.78) +
         's' + n(s * 0.72) + ' ' + n(s * 0.28) + ' ' + n(s * 0.72) + ' ' + n(s * 0.78), ACCENT, s * 0.26);
   }
-  /* Two overlapping heads - the shared-group fact chip. */
+  /* Two interlaced rings - the circles mark, on a fact row and on the dock. */
   function usersGlyph(s) {
     return ring(-s * 0.42, 0, s * 0.4, ACCENT, n(s * 0.24)) + ring(s * 0.42, 0, s * 0.4, ACCENT, n(s * 0.24));
+  }
+  /* A parent and a child - the family fact. Stature, not head size, says which
+     of the two is the child. */
+  function kidsGlyph(s) {
+    return ring(-s * 0.34, -s * 0.5, s * 0.3, ACCENT, n(s * 0.22)) +
+      line('M' + n(-s * 0.86) + ' ' + n(s * 0.72) + 'a' + n(s * 0.52) + ' ' + n(s * 0.52) + ' 0 0 1 ' + n(s * 1.04) + ' 0', ACCENT, s * 0.22) +
+      ring(s * 0.52, -s * 0.05, s * 0.2, ACCENT, n(s * 0.18)) +
+      line('M' + n(s * 0.24) + ' ' + n(s * 0.72) + 'a' + n(s * 0.28) + ' ' + n(s * 0.28) + ' 0 0 1 ' + n(s * 0.56) + ' 0', ACCENT, s * 0.18);
+  }
+  /* THE card's one round action, in every state that has one: the conversation.
+     (The heart is gone from the watching card - what an invitation offers on
+     either side is the chat, so the two sides are one mark.) */
+  function chatGlyph(s, fill) {
+    return path('M' + n(-s) + ' ' + n(-s * 0.1) + 'a' + n(s) + ' ' + n(s * 0.86) + ' 0 1 1 ' + n(s * 0.42) + ' ' + n(s * 0.68) +
+      'l' + n(-s * 0.62) + ' ' + n(s * 0.24) + 'l' + n(s * 0.18) + ' ' + n(-s * 0.56) +
+      'a' + n(s * 0.9) + ' ' + n(s * 0.78) + ' 0 0 1 ' + n(s * 0.02) + ' ' + n(-s * 0.36) + 'Z',
+      ' fill="' + (fill || ACCENT) + '"');
+  }
+  /* The dock's other three: a silhouette (profile), a magnifier (search) and a
+     cut stone (the wallet). */
+  function searchGlyph(s) {
+    return ring(s * 0.16, -s * 0.16, s * 0.56, ACCENT, n(s * 0.2)) +
+      line('M' + n(-s * 0.28) + ' ' + n(0.28 * s) + 'L' + n(-s * 0.78) + ' ' + n(s * 0.78), ACCENT, s * 0.2);
+  }
+  function creditGlyph(s) {
+    return line('M' + n(-s * 0.42) + ' ' + n(-s * 0.62) + 'h' + n(s * 0.84) + 'l' + n(s * 0.38) + ' ' + n(s * 0.5) +
+      'L0 ' + n(s * 0.88) + 'L' + n(-s * 0.8) + ' ' + n(-s * 0.12) + 'Z', ACCENT, s * 0.2) +
+      line('M' + n(-s * 0.8) + ' ' + n(-s * 0.12) + 'h' + n(s * 1.6), ACCENT, s * 0.2);
+  }
+  function plusGlyph(s) {
+    return line('M0 ' + n(-s) + 'V' + n(s) + 'M' + n(-s) + ' 0H' + n(s), ACCENT, s * 0.3);
+  }
+  function micGlyph(s) {
+    return rect(-s * 0.3, -s, s * 0.6, s * 1.2, s * 0.3, ACCENT) +
+      line('M' + n(-s * 0.62) + ' ' + n(s * 0.1) + 'a' + n(s * 0.62) + ' ' + n(s * 0.62) + ' 0 0 0 ' + n(s * 1.24) + ' 0M0 ' + n(s * 0.72) + 'v' + n(s * 0.36), ACCENT, s * 0.22);
+  }
+
+  /* THE dock: a strip of four along the foot of the screen - a glyph with one
+     word under it, the app's hairline between two of them, nothing with a fill.
+     Its ground IS the page's, and what says it is a foreground is the lift. */
+  function dock() {
+    var top = SH - DOCK_H, keys = [userGlyph, usersGlyph, searchGlyph, creditGlyph], out = '';
+    for (var i = 0; i < 4; i++) {
+      var cx = 16 + (SW - 32) * (i + 0.5) / 4;
+      if (i) out += rect(16 + (SW - 32) * i / 4, top + 12, 1, 42, 0, LINE);
+      out += group(keys[i](9), ' transform="translate(' + n(cx) + ',' + n(top + 24) + ')"') +
+        bar(cx - 14, top + 38, 28, 8, INK, 0.55);
+    }
+    return rect(0, top, SW, SH - top, 0, PAGE, ' filter="url(#SHADOW)"') + out +
+      rect(105, SH - 12, 90, 5, 2.5, INK, op(0.3));
+  }
+
+  /* THE popup: every surface the app raises is this one - a white sheet off the
+     bottom with the drag handle in its own top air, a title, the sentence under
+     it and the ONE thing to do about it. No scrim: it floats on its own lift. */
+  function sheet(top, opts) {
+    opts = opts || {};
+    var y = top + 26;
+    var out = rect(0, top, SW, SH - top, 0, SURFACE, ' filter="url(#SHADOW)"') +
+      rect(126, top + 12, 48, 4, 2, INK, op(0.32)) +
+      bar(SW / 2 - 52, y, 104, 14, INK, 0.82);
+    y += 30;
+    for (var i = 0; i < (opts.lines || 2); i++) {
+      out += bar(24 + (i ? 20 : 0), y, SW - 48 - (i ? 40 : 0), 10, INK, 0.6);
+      y += 18;
+    }
+    y += 18;
+    if (opts.pair) {
+      out += rect(24, y, 78, 44, RAD, PAGE) + bar(50, y + 19, 26, 10, INK, 0.45) +
+        rect(112, y, SW - 136, 44, RAD, BRAND) + bar(150, y + 18, 84, 12, SURFACE, 0.92);
+    } else {
+      out += rect(24, y, SW - 48, 44, RAD, BRAND) + bar(SW / 2 - 42, y + 18, 84, 12, SURFACE, 0.92) +
+        (opts.token ? token(SW / 2 - 62, y + 22, 9, SURFACE, 1, BRAND) : '');
+    }
+    return out + rect(105, SH - 12, 90, 5, 2.5, INK, op(0.3));
   }
 
   /* ---------- Screens (drawn against 300x617) ---------- */
   var SCREEN = {};
 
-  /* Home: one person, full bleed, with the shell chrome over it. The match card
-     layout (2026-07-26): hamburger top-START, name/age heading chip top-END, the
-     fact chips (distance, family, shared group) stacked bottom-START, the small
-     de-emphasised report at the very bottom-START, and the heart (invite) floating
-     bottom-END. */
+  /* Home: one person, full bleed, with the card's chrome over it and the dock
+     along the foot. The layout is the current contract: the heading tile in the
+     top-START corner (report flag, name, and the clock behind the hairline when
+     the state has one), ONE merged tile of facts bottom-START, ONE round action
+     bottom-END - the chat glyph, in every state that has an action at all - and
+     the dock as a flow sibling BELOW the card, never a layer over it.
+     There is no hamburger, no heart and no status card: all three are gone from
+     the app. */
   SCREEN.home = function (face, o) {
     o = o || {};
-    return photo(0, 0, SW, SH, 0, face || F(0), null, o.zoom, o.dy) +
-      roundBtn(34, 42, 20, hamburger(34, 42, 18)) +
-      plainChip(166, 27, 118, true) +
-      chip(16, 404, 168, pinGlyph(7)) +
-      chip(16, 442, 150, userGlyph(9)) +
-      chip(16, 480, 120, usersGlyph(8)) +
-      reportBtn(36, 556, 20) +
-      circle(254, 546, 30, BRAND) + heart(254, 546, 20) +
-      rect(105, 598, 90, 5, 2.5, INK, op(0.35));
+    return photo(0, 0, SW, SH - DOCK_H, 0, face || F(0), null, o.zoom, o.dy) +
+      headingChip(16, 30, 108, o.clock) +
+      factTile(16, 378, 176, [
+        [usersGlyph(8), 108],
+        [pinGlyph(7), 132],
+        [kidsGlyph(9), 120],
+      ]) +
+      circle(254, 502, 27, SURFACE, ' filter="url(#SHADOW)"') +
+      group(chatGlyph(14, BRAND), ' transform="translate(254,502)"') +
+      dock();
   };
 
-  /* Invite: the countdown panel over the person. `tone` picks the action colour. */
-  SCREEN.invite = function (face, tone, withToken) {
-    var btn = tone || BRAND;
-    return rect(0, 0, SW, 250, 0, PAGE) +
-      roundBtn(266, 34, 18, hamburger(266, 34, 16)) +
-      bar(46, 66, 208, 11) + bar(30, 88, 240, 11) + bar(70, 110, 160, 11) +
-      rect(108, 140, 84, 26, 13, INK, ' filter="url(#BLUR)" opacity=".78"') +
-      rect(24, 192, withToken ? 168 : 252, 44, 22, btn) +
-      bar(withToken ? 66 : 108, 208, withToken ? 84 : 84, 12, SURFACE, 0.92) +
-      (withToken ? rect(204, 192, 72, 44, 22, GHOST) + bar(222, 209, 36, 11, INK, 0.4) + token(48, 214, 12, SURFACE, 1, BRAND) : '') +
-      photo(0, 250, SW, SH - 250, 0, face || F(1), null, 1, 0) +
-      roundBtn(34, 286, 18, shield(34, 286, 12));
+  /* Invite: the same card, with the popup the app raises over it - the message,
+     what it costs and the one thing to do about it. The clock rides INSIDE the
+     name tile; the popup is where the words are. `pair` is the incoming side
+     (refuse beside approve), plain is the outgoing one (cancel). */
+  SCREEN.invite = function (face, opts) {
+    opts = opts || {};
+    return photo(0, 0, SW, SH - DOCK_H, 0, face || F(1), null, 1, 0) +
+      headingChip(16, 30, 108, true) +
+      factTile(16, 268, 176, [[usersGlyph(8), 108], [pinGlyph(7), 132]]) +
+      dock() +
+      sheet(400, { lines: 2, pair: opts.pair, token: !opts.pair });
   };
 
-  /* Chat: the conversation that opens on a match. */
+  /* Chat: the conversation that opens on an approval. No title bar at all - the
+     partner's name rides the card, not the sheet - and the composer is ONE box
+     with both of its controls standing INSIDE it. */
   SCREEN.chat = function () {
     var bubble = function (x, y, wd, mine) {
-      return rect(x, y, wd, 44, 18, mine ? BRAND : TINT, mine ? '' : ' stroke="' + LINE + '" stroke-width="1.5"') +
-        bar(x + 16, y + 17, wd - 32, 11, mine ? SURFACE : INK, mine ? 0.9 : 0.5);
+      return rect(x, y, wd, 40, 16, mine ? BRAND : SURFACE) +
+        bar(x + 14, y + 15, wd - 28, 11, mine ? SURFACE : INK, mine ? 0.9 : 0.5);
     };
     return rect(0, 0, SW, SH, 0, PAGE) +
-      rect(0, 0, SW, 58, 0, TINT) + rect(14, 16, 46, 26, 13, SURFACE) + bar(112, 24, 76, 12, INK, 0.7) +
-      circle(268, 29, 15, SURFACE) + line('M262 23l12 12M274 23l-12 12', INK, 2.4, op(0.6)) +
-      bubble(24, 300, 190, false) + bubble(24, 356, 150, false) +
-      bubble(96, 412, 180, true) + bubble(140, 468, 136, true) +
-      rect(0, 545, SW, 72, 0, TINT) + circle(36, 581, 22, BRAND) +
-      rect(70, 561, 212, 40, 20, SURFACE) + bar(88, 576, 110, 11, INK, 0.35) +
-      rect(105, 606, 90, 5, 2.5, INK, op(0.3));
+      bubble(24, 232, 178, false) +
+      bubble(112, 284, 164, true) +
+      bubble(24, 336, 146, false) +
+      bubble(24, 388, 196, false) +
+      bubble(92, 440, 184, true) +
+      rect(16, 512, SW - 32, 48, RAD, SURFACE, ' stroke="' + LINE + '" stroke-width="1.5"') +
+      group(plusGlyph(7), ' transform="translate(40,536)"') +
+      bar(64, 531, 120, 11, INK, 0.35) +
+      group(micGlyph(7), ' transform="translate(260,536)"') +
+      rect(105, SH - 12, 90, 5, 2.5, INK, op(0.3));
   };
 
-  /* Communities hub: my-friends (pinned) over the groups you manage / are in,
-     with create + find actions. Pale top, dark glyphs, no purple band. */
+  /* The circles hub: the page says its own NAME first, at the START of the row,
+     and what it can DO stands at the far END (create, then find). Under it the
+     circles themselves - my friends over the groups. */
   SCREEN.communities = function () {
     // A short row of overlapping member faces, left to right.
     var faces = function (x, y, r, list) {
       return list.map(function (f, i) { return avatar(x + i * (r * 1.35), y, r, f, null, SURFACE); }).join('');
     };
-    // One group row: rounded tile, a group thumbnail, a name line, a little
-    // cluster of member faces and a count.
+    // One circle row: the app's ONE row - a thumbnail, the name, and the facts
+    // under it, size FIRST.
     var groupRow = function (y, thumb, list) {
-      return rect(20, y, 260, 76, 18, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') +
+      return rect(20, y, 260, 76, RAD + 4, SURFACE, ' filter="url(#SHADOW)"') +
         photo(32, y + 12, 52, 52, 14, thumb, null, 1.2, 0) +
         bar(100, y + 18, 116, 12) +
         faces(102, y + 48, 11, list) + bar(176, y + 44, 34, 9, INK, 0.4);
     };
     return rect(0, 0, SW, SH, 0, PAGE) +
-      // header: back chevron + title
-      line('M42 34l-10 10 10 10', INK, 3, op(0.7)) +
-      bar(62, 36, 92, 15, INK, 0.8) +
-      // my-friends, pinned (a distinct tinted tile)
-      rect(20, 74, 260, 84, 20, TINT) +
+      // the page's own name, at the START; its two actions at the END
+      bar(20, 34, 104, 15, INK, 0.8) +
+      group(plusGlyph(8), ' transform="translate(246,42)"') +
+      group(searchGlyph(9), ' transform="translate(276,42)"') +
+      // my friends, over the circles
+      rect(20, 74, 260, 84, RAD + 6, SURFACE, ' filter="url(#SHADOW)"') +
       faces(54, 116, 18, [F(6), F(7), F(8)]) +
       bar(150, 100, 94, 13) + bar(150, 126, 64, 10, INK, 0.4) +
-      // groups you manage
-      bar(24, 180, 118, 10, INK, 0.5) + groupRow(198, F(9), [F(10), F(11), F(12)]) +
-      // groups you are in
-      bar(24, 292, 118, 10, INK, 0.5) + groupRow(310, F(13), [F(14), F(15), F(16)]) +
-      // actions: create (solid) + find (outline)
-      rect(20, 406, 124, 46, 23, BRAND) + bar(52, 423, 60, 12, SURFACE, 0.92) +
-      rect(156, 406, 124, 46, 23, SURFACE, ' stroke="' + LINE + '" stroke-width="2"') + bar(184, 423, 68, 11, INK, 0.45) +
-      rect(105, 598, 90, 5, 2.5, INK, op(0.35));
+      bar(24, 182, 96, 10, INK, 0.5) + groupRow(200, F(9), [F(10), F(11), F(12)]) +
+      groupRow(288, F(13), [F(14), F(15), F(16)]) +
+      groupRow(376, F(17), [F(18), F(19), F(20)]) +
+      rect(105, SH - 12, 90, 5, 2.5, INK, op(0.3));
   };
 
   /* ---------- Devices ---------- */
@@ -489,7 +577,7 @@
   ART.now = function () {
     var cx = 578, cy = 250, R = 130;
     return wide(
-      part('sc-lead', device(60, 22, 0.7, SCREEN.invite(F(4), BRAND, true), true)) +
+      part('sc-lead', device(60, 22, 0.7, SCREEN.invite(F(4), { pair: true }), true)) +
       part('sc-link', line('M282 250H428', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"'), pivot(282, 250)) +
       part('sc-dial', circle(cx, cy, R, TINT) + ring(cx, cy, R, LINE, 18)) +
       // The spent sweep and the hands are drawn strokes, so a page can start the
@@ -536,7 +624,7 @@
   ART.final = function () {
     return svg(800, 450,
       part('sc-lead', device(72, 44, 0.58, SCREEN.home(F(6)), true)) +
-      part('sc-lead', device(310, 44, 0.58, SCREEN.invite(F(7), BRAND, true), true)) +
+      part('sc-lead', device(310, 44, 0.58, SCREEN.invite(F(7), { pair: true }), true)) +
       part('sc-lead', device(548, 44, 0.58, SCREEN.chat(), true))
     );
   };

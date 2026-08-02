@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, AppState, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Animated, AppState, BackHandler, Dimensions, Easing, FlatList, I18nManager, Image, InteractionManager, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, requestRecordingPermissionsAsync, setAudioModeAsync, RecordingPresets } from 'expo-audio'
 import { Text, TextInput } from '../src/components/AppText'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -10,7 +10,7 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler'
-import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated'
+import ReAnimated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, runOnJS } from 'react-native-reanimated'
 import { supabase } from '../src/lib/supabase'
 import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
@@ -22,6 +22,7 @@ import { FIELD_SKIN } from '../src/field'
 import { INK, SURFACE, SURFACE_SUNK, PAGE, INK_MUTED, INK_PALE, INK_WASH, LINE, WHITE, INK_SUBTLE, INK_DIM, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW, SHADOW_BLACK } from '../src/colors'
 import { SendIcon, MicIcon, StopIcon, PlusIcon, ReplyIcon, CopyIcon } from '../src/components/icons'
 import { BottomSheet, SheetActionRow, SheetActions } from '../src/components/BottomSheet'
+import { Chip } from '../src/components/Chip'
 import { copyToClipboard } from '../src/lib/clipboard'
 import { PullPane, usePullBehavior, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
@@ -37,6 +38,17 @@ import { nameFromTitle } from '../src/lib/profileTitle'
 
 const isRTL = I18nManager.isRTL
 const N_REC_BARS = 34
+
+// One thing that can be added to a message: the mark, the word beside it, and
+// what the tap does. Local to the composer — this strip lives INSIDE the field's
+// own pill, so it is not the app's `OptionStrip` (a mark with a caption under it,
+// standing along the foot of a surface).
+type AttachOption = {
+  key: string
+  label: string
+  icon: React.ReactNode
+  onPress: () => void
+}
 
 // How long the message list waits before mirroring itself to disk. Long enough
 // that a burst of arrivals is one write, short enough that the cache is never
@@ -376,9 +388,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const loadingMoreRef = useRef(false)
 
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
-  const [attachVisible, setAttachVisible] = useState(false)
   const [attachConfirm, setAttachConfirm] = useState<'location' | 'schedule' | null>(null)
-  const [inputWrapWidth, setInputWrapWidth] = useState(0)
   // A picker is on its way up. NOTHING IS DRAWN FOR IT (user directive
   // 2026-08-01): the picker is its own answer to the tap, and a spinner is for
   // the photo going to the server — which is what the pending bubble already
@@ -389,22 +399,46 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   // initializes the native bridge so the first launchImageLibraryAsync after
   // this is dramatically faster.
   useEffect(() => { ImagePicker.getMediaLibraryPermissionsAsync().catch(() => {}) }, [])
+  // THE STRIP IS ONE STATE OF THE FIELD, AND THE CONFIRMATION IS ANOTHER OF THE
+  // SAME ONE (user directive 2026-08-02). Choosing a place or a schedule used to
+  // put the options away and raise a purple bar ABOVE the composer with its own
+  // send button and its own X — three controls saying what the field's own two
+  // already say. It stays in the box: the sentence rises where the options were,
+  // the pill's own send mark sends it and the plus, still turned as an X, is what
+  // cancels it. So the strip is open for both, and one flag says so.
+  const attachOpen = attachMenuOpen || !!attachConfirm
   const attachAnim = useSharedValue(0)
+  useEffect(() => { attachAnim.value = withTiming(attachOpen ? 1 : 0) }, [attachOpen])
+  // BACK PUTS THE STRIP AWAY BEFORE IT PUTS THE CHAT AWAY (user directive
+  // 2026-08-02) — from both of its states, and back to an ordinary field either
+  // way, which is exactly what the X beside it does. Registered here rather than
+  // in the shell: chat mounts after home, and the last handler registered is the
+  // first one asked, so this stands in front of the overlay's own pop and falls
+  // through to it (returning false) whenever the field is already at rest.
   useEffect(() => {
-    if (attachMenuOpen) {
-      setAttachVisible(true)
-      attachAnim.value = withTiming(1)
-    } else {
-      attachAnim.value = withTiming(0, undefined, (finished) => {
-        if (finished) runOnJS(setAttachVisible)(false)
-      })
-    }
-  }, [attachMenuOpen])
-  const attachBarStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: (isRTL ? 1 : -1) * inputWrapWidth * (1 - attachAnim.value) }],
+    if (!attachOpen) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (attachConfirm) { setAttachConfirm(null); return true }
+      if (attachMenuOpen) { setAttachMenuOpen(false); return true }
+      return false
+    })
+    return () => sub.remove()
+  }, [attachOpen, attachConfirm, attachMenuOpen])
+  // ── THE ADD GLYPH IS THE CLOSE GLYPH, TURNED ───────────────────────────────
+  // The options do not slide in over the field from the side any more: the plus
+  // TURNS 45° into an X and the options RISE INTO THE FIELD from below, so the one
+  // mark that opened them is the one that puts them away. There is therefore no
+  // second X in the row — a strip whose own opener is standing there as a close
+  // mark has nothing left to carry one for.
+  const attachPlusStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${attachAnim.value * 45}deg` }],
   }))
-  const inputWrapBorderStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(attachAnim.value, [0, 1], [LINE, INK]),
+  // The strip rises through the pill's own clip, out of the bottom edge and back
+  // down into it. Its travel is the resting line's height, which is the box it
+  // lands in — nothing here is measured.
+  const attachStripStyle = useAnimatedStyle(() => ({
+    opacity: attachAnim.value,
+    transform: [{ translateY: INPUT_MIN_HEIGHT * (1 - attachAnim.value) }],
   }))
   const [lightboxUri, setLightboxUri] = useState<string | null>(null)
   // Signed URL cache: image_key → signed URL (valid ~24h)
@@ -1483,6 +1517,46 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     }
   }, [userId, otherId, myFamily, takeReply])
 
+  // What can be added to this message. Each option puts the strip away as it
+  // goes: the plus turns back into a plus in the same movement. The glyphs are
+  // ICON.md — a mark standing beside a line of text, sized as the send and mic
+  // marks in the same pill are.
+  const attachOptions = useMemo<AttachOption[]>(() => [
+    {
+      key: 'image',
+      label: t('chat.attachMenu.image'),
+      icon: (
+        <Svg width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
+          <Circle cx={12} cy={14} r={3.5} />
+        </Svg>
+      ),
+      onPress: handlePickImage,
+    },
+    {
+      key: 'location',
+      label: t('chat.attachMenu.location'),
+      icon: (
+        <Svg width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+          <Circle cx={12} cy={9} r={2.5} />
+        </Svg>
+      ),
+      onPress: () => { tap(); setAttachMenuOpen(false); setAttachConfirm('location') },
+    },
+    ...(canSendSchedule ? [{
+      key: 'schedule',
+      label: t('chat.attachMenu.schedule'),
+      icon: (
+        <Svg width={ICON.md} height={ICON.md} viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Rect x={3} y={4.5} width={18} height={16} rx={2.5} />
+          <Path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+        </Svg>
+      ),
+      onPress: () => { tap(); setAttachMenuOpen(false); setAttachConfirm('schedule') },
+    } as AttachOption] : []),
+  ], [canSendSchedule, handlePickImage])
+
   const handleRetrySchedule = useCallback(async (failedMsg: Message) => {
     if (!failedMsg.schedule || !userId || !otherId) return
     setMessages(prev => prev.map(m =>
@@ -1920,9 +1994,8 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         {/* The dots are page chrome, not a message: they float on the sheet's
             own header line and never enter the list, so nothing they do can
             move a bubble (user directive 2026-07-27). Geometry mirrors
-            SheetHeader — the page gutter from the START edge, chromeGap below
-            the safe-area top — and that line carries nothing else now that the
-            close X is gone (2026-07-31). */}
+            SheetHeader — chromeGap below the safe-area top — and that line
+            carries nothing else now that the close X is gone (2026-07-31). */}
         <View
           pointerEvents="none"
           style={[styles.typingFloat, { top: insets.top + OVERLAY.chromeGap }]}
@@ -1931,8 +2004,11 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         </View>
           {/* Tapping the messages area dismisses the open attach menu. Mounted
               only while it's open, so it never intercepts normal scroll/taps. */}
-          {attachMenuOpen && (
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setAttachMenuOpen(false)} />
+          {attachOpen && (
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => { setAttachMenuOpen(false); setAttachConfirm(null) }}
+            />
           )}
         </View>
 
@@ -1952,37 +2028,9 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                 onPress={() => { tap(); setReplyTo(null) }}
                 hitSlop={8}
                 accessibilityLabel={t('chat.reply.a11y')}
-                style={({ pressed }) => [styles.replyComposerClose, pressed && styles.attachBarItemPressed]}
+                style={({ pressed }) => [styles.replyComposerClose, pressed && styles.glyphOnInkPressed]}
               >
                 <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={INK_MUTED} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M18 6L6 18M6 6l12 12" />
-                </Svg>
-              </Pressable>
-            </View>
-          )}
-          {attachConfirm && (
-            <View style={styles.attachConfirm}>
-              <Text style={styles.attachConfirmText}>
-                {attachConfirm === 'location'
-                  ? tg('chat.confirmSend.location', isMale)
-                  : tg('chat.confirmSend.schedule', isMale)}
-              </Text>
-              <Pressable
-                onPress={() => {
-                  tap()
-                  if (attachConfirm === 'location') handleShareLocation()
-                  else handleSendSchedule()
-                }}
-                style={({ pressed }) => [styles.attachConfirmSend, pressed && styles.attachConfirmSendPressed]}
-              >
-                <Text style={styles.attachConfirmSendLabel}>{genderize(t('chat.confirmSend.send'), isMale)}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => { tap(); setAttachConfirm(null) }}
-                hitSlop={8}
-                style={({ pressed }) => [styles.attachConfirmClose, pressed && styles.attachBarItemPressed]}
-              >
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M18 6L6 18M6 6l12 12" />
                 </Svg>
               </Pressable>
@@ -1991,19 +2039,24 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           {/* Always render the text input row so the keyboard stays open while
               recording/previewing. The recording and preview UIs overlay on top. */}
           <View style={styles.inputRow}>
-            <ReAnimated.View
-              style={[styles.inputWrap, inputWrapBorderStyle]}
-              onLayout={e => setInputWrapWidth(e.nativeEvent.layout.width)}
-            >
+            <View style={styles.inputWrap}>
               {/* Add — the LEADING glyph, standing before the first character of
                   the message. A plus rather than a paperclip: what opens behind
                   it is a photo / a place / a time, which is "add something to
                   this message", not "attach a file to it". */}
               <ComposerGlyph
-                disabled={attachVisible}
-                onPress={() => { tap(); setAttachConfirm(null); setAttachMenuOpen(true) }}
+                steady
+                onPress={() => {
+                  tap()
+                  // Turned into an X it is the one way back out of both states:
+                  // a confirmation it CANCELS, the options it simply closes.
+                  if (attachConfirm) { setAttachConfirm(null); return }
+                  setAttachMenuOpen(o => !o)
+                }}
               >
-                <PlusIcon size={ICON.xl} color={INK} />
+                <ReAnimated.View style={attachPlusStyle}>
+                  <PlusIcon size={ICON.xl} color={INK} />
+                </ReAnimated.View>
               </ComposerGlyph>
               <View style={styles.inputAnimWrap}>
                 <TextInput
@@ -2033,70 +2086,82 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                   which could sit at 0 while the field already held text, leaving
                   the mic up on a composed message. One source can't drift, and it
                   flips in the very commit the character lands. */}
+              {/* A confirmation is a message waiting to be sent, so the mark that
+                  sends it is the field's OWN send mark — the same glyph in the
+                  same berth, never a second send button raised beside the
+                  sentence (user directive 2026-08-02). */}
               <ComposerGlyph
-                disabled={hasText && sending}
-                onPress={() => hasText ? handleSend() : handleMicPress()}
+                disabled={!attachConfirm && hasText && sending}
+                onPress={() => {
+                  if (attachConfirm) {
+                    tap()
+                    if (attachConfirm === 'location') handleShareLocation()
+                    else handleSendSchedule()
+                    return
+                  }
+                  hasText ? handleSend() : handleMicPress()
+                }}
               >
-                {hasText
+                {attachConfirm || hasText
                   ? <SendIcon size={ICON.md} color={INK} />
                   : <MicIcon size={ICON.md} color={INK} />}
               </ComposerGlyph>
-              {attachVisible && inputWrapWidth > 0 && (
-                <ReAnimated.View style={[styles.attachBar, attachBarStyle]}>
-                  <View style={styles.attachBarInner}>
-                    <View style={styles.attachBarItems}>
-                      <Pressable
-                        onPress={handlePickImage}
-                        accessibilityLabel={t('chat.attachMenu.image')}
-                        style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
-                      >
-                        <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                          <Path d="M9 5h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2z" />
-                          <Circle cx={12} cy={14} r={3.5} />
-                        </Svg>
-                      </Pressable>
-                      <View style={styles.attachBarDivider} />
-                      <Pressable
-                        onPress={() => { tap(); setAttachMenuOpen(false); setAttachConfirm('location') }}
-                        accessibilityLabel={t('chat.attachMenu.location')}
-                        style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
-                      >
-                        <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                          <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-                          <Circle cx={12} cy={9} r={2.5} />
-                        </Svg>
-                      </Pressable>
-                      {canSendSchedule && (
-                        <>
-                          <View style={styles.attachBarDivider} />
-                          <Pressable
-                            onPress={() => { tap(); setAttachMenuOpen(false); setAttachConfirm('schedule') }}
-                            accessibilityLabel={t('chat.attachMenu.schedule')}
-                            style={({ pressed }) => [styles.attachBarItem, pressed && styles.attachBarItemPressed]}
-                          >
-                            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                              <Rect x={3} y={4.5} width={18} height={16} rx={2.5} />
-                              <Path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
-                            </Svg>
-                          </Pressable>
-                        </>
-                      )}
-                      <View style={styles.attachBarDivider} />
-                      <Pressable
-                        onPress={() => { tap(); setAttachMenuOpen(false) }}
-                        style={({ pressed }) => [styles.attachBarClose, pressed && styles.attachBarItemPressed]}
-                      >
-                        <View style={styles.attachBarCloseCircle}>
-                          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                            <Path d="M18 6L6 18M6 6l12 12" />
-                          </Svg>
-                        </View>
-                      </Pressable>
+              {/* ── What can be added to this message ──
+                  For as long as it is open the strip IS the field: it stands in
+                  the pill's own box, on the field's own white, from the plus's
+                  berth to the far edge — so the mark that opened it is beside it
+                  the whole time, as the X that closes it. Each option is a glyph
+                  with its word BESIDE it (a line of text in a line-tall box, not
+                  a caption under a mark), and the app's one hairline divides
+                  two. It rides up through the pill's own clip; nothing about it
+                  is measured.
+
+                  A CONFIRMATION IS THE SAME STRIP, SAYING ONE THING, AND IT SAYS
+                  IT ON A CHIP: the app's small tile — INK on the PAGE tint, the
+                  chip's own small type — hugging the sentence at the start edge,
+                  where the options stood. It stops short of the trailing berth
+                  (`attachStripSending`) because there the send mark is what it is
+                  FOR; the options cover that end, having nothing to send yet.
+
+                  IT IS MOUNTED WHETHER OR NOT IT IS OPEN, and hidden by the
+                  animation alone (user report 2026-08-02: the options appeared
+                  with no rise at all). Mounting it on the tap put a whole render
+                  — a strip of chips and glyphs — between the finger and the first
+                  frame of the movement, so most of the travel was over before
+                  anything was on the screen. Nothing here is expensive to keep. */}
+              <ReAnimated.View
+                pointerEvents={attachOpen ? 'auto' : 'none'}
+                style={[
+                  styles.attachStrip,
+                  attachConfirm && styles.attachStripSending,
+                  attachStripStyle,
+                ]}
+              >
+                  {attachConfirm ? (
+                    <View style={styles.attachStripSentence}>
+                      <Chip
+                        small
+                        text={attachConfirm === 'location'
+                          ? tg('chat.confirmSend.location', isMale)
+                          : tg('chat.confirmSend.schedule', isMale)}
+                      />
                     </View>
-                  </View>
-                </ReAnimated.View>
-              )}
-            </ReAnimated.View>
+                  ) : attachOptions.map((o, i) => (
+                    <Fragment key={o.key}>
+                      {i > 0 ? <View style={styles.attachStripDivider} /> : null}
+                      <Pressable
+                        onPress={o.onPress}
+                        accessibilityRole="button"
+                        accessibilityLabel={o.label}
+                        style={({ pressed }) => [styles.attachStripItem, pressed && styles.composerSlotPressed]}
+                      >
+                        {o.icon}
+                        <Text style={styles.attachStripLabel} numberOfLines={1}>{o.label}</Text>
+                      </Pressable>
+                    </Fragment>
+                  ))}
+              </ReAnimated.View>
+            </View>
 
             {/* Recording and preview are the SAME box in another state, so they
                 wear the same pill with the same bare glyphs inside it — never a
@@ -2227,10 +2292,16 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 // they do while recording. Its berth is therefore the dot's width and its tap
 // target comes from the slop, which reaches only into the bar's own air (it stops
 // short of the trash's ink on one side and of the clock on the other).
-function ComposerGlyph({ onPress, disabled, mark, children }: {
+function ComposerGlyph({ onPress, disabled, mark, steady, children }: {
   onPress: () => void
   disabled?: boolean
   mark?: boolean
+  /** ITS OWN MOVEMENT IS THE FEEDBACK, so it does not also fade under the finger
+   *  (the add mark, which turns into an X on the tap). A fade on top of a turn
+   *  reads as the mark going grey rather than as a press — and Android is free to
+   *  hold `pressed` across the re-render the tap causes, which left it faded
+   *  after the finger was gone. */
+  steady?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -2245,7 +2316,7 @@ function ComposerGlyph({ onPress, disabled, mark, children }: {
         styles.composerSlot,
         mark && styles.composerMarkSlot,
         disabled && styles.composerSlotDisabled,
-        pressed && !disabled && styles.composerSlotPressed,
+        pressed && !disabled && !steady && styles.composerSlotPressed,
       ]}
     >
       {children}
@@ -3520,6 +3591,10 @@ const styles = StyleSheet.create({
   // the END in 2026-07-30 and left the pill hanging 44dp inside an empty edge,
   // then went altogether 2026-07-31. Never in the list, so it cannot move a
   // single bubble (user directive 2026-07-27).
+  // It stands at the START corner, which is the side the partner's own bubbles
+  // stand on (`bubbleTheirs` is `flex-start`) — and those are WHITE, so an INK
+  // pill is only ever purple on white there. Centred it rode over the middle of
+  // the list, where an outgoing INK bubble passes behind it (2026-08-02).
   typingFloat: {
     position: 'absolute',
     start: OVERLAY.chromeInset,
@@ -3560,9 +3635,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SM,
   },
   inputWrap: {
-    // The composer is a typing surface, so it wears the standard field skin.
-    // `borderColor` is then animated to INK while the attach bar is open
-    // (inputWrapBorderStyle) — the one allowed override, and it is state.
+    // The composer is a typing surface, so it wears the standard field skin, and
+    // it wears it in EVERY state: the box does not change because the options are
+    // open (user directive 2026-08-02). Its border used to animate to INK with
+    // them, which made a field the user is still typing in read as a different
+    // control for as long as a menu was up.
     //
     // It is the row's ONLY child, so it spans the whole width: both of its
     // controls stand inside it, each a bare glyph in a `composerSlot` (see
@@ -3629,98 +3706,60 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
-  // The attachments strip does not sit NEXT TO the field — for as long as it is
-  // open it IS the field, so its frame is stated as the pill's own box on all
-  // four sides and nothing about it is measured. It used to be a JS width pinned
-  // to one edge, and that width was the wrap's OUTER layout width: 2 ×
-  // STROKE.thin more than the box it had to fill, so the strip ran past the start
-  // edge and only `overflow:'hidden'` hid the difference — which left it to the
-  // platform's rounded-corner clip to decide where the purple stopped, and iOS
-  // and Android do not decide that identically (reported on an iPhone,
-  // 2026-07-30: the strip did not sit flush on the box). The measured width still
-  // drives the SLIDE, which is all a distance was ever good for.
-  //
-  // It carries the field's own INNER corner (RADIUS less the rule it sits
-  // inside), so it lands on the box exactly with or without the clip; its own
-  // `overflow` is what keeps an item's press flash from squaring those corners.
-  attachBar: {
+  // ── The options, INSIDE the field ──────────────────────────────────────────
+  // For as long as it is open the strip IS the field, so it takes the pill's own
+  // box — the field's white, the resting line's height, bottom-anchored so it
+  // stays on the last line exactly as the glyphs beside it do. Its START edge is
+  // the plus's berth: the mark that opened it is never covered, because it is the
+  // X that closes it. It rides in and out through the pill's own `overflow`, so
+  // nothing here is measured and no width is pinned to an edge.
+  attachStrip: {
     position: 'absolute',
-    start: 0, end: 0, top: 0, bottom: 0,
-    borderRadius: RADIUS - STROKE.thin,
-    backgroundColor: INK,
-    overflow: 'hidden',
-  },
-  attachBarInner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  attachBarItems: {
-    flex: 1,
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  attachBarItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SM,
-    alignSelf: 'stretch',
-  },
-  attachBarItemPressed: { backgroundColor: WHITE_SOFT },
-  attachBarDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 22,
-    backgroundColor: WHITE_MID,
-  },
-  attachBarClose: {
-    alignSelf: 'stretch',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachBarCloseCircle: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: WHITE_SOFT,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  // Confirm-send popup (above input bar, keyboard stays open)
-  attachConfirm: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SM,
-    paddingHorizontal: MD,
-    paddingVertical: SM,
-    backgroundColor: INK,
-  },
-  attachConfirmText: {
-    flex: 1,
-    fontSize: TEXT.md,
-    color: WHITE,
-    fontWeight: WEIGHT.medium,
-  },
-  attachConfirmClose: {
-    width: 32, height: 32,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: 16,
-  },
-  attachConfirmSend: {
-    paddingHorizontal: MD,
-    height: 32,
-    borderRadius: 16,
+    start: INPUT_MIN_HEIGHT, end: 0, bottom: 0,
+    height: INPUT_MIN_HEIGHT,
     backgroundColor: SURFACE,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  // One option: the mark and its word on one line, an equal share of the strip.
+  attachStripItem: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: XS,
+    paddingHorizontal: XS,
   },
-  attachConfirmSendPressed: { opacity: 0.7 },
-  attachConfirmSendLabel: {
-    fontSize: TEXT.md,
-    color: INK,
+  // THE hairline, the app's one, between two options and nowhere else.
+  attachStripDivider: {
+    width: StyleSheet.hairlineWidth,
+    marginVertical: SM,
+    backgroundColor: LINE,
+  },
+  // The word beside the mark: the rank below the field's own text, in its ink.
+  attachStripLabel: {
+    fontSize: TEXT.sm,
     fontWeight: WEIGHT.medium,
+    color: INK,
   },
+  // The confirmation's own end: the trailing berth stays clear, because the send
+  // mark standing in it is the button this sentence is asking about.
+  attachStripSending: { end: INPUT_MIN_HEIGHT },
+  // The sentence's berth: it stands on the app's small `Chip` — INK on the PAGE
+  // tint, the chip's own small type — which hugs the words, so the tile is the
+  // sentence's own width and never a band across the field. Start-aligned, where
+  // the first character of a typed message would be, and centred on the line.
+  attachStripSentence: {
+    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: XS,
+  },
+  // The press flash for a bare glyph standing ON the purple (the reply strip's
+  // close mark) — white laid thin over the ink, since there is no tile of its own
+  // to tint.
+  glyphOnInkPressed: { backgroundColor: WHITE_SOFT },
 
   // Image bubble
   imageBubble: {

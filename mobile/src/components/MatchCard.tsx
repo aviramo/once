@@ -5,26 +5,28 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
 import { useBottomInset } from '../hooks/useBottomInset'
 import { useKeyboardOpen } from '../hooks/useKeyboard'
+import { useCountBlink } from '../hooks/useCountBlink'
 import { PullScrollView, PullContext } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
-import { t, genderize, isRTL } from '../i18n'
+import { t, tg, genderize, isRTL } from '../i18n'
 import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
 import { BIO_MAX } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import { buildFamilySegments } from './FamilyCard'
-import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, CHIP_BLOCK_PAD_V, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, PresenceDot } from './Chip'
-import { HeartIcon, ShieldIcon, GroupsIcon, ChevronEndIcon } from './icons'
+import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, HeightIcon, SmokeIcon, PresenceDot, type ChipTone } from './Chip'
+import { ChatIcon, ShieldIcon, GroupsIcon, ChevronEndIcon, PlusIcon } from './icons'
 import type { TapPoint } from './TapMenu'
 import { sharedCircle, useMyFriendCount } from '../lib/circles'
 import { RoundButton } from './RoundButton'
 import { SheetTitle } from './BottomSheet'
 import { OptionStrip, type StripOption } from './OptionStrip'
 import { EditableText } from './EditableText'
-import { XS, SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, SHEET_GAP, DOCK_SHADOW, TAP_SLOP, chromeTop, lh, bottomGap } from '../tokens'
+import { XS, SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, SHEET_GAP, DOCK_SHADOW, TAP_SLOP, PHOTO_WAIT_DELAY_MS, chromeTop, lh, bottomGap } from '../tokens'
 import { PAGE, PHOTO_CHROME, INK, SURFACE, WHITE, INK_DIM, INK_SUBTLE, LIFT_SHADOW } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
+import { formatHeight } from '../lib/height'
 import { isLastSeenJustNow } from '../lib/lastSeen'
 import { useSecsLeft, formatClock } from '../lib/countdown'
 
@@ -35,11 +37,11 @@ import { useSecsLeft, formatClock } from '../lib/countdown'
 const SCROLL_TO_END_MS = 1400
 
 // One round icon-button overlaid on the hero photo. CardActionStack stacks
-// these vertically growing upward from the heart's anchor. Default usage is
-// a single heart button (invite affordance); the own-profile preview passes `[]`
-// — the one thing to do about that card is the plus on its heading tile. The
-// button shape / size / shadow / press feedback live in RoundButton — this just
-// stacks them.
+// these vertically growing upward from the action's anchor. Default usage is a
+// single chat button (the invite affordance — see the fallback below); the
+// own-profile preview passes `[]`, since the one thing to do about that card is
+// the plus on its heading tile. The button shape / size / shadow / press
+// feedback live in RoundButton — this just stacks them.
 // `onPress` is optional: when omitted, MatchCard fills it with its built-in
 // scroll-to-end behavior. Lets callers reuse the "teaser" affordance with a
 // custom icon (e.g. the page2 pending-invite question-mark) without
@@ -129,10 +131,15 @@ function InviteCountdown({ countdown, color }: { countdown: CardCountdown; color
 // card the user is already looking at is one.
 function useTrailing(active: boolean) {
   const [mounted, setMounted] = useState(active)
+  // Whether this block is ARRIVING as a change rather than being what the card
+  // has always carried — the same fact the slide is gated on, handed to the
+  // block itself so its readout can announce the change (see CardTrailing).
+  const [announce, setAnnounce] = useState(false)
   const progress = useSharedValue(active ? 1 : 0)
   const settled = useRef(false)
   useEffect(() => {
     if (active) {
+      setAnnounce(settled.current)
       setMounted(true)
       progress.value = settled.current ? withTiming(1) : 1
     } else if (settled.current) {
@@ -145,12 +152,14 @@ function useTrailing(active: boolean) {
     }
     settled.current = true
   }, [active])
-  return { mounted, progress }
+  return { mounted, announce, progress }
 }
 
-function CardTrailing({ color, progress, countdown, onMessage, trailingLabel, trailingAction }: {
+function CardTrailing({ color, progress, announce, countdown, onMessage, trailingLabel, trailingAction }: {
   color: string
   progress: SharedValue<number>
+  /** This block is arriving as a change, not as what the card came up with. */
+  announce: boolean
   countdown?: CardCountdown
   onMessage?: () => void
   trailingLabel?: string
@@ -158,11 +167,31 @@ function CardTrailing({ color, progress, countdown, onMessage, trailingLabel, tr
 }) {
   // The content's own box, measured once it has laid out. Until then the clip is
   // 0 wide and paints nothing, which is also the state the slide starts from.
-  const [box, setBox] = useState({ w: 0, h: 0 })
-  const onBox = useCallback((w: number, h: number) => {
-    setBox(cur => (Math.abs(cur.w - w) < 0.5 && Math.abs(cur.h - h) < 0.5 ? cur : { w, h }))
+  const [width, setWidth] = useState(0)
+  const onBox = useCallback((w: number) => {
+    setWidth(cur => (Math.abs(cur - w) < 0.5 ? cur : w))
   }, [])
-  const clip = useAnimatedStyle(() => ({ width: box.w * progress.value }), [box.w])
+  const clip = useAnimatedStyle(() => ({ width: width * progress.value }), [width])
+  // WHAT THIS SLOT IS SAYING, AND IT BLINKS WHEN THAT CHANGES (user directive
+  // 2026-08-02). A clock starting and a clock running OUT — the moment the
+  // countdown is replaced by the word for what happened — are the two changes a
+  // user cannot be expected to catch on a corner of a tile he is not looking at,
+  // so the readout says it for itself, on the app's one blink (`useCountBlink`,
+  // shared with the dock's numbers). The KEY is what the slot says and not what
+  // it reads: a clock's digits change every second and none of those seconds is
+  // a change of state. A card that arrives with a clock already on it does not
+  // blink, exactly as it does not play the slide.
+  const readoutLabel = trailingAction ? trailingAction.label : trailingLabel
+  const blink = useCountBlink(countdown ? 'clock' : readoutLabel, announce)
+  const readout = (
+    <Animated.View style={blink}>
+      {countdown
+        ? <InviteCountdown countdown={countdown} color={color} />
+        : readoutLabel
+          ? <Text style={[styles.countdown, { color }]}>{readoutLabel}</Text>
+          : null}
+    </Animated.View>
+  )
   const inner = trailingAction ? (
     <Pressable
       onPress={trailingAction.onPress}
@@ -170,7 +199,7 @@ function CardTrailing({ color, progress, countdown, onMessage, trailingLabel, tr
       accessibilityRole="button"
       accessibilityLabel={trailingAction.label}
     >
-      <Text style={[styles.countdown, { color }]}>{trailingAction.label}</Text>
+      {readout}
     </Pressable>
   ) : onMessage ? (
     <Pressable
@@ -180,21 +209,17 @@ function CardTrailing({ color, progress, countdown, onMessage, trailingLabel, tr
       accessibilityLabel={t('home.a11y.cardMessage')}
       style={styles.trailingRow}
     >
-      {countdown
-        ? <InviteCountdown countdown={countdown} color={color} />
-        : trailingLabel
-          ? <Text style={[styles.countdown, { color }]}>{trailingLabel}</Text>
-          : null}
+      {readout}
       <ChevronEndIcon color={color} size={ICON.sm} />
     </Pressable>
   ) : countdown ? (
-    <InviteCountdown countdown={countdown} color={color} />
+    readout
   ) : null
   return (
-    <Animated.View style={[styles.trailingClip, { height: box.h }, clip]}>
+    <Animated.View style={[styles.trailingClip, clip]}>
       <View
         style={styles.trailingInner}
-        onLayout={e => onBox(e.nativeEvent.layout.width, e.nativeEvent.layout.height)}
+        onLayout={e => onBox(e.nativeEvent.layout.width)}
       >
         {inner}
       </View>
@@ -341,6 +366,22 @@ function LoadingImage({
   darkenIfLight?: boolean
 }) {
   const [loading, setLoading] = useState(true)
+  // A PHOTO THAT IS ALREADY THERE NEVER SAYS IT IS LOADING. `loading` starts
+  // true on every mount, memory-cache hit included — expo-image's `onLoad` is a
+  // JS event, so it lands a frame or two after the picture is already on the
+  // screen — and the waiting treatment (the spinner, and the darkening that
+  // keeps it legible over a light placeholder) therefore blinked over a
+  // complete photograph. On a card that was painted out of sight before it rose
+  // (WarmCard) that blink is every photo at once, on the first frames of the
+  // entrance: exactly the interruption the warm-up exists to remove. So the
+  // treatment waits, and only a picture that is genuinely still coming ever
+  // shows one.
+  const [showWait, setShowWait] = useState(false)
+  useEffect(() => {
+    if (!loading) { setShowWait(false); return }
+    const t = setTimeout(() => setShowWait(true), PHOTO_WAIT_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [loading])
   const [attempt, setAttempt] = useState(0)
   const attemptRef = useRef(0)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -374,10 +415,10 @@ function LoadingImage({
         onLoad={settle}
         onError={handleError}
       />
-      {loading && isLightHash && (
+      {showWait && isLightHash && (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: INK_DIM }]} />
       )}
-      {loading && (
+      {showWait && (
         <View style={spinnerOverlay}>
           <ActivityIndicator size="large" color={WHITE} />
         </View>
@@ -421,6 +462,11 @@ type MatchCardProps = {
   onPhotoTap?: (imageIndex: number, at: TapPoint) => void
   /** When provided, the family/kids card becomes tappable (own-profile preview). */
   onFamilyTap?: () => void
+  /** When provided, the height/smoking row becomes tappable, and on your OWN
+   * card an empty one is drawn as the invitation to fill it in (own-profile
+   * preview). Exactly the shape `onFamilyTap` has, because the two rows are the
+   * same kind of thing: a fact about the person, edited from where it stands. */
+  onTraitsTap?: () => void
   /** When provided, the shared-circle chip becomes tappable and opens the popup
    * listing everything the pair shares (every mutual friend, every shared
    * group). Absent on the own-profile preview (no chip).
@@ -435,8 +481,8 @@ type MatchCardProps = {
    * empty in this mode, so the user can add one in place. */
   bioEdit?: BioEdit
   /** Overlay action buttons stacked at the bottom-right of the hero photo,
-   * starting at the heart's anchor and growing upward. When omitted, a
-   * single heart button is rendered (tapping scrolls to the end of the
+   * starting at the action's anchor and growing upward. When omitted, a
+   * single chat button is rendered (tapping scrolls to the end of the
    * card). Pass `[]` for a card that carries no round action at all — the
    * own-profile preview, whose adds are the buttons in the bar UNDER the card
    * (ProfileActionBar). */
@@ -532,6 +578,7 @@ export function MatchCard({
   footerBg,
   onPhotoTap,
   onFamilyTap,
+  onTraitsTap,
   onCircleTap,
   bioEdit,
   actions,
@@ -549,9 +596,9 @@ export function MatchCard({
 }: MatchCardProps) {
   // (The bio's padding box used to be pulled from `useChipPadding` here, so the
   // oversized tile could not drift from the pill chips beside it. Those chips are
-  // BLOCKS now and the bio is one too, so its box is the block's — the gutter
-  // sideways, CHIP_BLOCK_PAD_V above and below — stated in `photoBioCard` below,
-  // still from the chip's own constants.)
+  // BLOCKS now and the bio is one too, so its box is the block's — the gutter on
+  // every side — stated in `photoBioCard` below, still from the chip's own
+  // constant.)
   //
   // The chip's trailing block, and whether it is on screen — it stays mounted
   // through its own slide back into the name (see useTrailing).
@@ -599,7 +646,7 @@ export function MatchCard({
   // THE PHOTO TOGGLES, THE CHIPS DO NOT (user directive 2026-07-30). The only
   // toggle surface is the photo Pressable under the whole info set; every tile
   // over it — each fact chip, the shared-circle chip, the bio card, the name/age
-  // heading, the floating heart — is live where it is painted and swallows its
+  // heading, the floating action — is live where it is painted and swallows its
   // own touch, so a tap on a chip can never be the tap that takes that chip
   // away. The chips used to be touch-transparent (pointerEvents 'none') so a tap
   // ON them reached the photo, and the heading chip called toggleChips itself;
@@ -731,10 +778,34 @@ export function MatchCard({
   // the top of the scroll, where viewport-multiple paging would have landed
   // mid-photo. There is no status card any more, so every page of this reel is a
   // photo and `pagingEnabled` is the only mode.)
-  // The heart/chat action floats FIXED over the card (never scrolls) — rendered
+  // The card's round action floats FIXED over the card (never scrolls) — rendered
   // as a pinned overlay after the ScrollView (user directive 2026-07-25). Both
   // the reserved gap on the chip column and that overlay derive from this.
   const showFloatingAction = sections[0]?.type === 'photo' && (actions ? actions.length > 0 : true)
+  // THE BUTTON LEAVES AS THE TILE GROWS INTO ITS LANE, AND BOTH TAKE THE SAME
+  // BEAT (user directive 2026-08-02). The action going away is a change under a
+  // reader who is looking at this card — chat ending, a state losing its one
+  // thing to press — so it may not blink out and hand the fact tile a sudden
+  // extra lane. `useTrailing` is the same mechanism the heading's clock rides,
+  // and for the same two reasons: the node stays mounted until the shrink LANDS
+  // (an exit on a child React has already unmounted is no exit), and a card that
+  // ARRIVES with the button plays nothing — that is not a change, it is what the
+  // card has always been.
+  //
+  // The reserve lane (`floatingActionReserve`) flips on `showFloatingAction` the
+  // instant the fact changes, so the tile's own resize (ChipStack's layout
+  // transition) runs across the very frames the button is shrinking over, and
+  // the two read as one movement rather than a sequence.
+  const floatingAction = useTrailing(showFloatingAction)
+  // ZOOM ONLY, for the reason the info set's toggle is zoom only: the round
+  // button wears LIFT_SHADOW, and an Android `elevation` shadow is drawn from
+  // the view's outline and does NOT inherit an animated opacity — a fade would
+  // leave a dark ghost of the circle behind and pop it off at the end. The
+  // wrapper hugs the button, so the default CENTRE origin is the circle's own
+  // middle and the mark shrinks in place, in either reading direction.
+  const floatingActionStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: floatingAction.progress.value }],
+  }))
   const loadedCount = useRef(0)
   useEffect(() => { loadedCount.current = 0 }, [match.user_id])
   useEffect(() => { if (photoCount === 0) onReady?.() }, [photoCount])
@@ -751,7 +822,7 @@ export function MatchCard({
   const photoHeight = Math.max(280, effectiveCardH - bottomInset)
   // WHERE THE ON-PHOTO SET ENDS. The first photo runs to the bottom of the card,
   // so this one offset is the bottom gutter of everything painted on it — the
-  // chips AND the heart.
+  // chips AND the round action.
   //
   // WITH FURNITURE UNDER THE CARD IT IS THE CARD'S OWN GUTTER, MD (user
   // directive 2026-07-30) — the very inset its other three edges take
@@ -762,7 +833,7 @@ export function MatchCard({
   // 2026-07-29). See the `bottomChrome` prop.
   const overlayBottomOffset = bottomChrome ? MD : bottomGap(safeBottomInset, MD)
   // The extra lift under the bottom-START info (fact chips AND the bio tile)
-  // exists ONLY to clear the floating heart's lane (user directive 2026-07-30):
+  // exists ONLY to clear the floating action's lane (user directive 2026-07-30):
   // a card with no floating action has nothing down there to clear, so its
   // chips end at the SAME ordinary gap off the bottom of the screen as every
   // other bottom-anchored thing in the app. One value for both groups, so the
@@ -806,8 +877,12 @@ export function MatchCard({
   // are. My friends is a circle like any group, and the SMALLEST one wins — so
   // the card needs the size of my own friends circle, read off my summary here
   // rather than threaded through every call site.
+  // NEVER on my OWN card (user directive 2026-08-02), the same rule the where/
+  // when chip keeps: of myself that chip can only say "we share every circle I
+  // am in", which is not a fact about anybody. Stated here rather than at the
+  // roster's call site so a self card is the same card wherever it is rendered.
   const myFriends = useMyFriendCount()
-  const circle = useMemo(() => sharedCircle(match, myFriends), [match.group_name, match.group_members, match.group_extra, match.friend_name, match.friend_extra, match.is_male, myFriends])
+  const circle = useMemo(() => (self ? null : sharedCircle(match, myFriends)), [self, match.group_name, match.group_members, match.group_extra, match.friend_name, match.friend_extra, match.is_male, myFriends])
 
   // The circle's name with the "+N more" pill FLOWING after it (user directive
   // 2026-07-30): the same segment list the kids' ages ride, so the pill sits
@@ -824,6 +899,51 @@ export function MatchCard({
     () => buildFamilySegments(match.family, isForKids, self, match.is_male),
     [match.family, isForKids, self, match.is_male],
   )
+
+  // ── How tall, and whether they smoke ───────────────────────────────────────
+  // ONE row for the two, divided by the chip's own hairline (user directive
+  // 2026-08-02) — "175 ס״מ │ 🚬 לא מעשנת". They are two facts about the same
+  // body, and either of them alone is that row with one half in it: the row
+  // leads with whichever exists, and when neither does there is no row at all
+  // (and no rule, which is why the second `fact` is only handed over when both
+  // halves are there).
+  //
+  // The height is in the READER's units, not the subject's — the number on the
+  // row is centimetres whoever entered it, and a viewer who reads "57 mi away"
+  // on this card must read feet on it too (see lib/height.ts).
+  //
+  // The smoking word is GENDERED off the person the card is about (user
+  // directive 2026-08-02: מעשן / מעשנת), which is `match.is_male` on every card
+  // including your own — a self card is the same card, so the one lookup covers
+  // both places the row is read.
+  // AND THE MARK SAYS THE ANSWER TOO (user directive 2026-08-02): a "no" wears
+  // the same cigarette with the prohibition slash over it (SmokeIcon's
+  // `crossed`), so the glyph and the words beside it say one thing instead of
+  // the mark naming the subject and leaving the answer to the reading. Only a
+  // stated `false` is crossed — an unanswered question is not a "no", so the
+  // placeholder half keeps the plain mark.
+  const heightStr = formatHeight(match.height)
+  const smokesNo = match.smokes === false
+  const smokesStr = match.smokes == null
+    ? ''
+    : tg(match.smokes ? 'traits.smokes' : 'traits.smokesNo', match.is_male)
+  // ON YOUR OWN CARD THE HALF YOU HAVE NOT ANSWERED IS STILL DRAWN, as a
+  // PLACEHOLDER behind the rule (user directive 2026-08-02): a row carrying one
+  // fact and half a tile of white said nothing about what was missing, and the
+  // seam is what shows there is a second thing to say. So the two halves state
+  // their own strengths — what IS said at full ink, what is not in the
+  // placeholder's, the very split the empty family chip already makes — and the
+  // chip takes the LEADING half's tone while the second fact names its own (see
+  // `ChipFact`).
+  //
+  // Only on your own card, and only once ONE of them is answered: a stranger's
+  // card never lists what he declined to say, and a row with neither half is the
+  // plus below, which invites both at once rather than twice over.
+  const fillMissingTraits = self && !!onTraitsTap && !!(heightStr || smokesStr)
+  const heightLabel = heightStr || (fillMissingTraits ? t('traits.height') : '')
+  const smokesLabel = smokesStr || (fillMissingTraits ? t('traits.smoking') : '')
+  const heightTone: ChipTone = heightStr ? 'neutral' : 'placeholder'
+  const smokesTone: ChipTone = smokesStr ? 'neutral' : 'placeholder'
 
   const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'
   const scrollRef = useAnimatedRef<any>()
@@ -878,6 +998,10 @@ export function MatchCard({
     if (swallowTapWhileEditing()) return
     onFamilyTap?.()
   }, [swallowTapWhileEditing, onFamilyTap])
+  const handleTraitsTap = useCallback(() => {
+    if (swallowTapWhileEditing()) return
+    onTraitsTap?.()
+  }, [swallowTapWhileEditing, onTraitsTap])
   const handleCircleTap = useCallback(() => {
     if (swallowTapWhileEditing()) return
     onCircleTap?.(circle?.count ?? 0)
@@ -1092,7 +1216,7 @@ export function MatchCard({
           {/* Bottom-of-hero overlay: the fact-chip stack. The name/age heading
               no longer lives here — it is pinned FIXED to the card's top-END
               (opposite the shell's hamburger), out of the scroll (see the
-              top-END column after the ScrollView). The heart/chat action also
+              top-END column after the ScrollView). The round action also
               floats fixed after the ScrollView so it never scrolls; the chip
               column reserves a gap on the END side (floatingActionReserve) so a
               long chip wraps before reaching it. pointerEvents="box-none" so
@@ -1132,12 +1256,13 @@ export function MatchCard({
                     shared ground. Three separate tiles read as three unrelated
                     labels stacked in the corner.
 
-                    The set reads TOP-DOWN: circle → kids/family → time/distance
-                    (user directive 2026-07-30). How we are already connected
-                    comes first — it is the fact that decides whether the rest is
-                    worth reading — then who is in this person's life, and the
-                    where/when last, since it is the one fact that is true of any
-                    stranger.
+                    The set reads TOP-DOWN: circle → height/smoking →
+                    kids/family → time/distance (user directives 2026-07-30 and
+                    2026-08-02). How we are already connected comes first — it is
+                    the fact that decides whether the rest is worth reading —
+                    then this person's own body, then who is in their life, and
+                    the where/when last, since it is the one fact that is true of
+                    any stranger.
 
                     'auto' while the set is up: the tile is painted white
                     everywhere its widest row reaches, so it swallows its own
@@ -1155,7 +1280,21 @@ export function MatchCard({
                     wears the circles feature's own interlaced-rings mark, and is
                     interactive via a native RNGH tap (not the Chip's Pressable)
                     so the popup opens the instant it's tapped, without waiting on
-                    the scroll/pull pan. */}
+                    the scroll/pull pan.
+
+                    AND IT SAYS IT OPENS SOMETHING, with the app's disclosure
+                    mark (user directive 2026-08-02): the very ChevronEndIcon
+                    that stands beside the heading chip's clock, at the same
+                    ICON.sm, in the tile's own ink — one mark for "this goes
+                    somewhere", so a row that is a door and a heading that is a
+                    door say it identically. Only when there IS somewhere to go:
+                    a card rendered without `onCircleTap` (home's hidden warm-up
+                    card) draws the fact and no mark. */}
+                {/* THE TILE IS AS WIDE AS ITS TEXT, ALWAYS (user directive
+                    2026-08-02). It hugs its widest row whether or not the
+                    floating action stands beside it: stretched to the lane it
+                    came out a band of empty white past its short lines, which
+                    says nothing about the facts on it. */}
                 <ChipStack onPhoto pointerEvents={chipsHidden ? 'none' : 'auto'}>
                   {circle ? (
                     <GestureDetector gesture={circleTapGesture}>
@@ -1163,9 +1302,58 @@ export function MatchCard({
                         <Chip
                           renderIcon={c => <GroupsIcon color={c} size={ICON.sm} />}
                           segments={circleSegments}
+                          renderTrailing={onCircleTap ? c => <ChevronEndIcon color={c} size={ICON.sm} /> : undefined}
                         />
                       </View>
                     </GestureDetector>
+                  ) : null}
+                  {/* HOW TALL, AND WHETHER THEY SMOKE — one row, ABOVE the kids
+                      (user directive 2026-08-02). Two facts about the same body,
+                      so they share a row and the chip's own hairline stands
+                      between them. On a STRANGER's card a half that was never
+                      answered is simply not said, and a row with neither half is
+                      no row; on your OWN the missing half is drawn as a
+                      placeholder, so the rule stands and the tile shows the
+                      shape of what is still unsaid (see fillMissingTraits).
+                      Its leading glyph is whichever fact LEADS — the height's
+                      span when there is a height half, the cigarette when
+                      smoking is all there is — so the mark always annotates the
+                      words next to it (the smoking half carries its own, in its
+                      own package behind the rule), and each half states its own
+                      STRENGTH: the chip takes the leading one's tone and the
+                      second fact names its own.
+                      EACH HALF IS ONE PACKAGE and the row wraps BETWEEN them
+                      (user directive 2026-08-02) — a glyph never parts from its
+                      word and a word is never cut in half; see `useFactPair`.
+                      Its ORDER in the tile is height/smoking → kids → where and
+                      when: the body facts stand with the other things true of
+                      this person alone, and the where/when is last as ever. */}
+                  {heightLabel || smokesLabel ? (
+                    <Chip
+                      tone={heightLabel ? heightTone : smokesTone}
+                      renderIcon={c => (heightLabel ? <HeightIcon color={c} /> : <SmokeIcon color={c} crossed={smokesNo} />)}
+                      text={heightLabel || smokesLabel}
+                      fact={heightLabel && smokesLabel
+                        ? { label: smokesLabel, tone: smokesTone, renderIcon: ic => <SmokeIcon color={ic} crossed={smokesNo} /> }
+                        : undefined}
+                      onPress={onTraitsTap ? handleTraitsTap : undefined}
+                    />
+                  ) : self && onTraitsTap ? (
+                    // The same invitation the empty family row is, in the same
+                    // placeholder ink — except that its mark is a PLAIN PLUS
+                    // (user directive 2026-08-02): the row states two facts, so
+                    // there is no one glyph that is "the" fact being added, and
+                    // the plus says what the tap does instead. It takes the
+                    // optical half-step up from the chip's own ICON.sm for the
+                    // reason the composer's plus does: its cross paints only the
+                    // middle 14 of its 24 box, so at the size the fact glyphs
+                    // take it would read as the smaller mark.
+                    <Chip
+                      tone="placeholder"
+                      renderIcon={c => <PlusIcon color={c} size={ICON.md} />}
+                      text={t('traits.title')}
+                      onPress={handleTraitsTap}
+                    />
                   ) : null}
                   {familySegments.length ? (
                     <Chip
@@ -1239,7 +1427,7 @@ export function MatchCard({
               ) : null}
               {/* Bio as a big WHITE chip floated at the bottom of the second
                   photo, inset on every side. Its END inset clears the floating
-                  heart (so it is never where the heart is). On
+                  action (so it is never where that button is). On
                   a remote card it fades with the same tap-toggle as the fact
                   chips (user directive 2026-07-26): the info clears off whichever
                   photo the user is on. */}
@@ -1300,21 +1488,28 @@ export function MatchCard({
           <View style={{ flexGrow: 1, backgroundColor: footerBg }} />
         ) : null}
       </AnimatedPullScrollView>
-      {/* The heart/chat action, pinned over the card so it never scrolls: a
+      {/* The card's round action, pinned over the card so it never scrolls: a
           sibling of the ScrollView, anchored bottom-END at the same offset it
           used to sit at inside the hero. The chip column reserves a matching
           gap (infoLeftReserve) so nothing scrolls under it. */}
-      {showFloatingAction ? (
-        <View pointerEvents="box-none" style={[styles.actionStackFixed, { bottom: overlayBottomOffset }]}>
+      {floatingAction.mounted ? (
+        <Animated.View
+          pointerEvents="box-none"
+          style={[styles.actionStackFixed, { bottom: overlayBottomOffset }, floatingActionStyle]}
+        >
           {(() => {
+            // The watching card's own mark, for a caller that states no
+            // actions (home's hidden preloader card). It is the CHAT glyph
+            // since 2026-08-02, same as the live watching action it stands in
+            // for — the two must never disagree about what that button is.
             const base: CardAction[] = actions ?? [{
               key: 'like',
-              icon: <HeartIcon color={WHITE} stroke={WHITE} size={ICON.huge} />,
+              icon: <ChatIcon color={INK} size={ICON.huge} />,
             }]
             const resolved = base.map(a => ({ ...a, onPress: a.onPress ?? slowScrollToEnd }))
             return <CardActionStack actions={resolved} />
           })()}
-        </View>
+        </Animated.View>
       ) : null}
       {/* THE CARD'S HEADING: ONE TILE IN THE TOP-START CORNER (user directive
           2026-07-30, restored 2026-08-01 after a few hours as a band at the foot
@@ -1354,6 +1549,7 @@ export function MatchCard({
                   <CardTrailing
                     color={c}
                     progress={trailing.progress}
+                    announce={trailing.announce}
                     countdown={countdown}
                     onMessage={onMessage}
                     trailingLabel={trailingLabel}
@@ -1373,7 +1569,7 @@ export function MatchCard({
               onPress={onMessage && !trailingAction ? onMessage : undefined}
               // The report flag rides INSIDE the heading chip (user directive
               // 2026-07-29): reporting is a footnote to "who is this", not a
-              // second card-level control competing with the heart. It is the
+              // second card-level control competing with the round action. It is the
               // tile's FIRST mark.
               renderIcon={onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
               onIconPress={onReport}
@@ -1558,9 +1754,15 @@ const styles = StyleSheet.create({
   // The box the block emerges FROM: it clips, and its width is the animation
   // (see CardTrailing). Its height is the content's own, measured — a clipping
   // box has no height of its own to give an out-of-flow child.
+  // The slide is HORIZONTAL and nothing else (user directive 2026-08-02): the box
+  // states no height of its own and takes the row's (`alignSelf:'stretch'`), so the
+  // clock unfolding out of the name can never make the tile taller — it used to
+  // carry the measured content height, which is 0 until the content has laid out,
+  // so the chip grew on the vertical as the block arrived and shrank as it left.
   trailingClip: {
     overflow: 'hidden',
     flexShrink: 0,
+    alignSelf: 'stretch',
   },
   // The content, hung OUT OF FLOW at the box's START edge so the box can be any
   // width without squeezing it: what a narrower box does to it is hide its end,
@@ -1568,7 +1770,9 @@ const styles = StyleSheet.create({
   trailingInner: {
     position: 'absolute',
     top: 0,
+    bottom: 0,
     start: 0,
+    justifyContent: 'center',
   },
   // The clock and the mark that opens the message, side by side in one press
   // target. XS, not the chip's own gap: these two are one statement.
@@ -1593,8 +1797,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     // marginBottom is set inline (infoBottomLift): the breathing room is the
-    // heart's clearance, so it is there only when the heart is. Deliberately on
-    // this column and not on the shared overlay padding — the heart is anchored
+    // round action's clearance, so it is there only when that button is.
+    // Deliberately on this column and not on the shared overlay padding — the
+    // action is anchored
     // to the card's bottom edge and must not move with the chips.
   },
   // Reserve the END lane for the fixed floating action button, so on-photo text
@@ -1608,8 +1813,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SM,
   },
-  // The floating heart/chat action: pinned to the card's bottom-END so it never
-  // scrolls. `bottom` is set inline (overlayBottomOffset) to match the heart's
+  // The floating round action: pinned to the card's bottom-END so it never
+  // scrolls. `bottom` is set inline (overlayBottomOffset) to match the button's
   // old distance off the photo edge.
   actionStackFixed: {
     position: 'absolute',
@@ -1642,7 +1847,7 @@ const styles = StyleSheet.create({
   },
   // Bio as a big WHITE chip floated at the bottom of the second photo, inset on
   // every side (`start` here; `end` + `bottom` set inline so both insets can
-  // clear the floating heart when there is one, and neither does when there is
+  // clear the floating action when there is one, and neither does when there is
   // not — the tile then ends at the same ordinary bottom gap as the chips). It is
   // the SAME white tile as every other on-photo chip and round button
   // (PHOTO_CHROME) just oversized — user directive 2026-07-28 — so it is the
@@ -1650,21 +1855,20 @@ const styles = StyleSheet.create({
   // 2026-07-30): the same RADIUS, the same gutter, the same padding box as the
   // chips beside it and the same LIFT_SHADOW every on-photo tile casts.
   //
-  // That box is the BLOCK's: the chip's gutter sideways (CHIP_BLOCK_PAD) and one
-  // step in above and below (CHIP_BLOCK_PAD_V, user directive 2026-08-02). The
-  // tile is a PARAGRAPH in a wide white block, and so are the fact rows stacked
-  // above it, so both take the air a block states rather than whatever a round
-  // chrome button has left over once a line of label is in it. They are still the
-  // chips' own constants and not a re-typed `MD`/`SM`: the two tiles must move
+  // That box is the BLOCK's: the chip's gutter on every side (CHIP_BLOCK_PAD).
+  // The tile is a PARAGRAPH in a wide white block, and so are the fact rows
+  // stacked above it, so both take the air a block states rather than whatever a
+  // round chrome button has left over once a line of label is in it. It is still
+  // the chip's own constant and not a re-typed `MD`: the two tiles must move
   // together, which is the whole reason the bio stopped declaring its own padding
-  // in the first place.
+  // in the first place — and they did move together when the vertical was taken
+  // in for an afternoon on 2026-08-02 and put straight back.
   photoBioCard: {
     position: 'absolute',
     start: MD,
     backgroundColor: PHOTO_CHROME,
     borderRadius: RADIUS,
-    paddingHorizontal: CHIP_BLOCK_PAD,
-    paddingVertical: CHIP_BLOCK_PAD_V,
+    padding: CHIP_BLOCK_PAD,
     ...LIFT_SHADOW,
     // Same corner the fact column collapses into (user directive 2026-07-29):
     // the bio used to zoom around its own centre, which on a tile this wide read

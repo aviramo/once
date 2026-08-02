@@ -207,6 +207,28 @@ const inkRise = (label?: string): number =>
 export const inkOffset = (fontSize: number, cap: number = FONT_SCALE, label?: string): number =>
   fontSize * Math.min(PixelRatio.getFontScale(), cap) * inkRise(label)
 
+// ── When a ROW may lay a sentence out one word at a time ───────────────────
+// A flex row places its items in the ROW's direction, so a sentence handed to it
+// word by word — which is how a chip's segment label breaks where prose breaks,
+// see `layLine` — reads correctly only while its own letters read that way too.
+// Two Latin words in an RTL row would be placed right to left ("Club Book"),
+// which the text engine would never do: inside ONE Text, bidi puts a Latin
+// phrase back in its own order. So a run carrying a letter of the other script
+// stays whole and the text engine keeps the job.
+//
+// Asked of the STRING and not of the app, for the reason `inkOffset` asks the
+// label rather than the direction: a chip's text is as often user data as UI
+// language — a circle's name, a person's — and a Hebrew build paints plenty of
+// Latin. Digits and punctuation are neutral (they take the direction around
+// them), so they never make a line unsafe: "יש לי 2 ילדים" splits like any other
+// Hebrew sentence.
+// Escaped for the reason HEBREW_LETTER is: the accented range is a pair of
+// characters nobody can read in source. A-Z plus Latin-1 and Extended-A, which
+// is every letter a name in this app is written with.
+const LATIN_LETTER = /[A-Za-z\u00C0-\u024F]/
+export const readsInAppDirection = (s: string): boolean =>
+  !(isRTL ? LATIN_LETTER : HEBREW_LETTER).test(s)
+
 // fontWeight → the real weighted face to render it with. The app asks for
 // exactly two: 400 (the default) and 500 (WEIGHT.medium, the single emphasis
 // tier — see tokens.ts). Everything else here is a landing spot for a weight the

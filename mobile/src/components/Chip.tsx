@@ -1,13 +1,13 @@
 import { Children, Fragment, createContext, isValidElement, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { LayoutChangeEvent, NativeSyntheticEvent, Pressable, StyleProp, StyleSheet, TextLayoutEventData, View, ViewStyle } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
+import Animated, { LinearTransition, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Text } from './AppText'
 import { Path, Circle, Rect } from 'react-native-svg'
 import { Glyph } from './icons'
 import { GlyphSlot, LineProbe } from './GlyphSlot'
-import { FONT_SCALE } from '../fonts'
+import { FONT_SCALE, readsInAppDirection } from '../fonts'
 import { isRTL as localeIsRTL } from '../i18n'
-import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, ROUND_BUTTON_SIZE_SM, lh } from '../tokens'
+import { XS, SM, MD, RADIUS, TEXT, WEIGHT, ICON, PULSE, STROKE, ROUND_BUTTON_SIZE_SM, MOTION, lh } from '../tokens'
 import { PHOTO_CHROME, PAGE, INK, INK_DIM, PRESENCE, INK_WASH, WHITE, LIFT_SHADOW, LINE } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 
@@ -55,7 +55,26 @@ const TONES = {
   placeholder: { fg: INK_DIM, bg: PAGE },
 } as const
 
-type ChipTone = keyof typeof TONES
+export type ChipTone = keyof typeof TONES
+
+/** THE SECOND FACT ON A TILE: a glyph and its word, exactly the shape the chip's
+ *  own leading glyph and label make on the other side of the hairline. Stated as
+ *  DATA and not as a render slot (`renderAfterRule`, which the countdown rides,
+ *  is the slot) for two reasons: it does not tick, and the chip has to know both
+ *  labels to lay the pair out — see `useFactPair`.
+ *
+ *  Its `tone` is the one tile in the app that carries two facts at DIFFERENT
+ *  strengths: the match card's height row on your OWN card, where a fact you
+ *  have stated stands at full ink beside one you have not, which is a
+ *  placeholder. The chip takes the LEADING half's tone; this is how the half
+ *  behind the rule says it is the other one. A tone and not a colour, because
+ *  the palette a chip paints in lives here. */
+export type ChipFact = {
+  label: string
+  tone?: ChipTone
+  /** Handed the fact's own ink, like every other render slot here. */
+  renderIcon: (color: string) => React.ReactNode
+}
 
 // A chip label made of interleaved text runs and a mini-chip cluster (the
 // pale-purple pill, same fabric as the "+N" groups badge). Used by the
@@ -65,10 +84,28 @@ type ChipTone = keyof typeof TONES
 // status); a `badges` segment carries a tight cluster of mini-chips, `ltr`
 // forcing their numeric/"?" char order against an RTL paragraph.
 export type ChipSegment =
-  | { text: string; bold?: boolean }
+  // `phrase` says this run is ONE piece of the sentence: the row may break
+  // BEFORE it, never inside it (user directive 2026-08-02). A run is otherwise
+  // handed to the row one word per item so it breaks where prose breaks (see
+  // layLine), and that is right for a sentence — but the family chip's weekend
+  // status is a short emphasised fact standing at the end of one, and broken
+  // across two lines it left a single word stranded under a full line
+  // ("...ורוצה עוד, פנויה בסופ״ש" / "הקרוב"). It is the same thing `phraseWrap`
+  // says with NBSP for a plain label, said where a label is laid out by the flex
+  // engine and glue cannot reach. The AUTHOR states it: a phrase is a unit of
+  // meaning, which no measurement can find in a string.
+  | { text: string; bold?: boolean; phrase?: boolean }
   | { badges: string[]; ltr?: boolean }
-  // A forced line break: the segments after it start a fresh line (the weekend
-  // status wants to stand on a line of its own, not trail the kids sentence).
+  // A forced line break: the segments after it start a fresh line.
+  //
+  // IT HAS NO CALL SITE (2026-08-02). Its one caller was the family sentence's
+  // weekend phrase, which stood on a line of its own from 2026-07-26 until the
+  // comma put it back into the sentence (see buildFamilySegments) — a break is
+  // what a sentence does when it runs out of room, and that one was breaking
+  // with room still on the line above it. The machinery is wired end to end
+  // (segmentLines, the laid-out column, one row per line); it is dead weight on
+  // a label that is now always ONE line's worth of words, and should be removed
+  // in a change of its own rather than folded into an unrelated edit.
   | { br: true }
 
 /** The "+N more circles" hint as a segment: a mini-chip FLOWING with the label,
@@ -104,11 +141,87 @@ function segmentLines(segments: ChipSegment[]): ChipRun[][] {
     }
     const line = lines[lines.length - 1]
     const prev = line[line.length - 1]
-    if ('text' in seg && prev && 'text' in prev && !!prev.bold === !!seg.bold) {
+    // Only runs that are the same KIND of run may become one: the same weight,
+    // and neither of them a phrase the author asked to be kept whole — merging
+    // one into its neighbour would hand the pair to the row as ordinary words
+    // and lose exactly what the flag was set for.
+    if ('text' in seg && prev && 'text' in prev && !!prev.bold === !!seg.bold && !prev.phrase && !seg.phrase) {
       line[line.length - 1] = { text: `${prev.text} ${seg.text}`, bold: seg.bold }
     } else line.push(seg)
   }
   return lines.filter(l => l.length)
+}
+
+// ── A SENTENCE BREAKS AT ITS OWN SPACES, NOT AT THE ROW'S ITEM EDGES ───────
+// (user directive 2026-08-02.) A `segments` label is a sentence with pills in
+// it, and it is laid out by the FLEX engine rather than the text engine — which
+// breaks between ITEMS: a run that does not fit in what is left of a line moves
+// to the next line WHOLE, leaving behind a half-line of room that nothing may
+// use ("יש לי 2 ילדים [2][16]" over an empty half-line, with "ורוצה עוד"
+// underneath it). A paragraph would have broken between the words.
+//
+// So a run is handed over one WORD per item and the row breaks between them
+// exactly where prose breaks. What stands between two words is the FONT's own
+// space — the leading word carries it — and the row's `columnGap`, which is
+// there to stand a pill off the words around it (see segmentLines), is cancelled
+// between two words by a negative end margin. That margin rides the word that
+// LEADS and not the one that follows, because a negative margin at a line END is
+// invisible while one at a line START would push the word off the tile's gutter.
+//
+// AND A PILL THAT ENDS THE LINE RIDES THE LAST WORD (user directive 2026-08-02):
+// the "+N" counting the other circles stands after the last word of the circle's
+// NAME and wraps WITH it, which is the whole reason it flows with the text
+// instead of standing as a tile beside it. As an item of its own it could not —
+// a name too long for the tile left the pill alone on a line, under a line with
+// room still on it — so the last word and the pill are ONE unbreakable item. A
+// pill in the MIDDLE of a sentence (the kids' ages) is an item like any other:
+// what follows it is more sentence, and the row may break there.
+// A run whose letters read AGAINST the row is handed over whole (`readsInAppDirection`):
+// the flex row would place its words in the row's own direction, and only the
+// text engine can put a Latin phrase back in its order inside an RTL line. Such
+// a run is `whole`, which also keeps it out of the tail pair below — a pair is
+// built on the promise that its text is ONE word and therefore one line, and a
+// whole run can wrap inside the pair, leaving the pill hanging beside a block
+// instead of after the last word.
+type LaidItem =
+  | { kind: 'word'; text: string; bold?: boolean; space: boolean; whole?: boolean }
+  | { kind: 'pills'; badges: string[]; ltr?: boolean }
+  | { kind: 'tail'; text: string; bold?: boolean; badges: string[]; ltr?: boolean }
+
+function layLine(line: ChipRun[]): LaidItem[] {
+  const out: LaidItem[] = []
+  line.forEach((seg, i) => {
+    if ('badges' in seg) {
+      const prev = out[out.length - 1]
+      if (i === line.length - 1 && prev && prev.kind === 'word' && !prev.space && !prev.whole) {
+        out[out.length - 1] = { kind: 'tail', text: prev.text, bold: prev.bold, badges: seg.badges, ltr: seg.ltr }
+      } else out.push({ kind: 'pills', badges: seg.badges, ltr: seg.ltr })
+      return
+    }
+    // TWO RUNS THAT COULD NOT BE MERGED ARE STILL TWO WORDS APART. `segmentLines`
+    // joins adjacent text runs into one paragraph, but only when their `bold`
+    // matches — the family sentence's weekend phrase is the emphasised one, so it
+    // stays a run of its own and lands here as the very case that rule is about:
+    // what stands between the two is a SPACE, not the row's pill gap. So the run
+    // that leads carries the space exactly as its own words do.
+    const next = line[i + 1]
+    const runSpace = !!next && !('badges' in next)
+    // Handed over WHOLE for either of two reasons: the author says it is one
+    // phrase (`phrase`, see ChipSegment), or its letters read against the row and
+    // only the text engine can order them (`readsInAppDirection`). Both come out
+    // the same way — one item the row may break before and not inside.
+    if (seg.phrase || !readsInAppDirection(seg.text)) {
+      out.push({ kind: 'word', text: seg.text, bold: seg.bold, space: runSpace, whole: true })
+      return
+    }
+    // `filter(Boolean)` for a run that arrived with a double space in it: an
+    // empty word would be an item with nothing in it, carrying a gap of its own.
+    const words = seg.text.split(' ').filter(Boolean)
+    words.forEach((text, wi) =>
+      out.push({ kind: 'word', text, bold: seg.bold, space: wi < words.length - 1 || runSpace }),
+    )
+  })
+  return out
 }
 
 // ── A wrapped tile hugs the lines it actually paints ───────────────────────
@@ -339,47 +452,45 @@ export const CHIP_HEIGHT = ROUND_BUTTON_SIZE_SM
 // site.)
 
 /** THE gutter of a chip: the air between the tile's edge and what it carries.
- *  Stated once because it is now read on BOTH axes — see CHIP_BLOCK_PAD. */
+ *  Stated once because it is read on BOTH axes — see CHIP_BLOCK_PAD. */
 export const CHIP_GUTTER = MD
 
-/** ── A chip that is a BLOCK states its air on each axis ─────────────────────
+/** ── A chip that is a BLOCK pays the gutter on the vertical too ─────────────
  *  The rule above derives a PILL's vertical padding from the round-button
  *  height, which is right for a tile carrying one short line — but the match
  *  card's bottom-START set is not that: the merged fact tile stacks three
  *  sentences, two of which wrap, and the bio tile is a paragraph. So a block
- *  states its own box: the stacked rows (ChipStack) and the match card's bio
- *  tile, which imports these rather than re-typing them so the two can never
- *  drift (the bio sat at a flat `padding: MD` once before, and the whole point
- *  of `useChipPadding` was to stop it from differing from the chips beside it —
- *  this is the same guarantee, now that the chips beside it are blocks too).
+ *  states its own box, the same on every side: the stacked rows (ChipStack) and
+ *  the match card's bio tile, which imports this rather than re-typing it so the
+ *  two can never drift (the bio sat at a flat `padding: MD` once before, and the
+ *  whole point of `useChipPadding` was to stop it from differing from the chips
+ *  beside it — this is the same guarantee, now that the chips beside it are
+ *  blocks too).
  *
- *  SIDEWAYS it is the chip's own gutter, so a block indents its text exactly as
- *  every pill in the app does. On the OUTSIDE of its top and bottom it is one
- *  step in (user directive 2026-08-02): the block took the gutter on all four
- *  sides from 2026-07-31, and on the built tile the edge above the first fact and
- *  below the last read as a band of empty white the facts were floating in — a
- *  block is WIDE, so the same number that is right beside a line of text is too
- *  much at the ends of a stack of them.
+ *  ONE number on all four sides (user directive 2026-07-31, restored 2026-08-02
+ *  after an afternoon at a step in on the vertical): a block indents its text
+ *  from its own rim exactly as every pill in the app does, and the tile the user
+ *  reads is the one with room around its facts. The tighter top and bottom made
+ *  the stack read as crowded against its own edges, which is what the block's
+ *  air exists to prevent — do not close them in again.
  *
- *  What is NOT touched by that is the air between two facts: the user asked for
- *  the block's own edges and said so of the SEAMS in the same breath. Those stay
- *  a full gutter apart (see CHIP_BLOCK_SEAM_PAD, which is why it is still stated
- *  off CHIP_BLOCK_PAD rather than off this).
+ *  What that shorter-lived value never touched, and still does not, is the air
+ *  between two facts: see CHIP_BLOCK_SEAM_PAD, stated off this one.
  *
  *  A LONE pill is untouched: it is still exactly a round chrome button tall. */
 export const CHIP_BLOCK_PAD = CHIP_GUTTER
-export const CHIP_BLOCK_PAD_V = SM
 
 /** ── A SEAM is half a gutter, because two rows pay it together ──────────────
  *  (user directive 2026-07-31.) The air above the tile's first row and below its
  *  last is the block's own — it stands between the text and the OUTSIDE, and it
- *  is CHIP_BLOCK_PAD_V. A seam is not that: the rule between two facts has a
- *  row's padding on EACH side of it, so the full gutter twice over opened a band
- *  of empty white wider than the tile's own edges and read as three tiles again,
- *  which is the very thing the merge undid. Each side gives half, so the facts
- *  sit a gutter apart — unchanged when the tile's outer edges closed in on
- *  2026-08-02, because how far two facts stand from each other is a different
- *  question from how close the stack runs to the tile's rim. */
+ *  is a whole CHIP_BLOCK_PAD. A seam is not that: the rule between two facts has
+ *  a row's padding on EACH side of it, so the full gutter twice over opened a
+ *  band of empty white wider than the tile's own edges and read as three tiles
+ *  again, which is the very thing the merge undid. Each side gives half, so the
+ *  facts sit a gutter apart — and that number stood still through the outer
+ *  edges closing in and opening back out on 2026-08-02, because how far two
+ *  facts stand from each other is a different question from how close the stack
+ *  runs to the tile's rim. */
 export const CHIP_BLOCK_SEAM_PAD = CHIP_BLOCK_PAD / 2
 
 /** The chip's vertical padding: what is left of CHIP_HEIGHT once one line of
@@ -438,12 +549,88 @@ function ChipRule({ size }: { size: number }) {
   )
 }
 
+// ── A FACT IS ONE PACKAGE: ITS GLYPH AND ITS WORD, NEVER SPLIT ─────────────
+// (user directive 2026-08-02.) A tile carrying two facts is a row of five boxes
+// — glyph, word, rule, glyph, word — and a flex row with nothing to wrap at
+// shrinks its items instead: on a narrow column at a large font scale the mark
+// stayed where it was and the words were squeezed until the breaker cut them
+// mid-word ("⇕ 5'4 / "  │  🚬 Smoke / r", Hebrew_Big). So each fact is a box of
+// its own that cannot break, and the ROW is what wraps: two lines when the two
+// facts cannot stand side by side, each still whole.
+//
+// The rule goes with them. It divides two facts on ONE line; at the end of a
+// wrapped line it is a hairline dangling after a word, dividing nothing — the
+// stacking is the division, and the row's own tight line gap is what says these
+// two lines are one fact-row rather than two rows of the tile (which stand a
+// seam apart, see CHIP_BLOCK_SEAM_PAD).
+//
+// The same measure-then-correct shape as `useHugWidth` above, and for the same
+// reason: A FLEX WRAP ROW CANNOT SHRINK-TO-FIT WHAT IT WRAPPED — once it wraps
+// it takes the whole width it was offered, leaving the tile a band of empty
+// white past its two short lines. Two boxes is all this row has, so the widest
+// line is arithmetic rather than a sweep of item edges: the two of them plus the
+// gap when they share a line, the wider of the two when they do not.
+//
+// It cannot loop. The cap is the widest line, which is always LESS than the two
+// facts side by side, so a wrapped row stays wrapped and re-measures the same;
+// dropping the rule only ever narrows the lead box, so the second pass can only
+// narrow the cap. `maxWidth`, not `width`, exactly as the hug above: a box that
+// gets NARROWER (a larger font scale) must stay free to re-wrap.
+const FACT_WRAP_SLOP = 1
+const FACT_FIT_INIT = { wrapped: false, hug: null as number | null }
+
+function useFactPair(key: string) {
+  const [fit, setFit] = useState(FACT_FIT_INIT)
+  const lead = useRef<{ w: number; y: number } | null>(null)
+  const trail = useRef<{ w: number; y: number } | null>(null)
+  // New facts are a new question: measure them in the room the tile has, never
+  // cap them at what the last pair happened to need.
+  const measured = useRef(key)
+  if (measured.current !== key) {
+    measured.current = key
+    lead.current = null
+    trail.current = null
+    if (fit !== FACT_FIT_INIT) setFit(FACT_FIT_INIT)
+  }
+  const settle = useCallback(() => {
+    const a = lead.current
+    const b = trail.current
+    // Nothing to say until both boxes have reported: a cap read off one of them
+    // is a cap at half the row.
+    if (!a || !b) return
+    // Two boxes on one line share a cross-axis start (the row is flex-start
+    // aligned), so a trailing fact standing LOWER than the leading one is a
+    // trailing fact on a line of its own.
+    const wrapped = b.y - a.y > FACT_WRAP_SLOP
+    const hug = Math.ceil(wrapped ? Math.max(a.w, b.w) : a.w + SM + b.w)
+    setFit(cur =>
+      cur.wrapped === wrapped && cur.hug !== null && Math.abs(cur.hug - hug) <= HUG_SLACK
+        ? cur
+        : { wrapped, hug },
+    )
+  }, [])
+  const onLead = useCallback((e: LayoutChangeEvent) => {
+    lead.current = { w: e.nativeEvent.layout.width, y: e.nativeEvent.layout.y }
+    settle()
+  }, [settle])
+  const onTrail = useCallback((e: LayoutChangeEvent) => {
+    trail.current = { w: e.nativeEvent.layout.width, y: e.nativeEvent.layout.y }
+    settle()
+  }, [settle])
+  return {
+    wrapped: fit.wrapped,
+    style: fit.hug != null ? { maxWidth: fit.hug } : undefined,
+    onLead,
+    onTrail,
+  }
+}
+
 // ── Several facts sharing ONE tile ─────────────────────────────────────────
 // (user directive 2026-07-30.) Set by `ChipStack` below: a chip rendered inside
 // one is a ROW of a shared tile rather than a tile of its own, so it drops the
 // two things that made it a separate object — the fill and the lift — and keeps
 // everything that makes it a chip: its glyph slot and its gutter — plus the
-// block's own vertical air (CHIP_BLOCK_PAD_V, in place of the pill's derived
+// block's own vertical air (CHIP_BLOCK_PAD, in place of the pill's derived
 // padding). A context and not a prop, so no call site can put a chip in a stack
 // and forget to say so.
 //
@@ -492,6 +679,7 @@ export function Chip({
   small = false,
   count,
   endAction,
+  fact,
   renderAfterRule,
   renderTrailing,
   onTrailingPress,
@@ -506,7 +694,10 @@ export function Chip({
   text?: string
   /** Interleaved text runs + mini-chips, an alternative to the plain `text`
    * label. When set, the chip renders these wrapping segments (the family/kids
-   * chip, the shared-circle chip) and `text`/`renderTrailing` are ignored. */
+   * chip, the shared-circle chip) and `text` is ignored. `renderTrailing` is
+   * NOT: a mark at the tile's trailing end says something about the TILE (the
+   * shared circle's disclosure chevron) and is the same mark whichever shape
+   * the label took, so it stands in the chip's own row either way. */
   segments?: ChipSegment[]
   tone?: ChipTone
   onPhoto?: boolean
@@ -549,7 +740,17 @@ export function Chip({
    *  because both are the one thing the heading tile lets you DO about the
    *  person it names. */
   endAction?: ChipEndAction
-  /** A SECOND fact on the same tile, TRAILING it — after the label, behind the
+  /** A SECOND FACT on the same tile, behind the app's hairline — the smoking
+   *  half of the match card's height row ("175 ס״מ │ 🚬 לא מעשנת"). The tile is
+   *  then a row of two PACKAGES, each a glyph and its word, and it wraps between
+   *  them rather than inside either (see `useFactPair`).
+   *
+   *  It is the whole tile: a chip carrying two facts carries nothing else, so
+   *  `count`, `renderTrailing`, `endAction` and `renderAfterRule` are not drawn
+   *  beside it — the ticking countdown is the OTHER shape this tile takes, and a
+   *  tile is one or the other. */
+  fact?: ChipFact
+  /** A READOUT on the same tile, TRAILING it — after the label, behind the
    *  app's hairline rule (see ChipRule). Handed the tone's own ink, like every
    *  other render slot here. Today: the invitation countdown, which rides inside
    *  the match card's name/age chip (user directive 2026-07-30) instead of
@@ -560,8 +761,13 @@ export function Chip({
    *  label leads and a second fact follows it.
    *  A SLOT and not a string, deliberately — the countdown ticks, and a slot
    *  keeps that second inside the element it paints instead of re-rendering the
-   *  chip (and the card carrying it) once a second. */
-  renderAfterRule?: (color: string) => React.ReactNode
+   *  chip (and the card carrying it) once a second. A second FACT is the other
+   *  shape (`fact` above), stated as data because it does not tick and because
+   *  the tile has to know it to lay the pair out.
+   *  It is handed the tile's own LABEL SIZE beside the ink, so what stands
+   *  behind the rule is set at the size of the label in front of it whichever
+   *  tile it landed on (the `small` variant is a step down). */
+  renderAfterRule?: (color: string, size: number) => React.ReactNode
   renderTrailing?: (color: string) => React.ReactNode
   /** Makes the TRAILING glyph its own press target, separate from the chip's
    * `onPress` — a small affordance riding inside a label chip (the match card's
@@ -610,15 +816,25 @@ export function Chip({
   // "+N") — see `plusBadge`.
   const trailingPill = count != null ? String(count) : null
   // The flex-laid-out label shape: `br`-delimited lines of text runs + pill
-  // clusters. It is built here so the hug hook knows how many boxes each line
-  // owes it, and is capped by it so the tile ends where the text does (see
-  // useHugWidth).
+  // clusters, each line then handed to the row one WORD at a time so it breaks
+  // where prose breaks (see layLine). It is built here so the hug hook knows how
+  // many boxes each line owes it, and is capped by it so the tile ends where the
+  // text does (see useHugWidth).
   const lines = segments ? segmentLines(segments) : null
+  const laid = lines ? lines.map(layLine) : null
   const hug = useHugWidth(
     lines ? lines.map(l => l.map(s => ('badges' in s ? s.badges.join(',') : s.text)).join('')).join('\n') : '',
-    lines ? lines.map(l => l.length) : [],
+    laid ? laid.map(l => l.length) : [],
   )
   const unglue = useUnglue(!lines ? text : undefined)
+  // TWO FACTS ON ONE TILE, each a package of a glyph and its word (see
+  // `useFactPair`). Both labels are the key: the pair is laid out under a
+  // measured cap, so a half that CHANGES — the height row on your own card, the
+  // moment it is answered — must be measured in the room the tile has rather
+  // than in what the previous pair needed.
+  const pair = !!fact && !lines
+  const factFg = fact ? TONES[fact.tone ?? tone].fg : fg
+  const facts = useFactPair(pair ? `${text ?? ''}\n${fact!.label}` : '')
   // The tile's height contract (see CHIP_HEIGHT): the label's real line box is
   // measured by an out-of-flow probe and the padding is whatever is left of a
   // round chrome button's diameter. Two variants opt out — the `small` tile (one
@@ -634,6 +850,12 @@ export function Chip({
   // the mark half a gap off centre.)
   const pad = useChipPadding(outlined)
   const derivedPad = !small && !stacked
+  // The leading glyph, hoisted because a two-fact tile stands it INSIDE its
+  // fact's package (that is what keeps a mark with the word it annotates when
+  // the row wraps) and every other tile stands it in the chip's own row.
+  const leadGlyph = renderIcon
+    ? <GlyphSlot {...glyphSlot} onPress={onIconPress}>{renderIcon(fg)}</GlyphSlot>
+    : null
   return (
     <Container
       onPress={onPress}
@@ -649,33 +871,85 @@ export function Chip({
       ]}
     >
       {derivedPad ? pad.probe : null}
-      {renderIcon ? <GlyphSlot {...glyphSlot} onPress={onIconPress}>{renderIcon(fg)}</GlyphSlot> : null}
-      {lines ? (
-        // A column of wrapping rows: one row per `br`-delimited line, each row a
-        // run of text + mini-chip clusters. Each text run is its own flex item
-        // so it wraps at word boundaries; a badge cluster flows inline. Same
-        // direction as the chip so items read start-to-end.
-        <View style={[styles.segmentColumn, hug.style]}>
-          {lines.map((line, li) => (
-            <View key={li} style={styles.segments} onLayout={hug.onLineLayout(li)}>
-              {line.map((seg, i) =>
-                'badges' in seg ? (
-                  <View key={i} style={styles.badgeCluster} onLayout={hug.onItemLayout(li, i)}>
-                    {seg.badges.map((b, j) => <Badge key={j} text={b} ltr={seg.ltr} />)}
-                  </View>
-                ) : (
-                  <Text
-                    key={i}
-                    style={[styles.chipText, small && styles.chipTextSmall, (bold || seg.bold) && styles.chipTextBold, { color: fg }]}
-                    onLayout={hug.onItemLayout(li, i)}
-                  >
-                    {seg.text}
-                  </Text>
-                ),
-              )}
-            </View>
-          ))}
+      {pair ? null : leadGlyph}
+      {pair ? (
+        // TWO FACTS, TWO PACKAGES (see `useFactPair`): each fact is a glyph and
+        // its word in a box of its own, and the row between them is what wraps.
+        // The rule travels with the leading fact and is dropped the moment they
+        // stop sharing a line — a hairline at the end of a wrapped line divides
+        // nothing.
+        <View style={[styles.factRow, facts.style]}>
+          <View style={styles.factPack} onLayout={facts.onLead}>
+            {leadGlyph}
+            <Text
+              style={[styles.chipText, small && styles.chipTextSmall, bold && styles.chipTextBold, { color: fg }]}
+              onTextLayout={unglue.onTextLayout}
+              onLayout={unglue.onLayout}
+            >
+              {unglue.label}
+            </Text>
+            {facts.wrapped ? null : <ChipRule size={glyphSlot.size} />}
+          </View>
+          <View style={styles.factPack} onLayout={facts.onTrail}>
+            <GlyphSlot {...glyphSlot} label={fact!.label}>{fact!.renderIcon(factFg)}</GlyphSlot>
+            <Text style={[styles.chipText, small && styles.chipTextSmall, { color: factFg }]}>
+              {fact!.label}
+            </Text>
+          </View>
         </View>
+      ) : laid ? (
+        // A column of wrapping rows: one row per `br`-delimited line, each row a
+        // sentence handed over one WORD at a time with its pill clusters between
+        // them, so the row breaks where prose breaks and a pill that ends the
+        // line travels with the word before it (see layLine). Same direction as
+        // the chip so items read start-to-end.
+        //
+        // The trailing slot stands OUTSIDE that column, in the chip's own row —
+        // it is a mark about the tile, not a run of the sentence, so it may not
+        // be swept up by the hug or pushed onto a wrapped line.
+        <>
+          <View style={[styles.segmentColumn, hug.style]}>
+            {laid.map((items, li) => (
+              <View key={li} style={styles.segments} onLayout={hug.onLineLayout(li)}>
+                {items.map((it, i) =>
+                  it.kind === 'pills' ? (
+                    <View key={i} style={styles.badgeCluster} onLayout={hug.onItemLayout(li, i)}>
+                      {it.badges.map((b, j) => <Badge key={j} text={b} ltr={it.ltr} />)}
+                    </View>
+                  ) : it.kind === 'tail' ? (
+                    <View key={i} style={styles.tailPair} onLayout={hug.onItemLayout(li, i)}>
+                      <Text style={[styles.chipText, small && styles.chipTextSmall, (bold || it.bold) && styles.chipTextBold, { color: fg }]}>
+                        {it.text}
+                      </Text>
+                      <View style={styles.badgeCluster}>
+                        {it.badges.map((b, j) => <Badge key={j} text={b} ltr={it.ltr} />)}
+                      </View>
+                    </View>
+                  ) : (
+                    <Text
+                      key={i}
+                      style={[
+                        styles.chipText,
+                        small && styles.chipTextSmall,
+                        (bold || it.bold) && styles.chipTextBold,
+                        it.space && styles.wordSpace,
+                        { color: fg },
+                      ]}
+                      onLayout={hug.onItemLayout(li, i)}
+                    >
+                      {it.space ? `${it.text} ` : it.text}
+                    </Text>
+                  ),
+                )}
+              </View>
+            ))}
+          </View>
+          {renderTrailing ? (
+            <GlyphSlot {...glyphSlot} style={styles.segmentTrailing} onPress={onTrailingPress}>
+              {renderTrailing(fg)}
+            </GlyphSlot>
+          ) : null}
+        </>
       ) : (
         <>
           <Text
@@ -692,7 +966,7 @@ export function Chip({
             // something stuck to it.
             <>
               <ChipRule size={glyphSlot.size} />
-              {renderAfterRule(fg)}
+              {renderAfterRule(fg, glyphSlot.size)}
             </>
           ) : null}
           {trailingPill ? (
@@ -781,24 +1055,28 @@ export function Chip({
 // lift — and it drops it through the context above rather than by a prop at the
 // call site.
 //
-// What it takes ON is the block's own VERTICAL air (see CHIP_BLOCK_PAD_V): a
-// stacked row is a wrapping sentence in a wide white block, not a short line in a
-// capsule, so it neither takes the pill's derived padding — whatever a round
-// chrome button has left over — nor the full gutter it took from 2026-07-31,
-// which left a band of empty white over the first fact and under the last (user
-// directive 2026-08-02). A lone chip is still exactly a button tall.
+// What it takes ON is the block's own air (see CHIP_BLOCK_PAD): a stacked row is
+// a wrapping sentence in a wide white block, not a short line in a capsule, so it
+// pays the gutter on the vertical too rather than the pill's derived padding —
+// whatever a round chrome button has left over. A lone chip is still exactly a
+// button tall.
 //
 // On its OUTER edges, that is (user directive 2026-07-31): the two rows meeting
 // at a seam pay a GUTTER together, half each, so the facts stand one gutter apart
-// instead of two (see CHIP_BLOCK_SEAM_PAD) — and that is the one number 2026-08-02
-// deliberately left alone. A row learns which of its edges is which from the
-// context below.
+// instead of two (see CHIP_BLOCK_SEAM_PAD). A row learns which of its edges is
+// which from the context below.
 //
 // alignItems:'flex-start' so every row hugs its own label and the tile hugs the
 // WIDEST of them (a stretch-aligned column would have made every row as wide as
 // the widest and defeated each chip's own hug). The rule then takes
 // `alignSelf:'stretch'`, which is what lets a zero-width hairline span whatever
 // width the rows settled on.
+// How the tile changes size. `MOTION.base` is the app's standard transition —
+// the tier a box settling into a new shape belongs to — and the transition is
+// declared ONCE here rather than at the Animated.View, so nothing can hand this
+// object a second timing.
+const CHIP_RESIZE = LinearTransition.duration(MOTION.base)
+
 export function ChipStack({
   tone = 'neutral',
   onPhoto = false,
@@ -815,6 +1093,33 @@ export function ChipStack({
   style?: StyleProp<ViewStyle>
   children?: React.ReactNode
 }) {
+  // THE TILE ARRIVES AT ITS OWN SIZE; ONLY A CHANGE AFTER THAT IS ANIMATED
+  // (user directive 2026-08-02). A tile is born WIDE — its rows are laid out in
+  // the whole lane, measured, and only then capped to the width their lines
+  // actually used (useHugWidth / useFactPair) — so the very first thing the
+  // resize below had to animate was that settling, and every card came up with
+  // its fact tile spanning the photo and shrinking into itself. That is not a
+  // change under the reader's eye, it is the tile finding out what it is; it may
+  // not be shown. Same rule as the heading's trailing block, which does not play
+  // its slide on a card that ARRIVES with a clock on it.
+  //
+  // Armed one frame after the width stops moving, rather than after a fixed
+  // number of layouts: a tile whose rows never need capping reports one layout
+  // and a capped one reports two, so counting them would leave the first real
+  // change unanimated on some tiles and the settle animated on others. Each
+  // width change re-schedules, so the measure-and-cap pass disarms itself and
+  // the frame that follows the last of them arms for good.
+  const [live, setLive] = useState(false)
+  const lastW = useRef(-1)
+  const frame = useRef<number | null>(null)
+  useEffect(() => () => { if (frame.current != null) cancelAnimationFrame(frame.current) }, [])
+  const onBox = useCallback((e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width
+    if (Math.abs(lastW.current - w) < 0.5) return
+    lastW.current = w
+    if (frame.current != null) cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => { frame.current = null; setLive(true) })
+  }, [])
   // toArray drops the nulls a conditional row renders, so the rules land between
   // the facts that are actually there — and an empty set paints no tile at all.
   const rows = Children.toArray(children)
@@ -822,7 +1127,22 @@ export function ChipStack({
   const { bg } = TONES[tone]
   const bgColor = onPhoto && tone !== 'solid' ? PHOTO_CHROME : bg
   return (
-    <View
+    <Animated.View
+      // THE TILE GROWS AND SHRINKS, IT NEVER JUMPS (user directive 2026-08-02).
+      // A fact set is read while the card is on the screen, and every one of its
+      // sizes is a live change under the reader's eye: a row arriving or leaving,
+      // a sentence rewrapping, and the END lane the floating action reserves
+      // opening or closing beside it (MatchCard's floatingActionReserve), which
+      // changes the width the tile hugs without a single one of its own rows
+      // changing. Stated HERE, on the tile, because the tile is what changes
+      // size — a host that toggles a row or a neighbour states nothing, and no
+      // two hosts can animate the same object differently.
+      //
+      // Children are laid out at the FINAL size the frame is animating toward,
+      // so the measured hugs inside (useHugWidth / useFactPair) settle once on
+      // the real width and never chase the animation.
+      layout={live ? CHIP_RESIZE : undefined}
+      onLayout={onBox}
       pointerEvents={pointerEvents}
       style={[styles.stack, { backgroundColor: bgColor }, onPhoto && styles.chipShadow, style]}
     >
@@ -835,7 +1155,7 @@ export function ChipStack({
           <ChipStacked.Provider value={rowPos(i, rows.length)}>{row}</ChipStacked.Provider>
         </Fragment>
       ))}
-    </View>
+    </Animated.View>
   )
 }
 
@@ -911,6 +1231,58 @@ export function KidsIcon({ color, size = ICON.sm }: { color: string; size?: numb
   )
 }
 
+// ── The two facts a person states about his own body ───────────────────────
+// They share ONE row of the fact tile, divided by the chip's own rule (see the
+// `fact` prop), because either of them alone is half a sentence about the
+// same thing. `size` for the same reason KidsIcon takes one: these glyphs also
+// lead the rows of the popup that edits them.
+
+// A measured span: the two ends marked, the arrow between them pointing at
+// both. Ink 3..21 on the vertical, the span every other glyph in this family
+// runs on the horizontal, so the mark reads at the same weight as the kids and
+// the pin beside it.
+export function HeightIcon({ color, size = ICON.sm }: { color: string; size?: number }) {
+  return (
+    <Glyph
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round"
+    >
+      <Path d="M5 3h14" />
+      <Path d="M5 21h14" />
+      <Path d="M12 7v10" />
+      <Path d="M9 10l3-3 3 3" />
+      <Path d="M9 14l3 3 3-3" />
+    </Glyph>
+  )
+}
+
+// A cigarette lying across the box with the filter marked off at its end, and
+// one wisp off the lit tip. `crossed` is the OTHER answer (user directive
+// 2026-08-02): the SAME mark with a prohibition slash over it, which is how a
+// "no" is drawn everywhere in the world and is read without the word beside it.
+// A VARIANT and never a second glyph, so the two answers cannot drift into two
+// different cigarettes — exactly the eye/eye-off pair the visibility row wears,
+// and the word still stands beside the mark in both cases.
+// The slash runs corner to corner on the family's own 3..21 span, and it LEANS
+// THE OTHER WAY from the app's other negations (user directive 2026-08-02;
+// BlockIcon and EyeOffIcon both run top-START to bottom-END): those two cross a
+// round eye and a circle, which have no grain to fight, while this one crosses a
+// long horizontal object — the way it leans now it cuts the cigarette's clear
+// stretch and leaves the filter tick and the wisp alone, instead of tying a knot
+// of three strokes over the tick at the size a fact chip paints. It is not
+// mirrored under RTL, and neither is the cigarette: an object is not a thing
+// held from the reading side (compare SearchIcon and BackIcon, which are).
+export function SmokeIcon({ color, size = ICON.sm, crossed = false }: { color: string; size?: number; crossed?: boolean }) {
+  return (
+    <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3} y={14} width={18} height={5} rx={2} stroke={color} strokeWidth={STROKE.base} />
+      <Path d="M16.5 14v5" stroke={color} strokeWidth={STROKE.base} />
+      <Path d="M7 11c0-1.8 2-1.8 2-3.6S7 5.6 7 3.8" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" />
+      {crossed ? <Path d="M21 3L3 21" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" /> : null}
+    </Glyph>
+  )
+}
+
 // Small presence dot used as a chip trailing affordance. 7px filled circle,
 // colour carries the meaning: purple (default) = "right now" / "right here" on
 // time + distance chips; white = kids-affinity chip (readable on the dark
@@ -964,17 +1336,14 @@ const styles = StyleSheet.create({
   // instead of standing beside it as an object of its own weight.
   chipSmall: { paddingHorizontal: SM, paddingVertical: XS, gap: XS },
   // A chip that is a BLOCK rather than a pill — a stacked row of the match card's
-  // fact tile. It states its own air on each axis (see CHIP_BLOCK_PAD_V): the
-  // gutter sideways, one step in on the edges facing OUT, because these rows are
-  // wrapping sentences in a wide white block and the top and bottom of such a
-  // stack sit closer to the tile's rim than a capsule's one line does.
-  chipBlock: { paddingVertical: CHIP_BLOCK_PAD_V },
+  // fact tile. It states its own air (see CHIP_BLOCK_PAD): the gutter on the
+  // vertical as well as sideways, because these rows are wrapping sentences in a
+  // wide white block and a block indents its text from every one of its edges.
+  chipBlock: { paddingVertical: CHIP_BLOCK_PAD },
   // …and half a GUTTER on an edge that faces a SEAM rather than the outside,
   // since the row on the other side of that hairline pays the other half (see
-  // CHIP_BLOCK_SEAM_PAD — deliberately not the value above: the distance between
-  // two facts did not change when the tile's outer edges closed in). Two styles
-  // and not four, so each edge is decided on its own and a one-row stack keeps
-  // the block's air on both.
+  // CHIP_BLOCK_SEAM_PAD). Two styles and not four, so each edge is decided on its
+  // own and a one-row stack keeps the block's air on both.
   chipBlockSeamTop: { paddingTop: CHIP_BLOCK_SEAM_PAD },
   chipBlockSeamBottom: { paddingBottom: CHIP_BLOCK_SEAM_PAD },
   // The line-box probe is a measuring stick, not content: absolute so it neither
@@ -1149,6 +1518,34 @@ const styles = StyleSheet.create({
     rowGap: XS,
     flexShrink: 1,
   },
+  // The row a TWO-FACT tile lays out in (see `useFactPair`). Its items are the
+  // two facts, so `columnGap` is the chip's own SM — the air between any two
+  // parts of a tile — and `rowGap` the tighter XS a wrapped label takes, which
+  // is what says the two lines are ONE row of the stack and not two.
+  // alignItems:'flex-start' for the reason the chip's own row does it: a fact
+  // whose word wrapped is taller than the one beside it, and both marks belong
+  // level with their first line.
+  factRow: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    columnGap: SM,
+    rowGap: XS,
+    flexShrink: 1,
+  },
+  // ONE fact: its glyph and its word (and, on the leading one, the rule that
+  // follows it), with the chip's own SM between them — the very row the tile
+  // itself is, one level in, so a package reads exactly as a lone chip's
+  // contents do. It shrinks, so a fact too wide for a line of its own still
+  // wraps at its spaces instead of overflowing the tile.
+  factPack: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SM,
+    flexShrink: 1,
+  },
   // The age pills packed tight as one inline unit (user directive 2026-07-26 —
   // "denser"): a hair-gap between pills, well under the SM that separates the
   // sentence's words, so [0][5][?] read as a single little group.
@@ -1160,6 +1557,35 @@ const styles = StyleSheet.create({
     columnGap: XS,
     rowGap: XS,
   },
+  // TWO WORDS STAND A SPACE APART, NOT A CHIP-GAP APART (see layLine). The
+  // leading word carries the font's own space and cancels the row's `columnGap`
+  // — which is there to stand a PILL off the words around it, and between two
+  // words would be a second space, and a visibly wider one. It rides the word
+  // that LEADS because a negative end margin at a line end is invisible, while
+  // the same margin on the word that follows would push a line's first word out
+  // through the tile's gutter.
+  wordSpace: { marginEnd: -SM },
+  // The last word of a sentence and the pill that counts it: ONE item, so the
+  // row can break BEFORE the word and never between the word and its pill. Its
+  // gap is the row's own — this pair is a pill standing off the words beside it,
+  // which is exactly what that gap is for — and `alignItems:'center'` is the
+  // row's own too: the word is a single line by construction, so the pill sits
+  // on it exactly as it sat when both were items of the row.
+  tailPair: {
+    direction: isRTL ? 'rtl' : 'ltr',
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: SM,
+    flexShrink: 1,
+  },
+  // The disclosure mark stands XS off the label, not the chip's own SM — exactly
+  // the distance it keeps from the clock it follows in the heading tile
+  // (`trailingRow` in MatchCard): the mark and what it follows are ONE
+  // statement, and this row is read for the label rather than for the mark. The
+  // 4dp it gives back is 4dp the sentence keeps: a segments label wraps at its
+  // own items, so the last of them — the "+N" pill — is what a too-narrow line
+  // costs, and this row is the tile's widest.
+  segmentTrailing: { marginStart: XS - SM },
   // The stack of `br`-delimited lines. alignItems:'flex-start' so each line hugs
   // its own content and the chip tile ends up as wide as the WIDEST line, not as
   // wide as the column it sits in.

@@ -355,16 +355,24 @@ Deno.serve(async (req) => {
       case "start":
       case "location":
       case "focus": {
-        // Re-login reset: app_logout_cleanup writes page2 = {state:'locked',
-        // message:'logout'} on logout so we can distinguish it from an
-        // explicit lock2 hide. When a logged-out user comes back, their
-        // first /app/start (or /location, /focus) flips page2 back to
-        // {state:'free', profiles:[]} so they're discoverable again.
-        // Explicit-hide users (locked, no message) stay locked across
-        // re-logins — that's the whole point of the message marker.
-        const p2 = user.relations?.page2 as { state?: string; message?: string } | undefined;
-        if (p2?.state === "locked" && p2?.message === "logout") {
-          user.relations.page2 = { state: "free", profiles: [] } as typeof user.relations.page2;
+        // Re-login reset: app_logout_cleanup stamps `signed_out` so we can
+        // distinguish a logout from an explicit lock2 hide. When a logged-out
+        // user comes back, their first /app/start (or /location, /focus) opens
+        // the account back up. Explicit-hide users are `discoverable = false`
+        // with no such stamp and stay hidden across re-logins — that is the
+        // whole point of the marker.
+        //
+        // It used to be page2 = {state:'locked', message:'logout'} — a message
+        // with no relation behind it. `watch` cannot carry one (there is no row
+        // for "I signed out"), so the marker moved to the column it always was,
+        // and the boards are projected from relations like everything else.
+        // Set on `user` itself, not on user.db.new: persist() builds its delta
+        // by diffing the object against db.old, so a write to db.new is never
+        // sent.
+        if ((user as unknown as { signed_out?: boolean }).signed_out) {
+          (user as unknown as Record<string, unknown>).signed_out = false;
+          (user as unknown as Record<string, unknown>).seeking = true;
+          (user as unknown as Record<string, unknown>).discoverable = true;
         }
         // Capture the client-reported notification permission (+ token health)
         // before persist, so the app_availability recompute below sees a fresh
@@ -632,7 +640,13 @@ Deno.serve(async (req) => {
         // lets the client render a "Pending" state instead of "Joined".
         notifyList = result?.notify ?? [];
         rpcGroups = result?.groups;
-        rpcExtra = { join_status: result?.join_status };
+        // `group` is the circle the link named, described the way the group
+        // popup reads a circle (_group_brief_json). A tapped invite link opens
+        // that popup over the hub, and it cannot wait for the denormalized
+        // summary to arrive: an invoke response has its `relations` stripped on
+        // the way into the client store, so the membership this call just
+        // created lands there a beat later over a popup with nothing to draw.
+        rpcExtra = { join_status: result?.join_status, group: result?.group };
         break;
       }
 
@@ -1136,10 +1150,10 @@ Deno.serve(async (req) => {
       }
 
       case "profile": {
-        // Accept any subset of {images, bio, family}. Keys absent from the
-        // body are left untouched on the row. Pass null on a key to clear
-        // the corresponding field (bio/family). The "wants own kids"
-        // preference (formerly the is_for_kids column) lives inside
+        // Accept any subset of {images, bio, family, height, smokes}. Keys absent
+        // from the body are left untouched on the row. Pass null on a key to
+        // clear the corresponding field (everything but images). The "wants own
+        // kids" preference (formerly the is_for_kids column) lives inside
         // family.isForKids — the client embeds it before sending.
         const payload: Record<string, unknown> = {};
         if ("images" in body && Array.isArray(body.images)) payload.images = body.images;
@@ -1148,6 +1162,19 @@ Deno.serve(async (req) => {
           payload.family = body.family && typeof body.family === "object" && !Array.isArray(body.family)
             ? body.family
             : null;
+        }
+        // Height in CENTIMETRES — one canonical number on the row whatever the
+        // client's own units are (see mobile/src/lib/height.ts). Anything that is
+        // not a finite number clears the key, which is how "not stated" is said:
+        // a height nobody has answered is an ABSENT key, never a 0.
+        if ("height" in body) {
+          const cm = typeof body.height === "number" && isFinite(body.height) ? body.height : null;
+          payload.height = cm;
+        }
+        // Three states, and only two of them are booleans: true, false, and
+        // "hasn't answered", which is the key not being there at all.
+        if ("smokes" in body) {
+          payload.smokes = typeof body.smokes === "boolean" ? body.smokes : null;
         }
         if (Object.keys(payload).length === 0) return log.error(key, "empty_payload", 400);
         // Read the gate BEFORE the save: the auto-visible below fires on the
@@ -1170,6 +1197,19 @@ Deno.serve(async (req) => {
         // because by then the shape had been normalized. Reproduced on the
         // review account 2026-07-30. Persisting first also means the RPC reads a
         // row that already carries this request's body fields.
+        //
+        // THE COST OF THAT ORDER IS AN ECHO OF THE OLD PROFILE, AND
+        // app_save_profile PAYS IT BY STAMPING `last_seen` ITSELF (migration
+        // 20260802190000). The persist writes the whole row while `data` still
+        // holds the PREVIOUS bio / height / photos, so Realtime hands the client
+        // the old profile and then the new one — harmless while it can tell the
+        // two apart, which is exactly what its `last_seen` ordering guard is
+        // for. The save used to leave the stamp alone, so both events carried
+        // the persist's, neither could be ordered against the other, and the
+        // stale one repainted the previous value for a beat (the HTTP response
+        // lands ~150ms in, long before Realtime's echo, and spends the store's
+        // optimistic `pending` guard on its way past). Any RPC that writes what
+        // the client is looking at, behind a persist, owes the same stamp.
         await user.persist(log);
         const result = await Tools.rpc(log, "app_save_profile", { me_id: user.user_id, payload });
         if (result?.error) return log.error(key, result.error, 400);
@@ -1292,12 +1332,15 @@ Deno.serve(async (req) => {
       })());
     }
 
-    // Propagate fresh last_seen / location into snapshots inside other users'
-    // relations (and recompute distances inside this user's own relations).
-    // Skip for delete (the row is gone).
+    // Propagate fresh last_seen / location into the profile copies the boards
+    // carry. Refreshing a snapshot IS projecting a board — the projection
+    // rebuilds those copies from make_profile every time it runs, from the one
+    // row both ends are drawn from — but it only runs when something CHANGES,
+    // and a snapshot goes stale on the clock rather than on an event. So the
+    // call stays and what it calls changed. Skip for delete (the row is gone).
     if (key !== "delete") {
       EdgeRuntime.waitUntil(
-        Tools.rpc(log, "app_refresh_snapshots", { me_id: user.user_id }).then(() => {}),
+        Tools.rpc(log, "app_refresh_boards", { me_id: user.user_id }).then(() => {}),
       );
     }
 

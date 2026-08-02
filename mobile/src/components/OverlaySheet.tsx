@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeSyntheticEvent, type StyleProp, type TextLayoutEventData, type ViewStyle } from 'react-native'
-import { useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
+import { runOnJS, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
 import { PullPane, usePullBehavior, type PullActivation, type PullAxis, type PullBehavior } from './PullPane'
@@ -131,6 +131,13 @@ export type OverlaySheetProps = {
   /** False removes the sheet with no slide-out. Required, not cosmetic, for a
    *  sheet that can unmount MID-GESTURE — see RisingCard's animateExit. */
   animateExit?: boolean
+  /** Fired the moment this sheet has finished RISING and is covering what was
+   *  under it. Whoever owns the motion owns the announcement: a mount/unmount
+   *  sheet takes it from RisingCard's entrance, a `keepMounted` one from its own
+   *  park timing — never from a duration copied into a timer at a call site.
+   *  Its one consumer is home, which holds the card the user just answered on
+   *  the screen until the chat says it is covered (user directive 2026-08-02). */
+  onArrived?: () => void
   /** Keeps the body mounted while closed, parked off-screen by the host's
    *  `pull`. For the drawer, whose position IS the open/closed state: it must
    *  already exist to be dragged in, and mounting it mid-gesture crashes
@@ -161,11 +168,18 @@ export function OverlaySheet({
   pull: externalPull,
   animateEnter = true,
   animateExit = true,
+  onArrived,
   keepMounted = false,
   children,
 }: OverlaySheetProps) {
   const { top: topInset } = useSafeAreaInsets()
   const headerBottom = useSharedValue(0)
+
+  // Kept in a ref for the same reason `onClose` is: the park effect below must
+  // not re-run (and re-drive the sheet) because a host re-rendered.
+  const onArrivedRef = useRef(onArrived)
+  onArrivedRef.current = onArrived
+  const announceArrival = useCallback(() => { onArrivedRef.current?.() }, [])
 
   // Keep the gesture's onCommit stable so usePullBehavior's useMemo doesn't
   // rebuild the Pan every render (a rebuilt gesture mid-drag drops the touch).
@@ -178,6 +192,11 @@ export function OverlaySheet({
     activation,
     enabled: open && isTop && swipeToClose && !externalPull,
     commit: commit === 'confirm' ? 'snapBack' : 'slideOff',
+    // A sheet that DISMISSES only goes away, so it is the cheap swipe every
+    // page in the app shares. A `confirm` sheet is the invitation asking the
+    // user something, and answering it costs the deliberate half-screen with no
+    // flick — the same weight page1's skip carries. See PullWeight.
+    weight: commit === 'confirm' ? 'decide' : 'close',
     axis,
     onCommit: requestClose,
     headerBottom: activation === 'sheet' ? headerBottom : undefined,
@@ -214,12 +233,22 @@ export function OverlaySheet({
     slidOut.value = false
     if (firstParkRef.current) {
       firstParkRef.current = false
-      if (open) { pullY.value = screenSpan; pullY.value = withTiming(0) }
-      else pullY.value = screenSpan
-      return
+      // Mounting already-closed parks with no motion (a flash is not an
+      // entrance). Mounting already-OPEN — a fresh match raising chat — seeds
+      // the off-screen start and rides up from it, below.
+      if (!open) { pullY.value = screenSpan; return }
+      pullY.value = screenSpan
     }
-    pullY.value = withTiming(open ? 0 : screenSpan)
-  }, [open, dragFrom, externalPull, selfPark, reset, setScrollAtTop, pullY, screenSpan, slidOut])
+    // Only the RISE says when it is over (`onArrived`, the timing's own
+    // completion callback, never a duration copied into a timer): a park is the
+    // surface leaving, and nothing is waiting to hear about that.
+    pullY.value = open
+      ? withTiming(0, undefined, () => {
+        'worklet'
+        runOnJS(announceArrival)()
+      })
+      : withTiming(screenSpan)
+  }, [open, dragFrom, externalPull, selfPark, reset, setScrollAtTop, pullY, screenSpan, slidOut, announceArrival])
 
   const ctx: OverlaySheetBody = {
     dismissGestureRef: pull.panRef,
@@ -264,6 +293,11 @@ export function OverlaySheet({
           // slide must be off or the two transforms clobber each other.
           animateEnter={selfPark ? false : animateEnter}
           animateExit={selfPark ? false : animateExit}
+          // Whoever owns the rise owns the announcement: a self-parking sheet
+          // rides its own pullY (above), and RisingCard — mounted with no
+          // entrance in that case — would otherwise report "arrived" the
+          // instant it mounted, i.e. before the sheet had moved at all.
+          onArrived={selfPark ? undefined : announceArrival}
           style={[styles.card, cardStyle]}
         >
           {floatingHeader ? (

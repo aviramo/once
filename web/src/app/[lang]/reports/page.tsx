@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireViewerScope } from "@/lib/admin-auth";
+import { readAdminEnv, envUserIds, NO_MATCH_ID } from "@/lib/adminEnv";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { getDictionary } from "@/i18n/dictionaries";
 import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
@@ -10,7 +11,7 @@ import { RealtimeRefresh } from "../_components/RealtimeRefresh";
 import { userImageUrl } from "@/lib/userImage";
 import {
   ReportsList,
-  type Reporter,
+  type ReportedUser,
   type ReportItem,
 } from "./_components/ReportsList";
 import { ReportsFilters } from "./_components/ReportsFilters";
@@ -75,11 +76,17 @@ export default async function ReportsPage({
   if (scope.kind !== "admin") redirect("/users");
 
   const admin = createSupabaseAdmin();
+  // The moderation queue belongs to one environment, like every other screen.
+  // `reports` carries no is_test and no foreign key (a report outlives the
+  // account it names), so it is bounded by the reporter's id set.
+  const env = await readAdminEnv();
+  const envIds = await envUserIds(admin, env);
   let query = admin
     .from("reports")
     .select(
       "id, created_at, context, reason, note, handled, reporter_id, reported_id",
     )
+    .in("reporter_id", envIds.length ? envIds : [NO_MATCH_ID])
     .order("created_at", { ascending: false })
     .limit(300);
   if (status === "unhandled") query = query.eq("handled", false);
@@ -106,13 +113,13 @@ export default async function ReportsPage({
     for (const u of (users ?? []) as UserMini[]) byId.set(u.user_id, u);
   }
 
-  // Resolve auth emails for the REPORTER ids (subset — the only ones the
-  // reporter card shows). Parallel getUserById is fine at this scale (one
-  // admin per active session, dozens of reporters at most).
-  const reporterIds = Array.from(new Set(reports.map((x) => x.reporter_id)));
+  // Resolve auth emails for the REPORTED ids — the card's own subtitle, and
+  // half of what the search matches on. Parallel getUserById is fine at this
+  // scale (one admin per active session, dozens of people at most).
+  const reportedIds = Array.from(new Set(reports.map((x) => x.reported_id)));
   const emailById = new Map<string, string>();
   await Promise.all(
-    reporterIds.map(async (id) => {
+    reportedIds.map(async (id) => {
       const { data: au } = await admin.auth.admin.getUserById(id);
       if (au?.user?.email) emailById.set(id, au.user.email);
     }),
@@ -122,20 +129,22 @@ export default async function ReportsPage({
     userImageUrl(id, byId.get(id)?.data?.images?.[0]?.normal);
   const nameFor = (id: string): string => byId.get(id)?.name ?? r.unknownUser;
 
-  // Group reports by reporter, tracking each reporter's latest report time.
-  const groups = new Map<string, Reporter>();
+  // Group by the person being REPORTED, tracking their latest report time.
+  // The question this queue answers is "is there somebody several people have
+  // flagged", and grouping the other way round buried it.
+  const groups = new Map<string, ReportedUser>();
   for (const x of reports) {
-    let g = groups.get(x.reporter_id);
+    let g = groups.get(x.reported_id);
     if (!g) {
       g = {
-        id: x.reporter_id,
-        name: nameFor(x.reporter_id),
-        email: emailById.get(x.reporter_id) ?? null,
-        image: photoFor(x.reporter_id),
+        id: x.reported_id,
+        name: nameFor(x.reported_id),
+        email: emailById.get(x.reported_id) ?? null,
+        image: photoFor(x.reported_id),
         reports: [],
         latest: x.created_at,
       };
-      groups.set(x.reporter_id, g);
+      groups.set(x.reported_id, g);
     }
     const item: ReportItem = {
       id: x.id,
@@ -143,19 +152,19 @@ export default async function ReportsPage({
       context: x.context,
       note: x.note,
       handled: x.handled,
-      reportedId: x.reported_id,
-      reportedName: nameFor(x.reported_id),
-      reportedImage: photoFor(x.reported_id),
+      reporterId: x.reporter_id,
+      reporterName: nameFor(x.reporter_id),
+      reporterImage: photoFor(x.reporter_id),
     };
     g.reports.push(item);
     if (x.created_at > g.latest) g.latest = x.created_at;
   }
-  let reporters = [...groups.values()];
+  let reported = [...groups.values()];
 
-  // Text search on the reporter's name OR email.
+  // Text search on the reported person's name OR email.
   if (q) {
     const ql = q.toLowerCase();
-    reporters = reporters.filter(
+    reported = reported.filter(
       (rp) =>
         (rp.name ?? "").toLowerCase().includes(ql) ||
         (rp.email ?? "").toLowerCase().includes(ql),
@@ -163,7 +172,7 @@ export default async function ReportsPage({
   }
 
   // Sort groups by their latest report time.
-  reporters.sort((a, b) =>
+  reported.sort((a, b) =>
     sort === "newest"
       ? b.latest.localeCompare(a.latest)
       : a.latest.localeCompare(b.latest),
@@ -210,7 +219,7 @@ export default async function ReportsPage({
   return (
     <AdminShell dict={dict.admin} active="reports">
       <RealtimeRefresh tables="reports" channel="admin-reports" />
-      <Section title={r.title} count={reporters.length} hint={r.subtitle}>
+      <Section title={r.title} count={reported.length} hint={r.subtitle}>
         <div className="space-y-4">
           <div className="flex items-center gap-1">
             {tab("unhandled", r.unhandled)}
@@ -226,11 +235,11 @@ export default async function ReportsPage({
               sortOptions,
             }}
           />
-          {reporters.length === 0 ? (
+          {reported.length === 0 ? (
             <EmptyState>{r.none}</EmptyState>
           ) : (
             <ReportsList
-              reporters={reporters}
+              reported={reported}
               dict={{
                 none: r.none,
                 note: r.note,

@@ -18,6 +18,14 @@ export interface Profile {
   images: Image[]
   bio?: string | null
   family?: FamilyData | null
+  /** How tall this person said he is, in CENTIMETRES — always, whatever units
+   * the phone that entered it uses. What the reader SEES is his own device's
+   * (see lib/height.ts → formatHeight), exactly as the distance chip works.
+   * Absent = not stated, which the card reads as "no height half to the row". */
+  height?: number | null
+  /** Whether this person smokes. Three states: true, false, and ABSENT — a
+   * question nobody answered is not a "no". */
+  smokes?: boolean | null
   is_male?: boolean | null
   last_seen?: string | null
   push_enabled?: boolean | null
@@ -170,6 +178,11 @@ interface UserProfile {
   images: Image[]
   bio: string | null
   family: FamilyData | null
+  /** Promoted from data.height / data.smokes — the two facts the card's height
+   * row states. Same three-state shape they have on a Profile snapshot: null is
+   * "not stated", and for smoking that is a different answer from `false`. */
+  height: number | null
+  smokes: boolean | null
   /** First day of the displayed week (0 = Sunday, 1 = Monday). Used by the
    * family/kids schedule UI to know which day to show in the leftmost column. */
   weekStart: number | null
@@ -221,7 +234,7 @@ interface UserStore {
 }
 
 const CLIENT_AUTHORED: ReadonlyArray<keyof UserProfile> = [
-  'images', 'bio', 'family',
+  'images', 'bio', 'family', 'height', 'smokes',
   'is_for_male', 'is_for_female',
   'age_from', 'age_to', 'range',
   'weekStart',
@@ -266,6 +279,27 @@ const lastSeenOf = (p: UserProfile | null | undefined): number => {
 }
 
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+/** The same value however its keys are spelled out. What needs it is the
+ *  pending-retire check below: the client's own fields live in the `data`
+ *  JSONB, and Postgres hands a jsonb object's keys back in ITS canonical order
+ *  (shortest first), which is not the order the client wrote them in. So the
+ *  `{normal, hash}` an added photo is stored as never matched the
+ *  `{hash, normal}` that came back, the optimistic entry was never retired, and
+ *  the client's own array went on outranking every server payload for the rest
+ *  of the session — a photo edited on another device could not land. Only ever
+ *  used on one field's value (an images array, a family object, a primitive),
+ *  never on the whole profile: `sameForRender` compares the same OBJECT the
+ *  store built a moment ago, where the ordering cannot differ. */
+const stableKeys = (v: unknown): unknown => {
+  if (Array.isArray(v)) return v.map(stableKeys)
+  if (!v || typeof v !== 'object') return v
+  const o = v as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(o).sort()) out[k] = stableKeys(o[k])
+  return out
+}
+const sameValue = (a: unknown, b: unknown) => equal(stableKeys(a), stableKeys(b))
 
 // Fields that ride on the row but that NOTHING renders, so a row differing only
 // in these is not a change as far as React is concerned. `last_seen` is the
@@ -357,6 +391,24 @@ function deriveCompat(relations: Pages | null | undefined) {
 // = raw relations spread + synthesized watchers/match/page2/page2State).
 // Single source of truth for both the Realtime/fetch path and the trusted
 // find/ignore page1 merge.
+/** The ONE thing an invoke response is trusted for inside `relations`: the
+ *  circles summary (`communities`, the wire key — see circlesSummary).
+ *
+ *  Every other key in there is a game board, which only Realtime and an
+ *  explicit fetch may write: page1/page2 are rewritten by the OTHER user's
+ *  RPCs, which do not bump my `last_seen`, so the ordering guard cannot tell a
+ *  stale HTTP response from a fresh one and the response is thrown away.
+ *  `communities` is not that. It is a projection of MY OWN rows, recomputed by
+ *  the DB's own trigger inside the transaction the request just ran, and the
+ *  row on the response is read back AFTER it (user.persist's RETURNING) — so
+ *  it is never older than what is on screen, and it is the only copy the actor
+ *  gets: approving a join request drops my own `pending` count, and stripping
+ *  it left the hub's "2 requests" standing on a queue of one until a Realtime
+ *  echo happened to land (reported 2026-08-02). A summary that a concurrent
+ *  manager has moved on from is corrected by that echo exactly as before. */
+const withCircles = <T extends object>(rel: T, resp: { communities?: unknown } | undefined | null): T =>
+  resp && resp.communities !== undefined ? { ...rel, communities: resp.communities } : rel
+
 function writeCompat(d: Record<string, unknown>, relations: Pages | null | undefined) {
   const compat = deriveCompat(relations)
   d.state = compat.state
@@ -623,6 +675,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
       ;(d as Record<string, unknown>).family = dd.family && typeof dd.family === 'object' && !Array.isArray(dd.family)
         ? (dd.family as FamilyData)
         : null
+      // Height (centimetres) and smoking. Both are THREE-state: a number/boolean
+      // when answered, null when not — so an absent key promotes to null rather
+      // than being left off the object, which is what lets a cleared answer read
+      // as cleared instead of as "unchanged".
+      ;(d as Record<string, unknown>).height = typeof dd.height === 'number' ? dd.height : null
+      ;(d as Record<string, unknown>).smokes = typeof dd.smokes === 'boolean' ? dd.smokes : null
     }
     const prev = get().profile
     if (source === 'invoke:self' && prev && d.relations) {
@@ -637,9 +695,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // page2 Realtime-owned by merging the response's page1 over the last
       // raw relations Realtime/fetch delivered.
       // Cold start (no raw yet): trust the full response relations.
-      const respRel = d.relations as Pages
+      const respRel = d.relations as Pages & { communities?: unknown }
       const base = lastRawRelations ?? respRel
-      const rebuilt = { ...base, page1: respRel.page1 } as Pages
+      const rebuilt = withCircles({ ...base, page1: respRel.page1 } as Pages, respRel)
       lastRawRelations = rebuilt
       writeCompat(d, rebuilt)
     } else if ((source === 'invoke' || source === 'invoke:self') && prev) {
@@ -647,8 +705,18 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // prev existed). Invoke (HTTP) responses can race with Realtime events
       // and arrive stale — Realtime and explicit fetch are the authoritative
       // source for game state — so strip relations/state.
+      //
+      // EXCEPT the circles summary: see withCircles. The game boards are the
+      // race this strip exists for; `communities` is a server-computed
+      // projection the response carries fresh out of the row it just wrote.
+      const respRel = d.relations as (Pages & { communities?: unknown }) | undefined
       delete (d as Record<string, unknown>).relations
       delete (d as Record<string, unknown>).state
+      const summary = respRel && (respRel as { communities?: unknown }).communities
+      if (summary !== undefined && prev.relations) {
+        if (lastRawRelations) lastRawRelations = withCircles(lastRawRelations, respRel)
+        d.relations = { ...(prev.relations as object), communities: summary }
+      }
     } else if (!('relations' in d)) {
       // Realtime payload from a partial UPDATE (REPLICA IDENTITY default sends
       // only changed columns + primary key). When `relations` isn't in the
@@ -672,10 +740,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
       return
     }
     const merged: Record<string, unknown> = { ...prev, ...d }
+    // An optimistic value stands until the server says it back. The comparison
+    // is key-order-blind (see sameValue) because what comes back has been
+    // through jsonb and no longer spells its objects the way the client did.
     for (const k of CLIENT_AUTHORED) {
       if (!pending.has(k)) continue
       const pendingVal = pending.get(k)
-      if (equal(d[k as string], pendingVal)) {
+      if (sameValue(d[k as string], pendingVal)) {
         pending.delete(k)
       } else {
         merged[k as string] = pendingVal

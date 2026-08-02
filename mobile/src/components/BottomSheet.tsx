@@ -43,9 +43,16 @@ type BottomSheetProps = {
   dragHandle?: boolean
   // True → enable swipe-down-to-dismiss gesture. Default true.
   swipeToDismiss?: boolean
-  // Disable the backdrop tap → dismiss (e.g. while a network call is in flight).
-  // Defaults to allowed.
-  disableBackdropDismiss?: boolean
+  // AN ACTION TAKEN ON THIS POPUP IS IN FLIGHT, SO THE POPUP CANNOT BE PUT AWAY
+  // (user directive 2026-08-02). A press that rewrites the user's state holds
+  // the surface it was taken on — with the pressed button's own spinner — until
+  // the server has answered, and only then does the screen express the new
+  // state. So while this is true ALL THREE ways out are shut together: the
+  // backdrop tap, hardware back, and the swipe down. It was `disableBackdropDismiss`
+  // and shut only the first two, which left the user able to drag away a popup
+  // whose request was still out and land on a board that had not changed yet.
+  // Every call site passed exactly `busy`, so the prop says that now.
+  busy?: boolean
   // Extra style override on the card wrapper (e.g. a `maxHeight` cap a body
   // wants to impose on itself). NEVER a keyboard lift: the sheet handles the
   // keyboard itself, below, and a second lift at a call site double-applies.
@@ -111,7 +118,7 @@ export function BottomSheet({
   children,
   dragHandle = true,
   swipeToDismiss = true,
-  disableBackdropDismiss,
+  busy,
   cardWrapStyle,
   contentStyle,
   scrollableGesture,
@@ -215,7 +222,7 @@ export function BottomSheet({
   }, [modalVisible, onClosed])
 
   const panBase = Gesture.Pan()
-    .enabled(swipeToDismiss)
+    .enabled(swipeToDismiss && !busy)
     .activeOffsetY(PAN_ACTIVE_OFFSET_Y)
     .failOffsetY(PAN_FAIL_OFFSET_Y)
   const pan = (scrollableGesture
@@ -285,7 +292,7 @@ export function BottomSheet({
     <View style={[styles.overlay, { paddingTop: topReserve }]}>
       <Pressable
         style={StyleSheet.absoluteFill}
-        onPress={disableBackdropDismiss ? undefined : onDismiss}
+        onPress={busy ? undefined : onDismiss}
       />
       <GestureDetector gesture={pan}>
         <Animated.View
@@ -332,7 +339,7 @@ export function BottomSheet({
       visible={modalVisible}
       transparent
       animationType="none"
-      onRequestClose={disableBackdropDismiss ? undefined : onDismiss}
+      onRequestClose={busy ? undefined : onDismiss}
       statusBarTranslucent
     >
       <GestureHandlerRootView style={styles.rootView}>
@@ -681,7 +688,11 @@ export function SheetActions({ children, row, flush, style }: {
 //
 // One row cannot hold both — a strip of two hugging its own words beside a purple
 // tile leaves each side a third of the popup — and a group is the one popup here
-// whose options are more than one. Which arrangement a popup wears is the call
+// whose options are more than one. It wears this arrangement at EVERY count,
+// including one (user directive 2026-08-02, evening): what a circle's foot looks
+// like, and how big the word on its purple is, may not change with how many
+// things I happen to be allowed to do in that particular circle.
+// Which arrangement a popup wears is the call
 // site's to state, and nothing else about the foot is: the gap above it, the case
 // where one side is missing and the case where neither is are this component's.
 //

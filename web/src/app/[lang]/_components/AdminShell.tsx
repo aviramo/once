@@ -4,8 +4,10 @@ import { ArrowLeft } from "lucide-react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireViewerScope } from "@/lib/admin-auth";
+import { readAdminEnv, envIsTest } from "@/lib/adminEnv";
 import { AdminNav } from "./AdminNav";
 import { RealtimeRefresh } from "./RealtimeRefresh";
+import { EnvSwitch } from "./EnvSwitch";
 
 /**
  * Async server shell wrapping every authenticated admin screen — logo header,
@@ -15,7 +17,7 @@ import { RealtimeRefresh } from "./RealtimeRefresh";
  * file that client components import — ui.tsx is one of those.
  */
 
-type Active = "dashboard" | "users" | "groups" | "reports" | "bugs";
+type Active = "dashboard" | "users" | "groups" | "reports";
 
 type ShellProps = {
   dict: Dictionary["admin"];
@@ -46,50 +48,28 @@ export async function AdminShell({
   const managerUserIds = scope.kind === "manager" ? scope.userIds : null;
   const managerGroupIds = scope.kind === "manager" ? scope.groupIds : null;
   // Per-tab badges in the nav. Fetched here (not per-page) so every admin
-  // screen carries them. `users` / `roles` badges are scoped to the manager
-  // when applicable; `reports` is an admin-only metric (its tab is hidden
-  // from managers via `visibleKeys`, so skipping the query is both correct
-  // and saves the round trip).
+  // screen carries them. All four counts belong to the selected environment, and two of them
+  // (reports / bugs) carry no `is_test` of their own — they are scoped through
+  // the user at their end, which PostgREST cannot express without an FK those
+  // tables deliberately do not have. So it is one RPC rather than four
+  // queries, and the manager scope rides in as its two id arrays.
+  const env = await readAdminEnv();
   const admin = createSupabaseAdmin();
-  const usersQuery = managerUserIds === null
-    ? admin.from("users").select("user_id", { count: "exact", head: true })
-    : managerUserIds.length === 0
-      ? null
-      : admin
-          .from("users")
-          .select("user_id", { count: "exact", head: true })
-          .in("user_id", managerUserIds);
-  const groupsQuery = managerGroupIds === null
-    ? admin.from("groups").select("id", { count: "exact", head: true })
-    : admin
-        .from("groups")
-        .select("id", { count: "exact", head: true })
-        .in("id", managerGroupIds);
-  const [
-    usersResult,
-    groupsResult,
-    pendingReportsResult,
-    pendingBugsResult,
-  ] = await Promise.all([
-    usersQuery ?? Promise.resolve({ count: 0 }),
-    groupsQuery,
-    isAdmin
-      ? admin
-          .from("reports")
-          .select("id", { count: "exact", head: true })
-          .eq("handled", false)
-      : Promise.resolve({ count: 0 }),
-    isAdmin
-      ? admin
-          .from("bug_reports")
-          .select("id", { count: "exact", head: true })
-          .eq("handled", false)
-      : Promise.resolve({ count: 0 }),
-  ]);
-  const usersTotal = usersResult.count ?? 0;
-  const groupsTotal = groupsResult.count ?? 0;
-  const pendingReports = pendingReportsResult.count ?? 0;
-  const pendingBugs = pendingBugsResult.count ?? 0;
+  const { data: countsData } = await admin.rpc("admin_env_counts", {
+    p_is_test: envIsTest(env),
+    p_user_ids: managerUserIds,
+    p_group_ids: managerGroupIds,
+  });
+  const counts = (countsData ?? {}) as {
+    users?: number;
+    groups?: number;
+    reports_pending?: number;
+  };
+  const usersTotal = counts.users ?? 0;
+  const groupsTotal = counts.groups ?? 0;
+  // The moderation queues are an admin metric; their tabs are hidden from
+  // managers, so a manager simply never sees the number.
+  const pendingReports = isAdmin ? (counts.reports_pending ?? 0) : 0;
 
   return (
     // overflow-x-clip guards against a child momentarily wider than the
@@ -102,7 +82,7 @@ export async function AdminShell({
           router refresh constantly; the users count re-reads on every nav
           anyway (server component) which is fresh enough. */}
       <RealtimeRefresh
-        tables="reports,bug_reports,groups"
+        tables="reports,groups"
         channel="admin-shell-counts"
       />
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
@@ -118,11 +98,12 @@ export async function AdminShell({
               </span>
             </span>
           </Link>
+          <EnvSwitch env={env} labels={dict.env} />
           <AdminNav
             active={active}
             visibleKeys={
               isAdmin
-                ? ["dashboard", "users", "groups", "reports", "bugs"]
+                ? ["dashboard", "users", "groups", "reports"]
                 : ["dashboard", "users", "groups"]
             }
             labels={{
@@ -130,13 +111,11 @@ export async function AdminShell({
               users: dict.nav.users,
               groups: dict.nav.groups,
               reports: dict.nav.reports,
-              bugs: dict.nav.bugs,
               signOut: dict.signOut,
             }}
             userLabel={userLabel}
             badges={{
               reports: pendingReports,
-              bugs: pendingBugs,
               users: { count: usersTotal, tone: "info" },
               groups: { count: groupsTotal, tone: "info" },
             }}

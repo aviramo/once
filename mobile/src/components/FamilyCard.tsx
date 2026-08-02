@@ -86,11 +86,32 @@ export function buildFamilySegments(
 
   const weekend = familyWeekendKidStatus(family.schedule, lang)
   if (weekend) {
-    // Weekend status on its OWN line (user directive 2026-07-26): a forced break
-    // before the bold status run, so "busy weekend" never trails the kids
-    // sentence but always starts a fresh line under it.
-    segments.push({ br: true })
-    segments.push({ text: tg(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend', isMale), bold: true })
+    // THE WEEKEND STATUS IS THE LAST PHRASE OF THE SENTENCE, BEHIND A COMMA
+    // (user directive 2026-08-02, reversing the forced break of 2026-07-26):
+    // "יש לי 2 ילדים [6][10] ורוצה עוד, פנויה בסופ״ש הקרוב". It used to be pushed
+    // onto a LINE of its own so it could never trail the kids sentence — but a
+    // line break is what a sentence does when it runs out of room, and this one
+    // was breaking with room still on the line above it. It is one more fact
+    // about this person's family, so it is punctuated like one and wraps only if
+    // it has to.
+    //
+    // The comma joins two phrases of WORDS. Where the ages cluster is what
+    // stands between them (a profile with no kids preference stated), those
+    // pills are already the separator and no comma is added — a comma cannot
+    // attach to a pill, and one floating after the cluster would read as
+    // punctuation belonging to nothing.
+    // AND IT IS ONE PHRASE (user directive 2026-08-02): the row may break before
+    // it and never inside it. It is three short words saying one thing, and
+    // broken across two lines it left the last of them stranded under a full
+    // line ("...ורוצה עוד, פנויה בסופ״ש" / "הקרוב"). The sentence in front of it
+    // still breaks word by word, which is what a sentence does.
+    const prev = segments[segments.length - 1]
+    if ('text' in prev) prev.text += ','
+    segments.push({
+      text: tg(weekend === 'free' ? 'family.summaryFreeWeekend' : 'family.summaryWithKidsWeekend', isMale),
+      bold: true,
+      phrase: true,
+    })
   }
 
   return segments

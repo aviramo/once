@@ -581,14 +581,16 @@ export function PhotoTrashIcon({ color, size = ICON.xxl }: IconProps & { color: 
 
 // ── Action overlays (over photos) ──────────────────────────────────────────
 
-// HeartIcon — the app's solid filled heart mark: the like/action overlay over
-// match photos (over-photo callers pass `stroke={WHITE}` for the white
-// perimeter halo) and the Menu tab glyph. `stroke` defaults to `color`, so
-// omitting it yields a clean single-color glyph.
+// HeartIcon — the app's solid filled heart mark. `stroke` defaults to `color`,
+// so omitting it yields a clean single-color glyph.
 //
-// NOT the currency — that's CreditIcon. The heart is the "invite this person"
-// affordance; drawing money with the same glyph made the cost badge dissolve
-// into the button it sat on (renamed hearts -> credits, 2026-07-22).
+// NO CALL SITE since 2026-08-02: it was the page1 card's "invite this person"
+// action for as long as the card existed, and that button wears ChatIcon now on
+// both sides of an invitation (see ChatIcon below). Kept as artwork, unused.
+//
+// NOT the currency — that's CreditIcon. Drawing money with this glyph made the
+// cost badge dissolve into the button it sat on (renamed hearts -> credits,
+// 2026-07-22).
 export function HeartIcon({
   color = INK,
   stroke = color,
@@ -701,9 +703,11 @@ export function EyeOpenIcon({ color = WHITE, size = 28 }: IconProps = {}) {
 // surface. Same single-stroke STROKE.medium weight as the megaphone/eye
 // family it shares the tab indicator slot with, so swapping between them
 // reads as one icon morphing, not a weight jump.
-// Filled, like HeartIcon: its only consumer is the page1 card's primary action
-// button, where it stands in for the heart. An outline glyph read as lighter
-// than the button it replaced.
+// FILLED, deliberately: an outline glyph read as lighter than the round button
+// carrying it. It is the mark of the card's primary action in every state that
+// has one — open the chat, accept an invitation, and (since 2026-08-02) send
+// one, which is the heart's old job: a heart says "this person", and what an
+// invitation offers on either side is the conversation.
 export function ChatIcon({ color = WHITE, stroke = color, size = 28 }: IconProps & { stroke?: string } = {}) {
   return (
     <Glyph width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={stroke} strokeWidth={STROKE.medium} strokeLinecap="round" strokeLinejoin="round">

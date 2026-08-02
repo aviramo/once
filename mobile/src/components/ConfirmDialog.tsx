@@ -4,7 +4,7 @@ import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet, SheetTitle, SheetDesc, SheetActions } from './BottomSheet'
 import { SM, MD, RADII, TEXT, WEIGHT, STROKE, SHEET_GAP, lh } from '../tokens'
-import { SURFACE, INK, WHITE, INK_SUBTLE, INK_DIM } from '../colors'
+import { SURFACE, INK, WHITE, INK_SUBTLE, INK_DIM, INK_MUTED } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { CloseIcon, CheckIcon } from './icons'
 
@@ -49,6 +49,7 @@ export function ConfirmDialog({
   cancelFlex,
   confirmFlex,
   confirmDisabled,
+  actionNote,
 }: {
   visible: boolean
   title: string
@@ -82,6 +83,12 @@ export function ConfirmDialog({
    * its credit cost — the popup stays open and informative (the cost badge
    * still shows) but the action can't be taken. */
   confirmDisabled?: boolean
+  /** A small line directly ABOVE the button, saying what pressing it does. It
+   * belongs to the BUTTON, not to the popup's paragraph — so it takes the air
+   * over the actions block and the button stands one SM under it, exactly the
+   * shape the friends page's invite block has (CirclesPage `friendsInvite`).
+   * Only the friend-invite popup wears one (user directive 2026-08-02). */
+  actionNote?: string
 }) {
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
   useEffect(() => { if (!busy) setPressed(null) }, [busy])
@@ -97,7 +104,7 @@ export function ConfirmDialog({
     <BottomSheet
       visible={visible}
       onDismiss={dismiss}
-      disableBackdropDismiss={busy}
+      busy={busy}
       // The handle and the swipe are BottomSheet's own defaults — see the note
       // at the top of this file. Nothing here overrides them.
       // No frame and no keyboard lift of its own. The gutter, the air above the
@@ -139,8 +146,12 @@ export function ConfirmDialog({
         />
       )}
 
+      {(confirmLabel || cancelLabel) && actionNote ? (
+        <Text style={styles.actionNote}>{actionNote}</Text>
+      ) : null}
+
       {(confirmLabel || cancelLabel) ? (
-        <SheetActions row>
+        <SheetActions row flush={!!actionNote} style={actionNote ? styles.actionsUnderNote : undefined}>
           {cancelLabel ? (
             <View style={[styles.slot, cancelFlex != null && { flex: cancelFlex }]}>
               <Button
@@ -234,5 +245,16 @@ const styles = StyleSheet.create({
     fontSize: TEXT.md,
     color: INK,
   },
+  // The line that explains the button under it: the app's caption rank, centred
+  // like everything else in a popup, standing in the actions' own air.
+  actionNote: {
+    fontSize: TEXT.sm,
+    color: INK_MUTED,
+    textAlign: 'center',
+    marginTop: SHEET_GAP.actions,
+  },
+  // The note took that gap, so the button stands one SM under the sentence it
+  // belongs to — the friends page's `friendsInvite` block, same two pieces.
+  actionsUnderNote: { marginTop: SM },
   slot: { flex: 1 },
 })

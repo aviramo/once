@@ -47,10 +47,9 @@
     "nav": {
       "dashboard": "סקירה",
       "users": "משתמשים",
-      "groups": "קבוצות",
+      "groups": "מעגלים",
       "map": "מפה",
       "reports": "מדווחים",
-      "bugs": "תקלות",
       "site": "לאתר"
     },
     "reports": {
@@ -88,24 +87,6 @@
         "unknown": "אין קשר פעיל"
       }
     },
-    "bugs": {
-      "title": "תקלות",
-      "subtitle": "באגים שדווחו על ידי משתמשים מתוך האפליקציה",
-      "none": "אין תקלות",
-      "when": "מתי",
-      "unhandled": "פתוחות",
-      "handledTab": "טופלו",
-      "markHandled": "סמן כטופל",
-      "handled": "טופל",
-      "unknownUser": "משתמש לא ידוע",
-      "searchPlaceholder": "חיפוש לפי שם או אימייל",
-      "sortLabel": "מיון",
-      "sortNewest": "החדשים ראשונים",
-      "sortOldest": "הוותיקים ראשונים",
-      "attachment": "צירוף",
-      "openAttachment": "פתיחת התמונה",
-      "noText": "(ללא טקסט)"
-    },
     "dashboard": {
       "title": "סקירת ניהול",
       "subtitle": "מבט על על מצב המוצר והעסק בזמן אמת. כל כרטיס לחיץ ומוביל למסך הרלוונטי",
@@ -114,57 +95,61 @@
       "nav": {
         "usersTitle": "משתמשים",
         "usersDesc": "חיפוש, סינון וצפייה בכל המשתמשים",
-        "rolesTitle": "קבוצות",
-        "rolesDesc": "ניהול קבוצות וחסימת זמינות",
+        "rolesTitle": "מעגלים",
+        "rolesDesc": "ניהול מעגלים וחסימת זמינות",
         "mapTitle": "מפה",
         "mapDesc": "משתמשים פעילים על המפה בזמן אמת"
       },
       "sections": {
         "demographics": "פילוח משתמשים",
-        "signups": "נרשמים",
-        "engagement": "מעורבות פעילה",
-        "availability": "זמינות",
         "credits": "כלכלת קרדיטים",
-        "groups": "קבוצות",
-        "funnel": "משפך 7 ימים"
+        "activity": "פעילות"
       },
       "metrics": {
         "total": "סך משתמשים",
-        "newToday": "נרשמו היום",
-        "new7d": "נרשמו ב-7 ימים",
-        "new30d": "נרשמו ב-30 יום",
-        "withLocation": "עם מיקום",
         "men": "גברים",
         "women": "נשים",
         "avgAge": "ממוצע גילאים",
         "osIos": "iPhone",
         "osAndroid": "Android",
-        "chat": "בצ׳אט פעיל",
-        "waiting": "ממתינים לתשובה",
-        "watching": "צופים בפרופיל",
-        "pending": "הזמנה ממתינה",
-        "broadcasting": "משדרים את עצמם",
-        "available": "זמינים",
-        "unavailable": "חסומים זמנית",
-        "unknownAvail": "ללא מיקום עדיין",
-        "noNotif": "ללא התראות",
         "balanceTotal": "סך יתרת קרדיטים",
         "heldTotal": "קרדיטים בהקפאה",
         "extraTotal": "סך קרדיטים שנקנו",
         "withExtra": "משתמשים עם קרדיטים שנקנו",
-        "rolesTotal": "קבוצות",
-        "fSignups": "הרשמות",
-        "fInvites": "הזמנות שנשלחו",
-        "fApproves": "הזמנות שאושרו",
-        "fMessages": "הודעות צ׳אט",
-        "fLogouts": "התנתקויות",
-        "fDeletes": "מחקו חשבון"
+        "aActive": "פעילים",
+        "aAccounts": "חשבונות שנוצרו",
+        "aProfiles": "פרופילים שנוצרו",
+        "aFriendships": "חברויות",
+        "aMemberships": "השתייכות למעגל",
+        "aInvites": "הזמנות שנשלחו",
+        "aDeclined": "הזמנות שנדחו",
+        "aCancelled": "הזמנות שבוטלו",
+        "aExpired": "הזמנות שפג תוקפן",
+        "aChats": "שיחות",
+        "aAvgMessages": "ממוצע הודעות לשיחה",
+        "aBlocks": "חסימות",
+        "aReports": "דיווחים",
+        "aLogouts": "התנתקויות",
+        "aDeletes": "מחיקות חשבון"
       },
       "hints": {
-        "funnel": "סך הכל ב-7 הימים האחרונים",
         "extraShare": "{pct}% מהמשתמשים עם קרדיטים שנקנו"
       },
-      "viewAll": "לכל המשתמשים →"
+      "viewAll": "לכל המשתמשים →",
+      "range": {
+        "options": {
+          "1d": "יממה",
+          "7d": "שבוע",
+          "30d": "חודש",
+          "all": "הכל"
+        },
+        "hint": {
+          "1d": "סך הכל ב-24 השעות האחרונות",
+          "7d": "סך הכל ב-7 הימים האחרונים",
+          "30d": "סך הכל ב-30 הימים האחרונים",
+          "all": "סך הכל מאז ומתמיד · הזמנות ושיחות נספרות מהלוג, שנגזם, אז ותק גדול מהשמירה שלו חסר"
+        }
+      }
     },
     "map": {
       "title": "מפת משתמשים",
@@ -186,24 +171,20 @@
     "noResults": "לא נמצאו משתמשים",
     "resultsCount": "מציג {count} משתמשים",
     "resetAll": "אתחול משתמשים",
-    "resetAllConfirm": "פעולה בלתי הפיכה: עבור המשתמשים בקבוצות שנבחרו יימחקו כל הצ׳אטים, הלוגים וההגבלות, והם יאופסו (הזמינות תחושב מחדש). להמשיך?",
+    "resetAllConfirm": "פעולה בלתי הפיכה: עבור המשתמשים במעגלים שנבחרו יימחקו כל הצ׳אטים, הלוגים וההגבלות, והם יאופסו (הזמינות תחושב מחדש). להמשיך?",
     "resetAllBusy": "מאתחל…",
     "resetAllDone": "המשתמשים אופסו",
     "resetAllFail": "האיפוס נכשל. נסו שוב",
-    "resetAllTitle": "איפוס משתמשים לפי קבוצה",
-    "resetAllHint": "ייאופסו רק המשתמשים שמשויכים לקבוצות שתסמנו",
+    "resetAllTitle": "איפוס משתמשים לפי מעגל",
+    "resetAllHint": "ייאופסו רק המשתמשים שמשויכים למעגלים שתסמנו",
     "resetSelectAll": "סימון הכל",
     "resetDeselectAll": "ניקוי הכל",
-    "resetNoRoles": "לא הוגדרו קבוצות",
-    "resetNoneSelected": "בחרו לפחות קבוצה אחת",
+    "resetNoRoles": "לא הוגדרו מעגלים",
+    "resetNoneSelected": "בחרו לפחות מעגל אחד",
     "resetApply": "אפס",
     "resetCancel": "ביטול",
     "advancedFilters": "סינון מתקדם",
     "clearFilters": "ניקוי",
-    "filterP1": "דף ראשי",
-    "filterP2": "דף צד",
-    "filterGroup": "קבוצה",
-    "filterGroupNone": "ללא קבוצה",
     "filterAvail": "זמינות",
     "filterGender": "מין",
     "filterOs": "מערכת הפעלה",
@@ -228,10 +209,10 @@
       "resetDesc": "מחיקת מצב והיסטוריה, חזרה למצב התחלתי",
       "delete": "מחיקה",
       "deleteDesc": "מחיקה לצמיתות של החשבון, בלתי הפיך",
-      "assignGroup": "שיוך לקבוצה",
-      "assignGroupDesc": "הוספת המשתמשים לקבוצה",
-      "removeGroup": "הסרה מקבוצה",
-      "removeGroupDesc": "הסרת המשתמשים מקבוצה",
+      "assignGroup": "שיוך למעגל",
+      "assignGroupDesc": "הוספת המשתמשים למעגל",
+      "removeGroup": "הסרה ממעגל",
+      "removeGroupDesc": "הסרת המשתמשים ממעגל",
       "releasePage1": "שחרור דף 1",
       "releasePage1Desc": "איפוס דף 1 בלבד למצב ברירת מחדל",
       "releasePage2": "שחרור דף 2",
@@ -250,9 +231,9 @@
       "confirmDelete": "למחוק לצמיתות את {target}? פעולה בלתי הפיכה",
       "confirmRelease1": "לשחרר את דף 1 של {target}?",
       "confirmRelease2": "לשחרר את דף 2 של {target}?",
-      "pickGroup": "בחרו קבוצה",
-      "pickGroupRemove": "בחרו קבוצה להסרה",
-      "noGroups": "אין קבוצות",
+      "pickGroup": "בחרו מעגל",
+      "pickGroupRemove": "בחרו מעגל להסרה",
+      "noGroups": "אין מעגלים",
       "cancel": "ביטול",
       "confirm": "אישור",
       "back": "חזרה",
@@ -273,19 +254,6 @@
     "result": {
       "ok": "בוצע",
       "fail": "נכשל"
-    },
-    "page1States": {
-      "free": "פנוי",
-      "watching": "צופה",
-      "waiting": "מחכה לתשובה",
-      "chat": "בצ׳אט",
-      "locked": "נעול"
-    },
-    "page2States": {
-      "free": "פנוי",
-      "pending": "הזמנה ממתינה",
-      "chat": "בצ׳אט",
-      "locked": "נעול"
     },
     "availStates": {
       "available": "זמין",
@@ -312,33 +280,12 @@
       "broadcasting": "משדרים את עצמם",
       "held": "קרדיטים בהקפאה",
       "extra": "עם קרדיטים שנקנו",
-      "no_notif": "ללא התראות",
-      "test": "משתמשי בדיקה",
-      "not_test": "משתמשים רגילים"
+      "no_notif": "ללא התראות"
     },
     "narrative": {
-      "page1": {
-        "free": "פנוי, ממתין להתאמה",
-        "watching": "צופה בפרופיל של {name}",
-        "watchingNoName": "צופה בפרופיל",
-        "waiting": "הזמין את {name} וממתין לתשובה",
-        "waitingNoName": "שלח הזמנה וממתין לתשובה",
-        "chat": "בשיחה עם {name}",
-        "chatNoName": "בשיחה פעילה",
-        "locked": "לא פעיל כרגע"
-      },
-      "page2": {
-        "free": "זמין להתאמות",
-        "watchers": "{count} משתמשים צופים בו עכשיו",
-        "pending": "{name} הזמין אותו לשיחה, טרם הגיב",
-        "pendingNoName": "קיבל הזמנה לשיחה, טרם הגיב",
-        "chat": "בשיחה עם {name}",
-        "chatNoName": "בשיחה פעילה",
-        "locked": "מוסתר מהתאמות"
-      },
       "gate": {
         "push": "מושבת: ללא קבלת נוטיפיקציות",
-        "group": "מושבת: כל הקבוצות שלו מושבתות",
+        "group": "מושבת: כל המעגלים שלו מושבתים",
         "noPhoto": "לא ניתן להתאמה: אין תמונות",
         "unavailable": "מושבת: לא זמין כרגע"
       }
@@ -394,7 +341,20 @@
       "notif": "עדכן הרשאת נוטיפיקציות",
       "set_tier": "החליף חבילה",
       "buy_extra": "קנה קרדיטים",
-      "unknown": "פעולה"
+      "unknown": "פעולה",
+      "my_groups": "טען את המעגלים שלו",
+      "my_friends": "טען את החברים שלו",
+      "owned_groups": "טען מעגלים שבבעלותו",
+      "group_requests": "טען בקשות הצטרפות",
+      "group_members": "טען את חברי המעגל",
+      "search_groups": "חיפש מעגלים",
+      "shared_groups": "בדק מעגלים משותפים",
+      "shared_friends": "בדק חברים משותפים",
+      "redeem_invite": "הצטרף למעגל בקוד",
+      "update_group": "עדכן מעגל",
+      "remove_member": "הסיר חבר מהמעגל",
+      "set_manager": "מינה מנהל מעגל",
+      "respond_join": "ענה לבקשת הצטרפות"
     },
     "restrictionsMap": {
       "ignore": "דילג עליו",
@@ -441,31 +401,22 @@
       "notifUndetermined": "התראות לא הוגדרו"
     },
     "groups": {
-      "title": "קבוצות",
-      "subtitle": "קבוצה מושבתת חוסמת את חבריה (אם אין להם קבוצה אחרת מופעלת). משתמשים ללא שיוך לקבוצה נשארים זמינים",
-      "add": "הוספת קבוצה",
-      "namePlaceholder": "שם הקבוצה",
+      "title": "מעגלים",
+      "subtitle": "מעגל מושבת חוסם את חבריו (אם אין להם מעגל אחר מופעל). משתמשים ללא שיוך למעגל נשארים זמינים",
+      "add": "הוספת מעגל",
+      "namePlaceholder": "שם המעגל",
       "save": "שמירה",
       "cancel": "ביטול",
       "rename": "שינוי שם",
       "delete": "מחיקה",
       "members": "משתמשים",
-      "none": "לא הוגדרו קבוצות",
-      "duplicate": "כבר קיימת קבוצה בשם הזה",
-      "searchPlaceholder": "חיפוש קבוצה",
-      "noSearchResults": "לא נמצאו קבוצות",
-      "selectAll": "בחירת הכל",
-      "deselectAll": "ניקוי",
-      "selectedCount": "{count} נבחרו",
-      "bulkResetButton": "אתחול חברים",
-      "bulkResetConfirm": "לאתחל את כל המשתמשים בקבוצות שנבחרו? הצ׳אטים, ההיסטוריה והמצב יימחקו. בלתי הפיך",
-      "bulkResetBusy": "מאתחל…",
-      "bulkResetDone": "אותחלו {count} משתמשים",
-      "bulkFail": "הפעולה נכשלה",
+      "none": "לא הוגדרו מעגלים",
+      "duplicate": "כבר קיים מעגל בשם הזה",
+      "noSearchResults": "לא נמצאו מעגלים",
       "detail": {
         "open": "ניהול חברים",
-        "members": "חברי הקבוצה",
-        "noMembers": "אין משתמשים בקבוצה הזו",
+        "members": "חברי המעגל",
+        "noMembers": "אין משתמשים במעגל הזה",
         "remove": "הסרה",
         "addTitle": "הוספת משתמשים",
         "searchPlaceholder": "חיפוש משתמש לפי שם",
@@ -474,23 +425,23 @@
         "add": "הוספה",
         "bulkSelectedCount": "{count} נבחרו",
         "bulkClear": "ניקוי",
-        "bulkMoveLabel": "העברה לקבוצה",
-        "bulkMoveChoose": "בחר קבוצת יעד…",
+        "bulkMoveLabel": "העברה למעגל",
+        "bulkMoveChoose": "בחר מעגל יעד…",
         "bulkMoveButton": "העבר",
         "bulkMoveBusy": "מעביר…",
         "bulkMoveDone": "הועברו {count} משתמשים ל{name}",
         "bulkMoveFail": "ההעברה נכשלה",
-        "managerBadge": "מנהל קבוצה",
+        "managerBadge": "מנהל מעגל",
         "promote": "מינוי כמנהל",
         "demote": "ביטול ניהול",
         "dangerSection": "אזור מסוכן",
-        "deleteTitle": "מחיקת הקבוצה",
-        "deleteDesc": "מחיקה לצמיתות. כל המשתמשים יוסרו מהקבוצה (החשבונות שלהם נשארים). בלתי הפיך",
-        "deleteConfirmTitle": "למחוק את הקבוצה?",
-        "deleteConfirmBody": "הקבוצה \"{name}\" תימחק לצמיתות. {count} משתמשים יוסרו מהקבוצה (החשבונות עצמם נשארים). בלתי הפיך",
+        "deleteTitle": "מחיקת המעגל",
+        "deleteDesc": "מחיקה לצמיתות. כל המשתמשים יוסרו מהמעגל (החשבונות שלהם נשארים). בלתי הפיך",
+        "deleteConfirmTitle": "למחוק את המעגל?",
+        "deleteConfirmBody": "המעגל \"{name}\" יימחק לצמיתות. {count} משתמשים יוסרו ממנו (החשבונות עצמם נשארים). בלתי הפיך",
         "deleteBusy": "מוחק…",
         "inviteCodeTitle": "קוד הצטרפות",
-        "inviteCodeHint": "שתפו את הקוד עם משתמשים שאתם רוצים להוסיף לקבוצה. הם יזינו אותו באונבורדינג או במסך הקבוצות בהגדרות, ויצטרפו אוטומטית",
+        "inviteCodeHint": "שתפו את הקוד עם משתמשים שאתם רוצים להוסיף למעגל. הם יזינו אותו באונבורדינג או במסך המעגלים בהגדרות, ויצטרפו אוטומטית",
         "inviteCopy": "העתקה",
         "inviteCopied": "הועתק",
         "inviteRegenerate": "החלפת קוד",
@@ -499,7 +450,14 @@
         "inviteConfirmBody": "הקוד הקיים יפסיק לעבוד מיד. מי שעדיין לא הצטרף יצטרך לקבל את הקוד החדש",
         "inviteConfirmConfirm": "החלפה",
         "fail": "הפעולה נכשלה"
-      }
+      },
+      "cols": {
+        "owner": "בעלים",
+        "approvers": "מאשרים",
+        "members": "חברים",
+        "empty": "—"
+      },
+      "searchPlaceholder": "חיפוש לפי שם, קוד, בעלים, מאשרים או מספר חברים"
     },
     "userDetail": {
       "profile": "פרופיל",
@@ -513,11 +471,11 @@
       "notif": "התראות",
       "notifActive": "פעיל",
       "notifInactive": "לא פעיל",
-      "groups": "קבוצות",
-      "groupsHint": "שיוך לקבוצה מושבתת חוסם את המשתמש (אלא אם יש לו קבוצה אחרת מופעלת)",
-      "noGroups": "לא הוגדרו קבוצות במערכת",
-      "groupsEmpty": "אין קבוצות",
-      "groupsManage": "ניהול קבוצות",
+      "groups": "מעגלים",
+      "groupsHint": "שיוך למעגל מושבת חוסם את המשתמש (אלא אם יש לו מעגל אחר מופעל)",
+      "noGroups": "לא הוגדרו מעגלים במערכת",
+      "groupsEmpty": "אין מעגלים",
+      "groupsManage": "ניהול מעגלים",
       "summary": "סטטוס נוכחי",
       "currentState": "מצב נוכחי",
       "interactions": "אנשים שהיתה איתם אינטראקציה",
@@ -536,7 +494,7 @@
       "noActivity": "אין פעילות מתועדת",
       "eventsLog": {
         "title": "לוג אירועים",
-        "hint": "כל אירוע שעשה המשתמש או שהשפיע עליו, ממוין מהאחרון לישן ביותר. אפשר לחפש לפי שם או אימייל של משתמש שהיתה איתו אינטראקציה",
+        "hint": "כל אירוע שהמשתמש עשה או שהשפיע עליו, וכל קשר צפייה שהיה לו, מהאחרון לישן",
         "feed": {
           "searchPlaceholder": "חיפוש לפי שם או אימייל…",
           "clearSearch": "ניקוי חיפוש",
@@ -545,12 +503,14 @@
           "showMore": "הצג עוד",
           "showLess": "הצג פחות",
           "unknownPartner": "משתמש לא ידוע",
-          "byActorPrefix": "נעשה על ידי:",
           "page1Tag": "דף 1",
           "page2Tag": "דף 2",
           "locationCleared": "המיקום נמחק",
-          "openInMaps": "פתח במפות גוגל",
-          "groupedTitle": "{n} אירועים רצופים"
+          "groupedTitle": "{n} אירועים רצופים",
+          "watchedOut": "צפה ב",
+          "watchedIn": "צפו בו",
+          "onBoard": "על הלוח שלו",
+          "dismissed": "נוקה"
         }
       },
       "email": "אימייל",
@@ -564,8 +524,6 @@
       "female": "אישה",
       "location": "מיקום",
       "watchers": "צופים בו עכשיו",
-      "page1Profile": "צופה ב",
-      "page2Profile": "מוזמן מ",
       "messagesLabel": "הודעות",
       "restrictionsLabel": "הגבלות",
       "callsLabel": "פעולות שרת",
@@ -598,7 +556,7 @@
       "danger": {
         "section": "אזור מסוכן",
         "resetTitle": "איפוס משתמש",
-        "resetDesc": "מחיקת הצ׳אט, ההיסטוריה ומצב המשחק של המשתמש והחזרתו למצב התחלתי נקי. החשבון, הפרופיל והקבוצות נשמרים",
+        "resetDesc": "מחיקת הצ׳אט, ההיסטוריה ומצב המשחק של המשתמש והחזרתו למצב התחלתי נקי. החשבון, הפרופיל והמעגלים נשמרים",
         "resetButton": "אפס משתמש",
         "resetConfirmTitle": "לאפס את המשתמש?",
         "resetConfirmBody": "הודעות הצ׳אט, יומן הפעילות, ההגבלות ומצב המשחק של {name} יימחקו לצמיתות ויאופסו למצב התחלתי נקי. החשבון והפרופיל יישארו ללא שינוי. לא ניתן לבטל פעולה זו",
@@ -608,11 +566,56 @@
         "deleteDesc": "מחיקה לצמיתות של החשבון וכל הנתונים שלו. לא ניתן לבטל פעולה זו",
         "deleteButton": "מחק משתמש",
         "deleteConfirmTitle": "למחוק את המשתמש?",
-        "deleteConfirmBody": "החשבון של {name} יימחק לצמיתות, יחד עם הפרופיל, הצ׳אטים והשיוך לקבוצות. כל מי שנמצא איתו כעת באינטראקציה ישוחרר. לא ניתן לבטל פעולה זו",
+        "deleteConfirmBody": "החשבון של {name} יימחק לצמיתות, יחד עם הפרופיל, הצ׳אטים והשיוך למעגלים. כל מי שנמצא איתו כעת באינטראקציה ישוחרר. לא ניתן לבטל פעולה זו",
         "deleteBusy": "מוחק…",
         "fail": "משהו השתבש. נסו שוב",
         "cancel": "ביטול"
       }
+    },
+    "env": {
+      "prod": "ייצור",
+      "test": "בדיקות"
+    },
+    "filterStatus": "מצב",
+    "statusStates": {
+      "watching": "צופה",
+      "invited": "הזמין וממתין",
+      "chat": "בשיחה",
+      "ended": "הסתיים",
+      "invited_in": "קיבל הזמנה",
+      "free": "פנוי",
+      "not_seeking": "לא מחפש"
+    },
+    "watch": {
+      "status": {
+        "free": "פנוי, ממתין להתאמה",
+        "notSeeking": "לא מחפש כרגע",
+        "watching": "צופה ב-{name}",
+        "watchingNoName": "צופה בפרופיל",
+        "invited": "הזמין את {name} וממתין לתשובה",
+        "invitedNoName": "שלח הזמנה וממתין לתשובה",
+        "chat": "בשיחה עם {name}",
+        "chatNoName": "בשיחה פעילה",
+        "ended": "הקשר הסתיים"
+      },
+      "invitedBy": "הוזמן על ידי {name}",
+      "invitedByNoName": "קיבל הזמנה לשיחה",
+      "watchersOne": "אחד צופה בו",
+      "watchersMany": "{count} צופים בו"
+    },
+    "eventsByOther": {
+      "invite": "קיבל הזמנה לשיחה",
+      "approve": "אישר את ההזמנה שלו",
+      "decline": "דחה את ההזמנה שלו",
+      "cancel": "ביטל את ההזמנה אליו",
+      "extend": "האריך את זמן ההזמנה אליו",
+      "leave": "סיים איתו את השיחה",
+      "remove": "הסיר אותו מרשימת הצופים",
+      "block": "חסם אותו",
+      "report": "דיווח עליו",
+      "chat": "שלח לו הודעה",
+      "find": "התחיל לצפות בו",
+      "ignore": "הפסיק לצפות בו"
     }
   }
 }

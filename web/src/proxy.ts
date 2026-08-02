@@ -52,7 +52,7 @@ const FRIEND_PATH_RE = /^\/f\/([A-Za-z0-9]{4,16})\/?$/;
 // (handled separately below); these are the panel sub-routes. A signed-out
 // visit redirects to /login with `?next=<intended>` so the deep-link
 // survives the auth round-trip.
-const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/bugs", "/map"];
+const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/map"];
 
 function pickLocale(request: NextRequest): string {
   // The admin panel is Hebrew-only (there is no in-app language switcher).

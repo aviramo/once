@@ -159,7 +159,7 @@
   </div>
 
   <script src="store.js?v=1"></script>
-  <script src="art.js?v=9"></script>
+  <script src="art.js?v=10"></script>
   <script>
   (function () {
     'use strict';
@@ -204,7 +204,7 @@
         /* One label per pillar, in pillar order. */
         nav: { links: ['אדם אחד', 'זמן אמת', 'מעגלים', 'הורים'], login: 'התחברות' },
         hero: {
-          eyebrow: 'אדם אחד. עכשיו',
+          eyebrow: 'רק אחד. עכשיו',
           title: { lines: ['אפליקציית היכרויות', 'שלא מתנהגת כמו', 'אפליקציית היכרויות'], accent: true },
           sub: 'כי הגיע הזמן לשבור את כל ההרגלים הישנים. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס',
           pills: ['אדם אחד בכל פעם', 'זמן אמת', 'מעגלים משותפים', 'לוז של הורים'],
@@ -244,7 +244,7 @@
                 { icon: 'forward', label: 'בלי הזמנות תלויות' }
               ]
             },
-            media: { name: 'הזמנה בזמן אמת', desc: 'מסך הזמנה עם שעון ספירה לאחור, ולצידו טיימר של עשר דקות' }
+            media: { name: 'הזמנה בזמן אמת', desc: 'מסך הזמנה שהשעון רץ על הכרטיס שלו וחלון שמסביר מה ההזמנה פותחת, ולצידו טיימר של עשר דקות' }
           },
           {
             eyebrow: 'חברים ומעגלים משותפים',
@@ -291,7 +291,7 @@
         ui: { tag: 'Beta', preview: 'Preview', noteIOS: 'Once is not available on iPhone', noteDesktop: 'Open this page on your phone, or scan the code:', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
         nav: { links: ['One at a time', 'Real time', 'Circles', 'Parents'], login: 'Login' },
         hero: {
-          eyebrow: 'One person. Right now',
+          eyebrow: 'Just one. Right now',
           title: { lines: ['A dating app', 'that refuses to be', 'a dating app'], accent: true },
           sub: "Because it's time to break every old habit. No feed, no swiping, no twenty open chats. One person on the screen, 10 minutes to answer an invitation, and from there you stay focused",
           pills: ['One person at a time', 'Real time', 'Shared circles', 'Parent schedules'],
@@ -331,7 +331,7 @@
                 { icon: 'forward', label: 'Nothing left hanging' }
               ]
             },
-            media: { name: 'A real-time invitation', desc: 'An invitation screen with a countdown clock, beside a ten-minute timer' }
+            media: { name: 'A real-time invitation', desc: 'An invitation screen with the clock running on the card itself and a popup explaining what the invitation opens, beside a ten-minute timer' }
           },
           {
             eyebrow: 'Friends and shared circles',
@@ -540,6 +540,32 @@
         '<a href="child-safety.html' + suffix + '">' + esc(f.safety) + '</a>';
     }
 
+    /* A dot divides two links standing on ONE line. Where the row wraps it
+       divides nothing: a dot at the head or the tail of a line is a mark
+       hanging off the words, so the BREAK is the division and the dot goes.
+       It has to be measured, because only the layout knows where the row broke
+       and the row breaks differently per language, width and font size. The
+       pass always starts from every dot showing, so it reads the same box on
+       every run and cannot chase its own result. */
+    function syncFooterSeps() {
+      var row = document.getElementById('footer-links');
+      if (!row) return;
+      var kids = row.children, i;
+      for (i = 0; i < kids.length; i++) kids[i].classList.remove('is-cut');
+      for (i = 1; i < kids.length - 1; i++) {
+        if (!kids[i].classList.contains('sep')) continue;
+        if (kids[i - 1].offsetTop !== kids[i + 1].offsetTop) kids[i].classList.add('is-cut');
+      }
+    }
+    var footerSyncFrame = null;
+    function scheduleFooterSync() {
+      if (footerSyncFrame) return;
+      footerSyncFrame = requestAnimationFrame(function () { footerSyncFrame = null; syncFooterSeps(); });
+    }
+    window.addEventListener('resize', scheduleFooterSync);
+    // A font landing re-measures every line, this row included.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleFooterSync);
+
     /* ---------- Render ---------- */
     var CURRENT;
     function render(lang) {
@@ -581,6 +607,7 @@
       // footer
       set('footer-links', buildFooter());
       document.getElementById('footer-copy').textContent = T.footer.copyright;
+      syncFooterSeps();
 
       // language switcher label + active state
       document.getElementById('lang-label').textContent = LANG_CODE[lang];

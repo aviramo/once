@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { I18nManager, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
   LayoutAnimationConfig,
@@ -68,6 +68,7 @@ export function RisingCard({
   animateEnter = true,
   animateExit = true,
   from = 'up',
+  onArrived,
 }: {
   children: ReactNode
   style?: StyleProp<ViewStyle>
@@ -85,6 +86,13 @@ export function RisingCard({
   // unmount lands, no exit was ever registered.
   animateExit?: boolean
   from?: RiseFrom
+  /** Fired when the entrance has LANDED — the same one moment the arrival
+   *  context flips on, handed to whoever is standing OUTSIDE this card and has
+   *  to know that the screen behind it is covered now (home holds the card the
+   *  user answered until the chat that rises over it says this). A card born
+   *  arrived (`animateEnter` false) says so on mount, so a host waiting on it is
+   *  never left waiting for an animation that never ran. */
+  onArrived?: () => void
 }) {
   const { entering, exiting } = from === 'side'
     ? SIDE
@@ -95,13 +103,27 @@ export function RisingCard({
   // still leaves the card somewhere real, and a field that never gets focus
   // would be a worse bug than the one this prevents.
   const [arrived, setArrived] = useState(!animateEnter)
+  // ONE landing, said twice: to the subtree (the context) and to the host
+  // (`onArrived`). Both come off the animation's own callback, so nothing can
+  // learn about the arrival from a duration copied into a timer.
+  const onArrivedRef = useRef(onArrived)
+  onArrivedRef.current = onArrived
+  const land = useCallback(() => {
+    setArrived(true)
+    onArrivedRef.current?.()
+  }, [])
   const enter = useMemo(
     () => entering.withCallback(() => {
       'worklet'
-      runOnJS(setArrived)(true)
+      runOnJS(land)()
     }),
-    [entering],
+    [entering, land],
   )
+  // No entrance to wait for: the card is already where it is going, so it has
+  // already arrived.
+  useEffect(() => {
+    if (!animateEnter) onArrivedRef.current?.()
+  }, [animateEnter])
   // The app root wraps everything in `<LayoutAnimationConfig skipEntering>`
   // (_layout.tsx) to dodge a Fabric cold-start mount race. That guard is
   // meant to skip entering only on the first paint, but on iOS + New

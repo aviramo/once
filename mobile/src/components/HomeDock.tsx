@@ -1,11 +1,12 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { StyleSheet } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 import { Text } from './AppText'
 import { NotifyDot } from './RoundButton'
 import { OptionStrip, type StripOption } from './OptionStrip'
+import { useCountBlink } from '../hooks/useCountBlink'
 import { inkOffset, FONT_SCALE } from '../fonts'
-import { MD, TEXT, WEIGHT, DOCK_SHADOW, COUNT_BLINK } from '../tokens'
+import { MD, TEXT, WEIGHT, DOCK_SHADOW } from '../tokens'
 import { INK, INK_SUBTLE, PAGE } from '../colors'
 
 // ── The dock — home's strip of four ────────────────────────────────────────
@@ -146,12 +147,8 @@ export function HomeDock({ items, bottom }: {
 // numbers that happen to share a glyph.
 //
 // A NUMBER THAT CHANGED BLINKS (user directive 2026-07-31): three times over two
-// seconds, on COUNT_BLINK. These counts change while the user is looking at the
-// card in the middle of the screen — a request arrives, a watcher appears, a
-// credit is spent — and one digit quietly becoming another in a corner is a
-// change nobody is there to see. The blink is the key saying it just changed,
-// without taking the screen to do it (the same principle as the dot: the app
-// marks, it does not interrupt).
+// seconds, and the gesture is `useCountBlink` — one implementation, shared with
+// the name chip's clock, which says the same thing in the same way.
 //
 // It is mounted for every key, count or no count, and that is what makes the
 // FIRST number blink too: a count arriving where there was none (0 → 1 requests)
@@ -170,34 +167,10 @@ function DockMarker({ count, badge, muted }: {
    *  app's shut-door fade (DISABLED_OPACITY 0.45), and nothing here is shut. */
   muted?: boolean
 }) {
-  const blink = useSharedValue(1)
-  const seen = useRef(count)
-  useEffect(() => {
-    // `undefined` is a value like any other here, which is what makes a count
-    // ARRIVING a change (0 → 1 requests) rather than a mount; only a number can
-    // blink, so a count going away does nothing but get recorded.
-    const changed = count != null && count !== seen.current
-    // Recorded either way, absence included: a number coming back after the key
-    // had nothing to say is a count ARRIVING, and it blinks like any other.
-    seen.current = count
-    if (!changed) return
-    // One blink is away AND back, stated as a sequence rather than as a reversed
-    // repeat of a single timing: the way back names its own destination, so a
-    // change landing mid-blink (this assignment cancels the one running, which is
-    // what it should do) dips from wherever the digit currently is and still ends
-    // at full strength. A reversed repeat would end wherever it was interrupted.
-    blink.value = withRepeat(
-      withSequence(
-        withTiming(COUNT_BLINK.opacity, { duration: COUNT_BLINK.phaseMs }),
-        withTiming(1, { duration: COUNT_BLINK.phaseMs }),
-      ),
-      COUNT_BLINK.times,
-      false,
-    )
-  }, [count])
   // On the WRAPPER, not on the text: the digit is laid out by the marker slot
-  // and only its paint changes, so nothing about the blink can move it.
-  const blinkStyle = useAnimatedStyle(() => ({ opacity: blink.value }))
+  // and only its paint changes, so nothing about the blink can move it. The
+  // gesture itself is `useCountBlink`, shared with the name chip's clock.
+  const blinkStyle = useCountBlink(count)
   // The fade is on the COLOUR, never on this wrapper's opacity: the blink owns
   // that, and a second opacity would either be overwritten by it or have to be
   // multiplied into every frame of it.

@@ -141,29 +141,33 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
 
   const w = box?.w ?? 0
   const h = box?.h ?? 0
-  // The widest the tile may ever be: the band between the page's own gutters. A
-  // row is a line of TEXT, so without this the tile is as wide as its longest
-  // label wants to be and simply hangs off the screen — which is what the
-  // one-row tutorial did, its sentence clipped at both ends.
-  const maxWidth = bounds.screenW - MD * 2
   // Centred on the finger's column, then pushed back inside the margin. Both
-  // bounds are now well-formed by construction: the tile cannot be wider than
-  // the band, so its END margin is never past its START one.
+  // bounds are well-formed by construction: the anchor's own padding is the band,
+  // so the tile cannot be wider than it and its END margin is never past its
+  // START one.
   const left = Math.min(Math.max(at.x - w / 2, MD), bounds.screenW - MD - w)
-  // THE HORIZONTAL PLACEMENT IS A TRANSFORM, NOT A LAYOUT `left`, and that is
-  // what makes the cap above measurable. Yoga hands an absolutely positioned box
-  // `parentWidth - left` to lay itself out in, so a `left` that is computed FROM
-  // the measured width feeds back into the width: the tile wrapped at one place,
-  // moved, re-wrapped wider, moved again, converging over several renders — with
-  // the zoom already running. Pinned at 0 the available width is the same on
-  // every pass (the cap), so the tile is measured once and then simply moved.
+  // THE BAND IS A LAYOUT BOX AND THE PLACEMENT IS A TRANSFORM INSIDE IT (user
+  // report 2026-08-02: the tile still came out flush against a screen edge). The
+  // margin used to be a `maxWidth` on a box pinned at `left: 0` — i.e. a CAP the
+  // tile was free to sit anywhere inside, so anything the row laid out wider than
+  // the cap (a long sentence in a flex row) simply painted past it, and the
+  // clamp above was clamping a width that was not the width being painted. The
+  // anchor now spans the window with the page's gutter as PADDING, so the band
+  // is definite: the tile is laid out in it and physically cannot be drawn
+  // outside it, whatever its content does.
+  //
+  // It is still a transform and not a layout offset, for the reason it always
+  // was: a `left` computed FROM the measured width feeds back into the width
+  // Yoga offers the box, so the tile wrapped at one place, moved, re-wrapped
+  // wider and moved again, converging over several renders with the zoom already
+  // running. The band is the same width on every pass, so the tile is measured
+  // once and then simply moved — by `left - MD`, the band's own start being
+  // where an untranslated tile already stands.
   //
   // ZOOM ONLY — no opacity (user directive 2026-07-31). The origin stays the
-  // finger: at any scale the local point `at.x - left` lands on `at.x`, because
-  // the translate rides outside the scale.
-  const popStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: left }, { scale: pop.value }],
-  }))
+  // finger: at any scale the window point `at.x` lands on itself, because the
+  // translate rides outside the scale.
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }))
   // ABOVE the finger by default: the thing being acted on is under it, and a list
   // laid over the photo just chosen hides the answer to "which one". Below only
   // when there is no room above.
@@ -175,21 +179,29 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
 
   return (
     <Animated.View
+      // `box-none`: the band runs the width of the window, and the empty page
+      // gutter beside the tile must still be the backdrop's tap, not a dead
+      // strip that answers nothing.
+      pointerEvents="box-none"
+      style={[
+        styles.anchor,
+        { top },
+        // The origin IS the finger, expressed in the band's own coordinates —
+        // which on the horizontal are the window's, the band being pinned to both
+        // edges — so the tile grows out of the point that was touched even where
+        // the margin has pushed it away from there (a photo tapped at the screen's
+        // edge), rather than out of its own middle.
+        { transformOrigin: [at.x, at.y - top, 0] },
+        popStyle,
+      ]}
+    >
+     <View
       onLayout={(e: LayoutChangeEvent) => {
         const { width, height } = e.nativeEvent.layout
         setBox(cur => (cur && cur.w === width && cur.h === height ? cur : { w: width, h: height }))
       }}
-      style={[
-        styles.anchor,
-        { top, maxWidth },
-        // The origin IS the finger, expressed in the tile's own coordinates — so
-        // it grows out of the point that was touched even where the margin has
-        // pushed it away from there (a photo tapped at the screen's edge), rather
-        // than out of its own middle.
-        { transformOrigin: [at.x - left, at.y - top, 0] },
-        popStyle,
-      ]}
-    >
+      style={{ transform: [{ translateX: left - MD }] }}
+     >
       {/* The card's own fact tile, carrying verbs instead of facts: white
           (`onPhoto`), the app's one hairline between rows, each row a glyph and a
           line of text.
@@ -209,6 +221,7 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
           />
         ))}
       </ChipStack>
+     </View>
     </Animated.View>
   )
 }
@@ -216,13 +229,16 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
 const styles = StyleSheet.create({
   // See the LTR note above: the box a window coordinate is measured in.
   window: { flex: 1, direction: 'ltr' },
-  // The tile hugs its widest row, so the anchor hugs the tile: it exists only to
-  // hold the absolute position and the zoom, and its `alignItems` keeps a stack
-  // that is narrower than nothing from stretching. `left: 0` is fixed and the
-  // real x is a translate — see the placement note above.
+  // THE BAND the tile is allowed to stand in: the whole window less the page's
+  // own gutter on each side, stated as padding so it is a definite box rather
+  // than a cap (see the placement note above). It holds the vertical position and
+  // the zoom; `alignItems` keeps the tile hugging its widest row inside it, and
+  // the real x is a translate.
   anchor: {
     position: 'absolute',
     left: 0,
+    right: 0,
+    paddingHorizontal: MD,
     alignItems: 'flex-start',
   },
   // See the tile above: every row is as wide as the tile, so every row answers a

@@ -253,12 +253,15 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium",
+        // `min-w-0` + a truncating label so a badge can share a row with a
+        // name and give way instead of pushing it off: a no-op wherever the
+        // row has room, which is everywhere else it is used.
+        "inline-flex min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium",
         TONE[tone],
       )}
     >
       {dot ? <ToneDot tone={tone} /> : null}
-      {children}
+      <span className="truncate">{children}</span>
     </span>
   );
 }

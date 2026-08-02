@@ -6,25 +6,37 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, StatusBadge } from "../../_components/ui";
 
+/**
+ * THE QUEUE IS ABOUT THE PERSON BEING REPORTED, NOT THE ONE REPORTING.
+ *
+ * It used to group the other way round — a card per reporter, their targets
+ * inside — which answers "who complains a lot" and buries the question
+ * moderation actually opens this screen with: is there somebody several
+ * different people have flagged. Grouped by the reported user, that fact is
+ * the card's own count chip, and the reporters are the evidence inside it.
+ */
+
+/** One report, from the point of view of the person it is ABOUT: who filed it
+ * and in what circumstance. */
 export type ReportItem = {
   id: string;
   createdAt: string;
   context: string | null;
   note: string | null;
   handled: boolean;
-  reportedId: string;
-  reportedName: string;
-  reportedImage: string | null;
+  reporterId: string;
+  reporterName: string;
+  reporterImage: string | null;
 };
 
-export type Reporter = {
+/** One card: a reported person and everyone who has reported them. */
+export type ReportedUser = {
   id: string;
   name: string;
   email: string | null;
   image: string | null;
   reports: ReportItem[];
-  /** Latest report time across this reporter's items — used by the page for
-   * sorting + (optionally) as a card subtitle. */
+  /** Latest report time across this person's items — the page sorts on it. */
   latest: string;
 };
 
@@ -53,7 +65,7 @@ function ReportRow({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const contextLabel = row.context
-    ? dict.contextValues?.[row.context] ?? row.context
+    ? (dict.contextValues?.[row.context] ?? row.context)
     : null;
 
   function toggle() {
@@ -73,18 +85,18 @@ function ReportRow({
   return (
     <li className="flex flex-wrap items-start gap-3 p-3">
       <Link
-        href={`/users/${row.reportedId}`}
+        href={`/users/${row.reporterId}`}
         className="shrink-0"
-        aria-label={row.reportedName}
+        aria-label={row.reporterName}
       >
-        <Avatar src={row.reportedImage} name={row.reportedName} size="sm" />
+        <Avatar src={row.reporterImage} name={row.reporterName} size="sm" />
       </Link>
       <div className="min-w-0 flex-1">
         <Link
-          href={`/users/${row.reportedId}`}
+          href={`/users/${row.reporterId}`}
           className="block min-w-0 truncate text-sm font-medium underline-offset-2 transition-colors hover:text-primary hover:underline"
         >
-          {row.reportedName}
+          {row.reporterName}
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           {contextLabel ? (
@@ -121,41 +133,39 @@ function ReportRow({
   );
 }
 
-function ReporterCard({
-  reporter,
+function ReportedCard({
+  reported,
   dict,
   action,
 }: {
-  reporter: Reporter;
+  reported: ReportedUser;
   dict: ReportsDict;
   action: (fd: FormData) => Promise<void>;
 }) {
-  // Collapsed by default: cards are dense once a reporter has more than a few
-  // entries, and operators want to scan the board at a glance to spot serial
-  // reporters before drilling in. The count chip already conveys the magnitude
-  // — clicking the chevron (or the trailing area) reveals the entries.
+  // Collapsed by default: the count chip is the fact that matters at a glance
+  // (one complaint or five), and the operator opens the ones worth reading.
   const [open, setOpen] = useState(false);
-  const panelId = `reporter-${reporter.id}`;
+  const panelId = `reported-${reported.id}`;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
       <div className="flex items-center gap-3 p-4">
         <Link
-          href={`/users/${reporter.id}`}
+          href={`/users/${reported.id}`}
           className="shrink-0"
-          aria-label={reporter.name}
+          aria-label={reported.name}
         >
-          <Avatar src={reporter.image} name={reporter.name} size="md" />
+          <Avatar src={reported.image} name={reported.name} size="md" />
         </Link>
         <div className="min-w-0 flex-1">
           <Link
-            href={`/users/${reporter.id}`}
+            href={`/users/${reported.id}`}
             className="block min-w-0 truncate text-sm font-semibold underline-offset-2 transition-colors hover:text-primary hover:underline"
           >
-            {reporter.name}
+            {reported.name}
           </Link>
-          {reporter.email ? (
+          {reported.email ? (
             <p className="truncate text-xs text-muted-foreground">
-              {reporter.email}
+              {reported.email}
             </p>
           ) : null}
         </div>
@@ -167,7 +177,7 @@ function ReporterCard({
           className="inline-flex shrink-0 items-center gap-2 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
         >
           <span className="rounded-md bg-muted px-2 py-0.5 font-semibold tabular-nums">
-            {fill(dict.reportCount, { count: reporter.reports.length })}
+            {fill(dict.reportCount, { count: reported.reports.length })}
           </span>
           <ChevronDown
             className={cn(
@@ -183,7 +193,7 @@ function ReporterCard({
           id={panelId}
           className="divide-y divide-border border-t border-border"
         >
-          {reporter.reports.map((r) => (
+          {reported.reports.map((r) => (
             <ReportRow key={r.id} row={r} dict={dict} action={action} />
           ))}
         </ul>
@@ -193,25 +203,25 @@ function ReporterCard({
 }
 
 /**
- * Reporters list — one card per reporter, with their reports stacked inside.
- * The page does the heavy lifting (filtering, search, sort, grouping); this
- * component is presentational.
+ * The moderation queue — one card per reported person, with everyone who
+ * reported them stacked inside. The page does the heavy lifting (filtering,
+ * search, sort, grouping); this component is presentational.
  */
 export function ReportsList({
-  reporters,
+  reported,
   dict,
   action,
 }: {
-  reporters: Reporter[];
+  reported: ReportedUser[];
   dict: ReportsDict;
   action: (fd: FormData) => Promise<void>;
 }) {
   return (
     <div className="space-y-3">
-      {reporters.map((reporter) => (
-        <ReporterCard
-          key={reporter.id}
-          reporter={reporter}
+      {reported.map((person) => (
+        <ReportedCard
+          key={person.id}
+          reported={person}
           dict={dict}
           action={action}
         />
