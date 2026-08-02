@@ -1,0 +1,130 @@
+/* ==========================================================================
+   Once — THE ENTRANCE
+   The shared vocabulary for how a page ARRIVES: two easings, six keyframes,
+   and the one choreography that belongs to neither page in particular — the
+   store banner, which art.js draws for the landing page and the download page
+   alike, building itself piece by piece.
+
+   It is here and not in styles.css because download.html is deliberately
+   standalone (it does not load the site stylesheet), and it is not copied into
+   that page because the two banners are the SAME PICTURE: a build that differed
+   between them would be two answers to one question. Each page then states its
+   OWN choreography — what it puts on screen and in what order — against these
+   keyframes.
+
+   Nothing in this file loops. Every animation is one-shot, and when it has
+   landed the page is still: a drift that never ends is decoration, and both
+   pages here are asking to be read and then acted on.
+
+   THE GATE. Everything is scoped to html.js-intro, which a page's own inline
+   head script sets BEFORE the first paint, and only when JS runs and reduced
+   motion is off. `.go` starts the clock. So:
+     - no JS            -> no class, nothing hidden, the page is simply there
+     - reduced motion   -> no class, same
+     - JS fails midway  -> each page's head script holds a timeout backstop
+   A hidden element is never left with no one to reveal it.
+   ========================================================================== */
+
+:root {
+  /* The settle: fast off the mark, long tail. Every arrival on both pages
+     shares it, so a build reads as one hand rather than a set of parts that
+     happen to move. (styles.css's --ease is the INTERACTION curve — hover,
+     press, a menu opening. The two jobs are not the same curve.) */
+  --in-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* A small overshoot, for the things that POP rather than slide. */
+  --pop-ease: cubic-bezier(0.34, 1.42, 0.64, 1);
+}
+
+/* BOTH ends are declared, every time. An omitted `to` is not "the element's
+   resting style": it is an implicit keyframe made of the element's own
+   UNDERLYING value, which under the gate is the rule that HIDES it, so a
+   from-only keyframe animates 0 to 0 and the whole build stays invisible. */
+@keyframes ring-in { from { opacity: 0; transform: scale(0.62); }
+                       to { opacity: 1; transform: none; } }
+@keyframes draw-in { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes pop-in  { from { opacity: 0; transform: scale(0.34); }
+                       to { opacity: 1; transform: none; } }
+@keyframes card-in { from { opacity: 0; transform: translateY(46px); }
+                       to { opacity: 1; transform: none; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px) scale(0.96); }
+                       to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; transform: translateY(8px); }
+                       to { opacity: 1; transform: none; } }
+
+/* ==========================================================================
+   The banner builds itself
+   The order is the argument the picture makes: the mark draws itself (rings,
+   dial, numeral), and only then does the person arrive on it (card, hearts,
+   and the scatter last). Total ~1s, which is under the time it takes to read
+   the headline beside it.
+
+   The hooks are art.js's: every piece comes out wrapped in a group carrying a
+   class and NO transform of its own, because a CSS transform REPLACES the
+   `transform` attribute rather than composing with it — animating the numeral,
+   a heart or the card directly would tear it off its position. The two stroked
+   pieces carry pathLength="1", so drawing them is dashoffset 1 -> 0 with
+   nothing measured in JS and nothing to keep in sync with the path data.
+   ========================================================================== */
+
+/* An SVG piece scales about its OWN middle: fill-box is what makes
+   `transform-origin: 50%` mean the shape's centre and not the canvas's. */
+.js-intro .fg-ring,
+.js-intro .fg-heart,
+.js-intro .fg-dot,
+.js-intro .fg-one,
+.js-intro .fg-card { transform-box: fill-box; transform-origin: 50% 50%; }
+
+/* Hidden until the clock starts. `.art >` and not a bare class: the card draws
+   a heart of its own inside it, which arrives WITH the card and is not one of
+   the three that land on the picture. */
+.js-intro .fg-ring,
+.js-intro .art > .fg-heart,
+.js-intro .fg-dot,
+.js-intro .art > .fg-card { opacity: 0; }
+/* A stroke is not hidden, it is UNDRAWN: one dash the length of the line. */
+.js-intro .fg-arc,
+.js-intro .fg-stroke { stroke-dasharray: 1; stroke-dashoffset: 1; }
+
+/* 1. The rings ripple outwards from the numeral's centre. */
+.js-intro.go .fg-ring { animation: ring-in 0.62s var(--in-ease) both; }
+.js-intro.go .fg-ring:nth-child(1) { animation-delay: 0.04s; }
+.js-intro.go .fg-ring:nth-child(2) { animation-delay: 0.11s; }
+.js-intro.go .fg-ring:nth-child(3) { animation-delay: 0.18s; }
+
+/* 2. The dial sweeps itself round, the short arc chasing the long one. */
+.js-intro.go .fg-arc { animation: draw-in 0.8s var(--in-ease) 0.16s both; }
+.js-intro.go .fg-arc + .fg-arc { animation-duration: 0.5s; animation-delay: 0.38s; }
+
+/* 3. The "1" writes itself: the flag, then the stem, one continuous dash. */
+.js-intro.go .fg-stroke { animation: draw-in 0.62s var(--in-ease) 0.34s both; }
+
+/* 4. The person rises onto the mark, and the hearts land on him. */
+.js-intro.go .art > .fg-card { animation: card-in 0.66s var(--in-ease) 0.5s both; }
+.js-intro.go .art > .fg-heart { animation: pop-in 0.46s var(--pop-ease) 0.64s both; }
+.js-intro.go .art > .fg-heart ~ .fg-heart { animation-delay: 0.71s; }
+.js-intro.go .art > .fg-heart ~ .fg-heart ~ .fg-heart { animation-delay: 0.78s; }
+
+/* 5. The scatter, last and quietest. */
+.js-intro.go .fg-dot { animation: pop-in 0.42s var(--pop-ease) both; }
+.js-intro.go .fg-dot:nth-child(1) { animation-delay: 0.70s; }
+.js-intro.go .fg-dot:nth-child(2) { animation-delay: 0.75s; }
+.js-intro.go .fg-dot:nth-child(3) { animation-delay: 0.80s; }
+.js-intro.go .fg-dot:nth-child(4) { animation-delay: 0.85s; }
+.js-intro.go .fg-dot:nth-child(5) { animation-delay: 0.90s; }
+.js-intro.go .fg-dot:nth-child(6) { animation-delay: 0.95s; }
+
+/* Belt and braces: .js-intro is never set under reduce, so this only catches a
+   preference that changes after the page has already loaded. It cuts the
+   DURATIONS rather than forcing anything visible — every arrival above fills
+   `both`, so a zero-length animation lands on its own `to` state, and an
+   animated value outranks the static rule that was hiding it. Forcing
+   `opacity: 1` on everything instead would also switch on the things the page
+   keeps deliberately invisible (an inactive menu's checkmark). */
+@media (prefers-reduced-motion: reduce) {
+  .js-intro *, .js-intro *::before, .js-intro *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+  }
+}

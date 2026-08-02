@@ -684,12 +684,123 @@ strong { color: var(--ink); font-weight: 600; }
 }
 .skip-link:focus { transform: none; }
 
-/* ---------- Reveal-on-scroll animation ----------
+/* ==========================================================================
+   ARRIVAL
+   The page reads top to bottom, so it ARRIVES top to bottom, and the same
+   thing never arrives twice. Two clocks drive it and they do not overlap:
+
+     html.js-intro.go   the FIRST SCREEN, on load — the header, the picture
+                        (entrance.css, shared with /download) and the hero
+                        stanza. None of it is scroll-triggered, because none
+                        of it waits for a scroll that has already happened.
+     html.js-reveal     everything below the fold, on the IntersectionObserver,
+                        as each band comes up.
+
+   Both are set by JS and only when reduced motion is off, so a reader who has
+   asked for less, or whose JS never ran, meets the page fully painted and
+   still — never a blank box waiting for a class.
+
+   The vocabulary is deliberately small: text RISES, a card SETTLES (the same
+   lift with a touch of scale, over a longer beat), a visual comes in FROM THE
+   SIDE IT STANDS ON, and a row of chips does not move at all — its chips do,
+   one after another. Four arrivals, assigned by what a thing IS, which is what
+   makes the page varied without making it busy. Everything shares --in-ease
+   (entrance.css): one hand, many gestures.
+
+   Nothing here loops or drifts. A page that keeps moving after it has landed
+   is asking to be watched; this one is asking to be read.
+   ========================================================================== */
+
+/* ---------- Below the fold: reveal on scroll ----------
    Hiding is gated behind html.js-reveal, which JS only adds when the
    IntersectionObserver is actually driving the reveals. If JS fails or the
    observer is unavailable, content is fully visible by default — never blank. */
-.js-reveal .reveal { opacity: 0; transform: translateY(16px); transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.js-reveal .reveal { opacity: 0; transform: translateY(16px); transition: opacity var(--dur) var(--in-ease), transform var(--dur) var(--in-ease); }
 .js-reveal .reveal.in { opacity: 1; transform: none; }
+
+/* A CARD settles rather than rises: a longer beat and a hair of scale, which is
+   what makes a big white tile read as coming to rest instead of sliding up. */
+.js-reveal .reveal--card { transform: translateY(22px) scale(0.985); transition-duration: 0.72s; }
+
+/* A VISUAL arrives from the edge it stands on, so the two-column band assembles
+   outwards from its text rather than everything drifting up together. The SIGN
+   is the variable, not the distance, so the mirror under RTL and the collapse to
+   one column are each stated once. */
+.split-visual { --side: 26px; --side-dir: 1; }
+.split--media-start .split-visual { --side-dir: -1; }
+[dir="rtl"] .split-visual { --side-dir: -1; }
+[dir="rtl"] .split--media-start .split-visual { --side-dir: 1; }
+.js-reveal .reveal--side {
+  transform: translateX(calc(var(--side, 0px) * var(--side-dir, 1))) translateY(10px);
+  transition-duration: 0.72s;
+}
+
+/* A STAGGER container is a starting gun, not a thing that moves: it exists so
+   the observer has something to mark, and its children carry the arrival. */
+.js-reveal .reveal--stagger { opacity: 1; transform: none; }
+
+/* The text column runs in reading order — eyebrow, heading, paragraph, chips —
+   each a step behind the one above it, so the band composes itself instead of
+   appearing all at once. */
+.js-reveal .split-text > .reveal.in:nth-child(2) { transition-delay: 0.08s; }
+.js-reveal .split-text > .reveal.in:nth-child(3) { transition-delay: 0.16s; }
+.js-reveal .split-text > .reveal.in:nth-child(4) { transition-delay: 0.24s; }
+
+/* Chips: the row holds still and the tiles land one by one. */
+.js-reveal .chips .chip {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  transition: opacity 0.5s var(--in-ease), transform 0.5s var(--in-ease);
+}
+.js-reveal .chips.in .chip { opacity: 1; transform: none; }
+.js-reveal .chips.in .chip:nth-child(1) { transition-delay: 0.20s; }
+.js-reveal .chips.in .chip:nth-child(2) { transition-delay: 0.26s; }
+.js-reveal .chips.in .chip:nth-child(3) { transition-delay: 0.32s; }
+.js-reveal .chips.in .chip:nth-child(4) { transition-delay: 0.38s; }
+.js-reveal .chips.in .chip:nth-child(5) { transition-delay: 0.44s; }
+.js-reveal .chips.in .chip:nth-child(6) { transition-delay: 0.50s; }
+
+/* ---------- The first screen: on the clock ----------
+   The banner's own build is entrance.css's. What follows is the copy beside it.
+   The stanza is the page's signature: it arrives LINE BY LINE, which is the one
+   thing on the page that only the hero gets. */
+
+/* A transform on an INLINE box is ignored, so a stanza line has to be an
+   inline-block to be moved at all. `<br>` still ends every line and a line too
+   long for its column still wraps inside its own box, so the layout is
+   unchanged — checked against the pre-change render, not by eye. */
+.tl { display: inline-block; }
+
+.js-intro .header,
+.js-intro .hero-copy .eyebrow,
+.js-intro .hero h1 .tl,
+.js-intro .hero-sub,
+.js-intro .hero-pills .pill,
+.js-intro .mobile-cta { opacity: 0; }
+
+.js-intro.go .header { animation: fade-in 0.55s var(--in-ease) 0.06s both; }
+.js-intro.go .hero-copy .eyebrow { animation: rise-in 0.58s var(--in-ease) 0.40s both; }
+/* nth-of-type and not nth-child: the lines are separated by <br>, which is an
+   element child too, so counting children would skip every other line. */
+.js-intro.go .hero h1 .tl { animation: rise-in 0.66s var(--in-ease) both; }
+.js-intro.go .hero h1 .tl:nth-of-type(1) { animation-delay: 0.50s; }
+.js-intro.go .hero h1 .tl:nth-of-type(2) { animation-delay: 0.58s; }
+.js-intro.go .hero h1 .tl:nth-of-type(3) { animation-delay: 0.66s; }
+.js-intro.go .hero h1 .tl:nth-of-type(4) { animation-delay: 0.74s; }
+.js-intro.go .hero-sub { animation: rise-in 0.6s var(--in-ease) 0.82s both; }
+.js-intro.go .hero-pills .pill { animation: rise-in 0.52s var(--in-ease) both; }
+.js-intro.go .hero-pills .pill:nth-child(1) { animation-delay: 0.92s; }
+.js-intro.go .hero-pills .pill:nth-child(2) { animation-delay: 0.98s; }
+.js-intro.go .hero-pills .pill:nth-child(3) { animation-delay: 1.04s; }
+.js-intro.go .hero-pills .pill:nth-child(4) { animation-delay: 1.10s; }
+
+/* The floating button comes up from the edge it lives on — the one arrival on
+   the page that is a slide and not a rise, because it is the one thing that is
+   not part of the page's column. It is last: the reader is offered the app
+   after he has been told what it is. */
+@keyframes cta-rise { from { opacity: 0; transform: translateY(150%); }
+                        to { opacity: 1; transform: none; } }
+.js-intro.go .mobile-cta { animation: cta-rise 0.62s var(--in-ease) 1.18s both; }
 
 /* Gentle pulse (hero visual focus) */
 @keyframes soft-pulse {
@@ -721,6 +832,11 @@ strong { color: var(--ink); font-weight: 600; }
 
   .split { grid-template-columns: 1fr; }
   .split--media-start .split-visual, .split-visual { order: 0; }
+  /* One column: there is no side for the visual to stand on any more, so it
+     rises with the text instead of drifting in from an edge that is not there.
+     The DISTANCE is what goes to zero — the sign lives on other selectors, and
+     a media query adds no specificity to fight them with. */
+  .split-visual { --side: 0px; }
 
 
   .mobile-cta { display: block; }
@@ -799,10 +915,17 @@ strong { color: var(--ink); font-weight: 600; }
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  /* Neither gate class is ever set under reduce, so this is only reached by a
+     preference that changes after the page has loaded. Cutting the durations
+     does most of the work — every arrival fills `both`, so a zero-length
+     animation lands on its own `to` state — and the line under it covers the
+     pieces held back by a static rule rather than by an animation. */
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .js-reveal .reveal, .js-reveal .chips .chip { opacity: 1; transform: none; }
 }

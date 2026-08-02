@@ -27,7 +27,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=60" />
+  <!-- The shared motion vocabulary, and the one choreography this page has in
+       common with /download: the banner picture building itself. -->
+  <link rel="stylesheet" href="entrance.css?v=1" />
+  <link rel="stylesheet" href="styles.css?v=61" />
+  <script>
+    /* Set BEFORE the first paint, so nothing is ever seen in its landed state
+       and then re-animated. Reduced motion opts out of the whole entrance
+       rather than playing a shortened version of it, and the timeout is the
+       backstop: whatever happens in the page script below, the content lands. */
+    (function () {
+      try {
+        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        var root = document.documentElement;
+        root.className += " js-intro";
+        setTimeout(function () { root.classList.add("go"); }, 1200);
+      } catch (e) { /* no intro, no harm: the page is simply already there */ }
+    })();
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">דלג לתוכן</a>
@@ -392,8 +409,12 @@
           '<span class="media-icon">' + IC.image + '</span>' +
           '<span class="media-name">' + esc(m.name) + '</span>' +
           '<span class="media-desc">' + esc(m.desc) + '</span>';
+      /* No `reveal` of its own: every call site puts this figure inside a
+         container that is already arriving (a pillar's visual side, the
+         callout, the closing card), and a figure that faded in on top of the
+         box carrying it was two motions saying one thing. */
       return '<figure class="media media--wide' + (draw ? ' media--art' : '') +
-        ' reveal" role="img" aria-label="' + label + '">' + body + '</figure>';
+        '" role="img" aria-label="' + label + '">' + body + '</figure>';
     }
     /* ---------- Section builders ---------- */
     /* Both compositions are rendered and CSS shows the one that fits the width:
@@ -410,9 +431,13 @@
        the first thing on the screen, with the artwork left to the four pillars.
        It carries NO download button either (user directive 2026-07-27): the ask
        is the header button on a wide screen and the floating one on a phone. */
+    /* The hero carries no `reveal`: it is the first screen, so it arrives on the
+       page's own clock (styles.css, .js-intro.go) rather than on a scroll that
+       has not happened, and it arrives PIECE BY PIECE — eyebrow, then the
+       stanza line by line, then the sentence, then the pills. */
     function buildHero() {
       var s = T.hero;
-      return '<div class="hero-copy reveal">' +
+      return '<div class="hero-copy">' +
           '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' +
           '<h1>' + titleHTML(s.title) + '</h1>' +
           '<p class="hero-sub">' + esc(s.sub) + '</p>' +
@@ -428,7 +453,7 @@
       var s = T.ask;
       var art = (window.ART && window.ART.focus)
         ? '<div class="ask-art">' + window.ART.focus() + '</div>' : '';
-      return '<div class="ask-slab reveal">' +
+      return '<div class="ask-slab reveal reveal--card">' +
           '<div class="ask-copy">' +
             '<p class="ask-q">' + esc(s.question) + '</p>' +
             '<p class="ask-a">' + esc(s.answer) + '</p>' +
@@ -446,7 +471,10 @@
        same row either way, so a pillar and a note just hand it their own list. */
     function chipRow(list) {
       if (!list || !list.length) return '';
-      return '<div class="chips reveal">' + list.map(function (c) {
+      /* `reveal--stagger`: the row itself does not move, its chips do, one
+         after another. The class on the container is only what the observer
+         needs to know when to start them. */
+      return '<div class="chips reveal reveal--stagger">' + list.map(function (c) {
         return '<span class="chip">' + icon(c.icon) + esc(c.label) + '</span>';
       }).join('') + '</div>';
     }
@@ -471,7 +499,7 @@
                 '<p class="lede reveal">' + esc(s.body) + '</p>' +
                 chipRow(s.chips) +
               '</div>' +
-              '<div class="split-visual reveal">' + visual + '</div>' +
+              '<div class="split-visual reveal reveal--side">' + visual + '</div>' +
             '</div>' +
           '</div>' +
         '</section>';
@@ -483,7 +511,7 @@
        so it repeats no button of its own. */
     function buildFinal() {
       var s = T.finalCta;
-      return '<div class="final reveal">' +
+      return '<div class="final reveal reveal--card">' +
         '<div class="eyebrow" style="margin-inline:auto">' + esc(s.eyebrow) + '</div>' +
         '<h2>' + titleHTML(s.title) + '</h2>' +
         '<p class="lede">' + esc(s.body) + '</p>' +
@@ -699,6 +727,19 @@
     })();
     var initial = SUPPORTED.indexOf(urlLang) >= 0 ? urlLang : browserLang;
     render(initial);
+
+    /* Start the entrance now that the first screen it stages is in the DOM.
+       Two frames, not one: the first is where the browser takes in the markup
+       render() just wrote, and only from the second is the from-state of every
+       animation a style its element has actually held. Adding the class in the
+       same tick can drop the opening pieces on a cold load. The head script's
+       timeout is the backstop and is idempotent. */
+    (function () {
+      var root = document.documentElement;
+      var start = function () { root.classList.add('go'); };
+      if (window.requestAnimationFrame) requestAnimationFrame(function () { requestAnimationFrame(start); });
+      else start();
+    })();
   })();
   </script>
 </body>
