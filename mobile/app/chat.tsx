@@ -33,7 +33,7 @@ import { StatusBarBand } from '../src/components/StatusBarBand'
 import { useBottomInset } from '../src/hooks/useBottomInset'
 import { useKeyboardOpen } from '../src/hooks/useKeyboard'
 import { chatCacheKey, chatLastOpenedKey, chatLastReadKey } from '../src/keys'
-import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek, weekendDays } from '../src/lib/family'
+import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek } from '../src/lib/family'
 import { nameFromTitle } from '../src/lib/profileTitle'
 
 const isRTL = I18nManager.isRTL
@@ -1105,7 +1105,16 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     setHasMore(hadMore)
     hasMoreRef.current = hadMore
     oldestLoadedAtRef.current = older[0].created_at
-    older.forEach(m => seenSet.current.add(m.user_id + m.created_at))
+    // A page of history rises the way an arriving message does (user directive
+    // 2026-08-02). It is marked per KEY rather than as a block because the list
+    // only mounts the handful of rows the user has actually scrolled to: each
+    // bubble plays its entrance as it comes into view, and the key is spent by
+    // that first paint (see renderItem), so scrolling back past it later paints
+    // it still.
+    older.forEach(m => {
+      seenSet.current.add(m.user_id + m.created_at)
+      newMsgKeysRef.current.add(m.user_id + m.created_at)
+    })
     setMessages(prev => [...older, ...prev])
     setLoadingMore(false)
     loadingMoreRef.current = false
@@ -1803,7 +1812,14 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     if (msg.is_event) return null
 
     const msgAnimKey = msg.user_id + msg.created_at
-    const animateIn = newMsgKeysRef.current.has(msgAnimKey)
+    // Spent by the first paint: `delete` answers whether the key was there AND
+    // takes it away. An entrance is something a bubble does ONCE. The list
+    // recycles its rows, so a key left standing would replay the rise every time
+    // the user scrolled past that message again, which reads as the history
+    // re-arriving. AnimatedBubble reads `animate` at mount only, so a later
+    // re-render of the same bubble (a read receipt landing) sees false and
+    // correctly changes nothing.
+    const animateIn = newMsgKeysRef.current.delete(msgAnimKey)
     const isMine = msg.user_id === userId
     const displayTime = formatTime(displayTimes.get(msgAnimKey) ?? msg.created_at)
     const msgStatus: 'pending' | 'failed' | 'sent' | 'read' =
@@ -2678,7 +2694,6 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
   onReplyPress?: () => void
 }) {
   const viewerWeekStart = useUserStore(s => s.profile?.weekStart) ?? defaultWeekStart(appLang)
-  const weekendSet = useMemo(() => new Set(weekendDays(appLang)), [])
   const dateFmt = useMemo(() => {
     try { return new Intl.DateTimeFormat(isRTL ? 'he' : 'en', { day: 'numeric', month: 'numeric' }) }
     catch { return null }
@@ -2719,24 +2734,16 @@ function ScheduleBubble({ animate, isMine, isLast, schedule, senderIsMale, time,
             cellDate.setDate(cellDate.getDate() + wi * 7 + col)
             const cycleWeek = ((wi % cycleLen) + cycleLen) % cycleLen
             const free = !schedule.weeks[cycleWeek]?.[absWeekday]
-            const weekend = weekendSet.has(absWeekday)
             return (
               <View key={col} style={styles.scheduleCell}>
                 <View style={[
                   styles.scheduleDayBubble,
-                  isMine && !free && styles.scheduleDayBubbleMine,
-                  weekend && !free && styles.scheduleDayBubbleWeekend,
-                  weekend && !free && isMine && styles.scheduleDayBubbleWeekendMine,
-                  free && styles.scheduleDayBubbleSelected,
-                  free && isMine && styles.scheduleDayBubbleSelectedMine,
+                  free && (isMine ? styles.scheduleDayBubbleSelectedMine : styles.scheduleDayBubbleSelected),
                 ]}>
                   <Text style={[
                     styles.scheduleDayLetter,
                     isMine && styles.scheduleDayLetterMine,
-                    weekend && !free && styles.scheduleDayLetterWeekend,
-                    weekend && !free && isMine && styles.scheduleDayLetterWeekendMine,
-                    free && styles.scheduleDayLetterSelected,
-                    free && isMine && styles.scheduleDayLetterSelectedMine,
+                    free && (isMine ? styles.scheduleDayLetterSelectedMine : styles.scheduleDayLetterSelected),
                   ]}>{t(`family.dayShort.${absWeekday}` as never)}</Text>
                 </View>
                 <Text style={[styles.scheduleDayDate, isMine && styles.scheduleDayDateMine]}>
@@ -3933,22 +3940,27 @@ const styles = StyleSheet.create({
   scheduleTitleMine: { color: WHITE },
   scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SM },
   scheduleCell: { alignItems: 'center', justifyContent: 'flex-start', gap: XS },
+  // ONE mark, and it means ONE thing: a disc stands on a day I am FREE, and a
+  // day I am not is the bare letter (user directive 2026-08-02). The cell used
+  // to be circled in every state — an outline for a kid day, a tint for a
+  // weekend, a fill for a free one — so the card the title calls "the days I
+  // am free" was a row of seven circles the reader had to rank. The weekend
+  // tint went with them: it only ever painted a NOT-free day, which is the one
+  // thing this grid must not draw attention to. The disc is the app's small
+  // chrome circle, so it is the same object every other in-line circle is.
   scheduleDayBubble: {
-    width: 32, height: 32, borderRadius: 16,
+    width: ROUND_BUTTON_SIZE_SM, height: ROUND_BUTTON_SIZE_SM, borderRadius: ROUND_BUTTON_SIZE_SM / 2,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: SURFACE, borderWidth: STROKE.thin, borderColor: LINE,
   },
-  scheduleDayBubbleMine: { backgroundColor: 'transparent', borderColor: WHITE_MID },
-  scheduleDayBubbleSelected: { backgroundColor: INK, borderColor: INK },
-  scheduleDayBubbleSelectedMine: { backgroundColor: INK, borderColor: INK },
-  scheduleDayBubbleWeekend: { backgroundColor: INK_WASH, borderColor: INK_WASH },
-  scheduleDayBubbleWeekendMine: { backgroundColor: WHITE_SOFT, borderColor: WHITE_SOFT },
-  scheduleDayLetter: { fontSize: TEXT.md, color: INK },
-  scheduleDayLetterMine: { color: WHITE },
+  scheduleDayBubbleSelected: { backgroundColor: INK },
+  // My own bubble is already INK, so the free day inverts to white on it —
+  // an INK fill there painted nothing at all, and the card read as its own
+  // opposite (user report 2026-08-02).
+  scheduleDayBubbleSelectedMine: { backgroundColor: WHITE },
+  scheduleDayLetter: { fontSize: TEXT.md, color: INK_SUBTLE },
+  scheduleDayLetterMine: { color: WHITE_STRONG },
   scheduleDayLetterSelected: { color: WHITE },
-  scheduleDayLetterSelectedMine: { color: WHITE },
-  scheduleDayLetterWeekend: { color: INK },
-  scheduleDayLetterWeekendMine: { color: WHITE },
+  scheduleDayLetterSelectedMine: { color: INK },
   scheduleDayDate: { fontSize: TEXT.sm, color: INK_SUBTLE },
   scheduleDayDateMine: { color: WHITE_STRONG },
   scheduleFooter: {

@@ -27,9 +27,11 @@ import { PullPane, usePullBehavior, type PullActivation, type PullAxis, type Pul
 import { RisingCard } from './RisingCard'
 import { RoundButton } from './RoundButton'
 import { CloseIcon, BackIcon } from './icons'
+import { DragHandle } from './DragHandle'
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
-import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, chromeTop, lh } from '../tokens'
+import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, SCROLL_FADE, DRAG_HANDLE, chromeTop, lh } from '../tokens'
 import { FONT_SCALE, inkOffset } from '../fonts'
 import { INK, PAGE, SURFACE } from '../colors'
 import { SHEET_TITLE } from './BottomSheet'
@@ -97,6 +99,10 @@ export type OverlaySheetProps = {
    *  (user directive 2026-07-31) — the top strip of the screen keeps closing it
    *  by drag, which is how it was already being closed mid-conversation. */
   showClose?: boolean
+  /** Paints the app's drag handle on the header row, marking that band as the
+   *  thing the finger holds. Only for a `dragFrom="header"` sheet whose row is
+   *  otherwise EMPTY — chat, its one call site. See SheetHeader's own prop. */
+  dragHandle?: boolean
   /** Header renders as transparent chrome floating OVER the body rather than
    *  as a solid bar above it. For sheets whose body is a full-bleed photo. */
   floatingHeader?: boolean
@@ -157,6 +163,7 @@ export function OverlaySheet({
   isTop = true,
   chromeless,
   showClose = true,
+  dragHandle,
   floatingHeader,
   headerBg,
   title,
@@ -263,6 +270,7 @@ export function OverlaySheet({
       titleTrailing={titleTrailing}
       trailing={headerTrailing}
       floating={floatingHeader}
+      dragHandle={dragHandle}
       barBg={headerBg}
       topInset={topInset}
       // The 'x' drawer (the menu) closes back toward its START edge, so its
@@ -344,6 +352,22 @@ export function OverlaySheet({
 // live app, and the old measurement must not survive that.
 const TITLE_LINE_BOX = new Map<number, number>()
 
+// SVG gradient ids are document-global, so the one fade in this file names
+// itself once rather than per render.
+const HANDLE_FADE_ID = 'sheetHandleFade'
+
+// The band behind a floating drag handle. It is deliberately NOT the header
+// row's own box: the row is the DRAG area and is a whole chrome circle tall
+// (headerFloor), which as PAINT is a slab of page tint over the top of the
+// conversation. What has to be covered is the BAR, so the solid part ends just
+// under it — the handle's own line (it is centred in ROUND_BUTTON_SIZE_SM) plus
+// its thickness — and the fade carries the colour out from there. Paint and
+// touch are independent here, so shrinking this takes nothing off the gesture.
+const handleBandHeight = (topInset: number) =>
+  chromeTop(topInset) + ROUND_BUTTON_SIZE_SM / 2 + DRAG_HANDLE.height
+const HANDLE_BAND_FADE = SCROLL_FADE / 2
+const HANDLE_BAND_ALPHA = 0.5
+
 // The bar's FLOOR. It has always been exactly one small chrome circle tall,
 // because a dismiss circle stood in every one of them — nothing declared it. Now
 // that the X is droppable (see `onClose`), a row carrying nothing but a line of
@@ -376,6 +400,7 @@ export function SheetHeader({
   closeIcon = 'close',
   closeAccessibilityLabel,
   titleLines = 1,
+  dragHandle,
 }: {
   title?: string
   titleTrailing?: ReactNode
@@ -419,6 +444,13 @@ export function SheetHeader({
   /** Max title lines before ellipsizing. Default 1; the Circles sheet passes
    *  2 so a long group name wraps instead of truncating. */
   titleLines?: number
+  /** Paints the app's drag handle on the row's centre. For a `dragFrom="header"`
+   *  sheet that carries NOTHING else on that line — chat, its one call site
+   *  (user directive 2026-08-02): the band IS the only way out of a long
+   *  conversation, and an empty strip over a screen of bubbles gave the user no
+   *  reason to believe so. Takes the title's slot, so it is mutually exclusive
+   *  with a title/`center` by construction. See DragHandle. */
+  dragHandle?: boolean
 }) {
   const DismissIcon = closeIcon === 'back' ? BackIcon : CloseIcon
   // Where line one of the title sits, measured against the close button's
@@ -485,6 +517,36 @@ export function SheetHeader({
       pointerEvents="box-none"
       onLayout={e => onMeasured?.(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
     >
+      {/* THE BAND BEHIND A FLOATING DRAG HANDLE (user directive 2026-08-02).
+          A floating header stands over the body itself — chat is passed
+          topInset={0}, so message bubbles scroll right under it — and a bare
+          bar cannot survive that: INK_DIM vanishes on an outgoing INK bubble
+          exactly as white would vanish on an incoming one. It is the same trap
+          that drove chat's typing pill out of the row's centre the same day.
+          The answer is NOT a tile around the bar (tried, and it read as a chip
+          that had lost its label): it is the PAGE's own ground, run the full
+          width of the sheet across the top and then MELTED into the body, so
+          the handle stands on the page and the band has no edge to be read as
+          a bar of chrome. Two pieces and no measurement between them: the
+          row's own box painted solid, and one SCROLL_FADE hung off its bottom
+          (`top: '100%'`) fading that same colour out to nothing. Same fade
+          vocabulary a popup already uses where content runs past an edge. */}
+      {floating && dragHandle ? (
+        <View style={[styles.handleBandBox, { height: handleBandHeight(topInset) }]} pointerEvents="none">
+          <View style={styles.handleBand} />
+          <View style={styles.handleBandFade}>
+            <Svg width="100%" height="100%">
+              <Defs>
+                <LinearGradient id={HANDLE_FADE_ID} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={PAGE} stopOpacity={1} />
+                  <Stop offset="1" stopColor={PAGE} stopOpacity={0} />
+                </LinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${HANDLE_FADE_ID})`} />
+            </Svg>
+          </View>
+        </View>
+      ) : null}
       {/* A CENTRED title (the default): both side columns are held at the same
           width and the TITLE takes the rest, centring itself inside it — so the
           title sits on the row's true centre however much (or little) each side
@@ -533,7 +595,16 @@ export function SheetHeader({
           >
             <DismissIcon color={INK} size={ICON.round} />
           </RoundButton>
-        ), !dismissAtStart, dismissAtStart ? 'start' : 'end') : null
+        ), !dismissAtStart, dismissAtStart ? 'start' : 'end')
+          // A HANDLE is centred on the screen, not on whatever span is left
+          // over. With no dismiss the row carried one side column and nothing
+          // opposite it, so the free span — and the handle in it — sat a
+          // button's width off the middle (chat, 2026-08-02). The spacer that
+          // holds a TITLE on the true centre does the same job here, and being
+          // measured like any other column it keeps both sides matched.
+          : dragHandle && balanced
+            ? column(<View style={styles.trailingSpacer} />, !dismissAtStart, dismissAtStart ? 'start' : 'end')
+            : null
         // The spacer exists to CENTRE a title and for nothing else, so it is
         // rendered only when there is a centred title to hold in place.
         const otherContent = trailing ?? (balanced && !center ? <View style={styles.trailingSpacer} /> : null)
@@ -555,6 +626,15 @@ export function SheetHeader({
             >{title}</Text>
             {titleTrailing}
           </View>
+        ) : dragHandle ? (
+          // The handle stands where the title would, on the row's own chrome
+          // line — the height a dismiss circle occupies — so the band reads at
+          // exactly the level every other sheet's heading and X do. It also
+          // holds the row open, which is what the spacer below is for. The bar
+          // is BARE; what makes it legible is the band behind it (see the fade
+          // above), never a tile of its own — a white capsule around 48×4 of
+          // ink read as a chip that had lost its label (user, 2026-08-02).
+          <View style={styles.handleWrap}><DragHandle /></View>
         ) : (
           // A FLOATING header over a photo carries neither (chat, the profile
           // preview, the invite) — and the free space between the two side
@@ -690,5 +770,39 @@ const styles = StyleSheet.create({
   // the free span itself, so the side columns end up on the two edges of the row.
   middleSpacer: {
     flex: 1,
+  },
+  // The same free span, with the handle centred on the chrome line inside it.
+  // The row hangs its columns from the TOP (see `header`), so the height is
+  // stated here rather than left to an alignment the row does not make.
+  handleWrap: {
+    flex: 1,
+    height: ROUND_BUTTON_SIZE_SM,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // HALF-STRENGTH, all of it (user directive 2026-08-02): the band is there to
+  // hold the handle legible, not to be a surface, and at full PAGE it read as a
+  // bar of chrome pasted over the top of the conversation. Stated ONCE, on the
+  // box, so the solid part and its fade can never disagree about the strength
+  // they start from.
+  handleBandBox: {
+    position: 'absolute',
+    top: 0,
+    start: 0,
+    end: 0,
+    opacity: HANDLE_BAND_ALPHA,
+  },
+  handleBand: {
+    flex: 1,
+    backgroundColor: PAGE,
+  },
+  // Hung off the bottom EDGE of that box rather than measured against it, which
+  // is what keeps the pair honest at any header height and font scale.
+  handleBandFade: {
+    position: 'absolute',
+    top: '100%',
+    start: 0,
+    end: 0,
+    height: HANDLE_BAND_FADE,
   },
 })

@@ -9,10 +9,11 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from './AppText'
 import { OptionStrip, type StripOption } from './OptionStrip'
-import { SURFACE, PAGE, INK, INK_DIM } from '../colors'
+import { DragHandle } from './DragHandle'
+import { SURFACE, PAGE, INK } from '../colors'
 import { useBottomInset } from '../hooks/useBottomInset'
 import { useKeyboardShrinkSV } from '../hooks/useKeyboard'
-import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SHEET_GAP, SCROLL_FADE, DRAG_HANDLE } from '../tokens'
+import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SHEET_GAP, SCROLL_FADE } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
 // exceed any sheet's height, so the sheet always begins fully hidden no matter
@@ -324,7 +325,7 @@ export function BottomSheet({
               { paddingBottom: bottomPad },
             ]}
           >
-            {dragHandle ? <View style={styles.dragHandle} /> : null}
+            {dragHandle ? <DragHandle style={styles.dragHandle} /> : null}
             <SheetScrollContext.Provider value={scrollWiring}>
               {children}
             </SheetScrollContext.Provider>
@@ -586,12 +587,10 @@ const styles = StyleSheet.create({
   actionRowLabel: {
     fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK,
   },
+  // The BAR itself is DragHandle's (one handle in the app, shared with chat's
+  // header row). What is left here is only where it stands in a POPUP.
   dragHandle: {
     alignSelf: 'center',
-    width: DRAG_HANDLE.width,
-    height: DRAG_HANDLE.height,
-    borderRadius: DRAG_HANDLE.radius,
-    backgroundColor: INK_DIM,
     marginTop: MD,
     // The handle stands IN the popup's top air rather than beside it: what
     // follows it is the same distance below it as a handle-less popup's first

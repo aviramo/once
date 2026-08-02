@@ -4091,8 +4091,18 @@ export default function HomePage() {
           // `dragFrom="header"` it is this sheet's drag band, and dragging that
           // strip is how a chat scrolled to the middle of its history has always
           // been put away.
+          //
+          // AND THAT BAND SAYS SO, since 2026-08-02 (user directive): it wears
+          // the app's DRAG HANDLE. Dragging the strip is the only way out of a
+          // LONG chat — a body drag mid-history is scroll, by design — and with
+          // nothing painted on that line the user was looking at a screen of
+          // bubbles running to the very top edge with no reason to believe
+          // there was a handle above them. The X does not come back: a handle
+          // marks the gesture the sheet already has, where a button would be a
+          // second way out saying what the gesture says.
           floatingHeader
           showClose={false}
+          dragHandle
         >
           {(sheetBody) => (
           <ChatPage
@@ -4102,7 +4112,7 @@ export default function HomePage() {
             onOnlineChange={setPartnerOnline}
             // No top inset at all: the message list starts at the very top edge
             // of the screen and scrolls UNDER the OS status bar and the floating
-            // close X (user directive 2026-07-26). The list keeps its small
+            // drag band (user directive 2026-07-26). The list keeps its small
             // content padding so the oldest message still has a hair of breathing
             // room at the top.
             topInset={0}
