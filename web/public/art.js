@@ -302,38 +302,52 @@
   var MUTED = 'var(--muted)';
   var GROUND = 'var(--ground)';
 
+  /* Every piece of the banner comes out of these helpers wrapped in a group that
+     carries a CLASS and nothing else. It paints nothing and moves nothing: it is
+     there so a page can stage the picture's ARRIVAL piece by piece
+     (download.html does) without a CSS transform having to fight the `transform`
+     ATTRIBUTE already on the thing it would move. A CSS transform REPLACES that
+     attribute rather than composing with it, which would tear the numeral, the
+     hearts and the card off their positions the moment they were animated; the
+     wrapper is the layer an entrance is allowed to touch. */
+  function part(cls, inner) { return '<g class="' + cls + '">' + inner + '</g>'; }
+  /* A stroke a page may DRAW rather than reveal. `pathLength="1"` restates the
+     path's length as 1, so a dash animation is `stroke-dashoffset: 1 -> 0` in
+     CSS with nothing measured in JS and nothing to keep in sync with the `d`. */
+  var DRAWABLE = ' pathLength="1"';
+
   /* The concentric rings, thinning outwards. The store file bleeds four of them
      off its edges; on the page a stroke that stops dead against the header reads as
      a cropping mistake, so the band draws `count` of them (three) at a scale that
      keeps the outermost inside the canvas. */
   function fgRings(cx, cy, s, count) {
-    return [[200, 10], [250, 8.4], [300, 6.8], [350, 5.2]].slice(0, count || 4).map(function (r) {
-      return ring(cx, cy, r[0] * s, GROUND, n(r[1] * s));
-    }).join('');
+    return part('fg-rings', [[200, 10], [250, 8.4], [300, 6.8], [350, 5.2]].slice(0, count || 4).map(function (r) {
+      return ring(cx, cy, r[0] * s, GROUND, n(r[1] * s), ' class="fg-ring"');
+    }).join(''));
   }
   /* The dial: a long brand-purple sweep with a short muted one riding above it. */
   function fgDial(cx, cy, s) {
-    var r = 172 * s, sw = n(11 * s);
-    return arc(cx, cy, r, 22, 300, BRAND, sw) + arc(cx, cy, r, 310, 350, MUTED, sw);
+    var r = 172 * s, sw = n(11 * s), drawable = ' class="fg-arc"' + DRAWABLE;
+    return part('fg-dial', arc(cx, cy, r, 22, 300, BRAND, sw, drawable) + arc(cx, cy, r, 310, 350, MUTED, sw, drawable));
   }
   /* The "1" itself: one stroked polyline, drawn in the store file's own 1024 glyph
      space so the shape stays identical at any size. */
   function fgOne(cx, cy, s) {
-    return '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
+    return part('fg-one', '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
       ') translate(-512,-512)" fill="none" stroke="' + BRAND +
       '" stroke-width="150" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M577 312 L447 412 M577 312 L577 712"/></g>';
+      '<path class="fg-stroke"' + DRAWABLE + ' d="M577 312 L447 412 M577 312 L577 712"/></g>');
   }
   /* The store graphic's heart (a filled Material heart, not the app's own). */
   function fgHeart(cx, cy, s, fill) {
-    return '<path transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
-      ') translate(-12,-12)" fill="' + fill + '" d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>';
+    return part('fg-heart', '<path transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
+      ') translate(-12,-12)" fill="' + fill + '" d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>');
   }
   /* The profile card, tilted off true. Its innards keep the store file's absolute
      coordinates and are moved as a whole, so the card is pixel-identical. */
   function fgCard(cx, cy, s) {
     var clip = id('fg');
-    return '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
+    return part('fg-card', '<g transform="translate(' + n(cx) + ',' + n(cy) + ') scale(' + n(s) +
       ') translate(-810,-250) rotate(-4 810 250)">' +
       rect(706, 90, 208, 320, 32, GROUND) +
       rect(712, 96, 196, 308, 26, SURFACE) +
@@ -348,10 +362,12 @@
       rect(734, 330, 92, 12, 6, GROUND) +
       circle(902, 358, 32, BRAND) +
       fgHeart(902, 358, 1.4, SURFACE) +
-      '</g>';
+      '</g>');
   }
   function fgDots(list, s) {
-    return list.map(function (d) { return circle(d[0], d[1], n(d[2] * s), d[3]); }).join('');
+    return part('fg-dots', list.map(function (d) {
+      return circle(d[0], d[1], n(d[2] * s), d[3], ' class="fg-dot"');
+    }).join(''));
   }
   /* The cluster the whole picture hangs off: rings, dial and the numeral. */
   function fgCluster(cx, cy, s, rings) {
