@@ -802,6 +802,139 @@ strong { color: var(--ink); font-weight: 600; }
                         to { opacity: 1; transform: none; } }
 .js-intro.go .mobile-cta { animation: cta-rise 0.62s var(--in-ease) 1.18s both; }
 
+/* ==========================================================================
+   INSIDE THE PICTURES
+   Every illustration on this page builds itself when its band arrives, the way
+   the banner does on load — and each one builds in the order its OWN message is
+   made, which is why the timings live down here beside the sections and not in
+   the drawing. art.js states only what the PARTS are (`sc-*`, see `part`
+   there); this states when each of them shows up.
+
+   The vocabulary is the entrance's: something that is present RISES or POPS, a
+   stroke DRAWS itself, and a connector GROWS from the end it starts at — which
+   only the path knows, so the pivot is the one thing art.js states inline.
+
+   Same gate as everything else below the fold: hidden under html.js-reveal,
+   played when the container the observer is watching takes `.in`. Every rule
+   here therefore carries the .js-reveal prefix — without it a build would run
+   under reduced motion, where `.in` is put on everything at once and no gate
+   class is ever set.
+   ========================================================================== */
+
+@keyframes grow-x { from { opacity: 0; transform: scaleX(0); }
+                      to { opacity: 1; transform: none; } }
+
+/* A piece scales about its OWN middle. Not .sc-link: its pivot is an END, and
+   art.js states it inline in the drawing's coordinates. */
+.js-reveal .reveal .sc-lead,
+.js-reveal .reveal .sc-aside,
+.js-reveal .reveal .sc-face,
+.js-reveal .reveal .sc-member,
+.js-reveal .reveal .sc-hub,
+.js-reveal .reveal .sc-mark,
+.js-reveal .reveal .sc-ring,
+.js-reveal .reveal .sc-dial,
+.js-reveal .reveal .sc-cell { transform-box: fill-box; transform-origin: 50% 50%; }
+
+.js-reveal .reveal .sc-lead,
+.js-reveal .reveal .sc-aside,
+.js-reveal .reveal .sc-crowd,
+.js-reveal .reveal .sc-face,
+.js-reveal .reveal .sc-member,
+.js-reveal .reveal .sc-hub,
+.js-reveal .reveal .sc-mark,
+.js-reveal .reveal .sc-ring,
+.js-reveal .reveal .sc-dial,
+.js-reveal .reveal .sc-band,
+.js-reveal .reveal .sc-title,
+.js-reveal .reveal .sc-cell,
+.js-reveal .reveal .sc-link { opacity: 0; }
+/* Undrawn, not hidden: one dash the length of the line. */
+.js-reveal .reveal .sc-spoke,
+.js-reveal .reveal .sc-friend,
+.js-reveal .reveal .sc-sweep,
+.js-reveal .reveal .sc-hands { stroke-dasharray: 1; stroke-dashoffset: 1; }
+
+/* The subject of a picture is the first thing in it, always. */
+.js-reveal .reveal.in .sc-lead { animation: card-in 0.72s var(--in-ease) 0.08s both; }
+.js-reveal .reveal.in .sc-link { animation: grow-x 0.5s var(--in-ease) 0.34s both; }
+
+/* ---- The question: one person's whole attention ----
+   The two of them arrive and connect, the rings close around the one who is
+   being looked at, and the crowd outside turns up last and quietly — it is the
+   twenty other conversations, and none of them is looking at you. */
+.js-reveal .ask-slab.in .sc-lead { animation: pop-in 0.5s var(--pop-ease) 0.10s both; }
+.js-reveal .ask-slab.in .sc-face { animation: pop-in 0.5s var(--pop-ease) 0.22s both; }
+/* Outwards from the face, so the DOM order (widest ring first) is read back to
+   front: the innermost ring is the last of the three and goes first. */
+.js-reveal .ask-slab.in .sc-ring { animation: ring-in 0.6s var(--in-ease) 0.66s both; }
+.js-reveal .ask-slab.in .sc-ring ~ .sc-ring { animation-delay: 0.58s; }
+.js-reveal .ask-slab.in .sc-ring ~ .sc-ring ~ .sc-ring { animation-delay: 0.50s; }
+.js-reveal .ask-slab.in .sc-crowd { animation: fade-in 0.7s var(--in-ease) 0.80s both; }
+
+/* ---- One person at a time: the screen that is clear, and the piles set aside ---- */
+.js-reveal #one .in .sc-aside { animation: rise-in 0.6s var(--in-ease) 0.32s both; }
+.js-reveal #one .in .sc-aside ~ .sc-aside { animation-delay: 0.42s; }
+
+/* ---- Real time: the clock does not switch on, it STARTS ----
+   The dial appears, the spent sweep draws itself round, and only then do the
+   hands and their hub land on it. */
+.js-reveal #now .in .sc-dial  { animation: pop-in 0.5s var(--pop-ease) 0.46s both; }
+.js-reveal #now .in .sc-sweep { animation: draw-in 0.8s var(--in-ease) 0.58s both; }
+.js-reveal #now .in .sc-hands { animation: draw-in 0.5s var(--in-ease) 0.80s both; }
+.js-reveal #now .in .sc-hub   { animation: pop-in 0.4s var(--pop-ease) 0.95s both; }
+
+/* ---- Shared circles: the circle GROWS OUT OF ITS CENTRE ----
+   Hub, then a spoke at a time, each member landing just behind the spoke that
+   reached him, and the friend link last, which is the point of the picture. */
+.js-reveal #circles .in .sc-ring { animation: ring-in 0.6s var(--in-ease) 0.44s both; }
+.js-reveal #circles .in .sc-hub  { animation: pop-in 0.46s var(--pop-ease) 0.50s both; }
+.js-reveal #circles .in .sc-spoke { animation: draw-in 0.45s var(--in-ease) both; }
+.js-reveal #circles .in .sc-spoke:nth-child(1) { animation-delay: 0.56s; }
+.js-reveal #circles .in .sc-spoke:nth-child(2) { animation-delay: 0.62s; }
+.js-reveal #circles .in .sc-spoke:nth-child(3) { animation-delay: 0.68s; }
+.js-reveal #circles .in .sc-spoke:nth-child(4) { animation-delay: 0.74s; }
+.js-reveal #circles .in .sc-spoke:nth-child(5) { animation-delay: 0.80s; }
+.js-reveal #circles .in .sc-spoke:nth-child(6) { animation-delay: 0.86s; }
+.js-reveal #circles .in .sc-member { animation: pop-in 0.42s var(--pop-ease) both; }
+.js-reveal #circles .in .sc-member:nth-child(1) { animation-delay: 0.70s; }
+.js-reveal #circles .in .sc-member:nth-child(2) { animation-delay: 0.76s; }
+.js-reveal #circles .in .sc-member:nth-child(3) { animation-delay: 0.82s; }
+.js-reveal #circles .in .sc-member:nth-child(4) { animation-delay: 0.88s; }
+.js-reveal #circles .in .sc-member:nth-child(5) { animation-delay: 0.94s; }
+.js-reveal #circles .in .sc-member:nth-child(6) { animation-delay: 1.00s; }
+.js-reveal #circles .in .sc-friend { animation: draw-in 0.5s var(--in-ease) 1.06s both; }
+
+/* ---- Parents: the fortnight FILLS IN, and the one free day lights last ----
+   The card, its heading, the two of them, then the days along each row, and
+   only once the whole fortnight is on the table does the day they share light
+   up — the picture makes its point at the end of the sentence, not the start. */
+.js-reveal #parents .in .sc-title { animation: fade-in 0.5s var(--in-ease) 0.30s both; }
+.js-reveal #parents .in .sc-face  { animation: pop-in 0.46s var(--pop-ease) 0.36s both; }
+.js-reveal #parents .in .sc-face ~ .sc-face { animation-delay: 0.44s; }
+.js-reveal #parents .in .sc-cell  { animation: pop-in 0.4s var(--in-ease) both; }
+.js-reveal #parents .in .sc-cell:nth-child(1) { animation-delay: 0.42s; }
+.js-reveal #parents .in .sc-cell:nth-child(2) { animation-delay: 0.47s; }
+.js-reveal #parents .in .sc-cell:nth-child(3) { animation-delay: 0.52s; }
+.js-reveal #parents .in .sc-cell:nth-child(4) { animation-delay: 0.57s; }
+.js-reveal #parents .in .sc-cell:nth-child(5) { animation-delay: 0.62s; }
+.js-reveal #parents .in .sc-cell:nth-child(6) { animation-delay: 0.67s; }
+.js-reveal #parents .in .sc-cell:nth-child(7) { animation-delay: 0.72s; }
+/* The second row follows the first rather than racing it. */
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(1) { animation-delay: 0.50s; }
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(2) { animation-delay: 0.55s; }
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(3) { animation-delay: 0.60s; }
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(4) { animation-delay: 0.65s; }
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(5) { animation-delay: 0.70s; }
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(6) { animation-delay: 0.75s; }
+.js-reveal #parents .in .sc-week ~ .sc-week .sc-cell:nth-child(7) { animation-delay: 0.80s; }
+.js-reveal #parents .in .sc-band { animation: fade-in 0.55s var(--in-ease) 0.90s both; }
+.js-reveal #parents .in .sc-mark { animation: pop-in 0.5s var(--pop-ease) 1.02s both; }
+
+/* ---- The closing three: meet, invite, talk, in that order and no other ---- */
+.js-reveal .final.in .sc-lead ~ .sc-lead { animation-delay: 0.22s; }
+.js-reveal .final.in .sc-lead ~ .sc-lead ~ .sc-lead { animation-delay: 0.36s; }
+
 /* Gentle pulse (hero visual focus) */
 @keyframes soft-pulse {
   0%, 100% { transform: scale(1); }

@@ -310,11 +310,21 @@
      attribute rather than composing with it, which would tear the numeral, the
      hearts and the card off their positions the moment they were animated; the
      wrapper is the layer an entrance is allowed to touch. */
-  function part(cls, inner) { return '<g class="' + cls + '">' + inner + '</g>'; }
+  function part(cls, inner, style) {
+    return '<g class="' + cls + '"' + (style ? ' style="' + style + '"' : '') + '>' + inner + '</g>';
+  }
   /* A stroke a page may DRAW rather than reveal. `pathLength="1"` restates the
      path's length as 1, so a dash animation is `stroke-dashoffset: 1 -> 0` in
      CSS with nothing measured in JS and nothing to keep in sync with the `d`. */
   var DRAWABLE = ' pathLength="1"';
+  /* Where a piece PIVOTS, stated in the drawing's own coordinates. It is the one
+     thing about an entrance that CSS cannot know and the drawing can: a
+     connector grows from the end it STARTS at, and only the `d` says which end
+     that is. view-box and not fill-box on purpose — a horizontal rule's fill box
+     has no height, which is not a box to measure a centre against. */
+  function pivot(x, y) {
+    return 'transform-box:view-box;transform-origin:' + n(x) + 'px ' + n(y) + 'px';
+  }
 
   /* The concentric rings, thinning outwards. The store file bleeds four of them
      off its edges; on the page a stroke that stops dead against the header reads as
@@ -411,11 +421,16 @@
      the one screen that is actually clear. Two quiet piles rather than a scatter of
      faces - the section's own words are "no feed, no pile of cards", and a scene
      that shouts about the habit competes with the person it is meant to leave alone. */
+  /* The parts each scene below is built from carry a class and nothing else, in
+     the banner's own vocabulary (see `part`): `sc-lead` is what the picture is
+     ABOUT, `sc-aside` what stands beside it, and the rest name themselves. The
+     ORDER they arrive in is each picture's own and lives in styles.css, next to
+     the message it illustrates. */
   ART.one = function () {
     return wide(
-      cardPile(146, 262, 156, F(9), -5) +
-      cardPile(654, 238, 156, F(14), 5) +
-      device(325, 42, 0.68, SCREEN.home(F(1)), true)
+      part('sc-aside', cardPile(146, 262, 156, F(9), -5)) +
+      part('sc-aside', cardPile(654, 238, 156, F(14), 5)) +
+      part('sc-lead', device(325, 42, 0.68, SCREEN.home(F(1)), true))
     );
   };
 
@@ -427,14 +442,14 @@
   ART.focus = function () {
     var cx = 336, cy = 200;
     return svg(600, 400,
-      [[62, 52, 26, F(11)], [130, 342, 22, F(16)], [524, 66, 21, F(18)], [548, 328, 27, F(21)]]
-        .map(function (g) { return avatar(g[0], g[1], g[2], g[3], 0.28); }).join('') +
-      ring(cx, cy, 152, ACCENT, 3, op(0.16)) +
-      ring(cx, cy, 118, ACCENT, 4, op(0.3)) +
-      ring(cx, cy, 88, ACCENT, 6, op(0.5)) +
-      line('M100 200H' + (cx - 152), ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"') +
-      avatar(58, 200, 40, F(4), null, ACCENT) +
-      avatar(cx, cy, 62, F(1), null, BRAND)
+      part('sc-crowd', [[62, 52, 26, F(11)], [130, 342, 22, F(16)], [524, 66, 21, F(18)], [548, 328, 27, F(21)]]
+        .map(function (g) { return avatar(g[0], g[1], g[2], g[3], 0.28); }).join('')) +
+      part('sc-ring', ring(cx, cy, 152, ACCENT, 3, op(0.16))) +
+      part('sc-ring', ring(cx, cy, 118, ACCENT, 4, op(0.3))) +
+      part('sc-ring', ring(cx, cy, 88, ACCENT, 6, op(0.5))) +
+      part('sc-link', line('M100 200H' + (cx - 152), ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"'), pivot(100, 200)) +
+      part('sc-face', avatar(58, 200, 40, F(4), null, ACCENT)) +
+      part('sc-lead', avatar(cx, cy, 62, F(1), null, BRAND))
     );
   };
 
@@ -447,17 +462,24 @@
       [cx, cy - R, F(3)], [cx + 132, cy - 74, F(4)], [cx + 132, cy + 74, F(5)],
       [cx, cy + R, F(6)], [cx - 132, cy + 74, F(7)], [cx - 132, cy - 74, F(8)]
     ];
-    var spokes = ring6.map(function (m) { return line('M' + cx + ' ' + cy + 'L' + m[0] + ' ' + m[1], LINE, 3, op(0.7)); }).join('');
+    // Every spoke is drawn FROM the hub outwards, so a page that draws them
+    // draws the circle growing out of its centre rather than closing in on it.
+    var spokes = ring6.map(function (m) {
+      return line('M' + cx + ' ' + cy + 'L' + m[0] + ' ' + m[1], LINE, 3, op(0.7) + ' class="sc-spoke"' + DRAWABLE);
+    }).join('');
     // The two members on the END side are friends: a brand link between them.
-    var friendLink = line('M' + (cx + 132) + ' ' + (cy - 74) + 'L' + (cx + 132) + ' ' + (cy + 74), BRAND, 4, op(0.85));
-    var dots = ring6.map(function (m, i) { return avatar(m[0], m[1], 30, m[2], null, (i === 1 || i === 2) ? BRAND : SURFACE); }).join('');
+    var friendLink = line('M' + (cx + 132) + ' ' + (cy - 74) + 'L' + (cx + 132) + ' ' + (cy + 74), BRAND, 4,
+      op(0.85) + ' class="sc-friend"' + DRAWABLE);
+    var dots = ring6.map(function (m, i) {
+      return part('sc-member', avatar(m[0], m[1], 30, m[2], null, (i === 1 || i === 2) ? BRAND : SURFACE));
+    }).join('');
     return wide(
-      device(60, 44, 0.66, SCREEN.communities(), true) +
-      line('M266 250H396', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"') +
-      ring(cx, cy, R, ACCENT, 3, op(0.14)) +
-      spokes + friendLink + dots +
-      circle(cx, cy, 52, SURFACE, ' stroke="' + LINE + '" stroke-width="3"') +
-      group(usersGlyph(30), ' transform="translate(' + cx + ',' + cy + ')"')
+      part('sc-lead', device(60, 44, 0.66, SCREEN.communities(), true)) +
+      part('sc-link', line('M266 250H396', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"'), pivot(266, 250)) +
+      part('sc-ring', ring(cx, cy, R, ACCENT, 3, op(0.14))) +
+      part('sc-spokes', spokes) + friendLink + part('sc-members', dots) +
+      part('sc-hub', circle(cx, cy, 52, SURFACE, ' stroke="' + LINE + '" stroke-width="3"') +
+        group(usersGlyph(30), ' transform="translate(' + cx + ',' + cy + ')"'))
     );
   };
 
@@ -467,12 +489,15 @@
   ART.now = function () {
     var cx = 578, cy = 250, R = 130;
     return wide(
-      device(60, 22, 0.7, SCREEN.invite(F(4), BRAND, true), true) +
-      line('M282 250H428', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"') +
-      circle(cx, cy, R, TINT) + ring(cx, cy, R, LINE, 18) +
-      arc(cx, cy, R, 0, 250, BRAND, 18) +
-      line('M' + cx + ' ' + cy + 'V' + (cy - 90) + 'M' + cx + ' ' + cy + 'l60 38', INK, 13) +
-      circle(cx, cy, 13, INK)
+      part('sc-lead', device(60, 22, 0.7, SCREEN.invite(F(4), BRAND, true), true)) +
+      part('sc-link', line('M282 250H428', ACCENT, 3, ' stroke-dasharray="7 9" opacity=".5"'), pivot(282, 250)) +
+      part('sc-dial', circle(cx, cy, R, TINT) + ring(cx, cy, R, LINE, 18)) +
+      // The spent sweep and the hands are drawn strokes, so a page can start the
+      // clock instead of switching it on.
+      arc(cx, cy, R, 0, 250, BRAND, 18, ' class="sc-sweep"' + DRAWABLE) +
+      line('M' + cx + ' ' + cy + 'V' + (cy - 90) + 'M' + cx + ' ' + cy + 'l60 38', INK, 13,
+        ' class="sc-hands"' + DRAWABLE) +
+      part('sc-hub', circle(cx, cy, 13, INK))
     );
   };
 
@@ -486,31 +511,33 @@
     var withKids = [[0, 1, 4, 5], [1, 2, 5, 6]];
     function day(i, y, marked, lit) {
       var x = X0 + i * STEP, cx = x + CELL / 2, cy = y + CELL / 2;
-      return rect(x, y, CELL, CELL, 14, marked ? TINT : SURFACE,
+      return part('sc-cell', rect(x, y, CELL, CELL, 14, marked ? TINT : SURFACE,
         ' stroke="' + (lit ? BRAND : LINE) + '" stroke-width="' + (lit ? 3 : 2) + '"') +
-        (marked ? circle(cx - 9, cy, 5, INK, op(0.3)) + circle(cx + 9, cy, 5, INK, op(0.3)) : '');
+        (marked ? circle(cx - 9, cy, 5, INK, op(0.3)) + circle(cx + 9, cy, 5, INK, op(0.3)) : ''));
     }
+    // The cells of a week are wrapped as a set, so a page can fill them in one
+    // after another along the row without counting past anything else.
     function week(y, marks, face) {
       var cells = '';
       for (var i = 0; i < 7; i++) cells += day(i, y, marks.indexOf(i) >= 0, i === FREE_COL);
-      return avatar(118, y + CELL / 2, 30, face, null, SURFACE) + cells;
+      return part('sc-face', avatar(118, y + CELL / 2, 30, face, null, SURFACE)) + part('sc-week', cells);
     }
     var litX = X0 + FREE_COL * STEP;
     return wide(
-      rect(60, 96, 680, 308, 30, SURFACE, ' stroke="' + LINE + '" stroke-width="2" filter="url(#SHADOW)"') +
-      bar(102, 132, 150, 14) +
-      rect(litX - 8, RA - 16, CELL + 16, RB + CELL - RA + 32, 20, BRAND, op(0.12)) +
+      part('sc-lead', rect(60, 96, 680, 308, 30, SURFACE, ' stroke="' + LINE + '" stroke-width="2" filter="url(#SHADOW)"')) +
+      part('sc-title', bar(102, 132, 150, 14)) +
+      part('sc-band', rect(litX - 8, RA - 16, CELL + 16, RB + CELL - RA + 32, 20, BRAND, op(0.12))) +
       week(RA, withKids[0], F(2)) + week(RB, withKids[1], F(3)) +
-      heart(litX + CELL / 2, (RA + CELL + RB) / 2, 20, BRAND)
+      part('sc-mark', heart(litX + CELL / 2, (RA + CELL + RB) / 2, 20, BRAND))
     );
   };
 
   /* Final: the three moments - meet, invite, talk. */
   ART.final = function () {
     return svg(800, 450,
-      device(72, 44, 0.58, SCREEN.home(F(6)), true) +
-      device(310, 44, 0.58, SCREEN.invite(F(7), BRAND, true), true) +
-      device(548, 44, 0.58, SCREEN.chat(), true)
+      part('sc-lead', device(72, 44, 0.58, SCREEN.home(F(6)), true)) +
+      part('sc-lead', device(310, 44, 0.58, SCREEN.invite(F(7), BRAND, true), true)) +
+      part('sc-lead', device(548, 44, 0.58, SCREEN.chat(), true))
     );
   };
 
