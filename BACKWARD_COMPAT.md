@@ -29,6 +29,16 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 
 ## Open entries
 
+### `review-login` falls back to the old literal code when `REVIEW_CODE` is unset
+
+- **Added:** 2026-08-03
+- **Reason:** Security fix. The store-review code was the literal `once-review-7Fq2` in `supabase/functions/review-login/index.ts`, i.e. a live pre-auth credential readable by anyone with the repo. It is an env var now and has been rotated. This is NOT a mobile-build shim: the code is typed into a field by the reviewer (`mobile/app/login.tsx` takes it as an argument and holds no copy of it), so no app version depends on any particular value. The fallback exists only so that the deploy and the setting of the secret are safe in either order.
+- **Old shape (kept alive):** `Deno.env.get("REVIEW_CODE") ?? "once-review-7Fq2"` — with the secret unset, the old published code would work again.
+- **New shape (preferred):** `REVIEW_CODE` (and `REVIEW_EMAIL`) set as function secrets. Set and verified 2026-08-03: the old literal is refused, the new code returns an OTP.
+- **Safe to remove after:** immediately. There is no mobile floor to wait for.
+- **How to remove:** in `review-login/index.ts`, drop both `??` fallbacks and refuse outright when the env is unset.
+- **Verify before removing:** `curl` the endpoint with the old literal — must be 401 (it is).
+
 ### `/ext` still accepts the bare anon key when `EXT_SECRET` is unset
 
 - **Added:** 2026-08-03
